@@ -41,6 +41,18 @@ public:
             return;
         }
 
+        if (rec.GetEvictVDisks()) {
+            const auto &action = Actions.at(rec.GetAction());
+            if (!action || (*action != TAction::SHUTDOWN_HOST && *action != TAction::REBOOT_HOST)) {
+                ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "data_migration requires a host shutdown or reboot action", ctx);
+                return;
+            }
+            if (rec.HostsSize() != 1) {
+                ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "data_migration requires exactly one host", ctx);
+                return;
+            }
+        }
+
         ctx.Send(Cms, new TEvCms::TEvGetClusterInfoRequest);
 
         Become(&TThis::StateWork);
@@ -123,6 +135,7 @@ private:
         request->Record.SetUser(WALLE_CMS_USER);
         request->Record.SetSchedule(true);
         request->Record.SetDryRun(task.GetDryRun());
+        request->Record.SetEvictVDisks(task.GetEvictVDisks());
         const auto &action = task.GetAction();
         if (action == "temporary-unreachable") {
             request->Record.SetPriority(WALLE_SOFT_MAINTENANCE_PRIORITY);

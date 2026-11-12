@@ -146,6 +146,49 @@ void SetRunningSysTablet(ui32 nodeId, bool running) {
     }
 }
 
+TString SendWalleHttpRequest(TCmsTestEnv &env, HTTP_METHOD method, const TString &uri, const TString &body = {}) {
+    TFakeMonHttpRequest httpRequest(method, uri, {}, body);
+    const auto edge = env.AllocateEdgeActor();
+    NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
+        TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
+    env.Register(CreateWalleApiHandler(event));
+    TAutoPtr<IEventHandle> handle;
+    const auto *response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+    UNIT_ASSERT(response);
+    return response->Answer;
+}
+
+void CheckWalleHttpTask(const TString &response, const TString &status, ui32 nodeId) {
+    UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 200"), response);
+    const auto bodyOffset = response.find("\r\n\r\n");
+    UNIT_ASSERT(bodyOffset != TString::npos);
+    NJson::TJsonValue json;
+    UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response).SubStr(bodyOffset + 4), &json, true));
+    UNIT_ASSERT_VALUES_EQUAL_C(json["status"].GetString(), status, response);
+    UNIT_ASSERT_VALUES_EQUAL(json["hosts"].GetArray().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(json["hosts"][0].GetString(), ToString(nodeId));
+}
+
+TString MakeWalleDataMigrationJson(ui32 nodeId, const TString &migration = R"("full")", const TString &action = "redeploy") {
+    return Sprintf(R"({"id":"eviction","type":"automated","issuer":"UT","action":"%s","hosts":["%u"],"data_migration":%s})",
+        action.c_str(), nodeId, migration.c_str());
+}
+
+void EnableMaintenanceEviction(TCmsTestEnv &env) {
+    auto config = env.GetCmsConfig();
+    config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::MAINTENANCE);
+    env.SetCmsConfig(config);
+}
+
+void SetVDisksMoved(TCmsTestEnv &env, const TTestEnvOpts &opts, ui32 nodeId, bool moved) {
+    auto &node = TFakeNodeWhiteboardService::Info[nodeId];
+    node.VDisksMoved = moved;
+    if (moved) {
+        node.VDiskStateInfo.clear();
+    }
+    env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TCmsTest) {
@@ -3150,6 +3193,125 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
 
         env.DestroyDefaultCmsPipe();
+    }
+
+    Y_UNIT_TEST(WalleDataMigrationHttpLifecycle)
+    {
+        const auto opts = TTestEnvOpts(8).WithSentinel();
+        TCmsTestEnv env(opts);
+        EnableMaintenanceEviction(env);
+        const auto nodeId = env.GetNodeId(0);
+
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDataMigrationJson(nodeId)), "in-process", nodeId);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction"),
+            "in-process", nodeId);
+        env.CheckWalleListTasks("eviction", "in-process", nodeId);
+
+        // The request and its eviction marker must survive a CMS restart.
+        env.RestartCms();
+        env.CheckWalleCheckTask("eviction", TStatus::DISALLOW_TEMP, nodeId);
+        SetVDisksMoved(env, opts, nodeId, true);
+
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction"),
+            "ok", nodeId);
+        // A retained eviction request with no pending actions is already approved.
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction"),
+            "ok", nodeId);
+        env.CheckWalleListTasks("eviction", "ok", nodeId);
+        env.RestartCms();
+        env.CheckWalleCheckTask("eviction", TStatus::ALLOW, nodeId);
+
+        const auto response = SendWalleHttpRequest(env, HTTP_METHOD_DELETE, "/api/walle/v11/tasks/eviction");
+        UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 204"), response);
+        env.CheckWalleListTasks(0);
+
+        // Removing an approved task must clear both its permission and host marker.
+        SetVDisksMoved(env, opts, nodeId, false);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDataMigrationJson(nodeId)), "in-process", nodeId);
+        env.CheckWalleRemoveTask("eviction");
+        env.CheckWalleListTasks(0);
+        env.CheckWalleCreateTask("ordinary", "redeploy", true, TStatus::ALLOW, nodeId);
+    }
+
+    Y_UNIT_TEST(WalleDataMigrationDryRun)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        EnableMaintenanceEviction(env);
+        const auto nodeId = env.GetNodeId(0);
+
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            MakeWalleDataMigrationJson(nodeId)), "in-process", nodeId);
+        env.CheckWalleListTasks(0);
+        // DryRun must not leave a marker that blocks an ordinary stop.
+        env.CheckWalleCreateTask("ordinary", "redeploy", true, TStatus::ALLOW, nodeId);
+
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDataMigrationJson(nodeId)), "in-process", nodeId);
+        env.CheckWalleRemoveTask("eviction");
+    }
+
+    Y_UNIT_TEST(WalleDataMigrationValidation)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        EnableMaintenanceEviction(env);
+        const auto nodeId = env.GetNodeId(0);
+
+        for (const TString migration : {"true", "false", "1", "null", "{}", "[]", R"("")", R"("none")", R"("FULL")"}) {
+            const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+                MakeWalleDataMigrationJson(nodeId, migration));
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+        }
+        for (const TString action : {"prepare", "deactivate", "change-disk"}) {
+            const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+                MakeWalleDataMigrationJson(nodeId, R"("full")", action));
+            UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+        }
+        const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            Sprintf(R"({"id":"eviction","action":"redeploy","hosts":["%u","%u"],"data_migration":"full"})",
+                nodeId, env.GetNodeId(1)));
+        UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 400"), response);
+        env.CheckWalleListTasks(0);
+
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks?dry_run=true",
+            Sprintf(R"({"id":"ordinary","action":"redeploy","hosts":["%u"]})", nodeId)), "ok", nodeId);
+    }
+
+    Y_UNIT_TEST(WalleDataMigrationRespectsEvictionConfig)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        const auto nodeId = env.GetNodeId(0);
+
+        for (const auto mode : {NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY,
+                               NKikimrCms::TCmsConfig::TSentinelConfig::MAINTENANCE}) {
+            auto config = env.GetCmsConfig();
+            config.MutableSentinelConfig()->SetEvictVDisksStatus(mode);
+            env.SetCmsConfig(config);
+            CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+                MakeWalleDataMigrationJson(nodeId)), "in-process", nodeId);
+            env.CheckWalleRemoveTask("eviction");
+        }
+
+        auto config = env.GetCmsConfig();
+        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::DISABLED);
+        env.SetCmsConfig(config);
+        const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDataMigrationJson(nodeId));
+        UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 500"), response);
+        UNIT_ASSERT_C(response.Contains("Evict vdisks is disabled in Sentinel"), response);
+        env.CheckWalleListTasks(0);
+    }
+
+    Y_UNIT_TEST(WalleDataMigrationRequiresSentinel)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithoutSentinel());
+        EnableMaintenanceEviction(env);
+        const auto response = SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDataMigrationJson(env.GetNodeId(0)));
+        UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 500"), response);
+        UNIT_ASSERT_C(response.Contains("Unable to evict vdisks while Sentinel (self heal) is disabled"), response);
+        env.CheckWalleListTasks(0);
     }
 
     Y_UNIT_TEST(VDisksEvictionShouldFailWhileSentinelIsDisabled)

@@ -3216,7 +3216,8 @@ void TCms::Handle(TEvCms::TEvRemoveWalleTask::TPtr &ev, const TActorContext &ctx
     if (State->WalleTasks.contains(id)) {
         auto &task = State->WalleTasks.find(id)->second;
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
-        if (State->ScheduledRequests.contains(task.RequestId)) {
+        auto request = State->ScheduledRequests.find(task.RequestId);
+        if (request != State->ScheduledRequests.end() && request->second.Request.ActionsSize()) {
             Execute(CreateTxRemoveRequest(task.RequestId, std::move(ev->Release()), handle), ctx);
         } else {
             TVector<TString> ids(task.Permissions.begin(), task.Permissions.end());

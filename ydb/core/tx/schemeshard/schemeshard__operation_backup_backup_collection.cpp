@@ -5,6 +5,8 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/backup/common/omit_backup.h>
+
 
 namespace NKikimr::NSchemeShard {
 
@@ -85,11 +87,16 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         ++expectedItemCount;
 
-        if (omitIndexes) {
-            continue;
-        }
         const auto srcTablePath = TPath::Resolve(item.GetPath(), context.SS);
         if (!srcTablePath.IsResolved() || srcTablePath.IsDeleted()) {
+            continue;
+        }
+        if (::NKikimr::NBackup::IsOmittedFromBackup(srcTablePath.Base()->UserAttrs->Attrs)) {
+            return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+                << "Table " << item.GetPath() << " is marked with " << ::NKikimr::NBackup::OMIT_BACKUP_ATTRIBUTE
+                << " and cannot be backed up")};
+        }
+        if (omitIndexes) {
             continue;
         }
         for (const auto& [childName, childPathId] : srcTablePath.Base()->GetChildren()) {

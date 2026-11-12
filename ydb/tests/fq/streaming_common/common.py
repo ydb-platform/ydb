@@ -629,14 +629,27 @@ class Kikimr:
         self.cluster.start(timeout_seconds=timeout_seconds)
 
         token = config.default_clusteradmin
-        logger.info("Sleep")
-        time.sleep(10)
         logger.info(f"Creating tenant {tenant_database} with token={token!r}")
-        self.cluster.create_database(
-            tenant_database,
-            storage_pool_units_count={"hdd": 1},
-            token=token,
-        )
+        create_deadline = time.time() + 30
+        while True:
+            try:
+                self.cluster.create_database(
+                    tenant_database,
+                    storage_pool_units_count={"hdd": 1},
+                    token=token,
+                )
+                break
+            except Exception as e:
+                if time.time() >= create_deadline:
+                    raise
+                message = str(e).lower()
+                if not any(
+                    needle in message
+                    for needle in ("unavailable", "connection", "timeout", "not ready", "transport")
+                ):
+                    raise
+                logger.info("create_database not ready yet, retrying: %r", e)
+                time.sleep(0.5)
         self.cluster.register_and_start_slots(database=tenant_database, count=2)
         self.cluster.wait_tenant_up(tenant_database, token=token)
 

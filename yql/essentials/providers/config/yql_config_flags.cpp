@@ -12,6 +12,11 @@ TConfigFlags::TConfigFlags(TTypeAnnotationContext& types, TAllowSettingPolicy po
     , Policy_(std::move(policy))
 {
     InitFlags();
+    for (const auto name : {"ValidateUdf", "LLVM_OFF", "LLVM", "UdfSupportsYield", "GeobaseDownloadUrl"}) {
+        auto flagIt = Flags_.find(name);
+        YQL_ENSURE(flagIt != Flags_.end(), "Unknown flag " << name);
+        flagIt->second.AllowInProjectSettings = true;
+    }
 }
 
 TConfigFlags::TFlagHandler TConfigFlags::ToggleHandler(bool* field, TStringBuf enableName) {
@@ -150,6 +155,36 @@ void TConfigFlags::AddFlag(TStringBuf name, TStringBuf disableName, bool system,
         flag.System = false; // Always allow disable pragma
         Flags_[disableName] = std::move(flag);
     }
+}
+
+bool TConfigFlags::ApplyProjectSettings(TExprContext& ctx) {
+    for (const auto& pragma : Types_.ProjectSettings.Pragmas) {
+        if (!pragma.Name.StartsWith("config.")) {
+            continue;
+        }
+        if (Types_.StrictConfigValidation && pragma.Name != "config.flags") {
+            continue;
+        }
+        const TStringBuf name = pragma.Value.empty() ? TStringBuf{} : TStringBuf(pragma.Value.front());
+        const auto flagIt = Flags_.find(name);
+        if (flagIt == Flags_.end() && Types_.StrictConfigValidation) {
+            continue;
+        }
+        if (pragma.Name != "config.flags" || pragma.Value.empty() || name.empty() || flagIt == Flags_.end() || !flagIt->second.AllowInProjectSettings || (Policy_ && !Policy_(name))) {
+            if (Types_.StrictConfigValidation) {
+                TIssue issue(TPosition(), TStringBuilder() << "Unknown or disallowed project setting " << pragma.Name.Quote() << " (flag: " << name << ")");
+                issue.SetCode(EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, TSeverityIds::S_ERROR);
+                ctx.AddError(issue);
+                return false;
+            }
+            continue;
+        }
+        const TVector<TStringBuf> args(pragma.Value.begin() + 1, pragma.Value.end());
+        if (!ApplyFlag({}, name, args, ctx)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void TConfigFlags::InitFlags() {

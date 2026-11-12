@@ -5,6 +5,15 @@
 #include <util/string/cast.h>
 
 Y_UNIT_TEST_SUITE(TTranslationSettings) {
+Y_UNIT_TEST(TranslatorLevelPragmas) {
+    for (const TStringBuf name : {"", "ClassicDivision", "DqEngine", "yson.Strict", "YSON.Strict", "YsOn.AutoConvert"}) {
+        UNIT_ASSERT_C(NSQLTranslation::IsTranslatorLevelPragma(name), name);
+    }
+    for (const TStringBuf name : {"yt.StaticPool", "hahn.Pool", "dq.DefaultAutoPercentage", "config.Flags", "ysonOther.Strict"}) {
+        UNIT_ASSERT_C(!NSQLTranslation::IsTranslatorLevelPragma(name), name);
+    }
+}
+
 Y_UNIT_TEST(InfersCustomSyntax) {
     NSQLTranslation::TTranslationSettings settings;
     NYql::TIssues issues;

@@ -1,6 +1,7 @@
 #include "schemeshard__operation_rotate_cdc_stream.h"
 
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_create_cdc_stream.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
 
@@ -19,7 +20,9 @@ public:
     explicit TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages({});
+        IgnoreMessages({
+            TEvHive::TEvCreateTabletReply::EventType,
+        });
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -89,12 +92,12 @@ public:
     virtual const char* Name() const override final { return "TRotateCdcStream"; }
 
 private:
-    static TTxState::ETxState NextState() {
-        return TTxState::Propose;
-    }
-
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
+        case TTxState::CreateParts:
+            return TTxState::ConfigureParts;
+        case TTxState::ConfigureParts:
+            return TTxState::Propose;
         case TTxState::Propose:
             return TTxState::Done;
         default:
@@ -104,6 +107,10 @@ private:
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
+        case TTxState::CreateParts:
+            return MakeHolder<TCreateParts>(OperationId);
+        case TTxState::ConfigureParts:
+            return MakeHolder<TConfigureParts>(OperationId);
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
@@ -124,6 +131,7 @@ public:
         const auto& newStreamDesc = newStreamOp.GetStreamDescription();
         const auto& newStreamName = newStreamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
+        const bool shouldAggregateHeartbeats = ShouldAggregateHeartbeats(newStreamDesc);
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "",
             {"oldStream", workingDir + "/" + oldStreamName},
@@ -384,6 +392,11 @@ public:
             return result;
         }
 
+        TChannelsBindings channelsBindings;
+        if (shouldAggregateHeartbeats && !CheckAggregatorCanBeCreated(newStreamOp, newStreamPath, context, channelsBindings, *result)) {
+            return result;
+        }
+
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
         context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
@@ -431,6 +444,10 @@ public:
         newStreamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         newStreamPath.Base()->UserAttrs->AlterData = userAttrs;
 
+        if (shouldAggregateHeartbeats) {
+            AddAggregator(OperationId, newStreamPath, newStream, channelsBindings, txState, context);
+        }
+
         context.SS->CdcStreams.Set(pathId, newStream);
 
         newStreamPath.DomainInfo()->IncPathsInside(context.SS);
@@ -438,7 +455,7 @@ public:
 
         context.OnComplete.ActivateTx(OperationId);
 
-        SetState(NextState());
+        SetState(txState.State);
         return result;
     }
 

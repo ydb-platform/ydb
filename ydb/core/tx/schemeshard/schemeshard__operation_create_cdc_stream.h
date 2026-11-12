@@ -42,6 +42,36 @@ void DoCreateStream(
     const bool initialScan,
     const bool internal = false);
 
+bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
+
+bool CheckAggregatorCanBeCreated(
+    const NKikimrSchemeOp::TCreateCdcStream& op,
+    const TPath& streamPath,
+    TOperationContext& context,
+    TChannelsBindings& channelsBindings,
+    TProposeResponse& result);
+
+void AddAggregator(
+    const TOperationId& opId,
+    const TPath& streamPath,
+    const TCdcStreamInfo::TPtr& stream,
+    const TChannelsBindings& channelsBindings,
+    TTxState& txState,
+    TOperationContext& context);
+
+class TConfigureParts: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TConfigureParts"; }
+
+    explicit TConfigureParts(TOperationId id);
+
+    bool ProgressState(TOperationContext& context) override;
+
+private:
+    const TOperationId OperationId;
+
+}; // TConfigureParts
+
 struct TCdcPqPartParams {
     ui32 TotalGroupCount = 0;
     ui32 PartitionPerTablet = 2;

@@ -9705,16 +9705,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
     }
 
-    NKikimrHive::TTabletInfo GetHiveTabletInfo(
-            TTestActorRuntime& runtime, ui64 hiveTablet, ui64 tabletId, const TActorId& sender) {
-        runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(tabletId, false));
-        TAutoPtr<IEventHandle> handle;
-        auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(response->Record.TabletsSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTablets(0).GetTabletID(), tabletId);
-        return response->Record.GetTablets(0);
-    }
-
     ui64 GetCumulativeCounter(TTestActorRuntime& runtime, ui64 tabletId, NHive::ECumulativeCounters counter) {
         return GetCounters(runtime, tabletId).GetTabletCounters().GetAppCounters().GetCumulativeCounters(counter).GetValue();
     }

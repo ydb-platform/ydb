@@ -25,7 +25,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    TString TargetDatabase;
+    TString DatabasePath;
     bool Bridged = false;
     TString RetainPile;
 };
@@ -66,17 +66,6 @@ private:
     std::optional<NBridge::TStoragePoolId> StoragePoolId;
     std::optional<TString> PileName;
     std::optional<NBridge::EStorageMode> StorageModeFilter;
-};
-
-class TCommandBridgeRollbackStatus : public TYdbReadOnlyCommand, public TCommandWithOutput {
-public:
-    TCommandBridgeRollbackStatus(bool allowEmptyDatabase);
-    void Config(TConfig& config) override;
-    void Parse(TConfig& config) override;
-    int Run(TConfig& config) override;
-
-private:
-    bool AllowEmptyDatabase;
 };
 
 class TCommandBridgeRollback : public TYdbCommand {

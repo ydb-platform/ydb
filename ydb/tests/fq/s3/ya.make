@@ -6,6 +6,7 @@ FORK_TEST_FILES()
 FORK_SUBTESTS()
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_ENABLE_PQ="true")
 
 PEERDIR(
     contrib/python/boto3

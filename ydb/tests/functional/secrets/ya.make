@@ -4,6 +4,7 @@ RECURSE(
 )
 
 PY3TEST()
+ENV(YDB_ENABLE_PQ="true")
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 

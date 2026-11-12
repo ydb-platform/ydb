@@ -2,6 +2,7 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/kafka_serverless/kafka_streams_test")
+ENV(YDB_ENABLE_PQ="true")
 
 TEST_SRCS(
     test_kafka_streams.py

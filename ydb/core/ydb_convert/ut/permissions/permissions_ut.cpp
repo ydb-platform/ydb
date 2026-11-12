@@ -6,9 +6,15 @@ namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(FillACL) {
     Y_UNIT_TEST(InterruptInheritance) {
-        for (const bool interruptInheritance : {false, true}) {
+        for (const TMaybe<bool> interruptInheritance : {
+            TMaybe<bool>(),
+            TMaybe<bool>(false),
+            TMaybe<bool>(true),
+        }) {
             Ydb::Scheme::ModifyPermissionsRequest permissions;
-            permissions.set_interrupt_inheritance(interruptInheritance);
+            if (interruptInheritance) {
+                permissions.set_interrupt_inheritance(*interruptInheritance);
+            }
 
             NKikimrSchemeOp::TModifyScheme modifyScheme;
             TString error;
@@ -16,7 +22,7 @@ Y_UNIT_TEST_SUITE(FillACL) {
 
             const NACLib::TDiffACL diffACL(modifyScheme.GetModifyACL().GetDiffACL());
             UNIT_ASSERT(diffACL.HasInterruptInheritance());
-            UNIT_ASSERT_VALUES_EQUAL(diffACL.GetInterruptInheritance(), interruptInheritance);
+            UNIT_ASSERT_VALUES_EQUAL(diffACL.GetInterruptInheritance(), interruptInheritance.GetOrElse(false));
         }
     }
 }

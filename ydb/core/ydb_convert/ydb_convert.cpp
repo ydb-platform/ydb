@@ -855,9 +855,7 @@ void FillPermissionsFromAcl(
     for (const auto& permission : toGrant) {
         *to->mutable_actions()->Add()->mutable_grant() = permission;
     }
-    if (acl.GetInterruptInheritance()) {
-        to->set_interrupt_inheritance(true);
-    }
+    to->set_interrupt_inheritance(acl.GetInterruptInheritance());
 }
 
 using namespace NACLib;
@@ -1515,9 +1513,7 @@ bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
 
     NACLib::TDiffACL diffACL;
     diffACL.ClearAccess();
-    if (in->has_interrupt_inheritance()) {
-        diffACL.SetInterruptInheritance(in->interrupt_inheritance());
-    }
+    diffACL.SetInterruptInheritance(in->interrupt_inheritance());
     for (const auto& action : in->actions()) {
         if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
             return false;

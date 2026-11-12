@@ -227,7 +227,7 @@ private:
                     // used by the read actor (static discovery path) to limit
                     // which partition IDs belong to each cluster.
                     bool sourceModified = false;
-                    for (int ci = 0; ci < static_cast<int>(topicSource.FederatedClustersSize()); ++ci)
+                    for (size_t ci = 0; ci < topicSource.FederatedClustersSize(); ++ci)
                     {
                         auto* fc = topicSource.MutableFederatedClusters(ci);
                         auto cit = clusterPartitions.ByClusterName.find(fc->GetName());
@@ -264,7 +264,7 @@ private:
                 // This value is used by dq_pq_rd_read_actor to determine the
                 // full partition range, and serves as a fallback in dq_pq_read_actor
                 // when FederatedClusters.PartitionsCount is zero.
-                for (int rangeIdx = 0; rangeIdx < static_cast<int>(dqTask->ReadRangesSize()); ++rangeIdx)
+                for (size_t rangeIdx = 0; rangeIdx < dqTask->ReadRangesSize(); ++rangeIdx)
                 {
                     NYql::NPq::NProto::TDqReadTaskParams params;
                     if (!params.ParseFromString(dqTask->GetReadRanges(rangeIdx))) {
@@ -274,7 +274,7 @@ private:
                         continue;
                     }
                     bool rangeModified = false;
-                    for (int ppIdx = 0; ppIdx < static_cast<int>(params.PartitioningParamsSize()); ++ppIdx)
+                    for (size_t ppIdx = 0; ppIdx < params.PartitioningParamsSize(); ++ppIdx)
                     {
                         auto* pp = params.MutablePartitioningParams(ppIdx);
                         const ui32 oldTotal = pp->GetTopicPartitionsCount();

@@ -1,4 +1,4 @@
-#include "kqp_streaming_helper.h"
+#include "streaming_helper.h"
 
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 

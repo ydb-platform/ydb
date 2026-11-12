@@ -14,6 +14,8 @@
 namespace NKikimr {
 namespace NKqp {
 
+struct TAggExecStat;
+
 NYql::NDqProto::EDqStatsMode GetDqStatsMode(Ydb::Table::QueryStatsCollection::Mode mode);
 NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollection::Mode mode);
 
@@ -403,15 +405,6 @@ struct TQueryTableStats {
     ui64 AffectedPartitionsUniqueCount = 0;
 
     void Resize(ui32 taskCount);
-};
-
-struct TAggExecStat {
-    ui64 CpuTimeMs = 0;
-    ui64 DurationSeconds = 0;
-    ui64 MemoryUsageBytes = 0;
-    ui64 TasksCount = 0;
-    ui64 InputBytes = 0;
-    ui64 OutputBytes = 0;
 };
 
 struct TQueryExecutionStats {

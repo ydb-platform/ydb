@@ -2,12 +2,16 @@ LIBRARY()
 
 SRCS(
     kqp_federated_query_helpers.cpp
+    streaming_helper.cpp
 )
 
 PEERDIR(
+    library/cpp/monlib/dynamic_counters
     ydb/core/base
     ydb/core/fq/libs/credentials
     ydb/core/fq/libs/db_id_async_resolver_impl
+    ydb/core/kqp/common
+    ydb/core/kqp/query_data
     ydb/core/local_proxy/local_pq_client
     ydb/core/protos
     ydb/library/logger
@@ -16,6 +20,7 @@ PEERDIR(
     ydb/library/yql/providers/pq/comp_nodes
     ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/gateway/native
+    ydb/library/yql/providers/pq/proto
     ydb/library/yql/providers/pq/transform
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/s3/proto

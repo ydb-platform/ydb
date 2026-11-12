@@ -1,128 +1,111 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/client.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/read_session_impl.ipp>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/future/core/future.h>
 
-#include <chrono>
-#include <future>
+#include <functional>
 #include <memory>
-#include <optional>
 #include <thread>
+#include <utility>
 
 namespace NYdb::inline Dev {
     namespace {
 
-        template <typename TClient, typename TClientSettings, typename TReadSettings>
-        void CheckClosedReadSessionDoesNotBlockDriverStop(
-            const TClientSettings& clientSettings,
-            const TReadSettings& readSettings,
-            bool waitForTerminalError = false,
-            TDuration closeTimeout = TDuration::Zero())
-        {
-            TDriver driver(TDriverConfig()
-                               .SetEndpoint("localhost:1")
-                               .SetDatabase("/Root")
-                               .SetNetworkThreadsNum(2));
-            std::optional<TClient> client(std::in_place, driver, clientSettings);
-            auto settings = readSettings;
-            auto closed = std::make_shared<std::promise<EStatus>>();
-            auto closedFuture = closed->get_future();
-            if (waitForTerminalError) {
-                settings.EventHandlers_.SessionClosedHandler([closed](const NTopic::TSessionClosedEvent& event) {
-                    closed->set_value(event.GetStatus());
+        template <typename TClient, typename TReadSettings>
+        void CheckClosedReadSessions(const TReadSettings& baseSettings) {
+            for (const auto& [terminalError, closeTimeout] : {
+                     std::pair{false, TDuration::Zero()},
+                     std::pair{true, TDuration::Zero()},
+                     std::pair{true, TDuration::Seconds(5)}}) {
+                TDriver driver(TDriverConfig().SetEndpoint("localhost:1").SetDatabase("/Root").SetNetworkThreadsNum(2));
+                auto client = std::make_unique<TClient>(driver);
+                auto settings = baseSettings;
+                auto closed = NThreading::NewPromise<EStatus>();
+                if (terminalError) {
+                    settings.RetryPolicy(NTopic::IRetryPolicy::GetNoRetryPolicy()).ClientTimeout(TDuration::MilliSeconds(100));
+                    settings.EventHandlers_.SessionClosedHandler([closed](const NTopic::TSessionClosedEvent& event) mutable {
+                        closed.SetValue(event.GetStatus());
+                    });
+                }
+                auto session = client->CreateReadSession(settings);
+                if (terminalError) {
+                    UNIT_ASSERT_C(closed.GetFuture().Wait(TDuration::Seconds(10)), "Read session did not report the terminal error");
+                    UNIT_ASSERT(closed.GetFuture().GetValueSync() != EStatus::SUCCESS);
+                }
+                session->Close(closeTimeout);
+                session->Close(closeTimeout);
+
+                auto stopped = NThreading::NewPromise();
+                std::thread stopper([&driver, stopped]() mutable {
+                    driver.Stop(true);
+                    stopped.SetValue();
                 });
+                const bool stoppedWithClosedSession = stopped.GetFuture().Wait(TDuration::Seconds(5));
+                session.reset();
+                client.reset();
+                stopper.join();
+                UNIT_ASSERT_C(stoppedWithClosedSession,
+                              "Closed session blocks driver.Stop(true): terminal error=" << terminalError << ", close timeout=" << closeTimeout);
             }
-            auto session = client->CreateReadSession(settings);
-            if (waitForTerminalError) {
-                UNIT_ASSERT_C(closedFuture.wait_for(std::chrono::seconds(10)) == std::future_status::ready,
-                              "Read session did not report the terminal connection error");
-                UNIT_ASSERT(closedFuture.get() != EStatus::SUCCESS);
-            }
-            session->Close(closeTimeout);
-            session->Close(closeTimeout);
-
-            std::promise<void> stopped;
-            auto done = stopped.get_future();
-            std::thread stopper([&] {
-                driver.Stop(true);
-                stopped.set_value();
-            });
-            const bool stoppedWithClosedSession =
-                done.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
-            session.reset();
-            client.reset();
-            stopper.join();
-
-            UNIT_ASSERT_C(stoppedWithClosedSession,
-                          "A closed read session must not prevent driver.Stop(true) from completing");
         }
 
     } // namespace
 
     Y_UNIT_TEST_SUITE(TReadSessionLifecycle) {
         Y_UNIT_TEST(TopicClosedReadSessionDoesNotBlockDriverStop) {
-            CheckClosedReadSessionDoesNotBlockDriverStop<NTopic::TTopicClient>(
-                NTopic::TTopicClientSettings(),
-                NTopic::TReadSessionSettings()
-                    .ConsumerName("c")
-                    .AppendTopics(NTopic::TTopicReadSettings("/Root/topic")));
+            CheckClosedReadSessions<NTopic::TTopicClient>(NTopic::TReadSessionSettings()
+                                                              .ConsumerName("c")
+                                                              .AppendTopics(NTopic::TTopicReadSettings("/Root/topic")));
         }
 
         Y_UNIT_TEST(PersQueueClosedReadSessionDoesNotBlockDriverStop) {
-            CheckClosedReadSessionDoesNotBlockDriverStop<NPersQueue::TPersQueueClient>(
-                NPersQueue::TPersQueueClientSettings(),
-                NPersQueue::TReadSessionSettings()
-                    .DisableClusterDiscovery(true)
-                    .ConsumerName("c")
-                    .AppendTopics(NPersQueue::TTopicReadSettings("/Root/topic")));
-        }
-
-        Y_UNIT_TEST(TopicClosedReadSessionAfterTerminalErrorDoesNotBlockDriverStop) {
-            CheckClosedReadSessionDoesNotBlockDriverStop<NTopic::TTopicClient>(
-                NTopic::TTopicClientSettings(),
-                NTopic::TReadSessionSettings()
-                    .ConsumerName("c")
-                    .AppendTopics(NTopic::TTopicReadSettings("/Root/topic"))
-                    .RetryPolicy(NTopic::IRetryPolicy::GetNoRetryPolicy())
-                    .ClientTimeout(TDuration::MilliSeconds(100)),
-                true);
-        }
-
-        Y_UNIT_TEST(PersQueueClosedReadSessionAfterTerminalErrorDoesNotBlockDriverStop) {
-            CheckClosedReadSessionDoesNotBlockDriverStop<NPersQueue::TPersQueueClient>(
-                NPersQueue::TPersQueueClientSettings(),
-                NPersQueue::TReadSessionSettings()
-                    .DisableClusterDiscovery(true)
-                    .ConsumerName("c")
-                    .AppendTopics(NPersQueue::TTopicReadSettings("/Root/topic"))
-                    .RetryPolicy(NPersQueue::IRetryPolicy::GetNoRetryPolicy())
-                    .ClientTimeout(TDuration::MilliSeconds(100)),
-                true);
-        }
-
-        Y_UNIT_TEST(TopicClosedReadSessionAfterTerminalErrorWithTimeoutDoesNotBlockDriverStop) {
-            CheckClosedReadSessionDoesNotBlockDriverStop<NTopic::TTopicClient>(
-                NTopic::TTopicClientSettings(),
-                NTopic::TReadSessionSettings()
-                    .ConsumerName("c")
-                    .AppendTopics(NTopic::TTopicReadSettings("/Root/topic"))
-                    .RetryPolicy(NTopic::IRetryPolicy::GetNoRetryPolicy())
-                    .ClientTimeout(TDuration::MilliSeconds(100)),
-                true, TDuration::Seconds(5));
-        }
-
-        Y_UNIT_TEST(PersQueueClosedReadSessionAfterTerminalErrorWithTimeoutDoesNotBlockDriverStop) {
-            CheckClosedReadSessionDoesNotBlockDriverStop<NPersQueue::TPersQueueClient>(
-                NPersQueue::TPersQueueClientSettings(),
-                NPersQueue::TReadSessionSettings()
-                    .DisableClusterDiscovery(true)
-                    .ConsumerName("c")
-                    .AppendTopics(NPersQueue::TTopicReadSettings("/Root/topic"))
-                    .RetryPolicy(NPersQueue::IRetryPolicy::GetNoRetryPolicy())
-                    .ClientTimeout(TDuration::MilliSeconds(100)),
-                true, TDuration::Seconds(5));
+            CheckClosedReadSessions<NPersQueue::TPersQueueClient>(NPersQueue::TReadSessionSettings()
+                                                                      .DisableClusterDiscovery(true)
+                                                                      .ConsumerName("c")
+                                                                      .AppendTopics(NPersQueue::TTopicReadSettings("/Root/topic")));
         }
     } // Y_UNIT_TEST_SUITE(TReadSessionLifecycle)
 
+    namespace NTopic::NTests {
+
+        class TDirectReadSessionImplTestSetup {
+        public:
+            static bool CanCloseFromTerminalCallback() {
+                struct TControlCallbacks: IDirectReadSessionControlCallbacks {
+                    std::function<void()> OnAbort;
+                    void AbortSession(TSessionClosedEvent&&) override {
+                        OnAbort();
+                    }
+                };
+                auto callbacks = std::make_shared<TControlCallbacks>();
+                TDirectReadSession session(0, "", TReadSessionSettings{}, callbacks, nullptr, nullptr, TLog{});
+                bool closed = false;
+                callbacks->OnAbort = [&] {
+                    if (session.Lock.TryAcquire()) {
+                        session.Lock.Release();
+                        session.Close();
+                        closed = true;
+                    }
+                };
+                {
+                    TDeferredActions<false> deferred;
+                    with_lock (session.Lock) {
+                        session.AbortImpl(TPlainStatus(EStatus::UNAVAILABLE, "Connection failed"), deferred);
+                    }
+                }
+                return closed;
+            }
+        };
+
+        Y_UNIT_TEST_SUITE(TDirectReadSessionLifecycle) {
+            Y_UNIT_TEST(TerminalCallbackCanCloseDirectReader) {
+                UNIT_ASSERT_C(TDirectReadSessionImplTestSetup::CanCloseFromTerminalCallback(),
+                              "Terminal callback must run after releasing the direct reader lock");
+            }
+        } // Y_UNIT_TEST_SUITE(TDirectReadSessionLifecycle)
+
+    } // namespace NTopic::NTests
 } // namespace NYdb::inline Dev

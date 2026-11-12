@@ -2111,13 +2111,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortSession(TASession
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing session to cluster: " << closeEvent.DebugString());
 
     {
-        // The events queue below drains undelivered data events and defers
-        // OnUserRetrievedEvent for them. The session is being torn down, so
-        // the same data may already have been released by a concurrent path;
-        // mark the session aborting so the accounting guard in
-        // OnUserRetrievedEvent skips the second release.
         std::lock_guard guard(Lock);
-        Aborting = true;
+        AbortImpl(&deferred);
     }
 
     EventsQueue->Close(closeEvent, deferred);
@@ -2128,7 +2123,7 @@ template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl(TDeferredActions<UseMigrationProtocol>* deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    if (ClientContext) {
+    if (!Aborting) {
         Aborting = true;
         CallCloseCallbackImpl(deferred);
 
@@ -2163,7 +2158,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Close(std::function<vo
     TDeferredActions<UseMigrationProtocol> deferred;
     std::lock_guard guard(Lock);
     if (Aborting) {
-        AbortImpl(&deferred);
         callback();
         return;
     }

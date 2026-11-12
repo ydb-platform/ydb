@@ -1,3 +1,5 @@
+* Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
+
 * Added support for tablet reassignment operation IDs.
 
 ## v3.27.0
@@ -27,8 +29,6 @@
 * Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
 
 * Fixed a Topic read session crash (Panic in `OnUserRetrievedEvent`) when an unrecoverable stream read error tore down the session while data events were still queued for delivery; the teardown now releases the accounting for undelivered events exactly once.
-
-* Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
 
 ## v3.26.0
 

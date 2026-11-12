@@ -17,21 +17,21 @@ FROM (
         l_extendedprice * ($to_decimal(1) - l_discount) AS volume,
         n2.n_name AS nation
     FROM
-        `/Root/part` as part
+        `part` as part
     ,
-        `/Root/supplier` as supplier
+        `supplier` as supplier
     ,
-        `/Root/lineitem` as lineitem
+        `lineitem` as lineitem
     ,
-        `/Root/orders` as orders
+        `orders` as orders
     ,
-        `/Root/customer` as customer
+        `customer` as customer
     ,
-        `/Root/nation` AS n1
+        `nation` AS n1
     ,
-        `/Root/nation` AS n2
+        `nation` AS n2
     ,
-        `/Root/region` as region
+        `region` as region
     WHERE
         p_partkey == l_partkey
         AND s_suppkey == l_suppkey

@@ -2409,7 +2409,7 @@ Y_UNIT_TEST(EquiJoinWithRenames) {
     const auto exprRoot = ParseAndAnnotate(s, exprCtx);
     CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique(({key_1,key_2},{subkey_1,subkey_2})({value_1,value_2}))");
     CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct(({key_1,key_2},{subkey_1,subkey_2})({value_1,value_2}))");
-    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming(key_1|key_2)");
 }
 
 Y_UNIT_TEST(EquiJoinWithPartialRenames) {
@@ -2457,7 +2457,7 @@ Y_UNIT_TEST(EquiJoinWithPartialRenames) {
     const auto exprRoot = ParseAndAnnotate(s, exprCtx);
     CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((a.subkey1,{key_1,key_2})(value))");
     CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((a.subkey1,{key_1,key_2}))");
-    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "LazyList", "Streaming(key_1|key_2)");
 }
 
 Y_UNIT_TEST(EquiJoinInnerInner) {
@@ -4959,7 +4959,7 @@ Y_UNIT_TEST(StreamingConstraintEventTimeProjection) {
              {
                  .Query = "(let projected (Map watermarked (lambda '(row) (AsStruct '('ts1 (Member row 'ts)) '('ts2 (Member row 'ts))))))",
                  .Callable = "Map",
-                 .Constraint = "Streaming",
+                 .Constraint = "Streaming(ts1|ts2)",
              },
              {
                  .Query = "(let projected (Map watermarked (lambda '(row) (AsStruct '('ts (SafeCast (Member row 'ts) (OptionalType (DataType 'Timestamp))))))))",
@@ -5211,6 +5211,31 @@ Y_UNIT_TEST(StreamingConstraintEventTimeWideCastProjection) {
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "WatermarkGenerator", "Streaming(ts)");
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "WideFilter", "Streaming(0)");
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "WideMap", "Streaming(0)");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "NarrowMap", "Streaming(event_time)");
+}
+
+Y_UNIT_TEST(StreamingConstraintEventTimeWideCastProjectionWithAliases) {
+    const TStringBuf s = R"((
+        (let data (AsList (AsStruct '('ts (String '2024-01-01T00:00:01Z)) '('value (String 'x)))))
+        (let streaming (AssumeConstraints data '"{\"Streaming\" = #}"))
+        (let watermarked (WatermarkGenerator streaming (lambda '(row) (SafeCast (Member row 'ts) (OptionalType (DataType 'Timestamp)))) '()))
+        (let expanded (ExpandMap (ToFlow watermarked) (lambda '(row) (Member row 'ts) (Member row 'value))))
+        (let aliases (WideMap expanded (lambda '(t value) value t (SafeCast t (OptionalType (DataType 'Timestamp))))))
+        (let filteredWide (WideFilter aliases (lambda '(value t ts) (== value value))))
+        (let narrowed (NarrowMap filteredWide (lambda '(value ts event_time) (AsStruct '('event_time event_time) '('value value)))))
+        (let projected (Collect narrowed))
+
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) projected '()))
+        (return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "WatermarkGenerator", "Streaming(ts)");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "WideMap", "Streaming(1|2)");
+    CheckStreamingEventTimeAliases(exprRoot, "WideMap", {"1", "2"});
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "WideFilter", "Streaming(1|2)");
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "NarrowMap", "Streaming(event_time)");
 }
 

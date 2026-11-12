@@ -14,21 +14,21 @@ $my_customers = (
             cs_bill_customer_sk AS customer_sk,
             cs_item_sk AS item_sk
         FROM
-            `/Root/test/ds/catalog_sales`
+            `catalog_sales`
         UNION ALL
         SELECT
             ws_sold_date_sk AS sold_date_sk,
             ws_bill_customer_sk AS customer_sk,
             ws_item_sk AS item_sk
         FROM
-            `/Root/test/ds/web_sales`
+            `web_sales`
     ) AS cs_or_ws_sales
     ,
-        `/Root/test/ds/item`
+        `item`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/customer`
+        `customer`
     WHERE
         sold_date_sk == d_date_sk
         AND item_sk == i_item_sk
@@ -46,13 +46,13 @@ $my_revenue = (
     FROM
         $my_customers
     ,
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/customer_address`
+        `customer_address`
     ,
-        `/Root/test/ds/store`
+        `store`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         c_current_addr_sk == ca_address_sk
         AND ca_county == s_county
@@ -63,14 +63,14 @@ $my_revenue = (
             SELECT DISTINCT
                 d_month_seq + 1
             FROM
-                `/Root/test/ds/date_dim`
+                `date_dim`
             WHERE
                 d_year == 1999 AND d_moy == 3
         ) AND (
             SELECT DISTINCT
                 d_month_seq + 3
             FROM
-                `/Root/test/ds/date_dim`
+                `date_dim`
             WHERE
                 d_year == 1999 AND d_moy == 3
         )

@@ -806,6 +806,20 @@
             "uri": "https://{canondata_backend}/1871002/ca56f1bd9a2cc1daa18e63133158c480accb5db7/resource.tar.gz#test.test_in-in_with_tuple_simple-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[join-aggr_equals_decay-default.txt-Debug]": [
+        {
+            "checksum": "401960351f87865b28de003f31826777",
+            "size": 1442,
+            "uri": "https://{canondata_backend}/1942525/8c6ffc1e3f98aa4027523b069a6961a1bf90ed5d/resource.tar.gz#test.test_join-aggr_equals_decay-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[join-aggr_equals_decay-default.txt-Results]": [
+        {
+            "checksum": "beea67d26c033bbe14764d7dcb467a80",
+            "size": 4738,
+            "uri": "https://{canondata_backend}/1942525/8c6ffc1e3f98aa4027523b069a6961a1bf90ed5d/resource.tar.gz#test.test_join-aggr_equals_decay-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[join-convert_check_key_mem2-default.txt-Debug]": [
         {
             "checksum": "2079a5537b7d02da4507bef785e4902e",

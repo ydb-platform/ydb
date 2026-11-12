@@ -134,8 +134,8 @@ enum ETxTypeCumulativeCounters {
     COUNTER_TT_POSTPONED = 1                             [(CounterOpts) = {Name: "Postponed"}]; // Total restarts
     COUNTER_TT_RO_COMPLETED = 2                          [(CounterOpts) = {Name: "RoCompleted"}];
     COUNTER_TT_RW_COMPLETED = 3                          [(CounterOpts) = {Name: "RwCompleted"}];
-    COUNTER_TT_WRITES = 4                                [(CounterOpts) = {Name: "Writes"}];
-    COUNTER_TT_BYTES_WRITTEN = 5                         [(CounterOpts) = {Name: "WrittenBytes"}];
+    COUNTER_TT_WRITES_DEPRECATED = 4                     [deprecated = true];
+    COUNTER_TT_BYTES_WRITTEN_DEPRECATED = 5              [deprecated = true];
     COUNTER_TT_BYTES_READ = 6                            [(CounterOpts) = {Name: "ReadBytes"}];
     COUNTER_TT_EXECUTE_CPUTIME = 7                       [(CounterOpts) = {Name: "ExecuteCPUTime"}];
     COUNTER_TT_BOOKKEEPING_CPUTIME = 8                   [(CounterOpts) = {Name: "BookkeepingCPUTime"}];

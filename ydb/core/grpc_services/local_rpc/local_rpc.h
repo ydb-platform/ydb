@@ -615,7 +615,8 @@ using TStreamReadProcessorPtr = TIntrusivePtr<TStreamReadProcessor<TResponsePart
 
 template <typename TRpc, typename... TRpcActorArgs>
 TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database,
-    const TMaybe<TString>& token, const TMaybe<TString>& requestType, const TActorContext& ctx, bool internalCall, TRpcActorArgs... args)
+    const TMaybe<TString>& token, const TMaybe<TString>& requestType, const TActorContext& ctx, const TMap<TString, TString>& peerMeta,
+    bool internalCall, TRpcActorArgs... args)
 {
     using TCbWrapper = std::function<void(const typename TRpc::TResponse&)>;
     using TLocalRpcStreamCtx = TStreamReadProcessor<typename TRpc::TResponse>;
@@ -642,6 +643,9 @@ TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(ty
 
     auto localRpcCtx = std::make_shared<TLocalRpcCtx<TRpc, TCbWrapper>>(std::move(proto), [](const typename TRpc::TResponse&) {
     }, database, token, requestType, internalCall);
+    for (const auto& [key, value] : peerMeta) {
+        localRpcCtx->PutPeerMeta(key, value);
+    }
     auto localRpcStreamCtx = MakeIntrusive<TLocalRpcStreamCtx>(std::move(localRpcCtx));
     auto localRpcRequest = std::make_unique<TLocalRpcStreamRequest>(localRpcStreamCtx.Get(), internalCall);
     // The stream wrapper drops the base request's token (unlike DoLocalRpc), so set it here — system-user stream calls like the warmup sysview fetch must pass the KqpProxy warmup gate.
@@ -652,6 +656,14 @@ TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(ty
     ctx.RegisterWithSameMailbox(actor);
 
     return localRpcStreamCtx;
+}
+
+template <typename TRpc, typename... TRpcActorArgs>
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database,
+    const TMaybe<TString>& token, const TMaybe<TString>& requestType, const TActorContext& ctx, bool internalCall, TRpcActorArgs... args)
+{
+    return DoLocalRpcStreamSameMailbox<TRpc>(
+        std::move(proto), database, token, requestType, ctx, TMap<TString, TString>{}, internalCall, args...);
 }
 
 template <typename TRpc, typename... TRpcActorArgs>

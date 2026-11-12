@@ -107,6 +107,9 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
     }
 
     res["Storage"] = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
+    if (RequireSortedRead) {
+        res["RequireSortedRead"] = true;
+    }
 
     if (SortDir != ESortDir::None) {
         res["SortDirection"] = SortDir == ESortDir::Asc ? "asc" : "desc";

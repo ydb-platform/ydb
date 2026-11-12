@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 SRCS(
     abortable_http_response.cpp
     context.cpp
+    framing.cpp
     helpers.cpp
     host_manager.cpp
     http.cpp
@@ -27,4 +28,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_core_http
 )

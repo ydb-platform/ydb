@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SIZE(SMALL)
 
 PEERDIR(
+    ydb/core/grpc_services/local_rpc
     ydb/core/kqp/common
     ydb/core/kqp/ut/common
     ydb/core/kqp/topics
@@ -14,6 +15,7 @@ PEERDIR(
 )
 
 SRCS(
+    kqp_query_request_ut.cpp
     dynamic_function_registry_ut.cpp
     kqp_shard_meta_ut.cpp
     kqp_tli_ut.cpp

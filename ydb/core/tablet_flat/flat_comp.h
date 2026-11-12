@@ -64,15 +64,25 @@ namespace NTable {
         // Parts that replaced original data
         TVector<TPartView> Parts;
 
+        // Configured output id for each resulting part (not an LSM level or tier id).
+        THashMap<TLogoBlobID, ui32> PartOutputIds;
+
+        // Convenience constructor for single-output compactions with output id 0.
+        // Other output ids require the parts-count overload and explicit PartOutputIds.
         TCompactionResult(TEpoch epoch, TVector<TPartView> parts)
             : Epoch(epoch)
             , Parts(std::move(parts))
-        { }
+        {
+            for (const auto& part : Parts) {
+                PartOutputIds.emplace(part->Label, 0);
+            }
+        }
 
         TCompactionResult(TEpoch epoch, size_t parts)
             : Epoch(epoch)
         {
             Parts.reserve(parts);
+            PartOutputIds.reserve(parts);
         }
     };
 

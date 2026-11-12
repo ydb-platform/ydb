@@ -66,6 +66,9 @@ static constexpr i64 FILE_SPLIT_THRESHOLD = 128 << 20; // 128 MiB
 static constexpr i64 READ_TABLE_RETRIES = 100;
 static const std::string ATTR_ASYNC_REPLICATION = "__async_replication";
 static const std::string ATTR_ASYNC_REPLICA = "__async_replica";
+// Explicit backup exclusion for scheme objects; independent of the
+// replication markers above. Directories do not support this attribute.
+static const std::string ATTR_OMIT_BACKUP = "__omit_backup";
 
 ////////////////////////////////////////////////////////////////////////////////
 //                               Util
@@ -73,6 +76,12 @@ static const std::string ATTR_ASYNC_REPLICA = "__async_replica";
 
 void TYdbErrorException::LogToStderr() const {
     Cerr << Status;
+}
+
+template <typename TAttributes>
+static bool IsOmittedFromBackup(const TAttributes& attributes) {
+    const auto it = attributes.find(ATTR_OMIT_BACKUP);
+    return it != attributes.end() && it->second == "true";
 }
 
 static void VerifyStatus(TStatus status, const TString& explain = {}) {
@@ -611,6 +620,42 @@ NScheme::TSchemeEntry DescribePath(TDriver driver, const TString& fullPath) {
     return status.GetEntry();
 }
 
+static bool IsPathOmittedFromBackup(TDriver driver, const TString& path, NScheme::ESchemeEntryType type, bool checkTopicParent) {
+    if (type == NScheme::ESchemeEntryType::Table || type == NScheme::ESchemeEntryType::ColumnTable) {
+        const auto description = DescribeTable(driver, path);
+        const auto& attributes = description.GetAttributes();
+        const auto replica = attributes.find(ATTR_ASYNC_REPLICA);
+        return IsOmittedFromBackup(attributes)
+            || (replica != attributes.end() && replica->second == "true");
+    }
+    if (type == NScheme::ESchemeEntryType::Topic && checkTopicParent) {
+        // A directly requested changefeed is exposed as a topic. Its attributes
+        // belong to the parent table's changefeed description, not DescribeTopic.
+        const TString parentPath(TStringBuf(path).RBefore('/'));
+        try {
+            const auto parent = DescribePath(driver, parentPath);
+            if (parent.Type == NScheme::ESchemeEntryType::Table) {
+                const auto description = DescribeTable(driver, parentPath);
+                for (const auto& feed : description.GetChangefeedDescriptions()) {
+                    if (TStringBuf(feed.GetName()) == TStringBuf(path).RAfter('/')) {
+                        return IsOmittedFromBackup(feed.GetAttributes())
+                            || feed.GetAttributes().contains(ATTR_ASYNC_REPLICATION);
+                    }
+                }
+            }
+        } catch (const TYdbErrorException& e) {
+            if (e.Status.GetStatus() != EStatus::UNAUTHORIZED) {
+                throw;
+            }
+            LOG_W("Cannot check changefeed backup exclusions for " << path.Quote()
+                << ": access to parent " << parentPath.Quote() << " is denied; dumping the topic");
+        }
+    }
+    // Other object types do not expose scheme user attributes through the
+    // existing public API. Their exclusion is supported by server-side export.
+    return false;
+}
+
 TAsyncStatus CopyTableAsyncStart(TDriver driver, const TString& src, const TString& dst) {
     LOG_I("Copy table " << src.Quote() << " to " << dst.Quote());
 
@@ -706,8 +751,10 @@ NTopic::TTopicDescription DescribeTopic(TDriver driver, const TString& path) {
 
 void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& folderPath, const NTable::TTableDescription& desc) {
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
-        if (changefeedDesc.GetAttributes().contains(ATTR_ASYNC_REPLICATION)) {
-            // this changefeed is managed by ASYNC REPLICATION and does not need backing up separately
+        if (IsOmittedFromBackup(changefeedDesc.GetAttributes())
+            || changefeedDesc.GetAttributes().contains(ATTR_ASYNC_REPLICATION))
+        {
+            // Replication feeds remain excluded even if __omit_backup is removed.
             continue;
         }
         TFsPath changefeedDirPath = CreateDirectory(folderPath, TString{changefeedDesc.GetName()});
@@ -732,10 +779,10 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     const auto originalTablePath = JoinDatabasePath(dbPrefix, path);
     const auto originalTableDesc = DescribeTable(driver, originalTablePath);
     if (auto replicaAttribute = originalTableDesc.GetAttributes().find(ATTR_ASYNC_REPLICA);
-        replicaAttribute != originalTableDesc.GetAttributes().end()
-        && replicaAttribute->second == "true"
+        (replicaAttribute != originalTableDesc.GetAttributes().end() && replicaAttribute->second == "true")
+        || IsOmittedFromBackup(originalTableDesc.GetAttributes())
     ) {
-        LOG_D("Skip table " << originalTablePath.Quote() << ", because it is a replica table");
+        LOG_D("Skip table " << originalTablePath.Quote() << ", because it is a replica table or is marked with " << ATTR_OMIT_BACKUP);
         // remove the backup folder
         TVector<TString> children;
         folderPath.ListNames(children);
@@ -1098,7 +1145,11 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     {
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
+            // Only directly requested topics are already listed. Topics found
+            // while traversing directories have directory parents, not tables.
+            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)
+                || IsPathOmittedFromBackup(driver, dbIt.GetFullPath(), dbIt.GetCurrentNode()->Type, dbIt.IsListed()))
+            {
                 LOG_D("Skip " << dbIt.GetFullPath().Quote());
                 dbIt.Next();
                 continue;

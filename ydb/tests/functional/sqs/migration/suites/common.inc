@@ -36,6 +36,3 @@ PEERDIR(
     contrib/python/boto3
     contrib/python/botocore
 )
-
-FORK_SUBTESTS()
-SPLIT_FACTOR(60)

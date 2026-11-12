@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
             });
             observer.Remove();
 
-            auto* request = dynamic_cast<NGRpcService::IRequestCtx*>(pending->GetBase());
+            auto* request = dynamic_cast<NGRpcService::IRequestProxyCtx*>(pending->GetBase());
             UNIT_ASSERT(request);
             request->SetRespHook([&replied](NGRpcService::TRespHookCtx::TPtr ctx) {
                 replied = true;

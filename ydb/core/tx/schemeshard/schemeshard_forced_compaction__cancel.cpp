@@ -95,7 +95,9 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
             }
             Self->ForcedCompactionShardsByTable.erase(tablePathId);
             Self->ForcedCompactionTablesQueue.Remove(tablePathId);
-            Self->InProgressForcedCompactionsByTable.erase(tablePathId);
+            // the table stays registered to this operation until the progress transaction finalizes it: a newer
+            // operation created before that would share the shard queues, the shard registrations and the persisted
+            // shard rows with it (a completed shard may still wait for that transaction)
         }
 
         // clean waiting in flight shards
@@ -108,6 +110,11 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
             stopColumnShard(shardId);
         }
         forcedCompactionInfo.ShardsInFlight.clear();
+        if (!ColumnShardsToStop.empty()) {
+            // numbered now, not in DoComplete: a CASCADE created and dispatched for the same table before this transaction
+            // completes must get a greater number, so that the shard drops the late stop instead of the new request
+            StopSeqNo = Self->NextRound().SerializeToProto();
+        }
 
         Self->CancellingForcedCompactions.emplace_back(*forcedCompactionInfoPtr, Request->Sender, request.GetTxId(), Request->Cookie);
         Self->ForcedCompactionNeedsImmediatePersist = true;
@@ -123,7 +130,7 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
         for (const auto& [tabletId, pathId] : ColumnShardsToStop) {
             auto request = std::make_unique<TEvDataShard::TEvCompactTable>(pathId);
             request->Record.SetActualizeSchema(false);
-            *request->Record.MutableSeqNo() = Self->NextRound().SerializeToProto();
+            *request->Record.MutableSeqNo() = StopSeqNo;
             Self->PipeClientCache->Send(ctx, ui64(tabletId), request.release(), static_cast<ui64>(ECompactionType::ForcedStop));
         }
         Self->ScheduleForcedCompactionProgress(ctx);
@@ -151,6 +158,7 @@ private:
     TSideEffects SideEffects;
     TEvForcedCompaction::TEvCancelRequest::TPtr Request;
     TVector<std::pair<TTabletId, TPathId>> ColumnShardsToStop;
+    NKikimrTx::TMessageSeqNo StopSeqNo;
 };
 
 ITransaction* TSchemeShard::CreateTxCancelForcedCompaction(TEvForcedCompaction::TEvCancelRequest::TPtr& ev) {

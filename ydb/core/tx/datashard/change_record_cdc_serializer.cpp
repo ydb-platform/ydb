@@ -480,7 +480,18 @@ protected:
             if (!data.GetAllowOtherKinds() && data.GetPreferredPoolKind()) {
                 definition["data"]["media"] = data.GetPreferredPoolKind();
             }
-            definition["compression"] = family.Codec == NTable::NPage::ECodec::Plain ? "off" : "lz4";
+            switch (family.Codec) {
+                case NTable::NPage::ECodec::Plain:
+                    definition["compression"] = "off";
+                    break;
+                case NTable::NPage::ECodec::LZ4:
+                    definition["compression"] = "lz4";
+                    break;
+                case NTable::NPage::ECodec::ZSTD:
+                    definition["compression"] = "zstd";
+                    definition["compressionLevel"] = family.GetCodecLevel();
+                    break;
+            }
             definition["cacheMode"] = family.CacheMode == NTable::NPage::ECacheMode::Regular
                 ? "regular" : "in_memory";
         }

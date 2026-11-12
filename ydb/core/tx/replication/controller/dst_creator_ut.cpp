@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
@@ -1059,8 +1061,13 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     template <typename T>
-    void ExistingDstFamily(const TString& error, T&& modify) {
-        TEnv env;
+    void ExistingDstFamily(const TString& error, T&& modify,
+            NKikimrSchemeOp::EColumnCodec codec = NKikimrSchemeOp::ColumnCodecLZ4,
+            TMaybe<i32> compressionLevel = Nothing())
+    {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableRowTableZstdCompression(codec == NKikimrSchemeOp::ColumnCodecZSTD);
+        TEnv env(flags);
         auto source = MakeTableDescription({
             .Name = "Src",
             .KeyColumns = {"key"},
@@ -1073,7 +1080,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         source->MutableColumns(1)->SetFamilyName("archive");
         auto* family = source->MutablePartitionConfig()->AddColumnFamilies();
         family->SetName("archive");
-        family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+        family->SetColumnCodec(codec);
+        if (compressionLevel) {
+            family->SetColumnCodecLevel(*compressionLevel);
+        }
         auto* data = family->MutableStorageConfig()->MutableData();
         data->SetPreferredPoolKind("test");
         data->SetAllowOtherKinds(false);
@@ -1091,8 +1101,39 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
             "/Root/Src", "/Root/Dst"));
         const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusSchemeError);
-        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status,
+            error ? NKikimrScheme::StatusSchemeError : NKikimrScheme::StatusSuccess, result->Get()->Error);
+        if (error) {
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, error);
+        }
+    }
+
+    Y_UNIT_TEST(ZstdColumnFamilyCompressionLevelMismatch) {
+        for (const i32 level : {0, 7, ZSTD_maxCLevel()}) {
+            ExistingDstFamily("Column family compression level mismatch", [](auto& destination) {
+                destination.MutablePartitionConfig()->MutableColumnFamilies(0)->ClearColumnCodecLevel();
+            }, NKikimrSchemeOp::ColumnCodecZSTD, level);
+        }
+    }
+
+    Y_UNIT_TEST(ZstdColumnFamilyDefaultCompressionLevel) {
+        for (const bool explicitSourceLevel : {false, true}) {
+            ExistingDstFamily({}, [explicitSourceLevel](auto& destination) {
+                auto* family = destination.MutablePartitionConfig()->MutableColumnFamilies(0);
+                if (explicitSourceLevel) {
+                    family->ClearColumnCodecLevel();
+                } else {
+                    family->SetColumnCodecLevel(1);
+                }
+            }, NKikimrSchemeOp::ColumnCodecZSTD,
+                explicitSourceLevel ? TMaybe<i32>(1) : Nothing());
+        }
+    }
+
+    Y_UNIT_TEST(ZstdColumnFamilyCompressionLevelMatches) {
+        for (const i32 level : {0, 7, ZSTD_maxCLevel()}) {
+            ExistingDstFamily({}, [](auto&) {}, NKikimrSchemeOp::ColumnCodecZSTD, level);
+        }
     }
 
     Y_UNIT_TEST(ColumnFamilyCodecMismatch) {

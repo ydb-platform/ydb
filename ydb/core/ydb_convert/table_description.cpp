@@ -12,6 +12,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -663,6 +664,16 @@ static void FillColumnDefault(const NKikimrKqp::TKqpColumnMetadataProto& in,
     }
 }
 
+static void FillColumnDefaultLiteral(const Ydb::TypedValue& literal,
+    NKikimrSchemeOp::TColumnDescription& column)
+{
+    if (literal.value().has_null_flag_value()) {
+        column.SetEmptyDefault(google::protobuf::NULL_VALUE);
+    } else {
+        column.MutableDefaultFromLiteral()->CopyFrom(literal);
+    }
+}
+
 static bool FillAlterColumnDescription(const Ydb::Table::ColumnMeta& alter,
     NKikimrSchemeOp::TColumnDescription* column, const TString& workingDir,
     Ydb::StatusIds::StatusCode& code, TString& error)
@@ -685,7 +696,7 @@ static bool FillAlterColumnDescription(const Ydb::Table::ColumnMeta& alter,
 
     switch (alter.default_value_case()) {
         case Ydb::Table::ColumnMeta::kFromLiteral: {
-            *column->MutableDefaultFromLiteral() = alter.from_literal();
+            FillColumnDefaultLiteral(alter.from_literal(), *column);
             break;
         }
         case Ydb::Table::ColumnMeta::kFromSequence: {
@@ -1533,8 +1544,7 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
 
         switch (column.default_value_case()) {
             case Ydb::Table::ColumnMeta::kFromLiteral: {
-                auto fromLiteral = cd->MutableDefaultFromLiteral();
-                *fromLiteral = column.from_literal();
+                FillColumnDefaultLiteral(column.from_literal(), *cd);
                 break;
             }
             case Ydb::Table::ColumnMeta::kFromSequence: {
@@ -1669,7 +1679,7 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
             columnDesc->SetColumnFamilyName(column.family());
         }
 
-        if (column.has_from_literal()) {
+        if (column.has_from_literal() && !column.from_literal().value().has_null_flag_value()) {
             status = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Default values are not supported in column tables";
             return false;
@@ -1768,6 +1778,12 @@ template <typename TColumnDesc>
 static bool FillAlterColumnDescription(const Ydb::Table::ColumnMeta& alter,
     TColumnDesc* alterColumn, Ydb::StatusIds::StatusCode& status, TString& error)
 {
+    if (alter.default_value_case() != Ydb::Table::ColumnMeta::DEFAULT_VALUE_NOT_SET) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Default values are not supported in column tables";
+        return false;
+    }
+
     alterColumn->SetName(alter.Getname());
 
     if (alter.has_not_null()) {
@@ -3056,19 +3072,19 @@ void FillColumnFamily(Ydb::Table::ColumnFamily& out, const NKikimrSchemeOp::TFam
             case NKikimrSchemeOp::ColumnCodecLZ4:
                 out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
                 break;
-            case NKikimrSchemeOp::ColumnCodecZSTD: {
-                if (!isColumnTable) {
-                    break; // FIXME: not supported
-                }
+            case NKikimrSchemeOp::ColumnCodecZSTD:
                 out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
                 break;
-            }
         }
     } else if (in.GetCodec() == 1) {
         // Legacy setting, see datashard
         out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
     } else {
         out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
+    }
+
+    if (in.HasColumnCodecLevel()) {
+        out.set_compression_level(in.GetColumnCodecLevel());
     }
 
     // Check legacy settings for permanent in-memory cache

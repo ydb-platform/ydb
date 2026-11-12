@@ -644,8 +644,7 @@ class Kikimr:
                     raise
                 message = str(e).lower()
                 if not any(
-                    needle in message
-                    for needle in ("unavailable", "connection", "timeout", "not ready", "transport")
+                    needle in message for needle in ("unavailable", "connection", "timeout", "not ready", "transport")
                 ):
                     raise
                 logger.info("create_database not ready yet, retrying: %r", e)

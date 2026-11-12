@@ -150,7 +150,8 @@ public:
         const auto& streamName = streamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const bool shouldAggregateHeartbeats = AppData()->FeatureFlags.GetEnableCdcAggregator()
-            && streamDesc.GetResolvedTimestampsIntervalMs();
+            // DataShards emit heartbeats only with a resolved timestamps interval, otherwise there is nothing to aggregate
+            && streamDesc.GetResolvedTimestampsIntervalMs() > 0;
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "",
             {"stream", workingDir + "/" + streamName},

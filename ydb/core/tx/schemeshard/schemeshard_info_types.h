@@ -1895,6 +1895,10 @@ struct TShardInfo {
     static TShardInfo TestShardSetInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::TestShard);
     }
+
+    static TShardInfo CdcAggregatorInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::CdcAggregator);
+    }
 };
 
 /**

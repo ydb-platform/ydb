@@ -1530,6 +1530,103 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         });
     }
 
+    Y_UNIT_TEST(AggregatorCreatedWithResolvedTimestamps) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "StreamWithoutResolvedTimestamps"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/StreamWithoutResolvedTimestamps"), {
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
+            NLs::StreamHasAggregatorTabletId(false),
+        });
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              ResolvedTimestampsIntervalMs: 1000
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto describeResult = DescribePrivatePath(runtime, "/MyRoot/Table/Stream");
+        TestDescribeResult(describeResult, {
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
+            NLs::StreamHasAggregatorTabletId(true),
+        });
+        const ui64 aggregatorTabletId = describeResult.GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId();
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        describeResult = DescribePrivatePath(runtime, "/MyRoot/Table/Stream");
+        TestDescribeResult(describeResult, {
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId(), aggregatorTabletId);
+    }
+
+    Y_UNIT_TEST(AggregatorDroppedWithStream) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              ResolvedTimestampsIntervalMs: 1000
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 aggregatorTabletId = DescribePrivatePath(runtime, "/MyRoot/Table/Stream")
+            .GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId();
+        UNIT_ASSERT(aggregatorTabletId);
+
+        TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
+        env.TestWaitTabletDeletion(runtime, aggregatorTabletId);
+    }
+
     void Metering(bool serverless) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()

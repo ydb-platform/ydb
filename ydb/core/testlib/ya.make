@@ -74,6 +74,7 @@ PEERDIR(
     ydb/core/testlib/actors
     ydb/core/testlib/basics
     ydb/core/testlib/tablet_helpers
+    ydb/core/tx/cdc_aggregator/tablet
     ydb/core/tx/columnshard
     ydb/core/tx/conveyor/service
     ydb/core/tx/conveyor/usage

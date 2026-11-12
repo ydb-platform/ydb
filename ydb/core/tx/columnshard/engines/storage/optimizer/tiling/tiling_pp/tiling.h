@@ -91,6 +91,7 @@ struct Tiling: ICompactionUnit<TPortion> {
 
         State = EState::COMPATIBILITY;
 
+        // a portion crossing the batch's lower bound may take the last level early; at most one per batch, compaction fixes it
         for (auto portion : sortedPortions) {
             if (portion->GetTotalBlobBytes() < Settings.AccumulatorPortionSizeLimit) {
                 toAccumulator.push_back(portion);

@@ -350,7 +350,11 @@ protected:
     void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {
         NJson::TJsonValue json;
         SerializeToJson(json, record);
-        SetJsonData(data, JsonToString(json));
+        if (record.GetKind() == TChangeRecord::EKind::CdcHeartbeat) {
+            data.SetData(JsonToString(json));
+        } else {
+            SetJsonData(data, JsonToString(json));
+        }
     }
 
     virtual void SerializeToJson(NJson::TJsonValue& json, const TChangeRecord& record) = 0;

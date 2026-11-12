@@ -295,9 +295,11 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
                 break;
             case Ydb::Table::ColumnFamilyPolicy::UNCOMPRESSED:
                 familyProto.SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
+                familyProto.ClearColumnCodecLevel();
                 break;
             case Ydb::Table::ColumnFamilyPolicy::COMPRESSED:
                 familyProto.SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+                familyProto.ClearColumnCodecLevel();
                 break;
             default:
                 code = Ydb::StatusIds::BAD_REQUEST;

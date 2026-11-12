@@ -47,7 +47,8 @@ static std::shared_ptr<NTxProxy::TUploadTypes> BuildTypes(const TUserTable& tabl
     }
     for (size_t i = 0; i < buildSettings.columnSize(); i++) {
         const auto& column = buildSettings.column(i);
-        result->emplace_back(column.GetColumnName(), column.default_from_literal().type());
+        const auto& type = column.default_from_literal().type();
+        result->emplace_back(column.GetColumnName(), type.has_optional_type() ? type.optional_type().item() : type);
     }
     return result;
 }

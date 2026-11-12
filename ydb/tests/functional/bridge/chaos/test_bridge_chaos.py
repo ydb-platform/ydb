@@ -11,6 +11,9 @@ its nodes are restarted without bridge config, and it is converted again and get
 hosts, with another random phase following. Finally the cluster keeps only one of its piles, the original (inline) one
 or the added one. KV and table workloads run all the time.
 
+Before rollback, destructive removal is limited to the added pile: destroying the original pile makes rollback
+impossible even after that pile is added again. The final random phase can remove either pile.
+
 The test fails when an acknowledged write is lost or reads back with another value, when a node dies without being
 killed, or when an operation doesn't finish in time once the failures are healed.
 
@@ -1127,7 +1130,7 @@ class TestBridgeChaos(object):
         self.rejoin(ADDED_PILE)
         self.verify()
 
-    def chaos(self, seconds):
+    def chaos(self, seconds, preserve_original=False):
         actions = [
             (3, self.act_kill_nodes),
             (2, self.act_restart_bsc),
@@ -1144,7 +1147,12 @@ class TestBridgeChaos(object):
             step += 1
             action = self.rng.choices([action for _, action in actions], [weight for weight, _ in actions])[0]
             logger.info("Chaos step %d: %s, states %s", step, action.__name__, state_names(self.states))
-            action()
+            if preserve_original and action == self.act_remove_and_add:
+                # Destroying the original pile discards its inline groups and permanently
+                # makes rollback impossible, even if a fresh pile of the same name is added.
+                action(ADDED_PILE)
+            else:
+                action()
             # every action leaves the cluster with all its piles synchronized and its nodes running
             assert not self.down, self.down
             assert sorted(self.states.values()) == sorted([PRIMARY, SYNC]), state_names(self.states)
@@ -1293,8 +1301,10 @@ class TestBridgeChaos(object):
         self.start(victims)
         self.wait_serving()
 
-    def act_remove_and_add(self):
-        name = self.other(self.primary())
+    def act_remove_and_add(self, name=None):
+        name = name or self.other(self.primary())
+        if name == self.primary():
+            self.act_switchover()
         self.disconnect(name)
         self.kill(self.piles[name])
         self.pile_operation(name, add=False)
@@ -1326,7 +1336,7 @@ class TestBridgeChaos(object):
         self.convert()
         self.add_pile()
         if self.rollback:
-            self.chaos(self.chaos_seconds / 2)
+            self.chaos(self.chaos_seconds / 2, preserve_original=True)
             self.shrink(ORIGINAL_PILE)
             self.roll_back()
             self.convert()

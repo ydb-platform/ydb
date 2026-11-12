@@ -132,6 +132,9 @@ class TChangeSender {
     void ProcessBroadcasting(std::function<bool(TChangeSender*, ui64, ui64)> f, ui64 partitionId, const TVector<ui64>& broadcasting);
 
 protected:
+    virtual void OnRecordsRemoved(const TVector<ui64>&) {
+    }
+
     template <typename T>
     void RemoveRecords(TVector<T>&& records) {
         TVector<ui64> remove(Reserve(records.size()));
@@ -139,11 +142,12 @@ protected:
             remove.push_back(record.Order);
         }
 
-        ActorOps->Send(GetChangeServer(), new TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
+        RemoveRecords(std::move(remove));
     }
 
     template <>
     void RemoveRecords(TVector<ui64>&& records) {
+        OnRecordsRemoved(records);
         ActorOps->Send(GetChangeServer(), new TEvChangeExchange::TEvRemoveRecords(std::move(records)));
     }
 
@@ -170,8 +174,6 @@ protected:
         IChangeSenderFactory* const senderFactory,
         const TActorId changeServer);
 
-    virtual ~TChangeSender() = default;
-
     void RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
     inline bool IsAllSendersReady() {
@@ -184,12 +186,6 @@ protected:
 
     inline bool HasPendingRecords() const {
         return !Enqueued.empty() || !PendingBody.empty() || !PendingSent.empty();
-    }
-
-    ui64 GetMinPendingOrder() const;
-
-    virtual bool DivertBroadcast(const IChangeRecord::TPtr&) {
-        return false;
     }
 
     void SetPartitionResolver(IPartitionResolverVisitor* partitionResolver) {

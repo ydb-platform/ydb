@@ -4,6 +4,8 @@ SRCS(
     grpc_client_low.cpp
 )
 
+SUPPRESSIONS(tsan.supp)
+
 PEERDIR(
     contrib/libs/grpc
     library/cpp/containers/stack_vector

@@ -2523,7 +2523,15 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
     }
     auto* partitionInfo = &partitionIt->second;
 
-    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
+    // Cross-check the identity of the partition found by AssignId: a mismatch
+    // means a stale/inconsistent event - drop it before notifying the
+    // balancer, mirroring the check in Handle(TEvReadWindowExhausted).
+    if (partitionInfo->Topic->GetInternalName() != msg->Topic
+            || partitionInfo->Partition.Partition != msg->PartitionId) {
+        return;
+    }
+
+    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, partitionInfo->Partition.Partition, AutoPartitioningSupport, msg->FirstMessage));
 
     partitionInfo->EndOffset = msg->EndOffset;
     partitionInfo->ReadingFinished = true;
@@ -2581,9 +2589,10 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadWindowExhausted::TPt
     }
     auto& partitionInfo = partitionIt->second;
 
-    // Cross-check the topic of the partition found by AssignId: the AssignId is
+    // Cross-check the identity of the partition found by AssignId: the AssignId is
     // session-unique, so a mismatch means a stale/inconsistent event - drop it.
-    if (partitionInfo.Topic->GetInternalName() != msg->Topic) {
+    if (partitionInfo.Topic->GetInternalName() != msg->Topic
+            || partitionInfo.Partition.Partition != msg->PartitionId) {
         return;
     }
 
@@ -2606,7 +2615,16 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadWindowExhausted::TPt
         // the EOF first, stop the partition session and drop the batch. Defer
         // the EOF until all in-flight direct reads are acked.
         partitionInfo.WindowExhausted = true;
-        SendWindowExhaustedIfNeeded(partitionIt, ctx);
+        // A formed read response for this partition may still be in flight
+        // (e.g. parked in the quota queue under METERING_MODE_REQUEST_UNITS)
+        // and not yet counted in DirectReads. In that case only latch the
+        // flag and leave the sending to ProcessDirectReads, which runs after
+        // ProcessAnswer inserts the read into DirectReads and once more on
+        // every direct_read_ack. Regular (non-direct) reads never reach
+        // ProcessDirectReads, so for them the EOF must be sent right away.
+        if (!DirectRead || PartitionToReadResponse.find(ev->Sender) == PartitionToReadResponse.end()) {
+            SendWindowExhaustedIfNeeded(partitionIt, ctx);
+        }
     }
 }
 

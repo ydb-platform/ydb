@@ -8393,6 +8393,28 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         return std::move(driver);
     }
 
+    // Modern (first-class citizen) variant of SetupTestAndGetDriver: the topic is
+    // addressed by its absolute path and created without the legacy
+    // "rt3.dc1--" naming.
+    THolder<NYdb::TDriver> SetupTestAndGetDriverNoLegacy(
+            NPersQueue::TTestServer& server, const TString& topicPath, ui64 partsCount = 1
+    ) {
+        NYdb::TDriverConfig driverCfg;
+        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort);
+        auto driver = MakeHolder<NYdb::TDriver>(driverCfg);
+
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY});
+        server.EnableLogs({ NKikimrServices::KQP_PROXY}, NActors::NLog::PRI_EMERG);
+
+        server.AnnoyingClient->CreateTopicNoLegacy(topicPath, partsCount);
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+        auto alterSettings = NYdb::NTopic::TAlterTopicSettings();
+        alterSettings.BeginAddConsumer("debug");
+        auto alterRes = topicClient.AlterTopic(topicPath, alterSettings).GetValueSync();
+        UNIT_ASSERT(alterRes.IsSuccess());
+        return std::move(driver);
+    }
+
     Y_UNIT_TEST(MessageMetadata) {
         auto server = SetupLbFederationServerWithTopic("topic1", 1, {"user", "debug"});
         const TString topicPath = "account/topic1";
@@ -9321,13 +9343,15 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(ReadCommitMaxOffset) {
-        NPersQueue::TTestServer server;
-        TString topicFullName = "rt3.dc1--topic1";
-        auto driver = SetupTestAndGetDriver(server, topicFullName);
+        TServerSettings settings = PQSettings(0);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        NPersQueue::TTestServer server(settings);
+        TString topicPath = "/Root/PQ/topic1";
+        auto driver = SetupTestAndGetDriverNoLegacy(server, topicPath);
 
         auto topicClient = NYdb::NTopic::TTopicClient(*driver);
 
-        NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
+        NYdb::NTopic::TWriteSessionSettings wSettings {topicPath, "srcId", "srcId"};
         wSettings.DirectWriteToPartition(false);
         auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
         for (int i = 1; i <= 10; ++i) {
@@ -9338,7 +9362,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT(res);
 
         auto readSession = CreateReadSessionWithMaxOffset(
-            topicClient, topicFullName,
+            topicClient, topicPath,
             /*readOffset=*/4, /*commitOffset=*/3, /*maxOffset=*/6); //inclusive
         const auto result = ReadMessages(*readSession, 3);
         UNIT_ASSERT_VALUES_EQUAL(result.Messages.size(), 3u);
@@ -9350,6 +9374,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT(eof.EndOfPartition);
     }
 
+    // Writes with explicit offsets (gaps) through the raw msgbus protocol
+    // (WriteToPQ), which supports only legacy topic addressing - hence the
+    // legacy "rt3.dc1--" topic naming and a non-first-class-citizen server.
     Y_UNIT_TEST(ReadCommitMaxOffsetWithGaps) {
         NPersQueue::TTestServer server;
         TString topicFullName = "rt3.dc1--topic1";
@@ -9418,6 +9445,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     // balancer is not notified (the partition is alive), so the partition stays
     // locked to the session until it is closed; a second session of the same
     // consumer can read the partition only after the first session is closed.
+    // This test writes with explicit offsets (gaps) through the raw msgbus
+    // protocol (WriteToPQ), which supports only legacy topic addressing, so it
+    // keeps the legacy "rt3.dc1--" topic naming and a non-first-class-citizen
+    // server - like ReadCommitMaxOffsetWithGaps below.
     Y_UNIT_TEST(SendsEndPartitionSessionOnMaxOffsetReached) {
         NPersQueue::TTestServer server;
         TString topicFullName = "rt3.dc1--topic1";
@@ -9490,13 +9521,15 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     // keeps receiving new data as it is written (the partition stays assigned to
     // the session, see the read balancer README).
     Y_UNIT_TEST(MaxOffsetBeyondEndOffsetBehavesAsWithoutMaxOffset) {
-        NPersQueue::TTestServer server;
-        TString topicFullName = "rt3.dc1--topic1";
-        auto driver = SetupTestAndGetDriver(server, topicFullName);
+        TServerSettings settings = PQSettings(0);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        NPersQueue::TTestServer server(settings);
+        TString topicPath = "/Root/PQ/topic1";
+        auto driver = SetupTestAndGetDriverNoLegacy(server, topicPath);
 
         auto topicClient = NYdb::NTopic::TTopicClient(*driver);
 
-        NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
+        NYdb::NTopic::TWriteSessionSettings wSettings {topicPath, "srcId", "srcId"};
         wSettings.DirectWriteToPartition(false);
         auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
         for (int i = 1; i <= 10; ++i) {
@@ -9507,7 +9540,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         // max_offset far beyond the end offset (10): the window is not exhausted,
         // so no end_partition_session is sent and the session stays alive.
         auto readSession = CreateReadSessionWithMaxOffset(
-            topicClient, topicFullName,
+            topicClient, topicPath,
             /*readOffset=*/0, /*commitOffset=*/0, /*maxOffset=*/100); //inclusive
         const auto result = ReadMessages(*readSession, 10);
         UNIT_ASSERT_VALUES_EQUAL(result.Messages.size(), 10u);
@@ -9537,18 +9570,20 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     // that topic's partition session, not another topic's partition that happens
     // to have the same partition id (both topics here have a single partition 0).
     Y_UNIT_TEST(MultiTopicMaxOffsetEndsCorrectPartition) {
-        NPersQueue::TTestServer server;
-        TString topic1 = "rt3.dc1--topic1";
-        TString topic2 = "rt3.dc1--topic2";
-        auto driver = SetupTestAndGetDriver(server, topic1);
+        TServerSettings settings = PQSettings(0);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        NPersQueue::TTestServer server(settings);
+        TString topic1 = "/Root/PQ/topic1";
+        TString topic2 = "/Root/PQ/topic2";
+        auto driver = SetupTestAndGetDriverNoLegacy(server, topic1);
 
         // Create the second topic with the same "debug" consumer.
-        server.AnnoyingClient->CreateTopic(topic2, 1);
+        server.AnnoyingClient->CreateTopicNoLegacy(topic2, 1);
         {
             auto topicClient = NYdb::NTopic::TTopicClient(*driver);
             auto alterSettings = NYdb::NTopic::TAlterTopicSettings();
             alterSettings.BeginAddConsumer("debug");
-            auto alterRes = topicClient.AlterTopic(TString("/Root/PQ/") + topic2, alterSettings).GetValueSync();
+            auto alterRes = topicClient.AlterTopic(topic2, alterSettings).GetValueSync();
             UNIT_ASSERT(alterRes.IsSuccess());
         }
 
@@ -9570,8 +9605,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         rSettings.AppendTopics(NYdb::NTopic::TTopicReadSettings(topic2));
         auto readSession = topicClient.CreateReadSession(rSettings);
 
-        // The server reports the modern topic path (e.g. "/Root/topic1"),
-        // not the legacy "rt3.dc1--topic1" name, so match the short name.
+        // The SDK may report the topic path in a normalized form; match the
+        // short name to tell the two topics apart.
         auto isTopic1 = [&](const std::string& path) { return TString(path).EndsWith("topic1"); };
 
         // Both partitions have id 0. Collect their start events and confirm;
@@ -9628,13 +9663,15 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     // (readOffset == max_offset). The server must still send end_partition_session
     // instead of silently starting a read that can never deliver data.
     Y_UNIT_TEST(MaxOffsetExhaustedOnFirstReadSendsEndPartitionSession) {
-        NPersQueue::TTestServer server;
-        TString topicFullName = "rt3.dc1--topic1";
-        auto driver = SetupTestAndGetDriver(server, topicFullName);
+        TServerSettings settings = PQSettings(0);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        NPersQueue::TTestServer server(settings);
+        TString topicPath = "/Root/PQ/topic1";
+        auto driver = SetupTestAndGetDriverNoLegacy(server, topicPath);
 
         auto topicClient = NYdb::NTopic::TTopicClient(*driver);
 
-        NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
+        NYdb::NTopic::TWriteSessionSettings wSettings {topicPath, "srcId", "srcId"};
         wSettings.DirectWriteToPartition(false);
         auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
         for (int i = 1; i <= 10; ++i) {
@@ -9644,7 +9681,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         // readOffset == maxOffset + 1: the window is exhausted before any read.
         auto readSession = CreateReadSessionWithMaxOffset(
-            topicClient, topicFullName,
+            topicClient, topicPath,
             /*readOffset=*/6, /*commitOffset=*/0, /*maxOffset=*/5); //inclusive
         const auto eof = ReadMessages(*readSession, 0);
         UNIT_ASSERT(eof.EndOfPartition);

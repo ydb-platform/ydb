@@ -18,12 +18,12 @@ class TColumnShard;
 
 struct TEvMoveData {
     enum EEv {
-        EvWakeup = EventSpaceBegin(TEvents::ES_PRIVATE),
+        EvWakeup = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvPoke,
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE));
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE));
 
     // The move's own cadence, so it does not ride the tablet's periodic wakeup.
     struct TEvWakeup: public NActors::TEventLocal<TEvWakeup, EvWakeup> {};
@@ -34,7 +34,7 @@ struct TEvMoveData {
 
 // Stateless: nothing is persisted; on restart Hive re-sends TEvMoveData.
 struct TMoveDataState {
-    TActorId HiveSender;
+    NActors::TActorId HiveSender;
     THashSet<ui32> TargetGroups;
     bool Active = false;
     // Set by the executor's MoveDataCompleted(): the local-DB vacuum leg is done.
@@ -44,7 +44,7 @@ struct TMoveDataState {
 };
 
 // Owns the move loop (re-seed, metadata re-arm, rewrites, gate) on its own cadence; same mailbox as the tablet, so not CPU offload.
-class TMoveDataDriver: public TActorBootstrapped<TMoveDataDriver> {
+class TMoveDataDriver: public NActors::TActorBootstrapped<TMoveDataDriver> {
 private:
     TColumnShard* Self;
     TMoveDataState State;
@@ -53,7 +53,7 @@ private:
     // Periodic fallback interval; pokes run a turn sooner.
     static constexpr TDuration Cadence = TDuration::Seconds(5);
 
-    void ScheduleWakeup(const TActorContext& ctx) {
+    void ScheduleWakeup(const NActors::TActorContext& ctx) {
         ctx.Schedule(Cadence, new TEvMoveData::TEvWakeup());
     }
 
@@ -61,15 +61,15 @@ private:
         return TabletActivity->Val() != 0;
     }
 
-    void AcceptRequest(const TActorId& sender, const THashSet<ui32>& requested, const TActorContext& ctx);
+    void AcceptRequest(const NActors::TActorId& sender, const THashSet<ui32>& requested, const NActors::TActorContext& ctx);
     void RestartMoveDataActualizer();
     void SetupMoveDataMetadata();
     void SetupMoveDataRewrites();
-    void CheckMoveDataGate(const TActorContext& ctx);
-    void StartAndCheckGate(const TActorContext& ctx);
+    void CheckMoveDataGate(const NActors::TActorContext& ctx);
+    void StartAndCheckGate(const NActors::TActorContext& ctx);
 
-    void Handle(TEvMoveData::TEvWakeup::TPtr&, const TActorContext& ctx);
-    void Handle(TEvMoveData::TEvPoke::TPtr&, const TActorContext& ctx);
+    void Handle(TEvMoveData::TEvWakeup::TPtr&, const NActors::TActorContext& ctx);
+    void Handle(TEvMoveData::TEvPoke::TPtr&, const NActors::TActorContext& ctx);
 
 public:
     TMoveDataDriver(TColumnShard* self, const std::shared_ptr<TAtomicCounter>& tabletActivity)
@@ -79,11 +79,11 @@ public:
     }
 
     static void StartOrUpdateMigration(
-        TColumnShard& owner, const NKikimrTabletBase::TEvMoveData& request, const TActorId& sender, const TActorContext& ctx);
-    static void Stop(TColumnShard& owner, const TActorContext& ctx);
-    void OnVacuumCompleted(const TActorContext& ctx);
+        TColumnShard& owner, const NKikimrTabletBase::TEvMoveData& request, const NActors::TActorId& sender, const NActors::TActorContext& ctx);
+    static void Stop(TColumnShard& owner, const NActors::TActorContext& ctx);
+    void OnVacuumCompleted(const NActors::TActorContext& ctx);
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap(const NActors::TActorContext& ctx) {
         Become(&TThis::StateWork);
         // The tablet pokes after registering; this is the periodic fallback.
         ScheduleWakeup(ctx);
@@ -93,7 +93,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvMoveData::TEvWakeup, Handle);
             HFunc(TEvMoveData::TEvPoke, Handle);
-            cFunc(TEvents::TEvPoison::EventType, PassAway);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
             default:
                 break;
         }

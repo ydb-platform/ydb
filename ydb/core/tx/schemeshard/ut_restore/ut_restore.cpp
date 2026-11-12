@@ -3983,7 +3983,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 }
 
 Y_UNIT_TEST_SUITE(TImportTests) {
-    void TestTablePermissions(bool enableDataShardDirectPartImport, TMaybe<bool> interruptInheritance) {
+    void TestTablePermissions(bool enableDataShardDirectPartImport, bool interruptInheritance) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -4011,10 +4011,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 permission_names: "ydb.generic.read"
               }
             }
-            %s
-        )", interruptInheritance
-            ? (*interruptInheritance ? "interrupt_inheritance: true" : "interrupt_inheritance: false")
-            : "");
+            interrupt_inheritance: %s
+        )", interruptInheritance ? "true" : "false");
 
         const auto data = GenerateTestData(R"(
             columns {
@@ -4056,7 +4054,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         const auto describeResult = DescribePath(runtime, "/MyRoot/Table");
         const NACLib::TACL acl(describeResult.GetPathDescription().GetSelf().GetACL());
-        UNIT_ASSERT_VALUES_EQUAL(acl.GetInterruptInheritance(), interruptInheritance.GetOrElse(false));
+        UNIT_ASSERT_VALUES_EQUAL(acl.GetInterruptInheritance(), interruptInheritance);
     }
 
     ui64 Run(TTestBasicRuntime& runtime, TTestEnv& env,
@@ -6908,10 +6906,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST_FLAG(TablePermissions, EnableDataShardDirectPartImport) {
-        TestTablePermissions(EnableDataShardDirectPartImport, /* interruptInheritance */ Nothing());
-    }
-
-    Y_UNIT_TEST_FLAG(TablePermissionsWithExplicitInheritance, EnableDataShardDirectPartImport) {
         TestTablePermissions(EnableDataShardDirectPartImport, /* interruptInheritance */ false);
     }
 
@@ -9991,7 +9985,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
-    void TestRestoreSystemViewPermissions(TMaybe<bool> interruptInheritance) {
+    void TestRestoreSystemViewPermissions(bool interruptInheritance) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
@@ -10015,9 +10009,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 }
             }
             %s
-        )", interruptInheritance
-            ? (*interruptInheritance ? "interrupt_inheritance: true" : "interrupt_inheritance: false")
-            : "");
+        )", interruptInheritance ? "interrupt_inheritance: true" : "");
 
         const auto data = GenerateTestData(
             {
@@ -10038,7 +10030,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         NACLib::TDiffACL diffACL;
-        diffACL.SetInterruptInheritance(!interruptInheritance.GetOrElse(false));
+        diffACL.SetInterruptInheritance(!interruptInheritance);
         TestModifyACL(runtime, ++txId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "");
         env.TestWaitNotification(runtime, txId);
 
@@ -10065,14 +10057,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/partition_stats");
         const NACLib::TACL acl(describeResult.GetPathDescription().GetSelf().GetACL());
-        UNIT_ASSERT_VALUES_EQUAL(acl.GetInterruptInheritance(), interruptInheritance.GetOrElse(false));
+        UNIT_ASSERT_VALUES_EQUAL(acl.GetInterruptInheritance(), interruptInheritance);
     }
 
     Y_UNIT_TEST(ShouldRestoreSystemViewPermissions) {
-        TestRestoreSystemViewPermissions(/* interruptInheritance */ Nothing());
-    }
-
-    Y_UNIT_TEST(ShouldRestoreSystemViewPermissionsWithExplicitInheritance) {
         TestRestoreSystemViewPermissions(/* interruptInheritance */ false);
     }
 

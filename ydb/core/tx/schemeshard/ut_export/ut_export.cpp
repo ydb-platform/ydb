@@ -2234,7 +2234,7 @@ namespace {
             FinalizeColumnTableSlowS3Export(ctx);
         }
 
-        void TestTablePermissions(TMaybe<bool> interruptInheritance) {
+        void TestTablePermissions(bool interruptInheritance) {
             EnvOptions().EnablePermissionsExport(true);
             Env(); // Init test env
             ui64 txId = 100;
@@ -2250,7 +2250,7 @@ namespace {
             NACLib::TDiffACL diffACL;
             diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user@builtin", NACLib::InheritNone);
             if (interruptInheritance) {
-                diffACL.SetInterruptInheritance(*interruptInheritance);
+                diffACL.SetInterruptInheritance(true);
             }
             TestModifyACL(Runtime(), ++txId, "/MyRoot", "Table", diffACL.SerializeAsString(), "user@builtin");
             Env().TestWaitNotification(Runtime(), txId);
@@ -2281,10 +2281,10 @@ namespace {
                   }
                 }
                 interrupt_inheritance: %s
-            )", interruptInheritance.GetOrElse(false) ? "true" : "false")));
+            )", interruptInheritance ? "true" : "false")));
         }
 
-        void TestSystemViewPermissions(TMaybe<bool> interruptInheritance) {
+        void TestSystemViewPermissions(bool interruptInheritance) {
             Env();
             ui64 txId = 100;
 
@@ -2295,7 +2295,7 @@ namespace {
             NACLib::TDiffACL diffACL;
             diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
             if (interruptInheritance) {
-                diffACL.SetInterruptInheritance(*interruptInheritance);
+                diffACL.SetInterruptInheritance(true);
             }
             TestModifyACL(Runtime(), ++txId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
             Env().TestWaitNotification(Runtime(), txId);
@@ -2336,7 +2336,7 @@ namespace {
                   }
                 }
                 interrupt_inheritance: %s
-            )", interruptInheritance.GetOrElse(false) ? "true" : "false")));
+            )", interruptInheritance ? "true" : "false")));
         }
 
     private:
@@ -5005,10 +5005,6 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(TablePermissions) {
-        TestTablePermissions(/* interruptInheritance */ Nothing());
-    }
-
-    Y_UNIT_TEST(TablePermissionsWithExplicitInheritance) {
         TestTablePermissions(/* interruptInheritance */ false);
     }
 
@@ -5948,10 +5944,6 @@ state: STATE_ENABLED
     }
 
     Y_UNIT_TEST(SystemViewWithPermissionsExport) {
-        TestSystemViewPermissions(/* interruptInheritance */ Nothing());
-    }
-
-    Y_UNIT_TEST(SystemViewWithPermissionsAndExplicitInheritanceExport) {
         TestSystemViewPermissions(/* interruptInheritance */ false);
     }
 

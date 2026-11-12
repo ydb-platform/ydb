@@ -131,7 +131,6 @@ public:
         }
         YDB_LOG_VERIFY(false);
     }
-
 };
 
 }   // namespace NKikimr::NOlap

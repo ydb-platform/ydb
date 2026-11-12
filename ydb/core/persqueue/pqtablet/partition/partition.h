@@ -45,13 +45,6 @@ TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant t
 
 
 class TKeyLevel;
-struct TMirrorerInfo {
-    explicit TMirrorerInfo(const TActorId& actor)
-        : Actor(actor)
-    {}
-
-    TActorId Actor;
-};
 
 enum class ECommitState {
     Pending,
@@ -1174,7 +1167,7 @@ private:
 
     TDeque<NKikimrPQ::TStatusResponse::TErrorMessage> Errors;
 
-    THolder<TMirrorerInfo> Mirrorer;
+    TActorId Mirrorer;
 
     TInstant LastUsedStorageMeterTimestamp;
 

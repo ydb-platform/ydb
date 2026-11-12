@@ -954,7 +954,7 @@ void TPartition::DestroyActor(const TActorContext& ctx)
     }
 
     if (Mirrorer) {
-        Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
+        Send(Mirrorer, new TEvents::TEvPoisonPill());
     }
 
     if (UsersInfoStorage.Defined()) {
@@ -4330,7 +4330,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 
     if (MirroringEnabled(Config)) {
         if (Mirrorer) {
-            ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
+            ctx.Send(Mirrorer, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
                                                                           Config));
         } else {
             ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
@@ -4338,8 +4338,8 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         }
     } else {
         if (Mirrorer) {
-            ctx.Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
-            Mirrorer.Reset();
+            ctx.Send(Mirrorer, new TEvents::TEvPoisonPill());
+            Mirrorer = {};
         }
     }
 
@@ -5331,21 +5331,19 @@ void TPartition::CreateMirrorerActor() {
     for (const auto& consumer : Config.GetConsumers()) {
         destinationConsumers.push_back(consumer.GetName());
     }
-    Mirrorer = MakeHolder<TMirrorerInfo>(
-        RegisterWithSameMailbox(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, GetEndOffset(), Config.GetPartitionConfig().GetMirrorFrom(), destinationConsumers, TabletCounters))
-    );
+    Mirrorer = RegisterWithSameMailbox(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, GetEndOffset(), Config.GetPartitionConfig().GetMirrorFrom(), destinationConsumers, TabletCounters));
 }
 
 void TPartition::DestroyMirrorer() {
     if (Mirrorer) {
-        Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
-        Mirrorer.Reset();
+        Send(Mirrorer, new TEvents::TEvPoisonPill());
+        Mirrorer = {};
     }
 }
 
 void TPartition::NotifyMirrorerPersistDone() {
     if (Mirrorer) {
-        Send(Mirrorer->Actor, new TEvPQ::TEvPersistDone(GetEndOffset()));
+        Send(Mirrorer, new TEvPQ::TEvPersistDone(GetEndOffset()));
     }
 }
 

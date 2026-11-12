@@ -123,12 +123,12 @@ public:
 
     static void EnsureMirrorer(TPartition& partition, const TActorId& actor) {
         if (!partition.Mirrorer) {
-            partition.Mirrorer = MakeHolder<TMirrorerInfo>(actor);
+            partition.Mirrorer = actor;
         }
     }
 
     static TActorId GetMirrorerActor(const TPartition& partition) {
-        return partition.Mirrorer ? partition.Mirrorer->Actor : TActorId{};
+        return partition.Mirrorer;
     }
 
     static TString GetConfigKey(const TPartition& partition) {

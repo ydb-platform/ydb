@@ -24,7 +24,7 @@ void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext
 
         return;
     }
-    if (!Mirrorer || ev->Sender != Mirrorer->Actor) {
+    if (!Mirrorer || ev->Sender != Mirrorer) {
         LOG_D("Ignoring replication data from a retired mirrorer");
         return;
     }

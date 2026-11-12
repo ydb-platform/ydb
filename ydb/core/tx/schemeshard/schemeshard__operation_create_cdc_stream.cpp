@@ -118,7 +118,6 @@ public:
         const auto& streamDesc = op.GetStreamDescription();
         const auto& streamName = streamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
-        const bool shouldAggregateHeartbeats = ShouldAggregateHeartbeats(streamDesc);
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "",
             {"stream", workingDir + "/" + streamName},
@@ -344,9 +343,12 @@ public:
             return result;
         }
 
-        TChannelsBindings channelsBindings;
-        if (shouldAggregateHeartbeats && !CheckAggregatorCanBeCreated(op, streamPath, context, channelsBindings, *result)) {
-            return result;
+        TMaybe<TChannelsBindings> aggregatorChannels;
+        if (ShouldAggregateHeartbeats(streamDesc)) {
+            aggregatorChannels = CheckAggregatorCanBeCreated(op, streamPath, context, *result);
+            if (!aggregatorChannels) {
+                return result;
+            }
         }
 
         auto stream = TCdcStreamInfo::Create(streamDesc);
@@ -384,8 +386,8 @@ public:
         streamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         streamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        if (shouldAggregateHeartbeats) {
-            AddAggregator(OperationId, streamPath, stream, channelsBindings, txState, context);
+        if (aggregatorChannels) {
+            AddAggregator(OperationId, streamPath, stream, *aggregatorChannels, txState, context);
         }
 
         context.SS->CdcStreams.Set(pathId, stream);
@@ -1001,11 +1003,10 @@ bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& str
         && streamDesc.GetResolvedTimestampsIntervalMs() > 0;
 }
 
-bool CheckAggregatorCanBeCreated(
+TMaybe<TChannelsBindings> CheckAggregatorCanBeCreated(
         const NKikimrSchemeOp::TCreateCdcStream& op,
         const TPath& streamPath,
         TOperationContext& context,
-        TChannelsBindings& channelsBindings,
         TProposeResponse& result)
 {
     const auto checks = streamPath.Check();
@@ -1013,22 +1014,23 @@ bool CheckAggregatorCanBeCreated(
 
     if (!checks) {
         result.SetError(checks.GetStatus(), checks.GetError());
-        return false;
+        return Nothing();
     }
 
     if (op.GetTopicAutoPartitioning()) {
         result.SetError(NKikimrScheme::StatusInvalidParameter,
             "RESOLVED_TIMESTAMPS with topic autopartitioning are not supported when CDC heartbeats are aggregated");
-        return false;
+        return Nothing();
     }
 
+    TChannelsBindings channelsBindings;
     if (!context.SS->ResolveTabletChannels(0, streamPath.GetPathIdForDomain(), channelsBindings)) {
         result.SetError(NKikimrScheme::StatusInvalidParameter,
             "Unable to construct channel binding for CDC aggregator with the storage pool");
-        return false;
+        return Nothing();
     }
 
-    return true;
+    return channelsBindings;
 }
 
 void AddAggregator(

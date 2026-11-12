@@ -44,11 +44,10 @@ void DoCreateStream(
 
 bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
 
-bool CheckAggregatorCanBeCreated(
+TMaybe<TChannelsBindings> CheckAggregatorCanBeCreated(
     const NKikimrSchemeOp::TCreateCdcStream& op,
     const TPath& streamPath,
     TOperationContext& context,
-    TChannelsBindings& channelsBindings,
     TProposeResponse& result);
 
 void AddAggregator(

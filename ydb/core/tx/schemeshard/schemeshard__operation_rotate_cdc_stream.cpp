@@ -131,7 +131,6 @@ public:
         const auto& newStreamDesc = newStreamOp.GetStreamDescription();
         const auto& newStreamName = newStreamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
-        const bool shouldAggregateHeartbeats = ShouldAggregateHeartbeats(newStreamDesc);
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "",
             {"oldStream", workingDir + "/" + oldStreamName},
@@ -392,9 +391,12 @@ public:
             return result;
         }
 
-        TChannelsBindings channelsBindings;
-        if (shouldAggregateHeartbeats && !CheckAggregatorCanBeCreated(newStreamOp, newStreamPath, context, channelsBindings, *result)) {
-            return result;
+        TMaybe<TChannelsBindings> aggregatorChannels;
+        if (ShouldAggregateHeartbeats(newStreamDesc)) {
+            aggregatorChannels = CheckAggregatorCanBeCreated(newStreamOp, newStreamPath, context, *result);
+            if (!aggregatorChannels) {
+                return result;
+            }
         }
 
         auto guard = context.DbGuard();
@@ -444,8 +446,8 @@ public:
         newStreamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         newStreamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        if (shouldAggregateHeartbeats) {
-            AddAggregator(OperationId, newStreamPath, newStream, channelsBindings, txState, context);
+        if (aggregatorChannels) {
+            AddAggregator(OperationId, newStreamPath, newStream, *aggregatorChannels, txState, context);
         }
 
         context.SS->CdcStreams.Set(pathId, newStream);

@@ -58,6 +58,8 @@ Knn::ToBinaryStringFloat8E4M3(List<Float>{Flags:AutoMap})->Tagged<String, "Float
 Knn::ToBinaryStringFloat8E5M2(List<Float>{Flags:AutoMap})->Tagged<String, "Float8E5M2Vector">
 Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
 Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
+Knn::ToBinaryStringUint4(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint4Vector">
+Knn::ToBinaryStringInt4(List<Int8>{Flags:AutoMap})->Tagged<String, "Int4Vector">
 Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::ToBinaryStringBit(List<Float>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::ToBinaryStringBit(List<Uint8>{Flags:AutoMap})->Tagged<String, "BitVector">
@@ -69,8 +71,8 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 
 Функции сериализации векторных данных преобразуют массив элементов в байтовую строку следующего формата:
 
-- **Основная часть** — непрерывный массив элементов ([knn-serializer.h](https://github.com/ydb-platform/ydb/blob/0b506f56e399e0b4e6a6a4267799da68a3164bf7/ydb/library/yql/udfs/common/knn/knn-serializer.h#L19))
-- **Тип** — 1 байт в конце строки, обозначающий тип данных ([knn-defines.h](https://github.com/ydb-platform/ydb/blob/24026648dd7463d58e1470aa8981b17677116e7c/ydb/library/yql/udfs/common/knn/knn-defines.h#L5)):
+- **Основная часть** — непрерывный массив элементов ([knn-serializer-shared.h](https://github.com/ydb-platform/ydb/blob/4b6ee4f96913d1f7e21f7674fca6ab4abb1bc091/ydb/library/yql/udfs/common/knn/knn-serializer-shared.h))
+- **Тип** — 1 байт в конце строки, обозначающий тип данных ([knn-defines.h](https://github.com/ydb-platform/ydb/blob/4b6ee4f96913d1f7e21f7674fca6ab4abb1bc091/ydb/library/yql/udfs/common/knn/knn-defines.h)):
   - `1` — `Float` (4 байта на элемент);
   - `2` — `Uint8` (1 байт на элемент);
   - `3` — `Int8` (1 байт на элемент);
@@ -78,11 +80,19 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
   - `5` — `BFloat16` (2 байта на элемент, [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format));
   - `6`: `Float8E4M3` (1 байт на элемент, E4M3FN);
   - `7`: `Float8E5M2` (1 байт на элемент, E5M2);
+  - `8`: `Uint4` (4 бита на элемент);
+  - `9`: `Int4` (4 бита на элемент);
   - `10` — `Bit` (1 бит на элемент).
 
 Например, вектор из 5 элементов типа `Float` сериализуется в строку длиной 21 байт: 4 байта × 5 элементов (основная часть) + 1 байт (тип) = 21 байт.
 
 Формат `Bit` содержит дополнительный байт перед маркером типа с количеством неиспользованных битов в последнем байте данных.
+
+Форматы `Uint4` и `Int4` упаковывают две координаты в один байт: первая занимает младшие четыре бита, вторая занимает старшие четыре бита. `Int4` использует дополнительный код.
+
+Дополнительный байт перед маркером типа хранит число неиспользованных четырёхбитных позиций: `0` при чётной размерности и `1` при нечётной. При нечётной размерности неиспользованные старшие четыре бита последнего байта данных должны быть нулевыми.
+
+Длина сериализованного вектора из `N` координат составляет `ceil(N / 2) + 2` байта. Например, пять координат занимают пять байт: три байта данных, один байт с числом неиспользованных позиций и один байт типа.
 
 #### Детали имплементации {#functions-convert-details}
 
@@ -106,6 +116,21 @@ E4M3FN обеспечивает большую точность, а E5M2 под�
 Для векторных индексов с такими форматами укажите `vector_type="float8_e4m3"` или `vector_type="float8_e5m2"`. Сериализуйте векторы запросов в тот же формат, что и хранимые векторы. Все функции расстояния и сходства поддерживают оба формата и выполняют вычисления в `Float`.
 
 По сравнению с `Float`, FP8 сокращает объём хранения координат в четыре раза без учёта служебных данных сериализации. Перед выбором формата измерьте точность/полноту поиска на своих данных.
+
+#### Упакованные 4-битные целочисленные форматы {#int4-formats}
+
+`Int4` и `Uint4` хранят целочисленные координаты по четыре бита, упаковывая две координаты в один байт. Это форматы сериализации векторов; функции преобразования принимают существующие целочисленные типы YQL:
+
+| Формат вектора | Функция преобразования | Входной тип | Диапазон координат |
+| --- | --- | --- | --- |
+| `Int4` | `ToBinaryStringInt4` | `List<Int8>` | от -8 до 7 |
+| `Uint4` | `ToBinaryStringUint4` | `List<Uint8>` | от 0 до 15 |
+
+Используйте `Int4` для знаковых координат и `Uint4` для неотрицательных. Обе функции ограничивают значения за пределами целевого диапазона ближайшей границей. Масштабирование не применяется. Для эмбеддингов с плавающей точкой выберите масштабирование и округление, преобразуйте координаты в `List<Int8>` или `List<Uint8>`, затем сериализуйте их. `FloatFromBinaryString` декодирует оба формата в `List<Float>` с сохранёнными целочисленными значениями.
+
+Для векторных индексов с такими форматами укажите `vector_type="int4"` или `vector_type="uint4"`. Сериализуйте векторы запросов в тот же формат, что и хранимые векторы. Все функции расстояния и сходства поддерживают оба формата. Они возвращают `NULL` для некорректных упакованных данных, в том числе при отсутствии байта с числом неиспользованных позиций, значении этого байта, отличном от `0` или `1`, либо ненулевых неиспользованных старших битах.
+
+По сравнению с `Int8` или `Uint8`, эти форматы сокращают объём хранения координат вдвое без учёта служебных данных сериализации. По сравнению с `Float`, объём координат сокращается в восемь раз. Перед выбором формата измерьте точность/полноту поиска после квантования.
 
 ### Функции расстояния и сходства {#functions-distance}
 
@@ -142,7 +167,7 @@ Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 
 {% note info %}
 
-Все функции расстояния и сходства поддерживают перегрузки с аргументами одного из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Float8E4M3Vector">`, `Tagged<String, "Float8E5M2Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
+Все функции расстояния и сходства поддерживают перегрузки с аргументами одного из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Float8E4M3Vector">`, `Tagged<String, "Float8E5M2Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "Uint4Vector">`, `Tagged<String, "Int4Vector">`, `Tagged<String, "BitVector">`.
 
 Если оба аргумента `Tagged`, то значение тега должно совпадать, иначе запрос завершится с ошибкой.
 
@@ -299,7 +324,7 @@ $facts = AsList(
 
 ML модель может выполнять квантование или это можно сделать вручную с помощью YQL.
 
-Ниже приведены примеры квантования в FP8 и `Int8` на YQL.
+Ниже приведены примеры квантования в FP8 и целочисленные форматы векторов на YQL.
 
 #### Float -> FP8 {#approximate-vector-search-scalar-quantization-fp8}
 
@@ -311,6 +336,19 @@ SELECT Knn::FloatFromBinaryString($vector); -- [1.0, 2.0]
 ```
 
 Для использования E5M2 замените `ToBinaryStringFloat8E4M3` на `ToBinaryStringFloat8E5M2`. Перед сохранением сериализованного вектора в колонку `String` вызовите `Untag($vector, "Float8E4M3Vector")` или `Untag($vector, "Float8E5M2Vector")` соответственно.
+
+#### Int8/Uint8 -> Int4/Uint4 {#approximate-vector-search-scalar-quantization-int4}
+
+Сериализуйте целочисленные координаты с помощью функций преобразования в 4-битные форматы. [Суффиксы числовых литералов](../../syntax/lexer.md#literal-numbers) `t` и `ut` задают типы `Int8` и `Uint8` соответственно. Примеры показывают ограничение значений и декодирование:
+
+```yql
+$signed = Knn::ToBinaryStringInt4([-128t, -9t, 8t, 127t]);
+$unsigned = Knn::ToBinaryStringUint4([0ut, 15ut, 16ut, 255ut]);
+SELECT Knn::FloatFromBinaryString($signed); -- [-8.0, -8.0, 7.0, 7.0]
+SELECT Knn::FloatFromBinaryString($unsigned); -- [0.0, 15.0, 15.0, 15.0]
+```
+
+Перед сохранением сериализованных векторов в колонки `String` вызовите `Untag($signed, "Int4Vector")` или `Untag($unsigned, "Uint4Vector")` соответственно.
 
 #### Float -> Int8 {#approximate-vector-search-scalar-quantization-map}
 

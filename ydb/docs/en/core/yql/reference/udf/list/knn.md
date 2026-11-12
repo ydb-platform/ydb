@@ -59,6 +59,8 @@ Knn::ToBinaryStringFloat8E4M3(List<Float>{Flags:AutoMap})->Tagged<String, "Float
 Knn::ToBinaryStringFloat8E5M2(List<Float>{Flags:AutoMap})->Tagged<String, "Float8E5M2Vector">
 Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
 Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
+Knn::ToBinaryStringUint4(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint4Vector">
+Knn::ToBinaryStringInt4(List<Int8>{Flags:AutoMap})->Tagged<String, "Int4Vector">
 Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::ToBinaryStringBit(List<Float>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::ToBinaryStringBit(List<Uint8>{Flags:AutoMap})->Tagged<String, "BitVector">
@@ -70,8 +72,8 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 
 Conversion functions for vector data convert an array of elements into a byte string with the following format:
 
-- **Main part** — a contiguous array of elements ([knn-serializer.h](https://github.com/ydb-platform/ydb/blob/0b506f56e399e0b4e6a6a4267799da68a3164bf7/ydb/library/yql/udfs/common/knn/knn-serializer.h#L19))
-- **Type** — 1 byte at the end of the string that specifies the data type ([knn-defines.h](https://github.com/ydb-platform/ydb/blob/24026648dd7463d58e1470aa8981b17677116e7c/ydb/library/yql/udfs/common/knn/knn-defines.h#L5)):
+- **Main part** — a contiguous array of elements ([knn-serializer-shared.h](https://github.com/ydb-platform/ydb/blob/4b6ee4f96913d1f7e21f7674fca6ab4abb1bc091/ydb/library/yql/udfs/common/knn/knn-serializer-shared.h))
+- **Type** — 1 byte at the end of the string that specifies the data type ([knn-defines.h](https://github.com/ydb-platform/ydb/blob/4b6ee4f96913d1f7e21f7674fca6ab4abb1bc091/ydb/library/yql/udfs/common/knn/knn-defines.h)):
   - `1` — `Float` (4 bytes per element)
   - `2` — `Uint8` (1 byte per element)
   - `3` — `Int8` (1 byte per element)
@@ -79,12 +81,20 @@ Conversion functions for vector data convert an array of elements into a byte st
   - `5` — `BFloat16` (2 bytes per element, [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format))
   - `6`: `Float8E4M3` (1 byte per element, E4M3FN)
   - `7`: `Float8E5M2` (1 byte per element, E5M2)
+  - `8`: `Uint4` (4 bits per element)
+  - `9`: `Int4` (4 bits per element)
   - `10` — `Bit` (1 bit per element)
 
 For example, a vector of 5 elements of type `Float` will be serialized into a 21-byte string:
 4 bytes × 5 elements (main part) + 1 byte (type) = 21 bytes.
 
 The `Bit` format has an additional byte before the type marker storing the number of unused bits in the last data byte.
+
+The `Uint4` and `Int4` formats pack two coordinates per byte: the first occupies the low four bits, and the second occupies the high four bits. `Int4` uses two's complement.
+
+An additional byte before the type marker stores the number of unused four-bit positions: `0` for an even dimension and `1` for an odd dimension. For an odd dimension, the unused high four bits of the last data byte must be zero.
+
+The serialized length is `ceil(N / 2) + 2` bytes for `N` coordinates. For example, five coordinates occupy five bytes: three bytes of coordinate data, one padding-count byte, and one type byte.
 
 #### Implementation details {#functions-convert-details}
 
@@ -108,6 +118,21 @@ Both conversion functions round to the nearest representable value, with ties to
 Use `vector_type="float8_e4m3"` or `vector_type="float8_e5m2"` for vector indexes storing these formats. Serialize query vectors using the same format as the stored vectors. All distance and similarity functions support both formats and perform arithmetic in `Float`.
 
 Compared with `Float`, FP8 reduces coordinate storage by four times, excluding serialization metadata. Measure search accuracy/recall on your data before choosing a format.
+
+#### Packed 4-bit integer formats {#int4-formats}
+
+`Int4` and `Uint4` store integer coordinates in four bits each, packing two coordinates per byte. These are vector serialization formats; the conversion functions use the existing YQL integer types as input:
+
+| Vector format | Conversion function | Input type | Coordinate range |
+| --- | --- | --- | --- |
+| `Int4` | `ToBinaryStringInt4` | `List<Int8>` | -8 to 7 |
+| `Uint4` | `ToBinaryStringUint4` | `List<Uint8>` | 0 to 15 |
+
+Use `Int4` for signed coordinates and `Uint4` for nonnegative coordinates. Both functions clamp values outside the target range to the nearest boundary. They do not apply scaling. For floating-point embeddings, choose scaling and rounding, convert the coordinates to `List<Int8>` or `List<Uint8>`, and then serialize them. `FloatFromBinaryString` decodes either format to `List<Float>` containing the stored integer values.
+
+Use `vector_type="int4"` or `vector_type="uint4"` for vector indexes storing these formats. Serialize query vectors using the same format as the stored vectors. All distance and similarity functions support both formats. They return `NULL` for malformed packed inputs, including a missing padding-count byte, a padding count other than `0` or `1`, or nonzero unused high bits.
+
+Compared with `Int8` or `Uint8`, these formats halve coordinate storage, excluding serialization metadata. Compared with `Float`, coordinate storage is reduced by eight times. Measure search accuracy/recall after quantization before choosing a format.
 
 ### Distance and similarity functions {#functions-distance}
 
@@ -144,7 +169,7 @@ In case of mismatched lengths or formats, these functions return `NULL`.
 
 {% note info %}
 
-All distance and similarity functions support overloads when first or second arguments are `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Float8E4M3Vector">`, `Tagged<String, "Float8E5M2Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
+All distance and similarity functions support overloads when first or second arguments are `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Float8E4M3Vector">`, `Tagged<String, "Float8E5M2Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "Uint4Vector">`, `Tagged<String, "Int4Vector">`, `Tagged<String, "BitVector">`.
 
 If both arguments are `Tagged`, tag values should match, or the query will raise an error.
 
@@ -302,7 +327,7 @@ $facts = AsList(
 
 An ML model can do quantization, or it can be done manually with YQL.
 
-The following examples show quantization to FP8 and `Int8` in YQL.
+The following examples show quantization to FP8 and integer vector formats in YQL.
 
 #### Float -> FP8 {#approximate-vector-search-scalar-quantization-fp8}
 
@@ -314,6 +339,19 @@ SELECT Knn::FloatFromBinaryString($vector); -- [1.0, 2.0]
 ```
 
 To use E5M2, replace `ToBinaryStringFloat8E4M3` with `ToBinaryStringFloat8E5M2`. When storing the serialized vector in a `String` column, call `Untag($vector, "Float8E4M3Vector")` or `Untag($vector, "Float8E5M2Vector")`, respectively.
+
+#### Int8/Uint8 -> Int4/Uint4 {#approximate-vector-search-scalar-quantization-int4}
+
+Serialize integer coordinates with the 4-bit conversion functions. The [numeric literal suffixes](../../syntax/lexer.md#literal-numbers) `t` and `ut` specify `Int8` and `Uint8`, respectively. These examples show clamping and decoding:
+
+```yql
+$signed = Knn::ToBinaryStringInt4([-128t, -9t, 8t, 127t]);
+$unsigned = Knn::ToBinaryStringUint4([0ut, 15ut, 16ut, 255ut]);
+SELECT Knn::FloatFromBinaryString($signed); -- [-8.0, -8.0, 7.0, 7.0]
+SELECT Knn::FloatFromBinaryString($unsigned); -- [0.0, 15.0, 15.0, 15.0]
+```
+
+When storing the serialized vectors in `String` columns, call `Untag($signed, "Int4Vector")` or `Untag($unsigned, "Uint4Vector")`, respectively.
 
 #### Float -> Int8 {#approximate-vector-search-scalar-quantization-map}
 

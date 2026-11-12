@@ -64,6 +64,8 @@ Import vectors from files (CSV, TSV, or Parquet, optionally gzip-compressed). Th
 
 For CSV/TSV files, embeddings must be encoded as a list of floats, e.g., `"[ 1.0, 2.0, 3.0 ]"`. For Parquet files, embeddings can be a list of `float32` values or already serialized YDB binary embeddings.
 
+When importing numeric lists with `--vector-type int4` or `--vector-type uint4`, coordinates are clamped to `[-8, 7]` or `[0, 15]`, respectively, and fractional values are truncated toward zero. No scale factor is applied. NaN is converted to zero, and infinities are clamped to the corresponding range boundary.
+
 Example:
 
 ```bash
@@ -80,7 +82,7 @@ Example:
 | `--table <name>` | Name of the table to load data into. | `vector_index_workload` |
 | `--index <name>` | Name of the vector index to build after import. | `index` |
 | `--index-type <type>` | Index type to build after import. Possible values: `None`, `KmeansTree`. Set to `None` to skip index building. | `KmeansTree` |
-| `--vector-type <type>` | Type of vectors. One of `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `bit`. | `float` |
+| `--vector-type <type>` | Type of vectors. One of `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `int4`, `uint4`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension (size of embedding vectors). | `1024` |
 | `--distance <value>` | Distance or similarity function. One of `inner_product`, `cosine`, `euclidean`, `manhattan`. | `inner_product` |
 | `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. If not set, auto-detected by server. See [kmeans-tree type](../../dev/vector-indexes.md#kmeans-tree-type). | Auto-detected |
@@ -100,6 +102,8 @@ For more details on `--kmeans-tree-*` index building parameters, see [kmeans-tre
 
 Generate random vectors and load them into the table. Vector components are sampled from a uniform distribution and serialized into YDB binary embedding format.
 
+For `int4` and `uint4`, coordinates are sampled uniformly from all integers in `[-8, 7]` and `[0, 15]`, respectively.
+
 ```bash
 {{ ydb-cli }} workload vector import generator
 ```
@@ -114,7 +118,7 @@ Generate random vectors and load them into the table. Vector components are samp
 | `--table <name>` | Name of the table to load data into. | `vector_index_workload` |
 | `--index <name>` | Name of the vector index to build after import. | `index` |
 | `--index-type <type>` | Index type to build after import. Possible values: `None`, `KmeansTree`. | `KmeansTree` |
-| `--vector-type <type>` | Type of vectors. One of `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `bit`. | `float` |
+| `--vector-type <type>` | Type of vectors. One of `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `int4`, `uint4`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension. | `1024` |
 | `--distance <value>` | Distance or similarity function. | `inner_product` |
 | `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. If not set, auto-detected by server. | Auto-detected |
@@ -144,7 +148,7 @@ If the table was loaded with `--index-type None`, or if you want to build an add
 |---|---|---|
 | `--table <name>` | Name of the table to build the index on. | `vector_index_workload` |
 | `--index <name>` | Name of the index to create. | `index` |
-| `--vector-type <type>` | Type of vectors. One of `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `bit`. | `float` |
+| `--vector-type <type>` | Type of vectors. One of `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `int4`, `uint4`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension. | `1024` |
 | `--distance <value>` | Distance or similarity function. | `inner_product` |
 | `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. If not set, auto-detected by server. | Auto-detected |

@@ -2,7 +2,7 @@ Approximate methods can avoid a complete enumeration of the initial data or redu
 
 [Scalar Quantization](../udf/list/knn.md#approximate-vector-search-scalar-quantization) is a method of reducing coordinate precision while preserving vector dimensionality.
 
-{{ ydb-short-name }} supports vector searching for vector types `Float`, [Float16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format), [BFloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format), [Float8E4M3 and Float8E5M2](../udf/list/knn.md#fp8-formats), `Int8`, `Uint8`, and `Bit`. Consequently, it is possible to apply scalar quantization to transform data from `Float` to any of these types.
+{{ ydb-short-name }} supports vector searching for vector types `Float`, [Float16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format), [BFloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format), [Float8E4M3 and Float8E5M2](../udf/list/knn.md#fp8-formats), `Int8`, `Uint8`, [Int4 and Uint4](../udf/list/knn.md#int4-formats), and `Bit`. Consequently, it is possible to apply scalar quantization to transform data from `Float` to any of these types.
 
 Scalar quantization reduces the time required for reading and writing data by decreasing the number of bytes. For example, when quantizing from `Float` to `Bit`, coordinate data is reduced by 32 times, excluding serialization metadata.
 

@@ -20,6 +20,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/ylimits.h>
+#include <util/datetime/base.h>
 #include <util/string/builder.h>
 
 #include <utility>
@@ -32,15 +33,25 @@ ui64 gTableRangeReaderMaxRows = UINT64_MAX;
 
 namespace {
 
-// How many times a single shard read is retried from its last known good key
-// before the whole request fails.
-constexpr ui32 MaxShardRetries = 3;
+// Exponential retry delay with 5 second cap.
+TDuration RetryDelay(ui32 attempt) {
+    constexpr ui32 maxShift = 6;
+    constexpr ui32 maxDelayMs = 5000;
+    return TDuration::MilliSeconds(Min<ui32>(100u << Min<ui32>(attempt, maxShift), maxDelayMs));
+}
 
+// NOT_FOUND and SCHEME_ERROR mean the table was repartitioned.
+// We have to re-resolve and retry the whole read from the beginning.
+bool IsSchemeOutdatedStatus(Ydb::StatusIds::StatusCode status) {
+    return status == Ydb::StatusIds::NOT_FOUND || status == Ydb::StatusIds::SCHEME_ERROR;
+}
+
+// The shard still owns the range, it is just temporarily unavailable: it may be
+// overloaded, or moving to another node.
 bool IsRetriableStatus(Ydb::StatusIds::StatusCode status) {
     switch (status) {
         case Ydb::StatusIds::OVERLOADED:
         case Ydb::StatusIds::UNAVAILABLE:
-        case Ydb::StatusIds::NOT_FOUND:
         case Ydb::StatusIds::TIMEOUT:
             return true;
         default:
@@ -53,8 +64,12 @@ bool IsRetriableStatus(Ydb::StatusIds::StatusCode status) {
 // One actor serves many requests. Per table it keeps a scheme cache navigation
 // result (column names/tags and key types) and the partitioning resolved once
 // with a full range, so repeated requests to the same table do not re-resolve.
-// Every request is answered with a single TEvReadTableRangeResponse. In-flight reads
-// are cancelled when a request fails or when the actor is stopped.
+// A temporarily unavailable shard is retried on its own, a shard that has split
+// or merged (or a table that has been altered) drops the cached table scheme and
+// restarts the whole request after a backoff, so a response never mixes data
+// from different schemes. Every request is answered with a single
+// TEvReadTableRangeResponse. In-flight reads are cancelled when a request fails
+// or when the actor is stopped.
 class TTableRangeReader : public NActors::TActorBootstrapped<TTableRangeReader> {
     using TBase = NActors::TActorBootstrapped<TTableRangeReader>;
 
@@ -74,11 +89,16 @@ class TTableRangeReader : public NActors::TActorBootstrapped<TTableRangeReader> 
         };
 
         EState State = EState::Unknown;
+        // The scheme is being re-resolved after a retriable read error.
+        bool Refresh = false;
         TString DatabaseName;
         TTableId TableId;
         TVector<NScheme::TTypeInfo> KeyTypes;
         THashMap<TString, TColumnInfo> Columns;
         std::shared_ptr<const TPartitioning> Partitioning;
+        // Grows on every successful resolve, so a request can tell whether the
+        // scheme it failed with has already been re-resolved.
+        ui64 Generation = 0;
     };
 
     struct TShardRead {
@@ -90,9 +110,40 @@ class TTableRangeReader : public NActors::TActorBootstrapped<TTableRangeReader> 
         TSerializedCellVec ResumeKey;
         bool HasResumeKey = false;
         bool Finished = false;
+        // A retry of this shard read is already scheduled.
+        bool RetryPending = false;
         ui64 LastSeqNo = 0;
         ui32 Retries = 0;
         TVector<TEvDataShard::TEvReadResult::TPtr> Batches;
+    };
+
+    struct TEvPrivate {
+        enum EEv {
+            EvRetryShard = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 100,
+            EvRestartRequest,
+        };
+
+        struct TEvRetryShard : public TEventLocal<TEvRetryShard, EvRetryShard> {
+            ui64 InternalRequestId = 0;
+            ui32 ShardIndex = 0;
+            // The failed read, so a retry scheduled before a request restart is
+            // not applied to the new shards.
+            ui64 ReadId = 0;
+
+            TEvRetryShard(ui64 internalRequestId, ui32 shardIndex, ui64 readId)
+                : InternalRequestId(internalRequestId)
+                , ShardIndex(shardIndex)
+                , ReadId(readId)
+            {}
+        };
+
+        struct TEvRestartRequest : public TEventLocal<TEvRestartRequest, EvRestartRequest> {
+            ui64 InternalRequestId = 0;
+
+            explicit TEvRestartRequest(ui64 internalRequestId)
+                : InternalRequestId(internalRequestId)
+            {}
+        };
     };
 
     struct TRequestState {
@@ -101,10 +152,20 @@ class TTableRangeReader : public NActors::TActorBootstrapped<TTableRangeReader> 
         TActorId Sender;
         TString TablePath;
         TMaybe<TRowVersion> Snapshot;
+        TVector<TString> ColumnNames;
         TVector<ui32> ColumnTags;
         TSerializedTableRange Range;
         TVector<TShardRead> Shards;
         size_t ShardsRemaining = 0;
+        // The table scheme generation the reads were started with.
+        ui64 SchemeGeneration = 0;
+        // How many times the whole request has been restarted.
+        ui32 Retries = 0;
+        // No reads are in flight, the request waits to be restarted.
+        bool Waiting = false;
+        // The backoff has elapsed, the request can be restarted as soon as the
+        // table scheme is resolved.
+        bool ReadyToRestart = false;
     };
 
     struct TReadIdRoute {
@@ -127,6 +188,8 @@ public:
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             hFunc(TEvDataShard::TEvReadResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            hFunc(TEvPrivate::TEvRetryShard, Handle);
+            hFunc(TEvPrivate::TEvRestartRequest, Handle);
             cFunc(TEvents::TEvPoison::EventType, HandleStop);
             default:
                 YDB_LOG_WARN("TableRangeReader: unexpected event",
@@ -155,7 +218,7 @@ private:
         }
 
         if (scheme.State == TTableScheme::EState::Ready) {
-            ProcessRequest(ev, scheme);
+            ProcessRequest(ev);
             return;
         }
 
@@ -179,12 +242,12 @@ private:
                 continue;
             }
             NavigatingPath = path;
-            SendNavigate(path, it->second.DatabaseName);
+            SendNavigate(path, it->second.DatabaseName, it->second.Refresh);
             return;
         }
     }
 
-    void SendNavigate(const TString& path, const TString& databaseName) {
+    void SendNavigate(const TString& path, const TString& databaseName, bool syncVersion) {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = databaseName;
 
@@ -193,10 +256,14 @@ private:
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
         entry.ShowPrivatePath = true;
+        // A retry must not be answered from a stale cache entry: ask the scheme
+        // cache to wait for the current scheme board version.
+        entry.SyncVersion = syncVersion;
 
         YDB_LOG_DEBUG("TableRangeReader: sending navigate request",
             {"selfId", SelfId()},
-            {"tablePath", path});
+            {"tablePath", path},
+            {"syncVersion", syncVersion});
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), IEventHandle::FlagTrackDelivery);
     }
@@ -217,29 +284,21 @@ private:
 
         auto* request = ev->Get()->Request.Get();
         if (request->ResultSet.empty()) {
-            scheme.State = TTableScheme::EState::Unknown;
-            DrainPending(path, "Empty navigate result");
-            ProcessNavigateQueue();
+            FailNavigation(path, scheme, "Empty navigate result");
             return;
         }
 
         const auto& entry = request->ResultSet.front();
         if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            scheme.State = TTableScheme::EState::Unknown;
-            DrainPending(path, TStringBuilder() << "Failed to resolve table '" << path << "': status " << (int)entry.Status);
-            ProcessNavigateQueue();
+            FailNavigation(path, scheme, TStringBuilder() << "Failed to resolve table '" << path << "': status " << (int)entry.Status);
             return;
         }
         if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindTable) {
-            scheme.State = TTableScheme::EState::Unknown;
-            DrainPending(path, TStringBuilder() << "'" << path << "' is not a user table");
-            ProcessNavigateQueue();
+            FailNavigation(path, scheme, TStringBuilder() << "'" << path << "' is not a user table");
             return;
         }
         if (!entry.Self) {
-            scheme.State = TTableScheme::EState::Unknown;
-            DrainPending(path, TStringBuilder() << "No table entry for '" << path << "'");
-            ProcessNavigateQueue();
+            FailNavigation(path, scheme, TStringBuilder() << "No table entry for '" << path << "'");
             return;
         }
 
@@ -267,6 +326,14 @@ private:
         scheme.State = TTableScheme::EState::Resolving;
         ResolveQueue.push_back(path);
         ProcessResolveQueue();
+        ProcessNavigateQueue();
+    }
+
+    void FailNavigation(const TString& path, TTableScheme& scheme, const TString& error) {
+        scheme.Refresh = false;
+        scheme.State = TTableScheme::EState::Unknown;
+        FailWaitingRequests(path, error);
+        DrainPending(path, error);
         ProcessNavigateQueue();
     }
 
@@ -302,10 +369,14 @@ private:
         ResolveCookies[cookie] = path;
         request->ResultSet.emplace_back(std::move(keyDesc));
         request->ResultSet.front().UserData = cookie;
+        // A retry must not be answered from a stale cache entry: ask the scheme
+        // cache to wait for the current scheme board version.
+        request->ResultSet.front().SyncVersion = scheme.Refresh;
 
         YDB_LOG_DEBUG("TableRangeReader: sending resolve request",
             {"selfId", SelfId()},
-            {"tablePath", path});
+            {"tablePath", path},
+            {"syncVersion", scheme.Refresh});
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request.Release()), IEventHandle::FlagTrackDelivery);
     }
@@ -345,21 +416,31 @@ private:
                 {"errorCount", request->ErrorCount},
                 {"status", static_cast<int>(entry.Status)},
                 {"hasKeyDescription", bool(entry.KeyDescription)});
+            scheme.Refresh = false;
             scheme.State = TTableScheme::EState::Unknown;
-            DrainPending(path, TStringBuilder() << "Failed to resolve table '" << path << "' partitioning");
+            const TString error = TStringBuilder() << "Failed to resolve table '" << path << "' partitioning";
+            FailWaitingRequests(path, error);
+            DrainPending(path, error);
             ProcessResolveQueue();
             return;
         }
 
         scheme.Partitioning = entry.KeyDescription->Partitioning;
+        const bool wasRefresh = scheme.Refresh;
+        scheme.Refresh = false;
+        ++scheme.Generation;
         scheme.State = TTableScheme::EState::Ready;
 
         YDB_LOG_DEBUG("TableRangeReader: table resolved",
             {"selfId", SelfId()},
             {"tablePath", path},
             {"keyColumns", scheme.KeyTypes.size()},
-            {"columns", scheme.Columns.size()});
+            {"columns", scheme.Columns.size()},
+            {"shards", scheme.Partitioning->Size()},
+            {"refresh", wasRefresh},
+            {"generation", scheme.Generation});
 
+        StartWaitingRequests(path);
         ProcessResolveQueue();
         DrainPending(path);
     }
@@ -373,9 +454,8 @@ private:
         PendingRequests.erase(it);
 
         if (error.empty()) {
-            TTableScheme& scheme = Tables.at(path);
             for (auto& handle : requests) {
-                ProcessRequest(handle, scheme);
+                ProcessRequest(handle);
             }
         } else {
             for (const auto& handle : requests) {
@@ -384,24 +464,8 @@ private:
         }
     }
 
-    void ProcessRequest(TEvReadTableRangeRequest::TPtr& ev, TTableScheme& scheme) {
+    void ProcessRequest(TEvReadTableRangeRequest::TPtr& ev) {
         TEvReadTableRangeRequest* request = ev->Get();
-
-        TString error;
-        TVector<ui32> columnTags;
-        columnTags.reserve(request->Columns.size());
-        for (const auto& name : request->Columns) {
-            auto it = scheme.Columns.find(name);
-            if (it == scheme.Columns.end()) {
-                error = TStringBuilder() << "Unknown column '" << name << "' in table '" << request->TablePath << "'";
-                break;
-            }
-            columnTags.push_back(it->second.Id);
-        }
-        if (error) {
-            ReplyFailure(ev->Sender, request->RequestId, error);
-            return;
-        }
 
         auto state = MakeHolder<TRequestState>();
         state->InternalId = NextInternalId++;
@@ -409,37 +473,73 @@ private:
         state->Sender = ev->Sender;
         state->TablePath = request->TablePath;
         state->Snapshot = request->Snapshot;
-        state->ColumnTags = std::move(columnTags);
+        state->ColumnNames = request->Columns;
         state->Range = TSerializedTableRange(request->FromKey.GetCells(), request->FromInclusive,
             request->ToKey.GetCells(), request->ToInclusive);
 
-        TTableRange range(state->Range.From.GetCells(), state->Range.FromInclusive,
-            state->Range.To.GetCells(), state->Range.ToInclusive);
-        const auto intersections = scheme.Partitioning->GetIntersectionWithRange(scheme.KeyTypes, range);
+        const ui64 internalId = state->InternalId;
+        Requests.emplace(internalId, std::move(state));
+        StartRequest(internalId);
+    }
 
+    // Builds the shards of a request from the current table scheme and starts
+    // their reads. Also used to restart a request from scratch.
+    void StartRequest(ui64 internalId) {
+        auto it = Requests.find(internalId);
+        if (it == Requests.end()) {
+            return;
+        }
+        TRequestState& state = *it->second;
+        TTableScheme& scheme = Tables.at(state.TablePath);
+        Y_ABORT_UNLESS(scheme.State == TTableScheme::EState::Ready);
+
+        TVector<ui32> columnTags;
+        columnTags.reserve(state.ColumnNames.size());
+        for (const auto& name : state.ColumnNames) {
+            auto column = scheme.Columns.find(name);
+            if (column == scheme.Columns.end()) {
+                FailRequest(internalId, TStringBuilder()
+                    << "Unknown column '" << name << "' in table '" << state.TablePath << "'");
+                return;
+            }
+            columnTags.push_back(column->second.Id);
+        }
+
+        state.ColumnTags = std::move(columnTags);
+        state.SchemeGeneration = scheme.Generation;
+        state.Waiting = false;
+        state.ReadyToRestart = false;
+
+        const auto intersections = scheme.Partitioning->GetIntersectionWithRange(scheme.KeyTypes, state.Range.ToTableRange());
+
+        state.Shards.clear();
+        state.ShardsRemaining = 0;
         for (const auto& intersection : intersections) {
             TShardRead shard;
             shard.TabletId = intersection.ShardId;
-            shard.OriginalRange = TSerializedTableRange(static_cast<const TTableRange&>(intersection.TableRange));
-            state->Shards.push_back(std::move(shard));
+            shard.OriginalRange = TSerializedTableRange(intersection.TableRange);
+            if (shard.OriginalRange.To.GetCells().empty()) {
+                // make +inf stay +inf, otherwise it's transformed into -inf by datashard__read_iterator.cpp
+                // with keyTo = ToRawTypeValue(keyToCells.GetCells(), TableInfo, !toInclusive) :-(((
+                shard.OriginalRange.ToInclusive = true;
+            }
+            state.Shards.push_back(std::move(shard));
+            ++state.ShardsRemaining;
         }
-        state->ShardsRemaining = state->Shards.size();
 
-        const ui64 internalId = state->InternalId;
-        Requests.emplace(internalId, std::move(state));
-
-        YDB_LOG_DEBUG("TableRangeReader: processing read request",
+        YDB_LOG_DEBUG("TableRangeReader: starting read request",
             {"selfId", SelfId()},
-            {"tablePath", request->TablePath},
-            {"requestId", request->RequestId},
-            {"shards", Requests[internalId]->Shards.size()});
+            {"tablePath", state.TablePath},
+            {"requestId", state.RequestId},
+            {"shards", state.Shards.size()},
+            {"retries", state.Retries});
 
-        if (Requests[internalId]->Shards.empty()) {
+        if (state.Shards.empty()) {
             RespondOk(internalId);
             return;
         }
 
-        const size_t shardCount = Requests[internalId]->Shards.size();
+        const size_t shardCount = state.Shards.size();
         for (size_t i = 0; i < shardCount; ++i) {
             SendShardRead(internalId, static_cast<ui32>(i));
         }
@@ -476,8 +576,6 @@ private:
             record.MutableSnapshot()->SetStep(state.Snapshot->Step);
             record.MutableSnapshot()->SetTxId(state.Snapshot->TxId);
         }
-        //record.SetMaxRows(static_cast<ui32>(Min<ui64>(state.MaxRows, Max<ui32>())));
-        //record.SetMaxBytes(static_cast<ui32>(Min<ui64>(state.MaxBytes, Max<ui32>())));
 
         if (shard.HasResumeKey) {
             request->Ranges.emplace_back(shard.ResumeKey.GetCells(), false,
@@ -529,6 +627,10 @@ private:
             return;
         }
 
+        YDB_LOG_DEBUG("TableRangeReader: received read result",
+            {"selfId", SelfId()},
+            {"shardId", shard.TabletId},
+            {"rowCount", record.GetRowCount()});
         if (record.GetRowCount() > 0) {
             shard.Batches.push_back(std::move(ev));
         }
@@ -571,26 +673,67 @@ private:
     void HandleShardFailure(TRequestState& state, TShardRead& shard, ui32 shardIndex,
             Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
     {
-        if (IsRetriableStatus(status) && shard.Retries < MaxShardRetries) {
-            ++shard.Retries;
-            RetryShard(state.InternalId, shardIndex);
+        if (IsSchemeOutdatedStatus(status)) {
+            // The shard has split or merged, or the cached scheme is outdated:
+            // the whole request has to be restarted against a fresh scheme.
+            RestartRequest(state.InternalId, TStringBuilder()
+                << "shard " << shard.TabletId
+                << " answered " << Ydb::StatusIds::StatusCode_Name(status));
             return;
         }
 
-        const ui64 internalId = state.InternalId;
-        const ui64 tabletId = shard.TabletId;
-        FailRequest(internalId, TStringBuilder()
-            << "Failed to read table '" << state.TablePath << "' from shard " << tabletId
+        if (IsRetriableStatus(status)) {
+            // The shard still owns the range, it is just unavailable for a
+            // while (overloaded, moving to another node, ...).
+            RetryShardLater(state.InternalId, shardIndex, shard,
+                TStringBuilder() << "status " << Ydb::StatusIds::StatusCode_Name(status));
+            return;
+        }
+
+        FailRequest(state.InternalId, TStringBuilder()
+            << "Failed to read table '" << state.TablePath << "' from shard " << shard.TabletId
             << ": " << Ydb::StatusIds::StatusCode_Name(status), issues);
     }
 
-    void RetryShard(ui64 internalId, ui32 shardIndex) {
+    void RetryShardLater(ui64 internalId, ui32 shardIndex, TShardRead& shard, const TString& reason) {
+        if (shard.RetryPending) {
+            // Several failures of one read schedule a single retry.
+            return;
+        }
+        shard.RetryPending = true;
+        ++shard.Retries;
+        const TDuration delay = RetryDelay(shard.Retries);
+
+        YDB_LOG_DEBUG("TableRangeReader: scheduling shard read retry",
+            {"selfId", SelfId()},
+            {"shardId", shard.TabletId},
+            {"reason", reason},
+            {"retries", shard.Retries},
+            {"delay", delay});
+
+        Schedule(delay, new TEvPrivate::TEvRetryShard(internalId, shardIndex, shard.ReadId));
+    }
+
+    void Handle(TEvPrivate::TEvRetryShard::TPtr& ev) {
+        RetryShard(ev->Get()->InternalRequestId, ev->Get()->ShardIndex, ev->Get()->ReadId);
+    }
+
+    void RetryShard(ui64 internalId, ui32 shardIndex, ui64 readId) {
         auto it = Requests.find(internalId);
         if (it == Requests.end()) {
             return;
         }
         TRequestState& state = *it->second;
+        if (shardIndex >= state.Shards.size()) {
+            return;
+        }
         TShardRead& shard = state.Shards[shardIndex];
+        if (shard.Finished || shard.ReadId != readId) {
+            // The request has been restarted or the shard has been re-armed
+            // meanwhile, so this retry is stale.
+            return;
+        }
+        shard.RetryPending = false;
 
         if (!state.Shards[shardIndex].HasResumeKey) {
             // No continuation point, so the whole range must be re-read.
@@ -610,11 +753,138 @@ private:
         SendShardRead(internalId, shardIndex);
     }
 
+    // Drops everything read so far and restarts the whole request after a
+    // backoff, so a retriable error never leaves a partially read range behind.
+    void RestartRequest(ui64 internalId, const TString& reason) {
+        auto it = Requests.find(internalId);
+        if (it == Requests.end()) {
+            return;
+        }
+        TRequestState& state = *it->second;
+        if (state.Waiting) {
+            // Already scheduled by another failed shard of this request.
+            return;
+        }
+
+        ++state.Retries;
+        for (const auto& shard : state.Shards) {
+            if (!shard.Finished) {
+                CancelShardRead(shard);
+            }
+        }
+        RemoveRoutes(state);
+        state.Shards.clear();
+        state.ShardsRemaining = 0;
+        state.Waiting = true;
+        state.ReadyToRestart = false;
+
+        const TDuration delay = RetryDelay(state.Retries);
+        YDB_LOG_WARN("TableRangeReader: restarting read request",
+            {"selfId", SelfId()},
+            {"tablePath", state.TablePath},
+            {"requestId", state.RequestId},
+            {"reason", reason},
+            {"retries", state.Retries},
+            {"delay", delay});
+
+        Schedule(delay, new TEvPrivate::TEvRestartRequest(internalId));
+    }
+
+    void Handle(TEvPrivate::TEvRestartRequest::TPtr& ev) {
+        const ui64 internalId = ev->Get()->InternalRequestId;
+        auto it = Requests.find(internalId);
+        if (it == Requests.end()) {
+            return;
+        }
+        TRequestState& state = *it->second;
+        if (!state.Waiting) {
+            return;
+        }
+        state.ReadyToRestart = true;
+
+        TTableScheme& scheme = Tables.at(state.TablePath);
+        switch (scheme.State) {
+            case TTableScheme::EState::Ready:
+                if (state.SchemeGeneration != scheme.Generation) {
+                    // The scheme has been re-resolved since the failed read, so
+                    // the request can be restarted right away.
+                    StartRequest(internalId);
+                } else {
+                    ResetTableScheme(state.TablePath);
+                }
+                return;
+            case TTableScheme::EState::Unknown:
+                // Nothing is in flight for an unknown table, so the navigation
+                // has to be started here.
+                ResetTableScheme(state.TablePath);
+                return;
+            default:
+                // Navigation or resolve is already in progress, the request is
+                // started as soon as the scheme is ready.
+                return;
+        }
+    }
+
+    // Drops the cached table scheme, so the next resolve sees the current shards
+    // and schema version.
+    void ResetTableScheme(const TString& path) {
+        auto it = Tables.find(path);
+        if (it == Tables.end()) {
+            return;
+        }
+        TTableScheme& scheme = it->second;
+        if (scheme.State != TTableScheme::EState::Ready
+            && scheme.State != TTableScheme::EState::Unknown)
+        {
+            // Already re-resolving.
+            return;
+        }
+
+        YDB_LOG_DEBUG("TableRangeReader: dropping cached table scheme",
+            {"selfId", SelfId()},
+            {"tablePath", path},
+            {"generation", scheme.Generation});
+
+        scheme.Refresh = true;
+        scheme.State = TTableScheme::EState::Navigating;
+        NavigateQueue.push_back(path);
+        ProcessNavigateQueue();
+    }
+
+    void StartWaitingRequests(const TString& path) {
+        TVector<ui64> toStart;
+        for (const auto& [internalId, state] : Requests) {
+            if (state->Waiting && state->ReadyToRestart && state->TablePath == path) {
+                toStart.push_back(internalId);
+            }
+        }
+        for (ui64 internalId : toStart) {
+            if (Requests.find(internalId) != Requests.end()) {
+                StartRequest(internalId);
+            }
+        }
+    }
+
+    void FailWaitingRequests(const TString& path, const TString& message) {
+        TVector<ui64> toFail;
+        for (const auto& [internalId, state] : Requests) {
+            if (state->Waiting && state->TablePath == path) {
+                toFail.push_back(internalId);
+            }
+        }
+        for (ui64 internalId : toFail) {
+            FailRequest(internalId, message);
+        }
+    }
+
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         const ui64 tabletId = ev->Get()->TabletId;
 
         TVector<std::pair<ui64, ui32>> toRetry;
         for (const auto& [internalId, state] : Requests) {
+            if (state->Waiting) {
+                continue;
+            }
             for (ui32 i = 0; i < state->Shards.size(); ++i) {
                 const TShardRead& shard = state->Shards[i];
                 if (!shard.Finished && shard.TabletId == tabletId) {
@@ -634,15 +904,11 @@ private:
                 continue;
             }
             TRequestState& state = *it->second;
-            TShardRead& shard = state.Shards[shardIndex];
-            if (shard.Retries >= MaxShardRetries) {
-                const TString path = state.TablePath;
-                FailRequest(internalId, TStringBuilder()
-                    << "Failed to deliver read to table '" << path << "' shard " << tabletId);
+            if (shardIndex >= state.Shards.size()) {
                 continue;
             }
-            ++shard.Retries;
-            RetryShard(internalId, shardIndex);
+
+            RetryShardLater(internalId, shardIndex, state.Shards[shardIndex], "delivery problem");
         }
     }
 

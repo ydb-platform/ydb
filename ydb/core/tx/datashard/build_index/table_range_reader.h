@@ -21,10 +21,10 @@
 
 namespace NKikimr::NDataShard::NBuildIndex {
 
-enum EReadRowsEvent {
-    EvReadRowsRequest = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
-    EvReadRowsResponse,
-    EvReadRowsEventsEnd,
+enum EReadTableRangeEvent {
+    EvReadTableRangeRequest = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+    EvReadTableRangeResponse,
+    EvReadTableRangeEventsEnd,
 };
 
 // A request to read all rows of one table range.
@@ -32,9 +32,13 @@ enum EReadRowsEvent {
 // The reader resolves the table through the scheme cache (target shards are
 // discovered via TEvResolveKeySet) and caches both the navigation result and the
 // partitioning per table path, so many ranges of the same table do not re-resolve
-// columns and shards. Rows are streamed with TEvRead and are answered with a
-// single TEvReadTableRangeResponse once the whole range has been read.
-struct TEvReadTableRangeRequest : public TEventLocal<TEvReadTableRangeRequest, EvReadRowsRequest> {
+// columns and shards. A temporarily unavailable shard is retried in place; when a
+// shard splits or merges, or the table is altered, the cached scheme is dropped and
+// the whole request is restarted after a backoff, so the response always covers
+// the requested range and never mixes data read with different schemes. Rows are
+// streamed with TEvRead and are answered with a single TEvReadTableRangeResponse
+// once the whole range has been read.
+struct TEvReadTableRangeRequest : public TEventLocal<TEvReadTableRangeRequest, EvReadTableRangeRequest> {
     // Opaque id, echoed back in the response. Set by the caller when several
     // requests may be in flight at once.
     ui64 RequestId = 0;
@@ -61,7 +65,7 @@ struct TEvReadTableRangeRequest : public TEventLocal<TEvReadTableRangeRequest, E
 
 // Result of one request. Rows reference the DataShard batches and stay valid
 // only while the batches are alive; copy out anything that must outlive them.
-struct TEvReadTableRangeResponse : public TEventLocal<TEvReadTableRangeResponse, EvReadRowsResponse> {
+struct TEvReadTableRangeResponse : public TEventLocal<TEvReadTableRangeResponse, EvReadTableRangeResponse> {
     ui64 RequestId = 0;
     bool Success = false;
     NYql::TIssues Issues;

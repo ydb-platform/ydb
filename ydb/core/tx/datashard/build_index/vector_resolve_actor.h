@@ -20,8 +20,8 @@
 namespace NKikimr::NDataShard::NBuildIndex {
 
 enum EVectorResolveEvent {
-    EvVectorResolveRequest = EvReadRowsEventsEnd,
-    EvVectorResolveResponse = EvReadRowsEventsEnd + 1,
+    EvVectorResolveRequest = EvReadTableRangeEventsEnd,
+    EvVectorResolveResponse = EvReadTableRangeEventsEnd + 1,
 };
 
 // Settings of a resolver for one particular vector KMeans tree index.

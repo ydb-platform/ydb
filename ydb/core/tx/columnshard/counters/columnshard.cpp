@@ -46,18 +46,12 @@ TCSCounters::TCSCounters()
     OverloadSmallBlobsQuotaBytes = TBase::GetDeriviative("Overload/SmallBlobsQuota/Bytes");
     OverloadSmallBlobsQuotaCount = TBase::GetDeriviative("Overload/SmallBlobsQuota/Count");
 
-    InternalCompactionGranuleBytes = TBase::GetValueAutoAggregationsClient("InternalCompaction/Bytes");
-    InternalCompactionGranulePortionsCount = TBase::GetValueAutoAggregationsClient("InternalCompaction/PortionsCount");
-
     SplitCompactionGranuleBytes = TBase::GetValueAutoAggregationsClient("SplitCompaction/Bytes");
     SplitCompactionGranulePortionsCount = TBase::GetValueAutoAggregationsClient("SplitCompaction/PortionsCount");
 
     HistogramSuccessWritePutBlobsDurationMs = TBase::GetHistogram("SuccessWritePutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
     HistogramFailedWritePutBlobsDurationMs = TBase::GetHistogram("FailedWritePutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
     HistogramWriteTxCompleteDurationMs = TBase::GetHistogram("WriteTxCompleteDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
-
-    WritePutBlobsCount = TBase::GetValue("WritePutBlobs");
-    WriteRequests = TBase::GetValue("WriteRequests");
 
     for (auto&& i : GetEnumAllValues<EWriteFailReason>()) {
         auto sub = CreateSubGroup("reason", ::ToString(i));
@@ -68,7 +62,6 @@ TCSCounters::TCSCounters()
 }
 
 void TCSCounters::OnFailedWriteResponse(const EWriteFailReason reason) const {
-    WriteRequests->Sub(1);
     auto it = FailedWriteRequests.find(reason);
     AFL_VERIFY(it != FailedWriteRequests.end());
     it->second->Add(1);

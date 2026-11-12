@@ -25,7 +25,6 @@ public:
     enum class EIntervalStatus {
         Undefined = 0,
         WaitResources,
-        WaitSources,
         WaitMergerStart,
         WaitMergerContinue,
         WaitPartialReply,

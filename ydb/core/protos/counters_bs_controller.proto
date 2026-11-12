@@ -299,18 +299,5 @@ enum ETxTypes {
     TXTYPE_UPDATE_BRIDGE_SYNC_STATE = 33 [(TxTypeOpts) = {Name: "TTxUpdateBridgeSyncState"}];
     TXTYPE_ALLOCATE_DDISK_BLOCK_GROUP = 34 [(TxTypeOpts) = {Name: "TTxAllocateDDiskBlockGroup"}];
     TXTYPE_CLEANUP_STALE_STORAGE_ENTRIES = 35 [(TxTypeOpts) = {Name: "TTxCleanupStaleStorageEntries"}];
-<<<<<<< HEAD
-    TXTYPE_BLOB_CHECKER_UPDATE_GROUP_STATUS = 36 [(TxTypeOpts) = {Name: "TTxBlobCheckerUpdateGroupStatus"}];
-=======
     TXTYPE_BLOB_CHECKER_UPDATE_GROUP_STATUS_DEPRECATED = 36 [deprecated = true];
-    TXTYPE_LIST_DDISK_INFO_TABLETS = 37 [(TxTypeOpts) = {Name: "TTxListDDiskInfoTablets"}];
-    TXTYPE_GET_DDISK_INFO_TABLET = 38 [(TxTypeOpts) = {Name: "TTxGetDDiskInfoTablet"}];
-    TXTYPE_CONVERT_TO_BRIDGE = 39 [(TxTypeOpts) = {Name: "TTxConvertToBridge"}];
-    TXTYPE_ADD_BRIDGE_PILE = 40 [(TxTypeOpts) = {Name: "TTxAddBridgePile"}];
-    TXTYPE_REMOVE_BRIDGE_PILE = 41 [(TxTypeOpts) = {Name: "TTxRemoveBridgePile"}];
-    TXTYPE_UPDATE_BRIDGE_GROUP_MODES = 42 [(TxTypeOpts) = {Name: "TTxUpdateBridgeGroupModes"}];
-    TXTYPE_BRIDGE_ROLLBACK = 43 [(TxTypeOpts) = {Name: "TTxBridgeRollback"}];
-    TXTYPE_UPDATE_PILE_OVERRIDES = 44 [(TxTypeOpts) = {Name: "TTxUpdatePileOverrides"}];
-    TXTYPE_UPDATE_DATABASE_SPACE = 45 [(TxTypeOpts) = {Name: "TTxUpdateDatabaseSpace"}];
->>>>>>> caa9e72bbe9 (Stop exporting tablet counters that are never written (#58154))
 }

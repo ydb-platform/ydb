@@ -38,15 +38,4 @@ ui64 GetSimpleCounter(TTestActorRuntime& runtime, ui64 tabletId,
       NHive::ESimpleCounters_descriptor()->FindValueByNumber(counter));
 }
 
-<<<<<<< HEAD
-=======
-ui64 GetCumulativeCounter(TTestActorRuntime& runtime, ui64 tabletId,
-        NHive::ECumulativeCounters counter)
-{
-  return FindCounter(
-      GetCounters(runtime, tabletId).GetTabletCounters().GetAppCounters().GetCumulativeCounters(),
-      NHive::ECumulativeCounters_descriptor()->FindValueByNumber(counter));
-}
-
->>>>>>> caa9e72bbe9 (Stop exporting tablet counters that are never written (#58154))
 }

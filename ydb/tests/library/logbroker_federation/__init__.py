@@ -709,13 +709,44 @@ class LogbrokerFederation(object):
         _setenv("CM_PORT", str(grpc_port))
         logger.info("CM started on port {}".format(grpc_port))
 
+    def _wait_preinstalled_topics_on_clusters(self, timeout_seconds=60, step_seconds=0.5):
+        deadline = time.monotonic() + timeout_seconds
+        last_error = None
+        while True:
+            try:
+                for cluster_name, cluster_port in self.__cluster_ports.items():
+                    for account in PRE_INSTALLED_ACCOUNTS:
+                        database = "/Root/logbroker-federation/{}".format(account)
+                        driver_config = ydb.DriverConfig(
+                            endpoint="localhost:{}".format(cluster_port),
+                            database=database,
+                        )
+                        with ydb.Driver(driver_config) as driver:
+                            driver.wait(timeout=5)
+                            driver.topic_client.describe_topic("topic")
+                        logger.info(
+                            "Preinstalled topic ready on cluster=%s account=%s",
+                            cluster_name,
+                            account,
+                        )
+                return
+            except Exception as e:
+                last_error = e
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        "Preinstalled topics did not become ready within {}s: {}".format(
+                            timeout_seconds, last_error
+                        )
+                    ) from last_error
+                time.sleep(step_seconds)
+
     def start(self, args=None):
         for name in list(self.__clusters.keys()):
             cluster, port = self._start_single_ydb(name)
             self._setup_ydb_cluster(name, cluster, port)
         self._start_cm()
         self._setup_cm_topics_consumers(self.__cluster_ports)
-        time.sleep(20)
+        self._wait_preinstalled_topics_on_clusters()
         if self.__mock_federation_discovery:
             self._start_mock_federation_discovery()
 

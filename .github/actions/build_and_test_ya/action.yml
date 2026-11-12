@@ -498,8 +498,8 @@ runs:
 
         . .github/scripts/tests/build_before_tests.sh
 
-        # Oversubscribe only the test phase; preparation uses the host's 128 CPUs.
-        export YA_BUILD_THREADS=192
+        # Limit only the test phase to 32 CPU slots; preparation uses the host's 128 CPUs.
+        export YA_BUILD_THREADS=32
 
         BUILD_FAILED=0
 

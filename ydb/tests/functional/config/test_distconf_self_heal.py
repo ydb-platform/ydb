@@ -353,6 +353,10 @@ class TestKiKiMRDistConfSelfHealAllowedNodes(KiKiMRDistConfSelfHealTest):
 
         def wait_allowed_nodes():
             healed_config = self.do_request_config()
+            rg = get_ring_group(healed_config, configName)
+            # do_bad_config leaves NToSelect=5; wait until heal restores a full ring.
+            assert_eq(rg["NToSelect"], 9)
+            assert_eq(len(rg["Ring"]), 9)
             node_ids = extract_all_node_ids(healed_config, configName)
 
             assert_that(len(node_ids) > 0, f"Healed {configName} config has no nodes: {healed_config}")

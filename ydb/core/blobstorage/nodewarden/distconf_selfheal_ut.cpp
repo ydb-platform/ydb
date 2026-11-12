@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(TStateStorageReassignSelfhealCancellation) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TStateStorageSelfhealRecovery) {
+Y_UNIT_TEST_SUITE(TStateStorageSelfhealRecoveryPileZero) {
     void AddGroup(NKikimrConfig::TDomainsConfig::TStateStorage& config, ui32 pileId, ui32 firstNode, ui32 rings) {
         auto *group = config.AddRingGroups();
         group->SetBridgePileId(pileId);

@@ -7,8 +7,6 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/testlib/helpers.h>
 
-#include <ydb/library/testlib/helpers.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
 

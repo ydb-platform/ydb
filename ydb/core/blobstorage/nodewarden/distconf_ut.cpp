@@ -4521,8 +4521,10 @@ selector_config: []
             UNIT_ASSERT_C(response->GetStatus() == TResult::ERROR, response->DebugString());
             UNIT_ASSERT_STRING_CONTAINS(response->GetErrorReason(), "Main config version must be increasing by one");
             UNIT_ASSERT_VALUES_EQUAL(disableRequests, 0);
-            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(1).GetCommittedStorageConfig().GetFingerprint(),
-                fixture.Config.GetFingerprint());
+            for (ui32 nodeId : {1, 2, 3}) {
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(),
+                    fixture.Config.GetFingerprint());
+            }
         } else {
             UNIT_ASSERT_C(response->GetStatus() == TResult::OK, response->DebugString());
             UNIT_ASSERT_VALUES_EQUAL(disableRequests, 1);
@@ -9417,11 +9419,11 @@ selector_config: []
         }
         const auto nwConfig = MakeNodeWardenConfig(fixture.Config);
         TStringStream quorumError;
-        UNIT_ASSERT_C(NStorage::HasConfigQuorum(fixture.Config, readable, {},
+        UNIT_ASSERT_C(NStorage::HasConfigQuorum(fixture.Config, readable,
             TBridgePileId(), *nwConfig, false, &quorumError), quorumError.Str());
         auto insufficient = readable;
         insufficient.pop_back();
-        UNIT_ASSERT(!NStorage::HasConfigQuorum(fixture.Config, insufficient, {},
+        UNIT_ASSERT(!NStorage::HasConfigQuorum(fixture.Config, insufficient,
             TBridgePileId(), *nwConfig, false));
     }
 

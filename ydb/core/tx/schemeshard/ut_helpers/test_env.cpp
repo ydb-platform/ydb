@@ -963,10 +963,7 @@ void NSchemeShardUT_Private::TestWaitNotification(NActors::TTestActorRuntime &ru
     TActorId sender = runtime.AllocateEdgeActor();
 
     for (ui64 txId : txIds) {
-        if (TTestEnv::ENABLE_SCHEMESHARD_LOG) {
-            Cerr << Endl << "TestWaitNotification wait txId: " << txId << Endl;
-        }
-
+        Cerr << Endl << "TestWaitNotification wait txId: " << txId << Endl;
         auto ev = new TEvSchemeShard::TEvNotifyTxCompletion(txId);
         runtime.Send(new IEventHandle(subscriberActorId, sender, ev));
     }
@@ -976,10 +973,7 @@ void NSchemeShardUT_Private::TestWaitNotification(NActors::TTestActorRuntime &ru
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
         UNIT_ASSERT(event);
         ui64 eventTxId = event->Record.GetTxId();
-        if (TTestEnv::ENABLE_SCHEMESHARD_LOG) {
-            Cerr << Endl << "TestWaitNotification: OK eventTxId " << eventTxId << Endl;
-        }
-
+        Cerr << Endl << "TestWaitNotification: OK eventTxId " << eventTxId << Endl;
         UNIT_ASSERT(txIds.find(eventTxId) != txIds.end());
         txIds.erase(eventTxId);
     }

@@ -34,7 +34,7 @@ private:
 
     bool CalcAggregationsAndClean(i64& sum, i64& minValue, i64& maxValue) const;
     std::optional<TSignalAggregations> GetAggregations() const;
-    bool HasWrittenClient() const;
+    bool HasWrittenClientAndClean() const;
 
 public:
     TValueAggregationAgent(const TString& signalName, const TCommonCountersOwner& signalsOwner);

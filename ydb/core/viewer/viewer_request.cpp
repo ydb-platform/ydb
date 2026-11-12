@@ -83,6 +83,8 @@ public:
 
     void ReplyAndPassAway() override {
         auto response = MakeHolder<TEvViewer::TEvViewerResponse>();
+        // a reply has no payload when no node has answered, so the payload can not tell which request it answers
+        response->Record.SetAnsweredRequest(static_cast<ui32>(Event->Get()->Record.GetRequestCase()));
         auto& locationResponded = (*response->Record.MutableLocationResponded());
 
         for (auto& [nodeId, nodeResponse] : TBase::NodeResponses) {

@@ -853,6 +853,7 @@ message TEvViewerRequest {
 message TEvViewerResponse {
     TNodeLocation LocationResponded = 2;
     TNodeLocation LocationTimedOut = 3; // nodes that did not answer before the request timeout
+    uint32 AnsweredRequest = 4; // the field number of TEvViewerRequest.Request this is the answer to; set even when there is no data for Response
     oneof Response {
         NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
         NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;

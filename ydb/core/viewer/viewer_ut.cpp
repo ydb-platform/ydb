@@ -5628,6 +5628,79 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(disconnectedNodes <= 1, context);
     }
 
+    // The same reply without a payload comes when no node has answered about its tablets. It tells nothing
+    // about the request for the system state, so it must not mark the nodes as not answered in time, even
+    // the ones that have no system state for another reason (here the proxy returns none of it).
+    Y_UNIT_TEST(NodesPageIgnoresTimeoutOfOtherProxyRequests) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        // TServer registers viewers by node index; offload requests address them by node ID.
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            runtime.RegisterService(MakeViewerID(runtime.GetNodeId(nodeIndex)), viewerId, nodeIndex);
+        }
+        size_t droppedTabletStates = 0;
+        size_t strippedSystemProxyReplies = 0;
+        size_t emptyProxyReplies = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                // one data center, so all the nodes get into one batch with one proxy
+                SetNodesLocation(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev), "dc-1");
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvTabletStateResponse) {
+                // no node answers about its tablets, so the proxy has nothing to put into its reply about them
+                ++droppedTabletStates;
+                return TTestActorRuntime::EEventAction::DROP;
+            } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse) {
+                auto& record = ev->Get<TEvViewer::TEvViewerResponse>()->Record;
+                switch (record.Response_case()) {
+                    case NKikimrViewer::TEvViewerResponse::ResponseCase::kSystemResponse:
+                        // the proxy answers in time, but without the state of any node: none of them is timed out
+                        record.MutableSystemResponse()->ClearSystemStateInfo();
+                        record.ClearLocationResponded();
+                        record.ClearLocationTimedOut();
+                        ++strippedSystemProxyReplies;
+                        break;
+                    case NKikimrViewer::TEvViewerResponse::ResponseCase::RESPONSE_NOT_SET:
+                        ++emptyProxyReplies;
+                        break;
+                    default:
+                        break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/json/nodes?type=static&fields_required=NodeId,SystemState,Tablets&sort=NodeId"
+            "&offload_merge=true&offload_merge_attempts=1&timeout=1000&enums=true HTTP/1.1\r\n\r\n", endpoint, {});
+        TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const TString context = NJson::WriteJson(json, false);
+
+        // the scenario itself: the answer about the system state has no data, the answer about tablets is empty
+        UNIT_ASSERT_C(droppedTabletStates > 0, context);
+        UNIT_ASSERT_C(strippedSystemProxyReplies > 0, context);
+        UNIT_ASSERT_C(emptyProxyReplies > 0, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["Nodes"].GetArray().size(), 3, context);
+        for (const auto& node : json["Nodes"].GetArray()) {
+            // every node was waited for only by the request about tablets
+            UNIT_ASSERT_C(!node.Has("ResponseTimeout"), context);
+        }
+    }
+
     Y_UNIT_TEST(NodesPageKeepsPDisksForDisconnectedNode)
     {
         TPortManager tp;

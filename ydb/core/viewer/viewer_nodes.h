@@ -113,7 +113,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvTabletStateResponse>> TabletStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> PeersStateResponse;
     std::unordered_map<TNodeId, std::unordered_set<TNodeId>> SystemViewerRequest;
-    std::unordered_set<TNodeId> OffloadedTimedOutNodes; // the nodes a proxy was still waiting for when it answered with no data at all
+    std::unordered_set<TNodeId> OffloadedTimedOutNodes; // the nodes a proxy was still waiting for when it answered the request about the system state with no data at all
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> SystemViewerResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> VDiskViewerResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> PDiskViewerResponse;
@@ -3276,8 +3276,12 @@ public:
         // A proxy answers without any payload when none of the nodes it asked has answered. Such a reply is
         // handled as a wrong one below and the batch is asked again when it still can be, but the nodes
         // the proxy was still waiting for at its timeout are kept: without a retry nothing else tells about them.
-        for (TNodeId timedOutNodeId : ev->Get()->Record.GetLocationTimedOut().GetNodeId()) {
-            OffloadedTimedOutNodes.insert(timedOutNodeId);
+        // Only the reply to the request about the system state counts: ResponseTimeout is about that request,
+        // and the same reply to the request about tablets, disks or peers tells nothing about it.
+        if (ev->Get()->Record.GetAnsweredRequest() == static_cast<ui32>(NKikimrViewer::TEvViewerRequest::kSystemRequest)) {
+            for (TNodeId timedOutNodeId : ev->Get()->Record.GetLocationTimedOut().GetNodeId()) {
+                OffloadedTimedOutNodes.insert(timedOutNodeId);
+            }
         }
         TString error("WrongResponse");
         {

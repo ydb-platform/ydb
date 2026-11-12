@@ -221,7 +221,7 @@ public:
         }
 
         for (const auto replicationId : Self->DeferredAlters) {
-            if (!Self->HasPendingAlter(replicationId)) {
+            if (!Self->HasPendingAlter(replicationId) && !Self->ConsistentDoneBlocked(replicationId)) {
                 ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(replicationId));
             }
         }
@@ -368,7 +368,7 @@ public:
         }
 
         for (const auto replicationId : Self->DeferredAlters) {
-            if (!Self->HasPendingAlter(replicationId)) {
+            if (!Self->HasPendingAlter(replicationId) && !Self->ConsistentDoneBlocked(replicationId)) {
                 ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(replicationId));
             }
         }

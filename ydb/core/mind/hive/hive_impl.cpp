@@ -2218,8 +2218,10 @@ void THive::RecordTabletMove(TInstant timestamp, const TTabletInfo& tablet, cons
         TStringBuilder() << "from=" << moveInfo.From << " to=" << moveInfo.To << (details.empty() ? "" : " ") << details);
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
-    if (from.Counters && to.Counters) {
+    if (from.Counters) {
         from.Counters->TabletsMovedFromNode->Inc();
+    }
+    if (to.Counters) {
         to.Counters->TabletsMovedToNode->Inc();
     }
     if (TabletMoveSamplesForLog.size() < MOVE_SAMPLES_PER_LOG_ENTRY) {

@@ -8,13 +8,13 @@ SELECT
     i_item_desc,
     i_current_price
 FROM
-    `/Root/test/ds/item`
+    `item`
 ,
-    `/Root/test/ds/inventory`
+    `inventory`
 ,
-    `/Root/test/ds/date_dim`
+    `date_dim`
 ,
-    `/Root/test/ds/catalog_sales`
+    `catalog_sales`
 WHERE
     i_current_price BETWEEN 22 AND (22 + 30)
     AND inv_item_sk == i_item_sk

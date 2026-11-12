@@ -631,6 +631,9 @@ enum class EBoardLookupMode {
     SecondNonEmptyDoubleTime,
     MajorityDoubleTime,
     Subscription,
+    // Require two nonempty replies, collecting all available replicas before
+    // returning. A slow replica may delay the result by at most one second.
+    SecondWithAllReplies,
 };
 
 struct TBoardRetrySettings {

@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/public/lib/validation)
 
-FORK_SUBTESTS()
-
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ENDIF()

@@ -1,0 +1,103 @@
+{
+  "scale": 0.1,
+  "workload": "tpcds",
+  "storage": "row",
+  "tables": {
+    "/Root/Database/tpcds/call_center": {
+      "n_rows": 1,
+      "byte_size": 526
+    },
+    "/Root/Database/tpcds/catalog_page": {
+      "n_rows": 1171,
+      "byte_size": 227249
+    },
+    "/Root/Database/tpcds/catalog_returns": {
+      "n_rows": 14416,
+      "byte_size": 4714668
+    },
+    "/Root/Database/tpcds/catalog_sales": {
+      "n_rows": 143657,
+      "byte_size": 62957347
+    },
+    "/Root/Database/tpcds/customer": {
+      "n_rows": 10000,
+      "byte_size": 2412142
+    },
+    "/Root/Database/tpcds/customer_address": {
+      "n_rows": 5000,
+      "byte_size": 1099959
+    },
+    "/Root/Database/tpcds/customer_demographics": {
+      "n_rows": 192080,
+      "byte_size": 20814020
+    },
+    "/Root/Database/tpcds/date_dim": {
+      "n_rows": 7304,
+      "byte_size": 2227819
+    },
+    "/Root/Database/tpcds/household_demographics": {
+      "n_rows": 720,
+      "byte_size": 41520
+    },
+    "/Root/Database/tpcds/income_band": {
+      "n_rows": 2,
+      "byte_size": 84
+    },
+    "/Root/Database/tpcds/inventory": {
+      "n_rows": 1174500,
+      "byte_size": 66171760
+    },
+    "/Root/Database/tpcds/item": {
+      "n_rows": 1800,
+      "byte_size": 758886
+    },
+    "/Root/Database/tpcds/promotion": {
+      "n_rows": 30,
+      "byte_size": 7836
+    },
+    "/Root/Database/tpcds/reason": {
+      "n_rows": 3,
+      "byte_size": 220
+    },
+    "/Root/Database/tpcds/ship_mode": {
+      "n_rows": 2,
+      "byte_size": 226
+    },
+    "/Root/Database/tpcds/store": {
+      "n_rows": 1,
+      "byte_size": 486
+    },
+    "/Root/Database/tpcds/store_returns": {
+      "n_rows": 28704,
+      "byte_size": 7667352
+    },
+    "/Root/Database/tpcds/store_sales": {
+      "n_rows": 288464,
+      "byte_size": 91796044
+    },
+    "/Root/Database/tpcds/time_dim": {
+      "n_rows": 8640,
+      "byte_size": 1065760
+    },
+    "/Root/Database/tpcds/warehouse": {
+      "n_rows": 1,
+      "byte_size": 262
+    },
+    "/Root/Database/tpcds/web_page": {
+      "n_rows": 6,
+      "byte_size": 984
+    },
+    "/Root/Database/tpcds/web_returns": {
+      "n_rows": 7061,
+      "byte_size": 2074773
+    },
+    "/Root/Database/tpcds/web_sales": {
+      "n_rows": 71632,
+      "byte_size": 30962932
+    },
+    "/Root/Database/tpcds/web_site": {
+      "n_rows": 3,
+      "byte_size": 1466
+    }
+  }
+}

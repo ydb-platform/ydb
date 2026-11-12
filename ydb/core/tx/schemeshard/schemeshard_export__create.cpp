@@ -410,6 +410,11 @@ private:
                     if (childPath.IsDeleted() || !childPath.IsTableIndex()) {
                         continue;
                     }
+                    // An async index may lag behind the base table snapshot. Restore it by building
+                    // from the exported table data instead of exporting its impl table.
+                    if (childPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync)) {
+                        continue;
+                    }
                     for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
                         auto implTablePath = childPath.Child(implTableName);
                         if (implTablePath.IsDeleted()) {
@@ -1340,7 +1345,7 @@ private:
                     item.State = EState::Cancelled;
                     item.Issue = std::move(error);
                     Self->PersistExportItemState(db, *exportInfo, itemIdx);
-                    CancelAndPersistExport(exportInfo, itemIdx, "invalid index description", db);
+                    CancelAndPersistExport(exportInfo, itemIdx, "cannot prepare backup proposal", db);
                     return;
                 }
             } else {

@@ -66,7 +66,7 @@ enum ETxTypes {
     TXTYPE_REMOVE_WORKER = 21 [(TxTypeOpts) = {Name: "TxRemoveWorker"}];
     TXTYPE_COMPLETE_WORKER_SET = 22 [(TxTypeOpts) = {Name: "TxCompleteWorkerSet"}];
     TXTYPE_SCHEMA_CHANGE_REPORT = 23 [(TxTypeOpts) = {Name: "TxSchemaChangeReport"}];
-    TXTYPE_PREPARE_ATTACH_DST = 24 [(TxTypeOpts) = {Name: "TxPrepareAttachDst"}];
+    TXTYPE_PREPARE_ATTACH_DST_DEPRECATED = 24 [deprecated = true];
     TXTYPE_INDEX_BUILD = 25 [(TxTypeOpts) = {Name: "TxIndexBuild"}];
     TXTYPE_SOURCE_OFFSET_REPORT = 26 [(TxTypeOpts) = {Name: "TxSourceOffsetReport"}];
 }

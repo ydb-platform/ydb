@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
 
-FORK_SUBTESTS()
-
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)

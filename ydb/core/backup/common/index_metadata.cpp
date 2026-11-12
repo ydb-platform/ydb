@@ -16,6 +16,10 @@ TVector<TIndexMetadata> MakeIndexesMetadata(
     TVector<TIndexMetadata> result;
     ui32 exportPrefixNumber = firstExportPrefixNumber;
     for (const auto& index : indexes) {
+        // Async indexes are rebuilt from the base table data on import.
+        if (index.has_global_async_index()) {
+            continue;
+        }
         const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), enableFulltextCompact);
         if (!indexType) {
             continue;

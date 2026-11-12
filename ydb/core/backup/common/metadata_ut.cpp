@@ -74,6 +74,13 @@ Y_UNIT_TEST_SUITE(IndexMetadataTest) {
     Y_UNIT_TEST(MakeIndexesMetadata) {
         google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex> indexes;
         {
+            // Async index data is not exported and must not consume a prefix number.
+            auto& index = *indexes.Add();
+            index.set_name("async");
+            index.add_index_columns("value");
+            index.mutable_global_async_index();
+        }
+        {
             auto& index = *indexes.Add();
             index.set_name("global");
             index.add_index_columns("value");

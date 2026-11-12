@@ -985,7 +985,7 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             std::move(connectCallback),
             reqSettings,
             std::move(connectContext),
-            TDuration::Seconds(30) /* connect timeout */, // TODO: make connect timeout setting.
+            Settings.ConnectTimeout_,
             std::move(connectTimeoutContext),
             std::move(connectTimeoutCallback),
             delay,

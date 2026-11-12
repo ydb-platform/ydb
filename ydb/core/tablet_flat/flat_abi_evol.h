@@ -25,7 +25,7 @@ namespace NTable {
 
         Tail = 1,
         Head = 17,
-        Edge = 31,
+        Edge = 32,
     };
 
     /* The least evolution required to read redo log events with savepoint
@@ -107,6 +107,8 @@ namespace NTable {
        31   Parts with a separate descriptor page collection, data pages
             of each group in its own page collection, indexes in the
             descriptor or with data of their group
+     ---------------------------------------------------------------------
+       32   Parts with ZSTD compressed data pages
      */
 
 }

@@ -1018,6 +1018,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
             }
         }
 
+        InvalidateHnswIndexes();
         TableInfos.clear();
         for (auto& table : tables) {
             AddUserTable(table.TableId, std::move(table.Table));

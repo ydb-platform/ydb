@@ -8653,7 +8653,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         for (const auto mode : {
                 Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD,
                 Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
-                Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO}) {
+                Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO})
+        {
             // The archived index contains an extra row and misses a row from the base table.
             // Both metadata layouts must ignore that data, including when restoring a replica.
             for (const auto& metadata : {

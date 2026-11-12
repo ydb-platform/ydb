@@ -217,17 +217,7 @@ namespace NKikimr::NBsController {
 
     Ydb::StatusIds::StatusCode TBlobStorageController::SelectBridgeStoragePools(const NKikimrBridge::TStorageQuery& query,
                                                                                 std::set<TBoxStoragePoolId>& selected, NBridgeStorage::TReportBudget& budget, TString& error) const {
-        if (query.HasStoragePoolId()) {
-            const auto& id = query.GetStoragePoolId();
-            const TBoxStoragePoolId key(id.box_id(), id.pool_id());
-            if (!StoragePools.contains(key)) {
-                error = "Storage pool not found";
-                return Ydb::StatusIds::NOT_FOUND;
-            }
-            selected.insert(key);
-            return Ydb::StatusIds::SUCCESS;
-        }
-        if (query.GetFilterPools() && !query.PoolNamesSize() && !query.HasStoragePool()) {
+        if (query.StoragePoolIdsSize() || (query.GetFilterPools() && !query.PoolNamesSize() && !query.HasStoragePool())) {
             for (const auto& id : query.GetStoragePoolIds()) {
                 if (!budget.Visit()) {
                     error = TString(LimitError);
@@ -307,12 +297,8 @@ namespace NKikimr::NBsController {
         if (query.HasStoragePool() && query.GetStoragePool().empty()) {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Storage pool name must not be empty");
         }
-        if (query.HasStoragePoolId() && (!query.GetStoragePoolId().pool_id() || query.HasStoragePool() ||
-                query.GetFilterPools() || query.StoragePoolIdsSize())) {
-            return fail(Ydb::StatusIds::BAD_REQUEST, "Select storage pools by database, name, or a nonzero pool ID");
-        }
-        if (query.StoragePoolIdsSize() && (!query.GetFilterPools() || query.HasStoragePool() || query.PoolNamesSize())) {
-            return fail(Ydb::StatusIds::BAD_REQUEST, "A storage pool ID list requires FilterPools and excludes other pool selectors");
+        if (query.StoragePoolIdsSize() && (query.HasStoragePool() || query.PoolNamesSize())) {
+            return fail(Ydb::StatusIds::BAD_REQUEST, "Select storage pools by names or IDs");
         }
         if ((query.StatusesSize() && query.GetView() != TQuery::GROUPS) || (query.GetNotSynced() && query.GetView() != TQuery::DATABASES)) {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Synchronization statuses filter groups; incomplete summaries filter databases");
@@ -495,7 +481,7 @@ namespace NKikimr::NBsController {
                 }
             }
         }
-        if (query.GetView() == TQuery::GROUPS && !query.HasStoragePool() && !query.HasStoragePoolId() && !query.GetFilterPools()) {
+        if (query.GetView() == TQuery::GROUPS && !query.HasStoragePool() && !query.StoragePoolIdsSize() && !query.GetFilterPools()) {
             for (const auto& [id, group] : StaticGroups) {
                 if (!budget.Visit()) {
                     return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
@@ -566,7 +552,7 @@ namespace NKikimr::NBsController {
         }
         if (query.GetView() == TQuery::PILES) {
             // A pool filter can hide other pools of the same owner and change its apparent mode.
-            const bool reportBridgeDatabases = !query.HasStoragePool() && !query.HasStoragePoolId() && !query.GetFilterPools();
+            const bool reportBridgeDatabases = !query.HasStoragePool() && !query.StoragePoolIdsSize() && !query.GetFilterPools();
             ui64 bridgeDatabases = 0;
             std::map<TBridgePileId, NBridgeStorage::TCounts> bridgeDatabaseCounts;
             for (auto& [key, owner] : owners) {

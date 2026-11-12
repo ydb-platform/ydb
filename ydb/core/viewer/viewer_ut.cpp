@@ -1626,7 +1626,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             const auto& query = ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record;
             UNIT_ASSERT(query.GetView() == NKikimrBridge::TStorageQuery::DATABASES);
             UNIT_ASSERT(query.GetFilterPools());
-            UNIT_ASSERT(!query.HasStoragePoolId());
+            UNIT_ASSERT(!query.HasStoragePool());
             UNIT_ASSERT_VALUES_EQUAL(query.PoolNamesSize(), 0);
             std::set<std::pair<ui64, ui64>> actual;
             for (const auto& pool : query.GetStoragePoolIds()) {

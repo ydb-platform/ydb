@@ -9,6 +9,7 @@ SPLIT_FACTOR(10)
 
 TEST_SRCS(
     test_topic.py
+    test_cluster_discovery.py
     test_kafka_topic.py
 )
 

@@ -71,7 +71,6 @@ using namespace NLog;
 using namespace NKikimr::NMiniKQL;
 
 constexpr ui32 StateVersion = 1;
-constexpr ui32 MaxMessageSize = 1_MB;
 
 namespace {
 
@@ -234,11 +233,6 @@ public:
             SINK_LOG_T("Received data for sending: " << data);
 
             const auto messageSize = GetItemSize(data);
-            if (messageSize > MaxMessageSize) {
-                Fail(TStringBuilder() << "Max message size for YDS is " << MaxMessageSize
-                    << " bytes but received message with size of " << messageSize << " bytes");
-                return false;
-            }
 
             FreeSpace -= messageSize;
             Metrics.InFlyData->Inc();
@@ -361,7 +355,7 @@ private:
         auto settings = NYdb::NTopic::TWriteSessionSettings()
             .Path(SinkParams.GetTopicPath())
             .TraceId(LogPrefix)
-            .MaxMemoryUsage(FreeSpace)
+            .MaxMemoryUsage(FreeSpace > 0 ? FreeSpace : DqPqDefaultFreeSpace)
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
                 ? NYdb::NTopic::ECodec::RAW
                 : NYdb::NTopic::ECodec::GZIP)

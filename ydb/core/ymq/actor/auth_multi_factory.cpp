@@ -482,7 +482,7 @@ void TBaseCloudAuthRequestProxy::RequestFolderService() {
     Send(MakeSqsFolderServiceID(), std::move(request));
 }
 
-void TBaseCloudAuthRequestProxy::RetrieveCachedFolderId() {
+void TBaseCloudAuthRequestProxy::RequestQueueFolderId() {
     Become(&TThis::ProcessAuthorization);
 
     Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvGetQueueFolderIdAndCustomName(RequestId_, CloudId_, ResourceId_));
@@ -516,7 +516,7 @@ void TBaseCloudAuthRequestProxy::Bootstrap() {
                 return;
             }
             case EActionClass::QueueSpecified: {
-                RetrieveCachedFolderId();
+                RequestQueueFolderId();
                 return;
             }
             case EActionClass::CustomUIBatch: {
@@ -527,6 +527,8 @@ void TBaseCloudAuthRequestProxy::Bootstrap() {
         }
     } else if (FolderId_) {
         GetCloudIdAndAuthorize();
+    } else if (ActionClass_ == EActionClass::QueueSpecified) {
+        RequestQueueFolderId();
     } else {
         AuthenticateIamToken_ = true;
         Become(&TThis::ProcessAuthentication);

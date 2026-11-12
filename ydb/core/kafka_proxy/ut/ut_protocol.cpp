@@ -11,6 +11,7 @@
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
@@ -1382,7 +1383,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     } // Y_UNIT_TEST(FetchScenario)
 
-    Y_UNIT_TEST(FetchScenarioWithJoinGroup) {
+    Y_UNIT_TEST_TWIN(FetchScenarioWithJoinGroup, enableClientModifications) {
         TInsecureTestServer testServer("2");
 
         TString protocolName = "roundrobin";
@@ -1426,6 +1427,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                                         static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
 
+        testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(enableClientModifications);
         {
             std::vector<TString> topics = { topicName };
             auto msg = client.JoinGroup(topics, group, protocolName, 10000);
@@ -1442,7 +1444,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), true);
             UNIT_ASSERT_VALUES_EQUAL(ReadFetchRecords(msg->Responses[0].Partitions[0].Records).Records.size(), 1);
         }
-    } // Y_UNIT_TEST(FetchScenarioWithJoinGroup)
+    } // Y_UNIT_TEST_TWIN(FetchScenarioWithJoinGroup, enableClientModifications)
 
     Y_UNIT_TEST(JoinGroupWithEmptyMetadataScenario) {
         TInsecureTestServer testServer("2", false, false);
@@ -2003,6 +2005,79 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 for (const auto& partition : topic.Partitions) {
                     UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
                 }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ClientModificationsOffsetCommit, enableClientModifications) {
+        TInsecureTestServer testServer("2", false, true, false, false);
+        NYdb::NTopic::TTopicClient topics(*testServer.Driver);
+
+        const TString consumer = "consumer";
+        const TVector<TString> names = {"/Root/first", "/Root/second"};
+        for (auto name : names) {
+            CreateTopic(topics, name, 2, {consumer});
+        }
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        std::map<TString, std::vector<i32>> partitions;
+        std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+        for (const auto& name : names) {
+            partitions[name] = {0, 1};
+            offsets[name] = {{0, 1, "metadata"}, {1, 1, "metadata"}};
+
+            for (i32 partition : partitions[name]) {
+                auto produce = client.Produce({name, static_cast<ui32>(partition)}, {{"key", "value"}});
+                UNIT_ASSERT_VALUES_EQUAL(produce->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+            }
+        }
+
+        auto before = client.OffsetFetch(consumer, partitions);
+        UNIT_ASSERT_VALUES_EQUAL(before->Groups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(before->Groups[0].Topics.size(), 2);
+
+        testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(enableClientModifications);
+        auto fetch = client.Fetch(std::vector<std::pair<TString, std::vector<i32>>>(partitions.begin(), partitions.end()));
+        UNIT_ASSERT_VALUES_EQUAL(fetch->ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(fetch->Responses.size(), 2);
+
+        for (const auto& topic : fetch->Responses) {
+            UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), 2);
+
+            for (const auto& partition : topic.Partitions) {
+                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, EKafkaErrors::NONE_ERROR);
+
+                const auto batches = SplitFetchRecordBatches(partition.Records);
+                UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(ReadKafkaRecordBatch(batches[0]).Records.size(), 1);
+            }
+        }
+
+        auto commit = client.OffsetCommit(consumer, offsets);
+        UNIT_ASSERT_VALUES_EQUAL(commit->Topics.size(), 2);
+
+        for (const auto& topic : commit->Topics) {
+            UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), 2);
+
+            for (const auto& partition : topic.Partitions) {
+                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, enableClientModifications ? EKafkaErrors::NONE_ERROR : EKafkaErrors::POLICY_VIOLATION);
+            }
+        }
+
+        auto after = client.OffsetFetch(consumer, partitions);
+        UNIT_ASSERT_VALUES_EQUAL(after->Groups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(after->Groups[0].Topics.size(), 2);
+
+        for (size_t t = 0; t < after->Groups[0].Topics.size(); ++t) {
+            const auto& topic = after->Groups[0].Topics[t];
+            UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), 2);
+
+            for (size_t p = 0; p < topic.Partitions.size(); ++p) {
+                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions[p].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions[p].CommittedOffset,
+                    enableClientModifications ? 1 : before->Groups[0].Topics[t].Partitions[p].CommittedOffset);
             }
         }
     }
@@ -3362,6 +3437,82 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].NodeId, testServer.KikimrServer->GetRuntime()->GetFirstNodeId());
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Host, "::1");
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Port, testServer.Port);
+    }
+
+    Y_UNIT_TEST(ConnectionProcessesOneInflightRequest) {
+        TInsecureTestServer testServer;
+
+        TString topicName = "/Root/topic-one-inflight-test";
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, 1, {});
+
+        TKafkaTestClient client(testServer.Port);
+
+        TRequestHeaderData fetchHeader = client.Header(NKafka::EApiKey::FETCH, 4);
+        TFetchRequestData fetchRequest;
+        fetchRequest.MaxWaitMs = 1000;
+        fetchRequest.MinBytes = 1;
+        fetchRequest.ReplicaId = -1;
+        {
+            NKafka::TFetchRequestData::TFetchTopic topicReq;
+            topicReq.Topic = topicName;
+            NKafka::TFetchRequestData::TFetchTopic::TFetchPartition partitionReq;
+            partitionReq.FetchOffset = 0;
+            partitionReq.Partition = 0;
+            partitionReq.PartitionMaxBytes = 1_MB;
+            topicReq.Partitions.push_back(partitionReq);
+            fetchRequest.Topics.push_back(topicReq);
+        }
+        client.WriteToSocket(fetchHeader, fetchRequest);
+
+        TRequestHeaderData produceHeader = client.Header(NKafka::EApiKey::PRODUCE, 9);
+        TProduceRequestData produceRequest;
+        produceRequest.Acks = -1;
+        produceRequest.TopicData.resize(1);
+        produceRequest.TopicData[0].Name = topicName;
+        produceRequest.TopicData[0].PartitionData.resize(1);
+        produceRequest.TopicData[0].PartitionData[0].Index = 0;
+        TString key = "mute-key";
+        TString value = "mute-value";
+        TKafkaRecordBatch batch;
+        batch.Magic = 2;
+        batch.Records.resize(1);
+        batch.Records[0].Key = TKafkaRawBytes(key.data(), key.size());
+        batch.Records[0].Value = TKafkaRawBytes(value.data(), value.size());
+        const TString serializedBatch = WriteKafkaRecordBatch(batch);
+        produceRequest.TopicData[0].PartitionData[0].Records = ToRawBytes(serializedBatch);
+        client.WriteToSocket(produceHeader, produceRequest);
+
+        TKafkaTestClient observer(testServer.Port);
+        Sleep(TDuration::MilliSeconds(200));
+        {
+            std::vector<std::pair<i32, i64>> partitions {{0, LastTopicOffset}};
+            auto offsets = observer.ListOffsets(partitions, topicName);
+            UNIT_ASSERT_VALUES_EQUAL(offsets->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(offsets->Topics[0].Partitions.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(offsets->Topics[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(offsets->Topics[0].Partitions[0].Offset, 0);
+        }
+
+        auto fetchResponse = client.ReadResponse<TFetchResponseData>(fetchHeader);
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses[0].Partitions.size(), 1);
+        UNIT_ASSERT(fetchResponse->Responses[0].Partitions[0].Records.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses[0].Partitions[0].Records->size(), 0);
+
+        auto produceResponse = client.ReadResponse<TProduceResponseData>(produceHeader);
+        UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode,
+                                 static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        {
+            std::vector<std::pair<i32, i64>> partitions {{0, LastTopicOffset}};
+            auto offsets = observer.ListOffsets(partitions, topicName);
+            UNIT_ASSERT_VALUES_EQUAL(offsets->Topics[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(offsets->Topics[0].Partitions[0].Offset, 1);
+        }
     }
 
     Y_UNIT_TEST(HugeArrayLengthOverSocketDoesNotCrashServer) {

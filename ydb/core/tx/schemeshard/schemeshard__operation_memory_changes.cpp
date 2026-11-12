@@ -20,6 +20,12 @@ void TMemoryChanges::GrabNewTxState(TSchemeShard* ss, const TOperationId& opId) 
     GrabNew(opId, ss->TxInFlight, TxStates);
 }
 
+void TMemoryChanges::GrabReplicationSourceCleanup(TSchemeShard* ss, const TOperationId& opId) {
+    const auto* txState = ss->FindTx(opId);
+    Y_ABORT_UNLESS(txState);
+    ReplicationSourceCleanups.emplace(opId, txState->ReplicationSourceCleanup);
+}
+
 void TMemoryChanges::GrabNewPath(TSchemeShard* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->PathsById, Paths);
 }
@@ -43,7 +49,12 @@ void TMemoryChanges::GrabNewColumnTable(TSchemeShard* ss, const TPathId& pathId)
 
 void TMemoryChanges::GrabColumnTable(TSchemeShard* ss, const TPathId& pathId) {
     Y_ABORT_UNLESS(ss->ColumnTables.contains(pathId));
-    ColumnTables.emplace(pathId, std::make_shared<TColumnTableInfo>(*ss->ColumnTables.GetVerified(pathId)));
+    ColumnTables.emplace(pathId, ss->ColumnTables.GetVerified(pathId)->Clone());
+}
+
+void TMemoryChanges::GrabOlapStore(TSchemeShard* ss, const TPathId& pathId) {
+    Y_ABORT_UNLESS(ss->OlapStores.contains(pathId));
+    OlapStores.emplace(pathId, std::make_shared<TOlapStoreInfo>(*ss->OlapStores.at(pathId)));
 }
 
 void TMemoryChanges::GrabNewShard(TSchemeShard*, const TShardIdx& shardId) {
@@ -309,6 +320,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         ColumnTables.pop();
     }
 
+    while (OlapStores) {
+        const auto& [id, elem] = OlapStores.top();
+        if (elem) {
+            ss->OlapStores[id] = elem;
+        } else {
+            ss->OlapStores.erase(id);
+        }
+        OlapStores.pop();
+    }
+
     while (Shards) {
         const auto& [id, elem] = Shards.top();
         if (elem) {
@@ -330,6 +351,14 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         }
     }
     SubDomains.clear();
+
+    while (ReplicationSourceCleanups) {
+        const auto& [id, policy] = ReplicationSourceCleanups.top();
+        auto* txState = ss->FindTx(id);
+        Y_ABORT_UNLESS(txState);
+        txState->ReplicationSourceCleanup = policy;
+        ReplicationSourceCleanups.pop();
+    }
 
     while (TxStates) {
         const auto& [id, elem] = TxStates.top();

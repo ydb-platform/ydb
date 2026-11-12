@@ -4018,7 +4018,10 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(requests, 0);
 
         auto recovered = MakeNextConfig(fixture.Config, 1);
-        auto *group = recovered.MutableStateStorageConfig()->AddRingGroups();
+        auto *ss = recovered.MutableStateStorageConfig();
+        ss->ClearRing();
+        ss->ClearRingGroups();
+        auto *group = ss->AddRingGroups();
         group->SetNToSelect(3);
         for (ui32 node : {1, 2, 3}) {
             group->AddRing()->AddNode(node);
@@ -4463,6 +4466,86 @@ selector_config: []
         SetMetadataDiskGuid(nodeId, ev);
         return ReplyToReplaceController(runtime, nodeId, ev, edge)
             || (edge && CaptureInvokeResult(ev, edge, response));
+    }
+
+    void CheckDisableDistconfVersion(ui64 version) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.State.RequiredRootNodeId = 1;
+        const auto currentYaml = fixture.MakeReplacementYaml(4);
+        const auto error = NStorage::TDistributedConfigKeeper::UpdateConfigComposite(fixture.Config, currentYaml, currentYaml);
+        UNIT_ASSERT_C(!error, error.value_or(""));
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Start();
+        auto& runtime = fixture.Runtime;
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        std::optional<NKikimrBlobStorage::TStorageConfig> disabledCommittedConfig;
+        ui32 disableRequests = 0;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType
+                    && ev->Recipient == MakeBlobStorageNodeWardenID(1)) {
+                const auto& msg = *ev->Get<TEvNodeWardenStorageConfig>();
+                if (!msg.SelfManagementEnabled) {
+                    UNIT_ASSERT_VALUES_EQUAL(msg.Config->GetFingerprint(), fixture.Config.GetFingerprint());
+                    if (msg.CommittedConfig) {
+                        disabledCommittedConfig = *msg.CommittedConfig;
+                    }
+                }
+            }
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvSend
+                    && ev->Type == TEvBlobStorage::TEvControllerDistconfRequest::EventType) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerDistconfRequest>()->Record;
+                UNIT_ASSERT_C(record.GetOperation() ==
+                    NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf, record.DebugString());
+                UNIT_ASSERT(record.HasCompressedMainConfig());
+                UNIT_ASSERT(!record.GetDedicatedConfigMode());
+                UNIT_ASSERT(!record.GetDryRun());
+                ++disableRequests;
+            }
+            return !HandleReplaceEvent(runtime, nodeId, *ev, edge, response);
+        };
+        auto request = fixture.MakeReplaceRequest(version);
+        TString yaml = request->Record.GetReplaceStorageConfig().GetYAML();
+        const TStringBuf enabled = "enabled: true";
+        const size_t pos = yaml.find(enabled);
+        UNIT_ASSERT(pos != TString::npos);
+        yaml.replace(pos, enabled.size(), "enabled: false");
+        request->Record.MutableReplaceStorageConfig()->SetYAML(yaml);
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        if (version != 5) {
+            UNIT_ASSERT_C(response->GetStatus() == TResult::ERROR, response->DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(response->GetErrorReason(), "Main config version must be increasing by one");
+            UNIT_ASSERT_VALUES_EQUAL(disableRequests, 0);
+            for (ui32 nodeId : {1, 2, 3}) {
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint(),
+                    fixture.Config.GetFingerprint());
+            }
+        } else {
+            UNIT_ASSERT_C(response->GetStatus() == TResult::OK, response->DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(disableRequests, 1);
+            UNIT_ASSERT_C(SimUntil(runtime, [&] {
+                return disabledCommittedConfig
+                    && disabledCommittedConfig->GetGeneration() == fixture.Config.GetGeneration() + 1
+                    && !disabledCommittedConfig->GetSelfManagementConfig().GetEnabled();
+            }), (disabledCommittedConfig ? disabledCommittedConfig->DebugString() : "missing disabled notification"));
+            const auto applied = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+            UNIT_ASSERT_VALUES_EQUAL(applied.GetGeneration(), fixture.Config.GetGeneration() + 1);
+            UNIT_ASSERT(!applied.GetSelfManagementConfig().GetEnabled());
+            UNIT_ASSERT_VALUES_EQUAL(applied.GetFingerprint(), disabledCommittedConfig->GetFingerprint());
+        }
+    }
+
+    Y_UNIT_TEST(DisableDistconfRejectsFutureYamlVersionBeforeBscMutation) {
+        CheckDisableDistconfVersion(14);
+    }
+
+    Y_UNIT_TEST(DisableDistconfAcceptsNextYamlVersion) {
+        CheckDisableDistconfVersion(5);
     }
 
     bool HasTestConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config,
@@ -7645,6 +7728,72 @@ selector_config: []
         CheckBridgeCommittedCatchup(EBridgeCommittedCatchup::ColdIntermediate);
     }
 
+    Y_UNIT_TEST(ReassignBaseConfigErrorReleasesQueue) {
+        TCommitConfirmationFixture fixture;
+        fixture.Start();
+        CheckDurableConfigConverges(fixture, fixture.Config);
+        auto& runtime = fixture.Runtime;
+        runtime.RegisterService(MakeBlobStorageVDiskID(1, 1, 0), runtime.Register(new TIgnoreActor, 1));
+        const TActorId root = fixture.Root();
+        const auto config = QueryKeeper(runtime, root).GetQueryConfig().GetConfig();
+        THashMap<ui32, std::pair<ui64, ui64>> metadataGenerations;
+        for (const TActorId keeper : fixture.Keepers) {
+            const auto& metadata = fixture.Metadata(keeper.NodeId());
+            metadataGenerations.emplace(keeper.NodeId(), std::pair{
+                metadata.GetCommittedStorageConfig().GetGeneration(),
+                metadata.GetProposedStorageConfig().GetGeneration()});
+        }
+        const TActorId reassignEdge = runtime.AllocateEdgeActor(1);
+        const TActorId queryEdge = runtime.AllocateEdgeActor(1);
+        ui32 statusRequests = 0;
+        ui32 baseConfigRequests = 0;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> reassignResponse;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> queryResponse;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (CaptureInvokeResult(*ev, reassignEdge, reassignResponse)
+                || CaptureInvokeResult(*ev, queryEdge, queryResponse)) {
+                return false;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVStatus::EventType) {
+                ++statusRequests;
+                return false; // An unrelated VDisk status request must not delay a known BSC error.
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenQueryBaseConfig::EventType) {
+                ++baseConfigRequests;
+                auto result = std::make_unique<NStorage::TEvNodeWardenBaseConfig>();
+                result->ErrorReason = "BSC unavailable";
+                runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), result.release(),
+                    0, ev->Cookie), nodeId);
+                return false;
+            }
+            return true;
+        };
+        auto reassign = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        VDiskIDFromVDiskID(TVDiskID(TGroupId::Zero(), 1, 0, 0, 0),
+            reassign->Record.MutableReassignGroupDisk()->MutableVDiskId());
+        runtime.Send(new IEventHandle(root, reassignEdge, reassign.release()), 1);
+        auto query = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        query->Record.MutableQueryConfig();
+        runtime.Send(new IEventHandle(root, queryEdge, query.release()), 1);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return reassignResponse && queryResponse; }, TDuration::Seconds(1)),
+            "A BSC base config error waited for VDisk status or blocked the next configuration query");
+        UNIT_ASSERT_VALUES_EQUAL(baseConfigRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(statusRequests, 1);
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        UNIT_ASSERT_C(reassignResponse->GetStatus() == TResult::ERROR, reassignResponse->DebugString());
+        UNIT_ASSERT_C(TString(reassignResponse->GetErrorReason()).Contains("BSC unavailable"),
+            reassignResponse->DebugString());
+        UNIT_ASSERT_C(queryResponse->GetStatus() == TResult::OK, queryResponse->DebugString());
+        const auto& actualConfig = queryResponse->GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(actualConfig.GetGeneration(), config.GetGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(actualConfig.GetFingerprint(), config.GetFingerprint());
+        for (const auto& [nodeId, generations] : metadataGenerations) {
+            const auto& metadata = fixture.Metadata(nodeId);
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetCommittedStorageConfig().GetGeneration(), generations.first);
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetProposedStorageConfig().GetGeneration(), generations.second);
+        }
+    }
+
     Y_UNIT_TEST(DisableFlatStateStorageRingPreservesReplicaIds) {
         TCommitConfirmationFixture fixture(true);
         fixture.State.RequiredRootNodeId = 1;
@@ -10295,115 +10444,6 @@ selector_config: []
     }
 
 
-
-
-    void CheckDisableDistconfVersion(ui64 version) {
-        auto config = MakeStorageConfig(3);
-        config.MutableSelfManagementConfig()->SetEnabled(true);
-        for (auto& node : *config.MutableAllNodes()) {
-            node.MutableLocation()->SetDataCenter("dc-1");
-        }
-        const auto makeYaml = [&](ui64 yamlVersion, bool enabled) {
-            TStringBuilder yaml;
-            yaml << "metadata: {kind: MainConfig, version: " << yamlVersion << ", cluster: ''}\n"
-                 << "config:\n"
-                 << "  erasure: none\n"
-                 << "  self_management_config: {enabled: " << (enabled ? "true" : "false")
-                 << ", erasure_species: none}\n"
-                 << "  default_disk_type: ROT\n"
-                 << "  hosts:\n";
-            for (const auto& node : config.GetAllNodes()) {
-                yaml << "  - node_id: " << node.GetNodeId() << '\n'
-                     << "    host: " << node.GetHost() << '\n'
-                     << "    port: " << node.GetPort() << '\n'
-                     << "    location: {data_center: dc-1}\n"
-                     << "    drive:\n"
-                     << "    - {path: /dev/disk" << node.GetNodeId() << "_1, type: ROT}\n";
-            }
-            return TString(yaml);
-        };
-        const TString currentYaml = makeYaml(4, true);
-        const auto error = NStorage::TDistributedConfigKeeper::UpdateConfigComposite(config, currentYaml, currentYaml);
-        UNIT_ASSERT_C(!error, error.value_or(""));
-        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
-
-        TNodeWardenTestState state;
-        state.RequiredRootNodeId = 1;
-        for (ui32 nodeId : {1, 2, 3}) {
-            state.Metadata[std::pair<ui32, TString>{nodeId, "/dev/disk" + std::to_string(nodeId) + "_1"}]
-                .MutableCommittedStorageConfig()->CopyFrom(config);
-        }
-        TTestActorSystem runtime(3);
-        runtime.Start();
-        Y_DEFER { runtime.Stop(); };
-        std::vector<TActorId> keepers;
-        for (ui32 nodeId : {1, 2, 3}) {
-            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state));
-        }
-        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
-        UNIT_ASSERT(QueryKeeper(runtime, keepers.front()).HasScepter());
-
-        const TActorId edge = runtime.AllocateEdgeActor(1);
-        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
-        ui32 disableRequests = 0;
-        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvTabletPipe::EvSend) {
-                if (ev->Type == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
-                    auto result = std::make_unique<TEvBlobStorage::TEvControllerConfigResponse>();
-                    result->Record.MutableResponse()->AddStatus()->SetInterfaceVersion(BSC_INTERFACE_DISTCONF_CONTROL);
-                    runtime.Send(new IEventHandle(ev->Sender, edge, result.release()), nodeId);
-                    return false;
-                } else if (ev->Type == TEvBlobStorage::TEvControllerDistconfRequest::EventType) {
-                    const auto& record = ev->Get<TEvBlobStorage::TEvControllerDistconfRequest>()->Record;
-                    UNIT_ASSERT_C(record.GetOperation() ==
-                        NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf, record.DebugString());
-                    UNIT_ASSERT(record.HasCompressedMainConfig());
-                    UNIT_ASSERT(!record.GetDedicatedConfigMode());
-                    UNIT_ASSERT(!record.GetDryRun());
-                    ++disableRequests;
-                    auto result = std::make_unique<TEvBlobStorage::TEvControllerDistconfResponse>();
-                    result->Record.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::OK);
-                    runtime.Send(new IEventHandle(ev->Sender, edge, result.release()), nodeId);
-                    return false;
-                }
-            }
-            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType
-                    && ev->GetRecipientRewrite() == edge) {
-                response = ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
-                return false;
-            }
-            return true;
-        };
-        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableReplaceStorageConfig()->SetYAML(makeYaml(version, false));
-        request->Record.MutableReplaceStorageConfig()->SetSkipConsoleValidation(true);
-        runtime.Send(new IEventHandle(keepers.front(), edge, request.release()), 1);
-        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
-        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
-        if (version != 5) {
-            UNIT_ASSERT_C(response->GetStatus() == TResult::ERROR, response->DebugString());
-            UNIT_ASSERT_STRING_CONTAINS(response->GetErrorReason(), "Main config version must be increasing by one");
-            UNIT_ASSERT_VALUES_EQUAL(disableRequests, 0);
-            for (const auto& [disk, metadata] : state.Metadata) {
-                UNIT_ASSERT_VALUES_EQUAL(metadata.GetCommittedStorageConfig().GetFingerprint(), config.GetFingerprint());
-            }
-        } else {
-            UNIT_ASSERT_C(response->GetStatus() == TResult::OK, response->DebugString());
-            UNIT_ASSERT_VALUES_EQUAL(disableRequests, 1);
-            const auto applied = QueryKeeper(runtime, keepers.front()).GetQueryConfig().GetConfig();
-            UNIT_ASSERT_VALUES_EQUAL(applied.GetGeneration(), config.GetGeneration() + 1);
-            UNIT_ASSERT(!applied.GetSelfManagementConfig().GetEnabled());
-        }
-    }
-
-    Y_UNIT_TEST(DisableDistconfRejectsFutureYamlVersionBeforeBscMutation) {
-        CheckDisableDistconfVersion(14);
-    }
-
-    Y_UNIT_TEST(DisableDistconfAcceptsNextYamlVersion) {
-        CheckDisableDistconfVersion(5);
-    }
-
 }
 
 Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
@@ -11582,6 +11622,79 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         UNIT_ASSERT_EXCEPTION(
             Reallocate(s, NodeIds({2}), /*applyNodeAllowList=*/ true, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(UsesReportedSlotCountForStaticGroupReassignment) {
+        struct TCase {
+            ui32 ConfiguredSlotCount;
+            std::optional<ui32> ReportedSlotCount;
+            bool CanReassign;
+        };
+        const TCase cases[] = {
+            {1, 2, true},
+            {2, 1, false},
+            {0, 2, true},
+            {1, std::nullopt, false},
+            {2, std::nullopt, true},
+            {0, std::nullopt, true},
+        };
+
+        for (const auto& test : cases) {
+            TSetup s = MakeSetup();
+            for (auto& pdisk : *s.BaseConfig.MutablePDisk()) {
+                if (pdisk.GetNodeId() == 2) {
+                    pdisk.SetExpectedSlotCount(test.ConfiguredSlotCount);
+                    pdisk.MutablePDiskConfig()->SetExpectedSlotCount(test.ConfiguredSlotCount);
+                    pdisk.MutablePDiskConfig()->SetSlotSizeInUnits(1);
+                    if (test.ReportedSlotCount) {
+                        auto *metrics = pdisk.MutablePDiskMetrics();
+                        metrics->SetSlotCount(*test.ReportedSlotCount);
+                        metrics->SetSlotSizeInUnits(1);
+                    }
+                }
+            }
+
+            // One dynamic VDisk already occupies a slot on the only allowed target.
+            auto *vslot = s.BaseConfig.AddVSlot();
+            vslot->MutableVSlotId()->SetNodeId(2);
+            vslot->MutableVSlotId()->SetPDiskId(1);
+            vslot->MutableVSlotId()->SetVSlotId(7);
+            vslot->SetGroupId(0x80000001);
+            vslot->SetGroupGeneration(1);
+            vslot->SetStatus("READY");
+
+            if (test.CanReassign) {
+                UNIT_ASSERT_NO_EXCEPTION(Reallocate(s, NodeIds({2}), true));
+                UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 2u);
+                for (const auto& pdisk : s.Config.GetBlobStorageConfig().GetServiceSet().GetPDisks()) {
+                    if (pdisk.GetNodeID() == 2) {
+                        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetPDiskConfig().GetExpectedSlotCount(), test.ConfiguredSlotCount);
+                    }
+                }
+            } else {
+                UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({2}), true),
+                    NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+                UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 1u);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(UsesReportedSlotSizeForStaticGroupReassignment) {
+        TSetup s = MakeSetup();
+        for (auto& pdisk : *s.BaseConfig.MutablePDisk()) {
+            if (pdisk.GetNodeId() == 2 || pdisk.GetNodeId() == 3) {
+                auto *config = pdisk.MutablePDiskConfig();
+                config->SetExpectedSlotCount(2);
+                config->SetSlotSizeInUnits(pdisk.GetNodeId() == 2 ? 2 : 1);
+                auto *metrics = pdisk.MutablePDiskMetrics();
+                metrics->SetSlotCount(2);
+                metrics->SetSlotSizeInUnits(pdisk.GetNodeId() == 2 ? 1 : 2);
+            }
+        }
+
+        // A static group uses one unit; prefer the reported single-unit slot.
+        Reallocate(s, NodeIds({2, 3}), true);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 2u);
     }
 }
 

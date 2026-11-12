@@ -354,6 +354,13 @@ message TFeatureFlags {
     optional bool EnableSuperLemmer = 319 [default = false];
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
+    // Bumps GROUP BY HOP state version to 3
+    optional bool EnableHoppingWindowStartCheck = 346 [default = false];
+    // Creates asynchronous indexes on newly created asynchronous replication destinations.
+    optional bool EnableAsyncIndexReplication = 351 [default = true];
+    optional bool EnableKeyValueRequestInFlightLimit = 363 [default = false];
+    // Allows client data writes and schema modifications.
+    optional bool EnableClientModifications = 368 [default = true];
     // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
     // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];

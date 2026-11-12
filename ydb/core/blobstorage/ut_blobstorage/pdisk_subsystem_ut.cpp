@@ -4,6 +4,11 @@
 
 namespace {
 
+    void CheckLegacyNodeWardenConfig(const TNodeWardenConfig& config) {
+        UNIT_ASSERT(!config.SelfManagementConfig || !config.SelfManagementConfig->GetEnabled());
+        UNIT_ASSERT(!config.FeatureFlags.GetSwitchToConfigV2());
+    }
+
     struct TSlowPDiskState {
         ui32 Starts = 0;
         ui32 CompletedStarts = 0;
@@ -125,6 +130,7 @@ namespace {
     void CheckSlowMetadataStartup() {
         TSlowPDiskState state;
         TEnvironmentSetup env({.NodeCount = 1, .ConfigPreprocessor = [&](ui32, TNodeWardenConfig& config) {
+            CheckLegacyNodeWardenConfig(config);
             config.PDiskServiceFactory.Reset(new TSlowPDiskServiceFactory(state));
         }});
         auto& runtime = env.Runtime;
@@ -321,6 +327,7 @@ namespace {
             config->PDiskKey = {.Keys = {NPDisk::YdbDefaultPDiskSequence}, .IsInitialized = true};
             config->FeatureFlags.SetEnableSmallDiskOptimization(true);
             config->SectorMaps[Path] = SectorMap;
+            CheckLegacyNodeWardenConfig(*config);
             Warden = Runtime.Register(CreateBSNodeWarden(config), NodeId);
             Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), Warden);
             Requester = Runtime.AllocateEdgeActor(NodeId);
@@ -471,7 +478,9 @@ namespace {
 Y_UNIT_TEST_SUITE(PDiskSubsystem) {
 
     Y_UNIT_TEST(SharedMockMetadataPreservesSnapshotIsolation) {
-        TEnvironmentSetup env({.NodeCount = 1});
+        TEnvironmentSetup env({.NodeCount = 1, .ConfigPreprocessor = [](ui32, TNodeWardenConfig& config) {
+            CheckLegacyNodeWardenConfig(config);
+        }});
         auto& runtime = env.Runtime;
         const auto edge = runtime->AllocateEdgeActor(1);
         auto metadata = std::make_shared<TPDiskMockState::TMetadata>();
@@ -532,7 +541,9 @@ Y_UNIT_TEST_SUITE(PDiskSubsystem) {
 
     template<bool Write>
     void TestMetadataTimeout() {
-        TEnvironmentSetup env({.NodeCount = 1});
+        TEnvironmentSetup env({.NodeCount = 1, .ConfigPreprocessor = [](ui32, TNodeWardenConfig& config) {
+            CheckLegacyNodeWardenConfig(config);
+        }});
         auto& runtime = env.Runtime;
         const ui32 nodeId = *runtime->GetNodes().begin();
         const auto edge = runtime->AllocateEdgeActor(nodeId);
@@ -619,7 +630,9 @@ Y_UNIT_TEST_SUITE(PDiskSubsystem) {
     Y_UNIT_TEST(MetadataFailureReleasesTemporaryPDisk) {
         for (const bool write : {false, true}) {
             for (const bool undelivered : {false, true}) {
-                TEnvironmentSetup env({.NodeCount = 1});
+                TEnvironmentSetup env({.NodeCount = 1, .ConfigPreprocessor = [](ui32, TNodeWardenConfig& config) {
+                    CheckLegacyNodeWardenConfig(config);
+                }});
                 auto& runtime = env.Runtime;
                 const auto edge = runtime->AllocateEdgeActor(1);
                 const auto warden = MakeBlobStorageNodeWardenID(1);
@@ -669,7 +682,8 @@ Y_UNIT_TEST_SUITE(PDiskSubsystem) {
         ui32 registrations = 0;
         TEnvironmentSetup env({
             .NodeCount = 1,
-            .ConfigPreprocessor = [&registrations](ui32, TNodeWardenConfig&) {
+            .ConfigPreprocessor = [&registrations](ui32, TNodeWardenConfig& config) {
+                CheckLegacyNodeWardenConfig(config);
                 ++registrations;
             },
         });

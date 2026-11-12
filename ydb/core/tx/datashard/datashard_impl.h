@@ -54,6 +54,7 @@
 #include <ydb/core/tablet_flat/flat_page_iface.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
@@ -380,6 +381,7 @@ class TDataShard
             EvTableStatsError,
             EvRemoveSchemaSnapshots,
             EvBlockFailPointUnblock,
+            EvAdvanceSequencesTimeout,
             EvEnd
         };
 
@@ -403,6 +405,16 @@ class TDataShard
         struct TEvProgressOperationHistogramScan : public TEventLocal<TEvProgressOperationHistogramScan, EvProgressOperationHistogramScan> {};
 
         struct TEvPeriodicWakeup : public TEventLocal<TEvPeriodicWakeup, EvPeriodicWakeup> {};
+
+        struct TEvAdvanceSequencesTimeout
+            : public TEventLocal<TEvAdvanceSequencesTimeout, EvAdvanceSequencesTimeout>
+        {
+            explicit TEvAdvanceSequencesTimeout(ui64 pendingId)
+                : PendingId(pendingId)
+            {}
+
+            const ui64 PendingId;
+        };
 
         struct TEvBuildTableStatsResult : public TEventLocal<TEvBuildTableStatsResult, EvAsyncTableStats> {
             ui64 TableId = -1;
@@ -1391,6 +1403,9 @@ class TDataShard
     void Handle(TEvDataShard::TEvS3DirectWriteBegin::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteAbort::TPtr& ev, const TActorContext& ctx);
+    bool IsActiveDirectImport(ui64 txId, ui64 tableId, const TActorId& sender);
+    TString CheckDirectImportSpace();
+    void AbortDirectImportsForSpace();
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
@@ -1471,6 +1486,8 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequenceResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvAdvanceSequencesTimeout::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
 
@@ -1572,6 +1589,7 @@ public:
     TDataShard(const TActorId &tablet, TTabletStorageInfo *info);
     ~TDataShard();
 
+    void CancelS3DirectWrite(ui64 txId);
 
     void PrepareAndSaveOutReadSets(ui64 step,
                                    ui64 txId,
@@ -1609,7 +1627,7 @@ public:
     void SendResult(const TActorContext &ctx, TOutputOpData::TResultPtr &result, const TActorId &target, ui64 step, ui64 txId,
         NWilson::TTraceId traceId);
     void SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId,
-        NWilson::TTraceId traceId);
+        NWilson::TTraceId traceId, ui64 cookie);
 
     void FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks);
 
@@ -1668,6 +1686,17 @@ public:
     bool IsReplicated() const {
         for (const auto& [_, info] : TableInfos) {
             if (info->IsReplicated()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool IsImportingReplica() const {
+        for (const auto& [_, info] : TableInfos) {
+            if (info->IsReplicated() &&
+                info->ReplicationConfig.ImportState == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING)
+            {
                 return true;
             }
         }
@@ -2883,6 +2912,17 @@ private:
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;
+
+    // Replication batches waiting for their sequences to be advanced: applying data before the
+    // sequence has moved past it could hand out values which are already in the table.
+    struct TPendingApplyReplicationChanges {
+        TEvDataShard::TEvApplyReplicationChanges::TPtr Ev;
+        THashSet<ui64> Cookies;
+    };
+    THashMap<ui64, TPendingApplyReplicationChanges> PendingApplyReplicationChanges; // by pending id
+    THashMap<ui64, ui64> AdvanceSequenceCookies; // advance cookie -> pending id
+    ui64 NextApplyReplicationChangesId = 1;
+    ui64 NextAdvanceSequenceCookie = 1;
     TSysLocks SysLocks;
 
     TSnapshotManager SnapshotManager;
@@ -2901,6 +2941,14 @@ private:
 
     TS3UploadsManager S3Uploads;
     TS3DownloadsManager S3Downloads;
+
+    // The shard owns the reservation even while the begin reply is in flight.
+    struct TDirectImportSession {
+        TActorId Actor;
+        ui64 TableId;
+        ui32 Step;
+    };
+    THashMap<ui64, TDirectImportSession> DirectImports;
 
     // Initial state
     struct TInitialState {
@@ -3100,7 +3148,7 @@ private:
         }
 
         explicit TEnqueuedRecord(const TChangeRecord& record)
-            : TEnqueuedRecord(record.GetBody().size(), record.GetTableId(), record.GetSchemaVersion(),
+            : TEnqueuedRecord(record.GetBodySize(), record.GetTableId(), record.GetSchemaVersion(),
                 record.GetApproximateCreationDateTime(), record.GetLockId(), record.GetLockOffset())
         {
         }
@@ -3489,6 +3537,8 @@ protected:
             HFunc(TEvDataShard::TEvCompactTable, Handle);
             HFunc(TEvDataShard::TEvGetCompactTableStats, Handle);
             HFunc(TEvDataShard::TEvApplyReplicationChanges, Handle);
+            HFunc(NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequenceResult, Handle);
+            HFunc(TEvPrivate::TEvAdvanceSequencesTimeout, Handle);
             fFunc(TEvDataShard::EvGetReplicationSourceOffsets, HandleByReplicationSourceOffsetsServer);
             fFunc(TEvDataShard::EvReplicationSourceOffsetsAck, HandleByReplicationSourceOffsetsServer);
             fFunc(TEvDataShard::EvReplicationSourceOffsetsCancel, HandleByReplicationSourceOffsetsServer);
@@ -3532,6 +3582,7 @@ protected:
             hFunc(TEvDataShard::TEvGetInfoRequest, Handle);
             HFunc(TEvDataShard::TEvGetTableStats, Handle);
             HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
+            HFunc(TEvPrivate::TEvAdvanceSequencesTimeout, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
         default:

@@ -11,7 +11,15 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 class IDataSource;
+class TDataSourceLease;
 class TFetchingScriptCursor;
+
+using TExecutionResult = NArrow::NSSA::TExecutionResult;
+
+class IAsyncJob: public NArrow::NSSA::IAsyncJob {
+public:
+    virtual void Start(std::unique_ptr<TDataSourceLease> sourceLease) = 0;
+};
 
 class IFetchingStep: public TNonCopyable {
 private:
@@ -21,7 +29,7 @@ private:
     std::shared_ptr<TFetchingStepSignals> Signals;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const = 0;
 
     virtual TString DoDebugString() const {
         return "";
@@ -44,11 +52,11 @@ public:
 
     virtual ~IFetchingStep() = default;
 
-    [[nodiscard]] TConclusion<bool> ExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    [[nodiscard]] TConclusion<TExecutionResult> ExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const {
         return DoExecuteInplace(source, step);
     }
 
-    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& /*source*/) const {
+    virtual ui64 GetProcessingDataSize(const IDataSource& /*source*/) const {
         return 0;
     }
 
@@ -97,7 +105,7 @@ public:
         return currentStepIdx == Steps.size();
     }
 
-    ui32 Execute(const ui32 startStepIdx, const std::shared_ptr<IDataSource>& source) const;
+    ui32 Execute(const ui32 startStepIdx, IDataSource& source) const;
 };
 
 class TFetchingScriptOwner: TNonCopyable {

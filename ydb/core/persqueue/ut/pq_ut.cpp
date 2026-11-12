@@ -575,6 +575,40 @@ Y_UNIT_TEST(BatchedMessagesWriteWithoutFeatureFlagFails) {
     PQGetPartInfo(0, 0, tc);
 }
 
+Y_UNIT_TEST(CmdWriteRejectsExplicitHashLongerThan255) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString ownerCookie = CmdSetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, 0).first;
+    auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* partitionRequest = request->Record.MutablePartitionRequest();
+    partitionRequest->SetPartition(0);
+    partitionRequest->SetOwnerCookie(ownerCookie);
+    partitionRequest->SetMessageNo(1);
+
+    auto* write = partitionRequest->AddCmdWrite();
+    write->SetSourceId("source");
+    write->SetSeqNo(1);
+    write->SetData("data");
+    write->SetLogicalMessageCount(1);
+    write->SetExplicitHash(TString(256, 'h'));
+
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
+        [](const TEvPersQueue::TEvResponse& event) {
+            return event.Record.GetErrorCode() != NPersQueue::NErrorCode::OK;
+        });
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(
+        static_cast<ui32>(response->Record.GetErrorCode()),
+        static_cast<ui32>(NPersQueue::NErrorCode::BAD_REQUEST));
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetErrorReason(), "too long explicit hash");
+}
+
 Y_UNIT_TEST(BatchedMessagesWriteWithoutMaxSeqNoFails) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;
@@ -2361,6 +2395,53 @@ void TestWritePQImpl(bool fast) {
 Y_UNIT_TEST(TestWritePQ) {
     TestWritePQImpl(true);
     TestWritePQImpl(false);
+}
+
+Y_UNIT_TEST(TestWriteWithMinOffset) {
+    for (const size_t messageSize : {size_t(100), size_t(1_MB)}) {
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        tc.Prepare();
+        tc.Runtime->SetScheduledLimit(5000);
+        auto& config = tc.Runtime->GetAppData(0).PQConfig;
+        config.SetMinOffset(100);
+        PQTabletPrepare({.partitions = 1}, {{"user", true}}, tc);
+
+        const TString data(messageSize, 'x');
+        CmdWrite(0, "sourceid", {{1, data}, {2, data}}, tc);
+        CmdWrite(0, "sourceid", {{3, data}}, tc);
+        PQGetPartInfo(100, 103, tc);
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 3, false, tc, {100, 101, 102});
+
+        // Raising the minimum introduces a gap in an existing partition.
+        config.SetMinOffset(200);
+        CmdWrite(0, "sourceid", {{4, data}}, tc);
+        PQGetPartInfo(100, 201, tc);
+        CmdRead(0, 103, Max<i32>(), Max<i32>(), 1, false, tc, {200});
+
+        // A lower minimum must not move the next offset backwards, including after restart.
+        config.SetMinOffset(50);
+        PQTabletRestart(tc);
+        CmdWrite(0, "sourceid", {{5, data}}, tc);
+        PQGetPartInfo(100, 202, tc);
+        CmdRead(0, 201, Max<i32>(), Max<i32>(), 1, false, tc, {201});
+    }
+}
+
+Y_UNIT_TEST(TestWriteWithMinOffsetPreservesExplicitOffset) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->GetAppData(0).PQConfig.SetMinOffset(100);
+    PQTabletPrepare({.partitions = 1}, {{"user", true}}, tc);
+
+    CmdWrite({.Partition = 0, .SourceId = "sourceid", .Data = {{1, "data"}}, .TestContext = tc, .Offset = 10});
+    PQGetPartInfo(10, 11, tc);
+    CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {10});
+
+    CmdWrite(0, "sourceid", {{2, "data"}}, tc);
+    PQGetPartInfo(10, 101, tc);
+    CmdRead(0, 11, Max<i32>(), Max<i32>(), 1, false, tc, {100});
 }
 
 Y_UNIT_TEST(Read_From_Different_Zones_What_Was_Written_With_Gaps)

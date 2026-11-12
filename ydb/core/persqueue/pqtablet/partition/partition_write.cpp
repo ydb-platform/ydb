@@ -620,8 +620,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
-    BlobQuotaSize = 0;
-    MessagesQuotaSize = 0;
     WriteNewSizeFromSupportivePartitions = 0;
     WriteNewMessagesFromSupportivePartitions = 0;
     UpdateWriteBufferIsFullState(now);
@@ -1275,6 +1273,9 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     //check already written
 
     ui64 poffset = p.Offset.GetOrElse(curOffset);
+    if (AppData(ctx)->PQConfig.HasMinOffset()) {
+        poffset = p.Offset.GetOrElse(std::max(curOffset, AppData(ctx)->PQConfig.GetMinOffset()));
+    }
 
     YDB_LOG_TRACE("Topic partition process write",
         {"logPrefix", NPQ_LOG_PREFIX},

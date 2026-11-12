@@ -73,11 +73,14 @@ public:
                     // KIKIMR-9614
                     return true;
                 }
-                if (!(tablet->IsLeader() && tablet->AsLeader().IsLockedToActor()) && !tablet->IsAliveOnLocal(Local)) {
+                if (!(tablet->IsLeader() && tablet->AsLeader().IsLockedToActor()) && !tablet->IsPresentOnLocal(Local)) {
                     SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tablet->GetFullTabletId(), Generation));
                     return true;
                 }
                 if (tablet->IsLeader() && Generation < tablet->GetLeader().KnownGeneration) {
+                    if (tablet->AsLeader().IsLockedToActor()) {
+                        tablet->SendStopTablet(Local, SideEffects);
+                    }
                     return true;
                 }
                 if (tablet->BootTime != TInstant()) {
@@ -106,6 +109,9 @@ public:
                     // Tablet is locked and shouldn't be running, but we just found out it's running on this node
                     // Ask it to stop using InitiateStop (which uses data saved by BecomeRunning call above)
                     tablet->InitiateStop(SideEffects);
+                    if (tablet->IsLeader()) {
+                        tablet->AsLeader().RestoreLockedTabletMetrics();
+                    }
                 }
                 tablet->BootState = Self->BootStateRunning;
                 tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
@@ -156,7 +162,7 @@ public:
                     }
                 }
                 if (Local) {
-                    if (tablet->IsAliveOnLocal(Local)) {
+                    if (tablet->IsPresentOnLocal(Local) && !(tablet->IsLeader() && tablet->AsLeader().IsBootingSuppressed())) {
                         if (tablet->IsLeader()) {
                             TLeaderTabletInfo& leader(tablet->AsLeader());
                             db.Table<Schema::Tablet>().Key(TabletId).Update(NIceDb::TUpdate<Schema::Tablet::LeaderNode>(0),

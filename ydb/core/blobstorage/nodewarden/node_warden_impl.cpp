@@ -33,7 +33,7 @@
 using namespace NKikimr;
 using namespace NStorage;
 
-TNodeWardenConfig::TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory>& pDiskServiceFactory)
+TNodeWardenConfig::TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
     : PDiskServiceFactory(pDiskServiceFactory)
     , AllVDiskKinds(new TAllVDiskKinds)
     , AllDriveModels(new NPDisk::TDriveModelDb)

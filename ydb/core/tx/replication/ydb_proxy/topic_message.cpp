@@ -1,9 +1,23 @@
 #include "topic_message.h"
 
+#include <util/string/builder.h>
+
 namespace NKikimr::NReplication {
 
 using TDataEvent = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent;
 using ECodec = NYdb::NTopic::ECodec;
+
+TString MakeDecompressionIssue(const TString& topic, ui64 partition, ui64 offset,
+    const TString& reason, std::optional<ui32> codec)
+{
+    TStringBuilder issue;
+    issue << "Failed to decompress topic message: topic=" << topic
+        << ", partition=" << partition << ", offset=" << offset;
+    if (codec) {
+        issue << ", codec=" << *codec;
+    }
+    return issue << ": " << reason;
+}
 
 TTopicMessage::TTopicMessage(const TDataEvent::TMessageBase& msg, ECodec codec, ui64 uncompressedSize)
     : TDataEvent::TMessageInformation(

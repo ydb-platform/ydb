@@ -10,6 +10,7 @@
 #include "schemeshard_operation_factory.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -204,6 +205,40 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             " Note that tx body equality isn't granted."
             " StatusAccepted is just returned on retries.");
         return response;
+    }
+
+    if (!AppData(context.Ctx)->FeatureFlags.GetEnableClientModifications()
+        && context.UserToken
+        && !context.UserToken->IsSystemUser()
+        && !IsAdministrator(AppData(context.Ctx), context.UserToken.Get()))
+    {
+        return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId),
+            "Client schema modifications are disabled for non-administrators");
+    }
+
+    if (record.TransactionSize() > 1) {
+        for (const auto& transaction : record.GetTransaction()) {
+            const auto type = transaction.GetOperationType();
+            const auto& drop = transaction.GetDrop();
+            if ((type != NKikimrSchemeOp::ESchemeOpDropReplication
+                    && type != NKikimrSchemeOp::ESchemeOpDropReplicationCascade)
+                || drop.GetReplicationSourceCleanup() != NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON)
+            {
+                continue;
+            }
+
+            const auto path = drop.HasId()
+                ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                : TPath::Resolve(transaction.GetWorkingDir(), context.SS).Dive(drop.GetName());
+            if (path.IsResolved() && path.IsReplication() && path->PlannedToDrop()) {
+                // A single response cannot subscribe the caller to multiple drop transactions.
+                // Reject before any other part can make changes that cannot be rolled back.
+                return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                    NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId),
+                    "Escalating a pending replication drop requires a single-operation request");
+            }
+        }
     }
 
     TOperation::TPtr operation = new TOperation(txId);

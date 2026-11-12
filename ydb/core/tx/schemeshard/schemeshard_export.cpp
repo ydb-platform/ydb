@@ -273,5 +273,9 @@ void TSchemeShard::ResumeExports(const TVector<ui64>& exportIds, const TActorCon
     }
 }
 
+void TSchemeShard::Handle(TEvPrivate::TEvExportCompletionUploadResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressExport(ev), ctx);
+}
+
 } // NSchemeShard
 } // NKikimr

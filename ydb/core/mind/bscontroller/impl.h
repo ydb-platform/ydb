@@ -976,6 +976,13 @@ public:
             return !BlobDepotId && DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE;
         }
 
+        // Do the writes to this group (to its parts, for a bridged one) go to VDisks? The group to be decommitted keeps
+        // taking them until it is switched to BlobDepot (see TBlobStorageGroupInfo::DecommitBlocksWrites).
+        bool WritesGoToVDisks() const {
+            return !BlobDepotId && (DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE ||
+                DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING);
+        }
+
         // is this group a pile of its own (a group converted from non-bridged one); such group has both its own VDisks
         // and BridgeGroupInfo referencing itself
         bool IsInlinePile() const {
@@ -1858,6 +1865,7 @@ private:
         bool TreatPhantomsOnlyVDisksAsWorking = false;
     };
 
+    void PropagateGroupContentChanged(TConfigState& state);
     bool ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
             TString* errorDescription, NKikimrBlobStorage::TConfigResponse* response = nullptr);
 
@@ -2499,6 +2507,8 @@ private:
     // the same inside a transaction that persists the state the changes follow from
     void CommitDatabaseSpaceChanges(NIceDb::TNiceDb& db);
     void PersistDatabaseSpaceLatches(NIceDb::TNiceDb& db, const std::map<TBoxStoragePoolId, bool>& latches);
+    // for the latches published outside of the transaction persisting them: writes their current values
+    void PersistChangedDatabaseSpaceLatches(NIceDb::TNiceDb& db, const std::map<TBoxStoragePoolId, bool>& changed);
     void SendDatabaseSpaceState(TNodeId nodeId, TDatabaseSpaceTracker::TScope scope);
     void UpdateDatabaseSpaceOnPileChanges();
     void UpdateDatabaseSpaceGroup(const TGroupInfo& group);
@@ -3107,6 +3117,8 @@ public:
         TBridgePileId pileId, const TBridgeInfo *bridgeInfo, const TStoragePoolPileOverrideRules *rules);
     TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const;
     const TStoragePoolPileOverrideRules *GetPileOverrideRules() const; // the rules BSC follows, if any
+    // the rules BSC would follow having got this StorageConfig: its ones, unless the groups don't fit them
+    const TStoragePoolPileOverrideRules *GetPileOverrideRulesWith(const NKikimrBlobStorage::TStorageConfig& config) const;
     std::optional<TString> CheckGroupsAgainstPileOverrides(const TStoragePoolPileOverrideRules& rules) const;
     std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrBlobStorage::TStorageConfig& config) const;
     void UpdatePileOverrides(); // adopt the overrides of StorageConfig, if they differ and fit the groups

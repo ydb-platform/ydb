@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/scheme)
 
-FORK_SUBTESTS()
-
 SRCS(
     scheme_tablecell_pg_ut.cpp
 )

@@ -43,6 +43,8 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     langver = get_langver(config)
     if langver is None:
         langver = DEFAULT_LANG_VER
+    elif what == 'AutoYqlSelect' and langver < '2026.03':
+        pytest.skip('AutoYqlSelect is not supported with configured langver < 2026.03')
 
     program_sql = get_case_file(DATA_PATH, suite, case)
 

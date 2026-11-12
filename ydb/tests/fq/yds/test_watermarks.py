@@ -1,76 +1,54 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-import pytest
 import time
 
+import pytest
+
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
-from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
-from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
-from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
+from ydb.tests.library.common.wait_for import wait_for
 
-import ydb.public.api.protos.draft.fq_pb2 as fq
-
-YDS_CONNECTION = "yds"
-COMPUTE_NODE_COUNT = 1
+CONSUMER = 'watermarks_consumer'
 
 
-@pytest.fixture
-def kikimr(request):
-    kikimr_conf = StreamingOverKikimrConfig(
-        cloud_mode=True, node_count={"/cp": TenantConfig(1), "/compute": TenantConfig(COMPUTE_NODE_COUNT)}
-    )
-    kikimr = StreamingOverKikimr(kikimr_conf)
-    kikimr.compute_plane.fq_config['row_dispatcher']['enabled'] = True
-    kikimr.compute_plane.fq_config['row_dispatcher']['without_consumer'] = True
-    kikimr.start_mvp_mock_server()
-    kikimr.start()
-    yield kikimr
-    kikimr.stop_mvp_mock_server()
-    kikimr.stop()
+def create_input_consumer(io):
+    io.kikimr.external_ydb_client.query(f'ALTER TOPIC `{io.input_topic}` ADD CONSUMER `{CONSUMER}`;')
 
 
-def start_yds_query(kikimr: StreamingOverKikimr, client: FederatedQueryClient, sql: str) -> str:
-    query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-    client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-    kikimr.compute_plane.wait_zero_checkpoint(query_id)
-    return query_id
-
-
-def stop_yds_query(client: FederatedQueryClient, query_id: str) -> None:
-    client.abort_query(query_id)
-    client.wait_query(query_id)
+def check_completed_query(io, query, shared_reading):
+    # Compilation warnings are persisted in Issues after successful completion;
+    # ALTER RUN=false exposes only the cancellation issue instead.
+    assert wait_for(
+        lambda: io.state(query)['Status'] == 'COMPLETED',
+        timeout_seconds=120,
+        step_seconds=0.5,
+    ), io.state(query)
+    if shared_reading:
+        issues = io.state(query)['Issues']
+        assert "Row dispatcher will use the predicate:" in issues, issues
+        assert "Row dispatcher will use watermark expr:" in issues, issues
 
 
 class TestWatermarks(TestYdsBase):
-    @yq_v1
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
-    def test_watermarks(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient, shared_reading: bool):
-        client.create_yds_connection(
-            name=YDS_CONNECTION,
-            database=os.getenv("YDB_DATABASE"),
-            endpoint=os.getenv("YDB_ENDPOINT"),
-            shared_reading=shared_reading,
-        )
-        self.init_topics(f"test_watermarks_{'shared' if shared_reading else 'no_shared'}")
+    def test_watermarks(self, ydb_topics, shared_reading: bool):
+        io = ydb_topics('test_watermarks', shared=shared_reading)
+        create_input_consumer(io)
 
-        ts = "CAST(ts AS Timestamp)" if shared_reading else 'SystemMetadata("write_time")'
+        ts = "CAST(ts AS Timestamp)" if shared_reading else '__ydb_write_time'
 
         sql = Rf'''
-            USE {YDS_CONNECTION};
+            PRAGMA pq.Consumer="{CONSUMER}";
+            PRAGMA ydb.OptValidateStreamingCheckpoints="FALSE";
             -- Cannot guarantee writing to a specific partition
-            PRAGMA dq.MaxTasksPerStage="1";
-            PRAGMA dq.WatermarksMode="default";
-            PRAGMA dq.WatermarksLateArrivalDelayMs="100";
+            PRAGMA ydb.MaxTasksPerStage="1";
 
             $input =
                 SELECT
-                    {self.input_topic}.*,
+                    ts,
+                    pass,
                     {ts} as hopTime
-                FROM {self.input_topic}
+                FROM {io.input}
                 WITH(
                     FORMAT=json_each_row,
                     SCHEMA(
@@ -79,7 +57,7 @@ class TestWatermarks(TestYdsBase):
                     )
                     , WATERMARK = {ts} - Interval("PT0.1S")
                     , WATERMARK_GRANULARITY = "PT0.5S"
-                );
+                ) AS input;
 
             $output =
                 SELECT
@@ -88,20 +66,21 @@ class TestWatermarks(TestYdsBase):
                 WHERE pass > 0
                 GROUP BY HoppingWindow(hopTime, "PT0.5S", "PT1S");
 
-            INSERT INTO {self.output_topic}
+            INSERT INTO {io.output}
             SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-            FROM $output;
+            -- Complete after both expected windows to retain warnings in .sys/streaming_queries.
+            FROM $output LIMIT 2;
         '''
 
-        query_id = start_yds_query(kikimr, client, sql)
+        query_id = io.start(sql)
 
-        self.write_stream(
+        io.write(
             [
                 '{"ts": "1970-01-01T00:00:42Z", "pass": 1}',
                 '{"ts": "1970-01-01T00:00:42Z", "pass": 0}',
             ]
         )
-        assert self.read_stream(1) == []
+        assert io.read(1) == []
 
         expected = [
             '{"result":["1970-01-01T00:00:42Z"]}',
@@ -111,47 +90,33 @@ class TestWatermarks(TestYdsBase):
         deadline = time.time() + 60
         while len(read) < len(expected):
             time.sleep(2)
-            self.write_stream(['{"ts": "1970-01-01T00:00:44Z", "pass": 0}'])
-            read += self.read_stream(len(expected) - len(read), timeout=5)
+            io.write(['{"ts": "1970-01-01T00:00:44Z", "pass": 0}'])
+            read += io.read(len(expected) - len(read), timeout=5)
             assert time.time() < deadline, f"Expected {expected}, but got {read}"
         assert read == expected
 
-        stop_yds_query(client, query_id)
+        check_completed_query(io, query_id, shared_reading)
 
-        if shared_reading:
-            issues = str(client.describe_query(query_id).result.query.transient_issue)
-            assert "Row dispatcher will use the predicate:" in issues, issues
-            issues = str(client.describe_query(query_id).result.query.transient_issue)
-            assert "Row dispatcher will use watermark expr:" in issues, issues
-
-    @yq_v1
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
-    def test_idle_watermarks(
-        self, kikimr: StreamingOverKikimr, client: FederatedQueryClient, shared_reading: bool, tasks: int
-    ):
-        client.create_yds_connection(
-            name=YDS_CONNECTION,
-            database=os.getenv("YDB_DATABASE"),
-            endpoint=os.getenv("YDB_ENDPOINT"),
-            shared_reading=shared_reading,
-        )
-        self.init_topics(f"test_idle_watermarks_{'shared' if shared_reading else 'no_shared'}", partitions_count=2)
+    def test_idle_watermarks(self, ydb_topics, shared_reading: bool, tasks: int):
+        io = ydb_topics('test_idle_watermarks', partitions=2, shared=shared_reading)
+        create_input_consumer(io)
 
-        ts = "CAST(ts AS Timestamp)" if shared_reading else 'SystemMetadata("write_time")'
+        ts = "CAST(ts AS Timestamp)" if shared_reading else '__ydb_write_time'
 
         sql = Rf'''
-            USE {YDS_CONNECTION};
+            PRAGMA pq.Consumer="{CONSUMER}";
+            PRAGMA ydb.OptValidateStreamingCheckpoints="FALSE";
             -- Cannot guarantee writing to a specific partition
-            PRAGMA dq.MaxTasksPerStage="{tasks}";
-            PRAGMA dq.WatermarksMode="default";
-            PRAGMA dq.WatermarksLateArrivalDelayMs="100";
+            PRAGMA ydb.MaxTasksPerStage="{tasks}";
 
             $input =
                 SELECT
-                    {self.input_topic}.*,
+                    ts,
+                    pass,
                     {ts} as hopTime
-                FROM {self.input_topic}
+                FROM {io.input}
                 WITH(
                     FORMAT=json_each_row,
                     SCHEMA(
@@ -161,7 +126,7 @@ class TestWatermarks(TestYdsBase):
                     , WATERMARK = {ts} - Interval("PT0.1S")
                     , WATERMARK_IDLE_TIMEOUT = "PT0.2S"
                     , WATERMARK_GRANULARITY = "PT0.5S"
-                );
+                ) AS input;
 
             $output =
                 SELECT
@@ -170,35 +135,30 @@ class TestWatermarks(TestYdsBase):
                 WHERE pass > 0
                 GROUP BY HoppingWindow(hopTime, "PT0.5S", "PT1S");
 
-            INSERT INTO {self.output_topic}
+            INSERT INTO {io.output}
             SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-            FROM $output;
+            -- Complete after both expected windows to retain warnings in .sys/streaming_queries.
+            FROM $output LIMIT 2;
         '''
 
-        query_id = start_yds_query(kikimr, client, sql)
+        query_id = io.start(sql)
 
-        self.write_stream(
+        io.write(
             [
                 '{"ts": "1970-01-01T00:00:42Z", "pass": 1}',
                 '{"ts": "1970-01-01T00:00:42Z", "pass": 0}',
             ],
             partition_key=b'1',
         )
-        assert self.read_stream(1) == []
+        assert io.read(1) == []
 
         time.sleep(2)
 
-        self.write_stream(['{"ts": "1970-01-01T00:00:44Z", "pass": 0}'], partition_key=b'1')
+        io.write(['{"ts": "1970-01-01T00:00:44Z", "pass": 0}'], partition_key=b'1')
         expected = [
             '{"result":["1970-01-01T00:00:42Z"]}',
             '{"result":["1970-01-01T00:00:42Z"]}',
         ]
-        assert self.read_stream(len(expected)) == expected
+        assert io.read(len(expected)) == expected
 
-        stop_yds_query(client, query_id)
-
-        if shared_reading:
-            issues = str(client.describe_query(query_id).result.query.transient_issue)
-            assert "Row dispatcher will use the predicate:" in issues, issues
-            issues = str(client.describe_query(query_id).result.query.transient_issue)
-            assert "Row dispatcher will use watermark expr:" in issues, issues
+        check_completed_query(io, query_id, shared_reading)

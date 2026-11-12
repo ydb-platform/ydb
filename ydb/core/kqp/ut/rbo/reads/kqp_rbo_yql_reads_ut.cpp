@@ -1498,6 +1498,74 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST(ExistsDropsSubquerySort) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        const auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t` (
+                a Int64 NOT NULL,
+                c Int64 NOT NULL,
+                PRIMARY KEY (a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, c] : std::vector<std::pair<i64, i64>>{{1, 3}, {2, 1}, {3, 2}}) {
+            rows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("c").Int64(c).EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        struct TCase {
+            TString Predicate;
+            TString Expected;
+            // Whether the plan still sorts the rows of the subquery.
+            bool Sorted;
+        };
+
+        // `c` is not a key, so only a sort can order the rows by it.
+        const TString sorted = "select s.a from `/Root/t` as s order by s.c";
+        const TString sortedEmpty = "select s.a from `/Root/t` as s where s.c > 5 order by s.c";
+        const TString all = "[[1];[2];[3]]";
+        const std::vector<TCase> cases = {
+            // EXISTS only checks that a row exists, so any row is an answer.
+            {"exists (" + sorted + ")", all, false},
+            {"not exists (" + sorted + ")", "[]", false},
+            {"exists (" + sortedEmpty + ")", "[]", false},
+            // The same for an EXISTS that is not a conjunct of the filter.
+            {"t.a = 1 or exists (" + sorted + ")", all, false},
+            {"t.a = 1 or exists (" + sortedEmpty + ")", "[[1]]", false},
+            // A limit written in the subquery depends on the order, whatever is above it.
+            {"exists (" + sorted + " limit 1 offset 2)", all, true},
+            {"exists (" + sorted + " limit 1 offset 3)", "[]", true},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; select t.a from `/Root/t` as t where " + testCase.Predicate + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString plan{*explain.GetStats()->GetPlan()};
+            NJson::TJsonValue planJson;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+            const bool planSorted = CountPlanNodesByKv(planJson, "Name", "Sort") + CountPlanNodesByKv(planJson, "Name", "TopSort") > 0;
+            UNIT_ASSERT_VALUES_EQUAL_C(planSorted, testCase.Sorted, query << ", plan: " << plan);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYsonUnordered(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)), query);
+        }
+    }
+
 }
 
 } // namespace NKikimr::NKqp

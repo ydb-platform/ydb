@@ -1060,7 +1060,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             $round = ($x, $y) -> { return $x; };
             $to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
             $to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };
-        )" + GetFullPath(BenchmarkQueryPath[EBenchType::TPCDS], "23.yql");
+        )" + ReadBenchmarkQuery(EBenchType::TPCDS, 23);
         auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
             NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

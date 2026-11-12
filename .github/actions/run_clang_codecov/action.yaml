@@ -111,7 +111,6 @@ runs:
           "-DCOVERAGE_TARGET_REGEXP=${REGEXP}"
           "--coverage-exclude-regexp=${EXCL}"
           --test-threads "${TEST_THREADS}"
-          --remove-cpu-detect-via-ram
           --link-threads "${LINK_THREADS}"
           --no-dir-outputs
         )

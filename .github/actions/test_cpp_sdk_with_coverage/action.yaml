@@ -43,7 +43,6 @@ runs:
             --coverage-prefix-filter=ydb/public/sdk/cpp
             --coverage-exclude-regexp='/(ut|tests)/|_(ut|it)\.(c|cc|cpp|cxx|h|hh|hpp|hxx)'
             --test-threads "${{ inputs.test_threads }}"
-            --remove-cpu-detect-via-ram
             --link-threads "${{ inputs.link_threads }}"
             --output "$out_dir"
             --no-dir-outputs

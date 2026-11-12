@@ -49,6 +49,7 @@ struct TSettings {
         PredicateAsExpression = ui64{ 1 } << 31,   // Predicates can be used in expressions (e.g. (a = b) = (c = d))
         AnyExpressionExceptMember = ui64{ 1 } << 32,
         StructOperators = ui64{ 1 } << 33,   // Struct operators can be used
+        LikeOperatorComplex = ui64{ 1 } << 34,   // Complete LIKE/ILIKE supported
     };
 
     explicit TSettings(NLog::EComponent logComponent)

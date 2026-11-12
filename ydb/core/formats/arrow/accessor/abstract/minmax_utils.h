@@ -41,15 +41,15 @@ public:
         return MinMax.value[1];
     }
 
-    void UniteWith(const TMinMax& other, const NScheme::TTypeInfo& logicalType);
+    void UniteWith(const TMinMax& other, const TComparisonType& logicalType);
 
-    std::partial_ordering CompareWithMin(const std::shared_ptr<arrow::Scalar>& value, const NScheme::TTypeInfo& logicalType) const;
-    std::partial_ordering CompareWithMax(const std::shared_ptr<arrow::Scalar>& value, const NScheme::TTypeInfo& logicalType) const;
+    std::partial_ordering CompareWithMin(const std::shared_ptr<arrow::Scalar>& value, const TComparisonType& logicalType) const;
+    std::partial_ordering CompareWithMax(const std::shared_ptr<arrow::Scalar>& value, const TComparisonType& logicalType) const;
 
     static TMinMax FromBinaryString(std::string_view string, const std::shared_ptr<arrow::DataType>& fieldType);
 
-    static TMinMax Compute(const std::shared_ptr<arrow::Array>& arr, const NScheme::TTypeInfo& logicalType);
-    static TMinMax Compute(const std::shared_ptr<arrow::ChunkedArray>& arr, const NScheme::TTypeInfo& logicalType);
+    static TMinMax Compute(const std::shared_ptr<arrow::Array>& arr, const TComparisonType& logicalType);
+    static TMinMax Compute(const std::shared_ptr<arrow::ChunkedArray>& arr, const TComparisonType& logicalType);
 
     TString ToBinaryString() const;
 };

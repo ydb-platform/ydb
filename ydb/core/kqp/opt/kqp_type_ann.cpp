@@ -1,6 +1,7 @@
 #include "kqp_opt.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
@@ -376,7 +377,7 @@ const TTypeAnnotationNode* GetReadTableRowTypeFullText(TExprContext& ctx, const 
 }
 
 TStatus AnnotateReadTableFullTextIndexSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster, const TKikimrTablesData& tablesData) {
-    if (!EnsureArgsCount(*node, 6, ctx)) {
+    if (!EnsureArgsCount(*node, 7, ctx)) {
         return TStatus::Error;
     }
 
@@ -1492,8 +1493,20 @@ TStatus AnnotateOlapApplyColumnArg(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 3U, ctx)) {
+    if (!EnsureMinArgsCount(*node, 3U, ctx) || !EnsureMaxArgsCount(*node, 4U, ctx)) {
         return TStatus::Error;
+    }
+    if (node->ChildrenSize() == 4U) {
+        const auto& hint = *node->Child(3);
+        if (!hint.IsList() || hint.ChildrenSize() != 4U) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "KqpOlapApply LikeHint must be a list of four atoms"));
+            return TStatus::Error;
+        }
+        for (const auto& atom : hint.Children()) {
+            if (!EnsureAtom(*atom, ctx)) {
+                return TStatus::Error;
+            }
+        }
     }
 
     TExprList args = TExprList(node->Child(TKqpOlapApply::idx_Args));
@@ -1983,6 +1996,21 @@ TStatus AnnotateSequencer(const TExprNode::TPtr& node, TExprContext& ctx, const 
 
     TVector<const TItemExprType *> seqRowTypeItems = rowType->GetItems();
     for (auto &column : columnsToGenerate) {
+        const auto* columnMeta = table->Metadata->Columns.FindPtr(column);
+        if (!columnMeta) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                TStringBuilder() << "Cannot generate a default value for unknown column: " << column
+                    << " in table: " << table->Metadata->Name));
+            return TStatus::Error;
+        }
+
+        if (columnMeta->NotNull && columnMeta->IsDefaultFromLiteral() && columnMeta->DefaultFromLiteral.value().has_null_flag_value()) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE,
+                TStringBuilder() << "NULL value violates not null constraint for column: " << column
+                    << " in table: " << table->Metadata->Name));
+            return TStatus::Error;
+        }
+
         auto columnType = table->GetColumnType(column);
         YQL_ENSURE(columnType);
         seqRowTypeItems.push_back(
@@ -2249,7 +2277,8 @@ TStatus AnnotateKqpStreamEnumerate(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 3, ctx)) {
+    if (node->ChildrenSize() != 3 && node->ChildrenSize() != 5) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "FulltextAnalyze requires 3 or 5 arguments"));
         return TStatus::Error;
     }
 
@@ -2295,10 +2324,37 @@ TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    // Third argument: mode (should be Atom - "0" (any fulltext), "1" (JI on Json) or "2" (JI on JsonDocument))
+    // Third argument: the numeric EIndexMode as an atom.
     const auto* modeArg = node->Child(2);
     if (!EnsureAtom(*modeArg, ctx)) {
         return TStatus::Error;
+    }
+
+    if (node->ChildrenSize() == 5) {
+        if ((textSlot != EDataSlot::String && textSlot != EDataSlot::Utf8)
+            || modeArg->Content() != ToString(static_cast<ui32>(NFulltext::EIndexMode::FulltextQuery)))
+        {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "String patterns require String or Utf8 text and FulltextQuery mode"));
+            return TStatus::Error;
+        }
+        const auto* patternMode = node->Child(3);
+        if (!EnsureAtom(*patternMode, ctx)) {
+            return TStatus::Error;
+        }
+        const auto mode = patternMode->Content();
+        if (mode != "LIKE" && mode != "ILIKE" && mode != "EXACT" && mode != "STARTS_WITH"
+            && mode != "ENDS_WITH" && mode != "CONTAINS")
+        {
+            ctx.AddError(TIssue(ctx.GetPosition(patternMode->Pos()), "Unknown string pattern mode"));
+            return TStatus::Error;
+        }
+        const auto* escape = node->Child(4);
+        if (!escape->IsCallable("String") || escape->ChildrenSize() != 1 || !escape->Head().IsAtom()
+            || escape->Head().Content().size() > 1)
+        {
+            ctx.AddError(TIssue(ctx.GetPosition(escape->Pos()), "Expected an optional single-byte LIKE escape as a String literal"));
+            return TStatus::Error;
+        }
     }
 
     // Return type: List<Struct<__ydb_token:String or Utf8,__ydb_freq:Uint32>>
@@ -2814,6 +2870,28 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
     return TStatus::Ok;
 }
 
+TStatus AnnotateUnsafeTruncate(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqlUnsafeTruncate::idx_TablePath), ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TListExprType>(MakeKqpEffectType(ctx)));
+    return TStatus::Ok;
+}
+
+TStatus AnnotateTableTruncateSettings(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)
+        || !EnsureAtom(*node->Child(TKqpTableTruncateSettings::idx_TablePath), ctx)) {
+        return TStatus::Error;
+    }
+    node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    return TStatus::Ok;
+}
+
 TStatus AnnotateExternalEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 1, ctx)) {
         return TStatus::Error;
@@ -2890,6 +2968,20 @@ TStatus AnnotateSublinkBase(const TExprNode::TPtr& node, TExprContext& ctx) {
 
         if (!lambda->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
+        }
+
+        // Keep the type the frontend gave the YqlSubLink (SqlSubLinkWrapper): Bool? for a nullable lookup, and with
+        // ANSI IN also for nullable collection items.
+        const auto lookupType = lambda->Tail().Head().GetTypeAnn();
+        Y_ENSURE(lookupType, "Missing IN lookup type");
+        bool optionalResult = lookupType->HasOptionalOrNull();
+        const auto settings = TKqpInSublink(node).Settings();
+        if (settings.IsValid()) {
+            optionalResult |= HasSetting(settings.Cast().Ref(), "ansiIn") && IsSqlInCollectionItemsNullable(lookupType, valueType);
+        }
+        if (optionalResult) {
+            node->SetTypeAnn(ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Bool)));
+            return TStatus::Ok;
         }
     }
 
@@ -4106,6 +4198,8 @@ public:
         AddHandler({TKqpReadRangesSourceSettings::CallableName()}, HndlInt(&AnnotateKqpSourceSettings));
         AddHandler({TKqpReadSysViewSourceSettings::CallableName()}, HndlInt(&AnnotateSysViewSourceSettings));
         AddHandler({TKqlExternalEffect::CallableName()}, Hndl(&AnnotateExternalEffect));
+        AddHandler({TKqlUnsafeTruncate::CallableName()}, Hndl(&AnnotateUnsafeTruncate));
+        AddHandler({TKqpTableTruncateSettings::CallableName()}, Hndl(&AnnotateTableTruncateSettings));
         AddHandler({TKqpSinkEffect::CallableName()}, Hndl(&AnnotateKqpSinkEffect));
         AddHandler({TKqlReturningList::CallableName()}, HndlInt(&AnnotateReturningList));
         AddHandler({TKqpTableSinkSettings::CallableName()}, Hndl(&AnnotateTableSinkSettings));

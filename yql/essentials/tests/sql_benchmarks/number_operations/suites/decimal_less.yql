@@ -1,0 +1,1 @@
+SELECT decimal_left < decimal_right AS is_less FROM Input;

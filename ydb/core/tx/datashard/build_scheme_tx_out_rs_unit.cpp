@@ -82,6 +82,8 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
 
         // New format, wrap in an additional protobuf layer
         NKikimrTxDataShard::TSnapshotTransferReadSet rs;
+        TSnapshotManager::SerializeRemovedRowVersions(txc.DB.GetRemovedRowVersions(localTableId),
+            *rs.MutableRemovedRowVersions());
 
         // Use lz4 compression so snapshots use less bandwidth
         TString compressedBody = NBlockCodecs::Codec("lz4fast")->Encode(snapBody);

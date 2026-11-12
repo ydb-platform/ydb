@@ -19,7 +19,7 @@ protected:
 
     bool DeserializeFromString(const TString& data);
 
-    TSimpleRow GetKeyByIndex(const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes) const;
+    TSimpleRow GetKeyByIndex(const ui32 position, const std::vector<TComparisonType>& logicalTypes) const;
 
     TSpecialKeys() = default;
     TSpecialKeys(const std::shared_ptr<arrow::RecordBatch>& data) {
@@ -42,7 +42,7 @@ public:
         , Rows(rows) {
     }
 
-    TSimpleRow GetFirst(const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool reverse = false) const {
+    TSimpleRow GetFirst(const std::vector<TComparisonType>& logicalTypes, const bool reverse = false) const {
         if (reverse) {
             return Rows.GetLast(Schema, logicalTypes);
         } else {
@@ -50,7 +50,7 @@ public:
         }
     }
 
-    TSimpleRow GetLast(const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool reverse = false) const {
+    TSimpleRow GetLast(const std::vector<TComparisonType>& logicalTypes, const bool reverse = false) const {
         if (reverse) {
             return Rows.GetFirst(Schema, logicalTypes);
         } else {
@@ -117,11 +117,11 @@ protected:
     }
 
 public:
-    TSimpleRow GetMin(const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+    TSimpleRow GetMin(const std::vector<TComparisonType>& logicalTypes) const {
         return GetFirst(logicalTypes);
     }
 
-    TSimpleRow GetMax(const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+    TSimpleRow GetMax(const std::vector<TComparisonType>& logicalTypes) const {
         return GetLast(logicalTypes);
     }
 
@@ -131,7 +131,7 @@ public:
     }
 
     explicit TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes);
+        const std::vector<TComparisonType>& logicalTypes);
 };
 
 }   // namespace NKikimr::NArrow

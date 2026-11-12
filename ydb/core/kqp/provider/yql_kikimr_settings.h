@@ -59,6 +59,7 @@ public:
     NCommon::TConfSetting<TString, Static> _DefaultCluster;
     NCommon::TConfSetting<ui32, Static> _ResultRowsLimit;
     NCommon::TConfSetting<bool, Static> EnableSystemColumns;
+    NCommon::TConfSetting<bool, Static> EnableUnsafeTruncateTable;
     NCommon::TConfSetting<bool, Static> UseLlvm;
     NCommon::TConfSetting<bool, Static> EnableLlvm;
     NCommon::TConfSetting<NDq::EHashJoinMode, Static> HashJoinMode;
@@ -95,6 +96,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapSortedRead;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownAggregate;
     NCommon::TConfSetting<TString, Static> OptForceOlapPushdownDistinct;
     NCommon::TConfSetting<ui64, Static> OptForceOlapPushdownDistinctLimit;

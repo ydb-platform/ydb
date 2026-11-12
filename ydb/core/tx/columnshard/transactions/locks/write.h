@@ -10,7 +10,7 @@ class TEvWriteWriter: public ITxEventWriter {
 private:
     YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, RecordBatch);
-    std::vector<NScheme::TTypeInfo> LogicalTypes;
+    std::vector<NArrow::TComparisonType> LogicalTypes;
 
     virtual bool DoCheckInteraction(
         const ui64 selfLockId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& /*notifications*/) const override {
@@ -30,8 +30,7 @@ private:
     }
 
 public:
-    TEvWriteWriter(const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& pkSchema)
+    TEvWriteWriter(const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::TComparisonSchema& pkSchema)
         : PathId(pathId)
         , RecordBatch(NArrow::TColumnOperator().Extract(batch, NArrow::ColumnNames(pkSchema)))
         , LogicalTypes(NArrow::ColumnTypes(pkSchema))

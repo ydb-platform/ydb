@@ -256,8 +256,8 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         }
         IIndexInfo::AddSnapshotFields(indexFields);
         auto dataSchema = std::make_shared<arrow::Schema>(indexFields);
-        NArrow::NMerger::TMergePartialStream mergeStream(resultFiltered->GetIndexInfo().GetPrimaryKeyColumns(), dataSchema, false,
-            IIndexInfo::GetSnapshotColumns(), std::nullopt, std::nullopt);
+        NArrow::NMerger::TMergePartialStream mergeStream(resultFiltered->GetIndexInfo().GetPrimaryKeyComparisonColumns(), dataSchema, false,
+            NArrow::ComparisonSchema(IIndexInfo::GetSnapshotColumns()), std::nullopt, std::nullopt);
 
         ui32 idx = 0;
         for (auto&& batch : Batches) {

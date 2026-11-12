@@ -208,6 +208,9 @@ public:
                 std::move(args.TraceId), std::move(args.Arena),
                 FederatedQuerySetup, GUCSettings,
                 std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
+            if (args.UseBatchPool) {
+                return TlsActivationContext->Register(computeActor, TActorId(), TMailboxType::HTSwap, AppData()->BatchPoolId);
+            }
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);
         }

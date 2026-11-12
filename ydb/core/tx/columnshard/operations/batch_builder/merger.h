@@ -38,8 +38,8 @@ private:
 
 public:
     IMerger(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
-        : IncomingPosition(
-              incoming.GetContainer(), 0, actualSchema->GetIndexInfo().GetPrimaryKeyColumns(), incoming->schema()->field_names(), false)
+        : IncomingPosition(incoming.GetContainer(), 0, actualSchema->GetIndexInfo().GetPrimaryKeyComparisonColumns(),
+              incoming->schema()->field_names(), false)
         , Schema(actualSchema)
         , IncomingData(incoming)
     {

@@ -52,7 +52,7 @@ protected:
         return {};
     }
 
-    virtual TMinMax DoGetMinMaxScalars(const NScheme::TTypeInfo& /*logicalType*/) const override {
+    virtual TMinMax DoGetMinMaxScalars(const TComparisonType& /*logicalType*/) const override {
         Y_ABORT("Not implemented");
     }
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {

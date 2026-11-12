@@ -4,7 +4,7 @@
 
 namespace NKikimr::NOlap::NTxInteractions {
 
-bool TTxEventContainer::DeserializeFromProto(const ITxEvent::TProto& proto, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+bool TTxEventContainer::DeserializeFromProto(const ITxEvent::TProto& proto, const std::vector<NArrow::TComparisonType>& logicalTypes) {
     if (proto.GetClassName() == "__UNDEFINED") {
         return true;
     }
@@ -28,7 +28,7 @@ bool TTxEventContainer::DeserializeFromProto(const ITxEvent::TProto& proto, cons
     return true;
 }
 
-TConclusionStatus TTxEventContainer::DeserializeFromString(const TString& data, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+TConclusionStatus TTxEventContainer::DeserializeFromString(const TString& data, const std::vector<NArrow::TComparisonType>& logicalTypes) {
     ITxEvent::TProto proto;
     if (!proto.ParseFromArray(data.data(), data.size())) {
         return TConclusionStatus::Fail("cannot parse string as proto");

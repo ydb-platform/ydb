@@ -1,0 +1,191 @@
+# Native Rust build; versions and features follow temporalio 1.32.0 Cargo.lock.
+
+CRATE(temporalio_sdk_core)
+
+CRATE_VERSION(0.6.0)
+CRATE_EDITION(2024)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/abstractions.rs
+    src/abstractions/take_cell.rs
+    src/antithesis.rs
+    src/changelog_release_notes.rs
+    src/core_tests/activity_tasks.rs
+    src/core_tests/mod.rs
+    src/core_tests/queries.rs
+    src/core_tests/replay_flag.rs
+    src/core_tests/updates.rs
+    src/core_tests/workers.rs
+    src/core_tests/workflow_cancels.rs
+    src/core_tests/workflow_tasks.rs
+    src/debug_client.rs
+    src/environment.rs
+    src/ephemeral_server/mod.rs
+    src/histfetch.rs
+    src/internal_flags.rs
+    src/pollers/mod.rs
+    src/pollers/poll_buffer.rs
+    src/protosext/mod.rs
+    src/protosext/protocol_messages.rs
+    src/replay/canned_histories.rs
+    src/replay/history_builder.rs
+    src/replay/history_info.rs
+    src/replay/mod.rs
+    src/retry_logic.rs
+    src/telemetry/metrics.rs
+    src/telemetry/mod.rs
+    src/test_help/integ_helpers.rs
+    src/test_help/mod.rs
+    src/test_help/test_utils.rs
+    src/test_help/unit_helpers.rs
+    src/worker/activities.rs
+    src/worker/activities/activity_heartbeat_manager.rs
+    src/worker/activities/local_activities.rs
+    src/worker/client.rs
+    src/worker/client/mocks.rs
+    src/worker/heartbeat.rs
+    src/worker/mod.rs
+    src/worker/nexus.rs
+    src/worker/slot_provider.rs
+    src/worker/slot_supplier.rs
+    src/worker/tuner.rs
+    src/worker/tuner/fixed_size.rs
+    src/worker/tuner/resource_based.rs
+    src/worker/workflow/driven_workflow.rs
+    src/worker/workflow/history_update.rs
+    src/worker/workflow/machines/activity_state_machine.rs
+    src/worker/workflow/machines/cancel_external_state_machine.rs
+    src/worker/workflow/machines/cancel_nexus_op_state_machine.rs
+    src/worker/workflow/machines/cancel_workflow_state_machine.rs
+    src/worker/workflow/machines/child_workflow_state_machine.rs
+    src/worker/workflow/machines/complete_workflow_state_machine.rs
+    src/worker/workflow/machines/continue_as_new_workflow_state_machine.rs
+    src/worker/workflow/machines/fail_workflow_state_machine.rs
+    src/worker/workflow/machines/local_activity_state_machine.rs
+    src/worker/workflow/machines/mod.rs
+    src/worker/workflow/machines/modify_workflow_properties_state_machine.rs
+    src/worker/workflow/machines/nexus_operation_state_machine.rs
+    src/worker/workflow/machines/patch_state_machine.rs
+    src/worker/workflow/machines/signal_external_state_machine.rs
+    src/worker/workflow/machines/timer_state_machine.rs
+    src/worker/workflow/machines/transition_coverage.rs
+    src/worker/workflow/machines/update_state_machine.rs
+    src/worker/workflow/machines/upsert_search_attributes_state_machine.rs
+    src/worker/workflow/machines/workflow_machines.rs
+    src/worker/workflow/machines/workflow_machines/local_acts.rs
+    src/worker/workflow/machines/workflow_task_state_machine.rs
+    src/worker/workflow/managed_run.rs
+    src/worker/workflow/mod.rs
+    src/worker/workflow/run_cache.rs
+    src/worker/workflow/wft_extraction.rs
+    src/worker/workflow/wft_poller.rs
+    src/worker/workflow/workflow_stream.rs
+)
+
+CRATE_INPUTS(
+    CHANGELOG.md
+    LICENSE.txt
+    machine_coverage/ActivityMachine_Coverage.puml
+    machine_coverage/CancelExternalMachine_Coverage.puml
+    machine_coverage/CancelWorkflowMachine_Coverage.puml
+    machine_coverage/ChildWorkflowMachine_Coverage.puml
+    machine_coverage/CompleteWorkflowMachine_Coverage.puml
+    machine_coverage/ContinueAsNewWorkflowMachine_Coverage.puml
+    machine_coverage/FailWorkflowMachine_Coverage.puml
+    machine_coverage/LocalActivityMachine_Coverage.puml
+    machine_coverage/ModifyWorkflowPropertiesMachine_Coverage.puml
+    machine_coverage/PatchMachine_Coverage.puml
+    machine_coverage/SignalExternalMachine_Coverage.puml
+    machine_coverage/TimerMachine_Coverage.puml
+    machine_coverage/UpdateMachine_Coverage.puml
+    machine_coverage/UpsertSearchAttributesMachine_Coverage.puml
+    machine_coverage/WorkflowTaskMachine_Coverage.puml
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    envconfig
+    ephemeral-server
+    prometheus
+    tls-ring
+)
+
+PEERDIR(
+    contrib/crates/anyhow-1.0.104
+    contrib/crates/backon-1.6.0
+    contrib/crates/bon-3.9.3
+    contrib/crates/crossbeam-channel-0.5.17
+    contrib/crates/crossbeam-utils-0.8.23
+    contrib/crates/derive_more-2.1.1
+    contrib/crates/enum-iterator-2.3.0
+    contrib/crates/flate2-1.1.10
+    contrib/crates/futures-0.3.34
+    contrib/crates/futures-util-0.3.34
+    contrib/crates/gethostname-1.1.0
+    contrib/crates/itertools-0.14.0
+    contrib/crates/lru-0.18.1
+    contrib/crates/mockall-0.14.0
+    contrib/crates/parking_lot-0.12.5
+    contrib/crates/pid-4.0.0
+    contrib/crates/pin-project-1.1.13
+    contrib/crates/prost-0.14.4
+    contrib/crates/prost-wkt-types-0.7.2
+    contrib/crates/rand-0.10.3
+    contrib/crates/reqwest-0.13.4
+    contrib/crates/serde-1.0.229
+    contrib/crates/serde_json-1.0.154
+    contrib/crates/siphasher-1.0.4
+    contrib/crates/slotmap-1.1.1
+    contrib/crates/sysinfo-0.38.4
+    contrib/crates/tar-0.4.46
+    contrib/crates/thiserror-2.0.21
+    contrib/crates/tokio-1.54.1
+    contrib/crates/tokio-stream-0.1.19
+    contrib/crates/tokio-util-0.7.20
+    contrib/crates/tonic-0.14.6
+    contrib/crates/tracing-0.1.44
+    contrib/crates/url-2.5.8
+    contrib/crates/uuid-1.29.0
+    contrib/crates/zip-8.6.0
+    contrib/python/temporalio/temporalio/bridge/sdk-core/crates/client
+    contrib/python/temporalio/temporalio/bridge/sdk-core/crates/common
+)
+
+CRATE_DEPENDENCY_ALIAS(prost_types contrib/crates/prost-wkt-types-0.7.2)
+LICENSE(MIT)
+VERSION(0.6.0)
+
+CRATE_PROC_MACROS(
+    contrib/crates/async-trait-0.1.92
+    contrib/crates/bon-macros-3.9.3
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/darling_macro-0.23.0
+    contrib/crates/derive_more-impl-2.1.1
+    contrib/crates/displaydoc-0.2.7
+    contrib/crates/enum-iterator-derive-1.5.0
+    contrib/crates/enum_dispatch-0.3.13
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/mockall_derive-0.14.0
+    contrib/crates/pin-project-internal-1.1.13
+    contrib/crates/prost-derive-0.14.4
+    contrib/crates/rustversion-1.0.23
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/thiserror-impl-1.0.69
+    contrib/crates/thiserror-impl-2.0.21
+    contrib/crates/tokio-macros-2.7.2
+    contrib/crates/tracing-attributes-0.1.31
+    contrib/crates/typetag-impl-0.2.23
+    contrib/crates/valuable-derive-0.1.1
+    contrib/crates/windows-implement-0.60.2
+    contrib/crates/windows-interface-0.59.3
+    contrib/crates/yoke-derive-0.8.4
+    contrib/crates/zerocopy-derive-0.8.63
+    contrib/crates/zerofrom-derive-0.1.8
+    contrib/crates/zerovec-derive-0.11.7
+    contrib/python/temporalio/temporalio/bridge/sdk-core/crates/macros
+)
+
+END()

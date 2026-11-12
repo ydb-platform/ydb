@@ -189,7 +189,7 @@ std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(cons
 }
 
 std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchLines(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NArrow::TComparisonType>& logicalTypes) {
     std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(TPKRangesFilter(batch));
     for (ui32 i = 0; i < batch->num_rows(); ++i) {
         NArrow::NMerger::TSortableBatchPosition batchRow(batch, i, false, logicalTypes);
@@ -199,7 +199,7 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
 }
 
 std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchFull(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+    const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NArrow::TComparisonType>& logicalTypes) {
     std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(TPKRangesFilter(batch));
     auto pkBatch = NArrow::TColumnOperator().Adapt(batch, pkSchema).DetachResult();
     auto c = batch->GetColumnByName(".ydb_operation_type");
@@ -259,7 +259,7 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
 }
 
 std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromString(
-    const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+    const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NArrow::TComparisonType>& logicalTypes) {
     auto batch = NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TNativeSerializer().Deserialize(data));
     return BuildFromRecordBatchFull(batch, pkSchema, logicalTypes);
 }
@@ -269,7 +269,7 @@ TString TPKRangesFilter::SerializeToString(const std::shared_ptr<arrow::Schema>&
 }
 
 TConclusion<TPKRangesFilter> TPKRangesFilter::BuildFromProto(
-    const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk) {
+    const NKikimrTxDataShard::TEvKqpScan& proto, const NArrow::TComparisonSchema& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk) {
     TRangesBuilder builder(ydbPk, arrPk);
     for (const auto& range : proto.GetRanges()) {
         builder.AddRange(TSerializedTableRange(range));

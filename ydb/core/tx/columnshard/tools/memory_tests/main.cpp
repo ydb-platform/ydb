@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
     }
 
     auto schema = MakeFullSchema();
-    const std::vector<NKikimr::NScheme::TTypeInfo> logicalTypes = { NKikimr::NScheme::TTypeInfo(NKikimr::NScheme::NTypeIds::Timestamp),
+    const std::vector<NKikimr::NArrow::TComparisonType> logicalTypes = { NKikimr::NScheme::TTypeInfo(NKikimr::NScheme::NTypeIds::Timestamp),
         NKikimr::NScheme::TTypeInfo(NKikimr::NScheme::NTypeIds::Utf8), NKikimr::NScheme::TTypeInfo(NKikimr::NScheme::NTypeIds::Uint64) };
     auto start = std::chrono::high_resolution_clock::now();
     for (auto i : std::ranges::views::iota(0ll, N)) {

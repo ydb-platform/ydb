@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
 
-        const TTypeInfo decimalType(NScheme::TDecimalType(22, 9));
+        const TComparisonType decimalType(TTypeInfo(NScheme::TDecimalType(22, 9)), true);
         const TTypeInfo uuidType(NTypeIds::Uuid);
         const auto schema =
             arrow::schema({ arrow::field("decimal", arrow::fixed_size_binary(16)), arrow::field("uuid", arrow::fixed_size_binary(16)) });
@@ -187,11 +187,11 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         auto batch = arrow::RecordBatch::Make(schema, 2, { values, values });
 
         auto cursor = [&]() {
-            std::vector<TTypeInfo> types = { decimalType, uuidType };
+            std::vector<TComparisonType> types = { decimalType, uuidType };
             NMerger::TSortableBatchPosition position(batch, 0, false, types);
             auto copy = position.BuildRWPosition(false, true);
             auto prefix = copy.TrimSortingKeys(1);
-            UNIT_ASSERT(prefix.GetSorting()->GetLogicalTypes() == std::vector<TTypeInfo>{ decimalType });
+            UNIT_ASSERT(prefix.GetSorting()->GetLogicalTypes() == std::vector<TComparisonType>{ decimalType });
             UNIT_ASSERT(prefix.ComparePartial(position) == std::partial_ordering::equivalent);
             const NMerger::TSortableBatchPosition next(batch, 1, false, types);
             UNIT_ASSERT(prefix.ComparePartial(next) == std::partial_ordering::greater);
@@ -199,13 +199,13 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
             return copy.BuildSortingCursor();
         }();
 
-        UNIT_ASSERT(cursor.GetLogicalTypes() == (std::vector<TTypeInfo>{ decimalType, uuidType }));
+        UNIT_ASSERT(cursor.GetLogicalTypes() == (std::vector<TComparisonType>{ decimalType, uuidType }));
         NMerger::TSortableBatchPosition one(batch, 1, false, { decimalType, uuidType });
         UNIT_ASSERT(cursor.Compare(*one.GetSorting(), 1) == std::partial_ordering::greater);
     }
 
     Y_UNIT_TEST(LogicalTypesAcrossChunkBoundaries) {
-        const std::vector<TTypeInfo> types = { TTypeInfo(NTypeIds::Datetime), TTypeInfo(NTypeIds::Uint32) };
+        const std::vector<TComparisonType> types = { TTypeInfo(NTypeIds::Datetime), TTypeInfo(NTypeIds::Uint32) };
         arrow::UInt32Builder builder;
         UNIT_ASSERT(builder.AppendValues({ 0, 1, 256, 257 }).ok());
         std::shared_ptr<arrow::Array> values;
@@ -229,7 +229,6 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
     }
 
     Y_UNIT_TEST(DecimalModeAcrossChunkBoundaries) {
-        const std::vector<TTypeInfo> types = { TTypeInfo(NScheme::TDecimalType(22, 9)), TTypeInfo(NTypeIds::Uuid) };
         arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
         for (const ui16 value : { 0, 1, 256, 257 }) {
             std::string bytes(16, '\0');
@@ -247,7 +246,9 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         for (const bool numeric : { false, true }) {
             TActorSystemStub actorSystem;
             actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
+            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(!numeric);
+            const std::vector<TComparisonType> types = {
+                TComparisonType(TTypeInfo(NScheme::TDecimalType(22, 9)), numeric), TTypeInfo(NTypeIds::Uuid) };
             const auto expected = numeric ? std::partial_ordering::greater : std::partial_ordering::less;
             NMerger::TSortableScanData atZero(0, table, schema->field_names(), types);
             NMerger::TSortableScanData atOne(1, table, schema->field_names(), types);
@@ -342,8 +343,8 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         auto sColumns = TDataRow::GetSortingColumns();
 
         const auto schema = TDataRow::MakeYdbSchema();
-        auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(std::vector<std::pair<TString, TTypeInfo>>{ schema[0] },
-            TDataRow::MakeDataSchema(), isReverse, std::vector<std::pair<TString, TTypeInfo>>{ schema[2] }, std::nullopt, std::nullopt);
+        auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(TComparisonSchema{ schema[0] },
+            TDataRow::MakeDataSchema(), isReverse, TComparisonSchema{ schema[2] }, std::nullopt, std::nullopt);
 
         merger->AddSource(batch1, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
         merger->AddSource(batch2, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
@@ -407,8 +408,8 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         auto sColumns = TDataRow::GetSortingColumns();
 
         const auto schema = TDataRow::MakeYdbSchema();
-        auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(std::vector<std::pair<TString, TTypeInfo>>{ schema[0] },
-            TDataRow::MakeDataSchema(), isReverse, std::vector<std::pair<TString, TTypeInfo>>{ schema[2] }, std::nullopt, std::nullopt);
+        auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(TComparisonSchema{ schema[0] },
+            TDataRow::MakeDataSchema(), isReverse, TComparisonSchema{ schema[2] }, std::nullopt, std::nullopt);
 
         merger->AddSource(batch1, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
         merger->AddSource(batch2, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));

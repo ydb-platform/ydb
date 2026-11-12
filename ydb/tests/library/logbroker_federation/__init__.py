@@ -189,7 +189,18 @@ class LogbrokerFederation(object):
                 'PQ_MIRRORER': LogLevels.TRACE,
                 'KAFKA_PROXY': LogLevels.TRACE,
             },
-            extra_feature_flags=["enable_topic_retention_delete_last_blob", "enable_insecure_mirror_factory", "enable_kafka_transactions"],
+            http_proxy_config={
+                'enabled': True,
+                'sqs_topic_enabled': True,
+                'ymq_enabled': False,
+                'yandex_cloud_service_region': ['ru-central1', 'ru-central-1'],
+            },
+            extra_feature_flags=[
+                "enable_topic_retention_delete_last_blob",
+                "enable_insecure_mirror_factory",
+                "enable_kafka_transactions",
+                "enable_topic_message_level_parallelism",
+            ],
             kafka_api_port='auto',
         )
         configurator.yaml_config.setdefault('pqconfig', {})
@@ -206,6 +217,7 @@ class LogbrokerFederation(object):
         grpc_port = node.grpc_port
         self.__cluster_ports[name] = grpc_port
         _setenv("{}_port".format(name), str(grpc_port))
+        _setenv("{}_http_proxy_port".format(name), str(node.http_proxy_port))
         if node.kafka_api_port is not None:
             _setenv("{}_kafka_static_port".format(name), str(node.kafka_api_port))
         logger.info("YDB cluster {} started on grpc port {}".format(name, grpc_port))
@@ -349,6 +361,44 @@ class LogbrokerFederation(object):
                             kesus_path, resource_path, e))
         finally:
             channel.close()
+
+    def _wait_for_cm_tables(self, meta_port, init_daemon, timeout=120):
+        # Wait for every CM table populated by _pre_init_cm before stopping CM.
+        pending = {
+            "/Root/AccountTemplates",
+            "/Root/TopicTemplates",
+            "/Root/ConsumerTemplates",
+            "/Root/Accounts",
+            "/Root/Clusters",
+            "/Root/Quotas",
+        }
+        deadline = time.monotonic() + timeout
+        last_errors = {}
+        cm_log = yatest.common.output_path('config_manager_logs/err.log')
+        driver_config = ydb.DriverConfig(endpoint="localhost:{}".format(meta_port), database="/Root")
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(timeout=min(10, timeout))
+            while pending:
+                if not init_daemon.running:
+                    raise RuntimeError("CM exited before creating tables {}; see {}".format(sorted(pending), cm_log))
+                for path in sorted(pending):
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise RuntimeError("Timed out waiting for CM tables {}; last errors: {}; see {}".format(
+                            sorted(pending), last_errors, cm_log))
+                    try:
+                        driver.scheme_client.describe_path(
+                            path, settings=ydb.BaseRequestSettings().with_timeout(min(5, remaining)))
+                    except (ydb.SchemeError, ydb.NotFound, ydb.Unavailable, ydb.Overloaded,
+                            ydb.Timeout, ydb.DeadlineExceed, ydb.ConnectionError) as error:
+                        last_errors[path] = str(error)
+                    else:
+                        pending.remove(path)
+                        last_errors.pop(path, None)
+                if pending:
+                    logger.info("Waiting for CM tables: %s", sorted(pending))
+                    time.sleep(min(1, max(0, deadline - time.monotonic())))
+        logger.info("CM tables are ready")
 
     def _pre_init_cm(self, meta_port):
         """
@@ -623,11 +673,14 @@ class LogbrokerFederation(object):
             stderr=self.__cm_stderr_file,
             wait=False,
         )
-        time.sleep(10)
         try:
-            os.kill(init_daemon.process.pid, signal.SIGKILL)
-        except OSError:
-            pass
+            self._wait_for_cm_tables(meta_port, init_daemon)
+        finally:
+            try:
+                os.kill(init_daemon.process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            init_daemon.process.wait(timeout=10)
 
         self._pre_init_cm(meta_port)
 

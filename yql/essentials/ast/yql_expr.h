@@ -2610,8 +2610,18 @@ private:
 
 using TModulesTable = THashMap<TString, TExportTable>;
 
+struct TProjectSettings;
+
 class IModuleResolver {
 public:
+    void SetProjectSettings(std::shared_ptr<const TProjectSettings> settings) {
+        ProjectSettings_ = std::move(settings);
+    }
+
+    const std::shared_ptr<const TProjectSettings>& GetProjectSettings() const {
+        return ProjectSettings_;
+    }
+
     using TPtr = std::shared_ptr<IModuleResolver>;
     virtual bool AddFromFile(const std::string_view& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;
     virtual bool AddFromUrl(const std::string_view& file, const std::string_view& url, const std::string_view& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;
@@ -2632,6 +2642,9 @@ public:
     virtual void SetFileAliasPrefix(TString&& prefix) = 0;
     virtual TString GetFileAliasPrefix() const = 0;
     virtual ~IModuleResolver() = default;
+
+private:
+    std::shared_ptr<const TProjectSettings> ProjectSettings_;
 };
 
 struct TExprStep {
@@ -2908,6 +2921,8 @@ struct TExprContext: private TNonCopyable {
     std::unordered_map<const TTypeAnnotationNode*, TExprNode::TPtr> TypeAsNodeCache;
     std::unordered_set<TStringBuf, THash<TStringBuf>> DisabledConstraints;
     std::unordered_map<TString, const TTypeAnnotationNode*> ParseTypeCache;
+    TNodeOnNodeOwnedMap LazyBindings;
+    TNodeOnNodeOwnedMap LazyBindingClones;
 
     ui64 NextUniqueId = 0;
     ui64 NodeAllocationCounter = 0;

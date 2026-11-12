@@ -8,12 +8,15 @@
 #include <util/stream/str.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
+#include <util/generic/strbuf.h>
 
 namespace NKikimrConfig {
     class TStateStorageConfig;
 }
 
 namespace NKikimr {
+
+struct TPathId;
 
 struct TEvStateStorage {
     enum EEv {
@@ -628,12 +631,18 @@ enum class EBoardLookupMode {
     SecondNonEmptyDoubleTime,
     MajorityDoubleTime,
     Subscription,
+    // Require two nonempty replies, collecting all available replicas before
+    // returning. A slow replica may delay the result by at most one second.
+    SecondWithAllReplies,
 };
 
 struct TBoardRetrySettings {
     TDuration StartDelayMs = TDuration::MilliSeconds(2000);
     TDuration MaxDelayMs = TDuration::MilliSeconds(5000);
 };
+
+ui64 GetSchemeBoardSelectionKey(TStringBuf path);
+ui64 GetSchemeBoardSelectionKey(const TPathId& pathId);
 
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TStateStorageConfig& config);
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TStateStorageConfig& config);

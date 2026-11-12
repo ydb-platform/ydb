@@ -16,6 +16,7 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
     } else if (columnInfo.HasCompression()) {
         Serializer.DeserializeFromProto(columnInfo.GetCompression()).Validate();
     }
+    OwnSerializer = HasOwnSerializer(columnInfo);
     if (columnInfo.HasDefaultValue()) {
         DefaultValue.DeserializeFromProto(columnInfo.GetDefaultValue()).Validate();
     }
@@ -28,13 +29,19 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
     return TConclusionStatus::Success();
 }
 
+void TSimpleColumnInfo::SetDefaultSerializer(const NArrow::NSerialization::TSerializerContainer& serializer) {
+    AFL_VERIFY(!OwnSerializer)("column_id", ColumnId);
+    Serializer = serializer;
+    Loader = std::make_shared<TColumnLoader>(Serializer, DataAccessorConstructor, ArrowField, DefaultValue.GetValue(), ColumnId);
+}
+
 TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField,
     const NArrow::NSerialization::TSerializerContainer& serializer, const bool needMinMax, const bool isSorted, const bool isNullable,
-    const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex, const NScheme::TTypeInfo& typeInfo)
+    const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex, const NArrow::TComparisonType& comparisonType)
     : ColumnId(columnId)
     , PKColumnIndex(pkColumnIndex)
     , ArrowField(arrowField)
-    , TypeInfo(typeInfo)
+    , ComparisonType(comparisonType)
     , Serializer(serializer)
     , NeedMinMax(needMinMax)
     , IsSorted(isSorted)

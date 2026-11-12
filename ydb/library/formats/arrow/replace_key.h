@@ -28,7 +28,7 @@ public:
     static constexpr bool IsOwning = std::is_same_v<TArrayVecPtr, std::shared_ptr<TArrayVec>>;
 
 protected:
-    using TLogicalTypes = std::vector<NScheme::TTypeInfo>;
+    using TLogicalTypes = std::vector<TComparisonType>;
     // Views borrow both columns and logical types; their owners must outlive the view.
     using TLogicalTypesPtr = std::conditional_t<IsOwning, std::shared_ptr<const TLogicalTypes>, const TLogicalTypes*>;
 
@@ -227,7 +227,7 @@ public:
         return TReplaceKeyTemplate<TArrayVecPtr>(columns, row, logicalTypes);
     }
 
-    static TReplaceKeyTemplate<TArrayVecPtr> FromScalar(const std::shared_ptr<arrow::Scalar>& s, const NScheme::TTypeInfo& logicalType)
+    static TReplaceKeyTemplate<TArrayVecPtr> FromScalar(const std::shared_ptr<arrow::Scalar>& s, const TComparisonType& logicalType)
         requires IsOwning
     {
         Y_DEBUG_ABORT_UNLESS(IsGoodScalar(s));
@@ -397,7 +397,7 @@ class TComparablePosition {
 private:
     std::vector<std::shared_ptr<arrow::Array>> Arrays;
     std::vector<ui32> Positions;
-    std::vector<NScheme::TTypeInfo> LogicalTypes;
+    std::vector<TComparisonType> LogicalTypes;
 
 public:
     ui32 GetMonoPosition() const {
@@ -417,7 +417,7 @@ public:
         return Arrays;
     }
 
-    const std::vector<NScheme::TTypeInfo>& GetLogicalTypes() const {
+    const std::vector<TComparisonType>& GetLogicalTypes() const {
         return LogicalTypes;
     }
 
@@ -433,7 +433,7 @@ public:
         , LogicalTypes(key.GetLogicalTypes()) {
     }
 
-    TComparablePosition(const std::shared_ptr<arrow::Table>& table, const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+    TComparablePosition(const std::shared_ptr<arrow::Table>& table, const ui32 position, const std::vector<TComparisonType>& logicalTypes)
         : LogicalTypes(logicalTypes) {
         AFL_VERIFY(LogicalTypes.size() == (size_t)table->num_columns());
         AFL_VERIFY(position < table->num_rows());
@@ -455,7 +455,7 @@ public:
     }
 
     TComparablePosition(const std::vector<std::shared_ptr<arrow::ChunkedArray>>& tableColumns, const ui32 position,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        const std::vector<TComparisonType>& logicalTypes)
         : LogicalTypes(logicalTypes) {
         AFL_VERIFY(LogicalTypes.size() == tableColumns.size());
         for (auto&& col : tableColumns) {
@@ -475,7 +475,7 @@ public:
         }
     }
 
-    TComparablePosition(const std::shared_ptr<arrow::RecordBatch>& rb, const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+    TComparablePosition(const std::shared_ptr<arrow::RecordBatch>& rb, const ui32 position, const std::vector<TComparisonType>& logicalTypes)
         : LogicalTypes(logicalTypes) {
         AFL_VERIFY(LogicalTypes.size() == (size_t)rb->num_columns());
         AFL_VERIFY(position < rb->num_rows());
@@ -584,7 +584,7 @@ public:
 };
 
 template <bool desc, bool uniq>
-static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TComparisonType>& logicalTypes) {
     AFL_VERIFY(logicalTypes.size() == (size_t)batch->num_columns());
     if (batch->num_rows() < 2) {
         return true;

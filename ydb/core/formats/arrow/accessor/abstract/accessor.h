@@ -187,7 +187,7 @@ public:
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
 
         std::partial_ordering Compare(
-            const ui64 position, const TFullDataAddress& item, const ui64 itemPosition, const NScheme::TTypeInfo& logicalType) const;
+            const ui64 position, const TFullDataAddress& item, const ui64 itemPosition, const TComparisonType& logicalType) const;
 
         TFullDataAddress(const std::shared_ptr<arrow::Array>& arr, TAddressChain&& address)
             : Array(arr)
@@ -246,7 +246,7 @@ public:
             AFL_VERIFY(position < (ui32)Array->length());
         }
 
-        const std::partial_ordering Compare(const TAddress& item, const NScheme::TTypeInfo& logicalType) const;
+        const std::partial_ordering Compare(const TAddress& item, const TComparisonType& logicalType) const;
     };
 
 private:
@@ -294,7 +294,7 @@ protected:
         return DoGetLocalChunkedArray(chunkCurrent, position);
     }
 
-    virtual TMinMax DoGetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const = 0;
+    virtual TMinMax DoGetMinMaxScalars(const TComparisonType& logicalType) const = 0;
 
     template <class TCurrentPosition, class TChunkAccessor>
     void SelectChunk(const std::optional<TCurrentPosition>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) const {
@@ -447,7 +447,7 @@ public:
 
         TAddress GetReadChunk(const ui64 position) const;
         static std::partial_ordering CompareColumns(const std::vector<TReader>& l, const ui64 lPosition, const std::vector<TReader>& r,
-            const ui64 rPosition, const std::vector<NScheme::TTypeInfo>& logicalTypes);
+            const ui64 rPosition, const std::vector<TComparisonType>& logicalTypes);
         void AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const;
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
         TString DebugString(const ui32 position) const;
@@ -458,12 +458,12 @@ public:
         return DoGetScalar(index);
     }
 
-    std::shared_ptr<arrow::Scalar> GetMaxScalar(const NScheme::TTypeInfo& logicalType) const {
+    std::shared_ptr<arrow::Scalar> GetMaxScalar(const TComparisonType& logicalType) const {
         AFL_VERIFY(GetRecordsCount());
         return GetMinMaxScalars(logicalType).Max();
     }
 
-    TMinMax GetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const {
+    TMinMax GetMinMaxScalars(const TComparisonType& logicalType) const {
         AFL_VERIFY(GetRecordsCount());
         return DoGetMinMaxScalars(logicalType);
     }

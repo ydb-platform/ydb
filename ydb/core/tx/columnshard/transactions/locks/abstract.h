@@ -24,7 +24,8 @@ public:
 protected:
     virtual void DoAddToInteraction(const ui64 lockId, TInteractionsContext& context) const = 0;
     virtual void DoRemoveFromInteraction(const ui64 lockId, TInteractionsContext& context) const = 0;
-    virtual bool DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEvent& proto, const std::vector<NScheme::TTypeInfo>& logicalTypes) = 0;
+    virtual bool DoDeserializeFromProto(
+        const NKikimrColumnShardTxProto::TEvent& proto, const std::vector<NArrow::TComparisonType>& logicalTypes) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) const = 0;
 
 public:
@@ -35,7 +36,7 @@ public:
 
     virtual NColumnShard::TUnifiedPathId GetPathId() const = 0;
 
-    bool DeserializeFromProto(const TProto& proto, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+    bool DeserializeFromProto(const TProto& proto, const std::vector<NArrow::TComparisonType>& logicalTypes) {
         return DoDeserializeFromProto(proto, logicalTypes);
     }
 
@@ -58,8 +59,8 @@ private:
     YDB_READONLY(ui64, LockId, 0);
 
 public:
-    bool DeserializeFromProto(const ITxEvent::TProto& proto, const std::vector<NScheme::TTypeInfo>& logicalTypes);
-    TConclusionStatus DeserializeFromString(const TString& data, const std::vector<NScheme::TTypeInfo>& logicalTypes);
+    bool DeserializeFromProto(const ITxEvent::TProto& proto, const std::vector<NArrow::TComparisonType>& logicalTypes);
+    TConclusionStatus DeserializeFromString(const TString& data, const std::vector<NArrow::TComparisonType>& logicalTypes);
 
     void AddToInteraction(TInteractionsContext& context) const {
         return GetObjectVerified().AddToInteraction(LockId, context);

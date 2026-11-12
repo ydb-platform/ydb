@@ -8,8 +8,8 @@
 namespace NKikimr {
 
 const NKikimrBlobStorage::TStoragePoolPileOverride* FindStoragePoolPileOverride(
-        const NKikimrConfig::TBlobStorageConfig& config, TStringBuf pileName, std::optional<TStringBuf> kind) {
-    for (const auto& rule : config.GetStoragePoolPileOverrides()) {
+        const TStoragePoolPileOverrideRules& rules, TStringBuf pileName, std::optional<TStringBuf> kind) {
+    for (const auto& rule : rules) {
         if (std::find(rule.GetPileName().begin(), rule.GetPileName().end(), pileName) != rule.GetPileName().end() && (kind
                 ? rule.GetAllKinds() || std::find(rule.GetKind().begin(), rule.GetKind().end(), *kind) != rule.GetKind().end()
                 : rule.GetStaticGroupOverride())) {
@@ -17,6 +17,21 @@ const NKikimrBlobStorage::TStoragePoolPileOverride* FindStoragePoolPileOverride(
         }
     }
     return nullptr;
+}
+
+const NKikimrBlobStorage::TStoragePoolPileOverride* FindStoragePoolPileOverride(
+        const NKikimrConfig::TBlobStorageConfig& config, TStringBuf pileName, std::optional<TStringBuf> kind) {
+    return FindStoragePoolPileOverride(config.GetStoragePoolPileOverrides(), pileName, kind);
+}
+
+bool HasStoragePoolPileOverrides(const TStoragePoolPileOverrideRules& rules, TStringBuf pileName) {
+    return std::ranges::any_of(rules, [&](const auto& rule) {
+        return std::ranges::find(rule.GetPileName(), pileName) != rule.GetPileName().end();
+    });
+}
+
+bool HasStoragePoolPileOverrides(const NKikimrConfig::TBlobStorageConfig& config, TStringBuf pileName) {
+    return HasStoragePoolPileOverrides(config.GetStoragePoolPileOverrides(), pileName);
 }
 
 std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrConfig::TBlobStorageConfig& config) {

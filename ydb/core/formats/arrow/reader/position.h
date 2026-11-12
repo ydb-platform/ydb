@@ -26,14 +26,14 @@ class TCursor {
 private:
     YDB_READONLY(ui64, Position, 0);
     std::vector<NAccessor::IChunkedArray::TFullDataAddress> PositionAddress;
-    YDB_READONLY_DEF(std::vector<NScheme::TTypeInfo>, LogicalTypes);
+    YDB_READONLY_DEF(std::vector<TComparisonType>, LogicalTypes);
 
 public:
     TCursor() = default;
-    TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema);
+    TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const TComparisonSchema& schema);
 
     TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TFullDataAddress>& addresses,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        const std::vector<TComparisonType>& logicalTypes)
         : Position(position)
         , PositionAddress(addresses)
         , LogicalTypes(logicalTypes) {
@@ -75,7 +75,7 @@ private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NAccessor::IChunkedArray>>, Columns);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
     // Empty only for payload data, which is never compared.
-    YDB_READONLY_DEF(std::vector<NScheme::TTypeInfo>, LogicalTypes);
+    YDB_READONLY_DEF(std::vector<TComparisonType>, LogicalTypes);
     ui64 StartPosition = 0;
     ui64 FinishPosition = 0;
     void BuildPosition(const ui64 position);
@@ -131,12 +131,12 @@ private:
     }
 public:
     TSortableScanData(
-        const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes);
-    TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes);
+        const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TComparisonType>& logicalTypes);
+    TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<TComparisonType>& logicalTypes);
 
     template <class TRecords>
     TSortableScanData(const ui64 position, const std::shared_ptr<TRecords>& batch,
-        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema) {
+        const TComparisonSchema& schema) {
         LogicalTypes.reserve(schema.size());
         for (const auto& [name, logicalType] : schema) {
             AddColumn(batch, std::string(name.data(), name.size()));
@@ -148,7 +148,7 @@ public:
 
     template <class TRecords>
     TSortableScanData(const ui64 position, const std::shared_ptr<TRecords>& batch, const std::vector<std::string>& columns,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        const std::vector<TComparisonType>& logicalTypes)
         : LogicalTypes(logicalTypes) {
         for (const auto& name : columns) {
             AddColumn(batch, name);
@@ -158,7 +158,7 @@ public:
     }
 
     TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns,
-        const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<TComparisonType>& logicalTypes)
         : RecordsCount(recordsCount)
         , Columns(columns)
         , Fields(fields)
@@ -167,7 +167,7 @@ public:
     }
 
     TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
-        const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<NScheme::TTypeInfo>& logicalTypes);
+        const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<TComparisonType>& logicalTypes);
 
     const NAccessor::IChunkedArray::TFullDataAddress& GetPositionAddress(const ui32 colIdx) const {
         AFL_VERIFY(colIdx < PositionAddress.size());
@@ -257,7 +257,7 @@ public:
         for (ui32 i = 0; i < Fields.size(); ++i) {
             if (i < LogicalTypes.size()) {
                 TStringBuilder sb;
-                sb << Fields[i]->name() << ": " << NScheme::TypeName(LogicalTypes[i]);
+                sb << Fields[i]->name() << ": " << NScheme::TypeName(LogicalTypes[i].GetTypeInfo());
                 jsonFields.AppendValue(sb);
             } else {
                 jsonFields.AppendValue(Fields[i]->ToString());
@@ -267,7 +267,7 @@ public:
         for (ui32 i = 0; i < Columns.size(); ++i) {
             auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
             jsonColumn["name"] = Fields[i]->name();
-            const NKikimr::NScheme::TTypeInfo* logicalType = (i < LogicalTypes.size()) ? &LogicalTypes[i] : nullptr;
+            const NScheme::TTypeInfo* logicalType = (i < LogicalTypes.size()) ? &LogicalTypes[i].GetTypeInfo() : nullptr;
             jsonColumn["value"] = GetPositionAddress(i).DebugString(position, logicalType);
         }
 
@@ -303,7 +303,7 @@ protected:
         AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
 
         if (dataColumns.size()) {
-            Data = std::make_shared<TSortableScanData>(Position, batch, dataColumns, std::vector<NScheme::TTypeInfo>{});
+            Data = std::make_shared<TSortableScanData>(Position, batch, dataColumns, std::vector<TComparisonType>{});
         }
 
         Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
@@ -453,7 +453,7 @@ public:
         return Sorting->IsSameSchema(schema);
     }
 
-    bool IsSameSortingSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema) const {
+    bool IsSameSortingSchema(const TComparisonSchema& schema) const {
         const auto& fields = Sorting->GetFields();
         const auto& types = Sorting->GetLogicalTypes();
         if (schema.size() != fields.size() || schema.size() != types.size()) {
@@ -478,7 +478,7 @@ public:
 
     template <class TRecords>
     TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position,
-        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const std::vector<std::string>& dataColumns,
+        const TComparisonSchema& sortingSchema, const std::vector<std::string>& dataColumns,
         const bool reverseSort)
         : Position(position)
         , ReverseSort(reverseSort) {
@@ -489,7 +489,7 @@ public:
 
     template <class TRecords>
     TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position, const std::vector<std::string>& sortingColumns,
-        const std::vector<std::string>& dataColumns, const bool reverseSort, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        const std::vector<std::string>& dataColumns, const bool reverseSort, const std::vector<TComparisonType>& logicalTypes)
         : Position(position)
         , ReverseSort(reverseSort) {
         AFL_VERIFY(logicalTypes.size() == sortingColumns.size());
@@ -500,7 +500,7 @@ public:
 
     template <class TRecords>
     TSortableBatchPosition(
-        const std::shared_ptr<TRecords>& batch, const ui32 position, const bool reverseSort, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        const std::shared_ptr<TRecords>& batch, const ui32 position, const bool reverseSort, const std::vector<TComparisonType>& logicalTypes)
         : Position(position)
         , ReverseSort(reverseSort) {
         Y_ABORT_UNLESS(batch);
@@ -514,7 +514,7 @@ public:
     }
 
     TSortableBatchPosition(const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<std::shared_ptr<arrow::Array>>& columns,
-        const ui32 position, const bool reverseSort, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        const ui32 position, const bool reverseSort, const std::vector<TComparisonType>& logicalTypes)
         : Position(position)
         , ReverseSort(reverseSort) {
         AFL_VERIFY(logicalTypes.size() == fields.size());
@@ -800,7 +800,7 @@ public:
     //  (-inf, it1), [it1, it2), [it2, it3), ..., [itLast, +inf)
     template <class TBordersIterator>
     static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBorders(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<std::string>& columnNames, TBordersIterator& it, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+        const std::vector<std::string>& columnNames, TBordersIterator& it, const std::vector<TComparisonType>& logicalTypes) {
         std::vector<std::shared_ptr<arrow::RecordBatch>> result;
         if (!batch || batch->num_rows() == 0) {
             while (it.IsValid()) {
@@ -880,7 +880,7 @@ public:
     template <class TContainer>
     static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInAssociativeContainer(
         const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+        const std::vector<TComparisonType>& logicalTypes) {
         TAssociatedContainerIterator<TContainer> it(container);
         return SplitByBorders(batch, columnNames, it, logicalTypes);
     }
@@ -916,7 +916,7 @@ public:
 
     template <class TContainer>
     static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInSequentialContainer(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<std::string>& columnNames, const TContainer& container, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+        const std::vector<std::string>& columnNames, const TContainer& container, const std::vector<TComparisonType>& logicalTypes) {
         TSequentialContainerIterator<TContainer> it(container);
         return SplitByBorders(batch, columnNames, it, logicalTypes);
     }
@@ -959,7 +959,7 @@ public:
     };
 
     static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInIntervalPositions(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& keySchema, const TIntervalPositions& container) {
+        const TComparisonSchema& keySchema, const TIntervalPositions& container) {
         TIntervalPointsIterator it(container);
         return SplitByBorders(batch, ColumnNames(keySchema), it, ColumnTypes(keySchema));
     }

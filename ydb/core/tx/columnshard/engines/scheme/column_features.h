@@ -38,8 +38,8 @@ public:
     TColumnFeatures(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField,
         const NArrow::NSerialization::TSerializerContainer& serializer, const std::shared_ptr<IBlobsStorageOperator>& bOperator,
         const bool needMinMax, const bool isSorted, const bool isNullable, const std::shared_ptr<arrow::Scalar>& defaultValue,
-        const std::optional<ui32>& pkColumnIndex, const NScheme::TTypeInfo& typeInfo)
-        : TBase(columnId, arrowField, serializer, needMinMax, isSorted, isNullable, defaultValue, pkColumnIndex, typeInfo)
+        const std::optional<ui32>& pkColumnIndex, const NArrow::TComparisonType& comparisonType)
+        : TBase(columnId, arrowField, serializer, needMinMax, isSorted, isNullable, defaultValue, pkColumnIndex, comparisonType)
         , Operator(bOperator)
     {
         AFL_VERIFY(Operator);

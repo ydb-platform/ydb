@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/fq/libs/actors)
 
 SIZE(MEDIUM)
 
-FORK_SUBTESTS()
-
 PEERDIR(
     library/cpp/retry
     library/cpp/testing/unittest

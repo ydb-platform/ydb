@@ -8,13 +8,13 @@ SELECT
     s_name,
     Count(*) AS numwait
 FROM
-    `/Root/supplier` as supplier
+    `supplier` as supplier
 ,
-    `/Root/lineitem` AS l1
+    `lineitem` AS l1
 ,
-    `/Root/orders` as orders
+    `orders` as orders
 ,
-    `/Root/nation` as nation
+    `nation` as nation
 WHERE
     s_suppkey == l1.l_suppkey
     AND o_orderkey == l1.l_orderkey
@@ -24,7 +24,7 @@ WHERE
         SELECT
             *
         FROM
-            `/Root/lineitem` AS l2
+            `lineitem` AS l2
         WHERE
             l2.l_orderkey == l1.l_orderkey
             AND l2.l_suppkey != l1.l_suppkey
@@ -33,7 +33,7 @@ WHERE
         SELECT
             *
         FROM
-            `/Root/lineitem` AS l3
+            `lineitem` AS l3
         WHERE
             l3.l_orderkey == l1.l_orderkey
             AND l3.l_suppkey != l1.l_suppkey

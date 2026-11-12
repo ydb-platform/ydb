@@ -54,8 +54,8 @@ void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/
         {"info", DebugString()});
     auto columnData = ColumnData.ExtractDataByPortion(Context.GetGlobalContext().GetColumns());
 
-    NArrow::NMerger::TMergePartialStream merger(Context.GetGlobalContext().GetSnapshotSchema()->GetIndexInfo().GetPrimaryKeyColumns(), nullptr,
-        false, IIndexInfo::GetSnapshotColumns(), ScanSnapshotBatch, MinUncommittedSnapshotBatch);
+    NArrow::NMerger::TMergePartialStream merger(Context.GetGlobalContext().GetSnapshotSchema()->GetIndexInfo().GetPrimaryKeyComparisonColumns(),
+        nullptr, false, NArrow::ComparisonSchema(IIndexInfo::GetSnapshotColumns()), ScanSnapshotBatch, MinUncommittedSnapshotBatch);
     for (const auto& [portionId, data] : columnData) {
         merger.AddSource(data, nullptr, NArrow::NMerger::TIterationOrder::Forward(0), portionId);
     }

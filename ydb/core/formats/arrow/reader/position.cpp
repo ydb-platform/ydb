@@ -162,7 +162,7 @@ void TSortableScanData::AddColumn(const std::shared_ptr<TGeneralContainer>& batc
 }
 
 TSortableScanData::TSortableScanData(
-    const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+    const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<TComparisonType>& logicalTypes)
     : LogicalTypes(logicalTypes) {
     Fields = batch->GetSchema()->GetFields();
     Columns = batch->GetColumns();
@@ -179,7 +179,7 @@ void TSortableScanData::AddColumn(const std::shared_ptr<arrow::RecordBatch>& bat
 }
 
 TSortableScanData::TSortableScanData(
-    const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+    const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TComparisonType>& logicalTypes)
     : LogicalTypes(logicalTypes) {
     for (auto&& c : batch->columns()) {
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(c));
@@ -198,7 +198,7 @@ void TSortableScanData::AddColumn(const std::shared_ptr<arrow::Table>& batch, co
 }
 
 TSortableScanData::TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
-    const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+    const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<TComparisonType>& logicalTypes)
     : RecordsCount(recordsCount)
     , Fields(fields)
     , LogicalTypes(logicalTypes) {
@@ -339,7 +339,7 @@ void TCursor::AppendPositionTo(TConstArrayRef<std::unique_ptr<arrow::ArrayBuilde
 }
 
 TCursor::TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position,
-    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema)
+    const TComparisonSchema& schema)
     : Position(position) {
     const TSortableScanData data(position, table, schema);
     PositionAddress = data.GetPositionAddress();

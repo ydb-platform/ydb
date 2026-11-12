@@ -103,7 +103,7 @@ private:
     NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) {
         NArrow::TGeneralContainer batch(1);
         IIndexInfo::AddSnapshotColumns(batch, snapshot, writeId);
-        return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumns());
+        return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, NArrow::ComparisonSchema(IIndexInfo::GetSnapshotColumns()));
     };
 
 public:

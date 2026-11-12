@@ -27,10 +27,13 @@ class PrSyncCreator:
         theirs_on_conflict,
         force_overwrite,
         overwrite_exclude,
+        head_tag=None,
     ):
         self.repo_name = repo
         self.base_branch = base_branch
         self.head_branch = head_branch
+        self.head_tag = head_tag
+        self.head_tag_sha = None
         self.ours_on_conflict = ours_on_conflict
         self.theirs_on_conflict = theirs_on_conflict
         self.force_overwrite = force_overwrite
@@ -129,16 +132,19 @@ class PrSyncCreator:
     def git_revparse_head(self):
         return self.git_run("rev-parse", "HEAD").stdout.decode().strip()
 
-    def head_top_level_paths(self):
-        output = self.git_run("ls-tree", "--name-only", self.head_branch).stdout.decode()
+    def head_top_level_paths(self, source_ref):
+        output = self.git_run("ls-tree", "--name-only", source_ref).stdout.decode()
         return [line for line in output.splitlines() if line]
 
     def overwrite_paths_from_head(self):
-        """Overwrite all top-level head paths, then restore overwrite_exclude from base. Does not commit."""
-        for path in self.head_top_level_paths():
-            self.logger.info(f"Overwriting {path} fully from {self.head_branch} for 100% match")
+        self.overwrite_paths_from_ref(self.head_branch)
+
+    def overwrite_paths_from_ref(self, source_ref):
+        """Overwrite top-level paths from source_ref, then restore overwrite_exclude from base. Does not commit."""
+        for path in self.head_top_level_paths(source_ref):
+            self.logger.info(f"Overwriting {path} fully from {source_ref} for 100% match")
             self.git_run("rm", "-r", "-f", "--ignore-unmatch", path)
-            self.git_run("checkout", self.head_branch, "--", path)
+            self.git_run("checkout", source_ref, "--", path)
             self.git_run("add", path)
 
         for path in self.overwrite_exclude:
@@ -149,22 +155,24 @@ class PrSyncCreator:
     def create_new_pr(self):
         dev_branch_name = f"robots/branch-sync/merge-{self.head_branch}-{self.dtm}"
         commit_msg = f"Sync branches {self.dtm}"
-        pr_title = f"Sync branches {self.dtm}: {self.head_branch} to {self.base_branch}"
+        source_name = f"tag {self.head_tag}" if self.head_tag else self.head_branch
+        source_ref = self.head_tag_sha if self.head_tag else self.head_branch
+        pr_title = f"Sync branches {self.dtm}: {source_name} to {self.base_branch}"
 
         self.git_run("clone", f"https://{self.token}@github.com/{self.repo_name}.git", "ydb-new-pr")
         os.chdir("ydb-new-pr")
-        self.git_run("checkout", self.head_branch)
-        rightlib_sha = self.git_revparse_head()
-
-        self.logger.info(f"{rightlib_sha=}")
+        if self.head_tag:
+            self.git_run("switch", "--detach", source_ref)
+        else:
+            self.git_run("checkout", self.head_branch)
 
         self.git_run("checkout", self.base_branch)
         self.git_run("checkout", "-b", dev_branch_name)
         # --no-commit so overwrite is folded into the merge commit (keeps head as a parent).
         if self.force_overwrite:
-            merge_result = self.git_run("merge", "--no-commit", "--no-ff", self.head_branch, fail=False)
+            merge_result = self.git_run("merge", "--no-commit", "--no-ff", source_ref, fail=False)
         else:
-            merge_result = self.git_run("merge", self.head_branch, "-m", commit_msg, fail=False)
+            merge_result = self.git_run("merge", source_ref, "-m", commit_msg, fail=False)
         merge_output = merge_result.stdout.decode()
         merge_failed = merge_result.returncode != 0
         conflict_files = ''
@@ -193,7 +201,10 @@ class PrSyncCreator:
         elif merge_failed:
             raise Exception(f"Unexpected error during merge {merge_output}")
         if self.force_overwrite:
-            self.overwrite_paths_from_head()
+            if self.head_tag:
+                self.overwrite_paths_from_ref(self.head_tag_sha)
+            else:
+                self.overwrite_paths_from_head()
             self.git_run("commit", "-m", commit_msg)
         self.git_run("push", "--set-upstream", "origin", dev_branch_name)
 
@@ -220,7 +231,12 @@ class PrSyncCreator:
         pr = self.get_latest_open_pr()
 
         if not pr:
-            cur_sha = self.rightlib_latest_repo_sha()
+            if self.head_tag:
+                self.head_tag_sha = self.repo.get_commit(f"refs/tags/{self.head_tag}").sha
+            if self.head_tag_sha:
+                cur_sha = self.head_tag_sha
+            else:
+                cur_sha = self.rightlib_latest_repo_sha()
             self.logger.info("cur_sha=%s", cur_sha)
 
             if self.is_commit_present_on_branch(cur_sha, self.base_branch) is False:
@@ -235,6 +251,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-branch", help="Branch to merge into")
     parser.add_argument("--head-branch", help="Branch to be merged")
+    parser.add_argument("--head-tag", help="Tag to merge instead of the head branch tip")
     parser.add_argument("--process-label", help="Label to filter PRs")
     parser.add_argument("--merge-ours", action="extend", nargs="+", default=[], type=str, help='Files that will be merged with --ours upon conflict')
     parser.add_argument("--merge-theirs", action="extend", nargs="+", default=[], type=str, help='Files that will be merged with --theirs upon conflict')
@@ -258,6 +275,7 @@ def main():
         args.merge_theirs,
         args.force_overwrite,
         args.overwrite_exclude,
+        args.head_tag,
     )
 
     syncer.cmd_create_pr()

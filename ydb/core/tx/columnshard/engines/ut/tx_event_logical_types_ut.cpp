@@ -16,8 +16,8 @@ Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
     Y_UNIT_TEST_TWIN(RangeOperationEncodingsPreserveBoundaries, NumericComparison) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(NumericComparison);
-        const std::vector<NScheme::TTypeInfo> logicalTypes = { NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)) };
+        const std::vector<NArrow::TComparisonType> logicalTypes = { NArrow::TComparisonType(
+            NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)), NumericComparison) };
         std::string lowerValue(16, '\0');
         std::string upperValue(16, '\0');
         lowerValue[NumericComparison ? 0 : 1] = 1;
@@ -69,8 +69,8 @@ Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
     Y_UNIT_TEST_TWIN(PrefixRangeRoundTrip, NumericComparison) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(NumericComparison);
-        const std::vector<NScheme::TTypeInfo> logicalTypes = { NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)),
+        const std::vector<NArrow::TComparisonType> logicalTypes = { NArrow::TComparisonType(
+                                                                        NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)), NumericComparison),
             NScheme::TTypeInfo(NScheme::NTypeIds::Uuid) };
         arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
         UNIT_ASSERT(builder.Append(std::string(16, '\0')).ok());
@@ -100,9 +100,10 @@ Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
     Y_UNIT_TEST_TWIN(ReadStartRoundTripAndWriteConflicts, NumericComparison) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(NumericComparison);
-        const std::vector<NScheme::TTypeInfo> logicalTypes = { NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)),
-            NScheme::TTypeInfo(NScheme::TDecimalType(35, 2)), NScheme::TTypeInfo(NScheme::NTypeIds::Uuid) };
+        const std::vector<NArrow::TComparisonType> logicalTypes = { NArrow::TComparisonType(
+                                                                        NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)), NumericComparison),
+            NArrow::TComparisonType(NScheme::TTypeInfo(NScheme::TDecimalType(35, 2)), NumericComparison),
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uuid) };
         arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
         UNIT_ASSERT(builder.Append(std::string(16, '\0')).ok());
         const auto values = NArrow::TStatusValidator::GetValid(builder.Finish());
@@ -145,10 +146,10 @@ Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
             for (const auto* predicate : { &range.GetPredicateFrom(), &range.GetPredicateTo() }) {
                 const auto& restoredTypes = predicate->GetSortableBatchPosition().GetSorting()->GetLogicalTypes();
                 UNIT_ASSERT(restoredTypes == logicalTypes);
-                UNIT_ASSERT_VALUES_EQUAL(restoredTypes[0].GetDecimalType().GetPrecision(), 22);
-                UNIT_ASSERT_VALUES_EQUAL(restoredTypes[0].GetDecimalType().GetScale(), 9);
-                UNIT_ASSERT_VALUES_EQUAL(restoredTypes[1].GetDecimalType().GetPrecision(), 35);
-                UNIT_ASSERT_VALUES_EQUAL(restoredTypes[1].GetDecimalType().GetScale(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(restoredTypes[0].GetTypeInfo().GetDecimalType().GetPrecision(), 22);
+                UNIT_ASSERT_VALUES_EQUAL(restoredTypes[0].GetTypeInfo().GetDecimalType().GetScale(), 9);
+                UNIT_ASSERT_VALUES_EQUAL(restoredTypes[1].GetTypeInfo().GetDecimalType().GetPrecision(), 35);
+                UNIT_ASSERT_VALUES_EQUAL(restoredTypes[1].GetTypeInfo().GetDecimalType().GetScale(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(restoredTypes[2].GetTypeId(), NScheme::NTypeIds::Uuid);
             }
 

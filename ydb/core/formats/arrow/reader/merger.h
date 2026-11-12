@@ -22,10 +22,10 @@ private:
 #endif
     bool PossibleSameVersionFlag = true;
 
-    const std::vector<std::pair<TString, NScheme::TTypeInfo>> SortSchema;
+    const TComparisonSchema SortSchema;
     std::shared_ptr<arrow::Schema> DataSchema;
     const bool Reverse;
-    const std::vector<std::pair<TString, NScheme::TTypeInfo>> VersionSchema;
+    const TComparisonSchema VersionSchema;
     std::optional<TCursor> MaxVersion;
     std::optional<TCursor> MinUncommittedVersion;
     ui32 ControlPoints = 0;
@@ -123,8 +123,8 @@ private:
     }
 
 public:
-    TMergePartialStream(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortSchema, std::shared_ptr<arrow::Schema> dataSchema,
-        const bool reverse, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& versionSchema, const std::optional<TCursor>& maxVersion,
+    TMergePartialStream(const TComparisonSchema& sortSchema, std::shared_ptr<arrow::Schema> dataSchema,
+        const bool reverse, const TComparisonSchema& versionSchema, const std::optional<TCursor>& maxVersion,
         const std::optional<TCursor>& minUncommittedVersion)
         : SortSchema(sortSchema)
         , DataSchema(dataSchema)

@@ -8,8 +8,11 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/switch/compare.h>
 
 namespace NKikimr::NArrow {
+
+using TComparisonSchema = std::vector<std::pair<TString, TComparisonType>>;
 
 template <class TArray, class TValue>
 std::optional<ui32> FindUpperOrEqualPosition(const TArray& arr, const TValue val, const ui32 startIndex = 0) {
@@ -51,8 +54,13 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
 arrow::Result<arrow::FieldVector> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns,  const std::set<std::string>& notNullColumns = {});
 arrow::Result<std::shared_ptr<arrow::Schema>> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns = {});
 
+TComparisonSchema ComparisonSchema(
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema, const bool enableDecimalNumericComparison = false);
 std::vector<std::string> ColumnNames(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema);
-std::vector<NScheme::TTypeInfo> ColumnTypes(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema);
+std::vector<std::string> ColumnNames(const TComparisonSchema& schema);
+std::vector<TComparisonType> ColumnTypes(const TComparisonSchema& schema);
+std::vector<TComparisonType> ColumnTypes(
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema, const bool enableDecimalNumericComparison = false);
 
 std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str);
 
@@ -63,20 +71,20 @@ std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob,
                                                      const std::shared_ptr<arrow::Schema>& schema);
 
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
-    const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool andUnique);
+    const std::vector<TComparisonType>& logicalTypes, const bool andUnique);
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::vector<std::shared_ptr<arrow::Array>>& sortingKey, const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool andUnique);
+    const std::vector<std::shared_ptr<arrow::Array>>& sortingKey, const std::vector<TComparisonType>& logicalTypes, const bool andUnique);
 bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
-    const std::vector<NScheme::TTypeInfo>& logicalTypes, bool desc = false);
+    const std::vector<TComparisonType>& logicalTypes, bool desc = false);
 bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
-    const std::vector<NScheme::TTypeInfo>& logicalTypes, bool desc = false);
+    const std::vector<TComparisonType>& logicalTypes, bool desc = false);
 void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
-    const std::vector<NScheme::TTypeInfo>& logicalTypes, std::vector<std::shared_ptr<arrow::RecordBatch>>& out);
+    const std::vector<TComparisonType>& logicalTypes, std::vector<std::shared_ptr<arrow::RecordBatch>>& out);
 
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const bool andUnique);
+    const TComparisonSchema& sortingSchema, const bool andUnique);
 bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& sortingSchema, const bool desc = false);
+    const TComparisonSchema& sortingSchema, const bool desc = false);
 
 [[nodiscard]] std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
 [[nodiscard]] std::shared_ptr<arrow::Table> ReallocateBatch(

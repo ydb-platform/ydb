@@ -130,7 +130,10 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                 }
             }
 
-            if (needDeletion) {
+            // An oversized intermediate key was never sent to the index. Sending
+            // its deletion would fail the key size check on the receiving shard.
+            if (needDeletion && (KeySizePolicy == EAsyncIndexKeySizePolicy::Reject
+                    || GetKeySize() <= NLimits::MaxWriteKeySize)) {
                 Persist(tableId, pathId, ERowOp::Erase, KeyVals, {});
             }
 
@@ -167,12 +170,26 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                 }
             }
 
-            ui64 sizeOfKey = 0;
-            for (auto x : KeyVals) {
-                sizeOfKey += x.Value.Size();
-            }
-
-            if (sizeOfKey > NLimits::MaxWriteKeySize) {
+            if (GetKeySize() > NLimits::MaxWriteKeySize) {
+                if (KeySizePolicy == EAsyncIndexKeySizePolicy::SkipOversizedIntermediateKeys
+                        && rop == ERowOp::Upsert && generateDeletions) {
+                    // Replaying a partial update over a newer snapshot can mix
+                    // index columns from different source versions. Keep applying
+                    // base changes, but omit this key until it becomes valid.
+                    ui64 explicitKeySize = 0;
+                    bool hasInheritedColumn = false;
+                    for (const auto& value : KeyVals) {
+                        if (userTable->Columns.at(value.Tag).IsKey || updatedTagToPos.contains(value.Tag)) {
+                            explicitKeySize += value.Value.Size();
+                        } else {
+                            hasInheritedColumn = true;
+                        }
+                    }
+                    if (hasInheritedColumn && explicitKeySize <= NLimits::MaxWriteKeySize) {
+                        Clear();
+                        return;
+                    }
+                }
                 throw TKeySizeConstraintException();
             }
 
@@ -202,6 +219,14 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     });
 
     return true;
+}
+
+ui64 TAsyncIndexChangeCollector::GetKeySize() const {
+    ui64 size = 0;
+    for (const auto& value : KeyVals) {
+        size += value.Value.Size();
+    }
+    return size;
 }
 
 auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {

@@ -69,7 +69,7 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
         }
     };
 
-    auto getLogicalTypes = [](const TPositionVariant& pos) -> const std::vector<NScheme::TTypeInfo>& {
+    auto getLogicalTypes = [](const TPositionVariant& pos) -> const std::vector<NArrow::TComparisonType>& {
         switch (pos.index()) {
             case StartPortionInfo:
                 return std::get<StartPortionInfo>(pos)->GetMeta().GetPKTypes();

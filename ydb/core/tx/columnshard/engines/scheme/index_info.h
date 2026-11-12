@@ -8,6 +8,7 @@
 #include "indexes/abstract/meta.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/program/abstract.h>
 #include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -114,6 +115,7 @@ private:
 
     TPresetId PresetId;
     ui64 Version = 0;
+    YDB_READONLY(bool, EnableDecimalNumericComparison, false);
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> PrimaryKey;
@@ -163,8 +165,14 @@ private:
         const std::shared_ptr<TSchemaObjectsCache>& cache) const;
 
     void Validate() const;
-    void Precalculate();
+    void BuildUsedStorageIds();
     void BuildColumnIndexByName();
+    TString BuildColumnFeaturesFingerprint(const NKikimrSchemeOp::TOlapColumnDescription& colProto) const;
+    TString BuildSystemColumnFeaturesFingerprint(const ui32 columnId) const;
+    void ApplyDefaultSerializer();
+    void EraseColumn(const ui32 position);
+    void InsertColumn(const NKikimrSchemeOp::TOlapColumnDescription& columnProto, const std::optional<ui32> keyOrder,
+        const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
         const std::shared_ptr<TSchemaObjectsCache>& cache);
@@ -292,6 +300,11 @@ public:
     const THashMap<ui32, NIndexes::TIndexMetaContainer>& GetIndexes() const {
         return Indexes;
     }
+
+    // Smallest ngram_size among the bloom-ngram indexes on `columnId` that can serve `caseSensitive` probes.
+    // A column can carry several such indexes and the reader picks one per portion, so a probe shorter
+    // than the smallest size cannot be checked by every candidate. Empty when no such index exists.
+    std::optional<ui32> GetBloomNgramSize(ui32 columnId, bool caseSensitive) const;
 
     TString DebugString() const {
         TStringBuilder sb;
@@ -466,8 +479,12 @@ public:
         return PKColumns;
     }
 
-    std::vector<NScheme::TTypeInfo> GetPrimaryKeyTypes() const {
-        return NArrow::ColumnTypes(PKColumns);
+    NArrow::TComparisonSchema GetPrimaryKeyComparisonColumns() const {
+        return NArrow::ComparisonSchema(PKColumns, EnableDecimalNumericComparison);
+    }
+
+    std::vector<NArrow::TComparisonType> GetPrimaryKeyTypes() const {
+        return NArrow::ColumnTypes(PKColumns, EnableDecimalNumericComparison);
     }
 
     const THashMap<ui32, TNameTypeInfo>& GetColumns() const {

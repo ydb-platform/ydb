@@ -31,10 +31,14 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             auto &family = it.second;
 
             delta.AddFamily(table, it.first, family.Room);
-            delta.SetFamilyCompression(table, it.first, family.Codec);
+            delta.SetFamilyCompression(table, it.first, family.Codec, family.CodecLevel);
             delta.SetFamilyCacheMode(table, it.first, family.CacheMode);
             delta.SetFamilyCache(table, it.first, family.Cache);
             delta.SetFamilyBlobs(table, it.first, family.Small, family.Large);
+            if (!family.KeyIndexInDescriptor || !family.GroupIndexesInDescriptor) {
+                // Only when changed, so that snapshots of tables without tiers stay as they were
+                delta.SetFamilyIndexPlacement(table, it.first, family.KeyIndexInDescriptor, family.GroupIndexesInDescriptor);
+            }
         }
 
         for(const auto& it : itTable.second.Columns) {
@@ -217,12 +221,15 @@ TAlter& TAlter::AddColumnToKey(ui32 table, ui32 column)
     return ApplyLastRecord();
 }
 
-TAlter& TAlter::SetFamilyCompression(ui32 table, ui32 family, ECodec codec) {
+TAlter& TAlter::SetFamilyCompression(ui32 table, ui32 family, ECodec codec, ui32 codecLevel) {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::SetFamily);
     delta.SetTableId(table);
     delta.SetFamilyId(family);
     delta.SetCodec(ui32(codec));
+    if (codecLevel != 1) {
+        delta.SetCodecLevel(codecLevel);
+    }
 
     return ApplyLastRecord();
 }
@@ -268,6 +275,18 @@ TAlter& TAlter::SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large)
     delta.SetFamilyId(family);
     delta.SetSmall(small);
     delta.SetLarge(large);
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetFamilyIndexPlacement(ui32 table, ui32 family, bool keyIndexInDescriptor, bool groupIndexesInDescriptor)
+{
+    TAlterRecord& delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetFamily);
+    delta.SetTableId(table);
+    delta.SetFamilyId(family);
+    delta.SetKeyIndexInDescriptor(keyIndexInDescriptor);
+    delta.SetGroupIndexesInDescriptor(groupIndexesInDescriptor);
 
     return ApplyLastRecord();
 }

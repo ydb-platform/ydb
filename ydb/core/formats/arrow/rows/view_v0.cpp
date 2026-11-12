@@ -116,7 +116,7 @@ TConclusionStatus TSimpleRowViewV0::AddToBuilders(
 class TCompareActor {
 private:
     const std::optional<std::string_view> ItemView;
-    const NScheme::TTypeInfo& LogicalType;
+    const TComparisonType& LogicalType;
     YDB_READONLY(std::partial_ordering, Result, std::partial_ordering::equivalent);
 
 public:
@@ -155,14 +155,14 @@ public:
         return false;
     }
 
-    TCompareActor(const std::optional<std::string_view>& itemView, const NScheme::TTypeInfo& logicalType)
+    TCompareActor(const std::optional<std::string_view>& itemView, const TComparisonType& logicalType)
         : ItemView(itemView)
         , LogicalType(logicalType) {
     }
 };
 
 TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(const TSimpleRowViewV0& item, const arrow::Schema& schema,
-    const std::vector<NScheme::TTypeInfo>& logicalTypes, const std::optional<ui32> columnsCount) const {
+    const std::vector<TComparisonType>& logicalTypes, const std::optional<ui32> columnsCount) const {
     AFL_VERIFY(logicalTypes.size() == (size_t)schema.num_fields());
     AFL_VERIFY(!columnsCount || *columnsCount <= (ui32)schema.num_fields());
     TIterator itSelf(Values, schema);

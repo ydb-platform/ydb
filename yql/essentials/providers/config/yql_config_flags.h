@@ -21,6 +21,7 @@ public:
     struct TFlag {
         TStringBuf Name;
         bool System = false;
+        bool AllowInProjectSettings = false;
         TFlagHandler Handler;
     };
 
@@ -45,6 +46,7 @@ protected:
     bool ApplyFlag(const TPosition& pos, TStringBuf name, const TVector<TStringBuf>& args, TExprContext& ctx, bool fromInitialize = false);
     void AddFlag(TStringBuf name, TStringBuf disableName, bool system, TFlagHandler handler);
     void InitFlags();
+    bool ApplyProjectSettings(TExprContext& ctx);
 
     bool ImportUdfs(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx);
     bool AddCredential(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx);

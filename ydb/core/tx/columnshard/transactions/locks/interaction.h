@@ -366,7 +366,7 @@ public:
     }
 
     THashSet<ui64> GetAffectedTxIds(
-        const std::shared_ptr<arrow::RecordBatch>& writtenPrimaryKeys, const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+        const std::shared_ptr<arrow::RecordBatch>& writtenPrimaryKeys, const std::vector<NArrow::TComparisonType>& logicalTypes) const {
         AFL_VERIFY(writtenPrimaryKeys);
         auto it = IntervalsInfo.begin();
         THashSet<ui64> affectedTxIds;
@@ -435,7 +435,7 @@ public:
     }
 
     THashSet<ui64> GetAffectedLockIds(const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+        const std::vector<NArrow::TComparisonType>& logicalTypes) const {
         auto it = ReadIntervalsByPathId.find(pathId);
         if (it == ReadIntervalsByPathId.end()) {
             return {};

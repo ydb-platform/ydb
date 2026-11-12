@@ -4,8 +4,10 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_user_table.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <util/string/strip.h>
@@ -16,6 +18,44 @@ using namespace NKikimr::NDataShard;
 using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
+
+namespace {
+
+    // A single-row batch applying `value` to the column with the given tag of a replicated table.
+    template <typename T>
+    THolder<TEvDataShard::TEvApplyReplicationChanges> MakeApplyRequest(
+            const TTableId& tableId, ui64 sourceOffset, ui32 tag, T value)
+    {
+        auto request = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
+        request->Record.SetSource("source");
+        request->Record.SetDatabaseName("/Root");
+
+        auto* change = request->Record.AddChanges();
+        change->SetSourceOffset(sourceOffset);
+        TCell keyCell = TCell::Make<ui32>(1);
+        change->SetKey(TSerializedCellVec::Serialize({&keyCell, 1}));
+
+        auto* upsert = change->MutableUpsert();
+        upsert->AddTags(tag);
+        TCell valueCell = TCell::Make<T>(value);
+        upsert->SetData(TSerializedCellVec::Serialize({&valueCell, 1}));
+
+        return request;
+    }
+
+    // Table with `value` defaulting from the table-local sequence `seq`.
+    TShardedTableOptions SequenceTableOptions(const TString& valueType = "Uint32") {
+        return TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", valueType, false, false, {}, "seq"},
+            })
+            .Sequences(true)
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row);
+    }
+
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(DataShardReplication) {
 
@@ -179,6 +219,112 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
             auto result = ReadShardedTable(server, "/Root/table-2");
             UNIT_ASSERT_VALUES_EQUAL(result,
                 "key = 4, value = 44\n");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(RejectedChangeDoesNotAdvanceOffset, Reboot) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row)
+        );
+
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        using TChangeProto = NKikimrTxDataShard::TEvApplyReplicationChanges::TChange;
+        using TEvResult = NKikimrTxDataShard::TEvApplyReplicationChangesResult;
+        const auto makeChange = [](i64 offset, ui32 key, ui32 value) {
+            TChangeProto change;
+            change.SetSourceOffset(offset);
+            const TCell keyCell = TCell::Make(key);
+            change.SetKey(TSerializedCellVec::Serialize({&keyCell, 1}));
+            auto* upsert = change.MutableUpsert();
+            upsert->AddTags(2);
+            const TCell valueCell = TCell::Make(value);
+            upsert->SetData(TSerializedCellVec::Serialize({&valueCell, 1}));
+            return change;
+        };
+        const auto apply = [&](const TVector<TChangeProto>& changes, TEvResult::EStatus status,
+                TEvResult::EReason reason = TEvResult::REASON_NONE) {
+            auto request = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
+            request->Record.SetSource("source");
+            for (const auto& change : changes) {
+                request->Record.AddChanges()->CopyFrom(change);
+            }
+            const auto replyTo = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, replyTo, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(replyTo);
+            const auto& record = result->Get()->Record;
+            UNIT_ASSERT_C(record.GetStatus() == status,
+                record.ShortDebugString() << ", expected " << TEvResult::EStatus_Name(status));
+            UNIT_ASSERT_C(record.GetReason() == reason,
+                record.ShortDebugString() << ", expected " << TEvResult::EReason_Name(reason));
+        };
+
+        TVector<std::pair<TString, TChangeProto>> invalidChanges;
+        for (bool reset : {false, true}) {
+            const TString operation = reset ? "reset" : "upsert";
+            auto change = makeChange(1, 2, 22);
+            if (reset) {
+                const auto updates = change.GetUpsert();
+                change.MutableReset()->CopyFrom(updates);
+            }
+            auto* updates = reset ? change.MutableReset() : change.MutableUpsert();
+            updates->SetTags(0, 3);
+            invalidChanges.emplace_back(operation + " unknown column", change);
+            updates->SetTags(0, 1);
+            invalidChanges.emplace_back(operation + " primary key column", change);
+            updates->SetTags(0, 2);
+            updates->AddTags(2);
+            invalidChanges.emplace_back(operation + " tag count mismatch", change);
+            updates->ClearTags();
+            updates->AddTags(2);
+            updates->SetData("\x01");
+            invalidChanges.emplace_back(operation + " malformed data", change);
+        }
+        auto missingOperation = makeChange(1, 2, 22);
+        missingOperation.ClearUpsert();
+        invalidChanges.emplace_back("missing operation", missingOperation);
+
+        TString expected;
+        ui32 firstKey = 1;
+        for (auto& [name, invalid] : invalidChanges) {
+            const i64 firstOffset = firstKey - 1;
+            const auto prefix = makeChange(firstOffset, firstKey, 11);
+            const auto corrected = makeChange(firstOffset + 1, firstKey + 1, 22);
+            const auto suffix = makeChange(firstOffset + 2, firstKey + 2, 33);
+            invalid.SetSourceOffset(corrected.GetSourceOffset());
+            invalid.SetKey(corrected.GetKey());
+
+            // A rejected record commits the valid prefix, but neither itself nor the suffix.
+            const auto reason = invalid.RowOperation_case() == TChangeProto::ROWOPERATION_NOT_SET
+                ? TEvResult::REASON_UNEXPECTED_ROW_OPERATION : TEvResult::REASON_BAD_REQUEST;
+            apply({prefix, invalid, suffix}, TEvResult::STATUS_REJECTED, reason);
+            expected += TStringBuilder() << "key = " << firstKey << ", value = 11\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(ReadShardedTable(server, "/Root/table-1"), expected, name);
+
+            if (Reboot) {
+                RebootTablet(runtime, shard, sender);
+            }
+
+            // Reuse the rejected offset and replay the prefix with a different value.
+            apply({makeChange(firstOffset, firstKey, 99), corrected, suffix}, TEvResult::STATUS_OK);
+            expected += TStringBuilder() << "key = " << firstKey + 1 << ", value = 22\n"
+                << "key = " << firstKey + 2 << ", value = 33\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(ReadShardedTable(server, "/Root/table-1"), expected, name);
+
+            // Previously accepted offsets remain duplicates, even with invalid payloads.
+            apply({invalid}, TEvResult::STATUS_OK);
+            UNIT_ASSERT_VALUES_EQUAL_C(ReadShardedTable(server, "/Root/table-1"), expected, name);
+            firstKey += 3;
         }
     }
 
@@ -662,6 +808,142 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         UNIT_ASSERT_C(!ReadShardedTable(server, "/Root/table-1").empty(), "The rejected batch advanced the source offset");
     }
 
+    Y_UNIT_TEST_QUAD(AsyncIndexOversizedSnapshotReplay, GlobalConsistency, Reboot) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"a", "String", false, false},
+                {"b", "String", false, false},
+                {"payload", "String", false, false},
+            })
+            .Replicated(true)
+            .ReplicationConsistencyLevel(GlobalConsistency ? EConsistencyLevel::Global : EConsistencyLevel::Row)
+            .Indexes({
+                {"by_ab", {"a", "b"}, {"payload"}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+                {"by_payload", {"payload"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+            })
+        );
+
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const TString indexPath = "/Root/table-1/by_ab/indexImplTable";
+        const TString otherIndexPath = "/Root/table-1/by_payload/indexImplTable";
+        const TString large(630000, 'L');
+        using TChangeProto = NKikimrTxDataShard::TEvApplyReplicationChanges::TChange;
+        using TEvResult = NKikimrTxDataShard::TEvApplyReplicationChangesResult;
+
+        const auto makeChange = [&](i64 offset, ui32 key, const TVector<std::pair<ui32, TString>>& values, bool erase = false) {
+            TChangeProto change;
+            change.SetSourceOffset(offset);
+            change.SetWriteTxId(GlobalConsistency ? 100 + offset : 0);
+            const TCell keyCell = TCell::Make(key);
+            change.SetKey(TSerializedCellVec::Serialize({&keyCell, 1}));
+            if (erase) {
+                change.MutableErase();
+            } else {
+                auto* upsert = change.MutableUpsert();
+                TVector<TCell> cells;
+                for (const auto& [tag, value] : values) {
+                    upsert->AddTags(tag);
+                    cells.emplace_back(value.data(), value.size());
+                }
+                upsert->SetData(TSerializedCellVec::Serialize(cells));
+            }
+            return change;
+        };
+        const auto apply = [&](const TVector<TChangeProto>& changes, bool reject = false) {
+            auto request = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
+            request->Record.SetSource("source");
+            for (const auto& change : changes) {
+                request->Record.AddChanges()->CopyFrom(change);
+            }
+            const auto replyTo = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, replyTo, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(replyTo);
+            const auto& record = result->Get()->Record;
+            UNIT_ASSERT_C(record.GetStatus() == (reject ? TEvResult::STATUS_REJECTED : TEvResult::STATUS_OK),
+                record.ShortDebugString());
+            UNIT_ASSERT_C(record.GetReason() == (reject ? TEvResult::REASON_BAD_REQUEST : TEvResult::REASON_NONE),
+                record.ShortDebugString());
+        };
+        const auto commit = [&](i64 offset) {
+            if (GlobalConsistency) {
+                CommitWrites(server, {"/Root/table-1"}, 100 + offset);
+            }
+        };
+        const auto reboot = [&] {
+            if (Reboot) {
+                RebootTablet(runtime, shard, sender);
+            }
+        };
+
+        // The restored snapshot already contains the later source state (S, L).
+        apply({makeChange(0, 1, {{2, "S"}, {3, large}, {4, "snapshot"}})});
+        commit(0);
+        const TString snapshotIndex = TStringBuilder() << "a = S, b = " << large << ", key = 1, payload = snapshot";
+        WaitForContent(server, indexPath, snapshotIndex);
+
+        // Explicit oversized keys must still reject the entire batch, including
+        // its valid prefix and source offsets, even with an existing pre-image.
+        apply({makeChange(1, 1, {{4, "rejected"}}), makeChange(2, 1, {{2, large}, {3, large}})}, true);
+        apply({makeChange(1, 1, {{2, TString(NLimits::MaxWriteKeySize + 1, 'X')}})}, true);
+        reboot();
+        WaitForContent(server, indexPath, snapshotIndex);
+        WaitForContent(server, otherIndexPath, "payload = snapshot, key = 1");
+
+        // An older partial update creates (L, L) only on the destination.
+        apply({makeChange(1, 1, {{2, large}})});
+        WaitForContent(server, indexPath, "");
+        reboot();
+
+        // Covered-column changes and other indexes must continue to work while
+        // this key is omitted. GLOBAL writes are still uncommitted at this point.
+        apply({makeChange(2, 1, {{4, "intermediate"}})});
+        WaitForContent(server, otherIndexPath, "payload = intermediate, key = 1");
+        WaitForContent(server, indexPath, "");
+        if (!GlobalConsistency) {
+            UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"),
+                TStringBuilder() << "key = 1, a = " << large << ", b = " << large << ", payload = intermediate\n");
+        }
+        reboot();
+
+        // A partial update restores a valid key without deleting the oversized
+        // one. Duplicate delivery must not revert the covered columns.
+        apply({makeChange(3, 1, {{2, "S"}, {4, "recovered"}})});
+        apply({makeChange(2, 1, {{4, "duplicate"}})});
+        const TString recoveredIndex = TStringBuilder() << "a = S, b = " << large << ", key = 1, payload = recovered";
+        WaitForContent(server, indexPath, recoveredIndex);
+        WaitForContent(server, otherIndexPath, "payload = recovered, key = 1");
+        for (i64 offset = 1; offset <= 3; ++offset) {
+            commit(offset);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"),
+            TStringBuilder() << "key = 1, a = S, b = " << large << ", payload = recovered\n");
+
+        // Deleting an omitted key must also work after restart. A following row
+        // proves that no oversized deletion has blocked the index sender.
+        apply({makeChange(4, 1, {{2, large}})});
+        WaitForContent(server, indexPath, "");
+        reboot();
+        apply({makeChange(5, 1, {}, true), makeChange(6, 2, {{2, "M"}, {3, "M"}, {4, "marker"}})});
+        WaitForContent(server, indexPath, "a = M, b = M, key = 2, payload = marker");
+        WaitForContent(server, otherIndexPath, "payload = marker, key = 2");
+        for (i64 offset = 4; offset <= 6; ++offset) {
+            commit(offset);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"),
+            "key = 2, a = M, b = M, payload = marker\n");
+    }
+
     Y_UNIT_TEST(AsyncIndexFromGloballyConsistentBase) {
         TPortManager pm;
         TServerSettings settings(pm.GetPort(2134));
@@ -783,6 +1065,174 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
             TChange{.Offset = 1, .WriteTxId = 0, .Key = 1, .Value = 22},
         });
         WaitForContent(server, indexPath, "value = 22, key = 1");
+    }
+
+    // The batch must not be applied until the sequence has been advanced past its values: the
+    // data shard sends the advance first and waits for the result.
+    Y_UNIT_TEST(ApplyWaitsForSequenceAdvance) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", SequenceTableOptions());
+
+        TBlockEvents<NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequence> blocked(runtime);
+
+        const auto requester = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(shards.at(0), requester,
+            MakeApplyRequest(tableId, 1, 2, ui32(42)).Release(), 0, GetPipeConfigWithRetries());
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1u);
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvApplyReplicationChangesResult>(
+            requester, TDuration::Seconds(1)));
+
+        const auto advance = blocked.front();
+        const auto advancePath = std::get<TString>(advance->Get()->Path);
+        UNIT_ASSERT_VALUES_EQUAL(advancePath, "/Root/table-1/seq");
+        UNIT_ASSERT_VALUES_EQUAL(advance->Get()->ObservedMin, 42);
+        UNIT_ASSERT_VALUES_EQUAL(advance->Get()->ObservedMax, 42);
+
+        const auto advanceSender = advance->Sender;
+        const auto advanceCookie = advance->Cookie;
+
+        blocked.Stop();
+        blocked.clear();
+
+        runtime.Send(new IEventHandle(advanceSender, requester,
+            new NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequenceResult(tableId.PathId, 42, true),
+            0, advanceCookie));
+
+        auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(requester);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(result->Get()->Record.GetStatus()),
+            static_cast<ui32>(NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK));
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 42\n");
+    }
+
+    void DoTestApplyAdvancesSequence(const TString& type) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", SequenceTableOptions(type));
+
+        const auto requester = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(shards.at(0), requester, (type == "Uint32"
+            ? MakeApplyRequest(tableId, 1, 2, ui32(42)).Release()
+            : MakeApplyRequest(tableId, 1, 2, i16(42)).Release()), 0, GetPipeConfigWithRetries());
+
+        auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(requester);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(result->Get()->Record.GetStatus()),
+            static_cast<ui32>(NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK));
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 42\n");
+
+        const auto nextValSender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(NSequenceProxy::MakeSequenceProxyServiceID(0), nextValSender,
+            new NSequenceProxy::TEvSequenceProxy::TEvNextVal("/Root", "/Root/table-1/seq")));
+
+        auto nextVal = runtime.GrabEdgeEventRethrow<NSequenceProxy::TEvSequenceProxy::TEvNextValResult>(nextValSender);
+        UNIT_ASSERT_VALUES_EQUAL(nextVal->Get()->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(nextVal->Get()->Value, 43);
+    }
+
+    Y_UNIT_TEST(ApplyAdvancesSequence) {
+        DoTestApplyAdvancesSequence("Uint32");
+    }
+
+    Y_UNIT_TEST(ApplyAdvancesSmallSerialSequence) {
+        DoTestApplyAdvancesSequence("Int16");
+    }
+
+    // If the advance does not complete in time, the batch is rejected (and retried by the
+    // replication service later) instead of being applied with a lagging sequence.
+    Y_UNIT_TEST(ApplyFailsOnSequenceAdvanceTimeout) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", SequenceTableOptions());
+
+        TBlockEvents<NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequence> blocked(runtime);
+
+        const auto requester = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(shards.at(0), requester,
+            MakeApplyRequest(tableId, 1, 2, ui32(42)).Release(), 0, GetPipeConfigWithRetries());
+
+        SimulateSleep(server, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1u);
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvDataShard::TEvApplyReplicationChangesResult>(
+            requester, TDuration::Seconds(1)));
+
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(requester);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(result->Get()->Record.GetStatus()),
+            static_cast<ui32>(NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(result->Get()->Record.GetReason()),
+            static_cast<ui32>(NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_OVERLOADED));
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "");
+    }
+
+    // `__ydb_row_id` is always stored with the spread layout (the query compiler applies it by column
+    // name), so the backing sequence must be advanced in the dense seq space rather than in the row-id
+    // space.
+    Y_UNIT_TEST(ApplyAdvancesRowIdSequenceInSeqSpace) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"__ydb_row_id", "Uint64", false, false, {}, "_seq___ydb_row_id"},
+            })
+            .Sequences(true)
+            .AllowSystemColumnNames(true)
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row);
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        TBlockEvents<NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequence> blocked(runtime);
+
+        const ui64 seq = 7;
+        const auto rowId = NTableIndex::NFulltext::RowIdFromSeq(seq);
+
+        const auto requester = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(shards.at(0), requester,
+            MakeApplyRequest(tableId, 1, /*tag=*/2, ui64(rowId)).Release(), 0, GetPipeConfigWithRetries());
+
+        SimulateSleep(server, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1u);
+
+        const auto advance = blocked.front();
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(advance->Get()->Path), "/Root/table-1/_seq___ydb_row_id");
+        UNIT_ASSERT_VALUES_EQUAL(advance->Get()->ObservedMin, static_cast<i64>(seq));
+        UNIT_ASSERT_VALUES_EQUAL(advance->Get()->ObservedMax, static_cast<i64>(seq));
+
+        blocked.Stop();
+        blocked.clear();
     }
 
 }

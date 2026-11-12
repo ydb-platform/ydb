@@ -1,4 +1,7 @@
 #pragma once
+
+#include "mkql_validate.h"
+
 #include <util/string/cast.h>
 
 namespace NKikimr::NMiniKQL {

@@ -91,6 +91,7 @@ struct Schema: NIceDb::Schema {
         LastCleanupSnapshotStep = 23,
         LastCleanupSnapshotTxId = 24,
         SubDomainSmallBlobsQuotaExceeded = 25,
+        DecimalNumericComparison = 26,
     };
 
     enum class EInsertTableIds: ui8 {
@@ -125,10 +126,10 @@ struct Schema: NIceDb::Schema {
     struct CutHistoryRequests: Table<(ui32)ECommonTables::CutHistoryRequests> {
         struct Sequence: Column<1, NScheme::NTypeIds::Uint64> {};
 
-        struct RequestProto: Column<2, NScheme::NTypeIds::String> {};
+        struct RequestsProto: Column<2, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Sequence>;
-        using TColumns = TableColumns<Sequence, RequestProto>;
+        using TColumns = TableColumns<Sequence, RequestsProto>;
     };
 
     // Tablet tables

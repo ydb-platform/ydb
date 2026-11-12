@@ -33,7 +33,7 @@ std::shared_ptr<arrow::Array> MakeValues(const std::vector<std::optional<i64>>& 
     return builder.Finish().ValueOrDie();
 }
 
-void CheckBounds(const IChunkedArray& accessor, const NScheme::TTypeInfo& type, const std::shared_ptr<arrow::Scalar>& min,
+void CheckBounds(const IChunkedArray& accessor, const TComparisonType& type, const std::shared_ptr<arrow::Scalar>& min,
     const std::shared_ptr<arrow::Scalar>& max) {
     const auto bounds = accessor.GetMinMaxScalars(type);
     UNIT_ASSERT(bounds.Min()->Equals(min));
@@ -48,7 +48,7 @@ void CheckBounds(const IChunkedArray& accessor, const NScheme::TTypeInfo& type, 
 }   // namespace
 
 Y_UNIT_TEST_SUITE(ArrowMinMaxLogicalTypes) {
-    Y_UNIT_TEST(AccessorsUseLogicalTypeAndCurrentConfig) {
+    Y_UNIT_TEST(AccessorsUseStoredComparisonMode) {
         TActorSystemStub actorSystem;
         const auto values = MakeValues({ std::nullopt, 1, 256, -1, -256, std::nullopt });
         const TTrivialArray plain(values);
@@ -62,13 +62,13 @@ Y_UNIT_TEST_SUITE(ArrowMinMaxLogicalTypes) {
         const auto sparseNullDefault = TSparsedArray::Make(plain, nullptr);
         const std::array<const IChunkedArray*, 5> accessors = { &plain, &chunked, &dictionary, sparse.get(), sparseNullDefault.get() };
         for (const bool numeric : { false, true }) {
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
+            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(!numeric);
             for (const auto& type : { NScheme::TTypeInfo(NScheme::TDecimalType(22, 0)), NScheme::TTypeInfo(NScheme::NTypeIds::Uuid) }) {
                 const bool useNumeric = numeric && type.GetTypeId() == NScheme::NTypeIds::Decimal;
                 const auto min = values->GetScalar(useNumeric ? 4 : 2).ValueOrDie();
                 const auto max = values->GetScalar(useNumeric ? 2 : 3).ValueOrDie();
                 for (const auto* accessor : accessors) {
-                    CheckBounds(*accessor, type, min, max);
+                    CheckBounds(*accessor, TComparisonType(type, numeric), min, max);
                 }
             }
         }
@@ -81,8 +81,9 @@ Y_UNIT_TEST_SUITE(ArrowMinMaxLogicalTypes) {
         const auto unusedDefault = MakeValues({ -1 })->GetScalar(0).ValueOrDie();
         const auto sparse = TSparsedArray::Make(TTrivialArray(values), unusedDefault);
         for (const bool numeric : { false, true }) {
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
-            CheckBounds(*sparse, type, values->GetScalar(numeric ? 0 : 1).ValueOrDie(), values->GetScalar(numeric ? 1 : 0).ValueOrDie());
+            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(!numeric);
+            CheckBounds(*sparse, TComparisonType(type, numeric), values->GetScalar(numeric ? 0 : 1).ValueOrDie(),
+                values->GetScalar(numeric ? 1 : 0).ValueOrDie());
         }
     }
 
@@ -94,34 +95,39 @@ Y_UNIT_TEST_SUITE(ArrowMinMaxLogicalTypes) {
         const auto values = MakeValues({ 1, 256 });
         const TTrivialChunkedArray chunked(std::make_shared<arrow::ChunkedArray>(arrow::ArrayVector{ nulls, empty, values, nulls }));
         for (const bool numeric : { false, true }) {
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
+            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(!numeric);
             for (const auto& array : { empty, nulls }) {
-                const auto bounds = TMinMax::Compute(array, type);
+                const auto bounds = TMinMax::Compute(array, TComparisonType(type, numeric));
                 UNIT_ASSERT(bounds.IsNull());
                 UNIT_ASSERT_VALUES_EQUAL(bounds.ToBinaryString(), "0");
                 UNIT_ASSERT(TMinMax::FromBinaryString(bounds.ToBinaryString(), array->type()).IsNull());
             }
 
-            CheckBounds(chunked, type, values->GetScalar(numeric ? 0 : 1).ValueOrDie(), values->GetScalar(numeric ? 1 : 0).ValueOrDie());
+            CheckBounds(chunked, TComparisonType(type, numeric), values->GetScalar(numeric ? 0 : 1).ValueOrDie(),
+                values->GetScalar(numeric ? 1 : 0).ValueOrDie());
         }
     }
 
-    Y_UNIT_TEST(PersistedOrderCannotBeReinterpretedAfterConfigChange) {
+    Y_UNIT_TEST(PersistedOrderCannotBeReinterpretedInAnotherMode) {
         TActorSystemStub actorSystem;
         const NScheme::TTypeInfo type(NScheme::TDecimalType(22, 0));
         const auto values = MakeValues({ 1, 2, 256 });
         const auto request = values->GetScalar(0).ValueOrDie();
         for (const bool numeric : { false, true }) {
             actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
-            const auto data = TMinMax::Compute(values, type).ToBinaryString();
+            const TComparisonType comparisonType(type, numeric);
+            const auto data = TMinMax::Compute(values, comparisonType).ToBinaryString();
             UNIT_ASSERT_VALUES_EQUAL(data[0], numeric ? '2' : '1');
             const auto bounds = TMinMax::FromBinaryString(data, values->type());
-            UNIT_ASSERT(bounds.CompareWithMin(request, type) != std::partial_ordering::unordered);
-            UNIT_ASSERT(bounds.CompareWithMax(request, type) != std::partial_ordering::unordered);
+            UNIT_ASSERT(bounds.CompareWithMin(request, comparisonType) != std::partial_ordering::unordered);
+            UNIT_ASSERT(bounds.CompareWithMax(request, comparisonType) != std::partial_ordering::unordered);
 
             actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(!numeric);
-            UNIT_ASSERT(bounds.CompareWithMin(request, type) == std::partial_ordering::unordered);
-            UNIT_ASSERT(bounds.CompareWithMax(request, type) == std::partial_ordering::unordered);
+            UNIT_ASSERT(bounds.CompareWithMin(request, comparisonType) != std::partial_ordering::unordered);
+            UNIT_ASSERT(bounds.CompareWithMax(request, comparisonType) != std::partial_ordering::unordered);
+            const TComparisonType otherMode(type, !numeric);
+            UNIT_ASSERT(bounds.CompareWithMin(request, otherMode) == std::partial_ordering::unordered);
+            UNIT_ASSERT(bounds.CompareWithMax(request, otherMode) == std::partial_ordering::unordered);
         }
     }
 

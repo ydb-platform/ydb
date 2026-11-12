@@ -57,6 +57,10 @@ SRCS(
     ut_index_info_schema_diff.cpp
     sys_view_keys_ut.cpp
     tx_event_logical_types_ut.cpp
+    ut_shared_schema_cache.cpp
+    ut_bloom_ngram_size.cpp
+    ut_loaded_key_ranges.cpp
+    ut_cleanup_tables.cpp
     helper.cpp
 )
 

@@ -47,8 +47,8 @@ std::shared_ptr<arrow::RecordBatch> MakeBatch(const std::shared_ptr<arrow::Array
 }
 
 void CheckPair(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 lhs, const ui32 rhs, const std::partial_ordering expected,
-    const NScheme::TTypeInfo& logicalType) {
-    const std::vector<NScheme::TTypeInfo> logicalTypes = { logicalType };
+    const TComparisonType& logicalType) {
+    const std::vector<TComparisonType> logicalTypes = { logicalType };
     const auto& values = batch->column(0);
     const TString context = TStringBuilder() << values->type()->ToString() << ": " << lhs << " vs " << rhs;
     UNIT_ASSERT_C(TComparator::TypedCompare<false>(*values, lhs, *values, rhs, logicalType) == expected, context);
@@ -67,7 +67,7 @@ void CheckPair(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 lhs,
     }
 }
 
-void CheckOrderedValues(const std::shared_ptr<arrow::Array>& values, const NScheme::TTypeInfo& logicalType) {
+void CheckOrderedValues(const std::shared_ptr<arrow::Array>& values, const TComparisonType& logicalType) {
     const auto batch = MakeBatch(values);
     const ui32 count = values->length();
     for (ui32 lhs = 0; lhs < count; ++lhs) {
@@ -81,13 +81,13 @@ void CheckOrderedValues(const std::shared_ptr<arrow::Array>& values, const NSche
 
 static_assert(!std::is_constructible_v<TSimpleRow, const std::shared_ptr<arrow::RecordBatch>&, ui32>);
 static_assert(!std::is_constructible_v<TSimpleRowRef, TSimpleRowViewV0, const arrow::Schema&>);
-static_assert(!std::is_constructible_v<TSimpleRowRef, TSimpleRowViewV0, const arrow::Schema&, std::vector<NScheme::TTypeInfo>&&>);
+static_assert(!std::is_constructible_v<TSimpleRowRef, TSimpleRowViewV0, const arrow::Schema&, std::vector<TComparisonType>&&>);
 
 Y_UNIT_TEST_SUITE(ArrowComparison) {
     Y_UNIT_TEST(PackedRowsPreserveLogicalTypes) {
-        const NScheme::TTypeInfo decimalType(NScheme::TDecimalType(22, 9));
+        const TComparisonType decimalType(NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)), true);
         const NScheme::TTypeInfo uuidType(NScheme::NTypeIds::Uuid);
-        std::vector<NScheme::TTypeInfo> logicalTypes = { decimalType, uuidType };
+        std::vector<TComparisonType> logicalTypes = { decimalType, uuidType };
         arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
         UNIT_ASSERT(builder.Append(std::string(16, '\0')).ok());
         const auto values = Finish(builder);
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
         const auto batch = arrow::RecordBatch::Make(schema, 1, { values, values });
         const TSimpleRow original(batch, 0, logicalTypes);
         logicalTypes.clear();
-        UNIT_ASSERT(original.GetLogicalTypes() == std::vector<NScheme::TTypeInfo>({ decimalType, uuidType }));
+        UNIT_ASSERT(original.GetLogicalTypes() == std::vector<TComparisonType>({ decimalType, uuidType }));
         const auto restored = original.GetContent().Build(schema, original.GetLogicalTypes());
         UNIT_ASSERT(restored.GetLogicalTypes() == original.GetLogicalTypes());
         UNIT_ASSERT(restored == original);
@@ -113,8 +113,6 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
     }
 
     Y_UNIT_TEST(SortAndDeduplicateUseSelectedDecimalOrder) {
-        const std::vector<NScheme::TTypeInfo> logicalTypes = { NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)),
-            NScheme::TTypeInfo(NScheme::NTypeIds::Uuid) };
         std::string zero(16, '\0');
         std::string one = zero;
         one[0] = 1;
@@ -138,8 +136,11 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
         for (const bool numeric : { false, true }) {
             TActorSystemStub actorSystem;
             actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(numeric);
-            const std::vector<std::pair<TString, NScheme::TTypeInfo>> sortingSchema = { { "decimal", logicalTypes[0] },
+            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(!numeric);
+            const std::vector<TComparisonType> logicalTypes = {
+                TComparisonType(NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)), numeric),
+                NScheme::TTypeInfo(NScheme::NTypeIds::Uuid) };
+            const TComparisonSchema sortingSchema = { { "decimal", logicalTypes[0] },
                 { "uuid", logicalTypes[1] } };
             const auto sorted = SortBatch(batch, sortingSchema, true);
             UNIT_ASSERT(IsSortedAndUnique(sorted, sortingSchema));
@@ -180,8 +181,8 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
     Y_UNIT_TEST_TWIN(MergeUsesLogicalSchemaAndLatestVersion, NumericComparison) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(NumericComparison);
-        const NScheme::TTypeInfo decimalType(NScheme::TDecimalType(22, 9));
+        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(!NumericComparison);
+        const TComparisonType decimalType(NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)), NumericComparison);
         const NScheme::TTypeInfo uuidType(NScheme::NTypeIds::Uuid);
         const NScheme::TTypeInfo versionType(NScheme::NTypeIds::Uint64);
         // Physical column order differs from both the key and version order.
@@ -236,7 +237,7 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
     }
 
     Y_UNIT_TEST(PrimitivePrefixComparison) {
-        const std::vector<NScheme::TTypeInfo> logicalTypes = { NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
+        const std::vector<TComparisonType> logicalTypes = { NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
             NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)) };
         const auto numbers = MakeArray<arrow::UInt64Builder, ui64>({ 1 });
         arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
@@ -256,6 +257,41 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
         UNIT_ASSERT(fullPosition.TrimSortingKeys(1) == prefixPosition);
     }
 
+    Y_UNIT_TEST(StoredDecimalModesCoexistAcrossConfigChanges) {
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        std::string one(16, '\0');
+        one[0] = 1;
+        std::string twoHundredFiftySix(16, '\0');
+        twoHundredFiftySix[1] = 1;
+        arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
+        UNIT_ASSERT(builder.Append(one).ok());
+        UNIT_ASSERT(builder.Append(twoHundredFiftySix).ok());
+        const auto batch = MakeBatch(Finish(builder));
+        const std::vector<std::pair<TString, NScheme::TTypeInfo>> rawSchema = {
+            { "key", NScheme::TTypeInfo(NScheme::TDecimalType(22, 0)) } };
+        const auto numericSchema = ComparisonSchema(rawSchema, true);
+        const auto legacySchema = ComparisonSchema(rawSchema, false);
+        const TSimpleRow numericOne(batch, 0, ColumnTypes(numericSchema));
+        const TSimpleRow numeric256(batch, 1, ColumnTypes(numericSchema));
+        const TSimpleRow legacyOne(batch, 0, ColumnTypes(legacySchema));
+        const TSimpleRow legacy256(batch, 1, ColumnTypes(legacySchema));
+        const auto numericPosition = numericOne.BuildSortablePosition();
+        const auto legacyPosition = legacyOne.BuildSortablePosition();
+        UNIT_ASSERT(numericPosition.IsSameSortingSchema(numericSchema));
+        UNIT_ASSERT(!numericPosition.IsSameSortingSchema(legacySchema));
+        UNIT_ASSERT(legacyPosition.IsSameSortingSchema(legacySchema));
+        for (const bool enabled : { true, false }) {
+            actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(enabled);
+            UNIT_ASSERT(numericOne < numeric256);
+            UNIT_ASSERT(legacyOne > legacy256);
+            UNIT_ASSERT(numericPosition.Compare(numeric256.BuildSortablePosition()) == std::partial_ordering::less);
+            UNIT_ASSERT(legacyPosition.Compare(legacy256.BuildSortablePosition()) == std::partial_ordering::greater);
+            CheckPair(batch, 0, 1, std::partial_ordering::less, numericSchema.front().second);
+            CheckPair(batch, 0, 1, std::partial_ordering::greater, legacySchema.front().second);
+        }
+    }
+
     Y_UNIT_TEST(NumericDecimalValues) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -272,7 +308,7 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
             UNIT_ASSERT(builder.Append(bytes).ok());
         }
 
-        CheckOrderedValues(Finish(builder), NScheme::TTypeInfo(NScheme::TDecimalType(35, 0)));
+        CheckOrderedValues(Finish(builder), TComparisonType(NScheme::TTypeInfo(NScheme::TDecimalType(35, 0)), true));
     }
 
     Y_UNIT_TEST(PrimitiveValues) {
@@ -354,7 +390,7 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
 
     Y_UNIT_TEST(NativeBooleanDispatchIsUnchanged) {
         const NScheme::TTypeInfo logicalType(NScheme::NTypeIds::Bool);
-        const std::vector<NScheme::TTypeInfo> logicalTypes = { logicalType };
+        const std::vector<TComparisonType> logicalTypes = { logicalType };
         const auto values = MakeArray<arrow::BooleanBuilder, bool>({false, true});
         const auto batch = MakeBatch(values);
         UNIT_ASSERT((TSimpleRow(batch, 0, logicalTypes) <=> TSimpleRow(batch, 1, logicalTypes)) ==
@@ -365,7 +401,7 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
 
     Y_UNIT_TEST(NaNAndSignedZeroContracts) {
         const NScheme::TTypeInfo logicalType(NScheme::NTypeIds::Double);
-        const std::vector<NScheme::TTypeInfo> logicalTypes = { logicalType };
+        const std::vector<TComparisonType> logicalTypes = { logicalType };
         const auto values = MakeArray<arrow::DoubleBuilder, double>({std::numeric_limits<double>::quiet_NaN(), 1.0,
             std::numeric_limits<double>::quiet_NaN(), -0.0, 0.0});
         const auto batch = MakeBatch(values);
@@ -385,9 +421,9 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
     }
 
     Y_UNIT_TEST(CompositeKeysAndPrefixes) {
-        const std::vector<NScheme::TTypeInfo> logicalTypes = { NScheme::TTypeInfo(NScheme::NTypeIds::Utf8),
+        const std::vector<TComparisonType> logicalTypes = { NScheme::TTypeInfo(NScheme::NTypeIds::Utf8),
             NScheme::TTypeInfo(NScheme::NTypeIds::Int32) };
-        const std::vector<NScheme::TTypeInfo> floatTypes = { NScheme::TTypeInfo(NScheme::NTypeIds::Double), logicalTypes[1] };
+        const std::vector<TComparisonType> floatTypes = { NScheme::TTypeInfo(NScheme::NTypeIds::Double), logicalTypes[1] };
         const auto first = MakeArray<arrow::StringBuilder, std::string>({"a", "a", "b"});
         const auto second = MakeArray<arrow::Int32Builder, i32>({2, 1, 0});
         const auto schema = arrow::schema({arrow::field("first", first->type()), arrow::field("second", second->type())});

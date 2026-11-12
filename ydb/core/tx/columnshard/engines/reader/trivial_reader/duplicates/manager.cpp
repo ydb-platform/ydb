@@ -50,7 +50,7 @@ public:
 NArrow::NMerger::TCursor TDuplicateManager::GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) {
     NArrow::TGeneralContainer batch(1);
     IIndexInfo::AddSnapshotColumns(batch, snapshot, writeId);
-    return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumns());
+    return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, NArrow::ComparisonSchema(IIndexInfo::GetSnapshotColumns()));
 }
 
 std::shared_ptr<TPortionStore> TDuplicateManager::MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
@@ -104,8 +104,8 @@ TDuplicateManager::TDuplicateManager(
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
     , BordersFlowController(
           std::make_shared<TMergeContext>(
-              std::make_unique<NArrow::NMerger::TMergePartialStream>(LastSchema->GetIndexInfo().GetPrimaryKeyColumns(), nullptr,
-                  context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumns(),
+              std::make_unique<NArrow::NMerger::TMergePartialStream>(LastSchema->GetIndexInfo().GetPrimaryKeyComparisonColumns(), nullptr,
+                  context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), NArrow::ComparisonSchema(IIndexInfo::GetSnapshotColumns()),
                   GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()),
                   GetVersionBatch(TSnapshot::Max(), 0)), Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions,
               GetFetchingColumns()), portions, context.GetCommonContext()->GetReadMetadata(), Counters)

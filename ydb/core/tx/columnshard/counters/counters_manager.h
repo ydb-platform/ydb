@@ -102,13 +102,13 @@ public:
         ScanCounters.FillStats(tableStats);
     }
 
-    void OnWritePutBlobsSuccess(const TDuration d, const ui64 rowsWritten) const {
-        TabletCounters->OnWritePutBlobsSuccess(rowsWritten);
+    void OnWritePutBlobsSuccess(const TDuration d, const ui64 rowsWritten, const bool isDelete) const {
+        TabletCounters->OnWritePutBlobsSuccess(rowsWritten, isDelete);
         CSCounters.OnWritePutBlobsSuccess(d);
     }
 
-    void OnWritePutBulkBlobsSuccess(const TDuration d, const ui64 rowsWritten) const {
-        TabletCounters->OnWritePutBulkBlobsSuccess(rowsWritten);
+    void OnWritePutBulkBlobsSuccess(const TDuration d, const ui64 rowsWritten, const bool isDelete) const {
+        TabletCounters->OnWritePutBulkBlobsSuccess(rowsWritten, isDelete);
         CSCounters.OnWritePutBlobsSuccess(d);
     }
 

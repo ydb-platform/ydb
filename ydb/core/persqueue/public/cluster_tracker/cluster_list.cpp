@@ -1,18 +1,8 @@
 #include "cluster_tracker.h"
 
-#include <util/generic/hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace NKikimr::NPQ::NClusterTracker {
-
-void TClustersList::MarkFnxFromBalancers() {
-    THashSet<TString> fnxNames;
-    for (const auto& [_, names] : Balancers) {
-        fnxNames.insert(names.begin(), names.end());
-    }
-    for (auto& cluster : Clusters) {
-        cluster.IsFnx = fnxNames.contains(cluster.Name);
-    }
-}
 
 void TClustersList::BuildVisibleClusters() {
     DefaultVisibleClusters.clear();
@@ -26,7 +16,7 @@ void TClustersList::BuildVisibleClusters() {
     }
 
     for (const auto& [host, extraFnxNames] : Balancers) {
-        THashSet<TString> extraFnx(extraFnxNames.begin(), extraFnxNames.end());
+        absl::flat_hash_set<TString> extraFnx(extraFnxNames.begin(), extraFnxNames.end());
         auto& visible = ClustersByBalancer[host];
         visible.reserve(Clusters.size());
         for (const auto& cluster : Clusters) {
@@ -35,6 +25,36 @@ void TClustersList::BuildVisibleClusters() {
             }
         }
     }
+}
+
+TVector<TClustersList::TCluster> TClustersList::GetReadClusters(TStringBuf account) const {
+    TString key(account);
+    key.to_lower();
+    const auto it = Accounts.find(key);
+    if (it == Accounts.end()) {
+        return DefaultVisibleClusters;
+    }
+    const auto& spec = it->second;
+
+    TVector<TCluster> visible;
+    visible.reserve(Clusters.size());
+    for (const auto& cluster : Clusters) {
+        const bool readable = cluster.IsFnx
+            ? spec.Write.contains(cluster.Name)
+            : spec.Read.empty() || spec.Read.contains(cluster.Name);
+        if (readable) {
+            visible.push_back(cluster);
+        }
+    }
+    return visible;
+}
+
+i64 TClustersList::SumAccountVersions() const {
+    i64 sum = 0;
+    for (const auto& [_, account] : Accounts) {
+        sum += account.Version;
+    }
+    return sum;
 }
 
 } // namespace NKikimr::NPQ::NClusterTracker

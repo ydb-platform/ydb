@@ -11,7 +11,7 @@ public:
     }
 
     static bool Skip(const NArrow::NAccessor::TMinMax& chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue,
-        const NArrow::NSSA::TIndexCheckOperation& op, const NScheme::TTypeInfo& logicalType);
+        const NArrow::NSSA::TIndexCheckOperation& op, const NArrow::TComparisonType& logicalType);
 
 private:
     using TBase = TSkipIndex;

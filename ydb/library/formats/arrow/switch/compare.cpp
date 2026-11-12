@@ -5,13 +5,8 @@
 
 namespace NKikimr::NArrow {
 
-TComparator::EComparisonOrder TComparator::GetComparisonOrder(const NScheme::TTypeInfo& logicalType) {
-    if (logicalType.GetTypeId() == NScheme::NTypeIds::Decimal && HasAppData() &&
-        AppDataVerified().ColumnShardConfig.GetEnableDecimalNumericComparison()) {
-        return EComparisonOrder::DecimalNumeric;
-    }
-
-    return EComparisonOrder::Default;
+bool TComparator::IsDecimalNumericComparisonEnabled() {
+    return HasAppData() && AppDataVerified().ColumnShardConfig.GetEnableDecimalNumericComparison();
 }
 
 }   // namespace NKikimr::NArrow

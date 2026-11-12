@@ -1,0 +1,13 @@
+#if !defined (__RSVG_RSVG_H_INSIDE__) && !defined (RSVG_COMPILATION)
+#warning "Including <librsvg/rsvg-version.h> directly is deprecated."
+#endif
+
+#ifndef RSVG_VERSION_H
+#define RSVG_VERSION_H
+
+#define LIBRSVG_MAJOR_VERSION (@LIBRSVG_MAJOR_VERSION@)
+#define LIBRSVG_MINOR_VERSION (@LIBRSVG_MINOR_VERSION@)
+#define LIBRSVG_MICRO_VERSION (@LIBRSVG_MICRO_VERSION@)
+#define LIBRSVG_VERSION "@PACKAGE_VERSION@"
+
+#endif

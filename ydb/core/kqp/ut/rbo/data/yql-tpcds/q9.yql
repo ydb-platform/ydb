@@ -9,14 +9,14 @@ SELECT
             SELECT
                 Count(*)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 1 AND 20
         ) > 25437 THEN (
             SELECT
                 Avg(ss_ext_discount_amt)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 1 AND 20
         )
@@ -24,7 +24,7 @@ SELECT
             SELECT
                 Avg(ss_net_profit)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 1 AND 20
         )
@@ -34,14 +34,14 @@ SELECT
             SELECT
                 Count(*)
             FROM
-                `/Root/test/ds/store_sales`
+                `store_sales`
             WHERE
                 ss_quantity BETWEEN 21 AND 40
         ) > 22746 THEN (
             SELECT
                 Avg(ss_ext_discount_amt)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 21 AND 40
         )
@@ -49,7 +49,7 @@ SELECT
             SELECT
                 Avg(ss_net_profit)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 21 AND 40
         )
@@ -59,14 +59,14 @@ SELECT
             SELECT
                 Count(*)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 41 AND 60
         ) > 9387 THEN (
             SELECT
                 Avg(ss_ext_discount_amt)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 41 AND 60
         )
@@ -74,7 +74,7 @@ SELECT
             SELECT
                 Avg(ss_net_profit)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 41 AND 60
         )
@@ -84,14 +84,14 @@ SELECT
             SELECT
                 Count(*)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 61 AND 80
         ) > 10098 THEN (
             SELECT
                 Avg(ss_ext_discount_amt)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 61 AND 80
         )
@@ -99,7 +99,7 @@ SELECT
             SELECT
                 Avg(ss_net_profit)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 61 AND 80
         )
@@ -109,14 +109,14 @@ SELECT
             SELECT
                 Count(*)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 81 AND 100
         ) > 18213 THEN (
             SELECT
                 Avg(ss_ext_discount_amt)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 81 AND 100
         )
@@ -124,13 +124,13 @@ SELECT
             SELECT
                 Avg(ss_net_profit)
             FROM
-                `/Root/test/ds/store_sales` as store_sales
+                `store_sales` as store_sales
             WHERE
                 ss_quantity BETWEEN 81 AND 100
         )
     END AS bucket5
 FROM
-    `/Root/test/ds/reason` as reason
+    `reason` as reason
 WHERE
     r_reason_sk == 1
 ;

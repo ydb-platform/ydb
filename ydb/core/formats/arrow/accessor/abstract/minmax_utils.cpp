@@ -14,7 +14,7 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-TMinMax TMinMax::Compute(const std::shared_ptr<arrow::Array>& arr, const NScheme::TTypeInfo& logicalType) {
+TMinMax TMinMax::Compute(const std::shared_ptr<arrow::Array>& arr, const TComparisonType& logicalType) {
     if (arr->type_id() == arrow::Type::FIXED_SIZE_BINARY) {
         const auto& values = static_cast<const arrow::FixedSizeBinaryArray&>(*arr);
         i64 min = -1;
@@ -76,7 +76,7 @@ std::shared_ptr<arrow::DataType> TMinMax::ElementType() const {
     return Min()->type;
 }
 
-TMinMax TMinMax::Compute(const std::shared_ptr<arrow::ChunkedArray>& arr, const NScheme::TTypeInfo& logicalType) {
+TMinMax TMinMax::Compute(const std::shared_ptr<arrow::ChunkedArray>& arr, const TComparisonType& logicalType) {
     auto res = TMinMax::MakeNull(arr->type());
     for (const auto& chunk : arr->chunks()) {
         res.UniteWith(Compute(chunk, logicalType), logicalType);
@@ -151,7 +151,7 @@ bool TMinMax::IsNull() const {
     return !Min()->is_valid;
 }
 
-void TMinMax::UniteWith(const TMinMax& other, const NScheme::TTypeInfo& logicalType) {
+void TMinMax::UniteWith(const TMinMax& other, const TComparisonType& logicalType) {
     AFL_VERIFY(other.MinMax.type->Equals(MinMax.type));
     AFL_VERIFY(other.ElementType()->Equals(ElementType()));
     
@@ -175,7 +175,7 @@ void TMinMax::UniteWith(const TMinMax& other, const NScheme::TTypeInfo& logicalT
     }
 }
 
-std::partial_ordering TMinMax::CompareWithMin(const std::shared_ptr<arrow::Scalar>& value, const NScheme::TTypeInfo& logicalType) const {
+std::partial_ordering TMinMax::CompareWithMin(const std::shared_ptr<arrow::Scalar>& value, const TComparisonType& logicalType) const {
     // Bounds computed in a different order cannot prove that a predicate has no matches.
     if (ComparisonOrder != TComparator::GetComparisonOrder(logicalType)) {
         return std::partial_ordering::unordered;
@@ -184,7 +184,7 @@ std::partial_ordering TMinMax::CompareWithMin(const std::shared_ptr<arrow::Scala
     return ScalarComparePartial(value, Min(), logicalType);
 }
 
-std::partial_ordering TMinMax::CompareWithMax(const std::shared_ptr<arrow::Scalar>& value, const NScheme::TTypeInfo& logicalType) const {
+std::partial_ordering TMinMax::CompareWithMax(const std::shared_ptr<arrow::Scalar>& value, const TComparisonType& logicalType) const {
     if (ComparisonOrder != TComparator::GetComparisonOrder(logicalType)) {
         return std::partial_ordering::unordered;
     }

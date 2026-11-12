@@ -143,6 +143,10 @@ public:
         State_->Gateway->AddCluster(cluster);
     }
 
+    bool AcceptsProjectSetting(const TProjectSettings::TPragma& pragma) const override {
+        return State_->Configuration->AcceptsProjectSetting(pragma);
+    }
+
     TStringBuf GetName() const override {
         return YtProviderName;
     }

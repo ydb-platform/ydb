@@ -19,7 +19,7 @@ std::shared_ptr<arrow::Table> CombineAndSortExistsData(const std::vector<std::sh
         return table;
     }
     auto batch = NArrow::ToBatch(table);
-    batch = NArrow::SortBatch(batch, indexInfo.GetPrimaryKeyColumns(), false);
+    batch = NArrow::SortBatch(batch, indexInfo.GetPrimaryKeyComparisonColumns(), false);
     return NArrow::ToTable(batch);
 }
 
@@ -55,7 +55,7 @@ NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::AddExistsDataOrdered(cons
 NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::MergeExistsDataOrdered(const std::shared_ptr<arrow::Table>& data) {
     AFL_VERIFY(data);
     NArrow::NMerger::TRWSortableBatchPosition existsPosition(
-        data, 0, Schema->GetIndexInfo().GetPrimaryKeyColumns(), Schema->GetIndexInfo().GetColumnSTLNames(false), false);
+        data, 0, Schema->GetIndexInfo().GetPrimaryKeyComparisonColumns(), Schema->GetIndexInfo().GetColumnSTLNames(false), false);
     bool exsistFinished = !existsPosition.InitPosition(0);
     while (!IncomingFinished && !exsistFinished) {
         auto cmpResult = IncomingPosition.Compare(existsPosition);

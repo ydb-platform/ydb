@@ -1,0 +1,25 @@
+diff --git a/rsvg/Cargo.toml b/rsvg/Cargo.toml
+index aeb4dda..0821c40 100644
+--- a/rsvg/Cargo.toml
++++ b/rsvg/Cargo.toml
+@@ -82,20 +82,6 @@ xml5ever.workspace = true
+ [target.'cfg(all(not(target_os = "macos"), not(target_os = "windows")))'.dependencies]
+ yeslogic-fontconfig-sys = { workspace = true, optional = true }
+ 
+-[dev-dependencies]
+-chrono = { workspace = true, features = ["clock", "std"] }
+-criterion.workspace = true
+-lopdf.workspace = true
+-matches.workspace = true
+-png.workspace = true
+-predicates.workspace = true
+-pretty_assertions.workspace = true
+-proptest.workspace = true
+-quick-error.workspace = true
+-serde = { workspace = true, features = ["derive"] }
+-serde_json.workspace = true
+-tempfile.workspace = true
+-
+ [build-dependencies]
+ system-deps.workspace = true
+ 

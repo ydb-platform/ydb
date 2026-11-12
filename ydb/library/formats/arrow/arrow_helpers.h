@@ -17,6 +17,8 @@ namespace NKikimr::NScheme {
 
 namespace NKikimr::NArrow {
 
+class TComparisonType;
+
 using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
 
 template <typename T>
@@ -92,16 +94,16 @@ TConclusion<bool> ScalarIsFalse(const arrow::Scalar& x);
 TConclusion<bool> ScalarIsTrue(const arrow::Scalar& x);
 TConclusion<bool> ScalarIsFalse(const std::shared_ptr<arrow::Scalar>& x);
 TConclusion<bool> ScalarIsTrue(const std::shared_ptr<arrow::Scalar>& x);
-std::partial_ordering ScalarComparePartial(const arrow::Scalar& x, const arrow::Scalar& y, const NScheme::TTypeInfo& logicalType);
+std::partial_ordering ScalarComparePartial(const arrow::Scalar& x, const arrow::Scalar& y, const TComparisonType& logicalType);
 std::partial_ordering ScalarComparePartial(
-    const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType);
-int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y, const NScheme::TTypeInfo& logicalType);
-int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType);
+    const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const TComparisonType& logicalType);
+int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y, const TComparisonType& logicalType);
+int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const TComparisonType& logicalType);
 int ScalarCompareNullable(
-    const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType);
+    const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const TComparisonType& logicalType);
 bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s);
-bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType);
-bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y, const NScheme::TTypeInfo& logicalType);
+bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const TComparisonType& logicalType);
+bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y, const TComparisonType& logicalType);
 
 bool HasNulls(const std::shared_ptr<arrow::Array>& column);
 

@@ -496,7 +496,7 @@ const std::vector<std::pair<TString, TTypeInfo>>& MakeTable1000Schema() {
     return schema;
 }
 
-const std::vector<TTypeInfo>& MakeTable1000Types() {
+const std::vector<NArrow::TComparisonType>& MakeTable1000Types() {
     static const auto types = NArrow::ColumnTypes(MakeTable1000Schema());
     return types;
 }
@@ -915,9 +915,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
-            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { MakeTable1000Schema().front() };
+            const NArrow::TComparisonSchema versionSchema = { MakeTable1000Schema().front() };
             auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
-                MakeTable1000Schema(), batch->schema(), false, versionSchema, std::nullopt, std::nullopt);
+                NArrow::ComparisonSchema(MakeTable1000Schema()), batch->schema(), false, versionSchema, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -943,9 +943,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
-            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { MakeTable1000Schema().front() };
+            const NArrow::TComparisonSchema versionSchema = { MakeTable1000Schema().front() };
             auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
-                MakeTable1000Schema(), batch->schema(), true, versionSchema, std::nullopt, std::nullopt);
+                NArrow::ComparisonSchema(MakeTable1000Schema()), batch->schema(), true, versionSchema, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Reversed(0));
             }
@@ -970,9 +970,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
-            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { { "snap", TTypeInfo(NTypeIds::Uint64) } };
+            const NArrow::TComparisonSchema versionSchema = { { "snap", TTypeInfo(NTypeIds::Uint64) } };
             auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
-                MakeTable1000Schema(), batches[0]->schema(), false, versionSchema, std::nullopt, std::nullopt);
+                NArrow::ComparisonSchema(MakeTable1000Schema()), batches[0]->schema(), false, versionSchema, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -1007,9 +1007,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
-            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { { "snap", TTypeInfo(NTypeIds::Uint64) } };
+            const NArrow::TComparisonSchema versionSchema = { { "snap", TTypeInfo(NTypeIds::Uint64) } };
             auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
-                MakeTable1000Schema(), batches[0]->schema(), false, versionSchema, maxVersionCursor, uncommittedVersionCursor);
+                NArrow::ComparisonSchema(MakeTable1000Schema()), batches[0]->schema(), false, versionSchema, maxVersionCursor, uncommittedVersionCursor);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -1052,9 +1052,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
-            const std::vector<std::pair<TString, TTypeInfo>> versionSchema = { { "snap", TTypeInfo(NTypeIds::Uint64) } };
+            const NArrow::TComparisonSchema versionSchema = { { "snap", TTypeInfo(NTypeIds::Uint64) } };
             auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
-                std::vector<std::pair<TString, TTypeInfo>>{ { "key", TTypeInfo(NTypeIds::Uint64) } }, batches[0]->schema(), false, versionSchema,
+                NArrow::TComparisonSchema{ { "key", TTypeInfo(NTypeIds::Uint64) } }, batches[0]->schema(), false, versionSchema,
                 maxVersionCursor, uncommittedVersionCursor);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));

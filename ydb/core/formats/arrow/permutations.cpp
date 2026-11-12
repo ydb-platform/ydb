@@ -13,7 +13,7 @@
 namespace NKikimr::NArrow {
 
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(
-    const std::vector<std::shared_ptr<arrow::Array>>& keyColumns, const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool andUnique) {
+    const std::vector<std::shared_ptr<arrow::Array>>& keyColumns, const std::vector<TComparisonType>& logicalTypes, const bool andUnique) {
     AFL_VERIFY(keyColumns.size() == logicalTypes.size());
     std::optional<i64> count;
     for (auto&& i : keyColumns) {
@@ -87,7 +87,7 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(
 }
 
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::shared_ptr<arrow::Schema>& sortingKey, const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool andUnique) {
+    const std::shared_ptr<arrow::Schema>& sortingKey, const std::vector<TComparisonType>& logicalTypes, const bool andUnique) {
     auto keyBatch = TColumnOperator().VerifyIfAbsent().Adapt(batch, sortingKey).DetachResult();
     return MakeSortPermutation(keyBatch->columns(), logicalTypes, andUnique);
 }

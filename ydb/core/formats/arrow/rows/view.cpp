@@ -55,7 +55,7 @@ NMerger::TSortableBatchPosition TSimpleRow::BuildSortablePosition(const bool rev
     return NMerger::TSortableBatchPosition(ToBatch(), 0, reverse, LogicalTypes);
 }
 
-TSimpleRow TSimpleRowContent::Build(const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+TSimpleRow TSimpleRowContent::Build(const std::shared_ptr<arrow::Schema>& schema, const std::vector<TComparisonType>& logicalTypes) const {
     return TSimpleRow(Data, schema, logicalTypes);
 }
 

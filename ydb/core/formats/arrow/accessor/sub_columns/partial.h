@@ -66,7 +66,7 @@ protected:
         return 0;
     }
 
-    virtual TMinMax DoGetMinMaxScalars(const NScheme::TTypeInfo& /*logicalType*/) const override {
+    virtual TMinMax DoGetMinMaxScalars(const TComparisonType& /*logicalType*/) const override {
         Y_ABORT("Not implemented");
     }
 

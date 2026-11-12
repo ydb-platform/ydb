@@ -44,7 +44,7 @@ public:
     }
 
     TSimpleRow GetRecord(
-        const ui32 recordIndex, const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const;
+        const ui32 recordIndex, const std::shared_ptr<arrow::Schema>& schema, const std::vector<TComparisonType>& logicalTypes) const;
 
     TRowsCollection() = default;
 
@@ -56,9 +56,9 @@ public:
         Initialize(data);
     }
 
-    TSimpleRow GetFirst(const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const;
+    TSimpleRow GetFirst(const std::shared_ptr<arrow::Schema>& schema, const std::vector<TComparisonType>& logicalTypes) const;
 
-    TSimpleRow GetLast(const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const;
+    TSimpleRow GetLast(const std::shared_ptr<arrow::Schema>& schema, const std::vector<TComparisonType>& logicalTypes) const;
 
     TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildBatch(const std::shared_ptr<arrow::Schema>& schema) const;
 

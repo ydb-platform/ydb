@@ -22,7 +22,7 @@ def create_cmakelists(zoneinfo_dir):
         for dir, _, files in zoneinfo_dir.walk():
             all_files += [
                 (dir / file).relative_to(".")
-                for file in files 
+                for file in files
             ]
         f.write("RESOURCE(\n")
         for file in sorted(all_files):
@@ -32,11 +32,10 @@ def create_cmakelists(zoneinfo_dir):
 
 
 def get_latest_version():
-    index_html = urllib.request.urlopen('http://www.iana.org/time-zones').read()
-    version_match = re.search('<a href="[^"]*">tzdata(.*).tar.gz</a>', index_html.decode())
-    if not version_match:
+    version = urllib.request.urlopen('https://data.iana.org/time-zones/tzdb/version').read().decode().strip()
+    if not re.fullmatch(r'\d{4}[a-z]+', version):
         raise Exception('Failed to determine the latest tzdata version')
-    return version_match.group(1)
+    return version
 
 
 def prepare_tzdata(version):
@@ -55,20 +54,20 @@ def prepare_tzdata(version):
     try:
         for type in ('data', 'code'):
             filename = f'tz{type}{version}.tar.gz'
-            url = f'http://www.iana.org/time-zones/repository/releases/{filename}'
+            url = f'https://data.iana.org/time-zones/releases/{filename}'
             print(f'Downloading {url}')
 
             bytestream = io.BytesIO(urllib.request.urlopen(url).read())
             print(f'Extracting {filename}')
             with tarfile.open(fileobj=bytestream, mode="r:gz") as f:
                 f.extractall(path=temp_dir)
-        
+
         print('Converting tzdata to binary format')
         subprocess.check_call(
             ['make', "--silent", "TOPDIR=.", 'install'],
             cwd=temp_dir,
         )
-        
+
         shutil.rmtree(f"{temp_dir}/usr/share/zoneinfo/etc")
         for path in EXCLUDE:
             os.remove(f"{temp_dir}/usr/share/zoneinfo/{path}")
@@ -93,5 +92,5 @@ def main():
     prepare_tzdata(version)
 
 if __name__ == '__main__':
-    
+
     main()

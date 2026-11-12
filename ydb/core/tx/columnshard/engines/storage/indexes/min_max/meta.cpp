@@ -36,7 +36,7 @@ TConclusionStatus TIndexMeta::DoCheckModificationCompatibility(const IIndexMeta&
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
-    const auto& logicalType = indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetTypeInfo();
+    const auto& logicalType = indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetComparisonType();
     reader.Start();
     TChunkedColumnReader cReader = *reader.begin();
     auto thisChunkIndex = NArrow::NAccessor::TMinMax::MakeNull(cReader.GetCurrentChunk()->GetDataType());
@@ -73,11 +73,11 @@ bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat
         chunkValue.Min() = chunkValue.Min()->CastTo(arrow::uint64()).ValueOrDie();
         chunkValue.Max() = chunkValue.Max()->CastTo(arrow::uint64()).ValueOrDie();
     }
-    return !Skip(chunkValue, requestValue, op, column.GetTypeInfo());
+    return !Skip(chunkValue, requestValue, op, column.GetComparisonType());
 }
 
 bool TIndexMeta::Skip(const NArrow::NAccessor::TMinMax& chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue,
-    const NArrow::NSSA::TIndexCheckOperation& op, const NScheme::TTypeInfo& logicalType) {
+    const NArrow::NSSA::TIndexCheckOperation& op, const NArrow::TComparisonType& logicalType) {
     if (!requestValue->is_valid) {   // predicate is of form "where col = null";
         return false;   // cant do much in this case
     }

@@ -107,6 +107,7 @@ void THeavyRequestRetrier::TryStartAttempt()
     auto header = Parameters_.Header;
     if (Parameters_.Context.ServiceTicketAuth) {
         header.SetServiceTicket(Parameters_.Context.ServiceTicketAuth->Ptr->IssueServiceTicket());
+        header.SetUserTicket(Parameters_.Context.UserTicket);
     } else {
         header.SetToken(Parameters_.Context.Token);
     }

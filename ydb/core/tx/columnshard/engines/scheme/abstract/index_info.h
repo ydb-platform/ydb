@@ -61,7 +61,7 @@ public:
         return result;
     }
 
-    static const std::vector<NScheme::TTypeInfo>& GetSnapshotColumnTypes() {
+    static const std::vector<NArrow::TComparisonType>& GetSnapshotColumnTypes() {
         static const auto result = NArrow::ColumnTypes(GetSnapshotColumns());
         return result;
     }

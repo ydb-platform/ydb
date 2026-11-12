@@ -39,7 +39,8 @@ void MaybeGuardIndexWithBaseCdcScanLock(
 void CheckWorkingDirOnPropose(const TPath::TChecker& checks, bool isTableIndex);
 void CheckSrcDirOnPropose(
     const TPath::TChecker& checks,
-    bool isInsideTableIndexPath,
-    TTxId op = InvalidTxId);
+    const TPath& path,
+    TTxId op = InvalidTxId,
+    bool internal = false);
 
 } // namespace NKikimr::NSchemeShard::NCdcStreamAtTable

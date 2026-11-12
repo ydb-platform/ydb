@@ -16,6 +16,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/gateway.h>
+#include <ydb/core/kqp/common/simple/mvcc_version.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -534,6 +535,10 @@ public:
         TTimerGuard timer(this);
         YQL_ENSURE(QueryState->GetDatabase() == Settings.Database,
                 "Wrong database, expected:" << Settings.Database << ", got: " << QueryState->GetDatabase());
+
+        if (!ValidateMvccVersion()) {
+            return;
+        }
 
         auto action = QueryState->GetAction();
 
@@ -1192,6 +1197,11 @@ public:
                     secureParams.emplace(secretName, "");
                 }
 
+                // Unsafe truncate is executed outside the tasks graph.
+                if (tx->HasUnsafeTruncate()) {
+                    continue;
+                }
+
                 txs.emplace_back(tx, QueryState->QueryData);
                 try {
                     QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txAlloc->TypeEnv);
@@ -1309,6 +1319,8 @@ public:
     }
 
     void AcquirePersistentSnapshot() {
+        AFL_ENSURE(QueryState->UserRequestContext);
+        AFL_ENSURE(!QueryState->UserRequestContext->IsStreamingQuery);
         QueryState->AcquireSnapshotSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::SessionAcquireSnapshot,
             QueryState->KqpSessionSpan.GetTraceId(), {
                 .Name = "Acquire persistent snapshot",
@@ -1411,6 +1423,15 @@ public:
 
         QueryState->TxCtx->SnapshotHandle.Snapshot = response->Snapshot;
         QueryState->TxCtx->SnapshotHandle.Handle = std::move(response->SnapshotHandle);
+
+        AFL_ENSURE(QueryState->UserRequestContext);
+        if (QueryState->UserRequestContext->IsStreamingQuery) {
+            // Streaming queries are long-running: the snapshot must not be pinned for
+            // their whole lifetime. Reads at the acquired step stay valid via the
+            // datashard KeepSnapshotTimeout grace window and are executed right away;
+            // per-event lookups use inconsistent reads instead of a stale snapshot.
+            QueryState->TxCtx->SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+        }
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
         ExecuteOrDefer();
@@ -1596,9 +1617,89 @@ public:
         return true;
     }
 
+    bool ValidateMvccVersion() {
+        const auto value = QueryState->RequestEv->GetMvccVersion();
+        if (!value) {
+            return true;
+        }
+        if (!QueryState->IsInternalCall()) {
+            ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "x-ydb-mvcc-version is only supported for internal calls");
+            return false;
+        }
+        const auto version = ParseMvccVersion(*value);
+        if (!version) {
+            ReplyQueryError(Ydb::StatusIds::BAD_REQUEST,
+                "Invalid x-ydb-mvcc-version: expected <step>:<txId> with unsigned 64-bit decimal components, "
+                "a finite step, and a nonzero version");
+            return false;
+        }
+        const auto action = QueryState->GetAction();
+        if (action != NKikimrKqp::QUERY_ACTION_EXECUTE && action != NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED) {
+            ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "x-ydb-mvcc-version is only supported for query execution");
+            return false;
+        }
+        switch (QueryState->GetType()) {
+            case NKikimrKqp::QUERY_TYPE_SQL_DML:
+            case NKikimrKqp::QUERY_TYPE_AST_DML:
+            case NKikimrKqp::QUERY_TYPE_PREPARED_DML:
+                if (!QueryState->HasTxControl()
+                    || (QueryState->GetTxControl().has_begin_tx()
+                        && !QueryState->GetTxControl().begin_tx().has_snapshot_read_only()))
+                {
+                    ReplyQueryError(Ydb::StatusIds::BAD_REQUEST,
+                        "x-ydb-mvcc-version requires a snapshot-read-only transaction");
+                    return false;
+                }
+                break;
+            default:
+                ReplyQueryError(Ydb::StatusIds::BAD_REQUEST,
+                    "x-ydb-mvcc-version is only supported for Table Service data queries");
+                return false;
+        }
+        QueryState->ExternalMvccVersion = *version;
+        return true;
+    }
+
+    bool ApplyMvccVersion() {
+        if (!QueryState->ExternalMvccVersion) {
+            return true;
+        }
+
+        auto& txCtx = *QueryState->TxCtx;
+        if (txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO) {
+            ReplyQueryError(Ydb::StatusIds::BAD_REQUEST,
+                "x-ydb-mvcc-version requires a snapshot-read-only transaction");
+            return false;
+        }
+        for (const auto& tx : QueryState->PreparedQuery->GetPhysicalQuery().GetTransactions()) {
+            if (tx.GetHasEffects() || tx.GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
+                ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "x-ydb-mvcc-version does not support writes");
+                return false;
+            }
+        }
+
+        const auto& version = *QueryState->ExternalMvccVersion;
+        const IKqpGateway::TKqpSnapshot snapshot(version.Step, version.TxId);
+        const bool continuing = QueryState->HasTxControl() && QueryState->GetTxControl().has_tx_id();
+        if (continuing || txCtx.GetSnapshot().IsValid()) {
+            if (!(txCtx.GetSnapshot() == snapshot)) {
+                ReplyQueryError(Ydb::StatusIds::BAD_REQUEST,
+                    "x-ydb-mvcc-version cannot change the snapshot of an existing transaction");
+                return false;
+            }
+        } else {
+            // Retention belongs to the caller; do not acquire a handle or a managing actor.
+            txCtx.SnapshotHandle.Snapshot = snapshot;
+        }
+        return true;
+    }
+
     bool PrepareQueryContext() {
         YQL_ENSURE(QueryState);
         if (!PrepareQueryTransaction()) {
+            return false;
+        }
+        if (!ApplyMvccVersion()) {
             return false;
         }
 
@@ -1613,6 +1714,14 @@ public:
                     std::vector<TIssue> issues{YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                         "Client data writes are disabled")};
                     ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "", MessageFromIssues(issues));
+                    return false;
+                }
+            }
+
+            // Unsafe truncate is represented by a sink and has no entry in TableOps.
+            for (const auto& tx : phyQuery.GetTransactions()) {
+                if (FindTableTruncateSink(tx)) {
+                    ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "Client data writes are disabled");
                     return false;
                 }
             }
@@ -2040,6 +2149,11 @@ public:
             return false;
         }
 
+        if (tx->HasUnsafeTruncate()) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for unsafe truncate");
+            return false;
+        }
+
         if (const auto txType = tx->GetType(); !IsIn({NKqpProto::TKqpPhyTx::TYPE_DATA, NKqpProto::TKqpPhyTx::TYPE_GENERIC, NKqpProto::TKqpPhyTx::TYPE_COMPUTE}, txType)) {
             ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Save state of query is not supported for this tx type: " << NKqpProto::TKqpPhyTx::EType_Name(txType));
             return false;
@@ -2093,6 +2207,8 @@ public:
             ExecutePartitioned(tx);
         } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
             ExecuteDeferredEffectsImmediately(tx);
+        } else if (tx && tx->HasUnsafeTruncate()) {
+            ExecuteUnsafeTruncate(tx);
         } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
             ExecutePhyTx(tx, commit);
         } else {
@@ -2138,6 +2254,17 @@ public:
 
         SendToPartitionedExecuter(QueryState->TxCtx.Get(), std::move(request));
         QueryState->CurrentTx += 1;
+    }
+
+    void ExecuteUnsafeTruncate(const TKqpPhyTxHolder::TConstPtr& tx) {
+        // Unsafe truncate runs in its own distributed transaction, applied
+        // immediately and never rolled back with the surrounding user transaction.
+        if (QueryState->TxCtx->Readonly) {
+            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                "Unsafe TRUNCATE TABLE cannot be executed in a read-only transaction");
+        }
+
+        SendToUnsafeTruncateExecuter(tx);
     }
 
     void ExecuteDeferredEffectsImmediately(const TKqpPhyTxHolder::TConstPtr& tx) {
@@ -2379,6 +2506,22 @@ public:
             QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext,
             expectsResult, expectsResult ? QueryState->QueryData->GetAllocState() : nullptr,
             KqpTempTablesAgentActor, QueryState->KqpSessionSpan.GetTraceId(), QueryState->QueryDeadlines.TimeoutAt);
+
+        ExecuterId = RegisterWithSameMailbox(executerActor);
+
+        ++QueryState->CurrentTx;
+    }
+
+    void SendToUnsafeTruncateExecuter(const TKqpPhyTxHolder::TConstPtr& tx) {
+        YQL_ENSURE(QueryState);
+
+        // The lock id of the user transaction, so the shards spare its locks while breaking
+        // everyone else's. Zero when the truncate is the first statement and no lock exists yet.
+        const ui64 userLockTxId = QueryState->TxCtx->LockHandle.GetLockId();
+
+        auto executerActor = CreateKqpUnsafeTruncateExecuter(
+            tx, SelfId(), Settings.Database, QueryState->UserToken, userLockTxId,
+            QueryState->UserRequestContext->TraceId, QueryState->QueryData->GetAllocState());
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 
@@ -3034,6 +3177,17 @@ public:
 
                 default:
                     break;
+            }
+
+            if (status == Ydb::StatusIds::ABORTED && QueryState->ExternalMvccVersion) {
+                // A new attempt cannot restore a caller-owned snapshot that is no longer readable.
+                for (const auto& issue : issues) {
+                    WalkThroughIssues(issue, false, [&](const TIssue& nested, ui16) {
+                        if (nested.GetCode() == TIssuesIds::KIKIMR_PRECONDITION_FAILED) {
+                            status = Ydb::StatusIds::PRECONDITION_FAILED;
+                        }
+                    });
+                }
             }
 
             ReplyQueryError(status, "", MessageFromIssues(issues));

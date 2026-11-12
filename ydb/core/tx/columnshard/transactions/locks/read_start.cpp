@@ -10,7 +10,8 @@ std::shared_ptr<NKikimr::NOlap::NTxInteractions::ITxEvent> TEvReadStartWriter::D
     return std::make_shared<TEvReadStart>(PathId, Schema, Filter);
 }
 
-bool TEvReadStart::DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEvent& proto, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+bool TEvReadStart::DoDeserializeFromProto(
+    const NKikimrColumnShardTxProto::TEvent& proto, const std::vector<NArrow::TComparisonType>& logicalTypes) {
     if (!proto.HasRead()) {
         YDB_LOG_ERROR("",
             {"error", "cannot_parse_TEvReadStart"},

@@ -155,8 +155,8 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         return TConclusionStatus::Fail("not enough pk fields");
     }
     auto result = batchConclusion.DetachResult();
-    result.MutableContainer() = NArrow::SortBatch(result.GetContainer(), GetIndexInfo().GetPrimaryKeyColumns(), true);
-    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(result.GetContainer(), GetIndexInfo().GetPrimaryKeyColumns()));
+    result.MutableContainer() = NArrow::SortBatch(result.GetContainer(), GetIndexInfo().GetPrimaryKeyComparisonColumns(), true);
+    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(result.GetContainer(), GetIndexInfo().GetPrimaryKeyComparisonColumns()));
     return result;
 }
 
@@ -294,7 +294,7 @@ std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
             if (it == defaults.end()) {
                 defaults.emplace(columnId, def);
             } else if (NArrow::ScalarCompareNullable(
-                           def, it->second, blobSchema->GetIndexInfo().GetColumnFeaturesVerified(columnId).GetTypeInfo()) != 0) {
+                           def, it->second, blobSchema->GetIndexInfo().GetColumnFeaturesVerified(columnId).GetComparisonType()) != 0) {
                 result.emplace(columnId);
             }
         }

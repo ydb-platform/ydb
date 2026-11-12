@@ -14,7 +14,7 @@ namespace NKikimr::NOlap::NIndexes::NMax {
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
     const auto& column = indexInfo.GetColumnFeaturesVerified(GetColumnId());
-    const auto& logicalType = column.GetTypeInfo();
+    const auto& logicalType = column.GetComparisonType();
     std::shared_ptr<arrow::Scalar> result;
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     {
@@ -35,7 +35,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
 std::shared_ptr<arrow::Scalar> TIndexMeta::GetMaxScalarVerified(const std::vector<TString>& data, const TIndexInfo& indexInfo) const {
     const auto& column = indexInfo.GetColumnFeaturesVerified(GetColumnId());
     const auto& dataType = column.GetArrowField()->type();
-    const auto& logicalType = column.GetTypeInfo();
+    const auto& logicalType = column.GetComparisonType();
     AFL_VERIFY(data.size());
     std::shared_ptr<arrow::Scalar> result;
     for (auto&& d : data) {

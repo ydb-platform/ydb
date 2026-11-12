@@ -9,19 +9,57 @@
 
 namespace NKikimr::NArrow {
 
+enum class EComparisonOrder {
+    Default,
+    DecimalNumeric,
+};
+
+class TComparisonType {
+    NScheme::TTypeInfo TypeInfo;
+    EComparisonOrder Order = EComparisonOrder::Default;
+
+public:
+    TComparisonType() = default;
+
+    TComparisonType(const NScheme::TTypeInfo& typeInfo, const bool enableDecimalNumericComparison = false)
+        : TypeInfo(typeInfo)
+        , Order(enableDecimalNumericComparison && typeInfo.GetTypeId() == NScheme::NTypeIds::Decimal
+                  ? EComparisonOrder::DecimalNumeric
+                  : EComparisonOrder::Default)
+    {
+    }
+
+    const NScheme::TTypeInfo& GetTypeInfo() const {
+        return TypeInfo;
+    }
+
+    NScheme::TTypeId GetTypeId() const {
+        return TypeInfo.GetTypeId();
+    }
+
+    EComparisonOrder GetComparisonOrder() const {
+        return Order;
+    }
+
+    bool operator==(const TComparisonType& other) const {
+        return TypeInfo == other.TypeInfo && Order == other.Order;
+    }
+};
+
 class TComparator {
 public:
-    enum class EComparisonOrder {
-        Default,
-        DecimalNumeric,
-    };
+    using EComparisonOrder = NArrow::EComparisonOrder;
 
     // Persisted extrema record this order so they are not reused under a different one.
-    static EComparisonOrder GetComparisonOrder(const NScheme::TTypeInfo& logicalType);
+    static EComparisonOrder GetComparisonOrder(const TComparisonType& logicalType) {
+        return logicalType.GetComparisonOrder();
+    }
+
+    static bool IsDecimalNumericComparisonEnabled();
 
     template <bool notNull>
     static std::partial_ordering ConcreteTypedCompare(const arrow::Type::type typeId, const arrow::Array& lhs, const int lpos,
-        const arrow::Array& rhs, const int rpos, const NScheme::TTypeInfo& logicalType) {
+        const arrow::Array& rhs, const int rpos, const TComparisonType& logicalType) {
         switch (typeId) {
             case arrow::Type::NA:
             case arrow::Type::BOOL:
@@ -92,14 +130,14 @@ public:
 
     template <bool notNull>
     static std::partial_ordering TypedCompare(
-        const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos, const NScheme::TTypeInfo& logicalType) {
+        const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos, const TComparisonType& logicalType) {
         AFL_VERIFY(lhs.type_id() == rhs.type_id())("lhs", lhs.type()->ToString())("rhs", rhs.type()->ToString());
         return ConcreteTypedCompare<notNull>(lhs.type_id(), lhs, lpos, rhs, rpos, logicalType);
     }
 
     template <typename T, bool notNull>
     static std::partial_ordering CompareView(
-        const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos, const NScheme::TTypeInfo& logicalType) {
+        const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos, const TComparisonType& logicalType) {
         auto& left = static_cast<const T&>(lhs);
         auto& right = static_cast<const T&>(rhs);
         if constexpr (notNull) {
@@ -112,7 +150,7 @@ public:
     }
 
     template <typename T>
-    static std::partial_ordering CompareValue(const T& x, const T& y, bool xIsNull, bool yIsNull, const NScheme::TTypeInfo& logicalType) {
+    static std::partial_ordering CompareValue(const T& x, const T& y, bool xIsNull, bool yIsNull, const TComparisonType& logicalType) {
         if (xIsNull && yIsNull) {
             return std::partial_ordering::equivalent;
         }
@@ -126,7 +164,7 @@ public:
     }
 
     template <typename T>
-    static std::partial_ordering CompareValueNotNull(const T& x, const T& y, [[maybe_unused]] const NScheme::TTypeInfo& logicalType) {
+    static std::partial_ordering CompareValueNotNull(const T& x, const T& y, [[maybe_unused]] const TComparisonType& logicalType) {
         if constexpr (std::is_same_v<T, arrow::util::string_view>) {
             if (GetComparisonOrder(logicalType) == EComparisonOrder::DecimalNumeric) {
                 AFL_VERIFY(x.size() == 16 && y.size() == 16);

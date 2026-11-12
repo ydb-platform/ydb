@@ -199,7 +199,7 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
                     const auto& type = column.GetArrowField()->type();
                     auto minmax = NArrow::NAccessor::TMinMax::MakeNull(type);
                     for (auto&& d : data) {
-                        minmax.UniteWith(NArrow::NAccessor::TMinMax::FromBinaryString(d, type), column.GetTypeInfo());
+                        minmax.UniteWith(NArrow::NAccessor::TMinMax::FromBinaryString(d, type), column.GetComparisonType());
                     }
                     max = minmax.Max();
                 }

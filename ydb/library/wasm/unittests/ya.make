@@ -2,6 +2,8 @@ GTEST()
 
 SRCS(
     wasm_ut.cpp
+    clock_ut.cpp
+    linking_ut.cpp
 )
 
 IF (OPENSOURCE)
@@ -30,8 +32,13 @@ PEERDIR(
     ydb/library/wasm/api
     ydb/library/wasm/engine
     library/cpp/testing/gtest
+    library/cpp/resource
 )
 
 SIZE(MEDIUM)
 
+RESOURCE(clock_fixture/clock.wasm /clock.wasm)
+
 END()
+
+RECURSE(clock_fixture)

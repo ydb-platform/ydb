@@ -69,7 +69,7 @@ std::shared_ptr<TSparsedArray> TSparsedArray::Make(const IChunkedArray& defaultA
     return std::shared_ptr<TSparsedArray>(new TSparsedArray(std::move(chunk), defaultValue, defaultArray.GetDataType()));
 }
 
-TMinMax TSparsedArray::DoGetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const {
+TMinMax TSparsedArray::DoGetMinMaxScalars(const TComparisonType& logicalType) const {
     return Record.GetMinMaxScalars(logicalType);
 }
 
@@ -200,7 +200,7 @@ ui32 TSparsedArrayChunk::GetFirstIndexNotDefault() const {
     }
 }
 
-TMinMax TSparsedArrayChunk::GetMinMaxScalars(const NScheme::TTypeInfo& logicalType) const {
+TMinMax TSparsedArrayChunk::GetMinMaxScalars(const TComparisonType& logicalType) const {
     TMinMax value = TMinMax::Compute(ColValue, logicalType);
     if (GetNotDefaultRecordsCount() < GetRecordsCount()) {
         value.UniteWith(TMinMax::Compute(DefaultsArray, logicalType), logicalType);

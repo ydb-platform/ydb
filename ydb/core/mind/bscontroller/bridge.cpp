@@ -440,6 +440,12 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic(),
             ProposedStorageConfig ? &*ProposedStorageConfig : nullptr);
+        if (ProposedStorageConfig) {
+            // The operation is validated the way it is going to run: BSC gets the pending operation with the
+            // StorageConfig, and adopts its storage pool pile overrides first. They may differ from the ones followed now
+            // (distconf may have committed them already, with BSC not notified yet).
+            State->PileOverrideRules = Self->GetPileOverrideRulesWith(*ProposedStorageConfig);
+        }
 
         try {
             NumGroups = DoStep(*State);

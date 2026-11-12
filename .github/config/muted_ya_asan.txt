@@ -1,4 +1,5 @@
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.BatchWriteThenReadMultiTabletInterleaved_Sequential_WithRestarts_PDiskFallback
+ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.BatchWriteThenReadMultiTabletInterleaved_Sequential_WithRestarts_Uring
 ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.Mirror3dcReadsFromRestoredRealmAfterSourceDisconnection
@@ -10,6 +11,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3o
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
+ydb/core/fq/libs/wasm_services/ut TFqWasmModuleTest.ProfileJsonStackHandlesLongStringsWithinResponseLimit
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery11
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut unittest.[*/*] chunk
@@ -30,6 +32,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommi
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.RestartStreamingQueryWithExactlyOnceWriting-LocalTopics-ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.StreamingQueryWithDeferredComitPublicationCreation-LocalTopics
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
+ydb/core/kqp/ut/olap KqpOlapTiering.OversizedNGrammIndexOnTiering
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
@@ -108,7 +111,6 @@ ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedClust
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_stable-26-4-1_and_stable-26-3-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_stable-26-4-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_stable-26-4-1_and_stable-26-3-1]
-ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_mid_blob_survives_tablet_move[mixed_stable-26-4-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_mid_blob_survives_tablet_move[mixed_stable-26-4-1_and_stable-26-3-1]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/workloads py3test.[test_statistics.py */*] chunk
@@ -134,6 +136,8 @@ ydb/tests/fq/streaming/logbroker test_logbroker.py.TestLogbroker.test_read_write
 ydb/tests/fq/streaming_optimize py3test.sole chunk
 ydb/tests/fq/streaming_optimize test_sql_negative.py.test[watermarks-bad_type-default.txt]
 ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopExprKey-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopListKey-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopPercentile-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_gs_simp-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_ru_join-]
@@ -141,6 +145,7 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_ru_join
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part1 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part1 test.py.test[aggregate-group_by_rollup_grouping_hum-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part1 test.py.test[aggregate-group_by_rollup_with_filter-]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part1 test.py.test[aggregate-having_distinct_expr-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part10 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part10 test.py.test[aggregate-avg_with_having-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part10 test.py.test[aggregate-group_by_rollup_key_check-]
@@ -151,6 +156,7 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part11 test.py.test[aggregate-group_by_ru_joi
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part12 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part12 test.py.test[aggr_factory-multi-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part12 test.py.test[aggregate-aggregate_key_column-default.txt]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part12 test.py.test[aggregate-aggregate_with_lambda-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part13 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part13 test.py.test[aggregate-group_by_gs_few_empty-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part13 test.py.test[aggregate-group_by_gs_subselect-default.txt]
@@ -158,12 +164,14 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part13 test.py.test[aggregate-group_by_sessio
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part14 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part14 test.py.test[aggregate-group_by_tablerow_column-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part14 test.py.test[blocks-combine_hashed_count_filter-]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part14 test.py.test[blocks-date_add_interval-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part15 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part15 test.py.test[aggregate-group_by_gs_flatten_expr-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part15 test.py.test[aggregate-group_by_rollup_column_ref-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part16 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part16 test.py.test[aggregate-group_by_mul_gs_gs-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part16 test.py.test[ansi_idents-join_using-default.txt]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part16 test.py.test[bigdate-table_common_type-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part17 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part17 test.py.test[aggregate-aggregate_by_one_column-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part17 test.py.test[aggregate-aggregate_udf_nested-]
@@ -176,6 +184,7 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 test.py.test[aggregate-dedup_state_key
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 test.py.test[aggregate-group_by_column_alias_reuse-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part19 test.py.test[aggregate-group_by_expr_with_where-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 test.py.test[aggregate-group_by_expr_semi_join-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 test.py.test[aggregate-group_by_gs_alt_duo-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part2 test.py.test[aggregate-group_by_gs_flatten_columns-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 py3test.sole chunk
@@ -183,6 +192,7 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 test.py.test[aggregate-group_by_mul_ru_
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 test.py.test[aggregate-group_by_rollup_duo-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part3 test.py.test[aggregate-group_by_rollup_udf-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 test.py.test[aggregate-aggregate_with_lambda_inside_avg-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 test.py.test[aggregate-aggrs_no_grouping_via_map-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part4 test.py.test[aggregate-compare_by_tuple-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part5 py3test.sole chunk
@@ -196,11 +206,13 @@ ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 test.py.test[action-evaluate_queries-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 test.py.test[aggregate-GroupByTwoFields-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part7 test.py.test[aggregate-group_by_cube_grouping_and_expr-default.txt]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 test.py.test[aggregate-aggrs_no_grouping-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 test.py.test[aggregate-group_by_cube_expr_trio-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part8 test.py.test[aggregate-group_by_cube_join_count-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part9 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part9 test.py.test[aggregate-group_by_rollup_aggr_expr-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part9 test.py.test[aggregate-group_by_ru_partition_by_grouping-default.txt]
+ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part9 test.py.test[aggregate-group_by_session_extended-]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/blobstorage/replication_rate_control test_replication_rate_control.py.test_replication_rate_control_is_applied_at_runtime

@@ -46,16 +46,16 @@ FROM (
                     / CAST(Sum(Coalesce(ws.ws_net_paid, $zero)) AS Decimal (15, 4))
                 ) AS currency_ratio
             FROM
-                `/Root/test/ds/web_sales` AS ws
+                `web_sales` AS ws
             LEFT OUTER JOIN
-                `/Root/test/ds/web_returns` AS wr
+                `web_returns` AS wr
             ON
                 (
                     ws.ws_order_number == wr.wr_order_number
                     AND ws.ws_item_sk == wr.wr_item_sk
                 )
             ,
-                `/Root/test/ds/date_dim`
+                `date_dim`
             WHERE
                 wr.wr_return_amt > $const_10000
                 AND ws.ws_net_profit > $one
@@ -106,16 +106,16 @@ FROM (
                     / CAST(Sum(Coalesce(cs.cs_net_paid, $zero)) AS Decimal (15, 4))
                 ) AS currency_ratio
             FROM
-                `/Root/test/ds/catalog_sales` AS cs
+                `catalog_sales` AS cs
             LEFT OUTER JOIN
-                `/Root/test/ds/catalog_returns` AS cr
+                `catalog_returns` AS cr
             ON
                 (
                     cs.cs_order_number == cr.cr_order_number
                     AND cs.cs_item_sk == cr.cr_item_sk
                 )
             ,
-                `/Root/test/ds/date_dim`
+                `date_dim`
             WHERE
                 cr.cr_return_amount > $const_10000
                 AND cs.cs_net_profit > $one
@@ -166,13 +166,13 @@ FROM (
                     / CAST(Sum(Coalesce(sts.ss_net_paid, $zero)) AS Decimal (15, 4))
                 ) AS currency_ratio
             FROM
-                `/Root/test/ds/store_sales` AS sts
+                `store_sales` AS sts
             LEFT OUTER JOIN
-                `/Root/test/ds/store_returns` AS sr
+                `store_returns` AS sr
             ON
                 (sts.ss_ticket_number == sr.sr_ticket_number AND sts.ss_item_sk == sr.sr_item_sk)
             ,
-                `/Root/test/ds/date_dim`
+                `date_dim`
             WHERE
                 sr.sr_return_amt > $const_10000
                 AND sts.ss_net_profit > $one

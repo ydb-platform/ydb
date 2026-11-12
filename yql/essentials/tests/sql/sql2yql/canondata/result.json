@@ -9806,6 +9806,13 @@
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_pg-uncorrelated_asterisk_subquery_scalar_with_source_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-aggregate_percentile]": [
+        {
+            "checksum": "d59c2f33314097774b0c9504a7bc9d16",
+            "size": 8183,
+            "uri": "https://{canondata_backend}/1942525/32ab560d79eb7917da5a3f9de0af8a9e1930ffb4/resource.tar.gz#test_sql2yql.test_select_yql-aggregate_percentile_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-alias]": [
         {
             "checksum": "19c58044aa34742ef7db3ce4bcb8b92b",
@@ -19132,6 +19139,11 @@
             "uri": "file://test_sql_format.test_select_op-select_op_precedence_named_node_/formatted.sql"
         }
     ],
+    "test_sql_format.test[select_yql-aggregate_percentile]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-aggregate_percentile_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[select_yql-alias]": [
         {
             "uri": "file://test_sql_format.test_select_yql-alias_/formatted.sql"
@@ -22200,6 +22212,34 @@
             "checksum": "9c020b2846f14c6a2eb9ed4930a7d7c6",
             "size": 289,
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql_negative.test_select-use_subrequest_as_table-_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[select_yql-aggregate_median_missing_value-]": [
+        {
+            "checksum": "7b8383dc07a7fed417689e808bc857d8",
+            "size": 120,
+            "uri": "https://{canondata_backend}/1942525/32ab560d79eb7917da5a3f9de0af8a9e1930ffb4/resource.tar.gz#test_sql_negative.test_select_yql-aggregate_median_missing_value-_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[select_yql-aggregate_percentile_column_parameter-]": [
+        {
+            "checksum": "7a7d6ffb29b97879e71cc3e9ad9ec773",
+            "size": 229,
+            "uri": "https://{canondata_backend}/1942525/32ab560d79eb7917da5a3f9de0af8a9e1930ffb4/resource.tar.gz#test_sql_negative.test_select_yql-aggregate_percentile_column_parameter-_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[select_yql-aggregate_percentile_extra_argument-]": [
+        {
+            "checksum": "6e6933e3be28d96077c2fc6496c54921",
+            "size": 143,
+            "uri": "https://{canondata_backend}/1942525/32ab560d79eb7917da5a3f9de0af8a9e1930ffb4/resource.tar.gz#test_sql_negative.test_select_yql-aggregate_percentile_extra_argument-_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[select_yql-aggregate_percentile_missing_value-]": [
+        {
+            "checksum": "469541f0c67c8aed565479fa94daa58c",
+            "size": 128,
+            "uri": "https://{canondata_backend}/1942525/32ab560d79eb7917da5a3f9de0af8a9e1930ffb4/resource.tar.gz#test_sql_negative.test_select_yql-aggregate_percentile_missing_value-_/err_file.out"
         }
     ],
     "test_sql_negative.test[select_yql-group_by_a_agglist_b-]": [

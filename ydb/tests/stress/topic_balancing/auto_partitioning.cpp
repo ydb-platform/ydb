@@ -1268,10 +1268,11 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
     rewindWorkers.Join();
     readWorkers.Join();
     sessions.CloseAll();
-    // wait=true deadlocks: in-flight session contexts keep CQ from shutting down.
+    // wait=true here deadlocks: in-flight session contexts keep CQ from shutting down.
     driver.Stop(false);
     // Stop the handlers pool before the stack frame that owns it is destroyed.
     handlersExecutor->Stop();
+    driver.Stop(true);
 
     Cerr << "Stress finished partitions=" << partitionCount
         << " sessionsOpened=" << opened.load()

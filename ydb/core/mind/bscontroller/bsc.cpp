@@ -440,7 +440,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 const NKikimrBridge::TClusterStateDetails::TPileSyncState* previousSync = nullptr;
                 if (prevStorageConfig) {
                     for (const auto& sync : prevStorageConfig->GetClusterStateDetails().GetPileSyncState()) {
-                        if (sync.GetBridgePileId() == pile.BridgePileId.GetRawId()) {
+                        if (TBridgePileId::FromProto(&sync,
+                                &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId) == pile.BridgePileId) {
                             previousSync = &sync;
                             break;
                         }

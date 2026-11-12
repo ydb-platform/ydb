@@ -3786,16 +3786,21 @@ Y_UNIT_TEST_SUITE(Viewer) {
             record.MutableEntries(1)->MutableInfo()->SetBridgeSyncRunning(false);
         });
 
-        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
-            "GET /storage/groups HTTP/1.1\r\n\r\n", endpoint, {});
-        const auto sender = runtime.AllocateEdgeActor();
-        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
-        TAutoPtr<IEventHandle> handle;
-        const auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
-        NJson::TJsonValue json;
-        NJson::ReadJsonTree(response->Response->Body, &json, true);
+        auto get = [&](TStringBuf params) {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /storage/groups" << params << " HTTP/1.1\r\n\r\n", endpoint, {});
+            const auto sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response->Response->Body, &json, true);
+            return json;
+        };
+        const auto json = get("");
+        UNIT_ASSERT_VALUES_EQUAL(json["Version"].GetUInteger(), 17);
         const auto& groups = json["StorageGroups"].GetArray();
         UNIT_ASSERT_VALUES_EQUAL(groups.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncStatus"].GetString(), "SYNCING");
@@ -3823,6 +3828,68 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 "BridgeSyncRemainingBytesComplete", "BridgeSyncRunning", "BridgeSyncLastErrorTimestamp", "BridgeSyncErrorCount"}) {
             UNIT_ASSERT_C(!groups[2].Has(field), field);
         }
+
+        const std::pair<const char*, EGroupFields> bridgeFields[] = {
+            {"BridgeSyncStatus", EGroupFields::BridgeSyncStatus},
+            {"BridgeSyncStage", EGroupFields::BridgeSyncStage},
+            {"BridgeSyncLastError", EGroupFields::BridgeSyncLastError},
+            {"BridgeSyncLastProgressTimestamp", EGroupFields::BridgeSyncLastProgressTimestamp},
+            {"BridgeSyncCopyBytesPerSecond", EGroupFields::BridgeSyncCopyBytesPerSecond},
+            {"BridgeSyncRemainingBytes", EGroupFields::BridgeSyncRemainingBytes},
+            {"BridgeSyncRemainingBytesComplete", EGroupFields::BridgeSyncRemainingBytesComplete},
+            {"BridgeSyncRunning", EGroupFields::BridgeSyncRunning},
+            {"BridgeSyncLastErrorTimestamp", EGroupFields::BridgeSyncLastErrorTimestamp},
+            {"BridgeSyncErrorCount", EGroupFields::BridgeSyncErrorCount},
+        };
+        const auto onlyIds = get("?fields_required=GroupId");
+        for (const auto& group : onlyIds["StorageGroups"].GetArray()) {
+            UNIT_ASSERT(group.Has("GroupId"));
+            for (const auto& [name, field] : bridgeFields) {
+                Y_UNUSED(field);
+                UNIT_ASSERT_C(!group.Has(name), name);
+            }
+        }
+        for (const auto& [requestedName, requestedField] : bridgeFields) {
+            const auto selected = get(TStringBuilder() << "?fields_required=" << requestedName);
+            const TStorageGroups::TFieldsType required(selected["FieldsRequired"].GetString().c_str());
+            const TStorageGroups::TFieldsType available(selected["FieldsAvailable"].GetString().c_str());
+            UNIT_ASSERT(required.test(+requestedField));
+            UNIT_ASSERT(available.test(+requestedField));
+            const auto& selectedGroups = selected["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(selectedGroups.size(), 3);
+            for (const auto& [name, field] : bridgeFields) {
+                UNIT_ASSERT_VALUES_EQUAL_C(selectedGroups[0].Has(name), field == requestedField, name);
+                UNIT_ASSERT_C(!selectedGroups[2].Has(name), name);
+            }
+        }
+        for (TStringBuf params : {"?fields_required=", "?fields_required=all"}) {
+            const auto all = get(params);
+            const auto& allGroups = all["StorageGroups"].GetArray();
+            for (const auto& [name, field] : bridgeFields) {
+                Y_UNUSED(field);
+                UNIT_ASSERT_C(allGroups[0].Has(name), name);
+                UNIT_ASSERT_C(!allGroups[2].Has(name), name);
+            }
+            UNIT_ASSERT(allGroups[1].Has("BridgeSyncCopyBytesPerSecond"));
+            UNIT_ASSERT_VALUES_EQUAL(allGroups[1]["BridgeSyncCopyBytesPerSecond"].GetString(), "0");
+            UNIT_ASSERT(allGroups[1].Has("BridgeSyncRunning"));
+            UNIT_ASSERT(!allGroups[1]["BridgeSyncRunning"].GetBoolean());
+            UNIT_ASSERT(allGroups[0].Has("BridgeSyncRemainingBytesComplete"));
+            UNIT_ASSERT(!allGroups[0]["BridgeSyncRemainingBytesComplete"].GetBoolean());
+        }
+        bool fieldsDocumented = false;
+        const auto swagger = TStorageGroups::GetSwagger()["get"];
+        for (const auto& parameter : swagger["parameters"]) {
+            if (parameter["name"].as<std::string>() == "fields_required") {
+                fieldsDocumented = true;
+                const auto description = parameter["description"].as<std::string>();
+                for (const auto& [name, field] : bridgeFields) {
+                    Y_UNUSED(field);
+                    UNIT_ASSERT(description.find("`" + std::string(name) + "`") != std::string::npos);
+                }
+            }
+        }
+        UNIT_ASSERT(fieldsDocumented);
     }
 
     Y_UNIT_TEST(StorageGroupsBridgeSyncStatusGrouping) {
@@ -3868,7 +3935,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
 
         const auto flat = get("?fields_required=BridgeSyncStatus");
-        UNIT_ASSERT_VALUES_EQUAL(flat["Version"].GetUInteger(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(flat["Version"].GetUInteger(), 17);
         const TStorageGroups::TFieldsType required(flat["FieldsRequired"].GetString().c_str());
         UNIT_ASSERT(required.test(+EGroupFields::BridgeSyncStatus));
         const auto& groups = flat["StorageGroups"].GetArray();
@@ -3919,7 +3986,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(numeric["StorageGroups"][2]["BridgeSyncStatus"].GetUInteger(),
             static_cast<ui32>(NKikimrBridge::SYNCING));
 
-        const auto swagger = TStorageGroups::GetSwagger();
+        const auto swagger = TStorageGroups::GetSwagger()["get"];
         ui32 documentedParameters = 0;
         for (const auto& parameter : swagger["parameters"]) {
             const auto name = parameter["name"].as<std::string>();
@@ -4072,7 +4139,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NJson::TJsonValue json;
             NJson::ReadJsonTree(response->Response->Body, &json, true);
             const auto& groups = json.GetMap().at("StorageGroups").GetArray();
-            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 16);
+            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 17);
             UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
             const auto& group = groups[0].GetMap();
             UNIT_ASSERT_VALUES_EQUAL(group.at("GroupId").GetString(), "2");

@@ -287,8 +287,8 @@ void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/groups", new THttpHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 16);
-    jsonHandlers.AddHandler("/storage/groups", new THttpHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 16);
+    jsonHandlers.AddHandler("/viewer/groups", new THttpHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 17);
+    jsonHandlers.AddHandler("/storage/groups", new THttpHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 17);
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {

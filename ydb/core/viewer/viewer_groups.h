@@ -113,6 +113,15 @@ enum class EGroupFields : ui8 {
     CapacityAlert,
     GroupSizeInUnits,
     BridgeSyncStatus,
+    BridgeSyncStage,
+    BridgeSyncLastError,
+    BridgeSyncLastProgressTimestamp,
+    BridgeSyncCopyBytesPerSecond,
+    BridgeSyncRemainingBytes,
+    BridgeSyncRemainingBytesComplete,
+    BridgeSyncRunning,
+    BridgeSyncLastErrorTimestamp,
+    BridgeSyncErrorCount,
     COUNT
 };
 
@@ -729,11 +738,20 @@ public:
     TFieldsType FieldsRequired; // fields that are required to calculate the response
     TFieldsType FieldsAvailable;
     const TFieldsType FieldsAll = TFieldsType().set();
+    const TFieldsType FieldsBridgeSync = TFieldsType().set(+EGroupFields::BridgeSyncStatus)
+                                                     .set(+EGroupFields::BridgeSyncStage)
+                                                     .set(+EGroupFields::BridgeSyncLastError)
+                                                     .set(+EGroupFields::BridgeSyncLastProgressTimestamp)
+                                                     .set(+EGroupFields::BridgeSyncCopyBytesPerSecond)
+                                                     .set(+EGroupFields::BridgeSyncRemainingBytes)
+                                                     .set(+EGroupFields::BridgeSyncRemainingBytesComplete)
+                                                     .set(+EGroupFields::BridgeSyncRunning)
+                                                     .set(+EGroupFields::BridgeSyncLastErrorTimestamp)
+                                                     .set(+EGroupFields::BridgeSyncErrorCount);
     const TFieldsType FieldsBsGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
                                                     .set(+EGroupFields::Latency)
-                                                    .set(+EGroupFields::GroupSizeInUnits)
-                                                    .set(+EGroupFields::BridgeSyncStatus);
+                                                    .set(+EGroupFields::GroupSizeInUnits) | FieldsBridgeSync;
     const TFieldsType FieldsBsPools = TFieldsType().set(+EGroupFields::PoolName)
                                                    .set(+EGroupFields::Kind)
                                                    .set(+EGroupFields::MediaType)
@@ -876,6 +894,24 @@ public:
             result = EGroupFields::GroupSizeInUnits;
         } else if (field == "BridgeSyncStatus") {
             result = EGroupFields::BridgeSyncStatus;
+        } else if (field == "BridgeSyncStage") {
+            result = EGroupFields::BridgeSyncStage;
+        } else if (field == "BridgeSyncLastError") {
+            result = EGroupFields::BridgeSyncLastError;
+        } else if (field == "BridgeSyncLastProgressTimestamp") {
+            result = EGroupFields::BridgeSyncLastProgressTimestamp;
+        } else if (field == "BridgeSyncCopyBytesPerSecond") {
+            result = EGroupFields::BridgeSyncCopyBytesPerSecond;
+        } else if (field == "BridgeSyncRemainingBytes") {
+            result = EGroupFields::BridgeSyncRemainingBytes;
+        } else if (field == "BridgeSyncRemainingBytesComplete") {
+            result = EGroupFields::BridgeSyncRemainingBytesComplete;
+        } else if (field == "BridgeSyncRunning") {
+            result = EGroupFields::BridgeSyncRunning;
+        } else if (field == "BridgeSyncLastErrorTimestamp") {
+            result = EGroupFields::BridgeSyncLastErrorTimestamp;
+        } else if (field == "BridgeSyncErrorCount") {
+            result = EGroupFields::BridgeSyncErrorCount;
         }
         return result;
     }
@@ -965,7 +1001,9 @@ public:
             FieldsRequired |= FieldsBsPDisks;
         }
         TString fieldsRequired = Params.Get("fields_required");
-        if (!fieldsRequired.empty()) {
+        if (fieldsRequired.empty()) {
+            FieldsRequired |= FieldsBridgeSync;
+        } else {
             if (fieldsRequired == "all") {
                 FieldsRequired = FieldsAll;
             } else {
@@ -1388,6 +1426,15 @@ public:
                 case EGroupFields::MaxNormalizedOccupancy:
                 case EGroupFields::MaxVDiskRawUsage:
                 case EGroupFields::GroupSizeInUnits:
+                case EGroupFields::BridgeSyncStage:
+                case EGroupFields::BridgeSyncLastError:
+                case EGroupFields::BridgeSyncLastProgressTimestamp:
+                case EGroupFields::BridgeSyncCopyBytesPerSecond:
+                case EGroupFields::BridgeSyncRemainingBytes:
+                case EGroupFields::BridgeSyncRemainingBytesComplete:
+                case EGroupFields::BridgeSyncRunning:
+                case EGroupFields::BridgeSyncLastErrorTimestamp:
+                case EGroupFields::BridgeSyncErrorCount:
                     break;
             }
         }
@@ -1476,6 +1523,15 @@ public:
                 case EGroupFields::NodeId:
                 case EGroupFields::PDisk:
                 case EGroupFields::VDisk:
+                case EGroupFields::BridgeSyncStage:
+                case EGroupFields::BridgeSyncLastError:
+                case EGroupFields::BridgeSyncLastProgressTimestamp:
+                case EGroupFields::BridgeSyncCopyBytesPerSecond:
+                case EGroupFields::BridgeSyncRemainingBytes:
+                case EGroupFields::BridgeSyncRemainingBytesComplete:
+                case EGroupFields::BridgeSyncRunning:
+                case EGroupFields::BridgeSyncLastErrorTimestamp:
+                case EGroupFields::BridgeSyncErrorCount:
                 case EGroupFields::COUNT:
                     break;
             }
@@ -2609,34 +2665,44 @@ public:
                 }
                 if (showBridgeSync && group->BscInfo) {
                     const auto& info = *group->BscInfo;
-                    if (info.HasBridgeSyncStatus()) {
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncStatus) && FieldsRequested.test(+EGroupFields::BridgeSyncStatus) &&
+                            info.HasBridgeSyncStatus()) {
                         jsonGroup.SetBridgeSyncStatus(info.GetBridgeSyncStatus());
                     }
-                    if (info.HasBridgeSyncStage()) {
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncStage) && FieldsRequested.test(+EGroupFields::BridgeSyncStage) &&
+                            info.HasBridgeSyncStage()) {
                         jsonGroup.SetBridgeSyncStage(info.GetBridgeSyncStage());
                     }
-                    if (!info.GetBridgeSyncLastError().empty()) {
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncLastError) && FieldsRequested.test(+EGroupFields::BridgeSyncLastError) &&
+                            !info.GetBridgeSyncLastError().empty()) {
                         jsonGroup.SetBridgeSyncLastError(info.GetBridgeSyncLastError());
                     }
-                    if (info.HasBridgeSyncLastProgressTimestamp()) {
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncLastProgressTimestamp) && FieldsRequested.test(+EGroupFields::BridgeSyncLastProgressTimestamp) &&
+                            info.HasBridgeSyncLastProgressTimestamp()) {
                         jsonGroup.SetBridgeSyncLastProgressTimestamp(info.GetBridgeSyncLastProgressTimestamp());
                     }
-                    if (info.HasBridgeSyncCopyBytesPerSecond()) {
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncCopyBytesPerSecond) && FieldsRequested.test(+EGroupFields::BridgeSyncCopyBytesPerSecond) &&
+                            info.HasBridgeSyncCopyBytesPerSecond()) {
                         jsonGroup.SetBridgeSyncCopyBytesPerSecond(info.GetBridgeSyncCopyBytesPerSecond());
                     }
-                    if (info.HasBridgeSyncRemainingBytes()) {
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncRemainingBytes) && FieldsRequested.test(+EGroupFields::BridgeSyncRemainingBytes) &&
+                            info.HasBridgeSyncRemainingBytes()) {
                         jsonGroup.SetBridgeSyncRemainingBytes(info.GetBridgeSyncRemainingBytes());
                     }
-                    if (info.HasBridgeSyncRemainingBytesComplete()) {
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncRemainingBytesComplete) && FieldsRequested.test(+EGroupFields::BridgeSyncRemainingBytesComplete) &&
+                            info.HasBridgeSyncRemainingBytesComplete()) {
                         jsonGroup.SetBridgeSyncRemainingBytesComplete(info.GetBridgeSyncRemainingBytesComplete());
                     }
-                    if (info.HasBridgeSyncRunning()) {
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncRunning) && FieldsRequested.test(+EGroupFields::BridgeSyncRunning) &&
+                            info.HasBridgeSyncRunning()) {
                         jsonGroup.SetBridgeSyncRunning(info.GetBridgeSyncRunning());
                     }
-                    if (info.HasBridgeSyncLastErrorTimestamp()) {
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncLastErrorTimestamp) && FieldsRequested.test(+EGroupFields::BridgeSyncLastErrorTimestamp) &&
+                            info.HasBridgeSyncLastErrorTimestamp()) {
                         jsonGroup.SetBridgeSyncLastErrorTimestamp(info.GetBridgeSyncLastErrorTimestamp());
                     }
-                    if (info.HasBridgeSyncErrorCount()) {
+                    if (FieldsAvailable.test(+EGroupFields::BridgeSyncErrorCount) && FieldsRequested.test(+EGroupFields::BridgeSyncErrorCount) &&
+                            info.HasBridgeSyncErrorCount()) {
                         jsonGroup.SetBridgeSyncErrorCount(info.GetBridgeSyncErrorCount());
                     }
                 }
@@ -2821,7 +2887,10 @@ public:
                   - name: fields_required
                     in: query
                     description: >
-                        list of fields required in response (the more - the heavier could be request):
+                        list of fields required in response (the more - the heavier could be request).
+                        When absent or empty, bridge synchronization fields are returned along with GroupId.
+                        An explicit list selects bridge fields individually; `all` requests every available field.
+                        Supported fields:
                           * `GroupId` (always required)
                           * `PoolName`
                           * `Kind`
@@ -2831,6 +2900,15 @@ public:
                           * `State` (also returns structured `StateInfo`)
                           * `StateInfo` (alias for `State`)
                           * `BridgeSyncStatus`
+                          * `BridgeSyncStage`
+                          * `BridgeSyncLastError`
+                          * `BridgeSyncLastProgressTimestamp`
+                          * `BridgeSyncCopyBytesPerSecond`
+                          * `BridgeSyncRemainingBytes`
+                          * `BridgeSyncRemainingBytesComplete`
+                          * `BridgeSyncRunning`
+                          * `BridgeSyncLastErrorTimestamp`
+                          * `BridgeSyncErrorCount`
                           * `Usage`
                           * `Used`
                           * `Limit`

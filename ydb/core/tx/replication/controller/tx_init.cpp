@@ -133,6 +133,8 @@ class TController::TTxInit: public TTxBase {
                 : dstState);
             target->SetDstPathId(dstPathId);
             target->SetIssue(issue);
+            target->SetSourceIdQualified(
+                rowset.GetValueOrDefault<Schema::Targets::QualifiedSourceId>(false));
             const auto indexBuild = rowset.GetValueOrDefault<Schema::Targets::IndexBuild>(TString());
             if (indexBuild) {
                 target->SetIndexBuild(true);

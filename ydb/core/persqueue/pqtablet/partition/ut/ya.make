@@ -10,6 +10,8 @@ PEERDIR(
     ydb/core/persqueue/pqtablet/partition
     ydb/core/persqueue/common
     ydb/core/protos
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
 )
 
 END()

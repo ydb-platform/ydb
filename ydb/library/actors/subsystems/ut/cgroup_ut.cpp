@@ -1,3 +1,4 @@
+// CI smoke: rebuild this suite to check --remove-cpu-detect-via-ram in PR-check.
 #include <ydb/library/actors/subsystems/cgroup/cgroup_events.h>
 #include <ydb/library/actors/subsystems/cgroup/cgroup_oom.h>
 #include <ydb/library/actors/subsystems/cgroup/cgroup_oom_trend.h>

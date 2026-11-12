@@ -225,8 +225,9 @@ namespace NKikimr {
 
                         if (numSmallParts) {
                             // fill in disk blob buffer
-                            AddBlobToQueue(id, TDiskBlob::CreateFromDistinctParts(&partData[0], &partData[numSmallParts],
-                                small, id.BlobSize(), Arena, ReplCtx->VDiskCfg->BlobHeaderMode, std::nullopt), small,
+                            AddBlobToQueue(id, TDiskBlob::CreateFromDistinctParts(partData.data(),
+                                partData.data() + numSmallParts, small, id.BlobSize(), Arena,
+                                ReplCtx->VDiskCfg->BlobHeaderMode, std::nullopt), small,
                                 false, rbq);
                         }
 

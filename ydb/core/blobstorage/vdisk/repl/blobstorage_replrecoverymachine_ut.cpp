@@ -6,6 +6,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
 
+#include <algorithm>
+
 namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TBlobStorageReplRecoveryMachine) {
@@ -118,22 +120,21 @@ namespace NKikimr {
                     }
                 }
                 UNIT_ASSERT(partIndex != groupInfo->Type.BlobSubgroupSize());
-                if (partIndex >= groupInfo->Type.TotalPartCount()) {
-                    continue;
-                }
-
                 auto partsToRecover = ingress.PartsWeMustHaveLocally(&groupInfo->GetTopology(),
                     replCtx->VCtx->ShortSelfVDisk, id) - ingress.LocalParts(groupInfo->Type);
+                if (partIndex >= groupInfo->Type.TotalPartCount()) {
+                    // A handoff may need all parts, including both parity parts.
+                    partsToRecover = ~NMatrix::TVectorType(0, groupInfo->Type.TotalPartCount());
+                } else {
+                    UNIT_ASSERT(partsToRecover.Get(partIndex));
+                }
                 UNIT_ASSERT(!partsToRecover.Empty());
-                UNIT_ASSERT(partsToRecover.Get(partIndex));
                 m.AddTask(id, partsToRecover, false, ingress);
             }
+            ui32 handoffRecoveries = 0;
             for (const auto& pair : data) {
                 const TLogoBlobID& id = pair.first;
                 const TVector<TString>& v = pair.second;
-                if (v[0].empty()) {
-                    continue; // nothing to recover on this disk
-                }
 
                 TBlobStorageGroupInfo::TVDiskIds varray;
                 TBlobStorageGroupInfo::TServiceIds services;
@@ -151,6 +152,9 @@ namespace NKikimr {
                         }
                     }
                     UNIT_ASSERT(partIndex != groupInfo->Type.BlobSubgroupSize());
+                    if (v[0].empty() && partIndex >= groupInfo->Type.DataParts()) {
+                        continue; // give the handoff only data parts and restore both parity parts
+                    }
                     p.AddData(0, TLogoBlobID(id, partIndex + 1), NKikimrProto::OK, TRope(v[i]));
                 }
                 NRepl::TRecoveryMachine::TRecoveredBlobsQueue rbq;
@@ -177,11 +181,24 @@ namespace NKikimr {
                 auto& item = rbq.front();
                 UNIT_ASSERT_EQUAL(item.Id, id);
 
-                TRope buf = TDiskBlob::Create(id.BlobSize(), partIndex + 1, groupInfo->Type.TotalPartCount(),
-                    TRope(v[0]), arena, replCtx->VDiskCfg->BlobHeaderMode, std::nullopt);
-
-                UNIT_ASSERT_EQUAL(item.Data, buf);
+                if (partIndex < groupInfo->Type.TotalPartCount()) {
+                    TRope buf = TDiskBlob::Create(id.BlobSize(), partIndex + 1, groupInfo->Type.TotalPartCount(),
+                        TRope(v[0]), arena, replCtx->VDiskCfg->BlobHeaderMode, std::nullopt);
+                    UNIT_ASSERT_EQUAL(item.Data, buf);
+                } else {
+                    ++handoffRecoveries;
+                    UNIT_ASSERT_VALUES_EQUAL(item.LocalParts.CountBits(), groupInfo->Type.TotalPartCount());
+                    const TDiskBlob recovered(&item.Data, item.LocalParts, groupInfo->Type, id);
+                    for (ui32 part = 0; part < groupInfo->Type.TotalPartCount(); ++part) {
+                        const auto disk = std::find(vdisks.begin(), vdisks.end(), varray[part]);
+                        UNIT_ASSERT(disk != vdisks.end());
+                        TRope holder;
+                        UNIT_ASSERT_VALUES_EQUAL(recovered.GetPart(part, &holder).ConvertToString(),
+                            v[disk - vdisks.begin()]);
+                    }
+                }
             }
+            UNIT_ASSERT(handoffRecoveries);
         }
         Y_UNIT_TEST(BasicFunctionality) {
             TestBasicFunctionality(TBlobStorageGroupType::Erasure4Plus2Block);

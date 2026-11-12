@@ -7,6 +7,7 @@ PEERDIR(
 SRCS(
     cast.h
     dynumber.cpp
+    cast.cpp
 )
 
 END()

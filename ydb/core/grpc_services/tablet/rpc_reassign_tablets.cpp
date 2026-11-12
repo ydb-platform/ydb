@@ -129,13 +129,14 @@ private:
         id.AddOptionalValue("hive_id", ToString(HiveId));
         id.AddOptionalValue("hive_generation", ToString(record.GetHiveGeneration()));
         id.AddOptionalValue("reassign_id", ToString(record.GetReassignId()));
-        Ydb::Operations::Operation operation;
+        Ydb::Tablet::ReassignTabletsResponse response;
+        auto& operation = *response.mutable_operation();
         operation.set_id(id.ToString());
         operation.set_ready(false);
         Ydb::Tablet::ReassignTabletsMetadata metadata;
         metadata.set_selected_tablets(record.GetSelectedTablets());
         operation.mutable_metadata()->PackFrom(metadata);
-        Reply(operation);
+        Reply(response, Ydb::StatusIds::SUCCESS);
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {

@@ -660,6 +660,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return false;
             }
 
+            const auto& actualColumn = *it->second;
+            if (column.HasDefaultFromLiteral() != actualColumn.HasDefaultFromLiteral()
+                || (column.HasDefaultFromLiteral()
+                    && column.GetDefaultFromLiteral().SerializeAsString() != actualColumn.GetDefaultFromLiteral().SerializeAsString())) {
+                error = TStringBuilder() << "Column literal default mismatch"
+                    << ": name: " << column.GetName();
+                return false;
+            }
+
             const auto expectedFamily = GetColumnFamilyName(column);
             const auto name = gotFamilyNames.find(it->second->GetFamily());
             const TStringBuf actualFamily = name == gotFamilyNames.end() ? TStringBuf("<unknown>") : name->second;

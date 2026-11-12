@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
     // The destination of a table with a serial column has to get the sequence as well: the column
     // default references it, and the sequence position is then advanced by replication.
-    Y_UNIT_TEST(CreateTableWithSerialColumn) {
+    void WithSerialColumn(bool withLiteralDefault) {
         TEnv env;
 
         NKikimrSchemeOp::TIndexedTableCreationConfig config;
@@ -119,6 +119,11 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             auto* column = tableDesc.AddColumns();
             column->SetName("value");
             column->SetType("Utf8");
+            if (withLiteralDefault) {
+                auto* literal = column->MutableDefaultFromLiteral();
+                literal->mutable_type()->set_type_id(Ydb::Type::UTF8);
+                literal->mutable_value()->set_text_value("default message");
+            }
         }
         tableDesc.AddKeyColumnNames("id");
         {
@@ -157,6 +162,16 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         UNIT_ASSERT_VALUES_EQUAL(sequence.GetName(), "_serial_column_id");
         UNIT_ASSERT_VALUES_EQUAL(sequence.GetDataType(), "Int64");
 
+        if (withLiteralDefault) {
+            const auto* valueColumn = FindIfPtr(replicatedDesc.GetColumns(), [](const auto& column) {
+                return column.GetName() == "value";
+            });
+            UNIT_ASSERT(valueColumn);
+            UNIT_ASSERT(valueColumn->HasDefaultFromLiteral());
+            UNIT_ASSERT_VALUES_EQUAL(valueColumn->GetDefaultFromLiteral().SerializeAsString(),
+                tableDesc.GetColumns(1).GetDefaultFromLiteral().SerializeAsString());
+        }
+
         // The sequence position is only returned by a table describe asked for it, the scheme
         // description above never has it.
         env.RunCall([&] {
@@ -176,6 +191,14 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             UNIT_ASSERT_VALUES_EQUAL(column->SequenceDescription->SetVal->NextValue, 42);
             UNIT_ASSERT(column->SequenceDescription->SetVal->NextUsed);
         });
+    }
+
+    Y_UNIT_TEST(CreateTableWithSerialColumn) {
+        WithSerialColumn(false);
+    }
+
+    Y_UNIT_TEST(CreateTableWithSerialColumnAndLiteralDefault) {
+        WithSerialColumn(true);
     }
 
     Y_UNIT_TEST(Basic) {
@@ -236,6 +259,61 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 }
             }
         }
+    }
+
+    void ExistingDstLiteralDefault(const TMaybe<ui64>& sourceDefault, const TMaybe<ui64>& destinationDefault) {
+        for (const auto consistency : {EConsistencyLevel::Row, EConsistencyLevel::Global}) {
+            for (const bool notNull : {false, true}) {
+                TEnv env;
+                auto source = MakeTableDescription({
+                    .Name = "Src",
+                    .KeyColumns = {"key"},
+                    .Columns = {
+                        {.Name = "key", .Type = "Uint64"},
+                        {.Name = "count", .Type = "Uint64"},
+                    },
+                    .ReplicationConfig = Nothing(),
+                });
+                auto* column = source->MutableColumns(1);
+                column->SetNotNull(notNull);
+                if (sourceDefault) {
+                    column->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+                    column->MutableDefaultFromLiteral()->mutable_value()->set_uint64_value(*sourceDefault);
+                }
+                env.CreateTable("/Root", *source);
+
+                auto destination = *source;
+                destination.SetName("Dst");
+                FillReplicationConfig(*destination.MutableReplicationConfig(), EReplicationMode::ReadOnly, consistency);
+                column = destination.MutableColumns(1);
+                column->ClearDefaultFromLiteral();
+                if (destinationDefault) {
+                    column->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+                    column->MutableDefaultFromLiteral()->mutable_value()->set_uint64_value(*destinationDefault);
+                }
+                env.CreateTable("/Root", destination);
+
+                env.GetRuntime().Register(CreateDstCreator(
+                    env.GetSender(), env.GetSchemeshardId("/Root/Src"), env.GetYdbProxy(),
+                    "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                    "/Root/Src", "/Root/Dst", EReplicationMode::ReadOnly, consistency));
+                const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSchemeError, result->Get()->Error);
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "Column literal default mismatch: name: count");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ColumnLiteralDefaultMissing) {
+        ExistingDstLiteralDefault(ui64(0), Nothing());
+    }
+
+    Y_UNIT_TEST(ColumnLiteralDefaultMismatch) {
+        ExistingDstLiteralDefault(ui64(0), ui64(1));
+    }
+
+    Y_UNIT_TEST(ColumnLiteralDefaultUnexpected) {
+        ExistingDstLiteralDefault(Nothing(), ui64(0));
     }
 
     Y_UNIT_TEST(CreateWaitingImportTable) {
@@ -909,7 +987,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Basic("/Root/Replicated", EReplicationMode::ReadOnly, EConsistencyLevel::Global);
     }
 
-    void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType, bool enableAsyncIndexReplication = false) {
+    void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType,
+            bool enableAsyncIndexReplication = false, TMaybe<ui32> defaultValue = Nothing()) {
         TFeatureFlags featureFlags;
         featureFlags.SetEnableChangefeedsOnIndexTables(true);
         featureFlags.SetEnableAsyncIndexReplication(enableAsyncIndexReplication);
@@ -928,7 +1007,13 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         const TString indexName = "index_by_value";
 
-        env.CreateTableWithIndex("/Root", *MakeTableDescription(tableDesc),
+        auto source = MakeTableDescription(tableDesc);
+        if (defaultValue) {
+            auto* literal = source->MutableColumns(1)->MutableDefaultFromLiteral();
+            literal->mutable_type()->set_type_id(Ydb::Type::UINT32);
+            literal->mutable_value()->set_uint32_value(*defaultValue);
+        }
+        env.CreateTableWithIndex("/Root", *source,
              indexName, TVector<TString>{"value"}, indexType);
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
@@ -944,6 +1029,16 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         const auto& replicatedDesc = desc.GetPathDescription().GetTable();
 
         CheckTableReplica(tableDesc, replicatedDesc);
+
+        if (defaultValue) {
+            const auto* valueColumn = FindIfPtr(replicatedDesc.GetColumns(), [](const auto& column) {
+                return column.GetName() == "value";
+            });
+            UNIT_ASSERT(valueColumn);
+            UNIT_ASSERT(valueColumn->HasDefaultFromLiteral());
+            UNIT_ASSERT_VALUES_EQUAL(valueColumn->GetDefaultFromLiteral().SerializeAsString(),
+                source->GetColumns(1).GetDefaultFromLiteral().SerializeAsString());
+        }
 
         if (indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync && !enableAsyncIndexReplication) {
             UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.TableIndexesSize(), 0);
@@ -993,12 +1088,20 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
+    Y_UNIT_TEST(WithSyncIndexAndLiteralDefault) {
+        WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobal, false, ui32(42));
+    }
+
     Y_UNIT_TEST(WithSyncIndexAndIntermediateDir) {
         WithIndex("/Root/Dir/Replicated", NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
     Y_UNIT_TEST(WithAsyncIndex) {
         WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobalAsync, true);
+    }
+
+    Y_UNIT_TEST(WithAsyncIndexAndLiteralDefault) {
+        WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobalAsync, true, ui32(42));
     }
 
     Y_UNIT_TEST(WithAsyncIndexDisabled) {

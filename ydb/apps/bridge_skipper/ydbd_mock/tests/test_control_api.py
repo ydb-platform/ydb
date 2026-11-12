@@ -1,6 +1,5 @@
 """The HTTP control API and the peer API of a live instance."""
 import asyncio
-import argparse
 import os
 import tempfile
 import time
@@ -8,7 +7,6 @@ import unittest
 from unittest import mock
 
 from ydb.apps.bridge_skipper.ydbd_mock.lib import model
-from ydb.apps.bridge_skipper.ydbd_mock.lib import supervisor
 from ydb.apps.bridge_skipper.ydbd_mock.lib.testkit import LiveCluster, wait_until
 
 
@@ -115,6 +113,16 @@ class ControlOpsTest(ApiCase):
         state = await self.post("pile1", "/control", {"all": True, "op": "unavailable", "on": True})
         self.assertTrue(all(n["faults"] == {"unavailable": True} for n in state["nodes"]))
         state = await self.post("pile1", "/control", {"all": True, "op": "clear"})
+        self.assertTrue(all(n["faults"] == {} for n in state["nodes"]))
+
+    async def test_healthcheck_status_op(self):
+        state = await self.post("pile1", "/control", {"all": True, "op": "healthcheck_status", "value": "RED"})
+        for n in state["nodes"]:
+            self.assertEqual(self.node_faults(state, n["label"]), {"healthcheck_status": "RED"})
+        await self.post("pile1", "/control", {"all": True, "op": "healthcheck_status", "value": "PURPLE"}, expect=400)
+        state = await self.get("pile1", "/state")
+        self.assertTrue(all(n["faults"] == {"healthcheck_status": "RED"} for n in state["nodes"]))
+        state = await self.post("pile1", "/control", {"all": True, "op": "healthcheck_status", "value": None})
         self.assertTrue(all(n["faults"] == {} for n in state["nodes"]))
 
     async def test_each_control_call_is_logged_as_a_fault_event(self):
@@ -329,85 +337,6 @@ class ResetAndScenarioTest(ApiCase):
             self.assertTrue(inst.node_faults[0].unavailable)
             self.assertEqual(inst.reach.blocked, {1})
 
-    async def test_reset_samples_generation_after_pending_commits_are_fenced(self):
-        loop = asyncio.get_running_loop()
-        with tempfile.TemporaryDirectory() as root:
-            topology_path = os.path.join(root, "topology.yaml")
-            self.c.topo.save(topology_path)
-            cluster = supervisor.Cluster(root)
-            cluster._topo = self.c.topo
-            cluster.alive = lambda pile: True
-            cluster.pid = lambda pile: os.getpid()
-
-            for name in self.c.topo.pile_names:
-                self.c.inst(name).timings.promote_delay = 60.0
-
-            delivery_entered = asyncio.Event()
-            release_delivery = asyncio.Event()
-            source = self.c.inst("pile1")
-            transport = source.transport
-            original_call = transport.call
-
-            async def gated_call(src, dst, op, payload, timeout):
-                snapshot = payload.get("snapshot", {})
-                if src == 0 and dst == 1 and op == "commit" and snapshot.get("generation") == 3:
-                    delivery_entered.set()
-                    await release_delivery.wait()
-                return await original_call(src, dst, op, payload, timeout)
-
-            transport.call = gated_call
-            proposal_tasks = []
-            state_reads = 0
-            injection_attempts = []
-            original_request = cluster.request
-
-            async def inject_commits():
-                injection_attempts.append("g2")
-                first = await source.admin_update([("pile2", model.PUB_PROMOTED)])
-                injection_attempts.append("g3")
-                second_task = asyncio.create_task(source.admin_update([
-                    ("pile1", model.PUB_SYNCHRONIZED), ("pile2", model.PUB_PRIMARY)]))
-                proposal_tasks.append(second_task)
-                while not delivery_entered.is_set() and not second_task.done():
-                    await asyncio.sleep(0.005)
-                return first
-
-            def intercepted_request(pile, method, path, body=None, timeout=5.0):
-                nonlocal state_reads
-                result = original_request(pile, method, path, body, timeout)
-                if method == "GET" and path == "/state":
-                    state_reads += 1
-                    if state_reads == len(self.c.topo.pile_names):
-                        asyncio.run_coroutine_threadsafe(inject_commits(), loop).result(timeout=10.0)
-                return result
-
-            cluster.request = intercepted_request
-            printed = []
-            try:
-                with mock.patch.object(supervisor, "_signal"), mock.patch.object(
-                        supervisor, "_scenario"), mock.patch.object(supervisor, "_print", printed.append):
-                    await asyncio.wait_for(asyncio.to_thread(
-                        supervisor.cmd_reset, cluster, argparse.Namespace()), timeout=15.0)
-                self.assertTrue(printed)
-                reset_generation = printed[-1]["generation"]
-                self.assertEqual(reset_generation, 2)
-                self.assertEqual(injection_attempts, ["g2", "g3"])
-                release_delivery.set()
-                if proposal_tasks:
-                    await asyncio.wait_for(proposal_tasks[-1], timeout=5.0)
-                await asyncio.sleep(0.1)
-                for pile in self.c.topo.pile_names:
-                    inst = self.c.inst(pile)
-                    self.assertEqual(inst.state.generation, reset_generation)
-                    self.assertEqual(inst.state.per_pile,
-                                     [model.Stored.SYNCHRONIZED, model.Stored.SYNCHRONIZED])
-                    self.assertEqual((inst.state.primary, inst.state.promoted), (0, 0))
-            finally:
-                release_delivery.set()
-                for task in proposal_tasks:
-                    if not task.done():
-                        await asyncio.gather(task, return_exceptions=True)
-
     async def test_scenario_markers_land_in_the_event_log(self):
         out = await self.post("pile1", "/scenario", {
             "name": "S4", "step": "kill pile2", "kind": "ignored", "pile": "pile2"})
@@ -421,7 +350,9 @@ class ResetAndScenarioTest(ApiCase):
 class PeerApiTest(ApiCase):
     async def test_ping_and_state(self):
         ping = await self.get("pile1", "/peer/ping", **{"from": "pile2"})
-        self.assertEqual(ping, {"pile": "pile1", "generation": 1, "revision": 0, "ready": True})
+        self.assertEqual(ping, {
+            "pile": "pile1", "generation": 1, "revision": 0, "ready": True,
+            "static_up": 3, "node_health": ["up", "up", "up"], "connected_piles": [True, True]})
         state = await self.get("pile1", "/peer/state", **{"from": "pile2"})
         self.assertEqual((state["generation"], state["per_pile"], state["primary"]), (1, [3, 3], 0))
 

@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
 
 import os
+import select
+import signal
 import sys
 import tempfile
+import time
 import uuid
 import pexpect
 import pytest
 
+from pexpect.spawnbase import SpawnBase
 from typing import List, Optional
 from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin, BaseCliTestWithDatabase
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -25,6 +29,90 @@ class BaseInteractiveTest(BaseCliTestWithDatabase):
     def _send_query(child, query: str):
         child.sendline(query)
         child.send('\r')
+
+    @staticmethod
+    def close_interactive(child, timeout: float = 60):
+        """Wait for CLI shutdown, including LLVM's exit-time profile write.
+
+        The caller must request exit first. Closing the PTY after just ``Bye!``
+        can kill the process while it is still writing its coverage profile.
+        A failed shutdown must remain a test failure, even during cleanup.
+        """
+        if child.closed:
+            return
+        original_error = sys.exc_info()[1]
+        process = child.ptyproc
+
+        def wait_for_exit(deadline, drain=False):
+            # pexpect.expect()/isalive()/wait() can block when a live child
+            # closes stdio. Reap with WNOHANG and drain only a readable PTY.
+            while not process.terminated or (drain and not child.flag_eof):
+                if not process.terminated:
+                    pid, status = os.waitpid(process.pid, os.WNOHANG)
+                    if pid:
+                        process.status = status
+                        process.terminated = True
+                        process.exitstatus = os.WEXITSTATUS(status) if os.WIFEXITED(status) else None
+                        process.signalstatus = os.WTERMSIG(status) if os.WIFSIGNALED(status) else None
+                if process.terminated and (not drain or child.flag_eof):
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                interval = min(0.02, remaining)
+                if drain and not child.flag_eof:
+                    if select.select([child.child_fd], [], [], interval)[0]:
+                        try:
+                            # Preserve pexpect's decoding and output logs without
+                            # spawn.read_nonblocking()'s blocking isalive() call.
+                            SpawnBase.read_nonblocking(child, 65536)
+                        except pexpect.EOF:
+                            pass
+                else:
+                    # EOF does not imply process exit. Only poll after EOF or
+                    # during forced cleanup; do not keep reading a closed PTY.
+                    time.sleep(interval)
+            return True
+
+        failure = None
+        cause = None
+        try:
+            deadline = time.monotonic() + timeout
+            if not wait_for_exit(deadline, drain=True):
+                failure = f"process shutdown did not finish within {timeout}s"
+            else:
+                child.close()
+                if child.signalstatus is not None:
+                    failure = f"Interactive CLI terminated by signal {child.signalstatus}"
+                elif child.exitstatus != 0:
+                    failure = f"Interactive CLI exit_code={child.exitstatus}, expected 0"
+        except Exception as error:
+            failure = str(error)
+            cause = error
+
+        if failure is None:
+            return
+
+        killed = False
+        if not process.terminated:
+            try:
+                # Do not use pexpect.kill(): it calls the possibly blocking
+                # isalive() before sending the signal.
+                os.kill(process.pid, signal.SIGKILL)
+                killed = True
+            except ProcessLookupError:
+                pass
+            if not wait_for_exit(time.monotonic() + 5):
+                # Even an uninterruptible process must not hang test cleanup.
+                process.fileobj.close()
+                process.closed = child.closed = True
+                process.fd = child.child_fd = -1
+        if not child.closed:
+            child.close()
+        detail = f"Interactive CLI shutdown failed: {failure}"
+        if killed:
+            detail += "; child was killed by signal 9, coverage may be incomplete"
+        raise AssertionError(detail) from (original_error or cause)
 
     @staticmethod
     def _isolated_profile_file() -> str:

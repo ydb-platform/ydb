@@ -377,6 +377,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TWriteSessionsQuoterInitializer : public IKikimrServicesInitializer {
+public:
+    TWriteSessionsQuoterInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TTopicDeferredPublishRegistryInitializer : public IKikimrServicesInitializer {
 public:
     TTopicDeferredPublishRegistryInitializer(const TKikimrRunConfig& runConfig);

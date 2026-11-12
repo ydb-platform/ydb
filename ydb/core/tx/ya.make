@@ -23,6 +23,7 @@ END()
 
 RECURSE(
     balance_coverage
+    cdc_aggregator
     columnshard
     conveyor
     conveyor_composite

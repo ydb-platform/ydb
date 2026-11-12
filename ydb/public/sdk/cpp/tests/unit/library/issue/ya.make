@@ -1,7 +1,5 @@
 UNITTEST()
 
-FORK_SUBTESTS()
-
 SRCS(
     utf8_ut.cpp
     yql_issue_ut.cpp

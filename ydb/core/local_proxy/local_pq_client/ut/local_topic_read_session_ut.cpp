@@ -147,7 +147,10 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
         auto session = NativeSdk ? TopicClient->CreateReadSession(ReadSettings()) : CreateReadSession();
         auto start = WaitForReadEvent<TReadSessionEvent::TStartPartitionSessionEvent>(*session);
         UNIT_ASSERT_VALUES_EQUAL(start.GetCommittedOffset(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(start.GetReadOffset(), 1);
         UNIT_ASSERT_VALUES_EQUAL(start.GetEndOffset(), 3);
+        UNIT_ASSERT(start.GetRetainedStartOffset());
+        UNIT_ASSERT_VALUES_EQUAL(*start.GetRetainedStartOffset(), 0);
         start.Confirm();
         const auto messages = ReadMessages(*session, 2);
         UNIT_ASSERT_VALUES_EQUAL(messages[0].GetOffset(), 1);

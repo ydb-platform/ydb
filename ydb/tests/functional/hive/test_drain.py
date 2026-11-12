@@ -3,6 +3,7 @@ import logging
 
 import yatest
 from ydb.tests.library.common.delayed import wait_tablets_are_active
+from ydb.tests.library.common.wait_for import retry_assertions
 from ydb.tests.library.common.types import Erasure, TabletStates
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -55,11 +56,22 @@ class TestHive(object):
         if hasattr(cls, 'cluster'):
             cls.cluster.stop()
 
+    def wait_storage_ready(self):
+        def check():
+            config = self.cluster.client.query_base_config().BaseConfig
+            connected_nodes = {node.NodeId for node in config.Node if node.Connected}
+            assert set(self.cluster.nodes).issubset(connected_nodes), 'Storage nodes are not connected'
+            assert config.VSlot, 'Storage groups are not configured'
+            assert all(slot.Ready for slot in config.VSlot), 'Storage disks are not BSC-ready'
+
+        retry_assertions(check, timeout_seconds=TimeoutSeconds)
+
     def test_drain_tablets(self):
         path = '/Root/mydb'
         table_path = '/Root/mydb/mytable'
         self.cluster.scheme_client.make_directory(path)
         all_tablet_ids = create_kv_tablets_and_wait_for_start(self.cluster.client, self.cluster.kv_client, self.swagger_client, TabletsCount, table_path)
+        self.wait_storage_ready()
         for node_id, node in self.cluster.nodes.items():
             if node_id == 1:
                 continue
@@ -85,12 +97,14 @@ class TestHive(object):
             )
 
             node.start()
+            self.wait_storage_ready()
 
     def test_drain_on_stop(self):
         path = '/Root/mydb'
         table_path = '/Root/mydb/mytable'
         self.cluster.scheme_client.make_directory(path)
         all_tablet_ids = create_kv_tablets_and_wait_for_start(self.cluster.client, self.cluster.kv_client, self.swagger_client, TabletsCount, table_path)
+        self.wait_storage_ready()
         for node_id, node in self.cluster.nodes.items():
             if node_id == 1:
                 continue
@@ -108,3 +122,4 @@ class TestHive(object):
                 )
 
             node.start()
+            self.wait_storage_ready()

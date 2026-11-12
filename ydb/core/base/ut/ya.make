@@ -23,6 +23,7 @@ SRCS(
     database_kind_ut.cpp
     fulltext_ut.cpp
     kmeans_ut.cpp
+    int4_kmeans_ut.cpp
     localdb_ut.cpp
     logoblob_ut.cpp
     memory_stats_ut.cpp

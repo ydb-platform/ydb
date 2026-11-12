@@ -12,7 +12,7 @@ FROM (
         Substring(CAST(c_phone AS String), 0u, 2u) AS cntrycode,
         c_acctbal
     FROM
-        `/Root/customer` as customer
+        `customer` as customer
     WHERE
         Substring(CAST(c_phone AS String), 0u, 2u) IN (
             '13', '31', '23', '29', '30', '18', '17'
@@ -21,7 +21,7 @@ FROM (
             SELECT
                 Avg(c_acctbal)
             FROM
-                `/Root/customer` as customer
+                `customer` as customer
             WHERE
                 c_acctbal > $to_decimal("0.00")
                 AND Substring(CAST(c_phone AS String), 0u, 2u) IN (
@@ -32,7 +32,7 @@ FROM (
             SELECT
                 *
             FROM
-                `/Root/orders` as orders
+                `orders` as orders
             WHERE
                 o_custkey == c_custkey
         )

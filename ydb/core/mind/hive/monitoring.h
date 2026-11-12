@@ -11,11 +11,12 @@ class TLoggedMonTransaction {
 private:
     ui64 Index;
     TString User;
+    TString LogPrefix;
 
 protected:
     TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& evi, THive* self);
 
-    void WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op);
+    void WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op, TStringBuf description);
 
     TString GetUserForLog() const {
         return User.empty() ? TString("anonymous") : User;
@@ -23,6 +24,12 @@ protected:
 };
 
 TCgiParameters GetParams(const NMon::TEvRemoteHttpInfo* ev);
+
+// user SID from the request's auth token; empty when the request carries no token
+TString GetMonUser(const NMon::TEvRemoteHttpInfo* ev);
+
+// the same with "anonymous" instead of an empty SID: for log lines and event history
+TString GetMonUserForLog(const NMon::TEvRemoteHttpInfo* ev);
 
 struct THttpStatus {
     static const inline TString OK = "200 Ok";

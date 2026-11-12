@@ -1,5 +1,6 @@
 #include "sql_query.h"
 
+#include "sql_checksum.h"
 #include "sql_ddl_backup.h"
 #include "sql_ddl_identity.h"
 #include "sql_ddl_resource_pool.h"
@@ -1742,6 +1743,15 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, node);
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore74: {
+            auto node = TChecksumTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core74().GetRule_checksum_table_stmt1());
+            if (!node) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, node);
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
     }
@@ -3332,16 +3342,13 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
                 return {};
             }
 
-            // special guard to raise error on situation:
-            // use cluster1;
-            // pragma PqReadPqBy="cluster2";
-            const TString* currentClusterLiteral = ctx.Scoped->CurrCluster.GetLiteral();
-            if (currentClusterLiteral && *values[0].GetLiteral() != "dq" && *currentClusterLiteral != *values[0].GetLiteral()) {
-                query.Error() << "Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: " << *values[0].GetLiteral() << " != " << *currentClusterLiteral;
+            const auto& reader = *values[0].GetLiteral();
+            if (reader && reader != "dq") {
+                query.Error() << "Expected 'dq' or an empty string for: " << pragma;
                 return {};
             }
 
-            ctx.PqReadByRtmrCluster = *values[0].GetLiteral();
+            ctx.PqReadByDq = reader == "dq";
             return TNodePtr{};
         },
     }),

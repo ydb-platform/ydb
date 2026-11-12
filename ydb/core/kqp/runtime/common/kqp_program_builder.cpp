@@ -308,7 +308,8 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings, TRuntimeNode mode)
+TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings, TRuntimeNode mode,
+    TRuntimeNode patternMode, TRuntimeNode escape)
 {
     // Validate text argument — String, Utf8, Json, JsonDocument (or optional of those)
     const auto& textType = text.GetStaticType();
@@ -360,10 +361,25 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
     const auto& modeTypeData = static_cast<const TDataType&>(*modeType);
     MKQL_ENSURE(modeTypeData.GetSchemeType() == NUdf::TDataType<ui32>::Id, "Expected Uint32 for mode.");
 
+    MKQL_ENSURE(static_cast<bool>(patternMode) == static_cast<bool>(escape), "Expected both pattern mode and escape.");
+    if (patternMode) {
+        MKQL_ENSURE(textSchemeType == NScheme::NTypeIds::String || textSchemeType == NScheme::NTypeIds::Utf8,
+            "Expected String or Utf8 for a pattern.");
+        for (const auto& argument : {patternMode, escape}) {
+            MKQL_ENSURE(argument.GetStaticType()->IsData()
+                && static_cast<const TDataType*>(argument.GetStaticType())->GetSchemeType() == NScheme::NTypeIds::String,
+                "Expected String for pattern mode and escape.");
+        }
+    }
+
     TCallableBuilder callableBuilder(Env, __func__, listType);
     callableBuilder.Add(text);
     callableBuilder.Add(settings);
     callableBuilder.Add(mode);
+    if (patternMode) {
+        callableBuilder.Add(patternMode);
+        callableBuilder.Add(escape);
+    }
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

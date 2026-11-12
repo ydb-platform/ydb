@@ -2,6 +2,8 @@
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/tablet_flat/flat_dbase_apply.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -102,6 +104,7 @@ namespace {
                 a.Room == b.Room
                 && a.Cache == b.Cache
                 && a.Codec == b.Codec
+                && a.CodecLevel == b.CodecLevel
                 && a.Small == b.Small
                 && a.Large == b.Large
                 && a.CacheMode == b.CacheMode
@@ -243,6 +246,36 @@ Y_UNIT_TEST_SUITE(TScheme) {
         }
     }
 
+    Y_UNIT_TEST(ZstdCompression)
+    {
+        for (ui32 level : {0u, 1u, static_cast<ui32>(ZSTD_maxCLevel())}) {
+            auto alter = TModel().Build();
+            alter.SetFamilyCompression(TModel::TableId, TModel::GroupId2, NPage::ECodec::ZSTD, level);
+
+            TScheme scheme;
+            TSchemeModifier(scheme).Apply(*alter.Flush());
+            const auto& family = scheme.GetTableInfo(TModel::TableId)->Families.at(TModel::GroupId2);
+            UNIT_ASSERT(family.Codec == NPage::ECodec::ZSTD);
+            UNIT_ASSERT_VALUES_EQUAL(family.CodecLevel, level);
+
+            TScheme restored;
+            TSchemeModifier(restored).Apply(*scheme.GetSnapshot());
+            UNIT_ASSERT(TCompare().Do(TModel::TableId, scheme, restored));
+
+            TAlter cache;
+            cache.SetFamilyCache(TModel::TableId, TModel::GroupId2, NPage::ECache::Ever);
+            TSchemeModifier(restored).Apply(*cache.Flush());
+            UNIT_ASSERT_VALUES_EQUAL(
+                restored.GetTableInfo(TModel::TableId)->Families.at(TModel::GroupId2).CodecLevel, level);
+
+            TAlter compression;
+            compression.SetFamilyCompression(TModel::TableId, TModel::GroupId2, NPage::ECodec::LZ4);
+            TSchemeModifier(restored).Apply(*compression.Flush());
+            UNIT_ASSERT_VALUES_EQUAL(
+                restored.GetTableInfo(TModel::TableId)->Families.at(TModel::GroupId2).CodecLevel, 1);
+        }
+    }
+
     Y_UNIT_TEST(MalformedFamilySettings)
     {
         using namespace NTable::NPage;
@@ -265,6 +298,11 @@ Y_UNIT_TEST_SUITE(TScheme) {
         apply([](auto&) { });
         UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& delta) { delta.SetCodec(256); }),
             yexception, "Invalid page encoding code value 256");
+        const auto invalidLevel = ZSTD_maxCLevel() + 1;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply([invalidLevel](auto& delta) { delta.SetCodecLevel(invalidLevel); }),
+            yexception, TStringBuilder() << "Invalid page compression level " << invalidLevel);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& delta) { delta.SetCodecLevel(2); }),
+            yexception, "Compression level is only supported for ZSTD");
         UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& delta) { delta.SetCache(256); }),
             yexception, "Invalid pages cache policy value 256");
         UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& delta) { delta.SetCacheMode(65536); }),

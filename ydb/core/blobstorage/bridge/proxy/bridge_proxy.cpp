@@ -23,6 +23,9 @@ namespace NKikimr {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         TGroupId GroupId;
         TActorId InnerProxyId; // DS proxy of the inline pile, if this group is an inline pile one
+        // the group is an ordinary one now (the bridged cluster has been rolled back), its inline pile serves it as such
+        // until node warden builds a plain DS proxy at the next start: requests go to the inner proxy as they are
+        bool Passthrough = false;
 
         using TClusterState = NKikimrBridge::TClusterState;
 
@@ -202,6 +205,7 @@ namespace NKikimr {
             std::optional<TDuration> RoutingBudget;
 
             TDynBitMap Processed; // a set of piles we already got main reply from
+            bool RestartNeeded = false; // set while processing a response: the request has to start over by current routing
 
             template<typename TEvRequest>
             TRequest(TActorId sender, ui64 cookie, std::unique_ptr<TEvRequest>&& request, TIntrusivePtr<TBlobStorageGroupInfo> info,
@@ -426,6 +430,10 @@ namespace NKikimr {
                         // the flag may be known from the earlier response about this blob, while this read may come from
                         // VDisks not knowing it yet
                         RestoreQueue[payload.Index].IssueKeepFlag |= response.DoNotKeep < response.Keep;
+                        DropRestoreTargetsOutOfDataQuorum(self, RestoreQueue[payload.Index]);
+                        if (RestoreQueue[payload.Index].WriteTo.Empty()) {
+                            return IssueNextRestoreGet(self); // the piles to restore have left while the blob was read
+                        }
                         IssueRestorePut(self, payload.Index);
                         return nullptr;
                     } else {
@@ -556,6 +564,7 @@ namespace NKikimr {
 
                 while (RestoreIndex < RestoreQueue.size()) {
                     auto& item = RestoreQueue[RestoreIndex];
+                    DropRestoreTargetsOutOfDataQuorum(self, item);
 
                     if (!item.ReadFrom || item.WriteTo.Empty()) {
                         ++RestoreIndex;
@@ -566,6 +575,11 @@ namespace NKikimr {
 
                     if (item.Buffer && item.Buffer.size() == item.Id.BlobSize()) {
                         IssueRestorePut(self, RestoreIndex);
+                    } else if (!self.IsPileInDataQuorum(item.ReadFrom)) {
+                        // the pile to read the blob from has left data quorum since it answered, so it may never answer
+                        // again; the request is restarted to find the blob in the piles still there
+                        RestartNeeded = true;
+                        return nullptr;
                     } else {
                         auto get = std::make_unique<TEvBlobStorage::TEvGet>(item.Id, 0, 0, Deadline,
                             GetHandleClass);
@@ -599,6 +613,17 @@ namespace NKikimr {
                         Y_ABORT();
                     }
                 }, State);
+            }
+
+            // The pile which has left data quorum since it reported the blob missing is not restored: the request admitted
+            // now wouldn't touch it, it gets synced when it is back, and it may be gone for good (so that the write would
+            // just fail the read of the blob other piles have).
+            static void DropRestoreTargetsOutOfDataQuorum(TThis& self, TRestoreItem& item) {
+                Y_FOR_EACH_BIT(i, item.WriteTo) {
+                    if (!self.IsPileInDataQuorum(TBridgePileId::FromPileIndex(i))) {
+                        item.WriteTo.Reset(i);
+                    }
+                }
             }
 
             void IssueRestorePut(TThis& self, size_t index) {
@@ -977,17 +1002,22 @@ namespace NKikimr {
 
         void RetryPending(TPendingQueue& queue) {
             for (auto& [deadline, ev] : std::exchange(queue, {})) {
-                switch (ev->GetTypeRewrite()) {
-#define RETRY_REQUEST(TYPE) \
-                    case TYPE::EventType: { \
-                        TYPE::TPtr request(static_cast<TEventHandle<TYPE>*>(ev.release())); \
-                        HandleProxyRequest(request, deadline - TActivationContext::Monotonic()); \
-                        break; \
-                    }
-                    DSPROXY_ENUM_EVENTS(RETRY_REQUEST)
-#undef RETRY_REQUEST
-                    default: Y_ABORT();
+                Redispatch(std::move(ev), deadline - TActivationContext::Monotonic());
+            }
+        }
+
+        // route the request held by this proxy (waiting or restarted one) anew, with the routing wait it has left
+        void Redispatch(std::unique_ptr<IEventHandle> ev, std::optional<TDuration> routingBudget) {
+            switch (ev->GetTypeRewrite()) {
+#define REDISPATCH_REQUEST(TYPE) \
+                case TYPE::EventType: { \
+                    TYPE::TPtr request(static_cast<TEventHandle<TYPE>*>(ev.release())); \
+                    HandleProxyRequest(request, routingBudget); \
+                    break; \
                 }
+                DSPROXY_ENUM_EVENTS(REDISPATCH_REQUEST)
+#undef REDISPATCH_REQUEST
+                default: Y_ABORT();
             }
         }
 
@@ -1003,8 +1033,77 @@ namespace NKikimr {
 
         void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             StorageConfig = std::move(ev->Get()->Config);
-            BridgeInfo = std::move(ev->Get()->BridgeInfo);
+            const TBridgeInfo::TPtr prevBridgeInfo = std::exchange(BridgeInfo, std::move(ev->Get()->BridgeInfo));
             RetryPending(PendingForClusterState);
+            // subrequests go only to the piles in data quorum, so there is nothing to look for unless some pile has left
+            // it with this very config (which is rare, unlike config changes of other kinds)
+            const bool pileLeftDataQuorum = prevBridgeInfo && std::ranges::any_of(prevBridgeInfo->Piles, [&](const auto& pile) {
+                return IsPileInDataQuorum(*prevBridgeInfo, pile.BridgePileId) && !IsPileInDataQuorum(pile.BridgePileId);
+            });
+            if (pileLeftDataQuorum) {
+                RestartRequestsWaitingForPilesOut();
+            }
+        }
+
+        // does the pile take part in data quorum (and hence gets requests) by the cluster state
+        static bool IsPileInDataQuorum(const TBridgeInfo& bridgeInfo, TBridgePileId bridgePileId) {
+            const TBridgeInfo::TPile *pile = bridgeInfo.FindPile(bridgePileId);
+            return pile && NBridge::PileStateTraits(pile->State).RequiresDataQuorum;
+        }
+
+        bool IsPileInDataQuorum(TBridgePileId bridgePileId) const {
+            return BridgeInfo && IsPileInDataQuorum(*BridgeInfo, bridgePileId);
+        }
+
+        // a request racing with configuration changes is restarted this many times at most
+        static constexpr ui32 MaxRestarts = 100;
+
+        // the responses of the subrequests still running are of no use anymore
+        void ForgetSubrequests(TRequest& request) {
+            for (ui64 cookie : std::exchange(request.CookiesInFlight, {})) {
+                RequestsInFlight.erase(cookie);
+            }
+        }
+
+        // the handle restarting the request with its original sender and cookie, and its restart counter advanced
+        std::tuple<std::unique_ptr<IEventHandle>, TEvBlobStorage::TEvRequestCommon*> MakeRestartHandle(TRequest& request) {
+            auto& ev = request.OriginalRequest;
+            auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(ev.get());
+            Y_ABORT_UNLESS(common);
+            ++common->RestartCounter;
+            return {std::make_unique<IEventHandle>(SelfId(), request.Sender, ev.release(), 0, request.Cookie), common};
+        }
+
+        // The request waiting for the pile which takes no part in data quorum by the new cluster state is restarted with
+        // it, as the one admitted now: the pile may never answer, or answer with an error (e.g. when its nodes are gone and
+        // that is why it is out), which would fail the request, while the piles staying in data quorum are enough. What
+        // the pile does with the subrequest doesn't matter then, it gets synced when it is back. The request is routed
+        // right here, with the routing wait it has left, so that it is never out of sight of this proxy (and so is
+        // answered when the proxy stops).
+        void RestartRequestsWaitingForPilesOut() {
+            if (!BridgeInfo) {
+                return;
+            }
+            std::vector<std::shared_ptr<TRequest>> requests;
+            THashSet<const TRequest*> seen;
+            for (const auto& [cookie, item] : RequestsInFlight) {
+                if (!item.Request->Finished && !IsPileInDataQuorum(item.Pile->BridgePileId) &&
+                        seen.insert(item.Request.get()).second) {
+                    requests.push_back(item.Request);
+                }
+            }
+            for (const auto& request : requests) {
+                STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB12, "request restarted as it waits for pile out of data quorum",
+                    (RequestId, request->RequestId), (GroupId, GroupId));
+                ForgetSubrequests(*request);
+                request->Finished = true;
+                auto [handle, common] = MakeRestartHandle(*request);
+                if (common->RestartCounter >= MaxRestarts) {
+                    ReplyWithError(*handle, "too many restarts of the request racing with cluster state");
+                } else {
+                    Redispatch(std::move(handle), request->RoutingBudget);
+                }
+            }
         }
 
         template<typename TEvent>
@@ -1085,6 +1184,10 @@ namespace NKikimr {
 
         template<typename TEvent>
         void HandleProxyRequest(TAutoPtr<TEventHandle<TEvent>>& ev, std::optional<TDuration> routingBudget = {}) {
+            if (Passthrough) {
+                TActivationContext::Send(ev->Forward(InnerProxyId));
+                return;
+            }
             if (routingBudget == TDuration::Zero()) {
                 ReplyWithError(*ev, "bridge request timed out");
                 return;
@@ -1138,14 +1241,13 @@ namespace NKikimr {
             bool hasTrustedPile = false;
             NBridge::ForEachGroupPile(state, [&](TBridgePileId bridgePileId,
                     const NKikimrBridge::TGroupState::TPile& groupPileInfo) {
-                const TBridgeInfo::TPile *pile = BridgeInfo->FindPile(bridgePileId);
-                if (!pile) {
-                    // bridge info is not older than group info, so the pile has left the cluster (or the group state comes
-                    // from the version not telling its cluster state, and then the pile is just added and holds no data)
+                if (!IsPileInDataQuorum(bridgePileId)) {
+                    // no data quorum needed from this pile; when it is not known at all, it has left the cluster, as
+                    // bridge info is not older than group info (or the group state comes from the version not telling
+                    // its cluster state, and then the pile is just added and holds no data)
                     return;
-                } else if (!NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
-                    return; // skip this pile, no data quorum needed
                 }
+                const TBridgeInfo::TPile *pile = BridgeInfo->GetPile(bridgePileId);
                 if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCheckIntegrity>) {
                     // Check every synchronized copy; incomplete parts being synced do not imply degradation.
                     if (!PartHoldsEverything(state, *pile)) {
@@ -1240,6 +1342,12 @@ namespace NKikimr {
                 TBridgePileId bridgePileId) {
             std::unique_ptr<TEvent> res;
 
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
+                if (!NBridge::GroupPartTakesPuts(pile.GetStage())) {
+                    return nullptr; // the rule is shared with BS_CONTROLLER counting the space of the group
+                }
+            }
+
             switch (pile.GetStage()) {
                 case NKikimrBridge::TGroupState::WRITE_KEEP:
                     if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
@@ -1308,6 +1416,7 @@ namespace NKikimr {
             auto& item = it->second;
             auto& pile = *item.Pile;
             std::shared_ptr<TRequest> request = item.Request;
+            std::unique_ptr<IEventHandle> redispatch; // the request restarted right here, once the bookkeeping is done
 
             const bool isError = ev->Get()->Status != NKikimrProto::OK && ev->Get()->Status != NKikimrProto::NODATA;
 
@@ -1338,19 +1447,19 @@ namespace NKikimr {
 
                 if (msg->Status == NKikimrProto::RACE) {
                     // route repeated request through node warden to ensure group info propagation before request gets restarted
-                    auto& ev = request->OriginalRequest;
-                    auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(ev.get());
-                    Y_ABORT_UNLESS(common);
-                    ++common->RestartCounter;
-                    auto handle = std::make_unique<IEventHandle>(SelfId(), request->Sender, ev.release(), 0, request->Cookie);
+                    auto [handle, common] = MakeRestartHandle(*request);
 
                     // when the group has no part in this pile anymore, our configuration is newer than the one the
                     // request was executed with
                     const auto *groupPile = NBridge::GetGroupPile(Info->Group->GetBridgeGroupState(), pile.BridgePileId);
                     const ui32 myGeneration = groupPile ? groupPile->GetGroupGeneration() : Max<ui32>();
 
-                    if (common->RestartCounter >= 100) {
+                    if (common->RestartCounter >= MaxRestarts) {
                         ReplyWithError(*handle, "too many restarts of the request racing with group configuration");
+                    } else if (Passthrough) {
+                        // the group is an ordinary one now (our bridged info is not updated anymore), the inner proxy
+                        // has its new info and serves the restarted request
+                        TActivationContext::Send(IEventHandle::Forward(std::move(handle), InnerProxyId).release());
                     } else if (myGeneration < msg->RacingGeneration) {
                         QueuePending(PendingForNextGeneration, std::move(handle), request->RoutingBudget);
                     } else if (msg->RacingGeneration < myGeneration) {
@@ -1377,7 +1486,7 @@ namespace NKikimr {
                         // now generation is correct)
                         Y_DEBUG_ABORT_UNLESS(NBridge::GetGroupPile(request->Info->Group->GetBridgeGroupState(),
                             pile.BridgePileId)->GetGroupGeneration() < myGeneration);
-                        TActivationContext::Send(handle.release());
+                        redispatch = std::move(handle);
                     }
                     request->Finished = true;
                 } else {
@@ -1418,6 +1527,16 @@ namespace NKikimr {
                         SetExecutionRelay(*response, std::exchange(originalCommon->ExecutionRelay, {}));
                         Send(request->Sender, response.release(), 0, request->Cookie);
                         request->Finished = true;
+                    } else if (request->RestartNeeded) {
+                        STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB13, "request restarted as its restoration source is out of"
+                            " data quorum", (RequestId, request->RequestId), (GroupId, GroupId));
+                        auto [handle, common] = MakeRestartHandle(*request);
+                        if (common->RestartCounter >= MaxRestarts) {
+                            ReplyWithError(*handle, "too many restarts of the request racing with cluster state");
+                        } else {
+                            redispatch = std::move(handle);
+                        }
+                        request->Finished = true;
                     }
                 }
             }
@@ -1428,9 +1547,13 @@ namespace NKikimr {
             RequestsInFlight.erase(it);
 
             if (request->Finished) {
-                for (ui64 cookie : request->CookiesInFlight) {
-                    RequestsInFlight.erase(cookie);
-                }
+                ForgetSubrequests(*request);
+            }
+
+            if (redispatch) {
+                // routed right away rather than sent to self, so that it is never out of sight of this proxy, and with the
+                // routing wait it has left
+                Redispatch(std::move(redispatch), request->RoutingBudget);
             }
         }
 
@@ -1440,6 +1563,28 @@ namespace NKikimr {
                 // decommitted group has lost its piles, so there is nothing to route requests to; BlobDepot agent in front
                 // of us stops us right away, and the requests we hold are answered with error then
                 return;
+            }
+            if (InnerProxyId && msg->Info && !msg->Info->IsBridged()) {
+                // the bridged cluster has been rolled back, the group is an ordinary one with the VDisks of its inline
+                // pile; the inner proxy serves it as such, and so do the requests waiting here
+                if (!Passthrough) {
+                    STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB11, "group is not bridged anymore, passing requests through",
+                        (GroupId, GroupId), (GroupGeneration, msg->Info->GroupGeneration));
+                    Passthrough = true;
+                }
+                Send(InnerProxyId, new TEvBlobStorage::TEvConfigureProxy(std::move(msg->Info), msg->NodeLayoutInfo,
+                    msg->StoragePoolCounters));
+                for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
+                    for (auto& [deadline, ev] : std::exchange(*queue, {})) {
+                        TActivationContext::Send(IEventHandle::Forward(std::move(ev), InnerProxyId).release());
+                    }
+                }
+                return;
+            }
+            if (Passthrough && msg->Info) {
+                // the group is bridged again (the cluster is converted once more), its inline pile is routed as before
+                Y_ABORT_UNLESS(msg->Info->IsInlinePile());
+                Passthrough = false;
             }
             if (InnerProxyId && msg->Info && !msg->Info->IsInlinePile()) {
                 // the pile of the inline pile has been removed from the cluster along with its VDisks, the group serves

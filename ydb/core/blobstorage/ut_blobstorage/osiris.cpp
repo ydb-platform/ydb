@@ -1,3 +1,4 @@
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.h>
@@ -353,8 +354,8 @@ enum class EMirror3dcDisconnectionScenario {
 };
 
 void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario) {
-    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-    std::array<TFailRealm::EState, 3> states{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
+    using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
+    TMirror3dcGroupState states;
     NKikimrBlobStorage::TGroupInfo originalGroup;
     ui32 revision = 0;
     std::map<ui32, ui32> nodeRealms;
@@ -374,7 +375,8 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
                 } else if (group.GetGroupID() == originalGroup.GetGroupID()) {
                     group.SetGroupGeneration(originalGroup.GetGroupGeneration() + revision);
                     for (ui32 realm = 0; realm < 3; ++realm) {
-                        group.MutableRings(realm)->SetState(states[realm]);
+                        group.MutableRings(realm)->SetState(states.FailRealmStates[realm]);
+                        group.SetMirror3dcState(states.State);
                     }
                 }
             }
@@ -390,7 +392,7 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
             || type == TEvBlobStorage::EvVSyncFull || type == TEvBlobStorage::EvVSyncGuid;
         const std::function<bool(ui32)> excluded = [&](ui32 node) {
             const auto it = nodeRealms.find(node);
-            return it != nodeRealms.end() && states[it->second] == TFailRealm::F;
+            return it != nodeRealms.end() && states.FailRealmStates[it->second] == TDataCenterState::EXCLUDED;
         };
         if (peerRequest && (excluded(nodeId) || excluded(event->Sender.NodeId()))) {
             std::unique_ptr<IEventHandle> undelivered = IEventHandle::ForwardOnNondelivery(std::move(event),
@@ -411,7 +413,7 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
     for (ui32 disk = 0; disk < originalInfo->GetTotalVDisksNum(); ++disk) {
         nodeRealms.emplace(originalInfo->GetActorId(disk).NodeId(), originalInfo->GetVDiskId(disk).FailRealm);
     }
-    std::function<void(std::array<TFailRealm::EState, 3>)> setStates = [&](std::array<TFailRealm::EState, 3> next) {
+    std::function<void(TMirror3dcGroupState)> setStates = [&](TMirror3dcGroupState next) {
         states = next;
         revision += 100;
         Cerr << "Applying realm states; revision# " << revision << Endl;
@@ -428,7 +430,7 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
     std::function<void()> checkBlob = [&] {
         ui32 clientNode = 0;
         for (const auto& [node, realm] : nodeRealms) {
-            if (states[realm] == TFailRealm::N1) {
+            if (states.FailRealmStates[realm] == TDataCenterState::INCLUDED) {
                 clientNode = node;
                 break;
             }
@@ -471,8 +473,8 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
         UNIT_ASSERT_C(replicated, "Realm must complete replication; realm# " << realm);
     };
     if (scenario == EMirror3dcDisconnectionScenario::SwitchToRestoredRealm) {
-        // N0/N0/F: explicitly seed exactly two copies in each available realm.
-        setStates({TFailRealm::N0, TFailRealm::N0, TFailRealm::F});
+        // I/I/X: explicitly seed exactly two copies in each available realm.
+        setStates({NKikimrBlobStorage::TGroupState::DC_FAILURE, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}});
         TBlobStorageGroupInfo::TOrderNums subgroup;
         originalInfo->GetTopology().PickSubgroup(blobId.Hash(), subgroup);
         TString encryptedData = data;
@@ -481,7 +483,7 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
         std::array<ui32, 3> seededCopies{};
         for (ui32 idx = 0; idx < subgroup.size(); ++idx) {
             TVDiskID disk = originalInfo->GetVDiskId(subgroup[idx]);
-            if (states[disk.FailRealm] == TFailRealm::F || seededCopies[disk.FailRealm] == 2) {
+            if (states.FailRealmStates[disk.FailRealm] == TDataCenterState::EXCLUDED || seededCopies[disk.FailRealm] == 2) {
                 continue;
             }
             disk.GroupGeneration = originalGroup.GetGroupGeneration() + revision;
@@ -500,31 +502,31 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
         UNIT_ASSERT_VALUES_EQUAL(seededCopies[2], 0);
         env.Sim(TDuration::Seconds(10));
 
-        // N0/N0/R -> N0/N0/N0: bring back the previously empty realm and collect metadata.
+        // I/I/R -> I/I/I: bring back the previously empty realm and collect metadata.
         const ui32 startupDoneBefore = startupSyncDone[2];
         const ui32 requestsBefore = fullSyncRequests[2];
-        setStates({TFailRealm::N0, TFailRealm::N0, TFailRealm::R});
+        setStates({NKikimrBlobStorage::TGroupState::DC_RECOVERY, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}});
         for (ui32 attempt = 0; attempt < 1200 && startupSyncDone[2] < startupDoneBefore + 3; ++attempt) {
             env.Sim(TDuration::MilliSeconds(100));
         }
         UNIT_ASSERT_C(startupSyncDone[2] >= startupDoneBefore + 3, "Returning realm must finish full sync");
         UNIT_ASSERT_C(fullSyncRequests[2] > requestsBefore, "F->R must start full sync");
-        setStates({TFailRealm::N0, TFailRealm::N0, TFailRealm::N0});
+        setStates({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
 
-        // N1/F/N1: repeat Osiris and replicate D=2+2 into the restored realm.
-        setStates({TFailRealm::N1, TFailRealm::F, TFailRealm::N1});
+        // DC_FAILURE_INV1: replicate D=1+1 into the restored realm.
+        setStates({NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}});
         waitForReplication(0);
         waitForReplication(2);
         checkBlob();
 
-        // F/F/N1: the only readable realm had no copy when the blob was written.
-        setStates({TFailRealm::F, TFailRealm::F, TFailRealm::N1});
+        // X/X/I: the only readable realm had no copy when the blob was written.
+        setStates({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}});
         checkBlob();
         env.Runtime->FilterFunction = {};
         return;
     }
     // Seed the blob while every realm is online; the rolling test preserves disk contents.
-    setStates({TFailRealm::N1, TFailRealm::N1, TFailRealm::N1});
+    setStates({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}});
     env.PutBlob(groupId, blobId, data);
     env.Sim(TDuration::Seconds(5));
     checkBlob();
@@ -533,14 +535,16 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
     // Two rotations with intact disks: each realm becomes the sole source twice.
     for (ui32 round = 0; round < 6; ++round) {
         const ui32 returning = (survivor + 1) % 3;
-        std::array<TFailRealm::EState, 3> next{TFailRealm::F, TFailRealm::F, TFailRealm::F};
-        next[survivor] = TFailRealm::N1;
+        TMirror3dcGroupState next{NKikimrBlobStorage::TGroupState::DC_SOLO_INV1,
+            {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}};
+        next.FailRealmStates[survivor] = TDataCenterState::INCLUDED;
         setStates(next);
         checkBlob();
 
         const ui32 startupDoneBefore = startupSyncDone[returning];
         const ui32 requestsBefore = fullSyncRequests[returning];
-        next[returning] = TFailRealm::R;
+        next.State = NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1;
+        next.FailRealmStates[returning] = TDataCenterState::RECOVERING;
         setStates(next);
         for (ui32 attempt = 0; attempt < 1200 && startupSyncDone[returning] < startupDoneBefore + 3; ++attempt) {
             env.Sim(TDuration::MilliSeconds(100));
@@ -551,9 +555,11 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
             "F->R must trigger full sync without wiping disks; round# " << round);
 
         waitForReplication(returning);
-        next[returning] = TFailRealm::N1;
+        next.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1;
+        next.FailRealmStates[returning] = TDataCenterState::INCLUDED;
         setStates(next);
-        next[survivor] = TFailRealm::F;
+        next.State = NKikimrBlobStorage::TGroupState::DC_SOLO_INV1;
+        next.FailRealmStates[survivor] = TDataCenterState::EXCLUDED;
         setStates(next);
         checkBlob();
         survivor = returning;
@@ -563,11 +569,11 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
 
 
 struct TMirror3dcConfigOverride {
-    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-    using TStates = std::array<TFailRealm::EState, 3>;
+    using TFailRealm = NKikimrBlobStorage::TDataCenterState;
+    using TStates = TMirror3dcGroupState;
 
     NKikimrBlobStorage::TGroupInfo OriginalGroup;
-    TStates States{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
+    TStates States;
     ui32 Revision = 0;
 
     void Patch(TEvBlobStorage::TEvControllerNodeServiceSetUpdate* update) {
@@ -576,8 +582,9 @@ struct TMirror3dcConfigOverride {
                 OriginalGroup = group;
             } else if (group.GetGroupID() == OriginalGroup.GetGroupID()) {
                 group.SetGroupGeneration(Generation());
-                for (ui32 realm = 0; realm < States.size(); ++realm) {
-                    group.MutableRings(realm)->SetState(States[realm]);
+                group.SetMirror3dcState(States.State);
+                for (ui32 realm = 0; realm < States.FailRealmStates.size(); ++realm) {
+                    group.MutableRings(realm)->SetState(States.FailRealmStates[realm]);
                 }
             }
         }
@@ -607,7 +614,6 @@ struct TMirror3dcConfigOverride {
 };
 
 void DoSyncConfigApplicationTest(bool changeGeneration) {
-    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
     TMirror3dcConfigOverride configuration;
     const TString data = "sync must include a pending write";
     const TLogoBlobID blobId(100500, 1, 1, 0, data.size(), 0);
@@ -703,7 +709,7 @@ void DoSyncConfigApplicationTest(bool changeGeneration) {
     UNIT_ASSERT(putAdmitted);
     UNIT_ASSERT(!heldLogResults.empty());
     UNIT_ASSERT_VALUES_EQUAL(putReplies, 0);
-    configuration.Apply(&env, {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}, TDuration::Seconds(1));
+    configuration.Apply(&env, {}, TDuration::Seconds(1));
     monitorSync = true;
     syncAdmitted = false;
     sendSync(syncState, true);
@@ -714,7 +720,7 @@ void DoSyncConfigApplicationTest(bool changeGeneration) {
     env.Sim(TDuration::Seconds(1));
     UNIT_ASSERT_VALUES_EQUAL_C(syncReplies, 0, "Sync must wait for the source's recovery log");
     if (changeGeneration) {
-        configuration.Apply(&env, {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}, TDuration::Seconds(1));
+        configuration.Apply(&env, {}, TDuration::Seconds(1));
     }
     holdLog = false;
     for (std::unique_ptr<IEventHandle>& event : heldLogResults) {
@@ -773,7 +779,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
     }
 
     Y_UNIT_TEST(MetadataSyncCompletesAfterSecondRealmExclusion) {
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        using TFailRealm = NKikimrBlobStorage::TDataCenterState;
         TMirror3dcConfigOverride configuration;
         std::set<ui32> survivorNodes;
         std::set<std::pair<ui32, ui32>> completedSyncs;
@@ -853,7 +859,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
                 env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge);
             UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
         }
-        configuration.Apply(&env, {TFailRealm::N1, TFailRealm::N0, TFailRealm::F});
+        configuration.Apply(&env, {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}});
         for (ui32 order = 0; order < info->GetTotalVDisksNum(); ++order) {
             if (info->GetVDiskId(order).FailRealm == 0) {
                 survivorNodes.insert(info->GetActorId(order).NodeId());
@@ -864,7 +870,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         }
         UNIT_ASSERT(blockedTargetNode);
         holdSourceReplies = true;
-        configuration.Apply(&env, {TFailRealm::N1, TFailRealm::F, TFailRealm::F});
+        configuration.Apply(&env, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}});
         env.Sim(TDuration::Seconds(30));
         UNIT_ASSERT(!heldSourceReplies.empty());
         UNIT_ASSERT_VALUES_EQUAL(blockedMetadataDone, 0);
@@ -928,12 +934,13 @@ Y_UNIT_TEST_SUITE(Osiris) {
         const ui32 groupId = env.GetGroups().front();
         const TIntrusivePtr<TBlobStorageGroupInfo> previous = env.GetGroupInfo(groupId);
         NKikimrBlobStorage::TConfigRequest request;
-        using TDefinition = NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition;
-        TDefinition* definition = request.AddCommand()->MutableDefineFailRealmStates()->AddGroups();
+        using TDefinition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
+        TDefinition* definition = request.AddCommand()->MutableDefineGroupState()->AddGroups();
         definition->SetGroupId(groupId);
-        definition->AddFailRealmStates(TDefinition::INVARIANT0);
-        definition->AddFailRealmStates(TDefinition::INVARIANT0);
-        definition->AddFailRealmStates(TDefinition::EXCLUDED);
+        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE);
+        definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::INCLUDED);
+        definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::INCLUDED);
+        definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
         UNIT_ASSERT(env.Invoke(request).GetSuccess());
         env.Sim(TDuration::Seconds(30));
         const TIntrusivePtr<TBlobStorageGroupInfo> current = env.GetGroupInfo(groupId);
@@ -983,7 +990,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
     }
 
     Y_UNIT_TEST(Mirror3dcControllerPromotesReplicatedRealms) {
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
         bool allowPromotion = false;
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
             .NodeCount = 9,
@@ -999,12 +1006,14 @@ Y_UNIT_TEST_SUITE(Osiris) {
         env.Sim(TDuration::Seconds(30));
         const ui32 groupId = env.GetGroups().front();
         NKikimrBlobStorage::TConfigRequest request;
-        NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition* definition =
-            request.AddCommand()->MutableDefineFailRealmStates()->AddGroups();
+        NKikimrBlobStorage::TDefineGroupState::TGroupDefinition* definition =
+            request.AddCommand()->MutableDefineGroupState()->AddGroups();
         definition->SetGroupId(groupId);
-        definition->AddFailRealmStates(NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition::INVARIANT0);
-        definition->AddFailRealmStates(NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition::INVARIANT0);
-        definition->AddFailRealmStates(NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition::EXCLUDED);
+        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING);
+        request.SetIgnoreGroupFailModelChecks(true);
+        definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::INCLUDED);
+        definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::INCLUDED);
+        definition->AddFailRealmStates(NKikimrBlobStorage::TDataCenterState::EXCLUDED);
         UNIT_ASSERT(env.Invoke(request).GetSuccess());
         env.Sim(TDuration::Seconds(30));
         const TIntrusivePtr<TBlobStorageGroupInfo> initialInfo = env.GetGroupInfo(groupId);
@@ -1012,7 +1021,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         const TLogoBlobID blobId(1, 1, 1, 0, data.size(), 0);
         TBlobStorageGroupInfo::TOrderNums subgroup;
         initialInfo->GetTopology().PickSubgroup(blobId.Hash(), subgroup);
-        // Materialize only the old D=1+1. The automatic N1 transition must trigger D=2+2 recovery.
+        // Seed one copy in each included realm; INV2_PENDING must restore D=2+2.
         for (ui32 part = 0; part < 3; ++part) {
             const TVDiskID disk = initialInfo->GetVDiskId(subgroup[part]);
             if (disk.FailRealm == 2) {
@@ -1028,6 +1037,8 @@ Y_UNIT_TEST_SUITE(Osiris) {
             UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
         }
         env.Sim(TDuration::Seconds(30));
+        definition->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING);
+        UNIT_ASSERT(env.Invoke(request).GetSuccess());
         allowPromotion = true;
         env.Sim(TDuration::Seconds(60));
         const TIntrusivePtr<TBlobStorageGroupInfo> finalInfo = env.GetGroupInfo(groupId);
@@ -1043,9 +1054,10 @@ Y_UNIT_TEST_SUITE(Osiris) {
         UNIT_ASSERT_VALUES_EQUAL(stateResponse->Get()->Record.GetStatus(), NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(stateResponse->Get()->Record.GetServiceSet().GroupsSize(), 1);
         const NKikimrBlobStorage::TGroupInfo& finalGroup = stateResponse->Get()->Record.GetServiceSet().GetGroups(0);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(finalGroup.GetRings(0).GetState()), ui32(TFailRealm::N2));
-        UNIT_ASSERT_VALUES_EQUAL(ui32(finalGroup.GetRings(1).GetState()), ui32(TFailRealm::N2));
-        UNIT_ASSERT_VALUES_EQUAL(ui32(finalGroup.GetRings(2).GetState()), ui32(TFailRealm::F));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(finalGroup.GetMirror3dcState()), static_cast<ui32>(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(finalGroup.GetRings(0).GetState()), ui32(TDataCenterState::INCLUDED));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(finalGroup.GetRings(1).GetState()), ui32(TDataCenterState::INCLUDED));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(finalGroup.GetRings(2).GetState()), ui32(TDataCenterState::EXCLUDED));
         UNIT_ASSERT(finalInfo->GroupGeneration >= initialInfo->GroupGeneration + 2);
         std::array<ui32, 3> copies{};
         for (ui32 index = 0; index < subgroup.size(); ++index) {
@@ -1073,11 +1085,9 @@ Y_UNIT_TEST_SUITE(Osiris) {
         env.Runtime->FilterFunction = {};
     }
 
-
-
     Y_UNIT_TEST(Mirror3dcRepeatsRecoveryOnDurabilityChange) {
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        std::array<TFailRealm::EState, 3> states{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
+        using TDataCenterState = NKikimrBlobStorage::TDataCenterState;
+        TMirror3dcGroupState states;
         NKikimrBlobStorage::TGroupInfo originalGroup;
         ui32 revision = 0;
         ui32 osirisDone = 0;
@@ -1106,7 +1116,8 @@ Y_UNIT_TEST_SUITE(Osiris) {
                         } else if (group.GetGroupID() == originalGroup.GetGroupID()) {
                             group.SetGroupGeneration(originalGroup.GetGroupGeneration() + revision);
                             for (ui32 realm = 0; realm < 3; ++realm) {
-                                group.MutableRings(realm)->SetState(states[realm]);
+                                group.MutableRings(realm)->SetState(states.FailRealmStates[realm]);
+                                group.SetMirror3dcState(states.State);
                             }
                         }
                     }
@@ -1156,7 +1167,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         const std::function<void(bool)> checkReplicationFlags = [&](bool durabilityReplicated) {
             for (ui32 order = 0; order < info->GetTotalVDisksNum(); ++order) {
                 TVDiskID disk = info->GetVDiskId(order);
-                if (states[disk.FailRealm] == TFailRealm::F) {
+                if (states.FailRealmStates[disk.FailRealm] == TDataCenterState::EXCLUDED) {
                     continue;
                 }
                 disk.GroupGeneration = originalGroup.GetGroupGeneration() + revision;
@@ -1172,7 +1183,8 @@ Y_UNIT_TEST_SUITE(Osiris) {
                 UNIT_ASSERT_VALUES_EQUAL(record.GetDurabilityReplicated(), durabilityReplicated);
             }
         };
-        states[2] = TFailRealm::F;
+        states = {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING,
+            {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED}};
         applyStates();
         const TString data(4096, 'U');
         const TLogoBlobID blobId(1, 1, 1, 0, data.size(), 0);
@@ -1204,7 +1216,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         env.Sim(TDuration::Seconds(30));
         osirisDone = replDone = osirisWrites = 0;
         handoffOsirisDone = 0;
-        states[0] = states[1] = TFailRealm::N1;
+        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING;
         applyStates();
         UNIT_ASSERT(!heldMetadata.empty());
         UNIT_ASSERT_VALUES_EQUAL(handoffOsirisDone, 0);
@@ -1236,14 +1248,14 @@ Y_UNIT_TEST_SUITE(Osiris) {
         env.Sim(TDuration::Seconds(60));
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
-        UNIT_ASSERT_C(osirisWrites, "N0->N1 must resurrect additional copies for D=2+2");
+        UNIT_ASSERT_C(osirisWrites, "Raising D to 2+2 must resurrect additional copies");
         checkReplicationFlags(true);
         // A generation-only update must not start another pass.
         applyStates();
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
-        // N1->N2 changes E, but keeps D=2+2: no new pass is needed.
-        states[0] = states[1] = TFailRealm::N2;
+        // Completing INV2_PENDING changes E, but keeps D=2+2: no new pass is needed.
+        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2;
         applyStates();
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
@@ -1270,22 +1282,22 @@ Y_UNIT_TEST_SUITE(Osiris) {
                 }
             }
         }
-        UNIT_ASSERT_C(copies[0] >= 2 && copies[1] >= 2, "Replication must materialize D=2+2 after the normal-state upgrades");
+        UNIT_ASSERT_C(copies[0] >= 2 && copies[1] >= 2, "Replication must materialize D=2+2 after the group-state upgrades");
         // A downgrade also changes D (2+2 -> 1+1) and starts a new pass.
         osirisDone = replDone = 0;
-        states[0] = states[1] = TFailRealm::N0;
+        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING;
         applyStates();
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
         // Queue a second D change while the first Osiris completion is still in flight.
         osirisDone = replDone = 0;
         holdOsirisDone = true;
-        states[0] = states[1] = TFailRealm::N1;
+        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING;
         applyStates();
         UNIT_ASSERT_VALUES_EQUAL(heldOsirisDone.size(), 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 0);
         checkReplicationFlags(false);
-        states[0] = states[1] = TFailRealm::N0;
+        states.State = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING;
         applyStates();
         checkReplicationFlags(false);
         holdOsirisDone = false;

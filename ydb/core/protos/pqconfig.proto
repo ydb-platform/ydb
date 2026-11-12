@@ -232,6 +232,7 @@ message TPQConfig {
 
     optional TCloudEventsConfig CloudEventsConfig = 61;
     optional uint64 MinOffset = 63;
+    optional uint64 WriteSessionsInitRps = 66 [default = 1000];
 }
 
 message TChannelProfile {

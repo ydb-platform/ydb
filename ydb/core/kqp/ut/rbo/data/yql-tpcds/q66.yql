@@ -205,15 +205,15 @@ FROM (
             END
         ) AS dec_net
     FROM
-        `/Root/test/ds/web_sales`
+        `web_sales`
     ,
-        `/Root/test/ds/warehouse`
+        `warehouse`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/time_dim`
+        `time_dim`
     ,
-        `/Root/test/ds/ship_mode`
+        `ship_mode`
     WHERE
         ws_warehouse_sk == w_warehouse_sk
         AND ws_sold_date_sk == d_date_sk
@@ -385,15 +385,15 @@ FROM (
             END
         ) AS dec_net
     FROM
-        `/Root/test/ds/catalog_sales`
+        `catalog_sales`
     ,
-        `/Root/test/ds/warehouse`
+        `warehouse`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/time_dim`
+        `time_dim`
     ,
-        `/Root/test/ds/ship_mode`
+        `ship_mode`
     WHERE
         cs_warehouse_sk == w_warehouse_sk
         AND cs_sold_date_sk == d_date_sk

@@ -51,6 +51,7 @@ namespace {
             case TableIndex::kGlobalAsyncIndex:
             case TableIndex::kGlobalUniqueIndex:
             case TableIndex::kGlobalVectorKmeansTreeIndex:
+            case TableIndex::kGlobalHnswIndex:
             case TableIndex::kGlobalFulltextPlainIndex:
             case TableIndex::kGlobalFulltextRelevanceIndex:
             case TableIndex::kGlobalJsonIndex:
@@ -609,6 +610,8 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     bool isLocalBloomFilter = false;
     bool isLocalBloomNgramFilter = false;
     switch (index.type_case()) {
+        case TableIndex::kGlobalHnswIndex:
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "HNSW index implementation is not available yet");
         case TableIndex::kGlobalIndex: {
             Stream << " GLOBAL SYNC ON ";
             break;
@@ -712,6 +715,12 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
                 break;
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
                 Stream << del << "vector_type=\"int8\"";
+                break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4:
+                Stream << del << "vector_type=\"uint4\"";
+                break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4:
+                Stream << del << "vector_type=\"int4\"";
                 break;
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
                 Stream << del << "vector_type=\"uint8\"";
@@ -1012,6 +1021,11 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
 
     if (compression) {
         Stream << del << "COMPRESSION = " << "\"" << compression << "\"";
+        del = ", ";
+    }
+
+    if (familyDesc.HasColumnCodecLevel()) {
+        Stream << del << "COMPRESSION_LEVEL = " << familyDesc.GetColumnCodecLevel();
         del = ", ";
     }
 

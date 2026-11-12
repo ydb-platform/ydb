@@ -30,14 +30,9 @@ TExprNode::TPtr LowerRowLambdaBody(const TExprNode::TPtr& lambda,
     const TMappedIUs<TExprNode::TPtr>& fields, TExprContext& ctx);
 TExprNode::TPtr BuildVoidLambda(TExprContext& ctx, TPositionHandle pos);
 
-// Transform one stage output, preserving the other Replicate branches and the row-read stage wrapper.
+// Transform one stage output, preserving the other Replicate branches.
 template <class TTransform>
 TExprNode::TPtr TransformStageOutput(TExprNode::TPtr input, TTransform&& transform, std::optional<ui32> outputIndex, TExprContext& ctx) {
-    if (TDqPhyStage::Match(input.Get())) {
-        const auto program = TDqPhyStage(input).Program().Ptr();
-        return ctx.ChangeChild(*input, TDqPhyStage::idx_Program, ctx.ChangeChild(*program, 1,
-            TransformStageOutput(program->TailPtr(), transform, outputIndex, ctx)));
-    }
     if (outputIndex && input->IsCallable("Switch")) {
         // Switch(input, buffer, [input indexes], lambda, ...).
         const auto index = 3 + 2 * *outputIndex;
@@ -226,15 +221,15 @@ private:
 // something is actually dropped.
 TStageBody BuildLiveWideBody(TExprNode::TPtr flow, const TVector<TString>& columns, const THashSet<TString>& live, TExprContext& ctx);
 
-// Transform one stage output of a body being assembled. Row-read stage wrappers and Switch
-// branches are narrow, so the transform gets a narrow body there; any other body is passed as is.
+// Transform one stage output of a body being assembled. Switch branches are narrow, so the
+// transform gets a narrow body there; any other body is passed as is.
 template <class TTransform>
 TStageBody TransformStageOutput(const TStageBody& input, TTransform&& transform, std::optional<ui32> outputIndex, TExprContext& ctx) {
     if (input.IsWide()) {
         return transform(input);
     }
     auto narrow = input.AsNarrow(ctx);
-    if (!TDqPhyStage::Match(narrow.Get()) && !(outputIndex && narrow->IsCallable("Switch"))) {
+    if (!outputIndex || !narrow->IsCallable("Switch")) {
         return transform(input);
     }
     return TStageBody::Narrow(TransformStageOutput(std::move(narrow), [&](TExprNode::TPtr body) {

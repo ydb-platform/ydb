@@ -1,17 +1,26 @@
 # Existing VDisk can be classified as FirstRun after local loss and erosion of peer GUID witnesses
 
-**Status:** reachable decision path verified in code; no dedicated end-to-end regression has been run for this scenario. It requires local `Empty` state in addition to temporary unavailability. It must not be reported as a third reproduced failure.
+**Status:** reproduced in the reduced P model for `Erasure4Plus2Block` and normal `ErasureMirror3dc`; no dedicated end-to-end C++ regression has been run. It requires local `Empty` state in addition to temporary unavailability.
 
 **Umbrella:** [[EPIC] Make VDisk recovery safe across rolling wipes](%5BEPIC%5D.md).
 
 ## Validation provenance
 
-- **Reproduction:** not executed; there is no reproduction SHA or reproduction date for this scenario.
+- **P reproduction:** 2026-11-12, `tcFalseFirstRun` and `tcMirror3dcFalseFirstRun`. Tested working-tree base Git SHA: `a68bd12f36af20329023baf319990155fa1ebf10`; commit date: 2026-11-12T20:12:20+03:00. The model changes were uncommitted; [results.json](../sync_guid_recovery_p/Evidence/results.json) records exact source hashes. Both saved schedules were replayed successfully.
+- **C++ reproduction:** not executed; there is no dedicated C++ reproduction SHA or date for this scenario.
 - **Code inspection date:** 2026-11-12.
 - **Inspected production Git SHA:** [`6e3629b18daf4a2441d2b129fa3b1ae84564610f`](https://github.com/ydb-platform/ydb/commit/6e3629b18daf4a2441d2b129fa3b1ae84564610f); commit date: 2026-11-11T17:52:44+03:00.
 - **Inspected checkout Git SHA:** `c28196d089ffdd61c365f15abc76cee36af8cbde`; commit date: 2026-11-12T00:27:29+03:00. The conditional path is present in this checkout, but its two executed regressions cover issues 01 and 02, not this scenario.
 
 This scenario shares the witness-erasure root cause with [issue 02](02-guid-witness-loss-after-rolling-wipes.md). It can be tracked with that issue unless a separate safety-focused report is useful.
+
+The P scenarios wipe VDisk 0, leave it offline, then wipe and fully recover every
+other VDisk sequentially. On return, the real empty first quorum triggers
+`FirstRun`, new-GUID publication, and local `Final`; the monitor rejects the
+reinitialization of an existing slot. Mirror-3-dc uses nine VDisks, three physical
+realms, `NORMAL`, all realms `INCLUDED`, and first quorum `{0,1,2,3,4}`.
+See the [mirror-3-dc trace](../sync_guid_recovery_p/Evidence/tcMirror3dcFalseFirstRun.excerpt.txt)
+and [checker commands](../sync_guid_recovery_p/README.md).
 
 An existing **open draft [PR #57055 — Preserve VDisk GUID history across realm recovery](https://github.com/ydb-platform/ydb/pull/57055)** explicitly describes peer-witness loss causing a later wiped realm to appear `FirstRun`. This is direct conceptual overlap, rather than a previously unknown proposal. The PR's inspected history collection targets mirror-3-dc realm state `R`; the candidate sequence below uses 4+2 and has not been run with that PR applied.
 
@@ -21,7 +30,7 @@ An existing **open draft [PR #57055 — Preserve VDisk GUID history across realm
 
 Unlike the two executed regressions, this scenario requires the unavailable VDisk `A` to have local `TLocalGuidInfo::Empty` state. A stopped VDisk whose original local `Final` state survives does not enter this branch.
 
-## Candidate reproduction
+## Minimal C++ reproduction candidate
 
 For an initialized eight-VDisk `Erasure4Plus2Block` group:
 
@@ -31,7 +40,7 @@ For an initialized eight-VDisk `Erasure4Plus2Block` group:
 4. Let the five wiped peers and `A`'s own empty entry form the first six-response quorum. Delay the two unwiped peers, which can still retain the old `Final` witness.
 5. Observe `TEvVDiskGuidRecovered::Outcome`, the selected eternal GUID, and whether `TSyncerRecoverLostDataActor` and Osiris run.
 
-The five-wipe threshold is derived from quorum geometry and the decision code. This sequence has not been implemented or executed as a separate test.
+The five-wipe threshold is derived from quorum geometry and the decision code. This minimal sequence has not been executed; the P reproduction above wipes all seven peers (eight for mirror-3-dc).
 
 ## Expected and code-derived actual behavior
 
@@ -52,7 +61,7 @@ The surviving witnesses do not provide an independent veto during publication: f
 
 The code permits normal operation without the prerequisites of the `LostData` branch. Ordinary synchronization is not an equivalent replacement for the lost-data full-sync quorum and Osiris's restoration of ingress responsibility. Once the original source histories have been wiped, it can also encounter the history-coverage gap in [issue 01](01-stale-metadata-after-rolling-wipes.md).
 
-No observed log or payload-loss assertion is claimed for this scenario. A focused regression should assert `LostData`, preservation of the original eternal GUID, and an Osiris invocation before adding a larger data-loss simulation.
+No end-to-end C++ log or payload-loss assertion is claimed for this scenario. A focused C++ regression should assert `LostData`, preservation of the original eternal GUID, and an Osiris invocation before adding a larger data-loss simulation.
 
 ## Fix considerations
 

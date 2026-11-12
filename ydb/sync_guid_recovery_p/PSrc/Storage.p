@@ -4,19 +4,23 @@
 machine TRecoveryStorage {
   var driver: machine;
   var transport: machine;
+  var topology: ETopology;
+  var diskCount: int;
   var disks: seq[TVDisk];
   var roundOwner: int;
   var roundPeers: set[int];
   var roundDone: set[int];
 
   start state Serving {
-    entry (config: (Driver: machine, Transport: machine, Fresh: bool)) {
+    entry (config: (Driver: machine, Transport: machine, Fresh: bool, Topology: ETopology)) {
       var i: int;
       var j: int;
       var disk: TVDisk;
       driver = config.Driver;
       transport = config.Transport;
-      while (i < 8) {
+      topology = config.Topology;
+      diskCount = DiskCount(topology);
+      while (i < diskCount) {
         disk = default(TVDisk);
         disk.Online = true;
         disk.Ready = !config.Fresh;
@@ -24,7 +28,7 @@ machine TRecoveryStorage {
         disk.LogStartLsn = 1;
         if (!config.Fresh) { disk.Local = (State = LocalFinal, Guid = i + 1, DbBirthLsn = 0); }
         j = 0;
-        while (j < 8) {
+        while (j < diskCount) {
           if (config.Fresh) {
             disk.PeerGuidInfo += (j, (State = RemoteEmpty, Guid = 0));
           } else {
@@ -36,7 +40,7 @@ machine TRecoveryStorage {
         disks += (i, disk);
         i = i + 1;
       }
-      announce eSeed, !config.Fresh;
+      announce eSeed, (Established = !config.Fresh, Topology = topology);
       send driver, eAck;
     }
     on eStop do (owner: int) {
@@ -47,12 +51,12 @@ machine TRecoveryStorage {
       var i: int;
       disks[owner].Ready = false;
       disks[owner].Local = default(TLocalGuidInfo);
-      disks[owner].Incarnation = disks[owner].Incarnation + 8;
+      disks[owner].Incarnation = disks[owner].Incarnation + diskCount;
       disks[owner].HullBlock = 0;
       disks[owner].LogBlock = 0;
       disks[owner].LogLsn = 0;
       disks[owner].LogStartLsn = 1;
-      while (i < 8) {
+      while (i < diskCount) {
         disks[owner].PeerGuidInfo[i] = default(TSyncGuidInfo);
         disks[owner].Cursors[i] = default(TSyncState);
         i = i + 1;
@@ -61,18 +65,18 @@ machine TRecoveryStorage {
     }
     on eWriteBlock do (generation: int) {
       var i: int;
-      var acks: int;
-      while (i < 8) {
+      var acks: set[int];
+      while (i < diskCount) {
         if (disks[i].Online && disks[i].Ready) {
           disks[i].HullBlock = generation;
           disks[i].LogBlock = generation;
           disks[i].LogLsn = disks[i].LogLsn + 1;
-          acks = acks + 1;
+          acks += (i);
         }
         i = i + 1;
       }
       // Abstract a successful DSProxy TEvBlock, after durable acknowledgements.
-      assert acks >= 6;
+      assert HasGroupQuorum(topology, acks);
       announce eBlockCommitted, generation;
       send driver, eAck;
     }
@@ -80,10 +84,10 @@ machine TRecoveryStorage {
       var source: int;
       var peer: int;
       // Allow the existing periodic propagators to settle, not history relaying.
-      while (source < 8) {
+      while (source < diskCount) {
         if (disks[source].Online && disks[source].Ready) {
           peer = 0;
-          while (peer < 8) {
+          while (peer < diskCount) {
             if (disks[peer].Online) {
               disks[peer].PeerGuidInfo[source] =
                 (State = RemoteFinal, Guid = disks[source].Local.Guid);
@@ -99,11 +103,11 @@ machine TRecoveryStorage {
       disks[owner].Online = true;
       disks[owner].Ready = false;
       announce eGuidRecoveryStarted, (Owner = owner, Local = disks[owner].Local);
-      new TVDiskGuidRecoveryActor((Storage = this, Owner = owner, Local = disks[owner].Local));
+      new TVDiskGuidRecoveryActor((Storage = this, Owner = owner, Local = disks[owner].Local, Topology = topology));
     }
     on eSurvey do (req: (Source: machine, Owner: int)) {
       var i: int;
-      while (i < 8) {
+      while (i < diskCount) {
         // TEvVSyncGuid is served during GUID recovery, including the self read.
         if (disks[i].Online) {
           new TVDiskGuidProxy((Transport = transport,
@@ -115,16 +119,16 @@ machine TRecoveryStorage {
     }
     on ePublishGuid do (req: (Source: machine, Owner: int, Info: TSyncGuidInfo)) {
       var i: int;
-      var acks: int;
-      while (i < 8) {
+      var acks: set[int];
+      while (i < diskCount) {
         if (disks[i].Online) {
           // TSyncer::Handle(TEvVSyncGuid) does not veto a different old Final.
           disks[i].PeerGuidInfo[req.Owner] = req.Info;
-          acks = acks + 1;
+          acks += (i);
         }
         i = i + 1;
       }
-      assert acks >= 6;
+      assert HasGroupQuorum(topology, acks);
       send req.Source, TEvVDiskGuidWritten, acks;
     }
     on TEvSyncerCommit do (req: (Source: machine, Owner: int, Local: TLocalGuidInfo)) {
@@ -134,22 +138,22 @@ machine TRecoveryStorage {
     }
     on TEvVDiskGuidRecovered do (result: TGuidRecovered) {
       var i: int;
-      var sources: int;
+      var sources: set[int];
       var generation: int;
       var owner: int;
       owner = result.Owner;
       if (result.Outcome.Decision == LostData) {
         // TSyncerRecoverLostDataActor: full-sync quorum EXCLUDES self.
         // A recovering/erased source cannot serve a successful empty snapshot.
-        while (i < 8) {
+        while (i < diskCount) {
           if (i != owner && disks[i].Online && disks[i].Ready) {
-            sources = sources + 1;
+            sources += (i);
             if (disks[i].HullBlock > generation) { generation = disks[i].HullBlock; }
             disks[owner].Cursors[i] = (Guid = disks[i].Incarnation, SyncedLsn = disks[i].LogLsn);
           }
           i = i + 1;
         }
-        assert sources >= 6;
+        assert HasFullSyncQuorum(topology, sources);
         disks[owner].HullBlock = generation;
         disks[owner].LogLsn = disks[owner].LogLsn + 1;
         announce eCallOsiris, owner;
@@ -169,14 +173,14 @@ machine TRecoveryStorage {
       roundPeers = default(set[int]);
       roundDone = default(set[int]);
       announce eRoundStarted, owner;
-      while (i < 8) {
+      while (i < diskCount) {
         if (i != owner && disks[i].Online && disks[i].Ready) {
           roundPeers += (i);
           new TSyncerJobTask((Storage = this, Owner = owner, Peer = i, Current = disks[owner].Cursors[i]));
         }
         i = i + 1;
       }
-      assert sizeof(roundPeers) >= 6;
+      assert HasGroupQuorum(topology, roundPeers);
     }
     on TEvVSync do (req: TVSyncRequest) {
       var peer: TVDisk;

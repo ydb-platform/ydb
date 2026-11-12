@@ -1,16 +1,23 @@
 {
-  "checker": "PChecker, randomized bounded exploration (not exhaustive)",
-  "p_command": "/tmp/sync-guid-p",
+  "checked_at": "2026-11-12T17:46:45.455021+00:00",
+  "checker": "PChecker 3.1.0, randomized bounded exploration (not exhaustive)",
+  "dotnet_sdk": "8.0.428",
+  "dotnet_runtime": "8.0.34",
+  "working_tree_base_sha": "a68bd12f36af20329023baf319990155fa1ebf10",
+  "working_tree_base_commit_date": "2026-11-12T20:12:20+03:00",
+  "model_changes_uncommitted": true,
+  "p_command": "p",
   "seed": 1,
   "schedules_requested": 50,
   "max_steps": 10000,
   "source_sha256": {
-    "PSpec/Invariants.p": "43f0b573b76fb41e67a7f8026825d7285469cf78c1f810e8fbfe6d857dec3b4a",
-    "PSrc/Events.p": "899fd534288065a0483d358dd5c53087bde9cfcb54f1f17a587240c109fe85e5",
-    "PSrc/GuidRecovery.p": "54de7f5dfe70ac65b922c6bbb34c142c66e6648ccd5d28bc4d88896c63bd166d",
-    "PSrc/Storage.p": "940ff610e9cf3f58ae74fab00baa279b9c5f8c2ba8bb234a37ade9ed0f3240ba",
-    "PTst/Scenarios.p": "b66d731a17c9ea47955be936b289d8b0ae364c330b40d8377d0e38e8a10bfa9f",
-    "PTst/Tests.p": "268094a7cf1c5d6fe4841dcb5a8a8abfd722302f767a2832c060b9b557d21e39"
+    "PSpec/Invariants.p": "f1cc46a66ebeb0e1852620a2950093094ac9764ddfe2418a465fc07787fba914",
+    "PSrc/Events.p": "45316f37ecc2a2a855868610619fd27afb6c4489af6b3fc469e376b2adcf04e6",
+    "PSrc/GuidRecovery.p": "b9a0b0aa1e966f8795aaee67a47a19df8e27d6434bc60be18b53cd40c45ae6dd",
+    "PSrc/Quorum.p": "1af340177ba235441d7bdce36384efc710ead3f3ac60e5efdbd7f4fa5b4562de",
+    "PSrc/Storage.p": "2a280faedd9e9cd759784462344d996f4f41a0e283c2a68503be6ca58e3e2864",
+    "PTst/Scenarios.p": "ccf8eeee6416d9c211aa9256bf52247228c006cfa5c8fa927a2e0b5f6fc32313",
+    "PTst/Tests.p": "054976f9b68185aff6174d5a928e396816b81e8a025f3bd1ee6ccc0906bac73b"
   },
   "results": [
     {
@@ -22,10 +29,15 @@
         "bugs": "1",
         "schedules": "1",
         "max_depth": "629",
-        "time_seconds": "0.29",
+        "time_seconds": "0.33",
         "memory_max_mb": "0"
       },
-      "log": "/tmp/sync-guid-recovery-verified/tcStaleMetadata.log"
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcStaleMetadata.log",
+      "replay": {
+        "exit_code": 0,
+        "bugs_reproduced": 1,
+        "schedule": "Evidence/tcStaleMetadata.schedule"
+      }
     },
     {
       "testcase": "tcDelayedSelfGuid",
@@ -36,10 +48,15 @@
         "bugs": "1",
         "schedules": "1",
         "max_depth": "534",
-        "time_seconds": "0.27",
+        "time_seconds": "0.3",
         "memory_max_mb": "0"
       },
-      "log": "/tmp/sync-guid-recovery-verified/tcDelayedSelfGuid.log"
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcDelayedSelfGuid.log",
+      "replay": {
+        "exit_code": 0,
+        "bugs_reproduced": 1,
+        "schedule": "Evidence/tcDelayedSelfGuid.schedule"
+      }
     },
     {
       "testcase": "tcFalseFirstRun",
@@ -50,10 +67,15 @@
         "bugs": "1",
         "schedules": "1",
         "max_depth": "563",
-        "time_seconds": "0.25",
+        "time_seconds": "0.31",
         "memory_max_mb": "0"
       },
-      "log": "/tmp/sync-guid-recovery-verified/tcFalseFirstRun.log"
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcFalseFirstRun.log",
+      "replay": {
+        "exit_code": 0,
+        "bugs_reproduced": 1,
+        "schedule": "Evidence/tcFalseFirstRun.schedule"
+      }
     },
     {
       "testcase": "tcNoWipes",
@@ -64,10 +86,10 @@
         "bugs": "0",
         "schedules": "50",
         "max_depth": "166",
-        "time_seconds": "1",
-        "memory_max_mb": "0.02"
+        "time_seconds": "1.23",
+        "memory_max_mb": "0.01"
       },
-      "log": "/tmp/sync-guid-recovery-verified/tcNoWipes.log"
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcNoWipes.log"
     },
     {
       "testcase": "tcRetainedSource",
@@ -78,10 +100,10 @@
         "bugs": "0",
         "schedules": "50",
         "max_depth": "572",
-        "time_seconds": "2.97",
+        "time_seconds": "4.47",
         "memory_max_mb": "0.02"
       },
-      "log": "/tmp/sync-guid-recovery-verified/tcRetainedSource.log"
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcRetainedSource.log"
     },
     {
       "testcase": "tcWipedWithWitnesses",
@@ -92,10 +114,10 @@
         "bugs": "0",
         "schedules": "50",
         "max_depth": "150",
-        "time_seconds": "1.02",
-        "memory_max_mb": "0.02"
+        "time_seconds": "1.23",
+        "memory_max_mb": "0.01"
       },
-      "log": "/tmp/sync-guid-recovery-verified/tcWipedWithWitnesses.log"
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcWipedWithWitnesses.log"
     },
     {
       "testcase": "tcFreshGroup",
@@ -106,10 +128,123 @@
         "bugs": "0",
         "schedules": "50",
         "max_depth": "86",
-        "time_seconds": "0.5",
+        "time_seconds": "0.78",
         "memory_max_mb": "0.01"
       },
-      "log": "/tmp/sync-guid-recovery-verified/tcFreshGroup.log"
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcFreshGroup.log"
+    },
+    {
+      "testcase": "tcMirror3dcStaleMetadata",
+      "exit_code": 1,
+      "expected_monitor": "misses committed 42",
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "1",
+        "schedules": "1",
+        "max_depth": "743",
+        "time_seconds": "0.3",
+        "memory_max_mb": "0"
+      },
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcMirror3dcStaleMetadata.log",
+      "replay": {
+        "exit_code": 0,
+        "bugs_reproduced": 1,
+        "schedule": "Evidence/tcMirror3dcStaleMetadata.schedule"
+      }
+    },
+    {
+      "testcase": "tcMirror3dcDelayedSelfGuid",
+      "exit_code": 1,
+      "expected_monitor": "Intact local Final rejected",
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "1",
+        "schedules": "1",
+        "max_depth": "633",
+        "time_seconds": "0.37",
+        "memory_max_mb": "0"
+      },
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcMirror3dcDelayedSelfGuid.log",
+      "replay": {
+        "exit_code": 0,
+        "bugs_reproduced": 1,
+        "schedule": "Evidence/tcMirror3dcDelayedSelfGuid.schedule"
+      }
+    },
+    {
+      "testcase": "tcMirror3dcFalseFirstRun",
+      "exit_code": 1,
+      "expected_monitor": "Existing VDisk was classified FirstRun",
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "1",
+        "schedules": "1",
+        "max_depth": "659",
+        "time_seconds": "0.39",
+        "memory_max_mb": "0"
+      },
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcMirror3dcFalseFirstRun.log",
+      "replay": {
+        "exit_code": 0,
+        "bugs_reproduced": 1,
+        "schedule": "Evidence/tcMirror3dcFalseFirstRun.schedule"
+      }
+    },
+    {
+      "testcase": "tcMirror3dcNoWipes",
+      "exit_code": 0,
+      "expected_monitor": null,
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "182",
+        "time_seconds": "1.56",
+        "memory_max_mb": "0.01"
+      },
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcMirror3dcNoWipes.log"
+    },
+    {
+      "testcase": "tcMirror3dcRetainedSource",
+      "exit_code": 0,
+      "expected_monitor": null,
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "686",
+        "time_seconds": "4.94",
+        "memory_max_mb": "0.02"
+      },
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcMirror3dcRetainedSource.log"
+    },
+    {
+      "testcase": "tcMirror3dcWipedWithWitnesses",
+      "exit_code": 0,
+      "expected_monitor": null,
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "162",
+        "time_seconds": "1.42",
+        "memory_max_mb": "0.01"
+      },
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcMirror3dcWipedWithWitnesses.log"
+    },
+    {
+      "testcase": "tcMirror3dcFreshGroup",
+      "exit_code": 0,
+      "expected_monitor": null,
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "90",
+        "time_seconds": "0.89",
+        "memory_max_mb": "0.01"
+      },
+      "log": "/tmp/sync-guid-mirror3dc-verified/tcMirror3dcFreshGroup.log"
     }
   ]
 }

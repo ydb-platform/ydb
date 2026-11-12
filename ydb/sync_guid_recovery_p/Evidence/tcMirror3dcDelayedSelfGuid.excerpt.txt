@@ -1,0 +1,38 @@
+Selected lines from the PChecker trace; not a full trace.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(5)' announced event 'eGuidVerdict' with payload <Owner:1, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 1.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(14)' announced event 'eGuidVerdict' with payload <Owner:2, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 2.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(23)' announced event 'eGuidVerdict' with payload <Owner:3, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 3.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(32)' announced event 'eGuidVerdict' with payload <Owner:4, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 4.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(41)' announced event 'eGuidVerdict' with payload <Owner:5, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 5.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(50)' announced event 'eGuidVerdict' with payload <Owner:6, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 6.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(59)' announced event 'eGuidVerdict' with payload <Owner:7, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 7.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(68)' announced event 'eGuidVerdict' with payload <Owner:8, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 8.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eGuidRecoveryStarted' with payload <Owner:0, Local:<State:3, Guid:1, DbBirthLsn:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(77)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:3, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(77)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(77)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:4, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(77)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(77)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:6, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(77)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(77)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:5, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(77)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(77)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:7, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(77)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(77)' announced event 'eGuidVerdict' with payload <Owner:0, Decision:3, >.
+<ErrorLog> Assertion Failed: sync_guid_recovery_p/PSpec/Invariants.p:48:9 Intact local Final rejected after an Empty first reply quorum
+<StrategyLog> Found bug using 'random' strategy.
+<StrategyLog> Checking statistics:
+<StrategyLog> Found 1 bug.
+<StrategyLog> Scheduling statistics:
+<StrategyLog> Explored 1 schedule
+<StrategyLog> Explored 1 timeline
+<StrategyLog> Found 100.00% buggy schedules.
+<StrategyLog> Number of scheduling points in terminating schedules: 633 (min), 633 (avg), 633 (max).

@@ -1,5 +1,27 @@
 # Recovery model and C++ correspondence
 
+## Topologies and quorums
+
+The same implementation and driver run with two configurations:
+
+| Configuration | Physical VDisks | GUID/group quorum |
+| --- | --- | --- |
+| `Block4Plus2` | 8, one per fail domain | At least 6 responders. |
+| `Mirror3dc` | 9, realms `{0,1,2}`, `{3,4,5}`, `{6,7,8}` | The complement has failures in at most 2 realms, with at least 2 failures in at most 1 realm. |
+
+The mirror-3-dc predicate requires one fully responding realm and at least two
+realms with two responders. `(3,2,0)` is a quorum of five; `(2,2,2)` is not a
+quorum of six. `ReachAVerdict` applies it both to all accepted replies and to
+the subset carrying `RemoteFinal`. Publication acknowledgements also use
+responder IDs. See [PSrc/Quorum.p](PSrc/Quorum.p).
+
+Mirror-3-dc is fixed in `NORMAL`, with all realms `INCLUDED`.
+`TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync` uses
+`Ensured=LAYOUT_111_22`: the missing domains cannot contain `111` or `22`.
+In this configuration it equals the group predicate. Lost-data recovery
+excludes self; at each rolling wipe only VDisk 0 and the current recovering
+VDisk are missing as sources, which satisfies that predicate.
+
 ## Scenarios and expected outcomes
 
 The group starts in a quiescent, fully initialized state, with every eternal GUID
@@ -12,15 +34,22 @@ VDisk 0 returns; `Good` alone is not treated as metadata freshness.
 | Test | Scenario | Expected checker result |
 | --- | --- | --- |
 | `tcStaleMetadata` | Preserve disk 0, wipe/recover peers 1–7, include self in the first GUID quorum, then finish ordinary synchronization with every available peer. | `MetadataIsCompleteWhenSynced` fails: all seven peers report `DisksSynced`, but local Hull lacks generation 42. |
-| `tcDelayedSelfGuid` | Same rolling wipes, but finitely delay disk 0's actual self-witness until six peer replies arrive. | `PreservedIdentityRemainsRecoverable` fails: local `Final` becomes `Inconsistency` after an all-`Empty` first quorum. |
+| `tcDelayedSelfGuid` | Same rolling wipes, but finitely delay disk 0's actual self-witness until a peer quorum arrives. | `PreservedIdentityRemainsRecoverable` fails: local `Final` becomes `Inconsistency` after an all-`Empty` first quorum. |
 | `tcFalseFirstRun` | Also wipe disk 0 before its unavailable interval; rolling wipes erase the remaining identity witnesses. | `NeverReinitializeExistingVDisk` fails after the real `FirstRun` publication/local-commit sequence. |
 | `tcNoWipes` | Preserve disk 0 and the original peer logs. | Pass: ordinary synchronization imports generation 42. |
 | `tcRetainedSource` | Wipe peers 1–6, leaving peer 7's original log. | Pass: the remaining original source repairs the metadata gap. |
 | `tcWipedWithWitnesses` | Wipe disk 0 but preserve its peer witnesses. | Pass: `LostData` retains the eternal GUID, imports metadata, completes abstract Osiris and persists recovery state. |
 | `tcFreshGroup` | All GUID records are initially empty and no slot has historical identity. | Pass: `FirstRun` is legitimate. Other VDisks can answer GUID reads while not yet ready for data synchronization. |
 
-The transport holds genuine read replies, releases them after six other replies,
-and never invents `Empty` answers. Independent proxy/job machines provide
+Each testcase also has a `tcMirror3dc…` counterpart using the same driver and
+monitors. It wipes peers 1–8; `tcMirror3dcRetainedSource` leaves peer 8 unwiped.
+The stale-metadata failure waits for successful synchronization with all eight
+peers. For the self-included branch, the first GUID quorum is `{0,1,2,3,4}`;
+for `DelayedSelfGuid` it is `{3,4,5,6,7}`. Both have realm counts `(3,2,0)`
+up to realm order. The latter consists entirely of erased witnesses.
+
+The transport holds genuine read replies, releases them after the delivered
+responder set forms a quorum, and never invents `Empty` answers. Independent proxy/job machines provide
 asynchronous interleavings. Verdicts are calculated from the stored records;
 the driver does not select a verdict or inject a failed monitor outcome.
 
@@ -55,7 +84,8 @@ The new P results are recorded separately in [Evidence](Evidence/README.md).
 
 | P subset | Original C++ |
 | --- | --- |
-| `ReachAVerdict` | [`TDecisionMaker::VDiskQuorumDecision`, `HandleQuorumEmpty`, `HandleQuorumInProgress`, `HandleQuorumFinal`, `CheckLocalAndRemoteGuid`](https://github.com/ydb-platform/ydb/blob/6e3629b18daf4a2441d2b129fa3b1ae84564610f/ydb/core/blobstorage/vdisk/syncer/guid_recovery.cpp#L398). Preserves local/remote state distinctions, unique-Final priority, conflicting Finals, maximum-count InProgress selection with smallest-GUID tie breaking, and the first-six-response decision. |
+| `HasGroupQuorum` / `HasFullSyncQuorum` | [`TQuorumCheckerOrdinary` / `TQuorumCheckerMirror3dc`](https://github.com/ydb-platform/ydb/blob/6e3629b18daf4a2441d2b129fa3b1ae84564610f/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.cpp#L215), [`TQuorumTracker::HasQuorum`](https://github.com/ydb-platform/ydb/blob/6e3629b18daf4a2441d2b129fa3b1ae84564610f/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncquorum.h#L57), and [`TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync`](https://github.com/ydb-platform/ydb/blob/6e3629b18daf4a2441d2b129fa3b1ae84564610f/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h#L138). Group/domain predicate, not the blob-subgroup write predicate; full-sync equivalence is limited to `NORMAL`, all realms `INCLUDED`. |
+| `ReachAVerdict` | [`TDecisionMaker::VDiskQuorumDecision`, `HandleQuorumEmpty`, `HandleQuorumInProgress`, `HandleQuorumFinal`, `CheckLocalAndRemoteGuid`](https://github.com/ydb-platform/ydb/blob/6e3629b18daf4a2441d2b129fa3b1ae84564610f/ydb/core/blobstorage/vdisk/syncer/guid_recovery.cpp#L398). Preserves local/remote state distinctions, unique-Final priority, conflicting Finals, maximum-count InProgress selection with smallest-GUID tie breaking, and decision on the first topology-valid response quorum. |
 | `TVDiskGuidRecoveryActor` publication states | [`FirstRunPhase`](https://github.com/ydb-platform/ydb/blob/6e3629b18daf4a2441d2b129fa3b1ae84564610f/ydb/core/blobstorage/vdisk/syncer/guid_recovery.cpp#L776) and [`TVDiskGuidFirstRunState`](https://github.com/ydb-platform/ydb/blob/6e3629b18daf4a2441d2b129fa3b1ae84564610f/ydb/core/blobstorage/vdisk/syncer/guid_firstrun.cpp#L95): InProgress publication, local Selected, Final publication and local Final. `PublishOnly` preserves existing local state and `DbBirthLsn`; late survey replies are ignored. |
 | `TRecoveryStorage.ePublishGuid` | [`TSyncer::Handle(TEvVSyncGuid)`](https://github.com/ydb-platform/ydb/blob/6e3629b18daf4a2441d2b129fa3b1ae84564610f/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer.cpp#L569): reads peer records for the requesting owner; writable peers overwrite and durably acknowledge incoming GUID information. |
 | `TRecoveryStorage.eRunPropagators` | [`RunPropagators`](https://github.com/ydb-platform/ydb/blob/6e3629b18daf4a2441d2b129fa3b1ae84564610f/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer.cpp#L282): each live source advertises only its own GUID. This does not relay the unavailable source's witnesses. |
@@ -71,14 +101,14 @@ identities instead of random 64-bit integers.
 
 ## Abstraction bounds
 
-- `TRecoveryStorage` co-locates durable records for eight VDisks. Commands and
+- `TRecoveryStorage` co-locates durable records for eight or nine VDisks. Commands and
   their acknowledgements abstract atomic durable operations. This model explores
   asynchronous survey/job ordering, not arbitrary PDisk or persistence-crash
   interleavings.
 - Publication writes all online peers before a quorum acknowledgement. C++ may
-  stop after six acknowledgements. This is a reachable settled schedule with no
+  stop after a topology-valid acknowledgement quorum. This is a reachable settled schedule with no
   intervening publication failure; it is not an exhaustive publication model.
-- Lost-data recovery reads all ready nonself sources, requiring at least six.
+- Lost-data recovery reads all ready nonself sources, requiring a full-sync quorum.
   All those sources have the same block in these scenarios, so reading extra
   sources cannot manufacture the demonstrated loss. Arbitrary dispersion of
   blob parts across recovery quorums is outside scope.
@@ -91,6 +121,21 @@ identities instead of random 64-bit integers.
   read-only peers, retry timers, mixed-version history exchange, and interrupted
   recovery are outside scope. The `NODATA` branch is included, but the current
   controls reach ordinary OK and RESTART/ALREADY rather than forcing log trimming.
+
+## Erasure scope
+
+The three failures are reproduced in this P model for both 4+2 and normal
+mirror-3-dc. The original C++ regressions cover the first two failures in 4+2.
+No end-to-end mirror-3-dc C++ reproduction is claimed.
+
+`TDecisionMaker`, GUID propagation, and `TSyncerJobTask::HandleRestart` are shared
+across erasures. Other supported redundant erasures have compatible failure
+budgets for an unavailable VDisk plus one rolling wipe, so the source-derived
+exposure extends beyond these two configurations. They have not been checked
+by this model. A universal claim including `ErasureNone` is unwarranted: its
+group quorum requires every fail domain, and a single-VDisk group has no peers
+to recover from. Realm exclusion/recovery transitions are also outside this
+model. PR #57055's GUID-history exchange is not modeled.
 
 In particular, the P `FirstRun` counterexample validates the reduced protocol
 path; it is not a claim that a new end-to-end C++ `FirstRun` regression was run.

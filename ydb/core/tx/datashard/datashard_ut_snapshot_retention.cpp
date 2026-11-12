@@ -4,6 +4,7 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
@@ -991,6 +992,56 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
+    Y_UNIT_TEST(ExplicitSnapshotSurvivesDelayedPublication) {
+        TSnapshotRetentionTest test(true, 2);
+        auto& runtime = test.GetRuntime();
+        using TService = NLongTxService::TEvLongTxService;
+        TBlockEvents<TService::TEvPropagateSnapshots> publication(runtime);
+        const auto snapshot = test.WriteVersion(1);
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.Send(NLongTxService::MakeLongTxServiceID(runtime.GetNodeId(0)), sender,
+            new TService::TEvAcquireReadSnapshot("/Root", { test.TableA, test.TableB }, snapshot), 0, true);
+        auto registered = runtime.GrabEdgeEventRethrow<TService::TEvAcquireReadSnapshotResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            registered->Get()->Status, Ydb::StatusIds::SUCCESS, registered->Get()->Issues.ToString());
+        UNIT_ASSERT(registered->Get()->SnapshotHandle);
+        UNIT_ASSERT_VALUES_EQUAL(registered->Get()->Snapshot, snapshot);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        test.WriteVersion(2);
+        test.RunCleanup();
+        UNIT_ASSERT(!publication.empty());
+        const auto& registry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+        UNIT_ASSERT(registry);
+        UNIT_ASSERT(!registry->GetActiveSnapshots(test.TableB).contains(snapshot));
+        // The freshness floor must protect the snapshot before its registration arrives.
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardB, snapshot));
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatIntReadResult(test.ReadSnapshot(test.ShardB, test.TableB, snapshot).get()), "1, 1\n");
+
+        publication.Stop().Unblock();
+        runtime.WaitFor("explicit snapshot published to the remote node", [&] {
+            const auto& current = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+            return current && current->GetActiveSnapshots(test.TableB).contains(snapshot);
+        }, TDuration::Seconds(30));
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardB));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardB, snapshot));
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatIntReadResult(test.ReadSnapshot(test.ShardB, test.TableB, snapshot).get()), "1, 1\n");
+
+        registered->Get()->SnapshotHandle.Reset();
+        runtime.WaitFor("explicit snapshot released on the remote node", [&] {
+            const auto& current = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+            return current && !current->HasSnapshot(test.TableB, snapshot);
+        }, TDuration::Seconds(30));
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardB, snapshot));
+        const auto removed = test.ReadSnapshot(test.ShardB, test.TableB, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(removed->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
     Y_UNIT_TEST(KqpFirstRemoteReadAfterCleanup) {
         TSnapshotRetentionTest test(true, 2);
         auto& runtime = test.GetRuntime();

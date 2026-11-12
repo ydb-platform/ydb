@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
+#include <ydb/core/sys_view/common/events.h>
 
 #include <set>
 
@@ -299,6 +300,23 @@ namespace {
         auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(edge, false);
         return response->Get()->Record;
     }
+
+    NKikimrSysView::TGroupInfo QueryGroupSystemView(TEnvironmentSetup& env, ui32 groupId) {
+        env.Sim(TDuration::Seconds(6));
+        const auto edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        env.Runtime->SendToPipe(env.TabletId, edge, new NSysView::TEvSysView::TEvGetGroupsRequest, 0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        const auto response = env.WaitForEdgeActorEvent<NSysView::TEvSysView::TEvGetGroupsResponse>(edge, false);
+        UNIT_ASSERT(response);
+        for (const auto& entry : response->Get()->Record.GetEntries()) {
+            if (entry.GetKey().GetGroupId() == groupId) {
+                UNIT_ASSERT(entry.GetInfo().HasBridgeSyncStatus());
+                return entry.GetInfo();
+            }
+        }
+        UNIT_FAIL("Group is missing from system views: " << groupId);
+        Y_UNREACHABLE();
+    }
 }
 
 Y_UNIT_TEST_SUITE(BridgePoolMode) {
@@ -434,6 +452,8 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         UNIT_ASSERT(ordinary.GetGroups().groups(0).has_pile_name());
         UNIT_ASSERT_VALUES_EQUAL(ordinary.GetGroups().groups(0).pile_name(), "b");
         UNIT_ASSERT(ordinary.GetGroups().groups(0).sync_status() == NKikimrBridge::NOT_REQUIRED);
+        UNIT_ASSERT(QueryGroupSystemView(env, ordinary.GetGroups().groups(0).physical_group_id()).GetBridgeSyncStatus() ==
+            NKikimrBridge::NOT_REQUIRED);
         query.SetPileName("b");
         UNIT_ASSERT_VALUES_EQUAL(QueryStorageDiagnostics(env, query).GetGroups().groups_size(), 1);
 
@@ -452,6 +472,7 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
             UNIT_ASSERT(row.has_pile_name());
             UNIT_ASSERT(row.pile_name().empty());
             UNIT_ASSERT(row.sync_status() == NKikimrBridge::NOT_REQUIRED);
+            UNIT_ASSERT(QueryGroupSystemView(env, row.physical_group_id()).GetBridgeSyncStatus() == row.sync_status());
         }
         query.SetView(NKikimrBridge::TStorageQuery::DATABASES);
         const auto emptyDatabase = QueryStorageDiagnostics(env, query);
@@ -486,8 +507,6 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         UNIT_ASSERT_C(overview.GetStatus() == Ydb::StatusIds::SUCCESS, overview.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().piles_size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().unattributed_storage_pools(), 2);
-        UNIT_ASSERT(overview.GetPiles().has_bridge_databases());
-        UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().bridge_databases(), 0);
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().cluster_state_generation(), QueryStorageConfig(env).GetClusterState().GetGeneration());
         UNIT_ASSERT(overview.GetPiles().has_observed_at());
         for (const auto& row : overview.GetPiles().piles()) {
@@ -511,6 +530,8 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
                 TBridgePileId::FromPileIndex(row.pile_name() == "pile_1" ? 0 : 1));
             UNIT_ASSERT(part);
             UNIT_ASSERT_VALUES_EQUAL(row.physical_group_id(), part->GetGroupId());
+            UNIT_ASSERT(QueryGroupSystemView(env, row.physical_group_id()).GetBridgeSyncStatus() == row.sync_status());
+            UNIT_ASSERT(QueryGroupSystemView(env, row.group_id()).GetBridgeSyncStatus() == NKikimrBridge::SYNCED);
         }
         query.AddStatuses(NKikimrBridge::UNKNOWN);
         UNIT_ASSERT_VALUES_EQUAL(QueryStorageDiagnostics(env, query).GetGroups().groups_size(), 0);
@@ -621,23 +642,19 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         const auto mixedOverview = QueryStorageDiagnostics(env, query);
         UNIT_ASSERT_C(mixedOverview.GetStatus() == Ydb::StatusIds::SUCCESS, mixedOverview.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(mixedOverview.GetPiles().unattributed_storage_pools(), 0);
-        UNIT_ASSERT(mixedOverview.GetPiles().has_bridge_databases());
-        UNIT_ASSERT_VALUES_EQUAL(mixedOverview.GetPiles().bridge_databases(), 0);
         for (const auto& row : mixedOverview.GetPiles().piles()) {
             UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), 1); // two groups and two pools, one storage owner
             UNIT_ASSERT_VALUES_EQUAL(row.databases().synced(), 1);
             UNIT_ASSERT_VALUES_EQUAL(row.databases().not_required(), 0);
-            UNIT_ASSERT(row.has_bridge_databases());
-            UNIT_ASSERT_VALUES_EQUAL(row.bridge_databases().total(), 0);
         }
 
         query.AddStoragePoolIds()->set_box_id(1);
         query.MutableStoragePoolIds(0)->set_pool_id(1);
         const auto filteredOverview = QueryStorageDiagnostics(env, query);
         UNIT_ASSERT_C(filteredOverview.GetStatus() == Ydb::StatusIds::SUCCESS, filteredOverview.DebugString());
-        UNIT_ASSERT(!filteredOverview.GetPiles().has_bridge_databases());
         for (const auto& row : filteredOverview.GetPiles().piles()) {
-            UNIT_ASSERT(!row.has_bridge_databases());
+            UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(row.databases().synced(), 1);
         }
         query.ClearStoragePoolIds();
 
@@ -650,14 +667,11 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         const auto separateOverview = QueryStorageDiagnostics(env, query);
         UNIT_ASSERT_C(separateOverview.GetStatus() == Ydb::StatusIds::SUCCESS, separateOverview.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(separateOverview.GetPiles().unattributed_storage_pools(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(separateOverview.GetPiles().bridge_databases(), 1);
         for (const auto& row : separateOverview.GetPiles().piles()) {
             UNIT_ASSERT(row.has_pile_name());
             UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), row.pile_name() == "pile_2" ? 2 : 1);
             UNIT_ASSERT_VALUES_EQUAL(row.databases().synced(), 1);
             UNIT_ASSERT_VALUES_EQUAL(row.databases().not_required(), row.pile_name() == "pile_2" ? 1 : 0);
-            UNIT_ASSERT_VALUES_EQUAL(row.bridge_databases().total(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(row.bridge_databases().synced(), 1);
         }
 
         auto emptyPool = ReadStoragePool(env, 2);
@@ -760,6 +774,20 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
             return std::ranges::all_of(logical, [&](ui32 id) { return IsFullyBridged(GetGroupInfo(env, id)); });
         }, "groups synchronized before scoped diagnostics");
 
+        NKikimrBridge::TStorageQuery unownedQuery;
+        unownedQuery.SetView(NKikimrBridge::TStorageQuery::DATABASES);
+        unownedQuery.SetGroupByStoragePool(true);
+        const auto unowned = QueryStorageDiagnostics(env, unownedQuery);
+        UNIT_ASSERT_C(unowned.GetStatus() == Ydb::StatusIds::SUCCESS, unowned.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(unowned.OwnersSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(unowned.GetDatabases().databases_size(), 4);
+        std::set<ui64> unownedPools;
+        for (const auto& row : unowned.GetDatabases().databases()) {
+            UNIT_ASSERT_VALUES_EQUAL(row.storage_pools_size(), 1);
+            unownedPools.insert(row.storage_pools(0).id().pool_id());
+        }
+        UNIT_ASSERT(unownedPools == std::set<ui64>({1, 2, 3}));
+
         NKikimrBlobStorage::TConfigRequest setOwners;
         for (ui64 poolId : {1, 2, 3}) {
             auto pool = ReadStoragePool(env, poolId);
@@ -803,6 +831,36 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
             UNIT_ASSERT_VALUES_EQUAL(row.groups().pending(), 0);
             UNIT_ASSERT_VALUES_EQUAL(row.groups().unknown(), 0);
         }
+
+        query.SetGroupByStoragePool(true);
+        const auto byPool = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(byPool.GetStatus() == Ydb::StatusIds::SUCCESS, byPool.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(byPool.GetDatabases().databases_size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(byPool.OwnersSize(), 3);
+        std::set<std::pair<ui64, TString>> poolCopies;
+        for (const auto& row : byPool.GetDatabases().databases()) {
+            UNIT_ASSERT_VALUES_EQUAL(row.storage_pools_size(), 1);
+            const auto& pool = row.storage_pools(0);
+            UNIT_ASSERT_VALUES_EQUAL(pool.id().box_id(), 1);
+            UNIT_ASSERT(pool.id().pool_id() == 1 || pool.id().pool_id() == 2);
+            UNIT_ASSERT(poolCopies.emplace(pool.id().pool_id(), row.pile_name()).second);
+            UNIT_ASSERT(row.storage_mode() == (pool.id().pool_id() == 1 ? NKikimrBridge::BRIDGED : NKikimrBridge::ORDINARY));
+            UNIT_ASSERT_VALUES_EQUAL(row.groups().required(), pool.id().pool_id() == 1 ? logical.size() : 0);
+            UNIT_ASSERT_VALUES_EQUAL(row.groups().synced(), row.groups().required());
+        }
+        for (const auto& owner : byPool.GetOwners()) {
+            UNIT_ASSERT_VALUES_EQUAL(owner.GetOwnerSchemeShardId(), 1000);
+            UNIT_ASSERT_VALUES_EQUAL(owner.GetOwnerPathId(), 5);
+            UNIT_ASSERT(owner.GetRowIndex() < static_cast<ui32>(byPool.GetDatabases().databases_size()));
+        }
+        for (const auto view : {NKikimrBridge::TStorageQuery::PILES, NKikimrBridge::TStorageQuery::GROUPS}) {
+            auto invalidView = query;
+            invalidView.SetView(view);
+            const auto invalid = QueryStorageDiagnostics(env, invalidView);
+            UNIT_ASSERT(invalid.GetStatus() == Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT(!invalid.HasPiles() && !invalid.HasGroups() && !invalid.HasDatabases());
+        }
+        query.SetGroupByStoragePool(false);
 
         query.SetView(NKikimrBridge::TStorageQuery::GROUPS);
         const auto groups = QueryStorageDiagnostics(env, query);

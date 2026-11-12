@@ -112,6 +112,7 @@ enum class EGroupFields : ui8 {
     MaxNormalizedOccupancy,
     CapacityAlert,
     GroupSizeInUnits,
+    BridgeSyncStatus,
     COUNT
 };
 
@@ -575,6 +576,10 @@ public:
             return PutTabletLogLatency;
         }
 
+        NKikimrBridge::ESynchronizationStatus GetBridgeSyncStatus() const {
+            return BscInfo && BscInfo->HasBridgeSyncStatus() ? BscInfo->GetBridgeSyncStatus() : NKikimrBridge::UNKNOWN;
+        }
+
         TString GetGroupName(EGroupFields groupBy) const {
             TString groupName;
             switch (groupBy) {
@@ -617,6 +622,9 @@ public:
                 case EGroupFields::CapacityAlert:
                     groupName = NKikimrBlobStorage::TPDiskSpaceColor::E_Name(CapacityAlert);
                     break;
+                case EGroupFields::BridgeSyncStatus:
+                    groupName = NKikimrBridge::ESynchronizationStatus_Name(GetBridgeSyncStatus());
+                    break;
                 default:
                     break;
             }
@@ -637,6 +645,8 @@ public:
                     return GetGroupName(groupBy);
                 case EGroupFields::State:
                     return StateSortKey;
+                case EGroupFields::BridgeSyncStatus:
+                    return static_cast<ui32>(GetBridgeSyncStatus());
                 case EGroupFields::Usage:
                     return Usage;
                 case EGroupFields::DiskSpaceUsage:
@@ -722,7 +732,8 @@ public:
     const TFieldsType FieldsBsGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
                                                     .set(+EGroupFields::Latency)
-                                                    .set(+EGroupFields::GroupSizeInUnits);
+                                                    .set(+EGroupFields::GroupSizeInUnits)
+                                                    .set(+EGroupFields::BridgeSyncStatus);
     const TFieldsType FieldsBsPools = TFieldsType().set(+EGroupFields::PoolName)
                                                    .set(+EGroupFields::Kind)
                                                    .set(+EGroupFields::MediaType)
@@ -782,6 +793,10 @@ public:
 
     bool FieldsNeeded(TFieldsType fields) const {
         return (FieldsRequired & (fields & ~FieldsAvailable)).any();
+    }
+
+    bool CanShowBridgeSync() {
+        return !IsStrictDatabaseOnlyRequest() || DatabaseStoragePoolsApplied;
     }
 
     bool NeedFilter = false;
@@ -859,6 +874,8 @@ public:
             result = EGroupFields::MaxVDiskRawUsage;
         } else if (field == "GroupSizeInUnits") {
             result = EGroupFields::GroupSizeInUnits;
+        } else if (field == "BridgeSyncStatus") {
+            result = EGroupFields::BridgeSyncStatus;
         }
         return result;
     }
@@ -1289,7 +1306,8 @@ public:
                     GroupsByGroupId.clear();
                 }
             }
-            if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy)) {
+            if (!FilterGroup.empty() && FieldsAvailable.test(+FilterGroupBy) &&
+                    (FilterGroupBy != EGroupFields::BridgeSyncStatus || CanShowBridgeSync())) {
                 TGroupView groupView;
                 for (TGroup* group : GroupView) {
                     if (group->GetGroupName(FilterGroupBy) == FilterGroup) {
@@ -1327,6 +1345,9 @@ public:
     }
 
     void ApplyGroup() {
+        if (GroupBy == EGroupFields::BridgeSyncStatus && !CanShowBridgeSync()) {
+            return;
+        }
         if (!NeedFilter && NeedGroup && FieldsAvailable.test(+GroupBy)) {
             switch (GroupBy) {
                 case EGroupFields::GroupId:
@@ -1336,6 +1357,7 @@ public:
                 case EGroupFields::Encryption:
                 case EGroupFields::MediaType:
                 case EGroupFields::PileName:
+                case EGroupFields::BridgeSyncStatus:
                     GroupCollection();
                     SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.SortKey; });
                     NeedGroup = false;
@@ -1372,6 +1394,9 @@ public:
     }
 
     void ApplySort() {
+        if (SortBy == EGroupFields::BridgeSyncStatus && !CanShowBridgeSync()) {
+            return;
+        }
         if (NeedSort && FieldsAvailable.test(+SortBy)) {
             switch (SortBy) {
                 case EGroupFields::GroupId:
@@ -1421,6 +1446,9 @@ public:
                     break;
                 case EGroupFields::State:
                     SortCollection(GroupView, [](const TGroup* group) { return group->StateSortKey; }, ReverseSort);
+                    break;
+                case EGroupFields::BridgeSyncStatus:
+                    SortCollection(GroupView, [](const TGroup* group) { return group->GetBridgeSyncStatus(); }, ReverseSort);
                     break;
                 case EGroupFields::Latency:
                     SortCollection(GroupView, [](const TGroup* group) { return group->GetLatencyForSort(); }, ReverseSort);
@@ -2041,6 +2069,7 @@ public:
                 GroupView.emplace_back(&group);
             }
             FieldsAvailable |= FieldsWbGroups;
+            FieldsAvailable.set(+EGroupFields::BridgeSyncStatus);
             FoundGroups = TotalGroups = GroupView.size();
             ApplyEverything();
         }
@@ -2494,7 +2523,7 @@ public:
             json.AddProblems(problem);
         }
         if (GroupGroups.empty()) {
-            const bool showBridgeSync = !IsStrictDatabaseOnlyRequest() || DatabaseStoragePoolsApplied;
+            const bool showBridgeSync = CanShowBridgeSync();
             for (const TGroup* group : GroupView) {
                 NKikimrViewer::TStorageGroupInfo& jsonGroup = *json.AddStorageGroups();
                 jsonGroup.SetGroupId(::ToString(group->GroupId));
@@ -2580,6 +2609,9 @@ public:
                 }
                 if (showBridgeSync && group->BscInfo) {
                     const auto& info = *group->BscInfo;
+                    if (info.HasBridgeSyncStatus()) {
+                        jsonGroup.SetBridgeSyncStatus(info.GetBridgeSyncStatus());
+                    }
                     if (info.HasBridgeSyncStage()) {
                         jsonGroup.SetBridgeSyncStage(info.GetBridgeSyncStage());
                     }
@@ -2719,6 +2751,7 @@ public:
                           * `MissingDisks`
                           * `State`
                           * `StateInfo` (alias for `State`)
+                          * `BridgeSyncStatus`
                           * `Usage`
                           * `GroupId`
                           * `Used`
@@ -2754,6 +2787,7 @@ public:
                           * `MissingDisks`
                           * `State`
                           * `StateInfo` (alias for `State`)
+                          * `BridgeSyncStatus`
                           * `Latency`
                           * `CapacityAlert`
                     required: false
@@ -2774,6 +2808,7 @@ public:
                           * `MissingDisks`
                           * `State`
                           * `StateInfo` (alias for `State`)
+                          * `BridgeSyncStatus`
                           * `Latency`
                           * `CapacityAlert`
                     required: false
@@ -2795,6 +2830,7 @@ public:
                           * `MissingDisks`
                           * `State` (also returns structured `StateInfo`)
                           * `StateInfo` (alias for `State`)
+                          * `BridgeSyncStatus`
                           * `Usage`
                           * `Used`
                           * `Limit`
@@ -2906,6 +2942,9 @@ public:
         storageGroupProperties["MaxNormalizedOccupancy"]["description"] = "max VDisk.NormalizedOccupancy across VDisks in this group";
         storageGroupProperties["MaxVDiskRawUsage"]["description"] = "max VDisk.RawUsage across VDisks in this group";
         storageGroupProperties["CapacityAlert"]["description"] = "worst VDisk.CapacityAlert in this group";
+        storageGroupProperties["BridgeSyncStatus"]["description"] =
+            "Bridge synchronization status from BSC: NOT_REQUIRED, SYNCED, SYNCING, UNKNOWN or PENDING. "
+            "Omitted when unavailable. Groups without an observed status use UNKNOWN for grouping and sorting.";
         storageGroupProperties["BridgeSyncStage"]["description"] =
             "Bridge synchronization stage as reported by the storage controller. Omitted when unavailable.";
         storageGroupProperties["BridgeSyncLastError"]["description"] =

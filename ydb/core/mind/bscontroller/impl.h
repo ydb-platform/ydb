@@ -2465,6 +2465,7 @@ private:
     NBridgeStorage::TCopyObservation ObserveBridgeStorageCopy(const NBridgeStorage::TGroupContext& group,
         const TBridgeInfo::TPile& pile, const NKikimrBridge::TClusterStateDetails::TPileSyncState* syncState,
         bool bridged) const;
+    NKikimrBridge::ESynchronizationStatus GetBridgeSyncStatus(TGroupId groupId);
     void Handle(TEvBlobStorage::TEvControllerQueryBridgeStorage::TPtr& ev);
     Ydb::StatusIds::StatusCode SelectBridgeStoragePools(const NKikimrBridge::TStorageQuery& query,
         std::set<TBoxStoragePoolId>& selected, NBridgeStorage::TReportBudget& budget, TString& error) const;

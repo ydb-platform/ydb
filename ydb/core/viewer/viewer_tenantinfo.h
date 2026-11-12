@@ -3,6 +3,7 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer.h"
+#include "viewer_bridge_storage.h"
 #include "viewer_request.h"
 #include "viewer_tabletinfo.h"
 #include "wb_aggregate.h"
@@ -42,7 +43,9 @@ class TJsonTenantInfo : public TViewerPipeClient {
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GroupsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> PoolsResponse;
     std::optional<TRequestResponse<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>> BridgeStorageResponse;
-    std::optional<TPathId> BridgeDatabaseKey;
+    THashMap<TPathId, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> BridgeResourceNavigateResults;
+    TVector<TPathId> BridgeResourceNavigateKeys;
+    static constexpr ui64 BridgeResourceNavigateCookie = ui64(1) << 63;
 
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
@@ -72,27 +75,6 @@ class TJsonTenantInfo : public TViewerPipeClient {
     struct TStorageQuota {
         uint64 SoftQuota = 0;
         uint64 HardQuota = 0;
-    };
-
-    struct TBridgeDatabaseStats {
-        NKikimrBridge::EStorageMode Mode = NKikimrBridge::STORAGE_MODE_UNSPECIFIED;
-        ui64 Required = 0;
-        ui64 Synced = 0;
-        ui64 Syncing = 0;
-        ui64 Unknown = 0;
-
-        void Add(const NKikimrBridge::TDatabaseSynchronization& row) {
-            const auto mode = row.storage_mode();
-            Mode = Mode == NKikimrBridge::STORAGE_MODE_UNSPECIFIED ? mode : Mode == mode ? mode : NKikimrBridge::MIXED;
-            Required += row.groups().required();
-            Synced += row.groups().synced();
-            Syncing += row.groups().syncing();
-            Unknown += row.groups().unknown();
-        }
-
-        NKikimrBridge::ESynchronizationStatus GetStatus() const {
-            return GetBridgeSynchronizationStatus(Required, Synced, Syncing, Unknown);
-        }
     };
 
 public:
@@ -190,6 +172,7 @@ public:
             if (Database.empty()) {
                 auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
                 request->Record.SetView(NKikimrBridge::TStorageQuery::DATABASES);
+                request->Record.SetGroupByStoragePool(true);
                 BridgeStorageResponse = MakeRequestToTablet<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(
                     GetBSControllerId(), request.release());
             } else {
@@ -511,6 +494,16 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (ev->Cookie >= BridgeResourceNavigateCookie) {
+            const ui64 index = ev->Cookie - BridgeResourceNavigateCookie;
+            if (index < BridgeResourceNavigateKeys.size()) {
+                auto& response = BridgeResourceNavigateResults.at(BridgeResourceNavigateKeys[index]);
+                if (response.Set(std::move(ev))) {
+                    RequestDone();
+                }
+            }
+            return;
+        }
         TString path = GetPath(ev);
         auto& result(NavigateKeySetResult[path]);
         if (result.Set(std::move(ev))) {
@@ -533,6 +526,13 @@ public:
                 if (domainInfo->ResourcesDomainKey != domainInfo->DomainKey) {
                     tenant.SetType(NKikimrViewer::Serverless);
                     tenant.SetResourceId(GetDomainId(domainInfo->ResourcesDomainKey));
+                    if (AppData()->BridgeModeEnabled && Database.empty() && domainInfo->ResourcesDomainKey &&
+                            !BridgeResourceNavigateResults.contains(domainInfo->ResourcesDomainKey)) {
+                        const auto cookie = BridgeResourceNavigateCookie + BridgeResourceNavigateKeys.size();
+                        BridgeResourceNavigateKeys.push_back(domainInfo->ResourcesDomainKey);
+                        BridgeResourceNavigateResults.emplace(domainInfo->ResourcesDomainKey,
+                            MakeRequestSchemeCacheNavigateWithoutToken(domainInfo->ResourcesDomainKey, cookie));
+                    }
                 } else {
                     RequestMetadataCacheHealthCheck(path);
                 }
@@ -781,45 +781,32 @@ public:
         if (!entry.DomainInfo || !entry.DomainDescription) {
             return;
         }
-        THashSet<TString> poolNames;
-        const auto collectPools = [&](const auto& domain) {
-            for (const auto& pool : domain.Description.GetStoragePools()) {
-                poolNames.insert(pool.GetName());
-            }
-        };
-        collectPools(*entry.DomainDescription);
-        const auto& domain = *entry.DomainInfo;
-        if (domain.ResourcesDomainKey != domain.DomainKey) {
-            if (!ResourceNavigateResponse || !ResourceNavigateResponse->IsOk()) {
-                return;
-            }
-            const auto& resourceEntry = ResourceNavigateResponse->Get()->Request->ResultSet.front();
-            if (!resourceEntry.DomainInfo || resourceEntry.DomainInfo->DomainKey != domain.ResourcesDomainKey ||
-                    !resourceEntry.DomainDescription) {
-                return;
-            }
-            collectPools(*resourceEntry.DomainDescription);
+        const auto* resource = ResourceNavigateResponse && ResourceNavigateResponse->IsOk()
+            ? &ResourceNavigateResponse->Get()->Request->ResultSet.front() : nullptr;
+        const auto poolNames = GetBridgeDatabaseStoragePools(entry, resource);
+        if (!poolNames) {
+            return;
         }
         THashMap<TString, const NKikimrSysView::TStoragePoolEntry*> pools;
         for (const auto& pool : PoolsResponse->Get()->Record.GetEntries()) {
             const auto& name = pool.GetInfo().GetName();
-            if (poolNames.contains(name) && !pools.emplace(name, &pool).second) {
+            if (poolNames->contains(name) && !pools.emplace(name, &pool).second) {
                 return;
             }
         }
-        if (pools.size() != poolNames.size()) {
+        if (pools.size() != poolNames->size()) {
             return;
         }
         auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
         auto& query = request->Record;
         query.SetView(NKikimrBridge::TStorageQuery::DATABASES);
+        query.SetGroupByStoragePool(true);
         query.SetFilterPools(true);
         for (const auto& [_, pool] : pools) {
             auto* id = query.AddStoragePoolIds();
             id->set_box_id(pool->GetKey().GetBoxId());
             id->set_pool_id(pool->GetKey().GetStoragePoolId());
         }
-        BridgeDatabaseKey = domain.DomainKey;
         BridgeStorageResponse = MakeRequestToTablet<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(
             GetBSControllerId(), request.release());
     }
@@ -830,23 +817,44 @@ public:
             return stats;
         }
         const auto& record = BridgeStorageResponse->Get()->Record;
-        if (record.GetStatus() != Ydb::StatusIds::SUCCESS || !record.HasDatabases()) {
+        const TBridgeStorageSnapshot snapshot(record);
+        if (!snapshot.IsValid()) {
             return stats;
         }
-        const auto& rows = record.GetDatabases().databases();
-        if (BridgeDatabaseKey) {
-            for (const auto& row : rows) {
-                stats[*BridgeDatabaseKey].Add(row);
+        using TEntry = NSchemeCache::TSchemeCacheNavigate::TEntry;
+        THashMap<TPathId, const TEntry*> byId;
+        const auto addEntry = [&](const auto& response) {
+            if (response.IsOk()) {
+                const auto& entry = response.Get()->Request->ResultSet.front();
+                if (entry.DomainInfo) {
+                    byId[entry.DomainInfo->DomainKey] = &entry;
+                }
             }
-            return stats;
+        };
+        for (const auto& [_, response] : NavigateKeySetResult) {
+            addEntry(response);
         }
-        for (const auto& owner : record.GetOwners()) {
-            if (!owner.GetOwnerSchemeShardId() || !owner.GetOwnerPathId() ||
-                    owner.GetRowIndex() >= static_cast<ui32>(rows.size())) {
+        if (ResourceNavigateResponse) {
+            addEntry(*ResourceNavigateResponse);
+        }
+        for (const auto& [_, response] : BridgeResourceNavigateResults) {
+            addEntry(response);
+        }
+        for (const auto& [_, response] : NavigateKeySetResult) {
+            if (!response.IsOk()) {
                 continue;
             }
-            const auto& row = rows.Get(owner.GetRowIndex());
-            stats[TPathId(owner.GetOwnerSchemeShardId(), owner.GetOwnerPathId())].Add(row);
+            const auto& entry = response.Get()->Request->ResultSet.front();
+            if (!entry.DomainInfo) {
+                continue;
+            }
+            const auto resource = byId.find(entry.DomainInfo->ResourcesDomainKey);
+            const auto pools = GetBridgeDatabaseStoragePools(entry, resource != byId.end() ? resource->second : nullptr);
+            if (pools) {
+                if (auto database = snapshot.Resolve(*pools)) {
+                    stats[entry.DomainInfo->DomainKey] = std::move(*database);
+                }
+            }
         }
         return stats;
     }
@@ -1349,6 +1357,9 @@ public:
             request.Error(error);
         }
         for (auto& [_, request] : NavigateKeySetResult) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : BridgeResourceNavigateResults) {
             request.Error(error);
         }
         for (auto& [_, request] : DescribeSchemeResult) {

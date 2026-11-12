@@ -311,6 +311,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             for (const auto& entry : response->Get()->Record.GetEntries()) {
                 if (entry.GetKey().GetGroupId() == targetGroupId) {
                     const auto& info = entry.GetInfo();
+                    UNIT_ASSERT(info.HasBridgeSyncStatus());
                     Cerr << "*** fault metrics " << phase << " at " << env.Runtime->GetClock()
                         << " stage=" << info.GetBridgeSyncStage()
                         << " running=" << info.GetBridgeSyncRunning()
@@ -326,10 +327,12 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             UNIT_FAIL("Synchronization target is missing from system views");
             return NKikimrSysView::TGroupInfo{};
         };
+        UNIT_ASSERT(groupMetrics("initial").GetBridgeSyncStatus() == NKikimrBridge::SYNCED);
         NBridgeTest::TDataChecker checker(env);
         checker.Write(groupId);
         NBridgeTest::SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
         env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT(groupMetrics("disconnected").GetBridgeSyncStatus() == NKikimrBridge::UNKNOWN);
         checker.Write(groupId);
 
         // every assimilation the syncers make fails, and so do the syncers
@@ -355,7 +358,14 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             // the backoff from 100 ms to 30 s allows about ten attempts a minute
             UNIT_ASSERT_C(num <= 15, "TargetGroupId# " << targetGroupId << " failures# " << num);
         }
-        const auto failed = groupMetrics("failing");
+        auto failed = groupMetrics("failing");
+        NBridgeTest::WaitUntil(env, [&] {
+            if (failed.GetBridgeSyncRunning()) {
+                failed = groupMetrics("waiting for retry backoff");
+            }
+            return !failed.GetBridgeSyncRunning();
+        }, "failed syncer waiting for retry");
+        UNIT_ASSERT(failed.GetBridgeSyncStatus() == NKikimrBridge::PENDING);
         UNIT_ASSERT_VALUES_EQUAL(failed.GetBridgeSyncStage(), "BLOCKS");
         UNIT_ASSERT(failed.GetBridgeSyncLastError().Contains("TEvAssimilate failed"));
         UNIT_ASSERT_GT(failed.GetBridgeSyncErrorCount(), 0);
@@ -373,6 +383,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         failing = false;
         NBridgeTest::WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
         const auto recovered = groupMetrics("recovered");
+        UNIT_ASSERT(recovered.GetBridgeSyncStatus() == NKikimrBridge::SYNCED);
         UNIT_ASSERT_VALUES_EQUAL(recovered.GetBridgeSyncStage(), "SYNCED");
         UNIT_ASSERT(recovered.GetBridgeSyncLastError().empty());
         UNIT_ASSERT_VALUES_EQUAL(recovered.GetBridgeSyncErrorCount(), 0);
@@ -467,6 +478,8 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         };
         auto checkRemaining = [&](ui64 bytes) {
             const auto info = groupSysView();
+            UNIT_ASSERT(info.HasBridgeSyncStatus());
+            UNIT_ASSERT(info.GetBridgeSyncStatus() == NKikimrBridge::SYNCING);
             UNIT_ASSERT_VALUES_EQUAL(info.GetBridgeSyncStage(), "WRITE_KEEP_BARRIER_DONOTKEEP_DATA");
             UNIT_ASSERT_C(info.HasBridgeSyncRemainingBytes(), info.ShortDebugString());
             UNIT_ASSERT_VALUES_EQUAL(info.GetBridgeSyncRemainingBytes(), bytes);
@@ -672,6 +685,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         release(heldFinishes);
         NBridgeTest::WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
         const auto synced = groupSysView();
+        UNIT_ASSERT(synced.GetBridgeSyncStatus() == NKikimrBridge::SYNCED);
         UNIT_ASSERT_VALUES_EQUAL(synced.GetBridgeSyncStage(), "SYNCED");
         const ui64 finishedProgress = synced.GetBridgeSyncLastProgressTimestamp();
         UNIT_ASSERT_GT(finishedProgress, info.GetBridgeSyncLastProgressTimestamp());

@@ -23,6 +23,7 @@
 #include "query_autocomplete_helper.h"
 #include "viewer_database_stats.h"
 #include "viewer_cluster.h"
+#include "viewer_bridge_storage.h"
 #include "viewer_groups.h"
 #include "viewer_healthcheck.h"
 #include "viewer_nodelist.h"
@@ -1451,6 +1452,79 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
+    void AddBridgePoolSnapshotRow(NKikimrBridge::TStorageState& state, ui64 poolId, const TString& name,
+            NKikimrBridge::EStorageMode mode, const TString& pile, NKikimrBridge::ESynchronizationStatus status) {
+        auto* row = state.MutableDatabases()->add_databases();
+        auto* pool = row->add_storage_pools();
+        pool->mutable_id()->set_box_id(1);
+        pool->mutable_id()->set_pool_id(poolId);
+        pool->set_name(name);
+        row->set_storage_mode(mode);
+        row->set_pile_name(pile);
+        auto* counts = row->mutable_groups();
+        if (mode == NKikimrBridge::BRIDGED && status != NKikimrBridge::NOT_REQUIRED) {
+            counts->set_required(1);
+            counts->set_synced(status == NKikimrBridge::SYNCED);
+            counts->set_syncing(status == NKikimrBridge::SYNCING);
+            counts->set_pending(status == NKikimrBridge::PENDING);
+            counts->set_unknown(status == NKikimrBridge::UNKNOWN);
+        }
+    }
+
+    Y_UNIT_TEST(BridgeDatabaseStoragePoolUnion) {
+        NKikimrBridge::TStorageState state;
+        state.SetStatus(Ydb::StatusIds::SUCCESS);
+        AddBridgePoolSnapshotRow(state, 10, "bridge-pool", NKikimrBridge::BRIDGED, "pile0", NKikimrBridge::SYNCED);
+        AddBridgePoolSnapshotRow(state, 10, "bridge-pool", NKikimrBridge::BRIDGED, "pile2", NKikimrBridge::SYNCING);
+        AddBridgePoolSnapshotRow(state, 20, "own-ordinary", NKikimrBridge::ORDINARY, "pile2", NKikimrBridge::NOT_REQUIRED);
+        const TBridgeStorageSnapshot snapshot(state);
+        UNIT_ASSERT(snapshot.IsValid());
+        UNIT_ASSERT_VALUES_EQUAL(state.OwnersSize(), 0);
+        const auto shared = snapshot.Resolve(THashSet<TString>{"bridge-pool"});
+        UNIT_ASSERT(shared);
+        UNIT_ASSERT(shared->Mode == NKikimrBridge::BRIDGED);
+        UNIT_ASSERT(shared->GetStatus() == NKikimrBridge::SYNCING);
+        const auto ordinary = snapshot.Resolve(THashSet<TString>{"own-ordinary"});
+        UNIT_ASSERT(ordinary);
+        UNIT_ASSERT(ordinary->Mode == NKikimrBridge::ORDINARY);
+        UNIT_ASSERT(ordinary->GetStatus() == NKikimrBridge::NOT_REQUIRED);
+
+        const TPathId databaseKey(1, 10);
+        const TPathId resourceKey(1, 20);
+        NSchemeCache::TSchemeCacheNavigate::TEntry database;
+        database.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+        database.DomainInfo = new NSchemeCache::TDomainInfo(databaseKey, resourceKey);
+        auto* description = new NSchemeCache::TSchemeCacheNavigate::TDomainDescription();
+        description->Description.AddStoragePools()->SetName("own-ordinary");
+        description->Description.AddStoragePools()->SetName("bridge-pool");
+        database.DomainDescription = description;
+        NSchemeCache::TSchemeCacheNavigate::TEntry resource;
+        resource.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+        resource.DomainInfo = new NSchemeCache::TDomainInfo(resourceKey, resourceKey);
+        description = new NSchemeCache::TSchemeCacheNavigate::TDomainDescription();
+        description->Description.AddStoragePools()->SetName("bridge-pool");
+        resource.DomainDescription = description;
+        const auto pools = GetBridgeDatabaseStoragePools(database, &resource);
+        UNIT_ASSERT(pools);
+        UNIT_ASSERT_VALUES_EQUAL(pools->size(), 2);
+        const auto mixed = snapshot.Resolve(*pools);
+        UNIT_ASSERT(mixed);
+        UNIT_ASSERT(mixed->Mode == NKikimrBridge::MIXED);
+        UNIT_ASSERT(mixed->GetStatus() == NKikimrBridge::SYNCING);
+        UNIT_ASSERT_VALUES_EQUAL(mixed->Groups.Required, 2);
+        UNIT_ASSERT(mixed->Piles.at("pile0").GetStatus() == NKikimrBridge::SYNCED);
+        UNIT_ASSERT(mixed->Piles.at("pile2").GetStatus() == NKikimrBridge::SYNCING);
+        UNIT_ASSERT(!GetBridgeDatabaseStoragePools(database));
+        resource.DomainInfo = new NSchemeCache::TDomainInfo(TPathId(1, 30), TPathId(1, 30));
+        UNIT_ASSERT(!GetBridgeDatabaseStoragePools(database, &resource));
+        UNIT_ASSERT(!snapshot.Resolve(THashSet<TString>{}));
+        UNIT_ASSERT(!snapshot.Resolve(THashSet<TString>{"missing"}));
+        AddBridgePoolSnapshotRow(state, 30, "bridge-pool", NKikimrBridge::BRIDGED, "pile0", NKikimrBridge::SYNCED);
+        const TBridgeStorageSnapshot ambiguous(state);
+        UNIT_ASSERT(!ambiguous.Resolve(THashSet<TString>{"bridge-pool"}));
+        UNIT_ASSERT(ambiguous.Resolve(THashSet<TString>{"own-ordinary"}));
+    }
+
     Y_UNIT_TEST(TenantInfoBridgeStorage) {
         TPortManager ports;
         auto settings = TServerSettings(ports.GetPort(2134))
@@ -1463,35 +1537,36 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto& runtime = *server.GetRuntime();
         auto& appData = runtime.GetAppData();
         appData.BridgeModeEnabled = true;
-        const auto root = appData.DomainsInfo->GetDomain()->SchemeRoot;
         const auto sender = runtime.AllocateEdgeActor();
 
         auto mode = NKikimrBridge::BRIDGED;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySetResult &&
+                    dynamic_cast<TViewerPipeClient*>(runtime.FindActor(ev->GetRecipientRewrite()))) {
+                auto& entry = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySetResult>()->Request->ResultSet.front();
+                auto* description = new NSchemeCache::TSchemeCacheNavigate::TDomainDescription();
+                if (entry.DomainDescription) {
+                    description->Description.CopyFrom(entry.DomainDescription->Description);
+                }
+                description->Description.ClearStoragePools();
+                description->Description.AddStoragePools()->SetName("database-pool");
+                entry.DomainDescription = description;
+            }
             if (ev->GetTypeRewrite() != TEvBlobStorage::EvControllerQueryBridgeStorage) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
             UNIT_ASSERT(ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record.GetView() ==
                 NKikimrBridge::TStorageQuery::DATABASES);
+            UNIT_ASSERT(ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record.GetGroupByStoragePool());
             auto result = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>();
             auto& record = result->Record;
             if (mode == NKikimrBridge::STORAGE_MODE_UNSPECIFIED) {
                 record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
             } else {
                 record.SetStatus(Ydb::StatusIds::SUCCESS);
-                for (int pile = 0; pile < 2; ++pile) {
-                    auto* owner = record.AddOwners();
-                    owner->SetRowIndex(pile);
-                    owner->SetOwnerSchemeShardId(root);
-                    owner->SetOwnerPathId(1);
-                    auto* row = record.MutableDatabases()->add_databases();
-                    row->set_storage_mode(mode);
-                    if (mode == NKikimrBridge::BRIDGED) {
-                        auto* counts = row->mutable_groups();
-                        counts->set_required(1);
-                        counts->set_synced(pile == 0);
-                        counts->set_pending(pile == 1);
-                    }
+                for (ui32 pile = 0; pile < 2; ++pile) {
+                    AddBridgePoolSnapshotRow(record, 10, "database-pool", mode, TStringBuilder() << "pile" << pile,
+                        pile ? NKikimrBridge::PENDING : NKikimrBridge::SYNCED);
                 }
             }
             runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), result.release(), 0, ev->Cookie));
@@ -1532,6 +1607,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         Dedicated,
         Shared,
         SharedOnly,
+        SharedMixed,
         MissingPool,
         AmbiguousPool,
         MissingMetadata,
@@ -1555,14 +1631,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto root = appData.DomainsInfo->GetDomain()->SchemeRoot;
         const TPathId databaseKey(root, 10);
         const TPathId resourceKey(root, 20);
+        const TPathId rootKey(root, 1);
         const bool shared = testCase == EBridgeStorageScopeCase::Shared ||
-            testCase == EBridgeStorageScopeCase::SharedOnly || testCase == EBridgeStorageScopeCase::MissingResourceMetadata;
+            testCase == EBridgeStorageScopeCase::SharedOnly || testCase == EBridgeStorageScopeCase::SharedMixed ||
+            testCase == EBridgeStorageScopeCase::MissingResourceMetadata;
         const bool unavailable = testCase == EBridgeStorageScopeCase::MissingPool ||
             testCase == EBridgeStorageScopeCase::AmbiguousPool || testCase == EBridgeStorageScopeCase::MissingMetadata ||
             testCase == EBridgeStorageScopeCase::MissingResourceMetadata;
         THashSet<TActorId> actors;
         ui32 bridgeRequests = 0;
-        auto mode = NKikimrBridge::BRIDGED;
+        auto mode = testCase == EBridgeStorageScopeCase::SharedMixed ? NKikimrBridge::MIXED : NKikimrBridge::BRIDGED;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySet &&
                     dynamic_cast<TViewerPipeClient*>(runtime.FindActor(ev->Sender))) {
@@ -1571,11 +1649,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 request->ResultSet.resize(1);
                 auto& entry = request->ResultSet.front();
                 const auto& incoming = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request->ResultSet.front();
-                const bool resource = incoming.TableId.PathId == resourceKey;
+                const TString path = CanonizePath(incoming.Path);
+                const bool resource = incoming.TableId.PathId == resourceKey || path == "/Root/shared";
+                const bool domainRoot = path == "/Root";
                 entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
-                entry.Path = SplitPath(resource ? "/Root/shared" : "/Root/db");
-                auto* domain = new NSchemeCache::TDomainInfo(resource ? resourceKey : databaseKey,
-                    shared ? resourceKey : databaseKey);
+                entry.Path = SplitPath(domainRoot ? "/Root" : resource ? "/Root/shared" : "/Root/db");
+                entry.TableId.PathId = domainRoot ? rootKey : resource ? resourceKey : databaseKey;
+                auto* domain = new NSchemeCache::TDomainInfo(entry.TableId.PathId,
+                    domainRoot ? rootKey : shared ? resourceKey : databaseKey);
                 domain->Params.SetHive(appData.DomainsInfo->GetHive());
                 domain->Params.SetSchemeShard(root);
                 entry.DomainInfo = domain;
@@ -1583,14 +1664,26 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         !(resource && testCase == EBridgeStorageScopeCase::MissingResourceMetadata)) {
                     auto* description = new NSchemeCache::TSchemeCacheNavigate::TDomainDescription();
                     if (testCase != EBridgeStorageScopeCase::EmptyPools &&
-                            (resource || testCase != EBridgeStorageScopeCase::SharedOnly)) {
-                        description->Description.AddStoragePools()->SetName(resource ? "shared-pool" : "database-pool");
+                            (domainRoot || resource || testCase != EBridgeStorageScopeCase::SharedOnly)) {
+                        description->Description.AddStoragePools()->SetName(domainRoot ? "root-pool"
+                            : resource ? "shared-pool" : "database-pool");
+                        if (!domainRoot && !resource && mode == NKikimrBridge::MIXED) {
+                            description->Description.AddStoragePools()->SetName("database-ordinary-pool");
+                        }
                     }
                     entry.DomainDescription = description;
                 }
                 runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
                     new TEvTxProxySchemeCache::TEvNavigateKeySetResult(request.release()), 0, ev->Cookie));
                 return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (ev->GetTypeRewrite() == NConsole::TEvConsole::EvListTenantsResponse &&
+                    dynamic_cast<TViewerPipeClient*>(runtime.FindActor(ev->GetRecipientRewrite()))) {
+                actors.insert(ev->GetRecipientRewrite());
+                Ydb::Cms::ListDatabasesResult databases;
+                databases.add_paths("/Root/db");
+                ev->Get<NConsole::TEvConsole::TEvListTenantsResponse>()->Record.MutableResponse()
+                    ->mutable_operation()->mutable_result()->PackFrom(databases);
             }
             if (ev->GetTypeRewrite() == TEvStateStorage::EvBoardInfo &&
                     actors.contains(ev->GetRecipientRewrite()) &&
@@ -1615,17 +1708,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
                 addPool(11, "shared-pool");
                 addPool(12, "other-database-pool");
+                addPool(14, "database-ordinary-pool");
                 if (testCase == EBridgeStorageScopeCase::AmbiguousPool) {
                     addPool(13, "database-pool");
                 }
             }
-            if (ev->GetTypeRewrite() != TEvBlobStorage::EvControllerQueryBridgeStorage || !actors.contains(ev->Sender)) {
+            if (ev->GetTypeRewrite() != TEvBlobStorage::EvControllerQueryBridgeStorage ||
+                    !dynamic_cast<TViewerPipeClient*>(runtime.FindActor(ev->Sender))) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
+            actors.insert(ev->Sender);
             ++bridgeRequests;
             const auto& query = ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record;
             UNIT_ASSERT(query.GetView() == NKikimrBridge::TStorageQuery::DATABASES);
-            UNIT_ASSERT(query.GetFilterPools());
+            UNIT_ASSERT(query.GetGroupByStoragePool());
             UNIT_ASSERT(!query.HasStoragePool());
             UNIT_ASSERT_VALUES_EQUAL(query.PoolNamesSize(), 0);
             std::set<std::pair<ui64, ui64>> actual;
@@ -1636,26 +1732,39 @@ Y_UNIT_TEST_SUITE(Viewer) {
             if (testCase != EBridgeStorageScopeCase::EmptyPools) {
                 if (testCase != EBridgeStorageScopeCase::SharedOnly) {
                     expected.emplace(1, 10);
+                    if (mode == NKikimrBridge::MIXED) {
+                        expected.emplace(1, 14);
+                    }
                 }
                 if (shared) {
                     expected.emplace(1, 11);
                 }
             }
-            UNIT_ASSERT(actual == expected);
+            UNIT_ASSERT(query.GetFilterPools() ? actual == expected : actual.empty());
             auto result = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>();
             auto& record = result->Record;
             record.SetStatus(mode == NKikimrBridge::STORAGE_MODE_UNSPECIFIED ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::SUCCESS);
             if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
-                auto* databases = record.MutableDatabases();
+                record.MutableDatabases();
                 if (!expected.empty() && testCase != EBridgeStorageScopeCase::EmptyResult) {
-                    for (ui32 pile = 0; pile < 2; ++pile) {
-                        auto* row = databases->add_databases();
-                        row->set_storage_mode(mode);
-                        if (mode != NKikimrBridge::ORDINARY) {
-                            auto* counts = row->mutable_groups();
-                            counts->set_required(1);
-                            counts->set_synced(pile == 0);
-                            counts->set_pending(pile == 1);
+                    auto reportPools = expected;
+                    if (!query.GetFilterPools()) {
+                        reportPools = {{1, 10}, {1, 11}, {1, 12}, {1, 90}};
+                        if (mode == NKikimrBridge::MIXED) {
+                            reportPools.emplace(1, 14);
+                        }
+                    }
+                    for (const auto& [boxId, poolId] : reportPools) {
+                        UNIT_ASSERT_VALUES_EQUAL(boxId, 1);
+                        const TString name = poolId == 10 ? "database-pool"
+                            : poolId == 11 ? "shared-pool" : poolId == 12 ? "other-database-pool"
+                            : poolId == 90 ? "root-pool" : "database-ordinary-pool";
+                        const auto poolMode = poolId == 90 ? NKikimrBridge::ORDINARY : mode == NKikimrBridge::MIXED
+                            ? poolId == 14 ? NKikimrBridge::ORDINARY : NKikimrBridge::BRIDGED : mode;
+                        for (ui32 pile = 0; pile < 2; ++pile) {
+                            AddBridgePoolSnapshotRow(record, poolId, name, poolMode,
+                                TStringBuilder() << "pile" << pile,
+                                poolId == 12 ? NKikimrBridge::UNKNOWN : pile ? NKikimrBridge::PENDING : NKikimrBridge::SYNCED);
                         }
                     }
                 }
@@ -1664,11 +1773,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
             return TTestActorRuntime::EEventAction::DROP;
         });
         const auto sender = runtime.AllocateEdgeActor();
-        auto getTenant = [&] {
+        auto getTenant = [&](bool general = false) {
             const auto before = bridgeRequests;
             auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
             NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
-                "GET /viewer/tenantinfo?database=/Root/db&storage=false&direct=true HTTP/1.1\r\n\r\n", endpoint, {});
+                general ? "GET /viewer/tenantinfo?storage=false&direct=true HTTP/1.1\r\n\r\n"
+                        : "GET /viewer/tenantinfo?database=/Root/db&storage=false&direct=true HTTP/1.1\r\n\r\n", endpoint, {});
             runtime.Send(new IEventHandle(MakeViewerID(0), sender,
                 new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
             TAutoPtr<IEventHandle> handle;
@@ -1678,18 +1788,35 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NJson::TJsonValue json;
             NJson::ReadJsonTree(response->Response->Body, &json, true);
             const auto& tenants = json["TenantInfo"].GetArray();
-            UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
-            const auto& tenant = tenants.front();
-            UNIT_ASSERT_VALUES_EQUAL(tenant["Name"].GetString(), "/Root/db");
-            return tenant;
+            if (!general) {
+                UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
+            }
+            for (const auto& tenant : tenants) {
+                if (tenant["Name"].GetString() == "/Root/db") {
+                    return tenant;
+                }
+            }
+            UNIT_FAIL("Requested database missing from tenantinfo");
+            return NJson::TJsonValue{};
         };
         auto tenant = getTenant();
         if (unavailable || testCase == EBridgeStorageScopeCase::EmptyPools || testCase == EBridgeStorageScopeCase::EmptyResult) {
             UNIT_ASSERT(!tenant.Has("BridgeMode"));
             UNIT_ASSERT(!tenant.Has("BridgeSyncStatus"));
+        } else if (testCase == EBridgeStorageScopeCase::SharedMixed) {
+            UNIT_ASSERT(!tenant.Has("BridgeMode"));
+            UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "PENDING");
         } else {
             UNIT_ASSERT(tenant["BridgeMode"].GetBoolean());
             UNIT_ASSERT_VALUES_EQUAL(tenant["BridgeSyncStatus"].GetString(), "PENDING");
+        }
+        if (shared && !unavailable) {
+            const auto general = getTenant(true);
+            UNIT_ASSERT_VALUES_EQUAL(general.Has("BridgeMode"), tenant.Has("BridgeMode"));
+            if (tenant.Has("BridgeMode")) {
+                UNIT_ASSERT_VALUES_EQUAL(general["BridgeMode"].GetBoolean(), tenant["BridgeMode"].GetBoolean());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(general["BridgeSyncStatus"].GetString(), tenant["BridgeSyncStatus"].GetString());
         }
         if (testCase == EBridgeStorageScopeCase::Dedicated) {
             mode = NKikimrBridge::ORDINARY;
@@ -1718,6 +1845,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(TenantInfoBridgeStorageSharedOnly) {
         CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::SharedOnly);
+    }
+
+    Y_UNIT_TEST(TenantInfoBridgeStorageSharedMixed) {
+        CheckTenantInfoBridgeStorageScoped(EBridgeStorageScopeCase::SharedMixed);
     }
 
     Y_UNIT_TEST(TenantInfoBridgeStorageMissingPool) {
@@ -1758,6 +1889,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         bool OffloadMerge = false;
         bool IncludeSyncInfo = false;
         std::optional<ui64> DatabaseCountsGeneration;
+        bool DatabaseCountsMissingMetadata = false;
+        bool DatabaseCountsMixedServerless = false;
+        bool DatabaseCountsBridgedRoot = false;
         bool ProvidePileMap = true;
         bool DropNodesInfo = false;
         bool DropWhiteboard = false;
@@ -1819,6 +1953,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         runtime.GetAppData(4).BridgeModeEnabled = true;
         runtime.GetAppData(5).BridgeModeEnabled = true;
         const ui32 firstNodeId = runtime.GetNodeId(0);
+        const auto rootSchemeShard = runtime.GetAppData().DomainsInfo->GetDomain()->SchemeRoot;
 
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
         bridgeInfo->Piles.resize(4);
@@ -1831,6 +1966,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         bridgeInfo->Piles[0].State = options.LocalState;
         bridgeInfo->Piles[1].IsFreeSlot = true;
         bridgeInfo->Piles[2].State = options.RemoteState;
+        if (options.DatabaseCountsGeneration) {
+            bridgeInfo->Piles[3].State = NKikimrBridge::TClusterState::INACTIVE;
+        }
         bridgeInfo->SelfNodePile = &bridgeInfo->Piles[0];
         auto remoteBridgeInfo = std::make_shared<TBridgeInfo>();
         remoteBridgeInfo->Piles = bridgeInfo->Piles;
@@ -1846,6 +1984,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
 
         ui32 httpsRequests = 0;
+        ui32 bridgeDatabaseQueries = 0;
+        ui32 bridgeMetadataBatches = 0;
         std::unordered_set<ui32> skippedOffloadNodeIndexes;
         struct TForwardedRequest {
             TActorId Sender;
@@ -1944,8 +2084,21 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         info->SetBridgeSyncCopyBytesPerSecond(100);
                         info->SetBridgeSyncRemainingBytesComplete(true);
                     }
-                    [[fallthrough]];
+                    if (options.DropClusterResponses && isClusterActor(ev->GetRecipientRewrite())) {
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
                 case NConsole::TEvConsole::EvListTenantsResponse:
+                    if (options.DatabaseCountsGeneration && isClusterActor(ev->GetRecipientRewrite())) {
+                        Ydb::Cms::ListDatabasesResult databases;
+                        for (const char* path : {"/Root/shared", "/Root/serverless1", "/Root/serverless2",
+                                "/Root/pending", "/Root/synced"}) {
+                            databases.add_paths(path);
+                        }
+                        ev->Get<NConsole::TEvConsole::TEvListTenantsResponse>()->Record.MutableResponse()
+                            ->mutable_operation()->mutable_result()->PackFrom(databases);
+                    }
+                    [[fallthrough]];
                 case TEvHive::EvResponseHiveNodeStats:
                 case NSysView::TEvSysView::EvGetPDisksResponse:
                 case NSysView::TEvSysView::EvGetVSlotsResponse:
@@ -1960,27 +2113,86 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         break;
                     }
                     UNIT_ASSERT(!options.LocalPileNodeStats);
-                    UNIT_ASSERT(ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record.GetView() ==
-                        NKikimrBridge::TStorageQuery::PILES);
+                    ++bridgeDatabaseQueries;
+                    const auto& query = ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record;
+                    UNIT_ASSERT(query.GetView() == NKikimrBridge::TStorageQuery::DATABASES);
+                    UNIT_ASSERT(query.GetGroupByStoragePool());
+                    UNIT_ASSERT(!query.GetFilterPools());
                     auto response = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>();
                     auto& record = response->Record;
                     record.SetStatus(options.DatabaseCountsGeneration ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAVAILABLE);
                     if (options.DatabaseCountsGeneration) {
-                        auto* snapshot = record.MutablePiles();
+                        auto* snapshot = record.MutableDatabases();
                         snapshot->set_cluster_state_generation(*options.DatabaseCountsGeneration);
-                        snapshot->set_bridge_databases(3);
-                        for (ui32 pileIndex : {0, 2, 3}) {
-                            auto* pile = snapshot->add_piles();
-                            pile->set_pile_name(TStringBuilder() << "pile" << pileIndex);
-                            auto* counts = pile->mutable_bridge_databases();
-                            counts->set_total(3);
-                            counts->set_synced(pileIndex == 0 ? 3 : pileIndex == 2 ? 1 : 0);
-                            counts->set_syncing(pileIndex == 2);
-                            counts->set_pending(pileIndex == 2);
-                            counts->set_not_required(pileIndex == 3 ? 3 : 0);
+                        for (ui64 poolId : {10, 20, 30}) {
+                            const TString name = poolId == 10 ? "shared-pool" : poolId == 20 ? "pending-pool" : "synced-pool";
+                            for (ui32 pile : {0, 2, 3}) {
+                                const auto status = pile == 3 ? NKikimrBridge::NOT_REQUIRED : pile == 0 || poolId == 30
+                                    ? NKikimrBridge::SYNCED : poolId == 10 ? NKikimrBridge::SYNCING : NKikimrBridge::PENDING;
+                                AddBridgePoolSnapshotRow(record, poolId, name, NKikimrBridge::BRIDGED,
+                                    TStringBuilder() << "pile" << pile, status);
+                            }
+                        }
+                        if (options.DatabaseCountsBridgedRoot) {
+                            for (ui32 pile : {0, 2, 3}) {
+                                AddBridgePoolSnapshotRow(record, 90, "root-pool", NKikimrBridge::BRIDGED,
+                                    TStringBuilder() << "pile" << pile,
+                                    pile == 3 ? NKikimrBridge::NOT_REQUIRED : NKikimrBridge::SYNCED);
+                            }
+                        } else {
+                            AddBridgePoolSnapshotRow(record, 90, "root-pool", NKikimrBridge::ORDINARY,
+                                "pile0", NKikimrBridge::NOT_REQUIRED);
+                        }
+                        if (options.DatabaseCountsMixedServerless) {
+                            AddBridgePoolSnapshotRow(record, 40, "ordinary-extra", NKikimrBridge::ORDINARY,
+                                "pile2", NKikimrBridge::NOT_REQUIRED);
                         }
                     }
                     runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie),
+                        ev->Sender.NodeId() - firstNodeId);
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                case TEvTxProxySchemeCache::EvNavigateKeySet: {
+                    if (!options.DatabaseCountsGeneration || !isClusterActor(ev->Sender)) {
+                        break;
+                    }
+                    UNIT_ASSERT(!options.LocalPileNodeStats);
+                    ++bridgeMetadataBatches;
+                    auto result = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+                    for (const auto& incoming : ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request->ResultSet) {
+                        const TString path = incoming.TableId.PathId == TPathId(rootSchemeShard, 10)
+                            ? TString("/Root/shared") : CanonizePath(incoming.Path);
+                        ui64 pathId = 1;
+                        TString pool;
+                        if (path == "/Root/shared") { pathId = 10; pool = "shared-pool"; }
+                        else if (path == "/Root/serverless1") { pathId = 11; }
+                        else if (path == "/Root/serverless2") {
+                            pathId = 12;
+                            if (options.DatabaseCountsMixedServerless) {
+                                pool = "ordinary-extra";
+                            }
+                        }
+                        else if (path == "/Root/pending") { pathId = 20; pool = "pending-pool"; }
+                        else if (path == "/Root/synced") { pathId = 30; pool = "synced-pool"; }
+                        else { UNIT_ASSERT_VALUES_EQUAL(path, "/Root"); pool = "root-pool"; }
+                        auto& entry = result->ResultSet.emplace_back();
+                        entry.Path = SplitPath(path);
+                        entry.TableId.PathId = TPathId(rootSchemeShard, pathId);
+                        if (options.DatabaseCountsMissingMetadata && pathId == 12) {
+                            entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown;
+                            continue;
+                        }
+                        entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+                        entry.DomainInfo = new NSchemeCache::TDomainInfo(entry.TableId.PathId,
+                            TPathId(rootSchemeShard, pathId == 11 || pathId == 12 ? 10 : pathId));
+                        auto* description = new NSchemeCache::TSchemeCacheNavigate::TDomainDescription();
+                        if (!pool.empty()) {
+                            description->Description.AddStoragePools()->SetName(pool);
+                        }
+                        entry.DomainDescription = description;
+                    }
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                        new TEvTxProxySchemeCache::TEvNavigateKeySetResult(result.release()), 0, ev->Cookie),
                         ev->Sender.NodeId() - firstNodeId);
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -2092,6 +2304,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, options.ExpectedStatus, response->Response->Body);
         UNIT_ASSERT_VALUES_EQUAL(httpsRequests, options.ExpectedHttpsRequests);
+        if (options.DatabaseCountsGeneration) {
+            UNIT_ASSERT_VALUES_EQUAL(bridgeDatabaseQueries, 1);
+            UNIT_ASSERT(bridgeMetadataBatches <= 2);
+        }
         UNIT_ASSERT_VALUES_EQUAL_C(skippedOffloadNodeIndexes.size(), options.MissingOffloadNodeIndexes.size(),
             "The partial offload response was not simulated for all requested nodes");
         NJson::TJsonValue json;
@@ -2156,20 +2372,58 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(piles[1]["Sync"]["SecondsLeft"].GetStringRobust(), "12");
         if (staleGeneration) {
             UNIT_ASSERT(!bridgeInfo.Has("BridgeDatabases"));
+            UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
+            UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
             for (const auto& pile : piles) {
                 UNIT_ASSERT(!pile.Has("DatabaseCountsBySyncStatus"));
             }
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
-            UNIT_ASSERT_VALUES_EQUAL(piles[0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "3");
+            UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+            UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "5");
+            UNIT_ASSERT_VALUES_EQUAL(piles[0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "5");
             const auto& counts = piles[1]["DatabaseCountsBySyncStatus"];
-            for (const char* status : {"SYNCED", "SYNCING", "PENDING"}) {
+            for (const char* status : {"SYNCED", "PENDING"}) {
                 UNIT_ASSERT_VALUES_EQUAL(counts[status].GetStringRobust(), "1");
             }
+            UNIT_ASSERT_VALUES_EQUAL(counts["SYNCING"].GetStringRobust(), "3");
             UNIT_ASSERT_VALUES_EQUAL(counts["UNKNOWN"].GetStringRobust(), "0");
             UNIT_ASSERT_VALUES_EQUAL(counts["NOT_REQUIRED"].GetStringRobust(), "0");
-            UNIT_ASSERT_VALUES_EQUAL(piles[2]["DatabaseCountsBySyncStatus"]["NOT_REQUIRED"].GetStringRobust(), "3");
+            UNIT_ASSERT_VALUES_EQUAL(piles[2]["DatabaseCountsBySyncStatus"]["NOT_REQUIRED"].GetStringRobust(), "5");
         }
+    }
+
+    Y_UNIT_TEST(ClusterBridgeDatabaseCountsPartial) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsMissingMetadata = true,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "4");
+        UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
+        UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "4");
+    }
+
+    Y_UNIT_TEST(ClusterBridgeDatabaseCountsMixedServerless) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsMixedServerless = true,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "4");
+        UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][1]["DatabaseCountsBySyncStatus"]["SYNCING"].GetStringRobust(), "2");
+    }
+
+    Y_UNIT_TEST(ClusterBridgeDatabaseCountsIncludesRoot) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsBridgedRoot = true,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "6");
+        UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][1]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "2");
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeNoAliveNodes, offloadMerge) {
@@ -3515,6 +3769,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 entry->MutableInfo()->SetErasureSpeciesV2("none");
             }
             auto* syncing = record.MutableEntries(0)->MutableInfo();
+            syncing->SetBridgeSyncStatus(NKikimrBridge::SYNCING);
             syncing->SetBridgeSyncStage("BLOCKS");
             syncing->SetBridgeSyncLastError("Synchronization failed");
             syncing->SetBridgeSyncLastProgressTimestamp(2'000'000);
@@ -3525,6 +3780,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             syncing->SetBridgeSyncLastErrorTimestamp(1'000'000);
             syncing->SetBridgeSyncErrorCount(2);
             record.MutableEntries(1)->MutableInfo()->SetBridgeSyncStage("SYNCED");
+            record.MutableEntries(1)->MutableInfo()->SetBridgeSyncStatus(NKikimrBridge::SYNCED);
             record.MutableEntries(1)->MutableInfo()->SetBridgeSyncLastProgressTimestamp(3'000'000);
             record.MutableEntries(1)->MutableInfo()->SetBridgeSyncCopyBytesPerSecond(0);
             record.MutableEntries(1)->MutableInfo()->SetBridgeSyncRunning(false);
@@ -3542,6 +3798,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NJson::ReadJsonTree(response->Response->Body, &json, true);
         const auto& groups = json["StorageGroups"].GetArray();
         UNIT_ASSERT_VALUES_EQUAL(groups.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncStatus"].GetString(), "SYNCING");
         UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncStage"].GetString(), "BLOCKS");
         UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncLastError"].GetString(), "Synchronization failed");
         UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncLastProgressTimestamp"].GetString(), "2000000");
@@ -3553,16 +3810,175 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncLastErrorTimestamp"].GetString(), "1000000");
         UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncErrorCount"].GetUInteger(), 2);
         UNIT_ASSERT_VALUES_EQUAL(groups[1]["BridgeSyncStage"].GetString(), "SYNCED");
+        UNIT_ASSERT_VALUES_EQUAL(groups[1]["BridgeSyncStatus"].GetString(), "SYNCED");
         UNIT_ASSERT_VALUES_EQUAL(groups[1]["BridgeSyncLastProgressTimestamp"].GetString(), "3000000");
         UNIT_ASSERT_VALUES_EQUAL(groups[1]["BridgeSyncCopyBytesPerSecond"].GetString(), "0");
         UNIT_ASSERT(groups[1].Has("BridgeSyncRunning"));
         UNIT_ASSERT(!groups[1]["BridgeSyncRunning"].GetBoolean());
         UNIT_ASSERT(!groups[1].Has("BridgeSyncLastError"));
         UNIT_ASSERT(!groups[2].Has("BridgeSyncStage"));
+        UNIT_ASSERT(!groups[2].Has("BridgeSyncStatus"));
         UNIT_ASSERT(!groups[2].Has("BridgeSyncLastError"));
         for (const char* field : {"BridgeSyncLastProgressTimestamp", "BridgeSyncCopyBytesPerSecond", "BridgeSyncRemainingBytes",
                 "BridgeSyncRemainingBytesComplete", "BridgeSyncRunning", "BridgeSyncLastErrorTimestamp", "BridgeSyncErrorCount"}) {
             UNIT_ASSERT_C(!groups[2].Has(field), field);
+        }
+    }
+
+    Y_UNIT_TEST(StorageGroupsBridgeSyncStatusGrouping) {
+        TPortManager ports;
+        auto settings = TServerSettings(ports.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        auto observer = runtime.AddObserver<NSysView::TEvSysView::TEvGetGroupsResponse>([](auto& ev) {
+            const NKikimrBridge::ESynchronizationStatus statuses[] = {
+                NKikimrBridge::NOT_REQUIRED, NKikimrBridge::SYNCED, NKikimrBridge::SYNCING,
+                NKikimrBridge::UNKNOWN, NKikimrBridge::PENDING, NKikimrBridge::SYNCING,
+            };
+            auto& record = ev->Get()->Record;
+            record.ClearEntries();
+            for (ui32 id = 1; id <= 7; ++id) {
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetGroupId(id);
+                entry->MutableInfo()->SetErasureSpeciesV2("none");
+                if (id <= std::size(statuses)) {
+                    entry->MutableInfo()->SetBridgeSyncStatus(statuses[id - 1]);
+                }
+            }
+        });
+        auto get = [&](TStringBuf params, const TString& userToken = {}) {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /storage/groups" << params << " HTTP/1.1\r\n\r\n", endpoint, {});
+            const auto sender = runtime.AllocateEdgeActor();
+            auto event = std::make_unique<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(request);
+            event->UserToken = userToken;
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, event.release(), 0));
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response->Response->Body, &json, true);
+            return json;
+        };
+
+        const auto flat = get("?fields_required=BridgeSyncStatus");
+        UNIT_ASSERT_VALUES_EQUAL(flat["Version"].GetUInteger(), 16);
+        const TStorageGroups::TFieldsType required(flat["FieldsRequired"].GetString().c_str());
+        UNIT_ASSERT(required.test(+EGroupFields::BridgeSyncStatus));
+        const auto& groups = flat["StorageGroups"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 7);
+        const char* statuses[] = {"NOT_REQUIRED", "SYNCED", "SYNCING", "UNKNOWN", "PENDING", "SYNCING"};
+        for (size_t i = 0; i < std::size(statuses); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(groups[i]["BridgeSyncStatus"].GetString(), statuses[i]);
+        }
+        UNIT_ASSERT(!groups[6].Has("BridgeSyncStatus"));
+
+        const auto grouped = get("?group=BridgeSyncStatus");
+        UNIT_ASSERT(!grouped.Has("NeedGroup"));
+        const auto& buckets = grouped["StorageGroupGroups"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(buckets.size(), 5);
+        for (const auto& bucket : buckets) {
+            const auto& status = bucket["GroupName"].GetString();
+            const auto expected = status == "SYNCING" || status == "UNKNOWN" ? "2" : "1";
+            UNIT_ASSERT_VALUES_EQUAL(bucket["GroupCount"].GetStringRobust(), expected);
+        }
+        const char* groupedStatuses[] = {"SYNCED", "SYNCING", "PENDING", "NOT_REQUIRED", "UNKNOWN"};
+        for (size_t i = 0; i < std::size(groupedStatuses); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(buckets[i]["GroupName"].GetString(), groupedStatuses[i]);
+        }
+
+        for (const char* status : {"SYNCING", "UNKNOWN"}) {
+            const auto filtered = get(TStringBuilder() << "?filter_group_by=BridgeSyncStatus&filter_group=" << status);
+            UNIT_ASSERT(!filtered.Has("NeedFilter"));
+            const auto& matches = filtered["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(matches.size(), 2);
+            for (const auto& group : matches) {
+                const auto actual = group.Has("BridgeSyncStatus") ? group["BridgeSyncStatus"].GetString() : TString("UNKNOWN");
+                UNIT_ASSERT_VALUES_EQUAL(actual, status);
+            }
+        }
+
+        const char* sortedStatuses[] = {"SYNCED", "SYNCING", "SYNCING", "PENDING", "NOT_REQUIRED", "UNKNOWN", "UNKNOWN"};
+        for (bool reverse : {false, true}) {
+            const auto sorted = get(reverse ? "?sort=-BridgeSyncStatus" : "?sort=BridgeSyncStatus");
+            UNIT_ASSERT(!sorted.Has("NeedSort"));
+            const auto& rows = sorted["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), std::size(sortedStatuses));
+            for (size_t i = 0; i < rows.size(); ++i) {
+                const auto actual = rows[i].Has("BridgeSyncStatus") ? rows[i]["BridgeSyncStatus"].GetString() : TString("UNKNOWN");
+                UNIT_ASSERT_VALUES_EQUAL(actual, sortedStatuses[reverse ? rows.size() - 1 - i : i]);
+            }
+        }
+        const auto numeric = get("?enums=false");
+        UNIT_ASSERT_VALUES_EQUAL(numeric["StorageGroups"][2]["BridgeSyncStatus"].GetUInteger(),
+            static_cast<ui32>(NKikimrBridge::SYNCING));
+
+        const auto swagger = TStorageGroups::GetSwagger();
+        ui32 documentedParameters = 0;
+        for (const auto& parameter : swagger["parameters"]) {
+            const auto name = parameter["name"].as<std::string>();
+            if (name == "sort" || name == "group" || name == "filter_group_by" || name == "fields_required") {
+                UNIT_ASSERT(parameter["description"].as<std::string>().find("`BridgeSyncStatus`") != std::string::npos);
+                ++documentedParameters;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(documentedParameters, 4);
+
+        auto& appData = runtime.GetAppData();
+        auto& security = *appData.DomainsConfig.MutableSecurityConfig();
+        security.AddAdministrationAllowedSIDs("admin");
+        security.AddMonitoringAllowedSIDs("monitoring");
+        security.AddViewerAllowedSIDs("viewer");
+        security.AddDatabaseAllowedSIDs("database-user");
+        appData.AdministrationAllowedSIDs = {"admin"};
+        appData.FeatureFlags.SetEnableExtraSidsControlForHttpViewer(true);
+        const TPathId rootKey(appData.DomainsInfo->GetDomain()->SchemeRoot, 1);
+        THashSet<TActorId> scopedActors;
+        auto navigate = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySet>([&](auto& ev) {
+            if (!dynamic_cast<TStorageGroups*>(runtime.FindActor(ev->Sender))) {
+                return;
+            }
+            scopedActors.insert(ev->Sender);
+            auto result = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+            result->ResultSet.resize(1);
+            auto& entry = result->ResultSet.front();
+            entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+            entry.Path = SplitPath("/Root");
+            entry.DomainInfo = new NSchemeCache::TDomainInfo(rootKey, rootKey);
+            runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                new TEvTxProxySchemeCache::TEvNavigateKeySetResult(result.release()), 0, ev->Cookie));
+            ev.Reset();
+        });
+        auto board = runtime.AddObserver<TEvStateStorage::TEvBoardInfo>([&](auto& ev) {
+            if (scopedActors.contains(ev->GetRecipientRewrite()) &&
+                    ev->Get()->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+                runtime.Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
+                    new TEvStateStorage::TEvBoardInfo(TEvStateStorage::TEvBoardInfo::EStatus::Ok, ev->Get()->Path),
+                    0, ev->Cookie));
+                ev.Reset();
+            }
+        });
+        const NACLib::TUserToken token({.UserSID = "database-user"});
+        for (const char* status : {"SYNCING", "PENDING"}) {
+            const auto scoped = get(TStringBuilder()
+                << "?database=/Root&direct=true&filter_group_by=BridgeSyncStatus&filter_group=" << status,
+                token.SerializeAsString());
+            UNIT_ASSERT(scoped["NeedFilter"].GetBoolean());
+            UNIT_ASSERT_VALUES_EQUAL(scoped["FoundGroups"].GetStringRobust(), "7");
+            const auto& rows = scoped["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 7);
+            std::set<TString> ids;
+            for (const auto& row : rows) {
+                UNIT_ASSERT(!row.Has("BridgeSyncStatus"));
+                ids.insert(row["GroupId"].GetString());
+            }
+            UNIT_ASSERT(ids == std::set<TString>({"1", "2", "3", "4", "5", "6", "7"}));
         }
     }
 
@@ -3656,7 +4072,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NJson::TJsonValue json;
             NJson::ReadJsonTree(response->Response->Body, &json, true);
             const auto& groups = json.GetMap().at("StorageGroups").GetArray();
-            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 15);
+            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 16);
             UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
             const auto& group = groups[0].GetMap();
             UNIT_ASSERT_VALUES_EQUAL(group.at("GroupId").GetString(), "2");

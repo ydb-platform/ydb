@@ -10,6 +10,7 @@ import traceback
 from enum import Enum
 from operator import attrgetter
 from typing import List, Dict
+from urllib.parse import quote, urlsplit, urlunsplit
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
 from error_type_utils import (
@@ -304,9 +305,21 @@ class TestSummary:
         return result
 
 
+def href_url(url):
+    """Encode the path so spaces in github.workflow survive markdown links."""
+    if not url:
+        return url
+    parts = urlsplit(url)
+    if not parts.scheme:
+        return url
+    return urlunsplit(
+        (parts.scheme, parts.netloc, quote(parts.path, safe="/%"), parts.query, parts.fragment)
+    )
+
+
 def render_pm(value, url, diff=None):
     if value:
-        text = f"[{value}]({url})"
+        text = f"[{value}]({href_url(url)})"
     else:
         text = str(value)
 

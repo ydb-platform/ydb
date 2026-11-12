@@ -29,66 +29,6 @@ using namespace NSchemeShard;
 
 namespace {
 
-<<<<<<< HEAD
-=======
-bool CheckColumnFamilySettings(
-        const NKikimrSchemeOp::TFamilyDescription& expected,
-        const NKikimrSchemeOp::TFamilyDescription& actual,
-        TString& error)
-{
-    const auto name = GetFamilyName(expected);
-
-    const auto expectedCodec = GetColumnCodec(expected);
-    const auto actualCodec = GetColumnCodec(actual);
-    if (expectedCodec != actualCodec) {
-        error = TStringBuilder() << "Column family codec mismatch"
-            << ": name: " << name
-            << ", expected: " << static_cast<ui32>(expectedCodec)
-            << ", got: " << static_cast<ui32>(actualCodec);
-        return false;
-    }
-
-    if (expectedCodec == NKikimrSchemeOp::ColumnCodecZSTD) {
-        const auto expectedLevel = expected.HasColumnCodecLevel() ? expected.GetColumnCodecLevel() : 1;
-        const auto actualLevel = actual.HasColumnCodecLevel() ? actual.GetColumnCodecLevel() : 1;
-        if (expectedLevel != actualLevel) {
-            error = TStringBuilder() << "Column family compression level mismatch"
-                << ": name: " << name
-                << ", expected: " << expectedLevel
-                << ", got: " << actualLevel;
-            return false;
-        }
-    }
-
-    const auto expectedCacheMode = expected.GetColumnCacheMode();
-    const auto actualCacheMode = actual.GetColumnCacheMode();
-    if (expectedCacheMode != actualCacheMode) {
-        error = TStringBuilder() << "Column family cache mode mismatch"
-            << ": name: " << name
-            << ", expected: " << static_cast<ui32>(expectedCacheMode)
-            << ", got: " << static_cast<ui32>(actualCacheMode);
-        return false;
-    }
-
-    const auto& expectedData = expected.GetStorageConfig().GetData();
-    const auto& expectedMedia = expectedData.GetPreferredPoolKind();
-    if (!expectedMedia || expectedData.GetAllowOtherKinds()) {
-        return true;
-    }
-
-    const auto& actualData = actual.GetStorageConfig().GetData();
-    const auto& actualMedia = actualData.GetPreferredPoolKind();
-    if (expectedMedia == actualMedia && !actualData.GetAllowOtherKinds()) {
-        return true;
-    }
-
-    error = TStringBuilder() << "Column family media mismatch"
-        << ": name: " << name
-        << ", expected: " << expectedMedia
-        << ", got: " << actualMedia;
-    return false;
-}
-
 bool AreLiteralDefaultsEqual(
         const NKikimrSchemeOp::TColumnDescription& expected,
         const NKikimrSchemeOp::TColumnDescription& actual)
@@ -106,7 +46,6 @@ bool AreLiteralDefaultsEqual(
     return expectedDefault.SerializeAsString() == actualDefault.SerializeAsString();
 }
 
->>>>>>> b1f5c5ad725 (Preserve literal defaults during replication initial sync (#59099))
 bool IsImported(const NKikimrSchemeOp::TTableDescription& table) {
     return table.GetReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED;
 }
@@ -648,9 +587,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
 
         // check columns
-        THashMap<TStringBuf, TStringBuf> columns;
+        THashMap<TStringBuf, const NKikimrSchemeOp::TColumnDescription*> columns;
         for (const auto& column : got.GetColumns()) {
-            columns.emplace(column.GetName(), column.GetType());
+            columns.emplace(column.GetName(), &column);
         }
 
         if (tableDesc->ColumnsSize() != columns.size()) {
@@ -668,13 +607,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return false;
             }
 
-            if (column.GetType() != it->second) {
+            if (column.GetType() != it->second->GetType()) {
                 error = TStringBuilder() << "Column type mismatch"
                     << ": name: " << column.GetName()
                     << ", expected: " << column.GetType()
-<<<<<<< HEAD
-                    << ", got: " << it->second;
-=======
                     << ", got: " << it->second->GetType();
                 return false;
             }
@@ -682,42 +618,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (!AreLiteralDefaultsEqual(column, *it->second)) {
                 error = TStringBuilder() << "Column literal default mismatch"
                     << ": name: " << column.GetName();
-                return false;
-            }
-
-            const auto expectedFamily = GetColumnFamilyName(column);
-            const auto name = gotFamilyNames.find(it->second->GetFamily());
-            const TStringBuf actualFamily = name == gotFamilyNames.end() ? TStringBuf("<unknown>") : name->second;
-            if (name == gotFamilyNames.end() || actualFamily != expectedFamily) {
-                error = TStringBuilder() << "Column family mismatch"
-                    << ": column: " << column.GetName()
-                    << ", expected: " << expectedFamily
-                    << ", got: " << actualFamily;
-                return false;
-            }
-        }
-
-        for (const auto& expected : tableDesc->GetPartitionConfig().GetColumnFamilies()) {
-            const auto name = GetFamilyName(expected);
-            auto it = families.find(name);
-            if (it == families.end()) {
-                error = TStringBuilder() << "Cannot find column family"
-                    << ": name: " << name;
-                return false;
-            }
-
-            if (!CheckColumnFamilySettings(expected, *it->second, error)) {
-                return false;
-            }
-
-            families.erase(it);
-        }
-
-        for (const auto& item : families) {
-            if (item.first != DefaultFamilyName) {
-                error = TStringBuilder() << "Unexpected column family"
-                    << ": name: " << item.first;
->>>>>>> b1f5c5ad725 (Preserve literal defaults during replication initial sync (#59099))
                 return false;
             }
         }

@@ -12,6 +12,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/public/pqdata_transaction_compat.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
 #include <ydb/core/persqueue/pqtablet/partition/autopartitioning_manager.h>
@@ -385,6 +386,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , NumChannels(numChannels)
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
+    , WriteInitThrottledMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
     , LastEmittedSchemaChange(TRowVersion::Min())
     , SamplingControl(samplingControl)
@@ -989,6 +991,14 @@ void TPartition::DestroyActor(const TActorContext& ctx)
     }
 
     Die(ctx);
+}
+
+void TPartition::PassAway() {
+    if (WriteSessionsQuoterNotified) {
+        Send(MakeWriteSessionsQuoterId(), new TEvWriteSessionsQuoter::TEvRemove(
+            TopicName(), Partition.OriginalPartitionId, TabletGeneration));
+    }
+    TBaseTabletActor<TPartition>::PassAway();
 }
 
 void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
@@ -2609,6 +2619,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
 
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES, TotalPartitionWriteSpeed);
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES, TotalPartitionWriteSpeedInMessages);
+    const ui64 initThrottledMs = WriteInitThrottledMs.Update(now);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_INIT_THROTTLED_MS, initThrottledMs);
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {

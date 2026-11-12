@@ -19,6 +19,7 @@ struct TCreatePartitionWriterCacheActorParams {
     bool WithDeduplication = true;
     TString Database = "database";
     bool WaitForInitResult = true;
+    TDuration WriteSessionQuotaWaitTime = TDuration::Zero();
 };
 
 struct TSendTxWriteRequestParams {

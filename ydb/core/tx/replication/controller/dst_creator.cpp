@@ -46,6 +46,18 @@ bool CheckColumnFamilySettings(
         return false;
     }
 
+    if (expectedCodec == NKikimrSchemeOp::ColumnCodecZSTD) {
+        const auto expectedLevel = expected.HasColumnCodecLevel() ? expected.GetColumnCodecLevel() : 1;
+        const auto actualLevel = actual.HasColumnCodecLevel() ? actual.GetColumnCodecLevel() : 1;
+        if (expectedLevel != actualLevel) {
+            error = TStringBuilder() << "Column family compression level mismatch"
+                << ": name: " << name
+                << ", expected: " << expectedLevel
+                << ", got: " << actualLevel;
+            return false;
+        }
+    }
+
     const auto expectedCacheMode = expected.GetColumnCacheMode();
     const auto actualCacheMode = actual.GetColumnCacheMode();
     if (expectedCacheMode != actualCacheMode) {

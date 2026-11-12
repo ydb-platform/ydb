@@ -495,9 +495,14 @@ void CreateDatabase(TTenants& tenants, TStringBuf path, TStringBuf storagePoolKi
 }
 
 NQuery::TSession CreateSession(NQuery::TQueryClient& client) {
-    auto sessionCreator = client.GetSession().ExtractValueSync();
-    UNIT_ASSERT_C(sessionCreator.IsSuccess(), sessionCreator.GetIssues().ToString());
-    return sessionCreator.GetSession();
+    const auto settings = NQuery::TCreateSessionSettings().ClientTimeout(TDuration::Seconds(30));
+    auto result = client.GetSession(settings).ExtractValueSync();
+    if (result.GetStatus() == EStatus::TIMEOUT || result.GetStatus() == EStatus::CLIENT_DEADLINE_EXCEEDED) {
+        result = client.GetSession(settings).ExtractValueSync();
+    }
+    UNIT_ASSERT_C(result.IsSuccess(), "Failed to create query session. Status: " << result.GetStatus()
+        << ". Issues: " << result.GetIssues().ToString());
+    return result.GetSession();
 }
 
 // whole database backup
@@ -3207,7 +3212,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto driver = TDriver(driverConfig);
         TSchemeClient schemeClient(driver);
         NQuery::TQueryClient queryClient(driver);
-        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        auto session = CreateSession(queryClient);
         TReplicationClient replicationClient(driver);
 
         if (tokenSecretType) {
@@ -3244,7 +3249,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto driver = TDriver(driverConfig);
         TSchemeClient schemeClient(driver);
         NQuery::TQueryClient queryClient(driver);
-        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        auto session = CreateSession(queryClient);
         TReplicationClient replicationClient(driver);
 
         if (config.AuthType != EAuthType::AuthTypeNone) {
@@ -3817,7 +3822,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server(appConfig);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
-        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        auto session = CreateSession(queryClient);
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
@@ -3947,7 +3952,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server(appConfig);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
-        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        auto session = CreateSession(queryClient);
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
@@ -4176,7 +4181,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
 
         NQuery::TQueryClient queryClient(driver);
-        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        auto session = CreateSession(queryClient);
         TReplicationClient replicationClient(driver);
         TSchemeClient schemeClient(driver);
 

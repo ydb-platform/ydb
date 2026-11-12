@@ -7204,7 +7204,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         WaitTxNotification(server, edgeActor, AsyncSetEnableFilterByKey(server, "/Root", "Table", true));
     }
 
-    Y_UNIT_TEST(SchemaChangesColumnFamilies) {
+    Y_UNIT_TEST_TWIN(SchemaChangesColumnFamilies, Zstd) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
@@ -7212,6 +7212,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         );
 
         auto& runtime = *server->GetRuntime();
+        runtime.GetAppData().FeatureFlags.SetEnableRowTableZstdCompression(Zstd);
         const auto edgeActor = runtime.AllocateEdgeActor();
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
@@ -7221,7 +7222,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
         WaitTxNotification(server, edgeActor, AsyncSetColumnFamily(server, "/Root", "Table", "value",
-            {.Name = "archive", .ColumnCodec = NKikimrSchemeOp::ColumnCodecLZ4, .DataPoolKind = "hdd"}));
+            {.Name = "archive",
+                .ColumnCodec = Zstd ? NKikimrSchemeOp::ColumnCodecZSTD : NKikimrSchemeOp::ColumnCodecLZ4,
+                .ColumnCodecLevel = Zstd ? TMaybe<i32>(7) : TMaybe<i32>(),
+                .DataPoolKind = "hdd"}));
         ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);");
         const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
@@ -7269,10 +7273,16 @@ Y_UNIT_TEST_SUITE(Cdc) {
         AssertColumn(added, "value", "Uint32", "archive");
         UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"].GetMap().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"]["default"]["compression"].GetString(), "off");
-        AssertFamily(added, "archive", "lz4", "regular");
+        AssertFamily(added, "archive", Zstd ? "zstd" : "lz4", "regular");
+        if (Zstd) {
+            UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"]["archive"]["compressionLevel"].GetInteger(), 7);
+        } else {
+            UNIT_ASSERT(!added["columnFamilies"]["archive"].Has("compressionLevel"));
+        }
 
         const auto& modified = tableAt(3);
         AssertFamily(modified, "archive", "off", "regular");
+        UNIT_ASSERT(!modified["columnFamilies"]["archive"].Has("compressionLevel"));
         AssertColumn(modified, "value", "Uint32", "archive");
 
         const auto& empty = tableAt(4);
@@ -7291,6 +7301,44 @@ Y_UNIT_TEST_SUITE(Cdc) {
         const auto& droppedColumn = tableAt(11);
         UNIT_ASSERT(!droppedColumn["columns"].Has("extra"));
         AssertFamily(droppedColumn, "empty", "lz4", "regular");
+    }
+
+    Y_UNIT_TEST(SchemaChangesColumnFamilyCompressionLevel) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+        auto& runtime = *server->GetRuntime();
+        runtime.GetAppData().FeatureFlags.SetEnableRowTableZstdCompression(true);
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable()
+            .Families({{.Name = "default", .ColumnCodec = NKikimrSchemeOp::ColumnCodecZSTD}}));
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        // The effective default is already 1, so specifying it does not change the schema.
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "default", .ColumnCodecLevel = 1}));
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "default", .ColumnCodecLevel = 0}));
+        const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
+        RebootTablet(runtime, shards.at(0), edgeActor);
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "default", .ColumnCodecLevel = 7}));
+
+        const auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"tableChanges":"***","ts":"***"})",
+        });
+        for (size_t index = 0; index < records.size(); ++index) {
+            const auto& table = records[index]["tableChanges"][0]["table"];
+            AssertFamily(table, "default", "zstd", "regular");
+            UNIT_ASSERT_VALUES_EQUAL(table["columnFamilies"]["default"]["compressionLevel"].GetUIntegerRobust(),
+                index == 0 ? 0 : 7);
+        }
     }
 
     Y_UNIT_TEST(SchemaChangesCompositePrimaryKey) {

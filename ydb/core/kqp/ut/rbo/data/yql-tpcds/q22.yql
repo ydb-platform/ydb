@@ -11,11 +11,11 @@ SELECT
     i_category,
     Avg(inv_quantity_on_hand) AS qoh
 FROM
-    `/Root/test/ds/inventory`
+    `inventory`
 ,
-    `/Root/test/ds/date_dim`
+    `date_dim`
 ,
-    `/Root/test/ds/item`
+    `item`
 WHERE
     inv_date_sk == d_date_sk
     AND inv_item_sk == i_item_sk

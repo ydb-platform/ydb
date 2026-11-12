@@ -483,4 +483,6 @@ message TFeatureFlags {
     optional bool EnableHnswIndex = 384 [default = false];
     optional bool EnableColumnshardCutHistorySending = 385 [default = false];
     optional bool EnableCdcAggregator = 386 [default = false];
+    // Requires EnableSnapshotsLocking to publish the registry consumed by DataShard.
+    optional bool EnableDataShardSnapshotLocking = 387 [default = false];
 }

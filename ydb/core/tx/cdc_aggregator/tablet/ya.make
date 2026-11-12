@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tx/cdc_aggregator/public
 )
 
 YQL_LAST_ABI_VERSION()

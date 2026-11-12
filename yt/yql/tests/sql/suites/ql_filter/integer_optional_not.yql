@@ -1,0 +1,9 @@
+PRAGMA yt.UseQLFilter;
+
+SELECT
+    a
+FROM
+    plato.Input
+WHERE
+    NOT COALESCE(a != 1, FALSE)
+;

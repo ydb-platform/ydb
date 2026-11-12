@@ -12,7 +12,7 @@ enum ESimpleCounters {
     COUNTER_SLOTS_ON_FAULTY_DISKS = 2 [(CounterOpts) = {Name: "SlotsOnFaultyDisks"}];
     COUNTER_BYTES_ON_FAULTY_DISKS = 3 [(CounterOpts) = {Name: "BytesOnFaultyDisks"}];
     COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT = 4 [(CounterOpts) = {Name: "PDisksWithoutExpectedSlotCount"}];
-    COUNTER_TO_BE_REMOVED_DISKS = 5 [(CounterOpts) = {Name: "ToBeRemovedDisks"}];
+    COUNTER_TO_BE_REMOVED_DISKS_DEPRECATED = 5 [deprecated = true];
     COUNTER_GROUPS_WITH_SLOTS_ON_TO_BE_REMOVED_DISKS = 6 [(CounterOpts) = {Name: "GroupsWithSlotsOnToBeRemovedDisks"}];
     COUNTER_SLOTS_ON_TO_BE_REMOVED_DISKS = 7 [(CounterOpts) = {Name: "SlotsOnToBeRemovedDisks"}];
     COUNTER_BYTES_ON_TO_BE_REMOVED_DISKS = 8 [(CounterOpts) = {Name: "BytesOnToBeRemovedDisks"}];
@@ -271,8 +271,8 @@ enum ETxTypes {
     TXTYPE_MON_EVENT_SET_DOWN = 4 [(TxTypeOpts) = {Name: "TTxMonEvent_SetDown"}];
     TXTYPE_MON_EVENT_GET_DOWN = 5 [(TxTypeOpts) = {Name: "TTxMonEvent_GetDown"}];
     TXTYPE_UPDATE_DISK_METRICS = 6 [(TxTypeOpts) = {Name: "TTxUpdateDiskMetrics"}];
-    TXTYPE_UPDATE_GROUP_LATENCIES = 7 [(TxTypeOpts) = {Name: "TTxUpdateGroupLatencies"}];
-    TXTYPE_GROUP_RECONFIGURE_WIPE = 8 [(TxTypeOpts) = {Name: "TTxGroupReconfigureWipe"}];
+    TXTYPE_UPDATE_GROUP_LATENCIES_DEPRECATED = 7 [deprecated = true];
+    TXTYPE_GROUP_RECONFIGURE_WIPE_DEPRECATED = 8 [deprecated = true];
     TXTYPE_NODE_REPORT = 9 [(TxTypeOpts) = {Name: "TTxNodeReport"}];
     TXTYPE_UPDATE_SEEN_OPERATIONAL = 10 [(TxTypeOpts) = {Name: "TTxUpdateSeenOperational"}];
     TXTYPE_CONFIG_CMD = 11 [(TxTypeOpts) = {Name: "TTxConfigCmd"}];
@@ -300,7 +300,7 @@ enum ETxTypes {
     TXTYPE_UPDATE_BRIDGE_SYNC_STATE = 33 [(TxTypeOpts) = {Name: "TTxUpdateBridgeSyncState"}];
     TXTYPE_ALLOCATE_DDISK_BLOCK_GROUP = 34 [(TxTypeOpts) = {Name: "TTxAllocateDDiskBlockGroup"}];
     TXTYPE_CLEANUP_STALE_STORAGE_ENTRIES = 35 [(TxTypeOpts) = {Name: "TTxCleanupStaleStorageEntries"}];
-    TXTYPE_BLOB_CHECKER_UPDATE_GROUP_STATUS = 36 [(TxTypeOpts) = {Name: "TTxBlobCheckerUpdateGroupStatus"}];
+    TXTYPE_BLOB_CHECKER_UPDATE_GROUP_STATUS_DEPRECATED = 36 [deprecated = true];
     TXTYPE_LIST_DDISK_INFO_TABLETS = 37 [(TxTypeOpts) = {Name: "TTxListDDiskInfoTablets"}];
     TXTYPE_GET_DDISK_INFO_TABLET = 38 [(TxTypeOpts) = {Name: "TTxGetDDiskInfoTablet"}];
     TXTYPE_CONVERT_TO_BRIDGE = 39 [(TxTypeOpts) = {Name: "TTxConvertToBridge"}];

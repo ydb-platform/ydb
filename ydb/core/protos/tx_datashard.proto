@@ -512,6 +512,15 @@ message TSnapshotTransaction {
     optional TDropVolatileSnapshot DropVolatileSnapshot = 2;
 }
 
+message TMvccRemovedRowVersions {
+    message TRange {
+        // Removed half-open interval [LowerInclusive, UpperExclusive).
+        optional NKikimrProto.TRowVersion LowerInclusive = 1;
+        optional NKikimrProto.TRowVersion UpperExclusive = 2;
+    }
+    repeated TRange Ranges = 1;
+}
+
 message TSnapshotTransferReadSet {
     optional bytes BorrowedSnapshot = 1;
     optional uint64 MinWriteVersionStep = 2;
@@ -525,6 +534,7 @@ message TSnapshotTransferReadSet {
     optional uint64 MvccImmediateWriteEdgeStep = 10;
     optional uint64 MvccImmediateWriteEdgeTxId = 11;
     optional bool WithOpenTxs = 12;
+    optional TMvccRemovedRowVersions RemovedRowVersions = 13;
 }
 
 message TSnapshotTransferInfo {
@@ -931,6 +941,8 @@ message TEvSplitAck {
 message TTableSnapshot {
     optional uint64 TableId = 1; // tableid in term of localDB
     optional bytes SnapshotData = 2;
+    // Presence distinguishes an empty set from snapshots sent by older shards.
+    optional TMvccRemovedRowVersions RemovedRowVersions = 3;
 }
 
 message TPersistentSnapshot {
@@ -2975,6 +2987,7 @@ message TEvInMemoryStateResponse {
 // Once the operation is done, any deleted data not used initially
 // will be included in garbage collection requests for the blobstorage.
 // Note: deleted data may still be used for a while, e.g. for history for MVCC.
+// Completion does not invalidate retained snapshots or wait for their release.
 message TEvVacuum {
     optional uint64 VacuumGeneration = 1; // increasing sequence
 }

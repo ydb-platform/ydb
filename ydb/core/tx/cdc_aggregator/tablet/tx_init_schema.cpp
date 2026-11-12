@@ -1,12 +1,11 @@
-#include "schema.h"
 #include "tablet_impl.h"
 
 namespace NKikimr::NCdcAggregator {
 
-class TCdcAggregator::TTxInitSchema : public NTabletFlatExecutor::TTransactionBase<TCdcAggregator> {
+class TCdcAggregator::TTxInitSchema : public TTxBase {
 public:
     explicit TTxInitSchema(TCdcAggregator* self)
-        : TTransactionBase(self)
+        : TTxBase(self)
     {
     }
 
@@ -16,7 +15,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
-        db.Materialize<TCdcAggregatorSchema>();
+        db.Materialize<Schema>();
         return true;
     }
 

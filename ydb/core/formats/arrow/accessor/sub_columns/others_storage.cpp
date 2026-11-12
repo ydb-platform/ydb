@@ -36,7 +36,7 @@ void TOthersData::TBuilderWithStats::AddImpl(const ui32 recordIndex, const ui32 
         LastRecordIndex = recordIndex;
         LastKeyIndex = keyIndex;
     } else {
-        YDB_LOG_VERIFY(*LastRecordIndex < recordIndex || (*LastRecordIndex == recordIndex/* && *LastKeyIndex < keyIndex*");
+        YDB_LOG_VERIFY(*LastRecordIndex < recordIndex || (*LastRecordIndex == recordIndex/* && *LastKeyIndex < keyIndex*/));
     }
     TStatusValidator::Validate(RecordIndex->Append(recordIndex));
     RTKeyIndexes.emplace_back(keyIndex);

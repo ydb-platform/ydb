@@ -12,13 +12,21 @@
 #include <util/generic/list.h>
 #include <util/generic/map.h>
 
+namespace NKikimrTxDataShard {
+class TMvccRemovedRowVersions;
+}
+
 namespace NKikimr {
+
+struct TTableId;
+
 namespace NDataShard {
 
 using NTabletFlatExecutor::TTransactionContext;
 
 class TOperation;
 class TDataShard;
+class TSnapshotRetentionPolicy;
 
 class TSnapshot {
     friend class TSnapshotExpireQueue;
@@ -154,10 +162,20 @@ public:
 
     TRowVersion GetLowWatermark() const;
 
+    bool IsSnapshotRetentionEnabled() const;
+
+    // Retention may allow reads below LowWatermark, but never resurrects removed
+    // history. locallyAcquired protects an already admitted iterator from registry updates.
+    // tableId is the current logical user-table path, not an executor LocalTid.
+    bool IsSnapshotReadable(NTable::TDatabase& db, const TTableId& tableId,
+        const TRowVersion& version, bool locallyAcquired = false) const;
+
     void SetLowWatermark(NIceDb::TNiceDb &db, TRowVersion watermark);
 
     bool AdvanceWatermark(NTable::TDatabase& db, const TRowVersion& to);
 
+    // Unconditional invalidation, except for persistent snapshots. Use when
+    // deletion is already known to be safe, independently of registry readiness.
     void RemoveRowVersions(NTable::TDatabase &db, const TRowVersion &from, const TRowVersion &to);
 
     const TSnapshotMap& GetSnapshots() const {
@@ -195,11 +213,29 @@ public:
     void PersistRemoveAllSnapshots(NIceDb::TNiceDb& db);
 
     void Fix_KIKIMR_14259(NTable::TDatabase& db);
-    void EnsureRemovedRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to);
+
+    // Optional additional cleanup of every user table, subject to retention and
+    // local acquisitions. A watermark can contain retained points below it; it
+    // does not prove that the entire preceding range has already been removed.
+    // With an enabled but unready registry this deliberately removes nothing.
+    void CleanupUnretainedRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to);
+
+    static void SerializeRemovedRowVersions(const NTable::TRowVersionRanges& ranges,
+        NKikimrTxDataShard::TMvccRemovedRowVersions& proto);
+
+    // Replay authoritative source deletions regardless of the retention policy.
+    static void RestoreRemovedRowVersions(NTable::TDatabase& db, ui32 localTableId,
+        const NKikimrTxDataShard::TMvccRemovedRowVersions& proto);
 
     void RenameSnapshots(NTable::TDatabase& db, const TPathId& prevTableId, const TPathId& newTableId);
 
 private:
+    TSnapshotRetentionPolicy GetSnapshotRetentionPolicy() const;
+    TRowVersion GetLeastAcquiredPipelineSnapshot() const;
+    bool IsSnapshotAcquiredByIterator(const TTableId& tableId, const TRowVersion& version) const;
+    bool CleanupRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to,
+        const TSnapshotRetentionPolicy& policy);
+
     void DoRemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey& key);
 
 private:
@@ -226,6 +262,8 @@ private:
     THashMap<TSnapshotKey, size_t> References;
 
     TMonotonic LastAdvanceWatermark{};
+    bool SnapshotRegistryWarningLogged = false;
+    bool SnapshotRegistryLagWarningLogged = false;
 };
 
 }   // namespace NDataShard

@@ -1665,6 +1665,17 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
               }
             }
         )", transaction.MutableRotateCdcStream()));
+
+        // Rotation creates the stream; its caller creates the topic in the same transaction.
+        auto& topicTransaction = *request->Record.AddTransaction();
+        topicTransaction.SetWorkingDir("/MyRoot/Table/RotatedStream");
+        topicTransaction.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
+        auto& topicDescription = *topicTransaction.MutableCreatePersQueueGroup();
+        topicDescription.SetName("streamImpl");
+        topicDescription.SetTotalGroupCount(1);
+        topicDescription.SetPartitionPerTablet(2);
+        topicDescription.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(86400);
+
         AsyncSend(runtime, TTestTxConfig::SchemeShard, request.release(), 0);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         env.TestWaitNotification(runtime, txId);
@@ -1681,6 +1692,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             NLs::StreamHasAggregatorTabletId(true),
         });
         UNIT_ASSERT_VALUES_UNEQUAL(rotatedDescribeResult.GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId(), oldAggregatorTabletId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/RotatedStream/streamImpl"), {NLs::PathExist});
     }
 
     Y_UNIT_TEST(AggregatorDroppedWithStream) {

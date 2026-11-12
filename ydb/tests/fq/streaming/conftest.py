@@ -3,7 +3,6 @@ import pytest
 import random
 import string
 
-from ydb.tests.fq.streaming_common.common import Kikimr, get_ydb_config, set_test_env
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
 from ydb.tests.library.compatibility.fixtures import inter_stable_binary_path
 from ydb.tests.fq.streaming_common.common import Kikimr, counter_nodes, get_ydb_config, set_test_env

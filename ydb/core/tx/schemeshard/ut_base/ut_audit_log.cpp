@@ -142,6 +142,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
             ++txId;
             runtime.RunCall([&] {
                 AuditLogModifySchemeOperation(operation, status, {}, ss, {}, {}, {}, txId, {});
+                return true;
             });
             CheckAuditRecord(runtime, auditLines, txId, "CREATE DIRECTORY", status, {});
         }

@@ -6,6 +6,7 @@
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
+#include <ydb/core/persqueue/common/heartbeat.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/common/write_stats.h>
 #include <ydb/core/persqueue/common/partitioning_keys_manager.h>

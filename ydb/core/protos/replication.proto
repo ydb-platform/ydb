@@ -538,6 +538,7 @@ message TSchemaChange {
             COMPRESSION_UNSPECIFIED = 0;
             COMPRESSION_OFF = 1;
             COMPRESSION_LZ4 = 2;
+            COMPRESSION_ZSTD = 3;
         }
 
         enum ECacheMode {
@@ -550,6 +551,7 @@ message TSchemaChange {
         optional string Media = 2;
         optional ECompression Compression = 3;
         optional ECacheMode CacheMode = 4;
+        optional uint32 CompressionLevel = 5 [default = 1];
     }
 
     message TIndex {

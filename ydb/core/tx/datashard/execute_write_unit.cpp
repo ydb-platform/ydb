@@ -714,6 +714,9 @@ public:
         DataShard.GetConflictsCache().GetTableCache(localTid).RemoveAllUncommittedWrites(txc.DB);
 
         txc.DB.Truncate(localTid);
+        if (!DataShard.GetUserTables().at(tableId)->HnswIndexes.empty()) {
+            txc.DB.OnCommit([self = &DataShard, localTid] { self->InvalidateHnswTable(localTid); });
+        }
 
         // Unlike the schema TRUNCATE (see truncate_unit.cpp), the snapshot low watermark is
         // deliberately left alone. Reads of the issuing transaction carry the MVCC version pinned

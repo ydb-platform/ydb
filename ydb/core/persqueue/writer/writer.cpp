@@ -382,6 +382,7 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
         auto& cmd = *request.MutableCmdGetOwnership();
         cmd.SetOwner(SourceId);
         cmd.SetForce(true);
+        cmd.SetQuotaWaitTimeMs(Opts.WriteSessionQuotaWaitTime.MilliSeconds());
 
         SetWriteId(request);
         SetTopic(request);

@@ -453,6 +453,7 @@ message TKqpVectorSearchSettings {
 
     // Inconsistent online RO: the reads carry neither a snapshot nor a lock.
     optional bool AllowInconsistentReads = 28;
+    optional NKikimrProto.TPathID HnswIndexId = 29;
 }
 
 message TKqpTaskInfo {

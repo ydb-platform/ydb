@@ -466,6 +466,7 @@ struct TShardedTableOptions {
         TString Name;
         TMaybe<ui32> Id;
         TMaybe<NKikimrSchemeOp::EColumnCodec> ColumnCodec;
+        TMaybe<i32> ColumnCodecLevel;
         TMaybe<NKikimrSchemeOp::EColumnCacheMode> ColumnCacheMode;
         TString LogPoolKind;
         TString SysLogPoolKind;

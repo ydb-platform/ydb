@@ -5023,6 +5023,50 @@ Y_UNIT_TEST_SUITE(KqpRboOlapAggregations) {
             CompareYson(result, R"([[[0.400000006;]]])");
         }
     }
+
+    // As in the old optimizer, PRAGMA OptEnableOlapProvideComputeSharding passes the keys of an aggregate to the column
+    // table read under it, so column shards send all rows of a key to one compute task.
+    Y_UNIT_TEST(AggregationProvidesComputeShardingKeys) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 300, true);
+        auto client = kikimr.GetTableClient();
+
+        const TString aggregates = R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)";
+        const TString sharding = R"(PRAGMA Kikimr.OptEnableOlapProvideComputeSharding = "true";)";
+        const std::vector<TString> queries = {
+            // An aggregate column shards compute.
+            "SELECT level, COUNT(*) AS c FROM `/Root/olapStore/olapTable` GROUP BY level ORDER BY level",
+            // A key range: the physical query builder rebuilds the read settings and must keep the keys.
+            "SELECT level, COUNT(*) AS c FROM `/Root/olapStore/olapTable` WHERE `timestamp` >= Timestamp(\"1970-01-01T00:00:01.000100Z\") "
+                "GROUP BY level ORDER BY level",
+            // An aggregate of an expression, which column shards do not compute.
+            "SELECT level, MAX(LENGTH(message)) AS m FROM `/Root/olapStore/olapTable` GROUP BY level ORDER BY level",
+        };
+
+        const auto getAst = [&](const TString& query) {
+            TStreamExecScanQuerySettings explainSettings;
+            explainSettings.Explain(true);
+            auto explain = client.StreamExecuteScanQuery(query, explainSettings).GetValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+            return TString{CollectStreamResult(explain).QueryStats->Getquery_ast()};
+        };
+        const auto getRows = [&](const TString& query) {
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return StreamResultToYson(it);
+        };
+        for (const auto& query : queries) {
+            const auto ast = getAst(aggregates + sharding + query);
+            UNIT_ASSERT_C(ast.Contains("GroupByFieldNames"), query << ", AST: " << ast);
+            UNIT_ASSERT_C(!getAst(aggregates + query).Contains("GroupByFieldNames"), query);
+            CompareYson(getRows(aggregates + query), getRows(aggregates + sharding + query));
+        }
+    }
 }
 
 

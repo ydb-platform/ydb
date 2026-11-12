@@ -1,0 +1,4 @@
+SELECT
+    CAST(index AS Double) AS left_value,
+    CAST(index / 2 AS Double) AS right_value
+FROM Input;

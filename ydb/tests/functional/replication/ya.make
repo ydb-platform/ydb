@@ -6,6 +6,7 @@ ENV(YDB_ERASURE=block_4-2)
 
 ENV(YDB_FEATURE_FLAGS="enable_topic_transfer,enable_topic_autopartitioning_for_cdc,enable_topic_autopartitioning_for_replication")
 ENV(YDB_GRPC_SERVICES="replication")
+ENV(YDB_ENABLE_PQ="true")
 
 PEERDIR(
     library/cpp/threading/local_executor

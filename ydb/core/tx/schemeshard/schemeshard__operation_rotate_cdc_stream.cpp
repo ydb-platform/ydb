@@ -393,7 +393,7 @@ public:
 
         TMaybe<TChannelsBindings> aggregatorChannels;
         if (ShouldAggregateHeartbeats(newStreamDesc)) {
-            aggregatorChannels = CheckAggregatorCanBeCreated(newStreamOp, newStreamPath, context, *result);
+            aggregatorChannels = CheckAggregatorCanBeCreated(newStreamOp, newStreamPath, context, result);
             if (!aggregatorChannels) {
                 return result;
             }

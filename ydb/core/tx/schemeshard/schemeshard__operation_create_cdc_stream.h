@@ -48,7 +48,7 @@ TMaybe<TChannelsBindings> CheckAggregatorCanBeCreated(
     const NKikimrSchemeOp::TCreateCdcStream& op,
     const TPath& streamPath,
     TOperationContext& context,
-    TProposeResponse& result);
+    const THolder<TProposeResponse>& result);
 
 void AddAggregator(
     const TOperationId& opId,

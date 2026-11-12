@@ -345,7 +345,7 @@ public:
 
         TMaybe<TChannelsBindings> aggregatorChannels;
         if (ShouldAggregateHeartbeats(streamDesc)) {
-            aggregatorChannels = CheckAggregatorCanBeCreated(op, streamPath, context, *result);
+            aggregatorChannels = CheckAggregatorCanBeCreated(op, streamPath, context, result);
             if (!aggregatorChannels) {
                 return result;
             }
@@ -1007,25 +1007,25 @@ TMaybe<TChannelsBindings> CheckAggregatorCanBeCreated(
         const NKikimrSchemeOp::TCreateCdcStream& op,
         const TPath& streamPath,
         TOperationContext& context,
-        TProposeResponse& result)
+        const THolder<TProposeResponse>& result)
 {
     const auto checks = streamPath.Check();
     checks.ShardsLimit(1);
 
     if (!checks) {
-        result.SetError(checks.GetStatus(), checks.GetError());
+        result->SetError(checks.GetStatus(), checks.GetError());
         return Nothing();
     }
 
     if (op.GetTopicAutoPartitioning()) {
-        result.SetError(NKikimrScheme::StatusInvalidParameter,
+        result->SetError(NKikimrScheme::StatusInvalidParameter,
             "RESOLVED_TIMESTAMPS with topic autopartitioning are not supported when CDC heartbeats are aggregated");
         return Nothing();
     }
 
     TChannelsBindings channelsBindings;
     if (!context.SS->ResolveTabletChannels(0, streamPath.GetPathIdForDomain(), channelsBindings)) {
-        result.SetError(NKikimrScheme::StatusInvalidParameter,
+        result->SetError(NKikimrScheme::StatusInvalidParameter,
             "Unable to construct channel binding for CDC aggregator with the storage pool");
         return Nothing();
     }

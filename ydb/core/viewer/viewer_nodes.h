@@ -3484,37 +3484,24 @@ public:
         FailViewerRequestsForNode(nodeId, error);
     }
 
-    bool HasPendingBscRequests() const {
-        return (StoragePoolsResponse && !StoragePoolsResponse->IsDone())
-            || (GroupsResponse && !GroupsResponse->IsDone())
-            || (VSlotsResponse && !VSlotsResponse->IsDone())
-            || (PDisksResponse && !PDisksResponse->IsDone());
-    }
-
-    // Fails the pending BSC requests. The reply can be sent from inside this call (when nothing else
-    // is awaited), so the reason of the failure has to be added to Problems before it, not after.
-    bool OnBscError(const TString& error) {
+    // Fails the pending BSC requests and adds the reason of the failure to Problems. The reply can be sent
+    // from inside this call (when nothing else is awaited), so the reason is added before a failed request
+    // is processed, not after the call. The requests are listed only here: one that is added to the list
+    // later can not lose the reason.
+    bool OnBscError(const TString& error, const TString& problem) {
         bool result = false;
-        if (StoragePoolsResponse && StoragePoolsResponse->Error(error)) {
-            ProcessResponses();
-            RequestDone();
-            result = true;
-        }
-        if (GroupsResponse && GroupsResponse->Error(error)) {
-            ProcessResponses();
-            RequestDone();
-            result = true;
-        }
-        if (VSlotsResponse && VSlotsResponse->Error(error)) {
-            ProcessResponses();
-            RequestDone();
-            result = true;
-        }
-        if (PDisksResponse && PDisksResponse->Error(error)) {
-            ProcessResponses();
-            RequestDone();
-            result = true;
-        }
+        auto fail = [&](auto& response) {
+            if (response && response->Error(error)) {
+                AddProblem(problem);
+                ProcessResponses();
+                RequestDone();
+                result = true;
+            }
+        };
+        fail(StoragePoolsResponse);
+        fail(GroupsResponse);
+        fail(VSlotsResponse);
+        fail(PDisksResponse);
         return result;
     }
 
@@ -3531,10 +3518,7 @@ public:
                 }
             }
             if (ev->Get()->TabletId == GetBSControllerId()) {
-                if (HasPendingBscRequests()) {
-                    AddProblem("bsc-error");
-                }
-                OnBscError(error);
+                OnBscError(error, "bsc-error");
             }
             FailPipeConnect(ev->Get()->TabletId);
         }
@@ -3564,10 +3548,7 @@ public:
                 ProcessResponses();
                 RequestDone();
             }
-            if (HasPendingBscRequests()) {
-                AddProblem("bsc-timeout");
-            }
-            if (OnBscError(error)) {
+            if (OnBscError(error, "bsc-timeout")) {
                 FailPipeConnect(GetBSControllerId());
             }
             for (auto& [hiveId, response] : HiveNodeStats) {

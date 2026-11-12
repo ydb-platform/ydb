@@ -8,8 +8,6 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
-#include <util/generic/algorithm.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
@@ -686,13 +684,6 @@ void DoCreateLock(
     result.push_back(CreateLock(NextPartId(opId, result), outTx));
 }
 
-ui64 GetDefaultTopicWriteSpeed(const NKikimrSchemeOp::TCreateCdcStream& op) {
-    const bool isReplication = AnyOf(op.GetStreamDescription().GetUserAttributes(), [](const auto& attribute) {
-        return attribute.GetKey() == ATTR_ASYNC_REPLICATION;
-    });
-    return isReplication ? 10_MB : 1_MB;
-}
-
 bool IsReplicationSupportTopicAutopartitioning(const NKikimrSchemeOp::TCreateCdcStream& op) {
     auto& descr = op.GetStreamDescription();
     for (auto& attribute : descr.GetUserAttributes()) {
@@ -780,7 +771,7 @@ void DoCreatePqPart(
 
     auto& partitionConfig = *pqConfig.MutablePartitionConfig();
     partitionConfig.SetLifetimeSeconds(op.GetRetentionPeriodSeconds());
-    partitionConfig.SetWriteSpeedInBytesPerSecond(op.HasTopicWriteSpeedInBytesPerSecond() ? op.GetTopicWriteSpeedInBytesPerSecond() : GetDefaultTopicWriteSpeed(op));
+    partitionConfig.SetWriteSpeedInBytesPerSecond(1_MB); // TODO: configurable write speed
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
 

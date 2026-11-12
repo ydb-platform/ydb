@@ -1,6 +1,20 @@
 #include "partition.h"
 
+#include <compare>
+#include <utility>
+
 namespace NKikimr::NPQ {
+
+namespace {
+
+std::strong_ordering CompareVersions(const NKikimrPQ::TVersionedConsumerOffset& left,
+                                     const NKikimrPQ::TVersionedConsumerOffset& right) {
+    const auto leftVersion = std::make_pair(left.GetReadRuleGeneration(), left.GetOffsetRevision());
+    const auto rightVersion = std::make_pair(right.GetReadRuleGeneration(), right.GetOffsetRevision());
+    return leftVersion <=> rightVersion;
+}
+
+} // namespace
 
 void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
     if (AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
@@ -8,6 +22,10 @@ void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext
 
         DestroyMirrorer();
 
+        return;
+    }
+    if (!Mirrorer || ev->Sender != Mirrorer->Actor) {
+        LOG_D("Ignoring replication data from a retired mirrorer");
         return;
     }
 
@@ -21,6 +39,24 @@ void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext
             // An invalid offset in the earlier payload must not hide a valid update.
             pendingOffset = pendingOffset > static_cast<ui64>(Max<i64>()) ? offset : Max(pendingOffset, offset);
         }
+        for (const auto& [consumer, offset] : ev->Get()->VersionedOffsetsByConsumers) {
+            auto it = pending.VersionedOffsetsByConsumers.find(consumer);
+            if (it == pending.VersionedOffsetsByConsumers.end()) {
+                pending.VersionedOffsetsByConsumers.emplace(consumer, offset);
+                continue;
+            }
+            const auto comparison = CompareVersions(offset, it->second);
+            if (comparison > 0) {
+                it->second = offset;
+            } else if (comparison == 0 && offset.GetOffset() != it->second.GetOffset()) {
+                LOG_E("Conflicting offsets with the same source revision",
+                    {"consumer", consumer},
+                    {"readRuleGeneration", offset.GetReadRuleGeneration()},
+                    {"offsetRevision", offset.GetOffsetRevision()},
+                    {"pendingOffset", it->second.GetOffset()},
+                    {"incomingOffset", offset.GetOffset()});
+            }
+        }
         if (const auto& mirroredOffset = ev->Get()->MirroredOffset; mirroredOffset.Defined()) {
             pending.MirroredOffset = pending.MirroredOffset.Defined()
                 ? Max(*pending.MirroredOffset, *mirroredOffset) : *mirroredOffset;
@@ -30,7 +66,6 @@ void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext
     }
 
     ReplicationDataNeedsApply = true;
-    UpdatePendingUsersFromReplicationData();
     if (InitDone) {
         ProcessTxsAndUserActs(ctx);
     }
@@ -44,11 +79,17 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
     ReplicationDataNeedsApply = false;
     const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
     const auto mirroredOffset = (*PendingReplicationData)->Get()->MirroredOffset;
-    if (mirroredOffset.Defined()) {
-        BlobEncoder.MirroredOffset = Max(BlobEncoder.MirroredOffset, *mirroredOffset);
-    }
 
+    const bool versioned = VersionedReplicationEnabled(config);
+    const auto& versionedOffsets = (*PendingReplicationData)->Get()->VersionedOffsetsByConsumers;
     for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
+        if (versioned) {
+            if (!versionedOffsets.contains(consumer)) {
+                LOG_W("Source consumer has no versioned offset in opt-in mode; ignoring legacy offset",
+                    {"consumer", consumer}, {"offset", offset});
+            }
+            continue;
+        }
         auto* consumerConfig = GetConsumer(config, consumer);
         if (!consumerConfig || offset > static_cast<ui64>(Max<i64>())) {
             continue;
@@ -72,51 +113,70 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
         }
         userInfo.Offset = Max(userInfo.Offset, static_cast<i64>(offset));
     }
+
+    if (!versioned) {
+        return;
+    }
+    bool applied = false;
+    for (const auto& [consumer, offset] : versionedOffsets) {
+        const auto* consumerConfig = GetConsumer(config, consumer);
+        if (!consumerConfig || offset.GetOffset() > static_cast<ui64>(Max<i64>())) {
+            continue;
+        }
+        if (consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            continue;
+        }
+        if (consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            LOG_W("Versioned offset mirroring is not supported for MLP consumers",
+                {"consumer", consumer});
+            continue;
+        }
+        if (offset.GetOffset() < GetStartOffset() || offset.GetOffset() > GetEndOffset()) {
+            LOG_W("Versioned source offset is outside the retained destination range; ignoring it",
+                {"consumer", consumer},
+                {"offset", offset.GetOffset()},
+                {"startOffset", GetStartOffset()},
+                {"endOffset", GetEndOffset()});
+            continue;
+        }
+
+        const auto* pending = GetPendingUserIfExists(consumer);
+        const auto* committed = UsersInfoStorage->GetIfExists(consumer);
+        const auto* accepted = pending
+            ? &pending->ReplicatedOffset
+            : committed ? &committed->ReplicatedOffset : nullptr;
+        if (accepted && *accepted) {
+            const auto& replicated = **accepted;
+            const auto comparison = CompareVersions(offset, replicated);
+            if (comparison < 0) {
+                continue;
+            }
+            if (comparison == 0) {
+                if (offset.GetOffset() != replicated.GetOffset()) {
+                    LOG_E("Conflicting offsets with the same accepted source revision",
+                        {"consumer", consumer},
+                        {"readRuleGeneration", offset.GetReadRuleGeneration()},
+                        {"offsetRevision", offset.GetOffsetRevision()},
+                        {"acceptedOffset", replicated.GetOffset()},
+                        {"incomingOffset", offset.GetOffset()});
+                }
+                continue;
+            }
+        }
+
+        auto& userInfo = GetOrCreatePendingUser(consumer);
+        userInfo.Offset = offset.GetOffset();
+        userInfo.ReplicatedOffset = offset;
+        applied = true;
+    }
+    if (!applied && !mirroredOffset.Defined()) {
+        PendingReplicationData.reset();
+    }
 }
 
 void TPartition::CompleteReplicationDataWrite(const TActorContext&) {
-    if (!PendingReplicationData) {
-        return;
-    }
-
-    // Updates merged during the KV write have not been applied yet. In
-    // particular, MLP offsets are not checked by expectedOffsets below.
-    if (ReplicationDataNeedsApply) {
-        UpdatePendingUsersFromReplicationData();
-        return; // OnHandleWriteResponse starts the next persist cycle.
-    }
-
-    const auto mirroredOffset = (*PendingReplicationData)->Get()->MirroredOffset;
-    // MirroredOffset is not updated while a KV write is in progress, so it still
-    // reflects the completed write here, before retrying the pending payload.
-    if (mirroredOffset.Defined() && BlobEncoder.MirroredOffset < *mirroredOffset) {
-        UpdatePendingUsersFromReplicationData();
-        return; // OnHandleWriteResponse starts the next persist cycle.
-    }
-
-    const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
-
-    // Replication may replay older snapshots; acknowledge the greatest valid offset.
-    y_absl::flat_hash_map<TString, ui64> expectedOffsets;
-    for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
-        const auto* consumerConfig = GetConsumer(config, consumer);
-        // Replication consumers are excluded from applying incoming offsets above.
-        // MLP progress is applied by TEvMLPPurgeRequest, not by the streaming commit offset.
-        if (!consumerConfig
-            || consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
-            || consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP
-            || offset > static_cast<ui64>(Max<i64>())) {
-            continue;
-        }
-        auto& expected = expectedOffsets[consumer];
-        expected = Max(expected, offset);
-    }
-    for (const auto& [consumer, offset] : expectedOffsets) {
-        const auto* userInfo = UsersInfoStorage->GetIfExists(consumer);
-        if (!userInfo || userInfo->Offset < 0 || static_cast<ui64>(userInfo->Offset) < offset) {
-            UpdatePendingUsersFromReplicationData();
-            return; // OnHandleWriteResponse starts the next persist cycle.
-        }
+    if (!PendingReplicationData || ReplicationDataNeedsApply) {
+        return; // OnHandleWriteResponse starts the next persist cycle for new arrivals.
     }
 
     PendingReplicationData.reset();
@@ -150,14 +210,21 @@ void TPartition::RestoreReadSessionActor(TUserInfo& userInfo, const TString& ses
 
 void TPartition::SendOffsetsToReplicationConsumer(const TActorContext& ctx, TConstArrayRef<const TUserInfo*> userInfos) {
     NKikimrPQ::TReplicationDataPayload replicationData;
+    auto addUserInfo = [&](const TUserInfo& info) {
+        (*replicationData.MutableOffsetsByConsumers())[info.User] = info.Offset;
+        auto& versioned = (*replicationData.MutableVersionedOffsetsByConsumers())[info.User];
+        versioned.SetOffset(info.Offset);
+        versioned.SetReadRuleGeneration(info.ReadRuleGeneration);
+        versioned.SetOffsetRevision(info.OffsetRevision);
+    };
     if (userInfos.empty()) {
         for (const auto& [consumer, info] : UsersInfoStorage->ViewAll()) {
-            (*replicationData.MutableOffsetsByConsumers())[consumer] = info.Offset;
+            addUserInfo(info);
         }
     }
 
     for (const auto* userInfo : userInfos) {
-        (*replicationData.MutableOffsetsByConsumers())[userInfo->User] = userInfo->Offset;
+        addUserInfo(*userInfo);
     }
     const TString payload = replicationData.SerializeAsString();
     for (const auto& [consumer, info] : UsersInfoStorage->ViewAll()) {

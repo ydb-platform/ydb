@@ -1261,7 +1261,7 @@ void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
 void TPersQueue::UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg)
 {
     PQ_ENSURE(cfg.HasVersion());
-    const int curConfigVersion = cfg.GetVersion();
+    const ui32 curConfigVersion = cfg.GetVersion();
 
     THashMap<TString, NKikimrPQ::TPQTabletConfig::TConsumer> existedConsumers;
     for (const auto& c : Config.GetConsumers()) {

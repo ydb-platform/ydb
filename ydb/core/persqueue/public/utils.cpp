@@ -41,7 +41,15 @@ bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config) {
 }
 
 bool ReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config) {
-    return MirroringEnabled(config) && config.GetPartitionConfig().GetMirrorFrom().GetMirrorConsumerOffsets();
+    if (!MirroringEnabled(config)) {
+        return false;
+    }
+    const auto& mirrorFrom = config.GetPartitionConfig().GetMirrorFrom();
+    return mirrorFrom.GetMirrorConsumerOffsets() || mirrorFrom.GetMirrorVersionedConsumerOffsets();
+}
+
+bool VersionedReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config) {
+    return MirroringEnabled(config) && config.GetPartitionConfig().GetMirrorFrom().GetMirrorVersionedConsumerOffsets();
 }
 
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {

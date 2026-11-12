@@ -1,7 +1,9 @@
 #pragma once
 
+#include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/system/types.h>
@@ -16,6 +18,9 @@ struct TCreateConsumerParams {
     TString Session;
     ui64 OffsetRewindSum = 0;
     ui64 ReadRuleGeneration = 0;
+    ui64 OffsetRevision = 0;
+    TMaybe<NKikimrPQ::TVersionedConsumerOffset> ReplicatedOffset;
+    TMaybe<NKikimrPQ::TPQTabletConfig::EConsumerType> Type;
 };
 
 struct TPartitionParams {
@@ -43,5 +48,12 @@ NKikimrPQ::TPQTabletConfig MakeConfig(ui64 version,
                                       NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
 
 NKikimrPQ::TBootstrapConfig MakeBootstrapConfig();
+
+class TIdleMirrorReaderFactory : public TPersQueueMirrorReaderFactory {
+protected:
+    NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr> GetCredentialsProviderImpl(
+        const NKikimrPQ::TMirrorPartitionConfig::TCredentials& credentials
+    ) const override;
+};
 
 }

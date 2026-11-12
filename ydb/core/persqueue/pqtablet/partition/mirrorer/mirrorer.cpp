@@ -1,5 +1,8 @@
 #include "mirrorer.h"
 
+#include <compare>
+#include <utility>
+
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
@@ -51,6 +54,13 @@ TString FormatOffsetsByConsumers(const y_absl::flat_hash_map<TString, ui64>& off
     return out;
 }
 
+std::strong_ordering CompareVersions(const NKikimrPQ::TVersionedConsumerOffset& left,
+                                     const NKikimrPQ::TVersionedConsumerOffset& right) {
+    const auto leftVersion = std::make_pair(left.GetReadRuleGeneration(), left.GetOffsetRevision());
+    const auto rightVersion = std::make_pair(right.GetReadRuleGeneration(), right.GetOffsetRevision());
+    return leftVersion <=> rightVersion;
+}
+
 struct TBatchInfo {
     ui32 LogicalMessageCount = 1;
     std::optional<ui64> MaxSeqNo;
@@ -92,6 +102,7 @@ TMirrorer::TMirrorer(
     bool localDC,
     ui64 endOffset,
     const NKikimrPQ::TMirrorPartitionConfig& config,
+    const TVector<TString>& destinationConsumers,
     const TTabletCountersBase& counters
 )
     : TBaseTabletActor(tabletId, tabletActor, NKikimrServices::PQ_MIRRORER)
@@ -104,8 +115,34 @@ TMirrorer::TMirrorer(
     , OffsetToRead(endOffset)
     , Config(config)
 {
+    SetDestinationConsumers(destinationConsumers);
     Counters.Populate(counters);
     Counters.ResetCounters();
+}
+
+void TMirrorer::SetDestinationConsumers(const TVector<TString>& consumers) {
+    DestinationConsumers.clear();
+    DestinationConsumers.insert(consumers.begin(), consumers.end());
+
+    const auto prune = [this](auto& offsets) {
+        for (auto it = offsets.begin(); it != offsets.end();) {
+            if (!DestinationConsumers.contains(it->first)) {
+                offsets.erase(it++);
+            } else {
+                ++it;
+            }
+        }
+    };
+    prune(OffsetsByConsumers);
+    prune(ReplicatedOffsetsByConsumers);
+    prune(VersionedOffsetsByConsumers);
+    for (auto it = MissingVersionedOffsetDiagnostics.begin(); it != MissingVersionedOffsetDiagnostics.end();) {
+        if (!DestinationConsumers.contains(*it)) {
+            MissingVersionedOffsetDiagnostics.erase(it++);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void TMirrorer::Bootstrap(const TActorContext& ctx) {
@@ -424,16 +461,28 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
 }
 
 void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
+    const auto& tabletConfig = ev->Get()->Config;
+    TVector<TString> destinationConsumers;
+    for (const auto& consumer : tabletConfig.GetConsumers()) {
+        destinationConsumers.push_back(consumer.GetName());
+    }
+    SetDestinationConsumers(destinationConsumers);
+
     bool equalConfigs = google::protobuf::util::MessageDifferencer::Equals(
         Config,
-        ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()
+        tabletConfig.GetPartitionConfig().GetMirrorFrom()
     );
     LOG_N(
         "Got new config, equal with previous",
         {"previous", equalConfigs}
     );
     if (!equalConfigs) {
-        Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
+        Config = tabletConfig.GetPartitionConfig().GetMirrorFrom();
+        OffsetsByConsumers.clear();
+        ReplicatedOffsetsByConsumers.clear();
+        VersionedOffsetsByConsumers.clear();
+        MissingVersionedOffsetDiagnostics.clear();
+        MirroredOffsetToSend = Nothing();
         LOG_N("Changing config");
 
         StartInit(ctx);
@@ -509,6 +558,37 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
 }
 
 void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
+    if (Config.GetMirrorVersionedConsumerOffsets()) {
+        if (VersionedOffsetsByConsumers.empty() && !MirroredOffsetToSend) {
+            return;
+        }
+
+        auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+        const ui64 availableOffset = Max(EndOffset, ConfirmedEndOffset);
+        TVector<TString> consumersToErase;
+        for (const auto& [consumer, offset] : VersionedOffsetsByConsumers) {
+            if (offset.GetOffset() > availableOffset || offset.GetOffset() > static_cast<ui64>(Max<i64>())) {
+                continue;
+            }
+
+            event->VersionedOffsetsByConsumers[consumer] = offset;
+            event->OffsetsByConsumers[consumer] = offset.GetOffset();
+            consumersToErase.push_back(consumer);
+        }
+        for (const auto& consumer : consumersToErase) {
+            VersionedOffsetsByConsumers.erase(consumer);
+        }
+
+        if (MirroredOffsetToSend) {
+            event->MirroredOffset = *MirroredOffsetToSend;
+            MirroredOffsetToSend = Nothing();
+        }
+        if (!event->OffsetsByConsumers.empty() || event->MirroredOffset.Defined()) {
+            ctx.Send(PartitionActor, event.Release());
+        }
+        return;
+    }
+
     if (OffsetsByConsumers.empty() && !MirroredOffsetToSend) {
         return;
     }
@@ -756,7 +836,8 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
 }
 
 void TMirrorer::AddMessagesToQueue(
-    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages
+    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages,
+    const TActorContext& ctx
 ) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
@@ -766,7 +847,38 @@ void TMirrorer::AddMessagesToQueue(
                 LastReplicationDataTimestamp = TActivationContext::Now();
                 LOG_D("Received replication data", {"replicationData", replicationData.DebugString()});
 
+                if (Config.GetMirrorVersionedConsumerOffsets()) {
+                    // Entry presence defines the tuple; omitted scalar fields have their protobuf zero defaults.
+                    for (const auto& [consumer, offset] : replicationData.GetVersionedOffsetsByConsumers()) {
+                        if (!DestinationConsumers.contains(consumer)) {
+                            continue;
+                        }
+                        MissingVersionedOffsetDiagnostics.erase(consumer);
+                        auto it = VersionedOffsetsByConsumers.find(consumer);
+                        if (it == VersionedOffsetsByConsumers.end()) {
+                            VersionedOffsetsByConsumers.emplace(consumer, offset);
+                            continue;
+                        }
+                        const auto comparison = CompareVersions(offset, it->second);
+                        if (comparison > 0) {
+                            it->second = offset;
+                        } else if (comparison == 0 && offset.GetOffset() != it->second.GetOffset()) {
+                            ProcessError(ctx, TStringBuilder() << "Conflicting versioned offsets for consumer " << consumer);
+                        }
+                    }
+                }
                 for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
+                    if (!DestinationConsumers.contains(consumer)) {
+                        continue;
+                    }
+                    if (Config.GetMirrorVersionedConsumerOffsets()) {
+                        if (!replicationData.GetVersionedOffsetsByConsumers().contains(consumer)
+                            && MissingVersionedOffsetDiagnostics.insert(consumer).second) {
+                            ProcessError(ctx, TStringBuilder()
+                                << "Source consumer " << consumer << " has no versioned offset in opt-in mode");
+                        }
+                        continue;
+                    }
                     auto& pendingOffset = OffsetsByConsumers[consumer];
                     pendingOffset = Max(pendingOffset, offset);
                 }
@@ -877,7 +989,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     LastReadEventTime = ctx.Now();
 
     if (auto* dataEvent = std::get_if<TPersQueueReadEvent::TDataReceivedEvent>(&event.value())) {
-        AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()));
+        AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()), ctx);
     } else if (auto* createStream = std::get_if<TPersQueueReadEvent::TStartPartitionSessionEvent>(&event.value())) {
         LOG_I(
             "Got create stream event for and will set",
@@ -1041,8 +1153,9 @@ NActors::IActor* CreateMirrorer(const ui64 tabletId,
                                 const bool localDC,
                                 const ui64 endOffset,
                                 const NKikimrPQ::TMirrorPartitionConfig& config,
+                                const TVector<TString>& destinationConsumers,
                                 const TTabletCountersBase& counters) {
-    return new TMirrorer(tabletId, tabletActor, partitionActor, topicConverter, partition, localDC, endOffset, config, counters);
+    return new TMirrorer(tabletId, tabletActor, partitionActor, topicConverter, partition, localDC, endOffset, config, destinationConsumers, counters);
 }
 
 }// NPQ

@@ -7,6 +7,7 @@
 
 #include <yql/essentials/minikql/mkql_string_util.h>
 
+#include <atomic>
 #include <thread>
 
 namespace NFq::NRowDispatcher::NTests {
@@ -228,8 +229,21 @@ class TJsonParserDeliveryFixture: public TBaseFixture {
 public:
     class TClient: public IClientDataConsumer {
     public:
+        struct TNotification {
+            ui64 Offset;
+            ui64 Rows;
+            ui64 DataSize;
+            TMaybe<TInstant> Watermark;
+        };
+
+        TClient(TString filterExpr = {}, TString watermarkExpr = {})
+            : FilterExpr(std::move(filterExpr))
+            , WatermarkExpr(std::move(watermarkExpr))
+        {
+        }
+
         bool IsStarted() const override {
-            return Started;
+            return Started.load();
         }
 
         const TVector<TSchemaColumn>& GetColumns() const override {
@@ -237,15 +251,15 @@ public:
         }
 
         const TString& GetWatermarkExpr() const override {
-            return Empty;
+            return WatermarkExpr;
         }
 
         const TString& GetFilterExpr() const override {
-            return Empty;
+            return FilterExpr;
         }
 
         TPurecalcCompileSettings GetPurecalcSettings() const override {
-            return {};
+            return { .EnabledLLVM = false };
         }
 
         NActors::TActorId GetClientId() const override {
@@ -261,13 +275,15 @@ public:
         }
 
         void StartClientSession() override {
-            Started = true;
+            Started.store(true);
         }
 
-        void AddDataToClient(ui64 offset, ui64 rows, ui64, TMaybe<TInstant>) override {
+        void AddDataToClient(ui64 offset, ui64 rows, ui64 dataSize, TMaybe<TInstant> watermark) override {
             UNIT_ASSERT_C(offset >= NextOffset, "Unexpected historical offset");
             NextOffset = offset + 1;
             Rows += rows;
+            DataSize += dataSize;
+            Notifications.push_back({ offset, rows, dataSize, watermark });
         }
 
         void UpdateClientOffset(ui64 offset) override {
@@ -276,23 +292,35 @@ public:
 
         ui64 NextOffset = 42;
         ui64 Rows = 0;
+        ui64 DataSize = 0;
+        TVector<TNotification> Notifications;
 
     private:
-        bool Started = false;
-        const TString Empty;
+        std::atomic<bool> Started = false;
+        const TString FilterExpr;
+        const TString WatermarkExpr;
         const TVector<TSchemaColumn> Columns = { { "col", "[DataType; String]" } };
     };
 
     void SetUp(NUnitTest::TTestContext& ctx) override {
         TBaseFixture::SetUp(ctx);
+        CompileService = Runtime.Register(CreatePurecalcCompileServiceMock(Runtime.AllocateEdgeActor()));
+        MakeClient();
+    }
+
+    void MakeClient(TString filterExpr = {}, TString watermarkExpr = {}) {
+        Handler.Reset();
         Handler = CreateTestFormatHandler({
                                               .FunctionRegistry = FunctionRegistry,
                                               .JsonParserConfig = { .FunctionRegistry = FunctionRegistry, .LatencyLimit = TDuration::Zero() },
+                                              .FiltersConfig = { .CompileServiceId = CompileService },
                                           },
             { .ParsingFormat = "json_each_row" });
-        Client = MakeIntrusive<TClient>();
+        Client = MakeIntrusive<TClient>(std::move(filterExpr), std::move(watermarkExpr));
         CheckSuccess(Handler->AddClient(Client));
-        UNIT_ASSERT(Client->IsStarted());
+        WaitFor(WAIT_TIMEOUT, "client filter compilation", [&] {
+            return Client->IsStarted();
+        });
     }
 
     void TearDown(NUnitTest::TTestContext& ctx) override {
@@ -303,6 +331,7 @@ public:
 
     ITopicFormatHandler::TPtr Handler;
     TIntrusivePtr<TClient> Client;
+    NActors::TActorId CompileService;
 };
 
 class TRawParserFixture: public TBaseParserFixture {
@@ -1933,6 +1962,106 @@ Y_UNIT_TEST_SUITE(TestJsonParserDelivery) {
         UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(batches.front().Offsets, (TVector<ui64>{ 42, 42 }));
         CheckMessageBatch(std::move(batches.front().SerializedData), { TRow().AddString(large), TRow().AddString("last") });
+    }
+
+    Y_UNIT_TEST_F(PredicateWithLastRowFiltered, TJsonParserDeliveryFixture) {
+        MakeClient(R"(col != "skip")");
+        Handler->ParseRecords({ GetRecord(42, R"([{"col":"first"},{"col":"second"},{"col":"skip"}])") });
+        UNIT_ASSERT_VALUES_EQUAL(Client->Rows, 2);
+        UNIT_ASSERT_VALUES_EQUAL(Client->NextOffset, 43);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications[0].Offset, 42);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications[0].Rows, 2);
+        UNIT_ASSERT_GT(Client->DataSize, 0);
+        const ui64 firstDataSize = Client->DataSize;
+        auto batches = Handler->ExtractClientData(Client->GetClientId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Offsets, (TVector<ui64>{ 42, 42 }));
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Rows, 2);
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().DataSize, firstDataSize);
+        UNIT_ASSERT(!batches.front().Watermark);
+        CheckMessageBatch(std::move(batches.front().SerializedData), { TRow().AddString("first"), TRow().AddString("second") });
+
+        Handler->ParseRecords({ GetRecord(43, R"({"col":"skip"}{"col":"skip"})") });
+        UNIT_ASSERT_VALUES_EQUAL(Client->NextOffset, 44);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Client->DataSize, firstDataSize);
+        UNIT_ASSERT(!Handler->HasClientData(Client->GetClientId()));
+
+        Handler->ParseRecords({ GetRecord(42, R"({"col":"replayed"})"), GetRecord(44, R"({"col":"third"}{"col":"skip"})") });
+        UNIT_ASSERT_VALUES_EQUAL(Client->Rows, 3);
+        UNIT_ASSERT_VALUES_EQUAL(Client->NextOffset, 45);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications[1].Offset, 44);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications[1].Rows, 1);
+        batches = Handler->ExtractClientData(Client->GetClientId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Offsets, (TVector<ui64>{ 44 }));
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Rows, 1);
+        UNIT_ASSERT_GT(batches.front().DataSize, 0);
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().DataSize, Client->Notifications[1].DataSize);
+        UNIT_ASSERT_VALUES_EQUAL(firstDataSize + batches.front().DataSize, Client->DataSize);
+        CheckMessageBatch(std::move(batches.front().SerializedData), { TRow().AddString("third") });
+    }
+
+    Y_UNIT_TEST_F(OversizedMessageWithLastRowFiltered, TJsonParserDeliveryFixture) {
+        MakeClient(R"(col != "skip")");
+        const TString large(MAX_BATCH_SIZE + 1, 'x');
+        Handler->ParseRecords({ GetRecord(42, TStringBuilder() << R"({"col":")" << large << R"("}{"col":"last"}{"col":"skip"})") });
+        UNIT_ASSERT_VALUES_EQUAL(Client->Rows, 2);
+        UNIT_ASSERT_VALUES_EQUAL(Client->NextOffset, 43);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications[0].Offset, 42);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications[0].Rows, 2);
+        UNIT_ASSERT_GT(Client->DataSize, MAX_BATCH_SIZE);
+        auto batches = Handler->ExtractClientData(Client->GetClientId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Offsets, (TVector<ui64>{ 42, 42 }));
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Rows, 2);
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().DataSize, Client->DataSize);
+        CheckMessageBatch(std::move(batches.front().SerializedData), { TRow().AddString(large), TRow().AddString("last") });
+        UNIT_ASSERT(!Handler->HasClientData(Client->GetClientId()));
+    }
+
+    Y_UNIT_TEST_F(FilteredLastRowContributesWatermark, TJsonParserDeliveryFixture) {
+        MakeClient(R"(col != "1970-01-01T00:00:44Z")", R"(CAST(col AS Timestamp?))");
+        Handler->ParseRecords(
+            { GetRecord(42, R"([{"col":"1970-01-01T00:00:42Z"},{"col":"1970-01-01T00:00:43Z"},{"col":"1970-01-01T00:00:44Z"}])") });
+        UNIT_ASSERT_VALUES_EQUAL(Client->Rows, 2);
+        UNIT_ASSERT_VALUES_EQUAL(Client->NextOffset, 43);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications[0].Offset, 42);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications[0].Rows, 2);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications[0].Watermark, TInstant::Seconds(44));
+        auto batches = Handler->ExtractClientData(Client->GetClientId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Offsets, (TVector<ui64>{ 42, 42 }));
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Rows, 2);
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().DataSize, Client->DataSize);
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Watermark, TInstant::Seconds(44));
+        CheckMessageBatch(
+            std::move(batches.front().SerializedData), { TRow().AddString("1970-01-01T00:00:42Z"), TRow().AddString("1970-01-01T00:00:43Z") });
+    }
+
+    Y_UNIT_TEST_F(AllRowsFilteredStillAdvanceWatermark, TJsonParserDeliveryFixture) {
+        MakeClient("FALSE", R"(CAST(col AS Timestamp?))");
+        Handler->ParseRecords(
+            { GetRecord(42, R"({"col":"1970-01-01T00:00:42Z"}{"col":"1970-01-01T00:00:45Z"}{"col":"1970-01-01T00:00:43Z"})") });
+        UNIT_ASSERT_VALUES_EQUAL(Client->Rows, 0);
+        UNIT_ASSERT_VALUES_EQUAL(Client->NextOffset, 43);
+        UNIT_ASSERT_VALUES_EQUAL(Client->DataSize, 0);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications[0].Offset, 42);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications[0].Rows, 0);
+        UNIT_ASSERT_VALUES_EQUAL(Client->Notifications[0].Watermark, TInstant::Seconds(45));
+        UNIT_ASSERT(Handler->HasClientData(Client->GetClientId()));
+        auto batches = Handler->ExtractClientData(Client->GetClientId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Offsets, (TVector<ui64>{ 42 }));
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Rows, 0);
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().DataSize, 0);
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Watermark, TInstant::Seconds(45));
+        UNIT_ASSERT(!Handler->HasClientData(Client->GetClientId()));
     }
 
     Y_UNIT_TEST_F(EmptyMessagesAdvanceOffsetWithoutRows, TJsonParserDeliveryFixture) {

@@ -42,7 +42,10 @@ public:
                 .RetrySettings(NYdb::NRetry::TRetryOperationSettings().MaxRetries(0)));
     }
 
-    void CheckMessages(const std::vector<std::string>& messages, const std::vector<std::string>& expected, bool skipJsonErrors = false) {
+    void CheckMessages(std::vector<std::string> messages, std::vector<std::string> expected, bool skipJsonErrors = false) {
+        // Read through a separate topic message so LIMIT cannot hide extra rows from the last tested message.
+        messages.emplace_back(R"({"value":"__end_of_test__"})");
+        expected.emplace_back("__end_of_test__");
         Init();
         auto asyncResult = StartReading(expected.size(), skipJsonErrors);
         Sleep(TDuration::Seconds(1));
@@ -94,6 +97,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsJsonParsing) {
                           R"([{"value":"fifth"},{"value":"sixth"}])",
                       },
             { "first", "second", "third", "fourth", "fifth", "sixth" }, /* skipJsonErrors */ true);
+    }
+
+    Y_UNIT_TEST_F(TrailingEmptyAndMalformedMessages, TJsonParsingFixture) {
+        CheckMessages({ R"([{"value":"first"},{"value":"second"}])", "[]", " \n", "{" }, { "first", "second" }, /* skipJsonErrors */ true);
     }
 }
 

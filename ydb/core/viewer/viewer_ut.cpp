@@ -4131,7 +4131,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NJson::TJsonValue json;
             NJson::ReadJsonTree(response->Response->Body, &json, true);
             const auto& groups = json.GetMap().at("StorageGroups").GetArray();
-            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 17);
+            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 18);
             UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
             const auto& group = groups[0].GetMap();
             UNIT_ASSERT_VALUES_EQUAL(group.at("GroupId").GetString(), "2");

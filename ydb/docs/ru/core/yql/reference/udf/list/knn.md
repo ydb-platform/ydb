@@ -78,8 +78,8 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
   - `3` — `Int8` (1 байт на элемент);
   - `4` — `Float16` (2 байта на элемент, [IEEE-754 binary16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format));
   - `5` — `BFloat16` (2 байта на элемент, [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format));
-  - `6`: `Float8E4M3` (1 байт на элемент, [E4M3FN](https://developer.nvidia.com/blog/floating-point-8-an-introduction-to-efficient-lower-precision-ai-training/));
-  - `7`: `Float8E5M2` (1 байт на элемент, [E5M2](https://developer.nvidia.com/blog/floating-point-8-an-introduction-to-efficient-lower-precision-ai-training/));
+  - `6`: `Float8E4M3` (1 байт на элемент, [E4M3FN](https://en.wikipedia.org/wiki/Minifloat#Machine_learning));
+  - `7`: `Float8E5M2` (1 байт на элемент, [E5M2](https://en.wikipedia.org/wiki/Minifloat#Machine_learning));
   - `8`: `Uint4` (4 бита на элемент);
   - `9`: `Int4` (4 бита на элемент);
   - `10` — `Bit` (1 бит на элемент).

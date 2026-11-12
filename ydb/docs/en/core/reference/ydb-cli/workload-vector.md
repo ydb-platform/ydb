@@ -64,8 +64,6 @@ Import vectors from files (CSV, TSV, or Parquet, optionally gzip-compressed). Th
 
 For CSV/TSV files, embeddings must be encoded as a list of floats, e.g., `"[ 1.0, 2.0, 3.0 ]"`. For Parquet files, embeddings can be a list of `float32` values or already serialized YDB binary embeddings.
 
-Numeric list imports with --vector-type int4 or --vector-type uint4 truncate toward zero and clamp to [-8, 7] or [0, 15], respectively, without scaling. NaN becomes 0, and infinities clamp to the corresponding bounds.
-
 Example:
 
 ```bash

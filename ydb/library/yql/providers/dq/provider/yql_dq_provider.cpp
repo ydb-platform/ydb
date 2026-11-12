@@ -102,7 +102,10 @@ TDataProviderInitializer GetDqDataProviderInitializer(
                     return false;
                 };
 
-                state->Settings->Init(gatewaysConfig->GetDq(), filter);
+                state->Settings->Init(gatewaysConfig->GetDq(), filter, state->TypeCtx->ProjectSettings);
+            } else {
+                state->Settings->ApplyProjectSettings(state->TypeCtx->ProjectSettings);
+                state->Settings->FreezeDefaults();
             }
 
             Y_UNUSED(progressWriter);

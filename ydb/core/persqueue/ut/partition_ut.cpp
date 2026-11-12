@@ -2277,6 +2277,69 @@ void TPartitionTxTestHelper::WaitTxPredicateReplyImpl(ui64 userActId, bool statu
 #endif
 }
 
+Y_UNIT_TEST_F(NewPartitionStartsWithoutWriteSessionsQuoter, TPartitionFixture)
+{
+    CreatePartition();
+    auto initialized = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1));
+    UNIT_ASSERT_C(initialized, "Partition initialization must not wait for the write sessions quoter");
+    CreateSession("client", "session-id");
+}
+
+Y_UNIT_TEST_F(RestoredPartitionStartsWithoutWriteSessionsQuoter, TPartitionFixture)
+{
+    CreatePartition({.Begin=0, .End=10});
+    auto initialized = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1));
+    UNIT_ASSERT_C(initialized, "Restored partition initialization must not wait for the write sessions quoter");
+    CreateSession("client", "session-id");
+}
+
+Y_UNIT_TEST_F(WriteInitThrottledMetricTracksLastMinuteMaximum, TPartitionFixture)
+{
+    // TSlidingWindow needs an initial timestamp greater than its window length.
+    Ctx->Runtime->UpdateCurrentTime(TInstant::Days(1));
+    CreatePartition();
+    UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1)));
+
+    auto recordWait = [&](ui64 milliseconds) {
+        const auto pipe = Ctx->Runtime->AllocateEdgeActor();
+        auto event = MakeHolder<TEvPQ::TEvChangeOwner>(1, "owner", pipe, Ctx->Edge, true);
+        event->WriteSessionQuotaWaitTime = TDuration::MilliSeconds(milliseconds);
+        Ctx->Runtime->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+    };
+
+    std::optional<ui64> lastMetric;
+    auto checkMetric = [&](ui64 expected) {
+        Ctx->Runtime->AdvanceCurrentTime(TDuration::Seconds(1));
+        Ctx->Runtime->Send(new IEventHandle(ActorId, Ctx->Edge, new TEvents::TEvWakeup()));
+        auto events = Ctx->Runtime->CaptureMailboxEvents(Ctx->Edge.Hint(), Ctx->Edge.NodeId());
+        for (const auto& event : events) {
+            if (auto* report = event->CastAsLocal<TEvPQ::TEvPartitionLabeledCounters>()) {
+                const auto& counters = report->LabeledCounters.GetCounters();
+                if (counters.Size() > METRIC_WRITE_INIT_THROTTLED_MS) {
+                    lastMetric = counters[METRIC_WRITE_INIT_THROTTLED_MS].Get();
+                }
+            }
+        }
+        UNIT_ASSERT(lastMetric);
+        UNIT_ASSERT_VALUES_EQUAL(*lastMetric, expected);
+    };
+
+    checkMetric(0);
+    recordWait(1200);
+    checkMetric(1200);
+    recordWait(300);
+    checkMetric(1200);
+
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::Seconds(30));
+    recordWait(700);
+    checkMetric(1200);
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::Seconds(29));
+    checkMetric(700);
+
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::Seconds(31));
+    checkMetric(0);
+}
+
 Y_UNIT_TEST_F(UserActCount, TPartitionFixture)
 {
     // In the test, we check that the reference count for `UserInfo` decreases in case of errors. To do this,

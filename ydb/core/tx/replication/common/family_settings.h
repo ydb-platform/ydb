@@ -2,6 +2,8 @@
 
 #include <util/generic/strbuf.h>
 
+#include <optional>
+
 namespace NKikimrReplication {
     enum TSchemaChange_TFamily_ECompression : int;
     enum TSchemaChange_TFamily_ECacheMode : int;
@@ -30,6 +32,7 @@ struct TFamilySettings {
     TStringBuf Media;
     EFamilyCompression Compression;
     EFamilyCacheMode CacheMode;
+    std::optional<ui32> CompressionLevel;
 
     static TFamilySettings FromProto(const NKikimrSchemeOp::TFamilyDescription* family);
 

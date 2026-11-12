@@ -2683,6 +2683,11 @@ private:
             }
         }
         YQL_ENSURE(indexDesc);
+        // Old schemas omit the index owner; use the same fallback as the
+        // metadata loader when resolving the index implementation tables.
+        vectorTopK.MutableHnswIndexId()->SetOwnerId(
+            indexDesc->PathOwnerId ? indexDesc->PathOwnerId : mainTable->Metadata->PathId.OwnerId());
+        vectorTopK.MutableHnswIndexId()->SetLocalId(indexDesc->LocalPathId);
 
         // Index settings
         auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
@@ -3174,6 +3179,9 @@ private:
 
             const auto* indexDesc = tableMeta->GetIndex(vectorSearch.Index().Value()).second;
             YQL_ENSURE(indexDesc);
+            proto.MutableHnswIndexId()->SetOwnerId(
+                indexDesc->PathOwnerId ? indexDesc->PathOwnerId : tableMeta->PathId.OwnerId());
+            proto.MutableHnswIndexId()->SetLocalId(indexDesc->LocalPathId);
 
             // Index settings
             const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);

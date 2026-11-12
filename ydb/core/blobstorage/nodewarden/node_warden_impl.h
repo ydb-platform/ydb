@@ -21,7 +21,7 @@
 namespace NKikimr {
     struct TNodeWardenConfig;
 
-    namespace NBridge {
+    namespace NGroupSyncer {
         struct TSyncerDataStats;
     }
 }
@@ -890,7 +890,7 @@ namespace NKikimr::NStorage {
         void ApplyReplBrokerConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Bridge syncer operation
+        // Group syncer operation
 
         struct TWorkingSyncer {
             const TGroupId BridgeProxyGroupId;
@@ -906,7 +906,7 @@ namespace NKikimr::NStorage {
             ui32 NumFinishOK = 0;
             ui32 NumFinishError = 0;
             std::optional<TString> LastErrorReason;
-            std::shared_ptr<NBridge::TSyncerDataStats> SyncerDataStats;
+            std::shared_ptr<NGroupSyncer::TSyncerDataStats> SyncerDataStats;
 
             ui64 ReportedBytesDone = 0;
             ui64 ReportedBytesTotal = 0;

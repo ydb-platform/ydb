@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/protos
     ydb/library/conclusion
     ydb/services/metadata/secret/accessor
     contrib/restricted/aws/aws-crt-cpp

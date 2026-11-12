@@ -169,11 +169,20 @@ namespace NKikimr {
             TBridgeInfo::TPtr BridgeInfo;
             std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
 
-            TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const {
+            // Storage pool pile overrides this transaction follows instead of the adopted ones. It is set by a dry run
+            // of the operation BSC is going to execute after it gets the StorageConfig being proposed, and hence after
+            // it adopts the overrides of that config.
+            const TStoragePoolPileOverrideRules *PileOverrideRules = nullptr;
+
+            const TStoragePoolPileOverrideRules *GetPileOverrideRules() const {
                 // the adopted rules, not the ones of the StorageConfig being proposed: BSC keeps following them until it
                 // adopts the new ones, which happens separately from this transaction
+                return PileOverrideRules ? PileOverrideRules : Self.GetPileOverrideRules();
+            }
+
+            TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const {
                 return Self.ResolveStoragePoolForPile(id, StoragePools.Get().at(id), pileId, BridgeInfo.get(),
-                    Self.GetPileOverrideRules());
+                    GetPileOverrideRules());
             }
 
             THashMap<TVSlotId, ui64> PDiskGuidsForDeletedVSlots;

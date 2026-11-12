@@ -58,6 +58,7 @@ SRCS(
     pool_stats_collector.cpp
     pool_stats_collector.h
     request_types.h
+    resource_profile.cpp
     resource_profile.h
     row_version.cpp
     row_version.h

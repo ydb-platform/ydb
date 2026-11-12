@@ -1,6 +1,6 @@
 # Sourced by build_and_test_ya: reuse its params array, paths and analytics function.
 # Experiment: compile/link everything before the first test attempt.
-# Keep this run's local cache; remote cache remains disabled by the workflow.
+# Reuse the normal remote build cache and retain local outputs for the test phase.
 BUILD_PREPARE_DIR="$PUBLIC_DIR/build_prepare"
 mkdir -p "$BUILD_PREPARE_DIR"
 echo "19 [Build before tests]($PUBLIC_DIR_URL/build_prepare/)" >> "$SUMMARY_LINKS"

@@ -42,6 +42,7 @@ public:
     FEATURE_FLAG_SETTER(EnableScriptExecutionOperations)
     FEATURE_FLAG_SETTER(EnableExternalDataSources)
     FEATURE_FLAG_SETTER(EnableForceImmediateEffectsExecution)
+    FEATURE_FLAG_SETTER(EnableHnswIndex)
     FEATURE_FLAG_SETTER(EnableTempTables)
     FEATURE_FLAG_SETTER(EnableChangefeedDynamoDBStreamsFormat)
     FEATURE_FLAG_SETTER(EnableChangefeedDebeziumJsonFormat)
@@ -88,6 +89,7 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardDetailedMetrics)
     FEATURE_FLAG_SETTER(EnableTopicDeferredPublish)
     FEATURE_FLAG_SETTER(TransferInternalDataDecompression)
+    FEATURE_FLAG_SETTER(EnableCdcAggregator)
     #undef FEATURE_FLAG_SETTER
 };
 

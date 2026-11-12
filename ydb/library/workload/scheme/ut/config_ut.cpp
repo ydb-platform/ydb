@@ -15,6 +15,9 @@ topics: {count: 3, partitions: 16, alter_batch_size: 4}
         UNIT_ASSERT_VALUES_EQUAL(config.CreateConcurrency, 7);
         UNIT_ASSERT_VALUES_EQUAL(config.AlterConcurrency, 3);
         UNIT_ASSERT_VALUES_EQUAL(config.ObjectCount(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(config.InitialObjectCount(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(config.Tables->InitialCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(config.Topics->InitialCount, 3);
         UNIT_ASSERT_VALUES_EQUAL(config.Object(1).Path, "workload/nested/table_1");
         UNIT_ASSERT_VALUES_EQUAL(config.Object(2).Path, "workload/nested/topic_0");
         UNIT_ASSERT_VALUES_EQUAL(config.Object(4).Path, "workload/nested/topic_2");
@@ -30,6 +33,29 @@ topics: {count: 3, partitions: 16, alter_batch_size: 4}
         UNIT_ASSERT_VALUES_EQUAL(config.AlterConcurrency, 1);
         UNIT_ASSERT_VALUES_EQUAL(config.Object(0).AlterBatchSize, 1);
         UNIT_ASSERT_VALUES_EQUAL(config.Object(0).Path, "load/topic_0");
+        UNIT_ASSERT_VALUES_EQUAL(config.InitialObject(0).Path, "load/topic_0");
+    }
+
+    Y_UNIT_TEST(InitialCountsAndObjectNames) {
+        const auto config = ParseConfig("path: load\ntables: {count: 100, initial_count: 2, partitions: 1}\ntopics: {count: 50, initial_count: 1, partitions: 1}");
+        UNIT_ASSERT_VALUES_EQUAL(config.InitialObjectCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(config.InitialObject(1).Path, "load/table_1");
+        UNIT_ASSERT_VALUES_EQUAL(config.InitialObject(2).Path, "load/topic_0");
+        UNIT_ASSERT_EXCEPTION(config.InitialObject(3), yexception);
+        const auto zero = ParseConfig("path: load\ntables: {count: 100, initial_count: 0, partitions: 1}\ntopics: {count: 50, initial_count: 0, partitions: 1}");
+        UNIT_ASSERT_VALUES_EQUAL(zero.InitialObjectCount(), 0);
+        UNIT_ASSERT_EXCEPTION(zero.InitialObject(0), yexception);
+        const auto topics = ParseConfig("path: load\ntables: {count: 100, initial_count: 0, partitions: 1}\ntopics: {count: 50, initial_count: 1, partitions: 1}");
+        UNIT_ASSERT_VALUES_EQUAL(topics.InitialObject(0).Path, "load/topic_0");
+    }
+
+    Y_UNIT_TEST(RejectsInvalidInitialCounts) {
+        for (const TString& value : {"-1", "3", "1.5", "true", "4294967296", "null", "[]", "{}", "1e3"}) {
+            for (const TString& group : {"tables", "topics"}) {
+                UNIT_ASSERT_EXCEPTION(ParseConfig("path: load\n" + group + ": {count: 2, partitions: 1, initial_count: " + value + "}"), std::exception);
+            }
+        }
+        UNIT_ASSERT_EXCEPTION(ParseConfig("path: load\ntables: {count: 2, partitions: 1, initial_count: 0, initial_count: 1}"), std::exception);
     }
 
     Y_UNIT_TEST(RejectsInvalidPaths) {
@@ -68,6 +94,7 @@ topics: {count: 3, partitions: 16, alter_batch_size: 4}
     Y_UNIT_TEST(ObjectCountDoesNotOverflow) {
         const auto config = ParseConfig("path: load\ntables: {count: 4294967295, partitions: 1}\ntopics: {count: 1, partitions: 1}");
         UNIT_ASSERT_VALUES_EQUAL(config.ObjectCount(), 4294967296ULL);
+        UNIT_ASSERT_VALUES_EQUAL(config.InitialObjectCount(), 4294967296ULL);
         UNIT_ASSERT_VALUES_EQUAL(config.Object(4294967295ULL).Path, "load/topic_0");
     }
 }

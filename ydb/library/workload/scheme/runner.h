@@ -10,13 +10,16 @@
 
 namespace NYdbWorkload::NScheme {
 
+enum class EObjectState { Missing, WithoutBatch, WithBatch };
+
 // Methods throw on failure. In particular, an uncertain DDL outcome is not retried.
 class IClient {
 public:
     virtual ~IClient() = default;
-    virtual void MakeDirectory(const TString& path) = 0;
+    // Ensure the directory exists and refresh the inventory used by Inspect.
+    virtual void PrepareDirectory(const TString& path) = 0;
     virtual void Create(const TObject& object) = 0;
-    virtual bool Inspect(const TObject& object) = 0; // Whether the complete ALTER batch is present.
+    virtual EObjectState Inspect(const TObject& object) = 0;
     virtual void Alter(const TObject& object, bool add) = 0;
 };
 
@@ -34,7 +37,7 @@ public:
     std::array<ui64, OperationCount> Statistics() const;
 
 private:
-    void Execute(ui32 concurrency, const std::function<void(ui32, ui32, const TCancelled&)>& worker);
+    void Execute(ui64 concurrency, ui64 objects, const std::function<void(ui32, ui32, const TCancelled&)>& worker);
     void Count(EOperation operation);
 
     const TConfig& Config;

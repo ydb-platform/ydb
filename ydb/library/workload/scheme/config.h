@@ -10,6 +10,7 @@ enum class EObjectType { Table, Topic };
 
 struct TGroupConfig {
     ui32 Count = 0;
+    ui32 InitialCount = 0;
     ui32 Partitions = 0;
     ui32 AlterBatchSize = 1;
 };
@@ -29,7 +30,9 @@ struct TConfig {
     std::optional<TGroupConfig> Topics;
 
     ui64 ObjectCount() const;
+    ui64 InitialObjectCount() const;
     TObject Object(ui64 index) const;
+    TObject InitialObject(ui64 index) const;
 };
 
 TConfig ParseConfig(const TString& yaml);

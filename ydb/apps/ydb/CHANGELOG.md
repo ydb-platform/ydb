@@ -1,4 +1,4 @@
-* Added `ydb workload scheme init|run` to create and alter row tables and topics using YAML configuration, with separate CREATE/ALTER concurrency limits and configurable ALTER batch sizes.
+* Added `ydb workload scheme init|run` to create and alter row tables and topics using YAML configuration, with optional `initial_count` preparation, mixed CREATE/ALTER traffic in `run`, separate concurrency limits and configurable ALTER batch sizes.
 * Added `--expected-generation` option to `ydb admin cluster bridge update` to apply a cluster state update only if the cluster state still has the given generation.
 * Added `ydb admin cluster bridge set-database-mode` to enable or disable bridge mode for the database selected with `--target-database`. Use `bridged` or `ordinary` as the required mode argument, and optionally `--retain-pile` with `ordinary`.
 * Added `ydb admin cluster bridge destroy-pile` command to destroy a DISCONNECTED pile along with all its data (asks for confirmation unless `-y` is given).

@@ -9,6 +9,7 @@
 #include <util/string/split.h>
 
 #include <unordered_set>
+#include <unordered_map>
 
 namespace NYdb::NConsoleClient {
 namespace {
@@ -43,7 +44,7 @@ public:
         }
     }
 
-    void MakeDirectory(const TString& path) override {
+    void PrepareDirectory(const TString& path) override {
         std::string fullPath = Database;
         for (const auto& part : StringSplitter(path).Split('/')) {
             fullPath += "/" + std::string(part.Token());
@@ -56,6 +57,14 @@ public:
                 }
                 Check(Scheme.MakeDirectory(fullPath, NScheme::TMakeDirectorySettings().ClientTimeout(RequestTimeout)).GetValueSync(), "MakeDirectory", fullPath);
             }
+        }
+        // SCHEME_ERROR from DescribePath can also mean a scheme failure. Determine absence
+        // from a successful directory listing, and propagate every error when inspecting existing objects.
+        const auto listing = Scheme.ListDirectory(fullPath, NScheme::TListDirectorySettings().ClientTimeout(RequestTimeout)).GetValueSync();
+        Check(listing, "ListDirectory", fullPath);
+        Entries.clear();
+        for (const auto& entry : listing.GetChildren()) {
+            Entries.emplace(entry.Name, entry.Type);
         }
     }
 
@@ -84,8 +93,14 @@ public:
         }
     }
 
-    bool Inspect(const TObject& object) override {
+    EObjectState Inspect(const TObject& object) override {
         const auto path = FullPath(object);
+        const auto entry = Entries.find(path.substr(path.rfind('/') + 1));
+        if (entry == Entries.end()) {
+            return EObjectState::Missing;
+        }
+        const auto expectedType = object.Type == EObjectType::Table ? NScheme::ESchemeEntryType::Table : NScheme::ESchemeEntryType::Topic;
+        Y_ENSURE(entry->second == expectedType, "Unexpected object type at " << path);
         std::unordered_set<std::string> names;
         if (object.Type == EObjectType::Table) {
             const auto result = Session().DescribeTable(path, NTable::TDescribeTableSettings().ClientTimeout(RequestTimeout)).GetValueSync();
@@ -107,7 +122,7 @@ public:
                     names.insert(column.Name);
                 }
             }
-            return CheckBatch(names, "extra_", object);
+            return CheckBatch(names, "extra_", object) ? EObjectState::WithBatch : EObjectState::WithoutBatch;
         }
         const auto result = Topics.DescribeTopic(path, NTopic::TDescribeTopicSettings().ClientTimeout(RequestTimeout)).GetValueSync();
         Check(result, "DescribeTopic", path);
@@ -119,7 +134,7 @@ public:
         for (const auto& consumer : description.GetConsumers()) {
             names.insert(consumer.GetConsumerName());
         }
-        return CheckBatch(names, "reader_", object);
+        return CheckBatch(names, "reader_", object) ? EObjectState::WithBatch : EObjectState::WithoutBatch;
     }
 
     void Alter(const TObject& object, bool add) override {
@@ -165,6 +180,7 @@ private:
     NScheme::TSchemeClient Scheme;
     NTable::TTableClient Tables;
     NTopic::TTopicClient Topics;
+    std::unordered_map<std::string, NScheme::ESchemeEntryType> Entries;
 };
 
 } // namespace

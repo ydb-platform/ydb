@@ -17,7 +17,7 @@ namespace {
 class TCommandSchemeLoad final : public TYdbCommand, private TInterruptableCommand {
 public:
     explicit TCommandSchemeLoad(bool init)
-        : TYdbCommand(init ? "init" : "run", {}, init ? "Create workload tables and topics" : "Repeatedly alter workload tables and topics")
+        : TYdbCommand(init ? "init" : "run", {}, init ? "Create initial_count tables and topics" : "Create missing objects and repeatedly alter tables and topics")
         , Init(init)
     {}
 
@@ -26,7 +26,7 @@ public:
         config.SetFreeArgsNum(0);
         config.Opts->AddLongOption("config", "Workload YAML configuration file.").Required().RequiredArgument("PATH").StoreResult(&ConfigPath);
         if (!Init) {
-            config.Opts->AddLongOption('s', "seconds", "Duration of ALTER traffic in seconds; waits for outstanding requests afterwards.")
+            config.Opts->AddLongOption('s', "seconds", "Duration of CREATE/ALTER traffic after schema validation; waits for outstanding requests afterwards.")
                 .DefaultValue(60).StoreResult(&Seconds);
         }
     }
@@ -41,7 +41,8 @@ public:
         SetInterruptHandlers();
         Y_DEFER { ResetInterrupted(); };
         auto driver = CreateDriver(config);
-        const auto concurrency = Init ? WorkloadConfig.CreateConcurrency : WorkloadConfig.AlterConcurrency;
+        const ui64 concurrency = Init ? WorkloadConfig.CreateConcurrency
+            : ui64(WorkloadConfig.CreateConcurrency) + WorkloadConfig.AlterConcurrency;
         auto client = CreateSchemeWorkloadClient(driver, config.Database, std::min<ui64>(concurrency, WorkloadConfig.ObjectCount()));
         NYdbWorkload::NScheme::TRunner runner(WorkloadConfig, *client, [] { return IsInterrupted(); });
         const auto started = TMonotonic::Now();

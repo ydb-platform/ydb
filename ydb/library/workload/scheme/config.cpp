@@ -26,23 +26,26 @@ void CheckKeys(const YAML::Node& node, std::initializer_list<TString> allowed, c
     }
 }
 
-ui32 PositiveInteger(const YAML::Node& node, const TString& name) {
-    Y_ENSURE(node.IsScalar(), name << " must be a positive integer");
+ui32 Integer(const YAML::Node& node, const TString& name, ui32 minimum = 1) {
+    Y_ENSURE(node.IsScalar(), name << " must be an integer");
     const TString value(node.Scalar());
     Y_ENSURE(!value.empty() && std::all_of(value.begin(), value.end(), [](char c) { return c >= '0' && c <= '9'; }),
-        name << " must be a positive integer");
+        name << " must be an integer");
     ui32 result = 0;
-    Y_ENSURE(TryFromString(value, result) && result > 0, name << " must be in [1, " << std::numeric_limits<ui32>::max() << "]");
+    Y_ENSURE(TryFromString(value, result) && result >= minimum,
+        name << " must be in [" << minimum << ", " << std::numeric_limits<ui32>::max() << "]");
     return result;
 }
 
 TGroupConfig ParseGroup(const YAML::Node& node, const TString& name) {
-    CheckKeys(node, {"count", "partitions", "alter_batch_size"}, name);
+    CheckKeys(node, {"count", "initial_count", "partitions", "alter_batch_size"}, name);
     TGroupConfig result;
-    result.Count = PositiveInteger(node["count"], name + ".count");
-    result.Partitions = PositiveInteger(node["partitions"], name + ".partitions");
+    result.Count = Integer(node["count"], name + ".count");
+    result.InitialCount = node["initial_count"] ? Integer(node["initial_count"], name + ".initial_count", 0) : result.Count;
+    Y_ENSURE(result.InitialCount <= result.Count, name << ".initial_count must not exceed count");
+    result.Partitions = Integer(node["partitions"], name + ".partitions");
     if (node["alter_batch_size"]) {
-        result.AlterBatchSize = PositiveInteger(node["alter_batch_size"], name + ".alter_batch_size");
+        result.AlterBatchSize = Integer(node["alter_batch_size"], name + ".alter_batch_size");
     }
     return result;
 }
@@ -67,10 +70,10 @@ TConfig ParseConfig(const TString& yaml) {
         }
     }
     if (root["create_concurrency"]) {
-        result.CreateConcurrency = PositiveInteger(root["create_concurrency"], "create_concurrency");
+        result.CreateConcurrency = Integer(root["create_concurrency"], "create_concurrency");
     }
     if (root["alter_concurrency"]) {
-        result.AlterConcurrency = PositiveInteger(root["alter_concurrency"], "alter_concurrency");
+        result.AlterConcurrency = Integer(root["alter_concurrency"], "alter_concurrency");
     }
     // The executor uses signed worker indices.
     Y_ENSURE(result.CreateConcurrency <= std::numeric_limits<int>::max()
@@ -87,6 +90,18 @@ TConfig ParseConfig(const TString& yaml) {
 
 ui64 TConfig::ObjectCount() const {
     return ui64(Tables ? Tables->Count : 0) + (Topics ? Topics->Count : 0);
+}
+
+ui64 TConfig::InitialObjectCount() const {
+    return ui64(Tables ? Tables->InitialCount : 0) + (Topics ? Topics->InitialCount : 0);
+}
+
+TObject TConfig::InitialObject(ui64 index) const {
+    Y_ENSURE(index < InitialObjectCount(), "Initial object index out of range");
+    if (Tables && index >= Tables->InitialCount) {
+        index += Tables->Count - Tables->InitialCount;
+    }
+    return Object(index);
 }
 
 TObject TConfig::Object(ui64 index) const {

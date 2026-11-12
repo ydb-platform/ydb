@@ -1699,8 +1699,13 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     pathId.ToProto(desc.MutablePathId());
     info->Serialize(desc);
 
-    if (const auto* shardInfo = ShardInfos.FindPtr(info->AggregatorShardIdx); shardInfo && shardInfo->TabletID != InvalidTabletId) {
-        desc.SetAggregatorTabletId(ui64(shardInfo->TabletID));
+    if (const auto& shardIdx = info->AggregatorShardIdx; shardIdx != InvalidShardIdx) {
+        Y_ABORT_UNLESS(ShardInfos.contains(shardIdx));
+        const auto& shardInfo = ShardInfos.at(shardIdx);
+
+        if (shardInfo.TabletID != InvalidTabletId) {
+            desc.SetAggregatorTabletId(ui64(shardInfo.TabletID));
+        }
     }
 
     Y_ABORT_UNLESS(PathsById.contains(pathId));

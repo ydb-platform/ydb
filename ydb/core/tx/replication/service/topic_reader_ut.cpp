@@ -144,6 +144,55 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
     }
 
+    Y_UNIT_TEST(SourceIdIsQualifiedByPrefix) {
+        // The destination shard deduplicates by the source id of TEvData. A plain reader names the
+        // partition index; a reader with a prefix names "<prefix>/<partition>", so a table that was
+        // a replica of an earlier stream does not skip the new stream's records (manual switchover C1).
+        TEnv env;
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
+        {
+            auto settings = NYdb::NTopic::TCreateTopicSettings()
+                .BeginAddConsumer()
+                    .ConsumerName("consumer")
+                .EndAddConsumer();
+            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(env.GetYdbProxy(),
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+        UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-1"));
+
+        const auto readSource = [&](const TString& prefix) {
+            auto settings = TEvYdbProxy::TTopicReaderSettings()
+                .ConsumerName("consumer")
+                .AutoCommit(false)
+                .AppendTopics(NYdb::NTopic::TTopicReadSettings()
+                    .Path("/Root/topic")
+                    .AppendPartitionIds(0)
+                );
+            if (prefix) {
+                settings.SourceIdPrefix(prefix);
+            }
+            TActorId reader;
+            do {
+                reader = CreateReader(env, settings);
+                env.SendAsync(reader, new TEvWorker::TEvPoll());
+                TAutoPtr<IEventHandle> ev;
+                do {
+                    env.GetRuntime().template GrabEdgeEvents<TEvWorker::TEvData, TEvWorker::TEvGone>(ev);
+                } while (ev->Sender != reader);
+                if (ev->GetTypeRewrite() == TEvWorker::EvData) {
+                    const auto source = ev->Get<TEvWorker::TEvData>()->Source;
+                    env.SendAsync(reader, new TEvents::TEvPoison());
+                    return source;
+                }
+            } while (true);
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(readSource(""), "0");
+        UNIT_ASSERT_VALUES_EQUAL(readSource("feed-a"), "feed-a/0");
+    }
+
     Y_UNIT_TEST(SourceIndexSchemeErrorIsRetryable) {
         for (const bool retryOnSchemeError : {false, true}) {
             TTestActorRuntime runtime;

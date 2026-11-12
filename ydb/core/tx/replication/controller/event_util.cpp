@@ -3,6 +3,12 @@
 
 namespace NKikimr::NReplication::NController {
 
+TString MakeSourceIdPrefix(const NKikimrReplication::TReplicationConfig& config, const TReplication::ITarget& target) {
+    // A replication without an initial scan attaches to an existing table, which may hold the
+    // deduplication offsets of an earlier stream under the bare partition index.
+    return config.GetInitialScan() ? TString() : target.GetStreamName();
+}
+
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         const TReplication::TPtr replication,
         const TReplication::ITarget& target,
@@ -17,6 +23,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         replication->GetConfig().GetConsistencySettings(),
         target.GetStreamPath(),
         target.GetStreamConsumerName(),
+        MakeSourceIdPrefix(replication->GetConfig(), target),
         target.GetDstPathId(),
         replication->GetConfig().GetTransferSpecific().GetBatching(),
         replication->GetDatabase(),
@@ -37,6 +44,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         const NKikimrReplication::TConsistencySettings& consistencySettings,
         const TString& srcStreamPath,
         const TString& srcStreamConsumerName,
+        const TString& sourceIdPrefix,
         const TPathId& dstPathId,
         const NKikimrReplication::TBatchingSettings& batchingSettings,
         const TString& database,
@@ -65,6 +73,9 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     readerSettings.SetTopicPath(srcStreamPath);
     readerSettings.SetTopicPartitionId(workerId);
     readerSettings.SetConsumerName(srcStreamConsumerName);
+    if (sourceIdPrefix) {
+        readerSettings.SetSourceIdPrefix(sourceIdPrefix);
+    }
 
     switch (config->GetKind()) {
         case TReplication::ETargetKind::Table:

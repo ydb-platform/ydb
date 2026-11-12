@@ -143,7 +143,12 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             totalSize += msg.GetData().size();
         }
 
-        auto event = MakeHolder<TEvWorker::TEvData>(result.PartitionId, ToString(result.PartitionId), std::move(result.Messages));
+        // The destination shard deduplicates by this name; qualify it so a new stream on a
+        // table that was a replica before does not collide with the old stream's offsets.
+        const TString source = Settings.SourceIdPrefix_
+            ? TString(TStringBuilder() << Settings.SourceIdPrefix_ << '/' << result.PartitionId)
+            : ToString(result.PartitionId);
+        auto event = MakeHolder<TEvWorker::TEvData>(result.PartitionId, source, std::move(result.Messages));
 
         if (Settings.ReportStats_) {
             event->Stats = std::make_unique<TWorkerDetailedStats>(EWorkerOperation::NONE, std::make_unique<ReplicationTopicReadStats>(),

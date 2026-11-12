@@ -53,7 +53,7 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
 
             auto ev = MakeRunWorkerEv(
                 ReplicationId, TargetId, Config, partition.GetPartitionId(),
-                ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, DstPathId,
+                ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, SourceIdPrefix, DstPathId,
                 BatchingSettings, Database, MetricsLevel, Location);
             Send(Parent, std::move(ev));
         }
@@ -82,6 +82,7 @@ public:
             ui64 tid,
             const TString& srcStreamPath,
             const TString& srcStreamConsumerName,
+            const TString& sourceIdPrefix,
             const TPathId& dstPathId,
             const TReplication::ITarget::IConfig::TPtr& config,
             const NKikimrReplication::TBatchingSettings& batchingSettings,
@@ -96,6 +97,7 @@ public:
         , TargetId(tid)
         , SrcStreamPath(srcStreamPath)
         , SrcStreamConsumerName(srcStreamConsumerName)
+        , SourceIdPrefix(sourceIdPrefix)
         , DstPathId(dstPathId)
         , LogPrefix(CreateActorLogPrefix("TableWorkerRegistar", ReplicationId, TargetId))
         , Config(config)
@@ -131,6 +133,7 @@ private:
     const ui64 TargetId;
     const TString SrcStreamPath;
     const TString SrcStreamConsumerName;
+    const TString SourceIdPrefix;
     const TPathId DstPathId;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
     const TReplication::ITarget::IConfig::TPtr Config;
@@ -373,7 +376,7 @@ IActor* TTargetWithStream::CreateWorkerRegistar(const TActorContext& ctx) const 
 
     return new TWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
         config.GetSrcConnectionParams(), config.GetConsistencySettings(),
-        replication->GetId(), GetId(), GetStreamPath(), GetStreamConsumerName(), GetDstPathId(), GetConfig(),
+        replication->GetId(), GetId(), GetStreamPath(), GetStreamConsumerName(), MakeSourceIdPrefix(config, *this), GetDstPathId(), GetConfig(),
         config.GetTransferSpecific().GetBatching(), replication->GetDatabase(), config.GetMetricsConfig(),
         replication->GetLocation());
 }

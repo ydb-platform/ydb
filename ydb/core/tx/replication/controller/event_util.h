@@ -6,6 +6,9 @@
 
 namespace NKikimr::NReplication::NController {
 
+// Deduplication source-id prefix for the workers of a target; empty for the bare partition index.
+TString MakeSourceIdPrefix(const NKikimrReplication::TReplicationConfig& config, const TReplication::ITarget& target);
+
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     const TReplication::TPtr replication,
     const TReplication::ITarget& target,
@@ -20,6 +23,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     const NKikimrReplication::TConsistencySettings& consistencySettings,
     const TString& srcStreamPath,
     const TString& srcStreamConsumerName,
+    const TString& sourceIdPrefix,
     const TPathId& dstPathId,
     const NKikimrReplication::TBatchingSettings& batchingSettings,
     const TString& database,

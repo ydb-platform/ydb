@@ -32,18 +32,11 @@ namespace {
         TImportInfo::EState state = TImportInfo::EState::Invalid;
 
         for (const auto& item : importInfo.Items) {
-            // New persisted states cannot be inserted into the old enum ordering.
-            // Compare their public phases so a mixed import keeps reporting the
-            // earliest unfinished phase rather than the smallest storage value.
-            auto itemState = item.State;
-            if (itemState == TImportInfo::EState::CreateKesusParent) {
-                itemState = TImportInfo::EState::CreateSchemeObject;
-            }
             if (state == TImportInfo::EState::Invalid) {
-                state = itemState;
+                state = item.State;
             }
 
-            state = Min(state, itemState);
+            state = Min(state, item.State);
         }
 
         return state;
@@ -484,22 +477,6 @@ void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev, cons
 
 void TSchemeShard::Handle(TEvPrivate::TEvImportKesusResult::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxProgressImport(ev), ctx);
-}
-
-void TSchemeShard::Handle(TEvPrivate::TEvImportRetryKesusParent::TPtr& ev, const TActorContext& ctx) {
-    const auto& message = *ev->Get();
-    const auto it = Imports.find(message.ImportId);
-    if (it == Imports.end() || it->second->State != TImportInfo::EState::Waiting
-        || message.ItemIdx >= it->second->Items.size())
-    {
-        return;
-    }
-    const auto& item = it->second->Items.at(message.ItemIdx);
-    if (item.State == TImportInfo::EState::CreateKesusParent
-        && item.SubState == TImportInfo::TItem::ESubState::WaitingForParent)
-    {
-        Execute(CreateTxProgressImport(message.ImportId, message.ItemIdx), ctx);
-    }
 }
 
 void TSchemeShard::ResumeImports(const TVector<ui64>& ids, const TActorContext& ctx) {

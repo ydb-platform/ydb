@@ -6227,7 +6227,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvImportSchemaMappingReady, Handle);
         HFuncTraced(TEvPrivate::TEvImportSchemeQueryResult, Handle);
         HFuncTraced(TEvPrivate::TEvImportKesusResult, Handle);
-        HFuncTraced(TEvPrivate::TEvImportRetryKesusParent, Handle);
         // } // NImport
 
         // namespace NBackup {

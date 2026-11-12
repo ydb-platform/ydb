@@ -11341,29 +11341,72 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         const ui64 originalTablet = t.CreateNode("Blocker");
         auto request = t.MakeImport();
         request.MutableImportFromS3Settings()->mutable_items(0)->set_destination_path("/MyRoot/Blocker/Restored");
-        t.Finish(t.StartImport(request), Ydb::StatusIds::CANCELLED, "Cannot create coordination node parent");
+        t.Finish(t.StartImport(request), Ydb::StatusIds::CANCELLED);
         TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/Blocker/Restored"), {NLs::PathNotExist});
         UNIT_ASSERT_VALUES_EQUAL(t.TabletId("/MyRoot/Blocker"), originalTablet);
         UNIT_ASSERT_VALUES_EQUAL(t.DescribeResources("/MyRoot/Blocker").resources_size(), 0);
     }
 
-    Y_UNIT_TEST(RebootBeforeCreatingParentDirectories) {
+    Y_UNIT_TEST_FLAG(RebootDuringNestedCreation, Proposed) {
         TKesusImportEnv t;
-        t.WriteBackup(MakeResources());
+        t.WriteBackup(MakeContents());
         auto request = t.MakeImport();
         request.MutableImportFromS3Settings()->mutable_items(0)->set_destination_path("/MyRoot/Nested/Deeper/Restored");
+        ui64 createTxId = 0;
+        auto observer = t.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            if (IsKesusCreation(ev)) {
+                const auto& tx = ev->Get()->Record.GetTransaction(0);
+                UNIT_ASSERT_VALUES_EQUAL(tx.GetWorkingDir(), "/MyRoot");
+                UNIT_ASSERT_VALUES_EQUAL(tx.GetKesus().GetName(), "Nested/Deeper/Restored");
+                createTxId = ev->Get()->Record.GetTxId();
+            }
+        });
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> proposals(t.Runtime, [](const auto& ev) {
-            const auto& record = ev->Get()->Record;
-            return record.TransactionSize() && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMkDir;
+            return !Proposed && IsKesusCreation(ev);
+        });
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> plans(t.Runtime, [&](const auto& ev) {
+            if (Proposed && createTxId) {
+                for (const auto& tx : ev->Get()->Record.GetTransactions()) {
+                    if (tx.GetTxId() == createTxId) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         });
         const ui64 id = t.StartImport(request);
-        t.Runtime.WaitFor("parent creation proposal blocked", [&] { return !proposals.empty(); });
+        t.Runtime.WaitFor("nested creation interrupted", [&] {
+            return Proposed ? !plans.empty() : !proposals.empty();
+        });
         proposals.Stop();
+        plans.Stop();
         t.RebootSchemeShard();
+        plans.Unblock();
         t.Finish(id);
-        t.AssertResources(MakeResources(), "/MyRoot/Nested/Deeper/Restored");
+        t.AssertContents(MakeContents(), "/MyRoot/Nested/Deeper/Restored");
         proposals.Unblock();
         TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(CreationFailureRollsBackParentDirectories) {
+        TKesusImportEnv t;
+        t.WriteBackup(MakeContents());
+        auto request = t.MakeImport();
+        request.MutableImportFromS3Settings()->mutable_items(0)->set_destination_path("/MyRoot/Nested/Deeper/Restored");
+        {
+            auto observer = t.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([](auto& ev) {
+                if (IsKesusCreation(ev)) {
+                    // MkDir suboperations are proposed before Kesus validates its config.
+                    ev->Get()->Record.MutableTransaction(0)->MutableKesus()->MutableConfig()->set_path("invalid");
+                }
+            });
+            t.Finish(t.StartImport(request), Ydb::StatusIds::CANCELLED, "Setting path is not allowed");
+        }
+        TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/Nested"), {NLs::PathNotExist});
+        t.RebootSchemeShard();
+        TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/Nested"), {NLs::PathNotExist});
+        t.Finish(t.StartImport(request));
+        t.AssertContents(MakeContents(), "/MyRoot/Nested/Deeper/Restored");
     }
 
     Y_UNIT_TEST_FLAG(TwoItemsCreatingTheSameParent, InFlight) {
@@ -11372,20 +11415,16 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         auto request = t.MakeImport(false, false, {
             {"coordination", "/MyRoot/New/N1"}, {"coordination", "/MyRoot/New/N2"},
         });
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> proposals(t.Runtime, [](const auto& ev) {
-            const auto& record = ev->Get()->Record;
-            return record.TransactionSize() && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMkDir;
-        });
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> proposals(t.Runtime, IsKesusCreation);
         const ui64 id = t.StartImport(request);
         t.Runtime.WaitFor("both items decided to create the same parent", [&] { return proposals.size() >= 2; });
-        const ui64 firstParentTxId = proposals[0]->Get()->Record.GetTxId();
-        const ui64 secondParentTxId = proposals[1]->Get()->Record.GetTxId();
+        const ui64 firstCreateTxId = proposals[0]->Get()->Record.GetTxId();
+        const ui64 secondCreateTxId = proposals[1]->Get()->Record.GetTxId();
         const TActorId schemeShard = proposals[0]->Sender;
-        t.Runtime.EnableScheduleForActor(schemeShard);
         TBlockEvents<TEvTxProcessing::TEvPlanStep> plans(t.Runtime, [&](const auto& ev) {
             if (InFlight) {
                 for (const auto& tx : ev->Get()->Record.GetTransactions()) {
-                    if (tx.GetTxId() == firstParentTxId) {
+                    if (tx.GetTxId() == firstCreateTxId) {
                         return true;
                     }
                 }
@@ -11395,24 +11434,23 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         // In the completed case keep the first item's subscription alive while the second
         // sees an existing parent. In the in-flight case hold the actual parent creation.
         TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> notifications(t.Runtime, [&](const auto& ev) {
-            return !InFlight && ev->Get()->Record.GetTxId() == firstParentTxId && ev->Recipient == schemeShard;
+            return !InFlight && ev->Get()->Record.GetTxId() == firstCreateTxId && ev->Recipient == schemeShard;
         });
         proposals.Stop().Unblock(1);
         if (InFlight) {
-            t.Runtime.WaitFor("first parent creation still in flight", [&] { return !plans.empty(); });
+            t.Runtime.WaitFor("first creation still in flight", [&] { return !plans.empty(); });
         } else {
-            t.Env.TestWaitNotification(t.Runtime, firstParentTxId);
+            t.Env.TestWaitNotification(t.Runtime, firstCreateTxId);
         }
         bool secondProposalAnswered = false;
         auto observer = t.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](auto& ev) {
-            if (ev->Get()->Record.GetTxId() == secondParentTxId) {
-                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), InFlight
-                    ? NKikimrScheme::StatusMultipleModifications : NKikimrScheme::StatusAlreadyExists);
+            if (ev->Get()->Record.GetTxId() == secondCreateTxId) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted);
                 secondProposalAnswered = true;
             }
         });
         proposals.Unblock();
-        t.Runtime.WaitFor("second parent proposal answered", [&] { return secondProposalAnswered; });
+        t.Runtime.WaitFor("second Kesus proposal accepted", [&] { return secondProposalAnswered; });
         plans.Stop().Unblock();
         notifications.Stop().Unblock();
         t.Finish(id);

@@ -5,15 +5,6 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-// A null proposal with no error means that the destination's parent is ready.
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusParentPropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    const TImportInfo& importInfo,
-    ui32 itemIdx,
-    TString& error
-);
-
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusPropose(
     TSchemeShard* ss,
     TTxId txId,

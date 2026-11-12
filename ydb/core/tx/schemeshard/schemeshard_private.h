@@ -66,7 +66,6 @@ namespace TEvPrivate {
         EvKesusResourcesDescribeResult,
         EvKesusSemaphoresDescribeResult,
         EvImportKesusResult,
-        EvImportRetryKesusParent,
         EvEnd
     };
 
@@ -162,16 +161,6 @@ namespace TEvPrivate {
             , ItemIdx(itemIdx)
             , Success(success)
             , Error(error)
-        {}
-    };
-
-    struct TEvImportRetryKesusParent: public TEventLocal<TEvImportRetryKesusParent, EvImportRetryKesusParent> {
-        const ui64 ImportId;
-        const ui32 ItemIdx;
-
-        TEvImportRetryKesusParent(ui64 id, ui32 itemIdx)
-            : ImportId(id)
-            , ItemIdx(itemIdx)
         {}
     };
 

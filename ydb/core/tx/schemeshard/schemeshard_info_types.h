@@ -3978,7 +3978,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         DownloadExportMetadata = 7,
         DropPlaceholder = 8,
         FinalizeImport = 9,
-        CreateKesusParent = 11,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,
@@ -3994,7 +3993,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
             AllocateTxId = 0,
             Proposed,
             Subscribed,
-            WaitingForParent,
         };
 
         enum class EChangefeedState: ui8 {

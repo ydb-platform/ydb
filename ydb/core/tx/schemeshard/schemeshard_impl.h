@@ -1831,7 +1831,6 @@ public:
     void Handle(TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportKesusResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvImportRetryKesusParent::TPtr& ev, const TActorContext& ctx);
 
     void ResumeImports(const TVector<ui64>& ids, const TActorContext& ctx);
     // } // NImport

@@ -708,6 +708,7 @@ void TWriteSessionActor<Protocol>::DiscoverPartition(const NActors::TActorContex
         ctx.Send(
             NPQ::MakeWriteSessionsQuoterId(),
             new TEvWriteSessionsQuoter::TEvAcquireQuota(
+                InitialPQTabletConfig.GetYdbDatabasePath(),
                 FullConverter->GetClientsideName(),
                 PreferedPartition,
                 *ExpectedGeneration),

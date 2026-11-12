@@ -395,6 +395,13 @@ private:
         const TNodeInfo &node,
         TErrorInfo &error,
         const TActorContext &ctx) const;
+    bool CheckStateStorageRingGroup(ui32 ringGroupId,
+        ui32 currentRing,
+        const TActionOptions& options,
+        TInstant now,
+        TDuration duration,
+        TInstant defaultDeadline,
+        TErrorInfo& error) const;
     void AcceptPermissions(NKikimrCms::TPermissionResponse &resp, const TString &requestId,
         const TString &owner, i32 priority, const TActorContext &ctx, bool check = false);
     void ScheduleUpdateClusterInfo(const TActorContext &ctx, bool now = false);

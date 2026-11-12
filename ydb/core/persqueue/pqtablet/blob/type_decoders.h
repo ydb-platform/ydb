@@ -146,13 +146,22 @@ public:
         const ui32 maskSize = ReadUnaligned<ui32>(sizePtr);
         AFL_ENSURE(static_cast<size_t>(maskSize) + sizeof(ui32) <= data.Size())
             ("description", "Mask is out of chunk bounds")("maskSize", maskSize)("chunkSize", data.Size());
+        BitsLeft = static_cast<size_t>(maskSize) * 8;
         BitIter.Reset((const ui8*)(sizePtr - maskSize));
     }
-    inline bool IsNotNull() const { return BitIter.Peek(); }
-    inline bool Next() { return BitIter.Next(); }
+    inline bool IsNotNull() const {
+        AFL_ENSURE(BitsLeft > 0)("description", "Nullable chunk mask is exhausted");
+        return BitIter.Peek();
+    }
+    inline bool Next() {
+        AFL_ENSURE(BitsLeft > 0)("description", "Nullable chunk mask is exhausted");
+        --BitsLeft;
+        return BitIter.Next();
+    }
 
 private:
     TMaskIterator BitIter;
+    size_t BitsLeft = 0;
 };
 
 template <>
@@ -191,6 +200,9 @@ public:
 
     TDataRef GetValue(size_t index) const override {
         if (Mask.IsNotNull(index)) {
+            AFL_ENSURE(Data.Size() >= Mask.Size() + sizeof(TCodecSig))
+                ("description", "FixedLen chunk is too small")
+                ("chunkSize", Data.Size())("maskSize", Mask.Size());
             const size_t valuesCount = (Data.Size() - Mask.Size() - sizeof(TCodecSig)) / Size;
             AFL_ENSURE(index < valuesCount)
                 ("description", "FixedLen chunk: value index is out of chunk")
@@ -256,7 +268,8 @@ public:
                 ("description", "VarLen chunk: data size is out of chunk bounds")
                 ("dataSize", PayloadSize)("chunkSize", Data.Size());
             AFL_ENSURE((tailSize - PayloadSize) % sizeof(ui32) == 0)
-                ("description", "VarLen chunk: misaligned offsets table");
+                ("description", "VarLen chunk: misaligned offsets table")
+                ("tailSize", tailSize)("dataSize", PayloadSize)("chunkSize", Data.Size());
             Sizes = (const ui32*)(payloadStart + PayloadSize);
         } else {
             AFL_ENSURE(tailSize == 0)
@@ -297,7 +310,7 @@ private:
         { }
 
         TDataRef Next() override {
-            AFL_ENSURE(CurrentOffset + 1 <= OffsetsEnd)
+            AFL_ENSURE(CurrentOffset < OffsetsEnd)
                 ("description", "VarLen chunk: value requested beyond the offsets table");
             if (MaskIter.Next()) {
                 ui32 endOffset = ReadUnaligned<ui32>(CurrentOffset);
@@ -318,7 +331,7 @@ private:
         }
 
         TDataRef Peek() const override {
-            AFL_ENSURE(CurrentOffset + 1 <= OffsetsEnd)
+            AFL_ENSURE(CurrentOffset < OffsetsEnd)
                 ("description", "VarLen chunk: value requested beyond the offsets table");
             if (MaskIter.IsNotNull()) {
                 ui32 endOffset = ReadUnaligned<ui32>(CurrentOffset);

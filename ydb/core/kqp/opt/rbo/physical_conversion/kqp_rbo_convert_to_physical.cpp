@@ -49,11 +49,12 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
     TVector<THashMap<ui32, TPositionHandle>> allStagePos;
 
     // As in the old optimizer, PRAGMA OptForceOlapPushdownDistinct marks a
-    // DISTINCT key in the read program unless aggregates are pushed down.
+    // DISTINCT key in the read program unless PRAGMA OptEnableOlapPushdownAggregate
+    // is set. The server setting alone does not turn it off.
     const auto& config = *rboCtx.KqpCtx.Config;
     std::optional<TString> forcedDistinctKey;
     if (const auto key = config.OptForceOlapPushdownDistinct.Get();
-        key && !key->empty() && config.HasOptEnableOlapPushdown() && !config.GetEnableOlapPushdownAggregate()) {
+        key && !key->empty() && config.HasOptEnableOlapPushdown() && !config.OptEnableOlapPushdownAggregate.Get().GetOrElse(false)) {
         forcedDistinctKey = *key;
     }
     const ui64 forcedDistinctLimit = config.OptForceOlapPushdownDistinctLimit.Get().GetOrElse(0);

@@ -3918,7 +3918,7 @@ private:
 
 public:
     explicit TTxBilling(TSelf* self, TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev)
-        : TTxBase(self, TIndexBuildId(ev->Get()->BuildId), TXTYPE_PROGRESS_INDEX_BUILD)
+        : TTxBase(self, TIndexBuildId(ev->Get()->BuildId), TXTYPE_MAKEBILL_INDEX_BUILD)
         , ScheduledAt(ev->Get()->SendAt)
     {}
 

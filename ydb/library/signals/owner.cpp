@@ -22,6 +22,10 @@ TString TCommonCountersOwner::NormalizeSignalName(const TString& name) const {
     return TFsPath(name).Fix().GetPath();
 }
 
+TString TCommonCountersOwner::GetHistogramName(const TString& name) const {
+    return NormalizeSignalName("Histogram/" + name);
+}
+
 TCommonCountersOwner::TCommonCountersOwner(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
     : ModuleId(module)
 {
@@ -35,7 +39,11 @@ TCommonCountersOwner::TCommonCountersOwner(const TString& module, TIntrusivePtr<
 }
 
 NMonitoring::THistogramPtr TCommonCountersOwner::GetHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const {
-    return SubGroup->GetHistogram(NormalizeSignalName("Histogram/" + name), std::move(hCollector));
+    return SubGroup->GetHistogram(GetHistogramName(name), std::move(hCollector));
+}
+
+TLazyHistogram TCommonCountersOwner::GetLazyHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const {
+    return TLazyHistogram(SubGroup, GetHistogramName(name), std::move(hCollector));
 }
 
 std::shared_ptr<TValueAggregationAgent> TCommonCountersOwner::GetValueAutoAggregations(const TString& name) const {

@@ -99,7 +99,6 @@ SRCS(
     tablet_flat_executor.cpp
     tablet_flat_executed.h
     tablet_flat_executed.cpp
-    flat_executor.proto
 )
 
 GENERATE_ENUM_SERIALIZATION(flat_comp_gen.h)
@@ -121,6 +120,8 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/protobuf
+    contrib/libs/zstd
+    library/cpp/blockcodecs
     ydb/library/actors/util
     ydb/library/actors/core
     ydb/library/services

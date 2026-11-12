@@ -1,44 +1,36 @@
-/* syntax version 1 */
+$rows = [
+    <|fdate: Just(Date("2018-11-22")), fdatetime: Just(Datetime("2018-11-22T21:20:19Z")), ftimestamp: Just(Timestamp("2018-11-22T21:20:19.345678Z")), finterval: Just(Interval("P2DT10H")), ftzdate: Just(TzDate("2018-11-22,Europe/Moscow")), ftzdatetime: Just(TzDatetime("2018-11-22T21:20:19,Europe/Moscow")), ftztimestamp: Just(TzTimestamp("2018-11-22T21:20:19.345678,Europe/Moscow")), finterval_1day: Just(Interval("P1D"))|>,
+];
+
 select
-    DateTime::ToDays(`interval`) as interval_to_days,
-    DateTime::ToHours(`interval`) as interval_to_hours,
-    DateTime::ToMinutes(`interval`) as interval_to_minutes,
-    DateTime::ToSeconds(`interval`) as interval_to_seconds,
-    DateTime::ToMilliseconds(`interval`) as interval_to_msec,
-    DateTime::ToMicroseconds(`interval`) as interval_to_usec,
+    DateTime::ToDays(finterval) as interval_to_days,
+    DateTime::ToHours(finterval) as interval_to_hours,
+    DateTime::ToMinutes(finterval) as interval_to_minutes,
+    DateTime::ToSeconds(finterval) as interval_to_seconds,
+    DateTime::ToMilliseconds(finterval) as interval_to_msec,
+    DateTime::ToMicroseconds(finterval) as interval_to_usec,
 
-    DateTime::ToSeconds(`date`) as date_to_seconds,
-    DateTime::ToSeconds(`datetime`) as datetime_to_seconds,
-    DateTime::ToSeconds(`timestamp`) as timestamp_to_seconds,
-    DateTime::ToSeconds(`tzdate`) as tzdate_to_seconds,
-    DateTime::ToSeconds(`tzdatetime`) as tzdatetime_to_seconds,
-    DateTime::ToSeconds(`tztimestamp`) as tztimestamp_to_seconds,
+    DateTime::ToSeconds(fdate) as date_to_seconds,
+    DateTime::ToSeconds(fdatetime) as datetime_to_seconds,
+    DateTime::ToSeconds(ftimestamp) as timestamp_to_seconds,
+    DateTime::ToSeconds(ftzdate) as tzdate_to_seconds,
+    DateTime::ToSeconds(ftzdatetime) as tzdatetime_to_seconds,
+    DateTime::ToSeconds(ftztimestamp) as tztimestamp_to_seconds,
 
-    DateTime::ToMilliseconds(`date`) as date_to_msec,
-    DateTime::ToMilliseconds(`datetime`) as datetime_to_msec,
-    DateTime::ToMilliseconds(`timestamp`) as timestamp_to_msec,
-    DateTime::ToMilliseconds(`tzdate`) as tzdate_to_msec,
-    DateTime::ToMilliseconds(`tzdatetime`) as tzdatetime_to_msec,
-    DateTime::ToMilliseconds(`tztimestamp`) as tztimestamp_to_msec,
+    DateTime::ToMilliseconds(fdate) as date_to_msec,
+    DateTime::ToMilliseconds(fdatetime) as datetime_to_msec,
+    DateTime::ToMilliseconds(ftimestamp) as timestamp_to_msec,
+    DateTime::ToMilliseconds(ftzdate) as tzdate_to_msec,
+    DateTime::ToMilliseconds(ftzdatetime) as tzdatetime_to_msec,
+    DateTime::ToMilliseconds(ftztimestamp) as tztimestamp_to_msec,
 
-    DateTime::ToMicroseconds(`date`) as date_to_usec,
-    DateTime::ToMicroseconds(`datetime`) as datetime_to_usec,
-    DateTime::ToMicroseconds(`timestamp`) as timestamp_to_usec,
-    DateTime::ToMicroseconds(`tzdate`) as tzdate_to_usec,
-    DateTime::ToMicroseconds(`tzdatetime`) as tzdatetime_to_usec,
-    DateTime::ToMicroseconds(`tztimestamp`) as tztimestamp_to_usec,
+    DateTime::ToMicroseconds(fdate) as date_to_usec,
+    DateTime::ToMicroseconds(fdatetime) as datetime_to_usec,
+    DateTime::ToMicroseconds(ftimestamp) as timestamp_to_usec,
+    DateTime::ToMicroseconds(ftzdate) as tzdate_to_usec,
+    DateTime::ToMicroseconds(ftzdatetime) as tzdatetime_to_usec,
+    DateTime::ToMicroseconds(ftztimestamp) as tztimestamp_to_usec,
 
     /* Overflow test */
-    DateTime::ToDays(`negative_1d`) as negative_1d,
-from (
-    select
-        cast(fdate as Date) as `date`,
-        cast(fdatetime as Datetime) as `datetime`,
-        cast(ftimestamp as Timestamp) as `timestamp`,
-        cast(finterval as Interval) as `interval`,
-        cast(ftzdate as TzDate) as `tzdate`,
-        cast(ftzdatetime as TzDatetime) as `tzdatetime`,
-        cast(ftztimestamp as TzTimestamp) as `tztimestamp`,
-        -cast(finterval_1day as Interval) as `negative_1d`,
-    from Input
-);
+    DateTime::ToDays(-finterval_1day) as negative_1d,
+FROM AS_TABLE($rows);

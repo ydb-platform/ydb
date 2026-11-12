@@ -43,7 +43,6 @@ SRCS(
     tty.cpp
     tty.h
     url_builder.cpp
-    utf8.cpp
     yql_panic.cpp
     yql_panic.h
     yql_paths.cpp
@@ -57,6 +56,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     library/cpp/threading/future
     library/cpp/deprecated/atomic
+    yql/essentials/public/utf8
 )
 
 END()

@@ -1,4 +1,5 @@
 #include "ydb_common_ut.h"
+#include <ydb/library/testlib/helpers.h>
 
 #include <ydb/services/keyvalue/grpc_service_v1.h>
 
@@ -37,9 +38,10 @@ namespace NKikimr::NGRpcService {
             rule->SetDst(dst);
         }
 
-        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true, bool nestedAliasParent = false) {
+        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true, bool nestedAliasParent = false, bool enableRelativePaths = false) {
             NKikimrConfig::TAppConfig config;
             config.MutableGRpcConfig()->SetSkipSchemeCheck(useSimpleProxy);
+            config.MutableFeatureFlags()->SetEnableRelativePaths(enableRelativePaths);
             if (!enablePathAliasing) {
                 return config;
             }
@@ -106,8 +108,8 @@ namespace NKikimr::NGRpcService {
             NYdb::TKikimrWithGrpcAndRootSchema Server;
             std::shared_ptr<grpc::Channel> Channel;
 
-            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true, bool createTenant = true, bool nestedAliasParent = false)
-                : Server(MakeConfig(useSimpleProxy, enablePathAliasing, nestedAliasParent), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
+            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true, bool createTenant = true, bool nestedAliasParent = false, bool enableRelativePaths = false)
+                : Server(MakeConfig(useSimpleProxy, enablePathAliasing, nestedAliasParent, enableRelativePaths), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
                     settings.StoragePoolTypes.clear();
                     settings.AddStoragePool("hdd");
                     settings.StoragePoolTypes.at("hdd").SetStoragePoolId(0);
@@ -178,8 +180,8 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT(!physicalChildren.contains("virtual"));
         }
 
-        Y_UNIT_TEST(ListDirectoryRenamesChildForTrailingSlashParent) {
-            TFixture fixture(/*useSimpleProxy=*/false, /*enablePathAliasing=*/true, /*createTenant=*/false, /*nestedAliasParent=*/true);
+        Y_UNIT_TEST_TWIN(ListDirectoryRenamesChildForTrailingSlashParent, enableRelativePaths) {
+            TFixture fixture(/*useSimpleProxy=*/false, /*enablePathAliasing=*/true, /*createTenant=*/false, /*nestedAliasParent=*/true, enableRelativePaths);
             auto stub = Ydb::Scheme::V1::SchemeService::NewStub(fixture.Channel);
 
             Ydb::Scheme::MakeDirectoryRequest make;
@@ -190,7 +192,7 @@ namespace NKikimr::NGRpcService {
             Ydb::Scheme::ListDirectoryRequest list;
             list.set_path("/Root/");
             const auto result = Result<Ydb::Scheme::ListDirectoryResult>(
-                Call(*stub, &TScheme::ListDirectory, list, "/Root/virtual"));
+                Call(*stub, &TScheme::ListDirectory, list, enableRelativePaths ? "virtual" : "/Root/virtual"));
 
             std::set<std::string> children;
             for (const auto& child : result.children()) {
@@ -200,36 +202,43 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT(!children.contains("kfront"));
         }
 
-        Y_UNIT_TEST(DeferredDatabaseOnlyRequestRewritesTheHeaderOnce) {
-            TFixture fixture;
+        Y_UNIT_TEST_TWIN(DeferredDatabaseOnlyRequestRewritesTheHeaderOnce, enableRelativePaths) {
+            TFixture fixture(false, true, true, /*nestedAliasParent=*/enableRelativePaths, enableRelativePaths);
+            const TString database = enableRelativePaths ? "virtual" : "/alias";
             auto stub = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
 
             // The first request for this tenant is deferred while its database info
             // is fetched, then re-enters ingress.
             const auto session = Result<Ydb::Table::CreateSessionResult>(
-                Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, "/alias/"));
+                Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, database + "/"));
             UNIT_ASSERT(!session.session_id().empty());
 
             Ydb::Table::KeepAliveRequest keepAlive;
             keepAlive.set_session_id(session.session_id());
-            Success(Call(*stub, &TTable::KeepAlive, keepAlive, "/alias"));
+            Success(Call(*stub, &TTable::KeepAlive, keepAlive, database));
 
             Ydb::Table::DeleteSessionRequest close;
             close.set_session_id(session.session_id());
-            Success(Call(*stub, &TTable::DeleteSession, close, "/alias"));
+            Success(Call(*stub, &TTable::DeleteSession, close, database));
         }
 
-        Y_UNIT_TEST(SimpleProxyInitializesDatabaseNormalization) {
-            TFixture fixture(true);
+        Y_UNIT_TEST_TWIN(SimpleProxyInitializesDatabaseNormalization, enableRelativePaths) {
+            TFixture fixture(true, true, true, /*nestedAliasParent=*/enableRelativePaths, enableRelativePaths);
+            const TString database = enableRelativePaths ? "virtual" : "/alias";
             auto stub = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
 
             const auto session = Result<Ydb::Table::CreateSessionResult>(
-                Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, "/alias"));
+                Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, database));
             UNIT_ASSERT(!session.session_id().empty());
+
+            Ydb::Table::ExecuteSchemeQueryRequest query;
+            query.set_session_id(session.session_id());
+            query.set_yql_text("CREATE TABLE `database_resolution` (Key Uint64, PRIMARY KEY (Key));");
+            Success(Call(*stub, &TTable::ExecuteSchemeQuery, query, database));
 
             Ydb::Table::DeleteSessionRequest close;
             close.set_session_id(session.session_id());
-            Success(Call(*stub, &TTable::DeleteSession, close, "/alias"));
+            Success(Call(*stub, &TTable::DeleteSession, close, database));
         }
 
         Y_UNIT_TEST(DiscoveryKeepsHeaderAndBodySeparate) {
@@ -341,10 +350,14 @@ namespace NKikimr::NGRpcService {
                 1);
         }
 
-        Y_UNIT_TEST(AlterTableRewritesAbsoluteSequenceDefaults) {
-            TFixture fixture;
+        Y_UNIT_TEST_TWIN(AlterTableRewritesAbsoluteSequenceDefaults, enableRelativePaths) {
+            TFixture fixture(false, true, true, /*nestedAliasParent=*/false, enableRelativePaths);
             auto stub = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
-            const TString table = "/alias/sequence_table";
+            auto scheme = Ydb::Scheme::V1::SchemeService::NewStub(fixture.Channel);
+            Ydb::Scheme::MakeDirectoryRequest directory;
+            directory.set_path("/alias/nested");
+            Success(Call(*scheme, &TScheme::MakeDirectory, directory, "/alias"));
+            const TString table = "/alias/nested/sequence_table";
             const TString sequence = table + "/seq";
 
             Ydb::Table::CreateTableRequest create;
@@ -372,18 +385,19 @@ namespace NKikimr::NGRpcService {
 
             Ydb::Table::AlterTableRequest relative;
             relative.set_path(table);
+            const TString relativeSequence = enableRelativePaths ? "nested/sequence_table/seq" : "sequence_table/seq";
             auto* relativeColumn = relative.add_add_columns();
             relativeColumn->set_name("added_relative");
             relativeColumn->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT64);
-            relativeColumn->mutable_from_sequence()->set_name("sequence_table/seq");
+            relativeColumn->mutable_from_sequence()->set_name(relativeSequence);
             auto* relativeAlter = relative.add_alter_columns();
             relativeAlter->set_name("existing");
-            relativeAlter->mutable_from_sequence()->set_name("sequence_table/seq");
+            relativeAlter->mutable_from_sequence()->set_name(relativeSequence);
             Success(Call(*stub, &TTable::AlterTable, relative, "/alias"));
         }
 
-        Y_UNIT_TEST(TopicRewritesNestedDlqPathsOnly) {
-            TFixture fixture;
+        Y_UNIT_TEST_TWIN(TopicRewritesNestedDlqPathsOnly, enableRelativePaths) {
+            TFixture fixture(false, true, true, false, enableRelativePaths);
             auto stub = Ydb::Topic::V1::TopicService::NewStub(fixture.Channel);
 
             auto createTopic = [&](const TString& path) {
@@ -402,12 +416,17 @@ namespace NKikimr::NGRpcService {
             auto* aliasPolicy = aliasConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
             aliasPolicy->set_enabled(true);
             aliasPolicy->mutable_move_action()->set_dead_letter_queue("/alias/dlq");
+            auto* sqsConsumer = create.add_consumers();
+            sqsConsumer->set_name("sqs_consumer");
+            auto* sqsPolicy = sqsConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
+            sqsPolicy->set_enabled(true);
+            sqsPolicy->mutable_move_action()->set_dead_letter_queue("sqs://account/queue");
             Success(Call(*stub, &TTopic::CreateTopic, create, "/alias"));
 
             Ydb::Topic::AlterTopicRequest alter;
             alter.set_path("/alias/source");
             auto* added = alter.add_add_consumers();
-            added->set_name("sqs_consumer");
+            added->set_name("added_sqs_consumer");
             auto* addedPolicy = added->mutable_shared_consumer_type()->mutable_dead_letter_policy();
             addedPolicy->set_enabled(true);
             addedPolicy->mutable_move_action()->set_dead_letter_queue("sqs://account/queue");
@@ -415,6 +434,10 @@ namespace NKikimr::NGRpcService {
             changed->set_name("alias_consumer");
             changed->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
                 ->mutable_alter_move_action()->set_set_dead_letter_queue("/alias/dlq");
+            auto* changedSqs = alter.add_alter_consumers();
+            changedSqs->set_name("sqs_consumer");
+            changedSqs->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+                ->mutable_alter_move_action()->set_set_dead_letter_queue("sqs://account/updated");
             Success(Call(*stub, &TTopic::AlterTopic, alter, "/alias"));
 
             Ydb::Topic::AlterTopicRequest setMove;
@@ -423,15 +446,20 @@ namespace NKikimr::NGRpcService {
             changedMove->set_name("alias_consumer");
             changedMove->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
                 ->mutable_set_move_action()->set_dead_letter_queue("/alias/dlq");
+            auto* changedSqsMove = setMove.add_alter_consumers();
+            changedSqsMove->set_name("sqs_consumer");
+            changedSqsMove->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+                ->mutable_set_move_action()->set_dead_letter_queue("sqs://account/final");
             Success(Call(*stub, &TTopic::AlterTopic, setMove, "/alias"));
 
             Ydb::Topic::DescribeTopicRequest describe;
             describe.set_path("/alias/source");
             const auto result = Result<Ydb::Topic::DescribeTopicResult>(
                 Call(*stub, &TTopic::DescribeTopic, describe, "/alias"));
-            const std::array<std::pair<std::string, std::string>, 2> expected{{
+            const std::array<std::pair<std::string, std::string>, 3> expected{{
                 {"alias_consumer", "/Root/kfront/dlq"},
-                {"sqs_consumer", "sqs://account/queue"},
+                {"sqs_consumer", "sqs://account/final"},
+                {"added_sqs_consumer", "sqs://account/queue"},
             }};
             for (const auto& [name, dlq] : expected) {
                 bool found = false;

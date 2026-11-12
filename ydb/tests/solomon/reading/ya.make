@@ -2,7 +2,7 @@ PY3TEST()
 
 STYLE_PYTHON()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 FORK_TEST_FILES()
 
@@ -22,10 +22,6 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
-
-DEPENDS(
-    ydb/apps/ydbd
-)
 
 PEERDIR(
     ydb/library/yql/tools/solomon_emulator/client

@@ -10,12 +10,17 @@ namespace NKikimr::NPQ::NClusterTracker {
 
 TString NormalizeDiscoveryHost(TStringBuf authority);
 
+// Last path component of an x-ydb-database value. `/Root` and an empty path have no account.
+TString AccountNameFromDatabase(TStringBuf database);
+
 TVector<TString> ParseFnxClusterCsv(TStringBuf csv);
 
-TString BalancerTablePathFromClusterTable(TStringBuf clusterTablePath);
+// `tableName` next to the Cluster table: `.../Cluster` -> `.../<tableName>`.
+TString SiblingTablePath(TStringBuf clusterTablePath, TStringBuf tableName);
 
 TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTablePath);
 TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionTablePath);
+TString MakeListAccountsQuery(TStringBuf accountTablePath);
 TString MakeCreateClusterQuery(TStringBuf clusterTablePath);
 TString MakeCreateBalancerQuery(TStringBuf balancerTablePath);
 TString MakeCreateVersionsQuery(TStringBuf versionTablePath);

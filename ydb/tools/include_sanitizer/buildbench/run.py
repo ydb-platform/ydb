@@ -109,7 +109,7 @@ class RunSample:
     tu_count: int = 0
     compile_count: int = 0
     sum_tu_user_s: float = 0.0
-    sum_tu_wall_s: float = 0.0
+    sum_tu_cpu_s: float = 0.0
     sum_tu_instructions: float = 0.0
     max_tu_peak_rss_kb: int = 0
 
@@ -307,7 +307,7 @@ def fold_tu_costs(sample: RunSample, costs: Dict[str, TuCost]) -> None:
     sample.tu_count = len(costs)
     sample.compile_count = sum(c.compiles for c in costs.values())
     sample.sum_tu_user_s = sum(c.user_us for c in costs.values()) / 1e6
-    sample.sum_tu_wall_s = sum(c.wall_us for c in costs.values()) / 1e6
+    sample.sum_tu_cpu_s = sum(c.cpu_us for c in costs.values()) / 1e6
     sample.sum_tu_instructions = sum(c.instructions for c in costs.values())
     sample.max_tu_peak_rss_kb = max((c.peak_rss_kb for c in costs.values()),
                                     default=0)
@@ -330,7 +330,7 @@ def merge_tu_costs(per_rep: List[Dict[str, TuCost]]) -> Dict[str, dict]:
         merged[tu] = {
             "compiles": max(e.compiles for e in entries),
             "user_us": min(e.user_us for e in entries),
-            "wall_us": min(e.wall_us for e in entries),
+            "cpu_us": min(e.cpu_us for e in entries),
             "peak_rss_kb": max(e.peak_rss_kb for e in entries),
             "instructions": instructions[len(instructions) // 2],
             "execute_us": min(e.execute_us for e in entries),
@@ -463,7 +463,7 @@ def write_reports(name: str, payload: dict, points: List[Point]) -> Path:
         csv_path = out_dir / f"{name}.per_tu.csv"
         with csv_path.open("w", encoding="utf-8", newline="") as fh:
             writer = csv.writer(fh)
-            writer.writerow(["tu", "instructions", "user_s", "wall_s",
+            writer.writerow(["tu", "instructions", "user_s", "cpu_s",
                              "execute_s", "frontend_s", "backend_s",
                              "peak_rss_mib", "compiles"])
             for tu, rec in sorted(primary_point.per_tu.items(),
@@ -472,7 +472,7 @@ def write_reports(name: str, payload: dict, points: List[Point]) -> Path:
                     tu,
                     f"{rec['instructions']:.0f}",
                     f"{rec['user_us'] / 1e6:.3f}",
-                    f"{rec['wall_us'] / 1e6:.3f}",
+                    f"{rec['cpu_us'] / 1e6:.3f}",
                     f"{rec['execute_us'] / 1e6:.3f}",
                     f"{rec['frontend_us'] / 1e6:.3f}",
                     f"{rec['backend_us'] / 1e6:.3f}",
@@ -557,9 +557,9 @@ def render_summary(name: str, payload: dict, points: List[Point]) -> str:
     lines.append("")
     lines.append("- Compare only runs of the same target with the same "
                  "`--rebuild` semantics.")
-    lines.append("- Give each run a private `-o OUTPUT_ROOT` if you suspect "
-                 "the local cache is serving results; check with "
-                 "`ya make --cache-stat`.")
+    lines.append("- An output directory (`-o`) does not disable the build "
+                 "cache. Use `--rebuild` for a full compilation and check "
+                 "the recorded compile count before comparing runs.")
     lines.append("- Judge changes by compile instructions. Wall clock at a "
                  "fixed `-j` is the sanity check, not the verdict.")
     lines.append("")
@@ -823,6 +823,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 if sample.rc != 0:
                     log.warning("build exited %d; its numbers may be partial",
                                 sample.rc)
+                elif sample.compile_count == 0 and (active_ps or active_perf or active_tt):
+                    log.warning("no compiler invocations recorded; cached "
+                                "results do not measure compilation cost. "
+                                "Use --rebuild for a full compilation")
             point.per_tu = merge_tu_costs(per_rep)
             points.append(point)
 
@@ -872,7 +876,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     else:
         log.info("results not saved; pass --out NAME to keep them for --compare")
 
-    return 0
+    return next((r.rc for p in points for r in p.runs if r.rc), 0)
 
 
 if __name__ == "__main__":

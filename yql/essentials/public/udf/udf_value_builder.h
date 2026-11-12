@@ -324,7 +324,21 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 39)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 48)
+class IValueBuilder9: public IValueBuilder8 {
+public:
+    virtual TUnboxedValue ValueToString(EDataSlot type, TUnboxedValuePod value) const = 0;
+    // Returns an empty value if parsing fails.
+    virtual TUnboxedValue ValueFromString(EDataSlot type, TStringRef value) const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 48)
+class IValueBuilder: public IValueBuilder9 {
+protected:
+    IValueBuilder();
+};
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 39)
 class IValueBuilder: public IValueBuilder8 {
 protected:
     IValueBuilder();

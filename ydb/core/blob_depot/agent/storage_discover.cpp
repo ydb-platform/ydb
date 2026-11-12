@@ -61,6 +61,7 @@ namespace NKikimr::NBlobDepot {
                 item->SetTabletId(Request.TabletId);
                 item->SetMustRestoreFirst(true);
                 Resolve.SetDataKind(Request.DataKind);
+                SetResolveDeadline(Resolve);
             }
 
             void IssueResolve() {

@@ -9,6 +9,7 @@
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
@@ -27,6 +28,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/pq_checkpoint_provider_integration.h>
+#include <ydb/core/kqp/federated_query/streaming/streaming_query_controller.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
@@ -40,6 +42,7 @@
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/sys_view/common/registry.h>
@@ -281,6 +284,7 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         ListScriptExecutionOperations,
         CancelScriptExecutionOperation,
         GetScriptExecutionPhysicalGraph,
+        FetchScriptResults,
     };
 
 public:
@@ -334,6 +338,10 @@ public:
             FederatedQuerySetup->CheckpointProviderIntegrations.try_emplace(
                 TString(NYql::PqProviderName),
                 CreatePqCheckpointProviderIntegration(TActivationContext::ActorSystem(), FederatedQuerySetup->PqGatewayFactory->CreatePqGateway(), *FederatedQuerySetup->Driver, FederatedQuerySetup->CredentialsFactory)
+            );
+            FederatedQuerySetup->StreamingQueryControllerFactory = CreateStreamingQueryControllerFactory(
+                FederatedQuerySetup->PqGatewayFactory,
+                FederatedQuerySetup->CheckpointProviderIntegrations
             );
         }
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);
@@ -889,6 +897,20 @@ public:
 
         if (!ev->Get()->GetUserRequestContext()) {
             ev->Get()->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(traceId, database, sessionId));
+        }
+
+        const bool isChecksumTable = ev->Get()->IsInternalCall()
+            && ev->Get()->GetRequestType() == NRequestTypes::ChecksumTable
+            && (queryType == NKikimrKqp::QUERY_TYPE_SQL_DML
+                || queryType == NKikimrKqp::QUERY_TYPE_PREPARED_DML
+                || queryType == NKikimrKqp::QUERY_TYPE_AST_DML);
+        ev->Get()->GetUserRequestContext()->ReadHints = isChecksumTable
+            ? NKikimrTxDataShard::TEvRead::HINT_BATCH | NKikimrTxDataShard::TEvRead::HINT_LOW_PRIORITY
+            : 0;
+        if (isChecksumTable) {
+            // This flag is local to the event. Reapply it at each proxy hop before
+            // calculating deadlines, including when the session is on another node.
+            ev->Get()->SetDisableDefaultTimeout(true);
         }
 
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
@@ -1765,12 +1787,14 @@ public:
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvGetScriptExecutionPhysicalGraph, Handle);
+            hFunc(NKqp::TEvFetchScriptResultsRequest, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
             hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
             hFunc(TEvKqp::TEvDelayedRequestError, Handle);
+            hFunc(TEvKqp::TEvGetVectorIndexLevelsCacheRequest, Handle)
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -2053,6 +2077,10 @@ private:
             case EDelayedRequestType::GetScriptExecutionPhysicalGraph:
                 HandleDelayedScriptRequestError<TEvGetScriptPhysicalGraphResponse>(std::move(requestEvent), status, std::move(issues));
                 break;
+
+            case EDelayedRequestType::FetchScriptResults:
+                HandleDelayedScriptRequestError<TEvFetchScriptResultsResponse>(std::move(requestEvent), status, std::move(issues));
+                break;
         }
     }
 
@@ -2157,6 +2185,14 @@ private:
     void Handle(TEvGetScriptExecutionPhysicalGraph::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::GetScriptExecutionPhysicalGraph)) {
             Register(CreateGetScriptExecutionPhysicalGraphActor(ev->Sender, ev->Get()->Database, ev->Get()->ExecutionId));
+        }
+    }
+
+    void Handle(TEvFetchScriptResultsRequest::TPtr& ev) {
+        if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::FetchScriptResults)) {
+            auto& request = *ev->Get();
+            Register(CreateGetScriptExecutionResultActor(ev->Sender, std::move(request.Database), std::move(request.ExecutionId),
+                std::move(request.UserSID), request.ResultSetIndex, request.Offset, request.RowsLimit, request.SizeLimit, request.Deadline));
         }
     }
 
@@ -2275,6 +2311,12 @@ private:
 
     void Handle(TEvKqp::TEvDelayedRequestError::TPtr& ev) {
         HandleDelayedRequestError(static_cast<EDelayedRequestType>(ev->Cookie), std::move(ev->Get()->RequestEvent), ev->Get()->Status, std::move(ev->Get()->Issues));
+    }
+
+    void Handle(TEvKqp::TEvGetVectorIndexLevelsCacheRequest::TPtr& ev) {
+        auto result = std::make_unique<TEvKqp::TEvGetVectorIndexLevelsCacheResponse>();
+        result->CachePtr = VectorIndexLevelsCache;
+        Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 
     void InitSharedReading() {

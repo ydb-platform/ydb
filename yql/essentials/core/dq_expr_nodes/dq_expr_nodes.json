@@ -67,6 +67,14 @@
         ]
     },
     {
+        "Name": "TDqPhyHashJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyHashJoin"},
+        "Children": [
+            {"Index": 8, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+        ]
+    },
+    {
         "Name": "TDqBlockHashJoinCore",
         "Base": "TCallable",
         "Match": {"Type": "Callable", "Name": "BlockHashJoinCore"},
@@ -82,6 +90,29 @@
             {"Index": 8, "Name": "LeftFilter", "Type": "TCoLambda", "Optional": true},
             {"Index": 9, "Name": "RightFilter", "Type": "TCoLambda", "Optional": true},
             {"Index": 10, "Name": "CommonFilter", "Type": "TCoLambda", "Optional": true}
+        ]
+    },
+    {
+        "Name": "TDqPhyScalarHashJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyScalarHashJoin"},
+        "Children": [
+            {"Index": 8, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+        ]
+    },
+    {
+        "Name": "TDqScalarHashJoinCore",
+        "Base": "TCallable",
+        "Match": {"Type": "Callable", "Name": "ScalarHashJoinCore"},
+        "Children": [
+            {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+            {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+            {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom"},
+            {"Index": 3, "Name": "LeftKeyColumns", "Type": "TCoAtomList"},
+            {"Index": 4, "Name": "RightKeyColumns", "Type": "TCoAtomList"},
+            {"Index": 5, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
+            {"Index": 6, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
+            {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
         ]
     },
     {

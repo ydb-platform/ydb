@@ -167,6 +167,106 @@ Y_UNIT_TEST(StaticPerClusterSettingBasic) {
 
 Y_UNIT_TEST_SUITE(TSettingDispatcherTest) {
 
+Y_UNIT_TEST(TranslatorProjectSettingsAreUnclaimed) {
+    TDispatcherAndSettings<TTestSettings> dispatcher(TStringBuf("test"), {}, /*strictConfigValidation=*/true);
+    dispatcher.SetValidClusters(TVector<TString>{"yson", "YSON", "YsOn", "cluster"});
+    dispatcher.AddSetting("Strict", &TTestSettings::StaticBoolean);
+    UNIT_ASSERT(dispatcher.AcceptsProjectSetting({.Name = "test.Strict", .Value = {"true"}}));
+    UNIT_ASSERT(dispatcher.AcceptsProjectSetting({.Name = "cluster.Strict", .Value = {"true"}}));
+    TProjectSettings settings;
+    for (const TString& name : {"Strict", "yson.Strict", "YSON.Strict", "YsOn.Strict"}) {
+        UNIT_ASSERT(!dispatcher.AcceptsProjectSetting({.Name = name, .Value = {"true"}}));
+        settings.AddPragma(name, "true");
+    }
+    dispatcher.ApplyProjectSettings(settings);
+    UNIT_ASSERT(!dispatcher.StaticBoolean.Get());
+}
+
+Y_UNIT_TEST(ProjectSettingsPreserveOrder) {
+    for (bool providerFirst : {false, true}) {
+        TDispatcherAndSettings<TTestSettings> dispatcher(TStringBuf("test"), {}, /*strictConfigValidation=*/true);
+        dispatcher.SetValidClusters(TVector<TString>{"cluster"});
+        dispatcher.AddSetting("MySetting", &TTestSettings::MySetting);
+        TProjectSettings settings;
+        settings.AddPragma(providerFirst ? "test.MySetting" : "cluster.MySetting", "first");
+        settings.AddPragma(providerFirst ? "cluster.MySetting" : "test.MySetting", "last");
+        dispatcher.ApplyProjectSettings(settings);
+        UNIT_ASSERT_VALUES_EQUAL(dispatcher.MySetting.Get("cluster").GetRef(), "last");
+        UNIT_ASSERT_VALUES_EQUAL(dispatcher.MySetting.Get(ALL_CLUSTERS).GetRef(), providerFirst ? "first" : "last");
+    }
+}
+
+Y_UNIT_TEST(ProjectProviderPrefixTakesPrecedenceOverClusterName) {
+    TDispatcherAndSettings<TTestSettings> dispatcher(TStringBuf("test"), {}, /*strictConfigValidation=*/true);
+    dispatcher.SetValidClusters(TVector<TString>{"test"});
+    dispatcher.AddSetting("StaticBoolean", &TTestSettings::StaticBoolean);
+    TProjectSettings settings;
+    settings.AddPragma("test.StaticBoolean", "true");
+    dispatcher.ApplyProjectSettings(settings);
+    UNIT_ASSERT(dispatcher.StaticBoolean.Get().GetRef());
+}
+
+Y_UNIT_TEST(ProjectSettingsValidationMessages) {
+    TDispatcherAndSettings<TTestSettings> dispatcher(TStringBuf("test"), {}, /*strictConfigValidation=*/true);
+    dispatcher.AddSetting("Integer", &TTestSettings::Integer);
+    TProjectSettings unknown;
+    unknown.AddPragma("test.Unknown", "value");
+    dispatcher.ApplyProjectSettings(unknown);
+    UNIT_ASSERT(!dispatcher.AcceptsProjectSetting(unknown.Pragmas.front()));
+    TProjectSettings multipleValues;
+    multipleValues.AddPragma("test.Integer", TVector<TString>{"1", "2"});
+    UNIT_ASSERT_EXCEPTION_CONTAINS(dispatcher.ApplyProjectSettings(multipleValues), TErrorException,
+                                   "Too many values for project setting: test.Integer; expected at most one value");
+}
+
+Y_UNIT_TEST(MalformedProjectSettingNamesAreUnclaimed) {
+    for (bool strict : {false, true}) {
+        TDispatcherAndSettings<TTestSettings> dispatcher(TStringBuf("test"), {}, strict);
+        dispatcher.AddSetting("Integer", &TTestSettings::Integer);
+        dispatcher.Integer[ALL_CLUSTERS] = 42;
+        for (const auto& name : {"test.Bad__Name", "test.A_B_C_D_E_F"}) {
+            TProjectSettings settings;
+            settings.AddPragma(name, "1");
+            dispatcher.ApplyProjectSettings(settings);
+            UNIT_ASSERT(!dispatcher.AcceptsProjectSetting(settings.Pragmas.front()));
+            UNIT_ASSERT_VALUES_EQUAL(dispatcher.Integer.Get(ALL_CLUSTERS).GetRef(), 42);
+        }
+    }
+}
+
+Y_UNIT_TEST(ProjectSettingsDefineRestoreDefaults) {
+    TDispatcherAndSettings<TTestSettings> dispatcher(TStringBuf("test"), {}, /*strictConfigValidation=*/true);
+    dispatcher.AddSetting("StaticBoolean", &TTestSettings::StaticBoolean);
+    dispatcher.StaticBoolean[ALL_CLUSTERS] = false;
+    TProjectSettings settings;
+    settings.AddPragma("test.StaticBoolean", TVector<TString>{});
+
+    dispatcher.ApplyProjectSettings(settings);
+    UNIT_ASSERT(dispatcher.StaticBoolean.Get().GetRef());
+    dispatcher.FreezeDefaults();
+    dispatcher.Dispatch(ALL_CLUSTERS, "StaticBoolean", TString("false"),
+                        ISettingDispatcher::EStage::STATIC, GetDefaultErrorCallback());
+    UNIT_ASSERT(!dispatcher.StaticBoolean.Get().GetRef());
+    dispatcher.Restore();
+    UNIT_ASSERT(dispatcher.StaticBoolean.Get().GetRef());
+}
+
+Y_UNIT_TEST(ProjectSettingsInvalidValuesRespectStrictValidation) {
+    for (bool strict : {false, true}) {
+        TDispatcherAndSettings<TTestSettings> dispatcher(TStringBuf("test"), {}, strict);
+        dispatcher.AddSetting("Integer", &TTestSettings::Integer);
+        dispatcher.Integer[ALL_CLUSTERS] = 42;
+        TProjectSettings settings;
+        settings.AddPragma("test.Integer", "invalid");
+        if (strict) {
+            UNIT_ASSERT_EXCEPTION(dispatcher.ApplyProjectSettings(settings), TErrorException);
+        } else {
+            dispatcher.ApplyProjectSettings(settings);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(dispatcher.Integer.Get("cluster").GetRef(), 42);
+    }
+}
+
 Y_UNIT_TEST(AddAndDispatchConfig) {
     TDispatcherAndSettings<TTestSettings> dispatcher;
     auto& setting = dispatcher.MySetting;

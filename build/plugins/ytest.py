@@ -426,6 +426,17 @@ def dump_test(unit, kw):
         ymake.report_configure_error(e)
     if valid_kw is None:
         return None
+    tags = set(deserialize_list(valid_kw.get(df.Tag.KEY, "")))
+    if (
+        unit.get('SANITIZER_TYPE') not in (None, '', 'no')
+        and consts.YaTestTags.PerfTest in tags
+        and consts.YaTestTags.PerfTestWithSanitizers not in tags
+    ):
+        valid_kw[df.SkipTest.KEY] = valid_kw.get(df.SkipTest.KEY) or 'Performance tests are disabled under sanitizers'
+        # Skipped LARGE suites are still discovered by CI.
+        tags.add(consts.YaTestTags.NotAutocheck)
+        valid_kw[df.Tag.KEY] = serialize_list(sorted(tags))
+    valid_kw.setdefault(df.BuildFolderPath.KEY, _common.get_norm_unit_path(unit))
     string_handler = StringIO()
     for k, v in valid_kw.items():
         print(k + ': ' + (v if isinstance(v, str) else str(v, encoding='utf-8')), file=string_handler)
@@ -845,6 +856,9 @@ def ADD_CHECK_PY_IMPORTS(fields: typing.Any, unit: ymake.Unit, *args: str):
 
     unit.onpeerdir(['library/python/testing/import_test'])
 
+    if unit.get('MODULE_LANG') == 'PY2' and unit.get('DISABLE_PY2_CHECKS') == 'yes':
+        return
+
     dart_record = create_dart_record(fields, unit, (), {})
     if not dart_record:
         return
@@ -1167,6 +1181,10 @@ def _ADD_PY_LINTER_CHECK(fields: typing.Any, unit: ymake.Unit, *args: str):
     _, spec_args = _common.sort_by_keywords(keywords, args)
 
     name = spec_args['NAME'][0]
+
+    if name == consts.PythonLinterName.Py2Flake8 and unit.get('DISABLE_PY2_CHECKS') == 'yes':
+        return
+
     global_resources = consts.LINTER_TO_GLOBAL_RESOURCES.get(name, ())
     for resource, _ in global_resources:
         unit.onpeerdir(resource)

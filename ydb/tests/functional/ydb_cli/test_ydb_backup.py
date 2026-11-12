@@ -2117,7 +2117,7 @@ class TestRestoreReplaceOption(BaseTestBackupInFiles):
         )
 
 
-class TestReplaceSysACLOption(BaseTestBackupInFiles):
+class BaseTestReplaceSysACLOption(BaseTestBackupInFiles):
     @classmethod
     def get_cluster_configurator(cls):
         return KikimrConfigGenerator()
@@ -2141,6 +2141,8 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
         except yatest.common.process.ExecutionError as exception:
             return False, exception.execution_result.std_err.decode('utf-8')
 
+
+class TestReplaceSysACLOption(BaseTestReplaceSysACLOption):
     def test_disabled_option(self):
         # Create folder
         self.driver.scheme_client.make_directory('/Root/folder')
@@ -2222,6 +2224,8 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
             contains_inanyorder('folder')
         )
 
+
+class TestReplaceSysACLOptionEnabled(BaseTestReplaceSysACLOption):
     def test_enabled_option(self):
         # Create folder
         self.driver.scheme_client.make_directory('/Root/folder')

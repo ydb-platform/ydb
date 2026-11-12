@@ -56,10 +56,20 @@ class Utils:
                 )
 
     def read_data(self, table_name):
-        with self.session_pool.checkout() as session:
-            session.transaction().execute(
-                f"select k, v from `{table_name}`;"
+        def read(session):
+            return session.transaction().execute(
+                f"select k, v from `{table_name}`;", commit_tx=True,
+                settings=ydb.BaseRequestSettings().with_timeout(20),
             )
+
+        # Discovery becoming ready after a restart does not mean that Hive has
+        # finished bringing the data tablet back. Retry transient SDK errors.
+        return self.session_pool.retry_operation_sync(
+            read, retry_settings=ydb.RetrySettings(
+                max_retries=10, idempotent=True,
+                slow_backoff_settings=ydb.BackoffSettings(ceiling=2, slot_duration=1),
+            ),
+        )
 
 
 class TestTinyVDisks:

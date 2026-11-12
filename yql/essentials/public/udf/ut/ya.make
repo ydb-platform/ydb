@@ -9,7 +9,7 @@ SRCS(
     udf_type_printer_ut.cpp
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_CURRENT_ABI_VERSION()
 
 PEERDIR(
     yql/essentials/utils

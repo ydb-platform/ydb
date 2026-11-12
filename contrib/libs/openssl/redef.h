@@ -6280,3 +6280,16 @@
 #define ZUINT32_it v1_ZUINT32_it
 #define ZUINT64_it v1_ZUINT64_it
 #endif
+
+/*
+ * HMAC, MD5, RC4, SHA1, SHA256, SHA384 and SHA512 clash with identifiers outside OpenSSL
+ * (class HMAC in aws-sdk-cpp, class MD5 in library/cpp/digest/md5), so the macros for them
+ * above stay disabled and their declarations bind to the v1_ symbols with an asm label instead.
+ */
+#if !defined(OPENSSL_BUILD) && defined(OPENSSL_RENAME_SYMBOLS)
+#define OPENSSL_V1_STR_IMPL(x) #x
+#define OPENSSL_V1_STR(x) OPENSSL_V1_STR_IMPL(x)
+#define OPENSSL_V1_ASM(name) __asm__(OPENSSL_V1_STR(__USER_LABEL_PREFIX__) "v1_" #name)
+#else
+#define OPENSSL_V1_ASM(name)
+#endif

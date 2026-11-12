@@ -1,12 +1,15 @@
 #include "columnshard_impl.h"
 #include "columnshard_view.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
@@ -665,15 +668,25 @@ bool FillCutHistoryMonitoringReport(NTabletFlatExecutor::TTransactionContext& tx
     report.clear();
     using T = Schema::CutHistoryRequests;
     NIceDb::TNiceDb db(txc.DB);
-    auto row = db.Table<T>().Range().Select<T::RequestProto>();
+    auto row = db.Table<T>().Range().Select<T::RequestsProto>();
     if (!row.IsReady()) {
         return false;
     }
     while (!row.EndOfSet()) {
-        NKikimrTxColumnShard::TCutHistoryRequest request;
-        Y_ABORT_UNLESS(request.ParseFromString(row.GetValue<T::RequestProto>()));
-        report += request.DebugString();
-        report += "\n";
+        NKikimrTxColumnShard::TCutHistoryRequests requests;
+        Y_ABORT_UNLESS(requests.ParseFromString(row.GetValue<T::RequestsProto>()));
+        for (const auto& request : requests.GetRequests()) {
+            report += TStringBuilder() << "<tr>"
+                                       << "<td>" << request.GetTabletID() << "</td>"
+                                       << "<td>" << request.GetChannel() << "</td>"
+                                       << "<td>" << request.GetGroupID() << "</td>"
+                                       << "<td>" << request.GetFromGeneration() << "</td>"
+                                       << "<td>" << request.GetToGeneration() << "</td>"
+                                       << "<td>" << TInstant::MicroSeconds(request.GetTimestampUs()).ToString() << "</td>"
+                                       << "<td>" << TEscapeHtml(NActors::ActorIdFromProto(request.GetRecipient()).ToString()) << "</td>"
+                                       << "<td>" << request.GetSendingGeneration() << "</td>"
+                                       << "</tr>";
+        }
         if (!row.Next()) {
             return false;
         }
@@ -799,6 +812,7 @@ TString TTxMonitoring::RenderMainPage() {
     html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
     html << "<h3><a href=\"app?page=portions&TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> Portions </a></h3>";
     html << "<h3><a href=\"app?page=cuthistory&amp;TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> CutHistory </a></h3>";
+    html << "<h3><a href=\"app?page=localdb_backup&amp;TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> Local DB backup (S3) </a></h3>";
     html << RenderLwTraceStartScript();
     html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), Self->SelfId().NodeId(),
                           "Traces for all scans on shard")
@@ -834,11 +848,18 @@ TString TTxMonitoring::RenderCutHistoryPage() {
     html << "<a href=\"app?TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\">ColumnShard</a>";
     HTML(html) {
         H3_CLASS("") {
-            html << "Persisted CutHistory request intents (latest " << CutHistoryRequestLimit << "; Hive confirmation is not tracked)";
+            html << "Persisted CutHistory request intents (latest " << CutHistoryJournalLimit
+                 << " request sets; Hive confirmation is not tracked)";
         }
-        html << "Diagnostic candidates only: GC queues are not checked and requests are not sent.";
-        PRE() {
-            html << TEscapeHtml(CutHistoryReport);
+        TABLE_CLASS("table table-bordered table-striped") {
+            TABLEHEAD() {
+                html << "<tr><th>Tablet ID</th><th>Channel</th><th>Group ID</th>"
+                        "<th>From generation (inclusive)</th><th>To generation (exclusive)</th>"
+                        "<th>Recorded at (UTC)</th><th>Recipient</th><th>Sending generation</th></tr>";
+            }
+            TABLEBODY() {
+                html << CutHistoryReport;
+            }
         }
     }
 
@@ -1404,6 +1425,15 @@ bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     if (cgi.Has("page") && cgi.Get("page") == "scan_traces") {
         ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(RenderScanTracesPage(TabletID(), ctx.SelfID.NodeId())));
         return true;
+    }
+
+    if (cgi.Has("page") && cgi.Get("page") == "localdb_backup") {
+        const auto* appData = AppData(ctx);
+        if (appData->FeatureFlags.GetEnableTabletDevUiSecurePath() && !IsAdministrator(appData, ev->Get()->GetUserToken())) {
+            ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+            return true;
+        }
+        return HandleLocalDbBackupPage(ev, ctx);
     }
 
     Execute(new TTxMonitoring(this, ev), ctx);

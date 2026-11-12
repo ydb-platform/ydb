@@ -25,7 +25,6 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
-    ydb/library/actors/dnscachelib
     ydb/library/actors/protos
     library/cpp/containers/stack_vector
     library/cpp/digest/crc32c
@@ -36,7 +35,6 @@ PEERDIR(
     library/cpp/monlib/dynamic_counters
     library/cpp/monlib/service/pages/resources
     library/cpp/monlib/service/pages/tablesorter
-    library/cpp/packedtypes
     library/cpp/sliding_window
     ydb/core/base
     ydb/core/driver_lib/version

@@ -1,5 +1,6 @@
 PY3TEST()
 FORK_SUBTESTS()
+SPLIT_FACTOR(5)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
@@ -9,7 +10,7 @@ TEST_SRCS(
     test_quota_exhaustion.py
 )
 
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:2)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

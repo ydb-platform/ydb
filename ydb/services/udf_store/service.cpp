@@ -454,7 +454,7 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
 
 void TUdfStoreService::UnloadWasmUdf(const TString& name) {
     if (auto* dynamicRegistry = NKqp::AsDynamicFunctionRegistry(FunctionRegistry.Get())) {
-        dynamicRegistry->RemoveModule(name);
+        dynamicRegistry->RemoveModuleIfOwned(name, TStringBuilder() << "wasm:" << name);
     }
     LoadedUdfs.erase(name);
     NWasm::GetWasmModuleCatalog().Unregister(name);

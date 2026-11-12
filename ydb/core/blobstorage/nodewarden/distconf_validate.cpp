@@ -205,8 +205,11 @@ namespace NKikimr::NStorage {
                 return error;
             }
         }
-        if (current.GetClusterStateDetails().GetNonUniformStorageEnabled()
-                && !proposed.GetClusterStateDetails().GetNonUniformStorageEnabled()) {
+        const auto& currentDetails = current.GetClusterStateDetails();
+        const bool clusterStateRemoved = NBridge::IsRollbackPending(currentDetails) && !proposed.HasClusterState();
+        if (currentDetails.GetNonUniformStorageEnabled() && !proposed.GetClusterStateDetails().GetNonUniformStorageEnabled()
+                && !clusterStateRemoved) {
+            // it goes away only along with the cluster state, when the bridged cluster is rolled back
             return "non-uniform storage activation can't be disabled";
         }
 
@@ -502,7 +505,32 @@ namespace NKikimr::NStorage {
         return {};
     }
 
+    std::optional<TString> ValidateBridgeClusterState(const NKikimrBridge::TClusterState& state) {
+        const auto primary = TBridgePileId::FromProto(&state, &NKikimrBridge::TClusterState::GetPrimaryPile);
+        const auto promoted = TBridgePileId::FromProto(&state, &NKikimrBridge::TClusterState::GetPromotedPile);
+        if (!primary || primary.GetPileIndex() >= state.PerPileStateSize()) {
+            return "Incorrect primary pile";
+        } else if (!promoted || promoted.GetPileIndex() >= state.PerPileStateSize()) {
+            return "Incorrect promoted pile";
+        } else if (state.GetPerPileState(primary.GetPileIndex()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
+            return "Incorrect primary pile state";
+        } else if (state.GetPerPileState(promoted.GetPileIndex()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
+            return "Incorrect promoted pile state";
+        }
+        for (const auto pileState : state.GetPerPileState()) {
+            if (!NKikimrBridge::TClusterState::EPileState_IsValid(pileState)) {
+                return "Incorrect pile state";
+            }
+        }
+        return {};
+    }
+
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (config.HasClusterState()) {
+            if (auto error = ValidateBridgeClusterState(config.GetClusterState())) {
+                return error;
+            }
+        }
         // validate node list
         THashSet<ui32> nodeIds;
         THashSet<std::tuple<TString, ui16>> fqdns;

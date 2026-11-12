@@ -11,7 +11,7 @@
 #include "flat_direct_part_writer.h"
 #include <ydb/core/util/pb.h>
 #include <util/generic/hash_set.h>
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

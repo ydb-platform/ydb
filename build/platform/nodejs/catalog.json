@@ -1,0 +1,90 @@
+{
+  "title": "Node.js",
+  "description": "Интерпретатор JS.\n\nНаравне с pnpm является основополагающими ресурсами.\nИменно он запускается во всех процессах сборки, линтинга и тестирования под капотом у `ya tool nots`.",
+  "type": "NODE_JS",
+  "default": "24.22.1",
+  "links": {
+    "Home": "https://nodejs.org/",
+    "Sources": "https://github.com/nodejs/node",
+    "Changelog": "https://github.com/nodejs/node/blob/main/CHANGELOG.md",
+    "Docs": "https://nodejs.org/en/docs",
+    "Release schedule": "https://github.com/nodejs/Release#release-schedule"
+  },
+  "versions": {
+    "26.12.1": {
+      "add_date": "2026-10-23T16:25:20",
+      "resources": [
+        {
+          "id": 14113735081,
+          "platform": "linux",
+          "arch": "x64"
+        },
+        {
+          "id": 14113749785,
+          "platform": "linux",
+          "arch": "arm64"
+        },
+        {
+          "id": 14113768023,
+          "platform": "darwin",
+          "arch": "x64"
+        },
+        {
+          "id": 14113788132,
+          "platform": "darwin",
+          "arch": "arm64"
+        }
+      ]
+    },
+    "24.22.1": {
+      "add_date": "2026-10-23T16:18:16",
+      "resources": [
+        {
+          "id": 14113657856,
+          "platform": "linux",
+          "arch": "x64"
+        },
+        {
+          "id": 14113680623,
+          "platform": "linux",
+          "arch": "arm64"
+        },
+        {
+          "id": 14113693510,
+          "platform": "darwin",
+          "arch": "x64"
+        },
+        {
+          "id": 14113707928,
+          "platform": "darwin",
+          "arch": "arm64"
+        }
+      ]
+    },
+    "22.23.4": {
+      "add_date": "2026-10-23T16:11:54",
+      "resources": [
+        {
+          "id": 14113597829,
+          "platform": "linux",
+          "arch": "x64"
+        },
+        {
+          "id": 14113613653,
+          "platform": "linux",
+          "arch": "arm64"
+        },
+        {
+          "id": 14113627528,
+          "platform": "darwin",
+          "arch": "x64"
+        },
+        {
+          "id": 14113642333,
+          "platform": "darwin",
+          "arch": "arm64"
+        }
+      ]
+    }
+  }
+}

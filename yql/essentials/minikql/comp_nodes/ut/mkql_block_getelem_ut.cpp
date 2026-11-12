@@ -220,87 +220,87 @@ Y_UNIT_TEST(OptTupleSingularNullTest) {
 }
 
 Y_UNIT_TEST(TupleTaggedIntTest) {
-    auto values = TagVector<TTag::A>(TVector<ui32>{1, 2, 3, 4});
+    auto values = TagVector<ETag::A>(TVector<ui32>{1, 2, 3, 4});
     TestNthKernelFuzzied(TupleZip(values), 0, values);
 }
 
 Y_UNIT_TEST(OptTupleTaggedTest) {
     // Create a tuple with tagged non-optional elements
-    auto values = TagVector<TTag::A>(TVector<ui32>{1, 2, 3, 4});
+    auto values = TagVector<ETag::A>(TVector<ui32>{1, 2, 3, 4});
     auto tuple = TupleZip(values);
 
     // Convert to optional tuple and make one element null
-    TVector<TMaybe<std::tuple<TTagged<ui32, TTag::A>>>> optTuple(tuple.begin(), tuple.end());
+    TVector<TMaybe<std::tuple<TTagged<ui32, ETag::A>>>> optTuple(tuple.begin(), tuple.end());
     optTuple[1] = Nothing();
 
     // Expected result: optional tagged values with one element being Nothing
-    TVector<TMaybe<TTagged<ui32, TTag::A>>> expected{
-        TTagged<ui32, TTag::A>(1),
+    TVector<TMaybe<TTagged<ui32, ETag::A>>> expected{
+        TTagged<ui32, ETag::A>(1),
         Nothing(),
-        TTagged<ui32, TTag::A>(3),
-        TTagged<ui32, TTag::A>(4)};
+        TTagged<ui32, ETag::A>(3),
+        TTagged<ui32, ETag::A>(4)};
 
     TestNthKernelFuzzied(optTuple, 0, expected);
 }
 
 Y_UNIT_TEST(OptTupleTaggedOptTest) {
     // Create a tuple with tagged optional elements
-    auto values = TagVector<TTag::A>(TVector<TMaybe<ui32>>{1, 2, Nothing(), 4});
+    auto values = TagVector<ETag::A>(TVector<TMaybe<ui32>>{1, 2, Nothing(), 4});
     auto tuple = TupleZip(values);
 
     // Convert to optional tuple and make one element null
-    TVector<TMaybe<std::tuple<TTagged<TMaybe<ui32>, TTag::A>>>> optTuple(tuple.begin(), tuple.end());
+    TVector<TMaybe<std::tuple<TTagged<TMaybe<ui32>, ETag::A>>>> optTuple(tuple.begin(), tuple.end());
     optTuple[1] = Nothing();
 
     // Expected result: optional tagged optional values with two elements being Nothing
-    TVector<TMaybe<TTagged<TMaybe<ui32>, TTag::A>>> expected{
-        TTagged<TMaybe<ui32>, TTag::A>(1),
+    TVector<TMaybe<TTagged<TMaybe<ui32>, ETag::A>>> expected{
+        TTagged<TMaybe<ui32>, ETag::A>(1),
         Nothing(),
-        TTagged<TMaybe<ui32>, TTag::A>(Nothing()),
-        TTagged<TMaybe<ui32>, TTag::A>(4)};
+        TTagged<TMaybe<ui32>, ETag::A>(Nothing()),
+        TTagged<TMaybe<ui32>, ETag::A>(4)};
 
     TestNthKernelFuzzied(optTuple, 0, expected);
 }
 
 Y_UNIT_TEST(OptTupleTaggedSingularTest) {
     // Create a tuple with tagged singular elements
-    auto values = TagVector<TTag::A>(TVector<TSingularVoid>{TSingularVoid(), TSingularVoid(), TSingularVoid(), TSingularVoid()});
+    auto values = TagVector<ETag::A>(TVector<TSingularVoid>{TSingularVoid(), TSingularVoid(), TSingularVoid(), TSingularVoid()});
     auto tuple = TupleZip(values);
 
     // Convert to optional tuple and make one element null
-    TVector<TMaybe<std::tuple<TTagged<TSingularVoid, TTag::A>>>> optTuple(tuple.begin(), tuple.end());
+    TVector<TMaybe<std::tuple<TTagged<TSingularVoid, ETag::A>>>> optTuple(tuple.begin(), tuple.end());
     optTuple[1] = Nothing();
 
     // Expected result: optional tagged singular values with one element being Nothing
-    TVector<TMaybe<TTagged<TSingularVoid, TTag::A>>> expected{
-        TTagged<TSingularVoid, TTag::A>(TSingularVoid()),
+    TVector<TMaybe<TTagged<TSingularVoid, ETag::A>>> expected{
+        TTagged<TSingularVoid, ETag::A>(TSingularVoid()),
         Nothing(),
-        TTagged<TSingularVoid, TTag::A>(TSingularVoid()),
-        TTagged<TSingularVoid, TTag::A>(TSingularVoid())};
+        TTagged<TSingularVoid, ETag::A>(TSingularVoid()),
+        TTagged<TSingularVoid, ETag::A>(TSingularVoid())};
 
     TestNthKernelFuzzied(optTuple, 0, expected);
 }
 
 Y_UNIT_TEST(OptTupleOptTaggedTest) {
     // Create a vector of optional tagged elements
-    TVector<TMaybe<TTagged<ui32, TTag::A>>> values{
-        TMaybe<TTagged<ui32, TTag::A>>{TTagged<ui32, TTag::A>(1)},
-        TMaybe<TTagged<ui32, TTag::A>>{TTagged<ui32, TTag::A>(2)},
+    TVector<TMaybe<TTagged<ui32, ETag::A>>> values{
+        TMaybe<TTagged<ui32, ETag::A>>{TTagged<ui32, ETag::A>(1)},
+        TMaybe<TTagged<ui32, ETag::A>>{TTagged<ui32, ETag::A>(2)},
         Nothing(),
-        TMaybe<TTagged<ui32, TTag::A>>{TTagged<ui32, TTag::A>(4)}};
+        TMaybe<TTagged<ui32, ETag::A>>{TTagged<ui32, ETag::A>(4)}};
 
     auto tuple = TupleZip(values);
 
     // Convert to optional tuple and make one element null
-    TVector<TMaybe<std::tuple<TMaybe<TTagged<ui32, TTag::A>>>>> optTuple(tuple.begin(), tuple.end());
+    TVector<TMaybe<std::tuple<TMaybe<TTagged<ui32, ETag::A>>>>> optTuple(tuple.begin(), tuple.end());
     optTuple[1] = Nothing();
 
     // Expected result: optional optional tagged values with two elements being Nothing
-    TVector<TMaybe<TTagged<ui32, TTag::A>>> expected{
-        TMaybe<TTagged<ui32, TTag::A>>{TMaybe<TTagged<ui32, TTag::A>>{TTagged<ui32, TTag::A>(1)}},
+    TVector<TMaybe<TTagged<ui32, ETag::A>>> expected{
+        TMaybe<TTagged<ui32, ETag::A>>{TMaybe<TTagged<ui32, ETag::A>>{TTagged<ui32, ETag::A>(1)}},
         Nothing(),
         Nothing(),
-        TMaybe<TTagged<ui32, TTag::A>>{TMaybe<TTagged<ui32, TTag::A>>{TTagged<ui32, TTag::A>(4)}}};
+        TMaybe<TTagged<ui32, ETag::A>>{TMaybe<TTagged<ui32, ETag::A>>{TTagged<ui32, ETag::A>(4)}}};
 
     TestNthKernelFuzzied(optTuple, 0, expected);
 }

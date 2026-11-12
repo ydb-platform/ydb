@@ -115,14 +115,6 @@ bool IsOlapAverageCast(const TTypeAnnotationNode& columnType) {
     return RemoveOptionality(columnType).Cast<TDataExprType>()->GetSlot() != EDataSlot::Double;
 }
 
-bool HasOlapAverageCast(const TOlapAggregate& aggregate, TExprContext& ctx) {
-    for (const auto& aggregation : aggregate.Aggregations) {
-        if (aggregation.Function == "avg" && IsOlapAverageCast(*aggregate.Read->GetIUType(*aggregation.Column, ctx))) {
-            return true;
-        }
-    }
-    return false;
-}
 
 std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, TExprContext& ctx) {
     const auto& aggregations = aggregate.GetAggregationTraits();

@@ -1,4 +1,5 @@
 #include <ydb/core/transfer/ut/common/transfer_common.h>
+#include <ydb/library/testlib/common/test_utils.h>
 
 using namespace NReplicationTest;
 
@@ -1926,6 +1927,62 @@ Y_UNIT_TEST_SUITE(Transfer)
             {{"Message", checker}},
             {{"Message", checker}},
         });
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(RetentionGapDoesNotFailTransfer) {
+        MainTestCase testCase(std::nullopt, "ROW");
+        testCase.CreateTable(R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Utf8,
+                PRIMARY KEY (Key)
+            ) WITH (STORE = %s);
+        )");
+        testCase.CreateTopic(1);
+        testCase.ExecuteDDL(Sprintf("ALTER TOPIC `%s` SET (RETENTION_PERIOD = Interval('PT1S'));", testCase.TopicName.data()));
+        testCase.CreateTransfer(R"(
+            $l = ($x) -> { return [<| Key:$x._offset, Message:CAST($x._data AS Utf8) |>]; };
+        )");
+        testCase.PauseTransfer();
+        testCase.CheckTransferState(TTransferDescription::EState::Paused);
+
+        testCase.Write({"expired-0"});
+        testCase.Write({"expired-1"});
+        ui64 startOffset = 0;
+        NTestUtils::WaitFor(TDuration::Seconds(10), "topic retention", [&] {
+            const auto description = testCase.DescribeTopic();
+            const auto& partitions = description.GetTopicDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            UNIT_ASSERT(partitions.front().GetPartitionStats());
+            startOffset = partitions.front().GetPartitionStats()->GetStartOffset();
+            return startOffset > 0;
+        }, TDuration::MilliSeconds(100));
+
+        const auto consumer = testCase.DescribeConsumer();
+        const auto& consumerPartitions = consumer.GetConsumerDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(consumerPartitions.size(), 1);
+        UNIT_ASSERT(consumerPartitions.front().GetPartitionConsumerStats());
+        UNIT_ASSERT_LT(consumerPartitions.front().GetPartitionConsumerStats()->GetCommittedOffset(), startOffset);
+
+        testCase.ExecuteDDL(Sprintf("ALTER TOPIC `%s` SET (RETENTION_PERIOD = Interval('PT1H'));", testCase.TopicName.data()));
+        testCase.Write({"retained"});
+        testCase.ResumeTransfer();
+
+        bool copied = false;
+        TTransferDescription::EState state = TTransferDescription::EState::Paused;
+        const TExpectations expected = {{_C("Message", TString("retained"))}};
+        NTestUtils::WaitFor(TDuration::Seconds(10), "transfer to process retained message", [&] {
+            copied = testCase.DoRead(expected).first == 1;
+            state = testCase.DescribeTransfer().GetTransferDescription().GetState();
+            return copied || state == TTransferDescription::EState::Error;
+        }, TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL_C(state, TTransferDescription::EState::Running,
+            testCase.DescribeTransfer().GetTransferDescription().GetErrorState().GetIssues().ToOneLineString());
+        testCase.CheckResult(expected);
 
         testCase.DropTransfer();
         testCase.DropTable();

@@ -43,6 +43,13 @@ Y_UNIT_TEST_SUITE(Cancellation) {
     Y_UNIT_TEST(Default) {
         auto const& token = TCancellationToken::Default();
         UNIT_ASSERT(!token.IsCancellationRequested());
+        UNIT_ASSERT(token.IsDefault());
+        UNIT_ASSERT(TCancellationToken(token).IsDefault());
+
+        TCancellationTokenSource source;
+        UNIT_ASSERT(!source.Token().IsDefault());
+        source.Cancel();
+        UNIT_ASSERT(!source.Token().IsDefault());
     }
 
     Y_UNIT_TEST(ThrowIfDeadlineReached) {

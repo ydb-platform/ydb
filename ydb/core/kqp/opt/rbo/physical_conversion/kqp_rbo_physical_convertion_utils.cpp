@@ -55,11 +55,6 @@ TCoAtomList BuildAtomList(TStringBuf value, TPositionHandle pos, TExprContext& c
 }
 
 TExprNode::TPtr BuildSwitch(TExprNode::TPtr input, TReplicate& hub, const TPhysicalNames& names, TExprContext& ctx) {
-    if (TDqPhyStage::Match(input.Get())) {
-        const auto program = TDqPhyStage(input).Program().Ptr();
-        return ctx.ChangeChild(*input, TDqPhyStage::idx_Program,
-            ctx.ChangeChild(*program, 1, BuildSwitch(program->TailPtr(), hub, names, ctx)));
-    }
     const auto pos = hub.Pos;
     const auto& outputs = hub.GetOutputs();
     TVector<TOpReplicate*> ports(outputs.size());

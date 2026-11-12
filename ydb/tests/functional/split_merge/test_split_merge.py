@@ -1,6 +1,10 @@
+import logging
+import struct
+
 import pytest
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta
+from decimal import Decimal
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.library.common.wait_for import wait_for
@@ -8,10 +12,26 @@ from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.test_pg_base import TestPgBase
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
     index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync, \
-    filter_dict, pk_pg_types_mixed, pk_pg_types_no_bool_mixed, non_pk_pg_types_mixed
+    filter_dict, pk_pg_types_mixed, pk_pg_types_no_bool_mixed, non_pk_pg_types_mixed, cleanup_type_name, ttl_types
 
 
 class TestSplitMergeBase(TestBase):
+    @classmethod
+    def get_disabled_feature_flags(cls):
+        # Shard size statistics remain enabled for automatic splitting.
+        return super().get_disabled_feature_flags() + ["enable_column_statistics"]
+
+    @pytest.fixture(autouse=True)
+    def avoid_logging_payloads(self):
+        # Avoid expensive protobuf formatting at DEBUG.
+        logger = logging.getLogger("ydb.connection")
+        previous_level = logger.level
+        logger.setLevel(logging.INFO)
+        try:
+            yield
+        finally:
+            logger.setLevel(previous_level)
+
     @classmethod
     def get_datashard_config(cls):
         # Size-based splitting needs flushed data and fresh shard statistics.
@@ -36,19 +56,59 @@ class TestSplitMergeBase(TestBase):
         dml = DMLOperations(self)
         dml.create_table(table_name, pk_types, all_types,
                          index, ttl, unique, sync)
+        # One split is enough to check data preservation.
         dml.query(
-            f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 1)")
-        dml.insert(table_name, all_types, pk_types, index, ttl)
+            f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 1, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 2)")
+        dml.insert(table_name, all_types, pk_types, index, ttl, batch_size=10)
         is_split = wait_for(self.expected_split(
             True, table_name), timeout_seconds=150)
         assert is_split is True, f"The table {table_name} is not split into partition"
-        dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
+        self.check_table_data(table_name, pk_types, all_types, index, ttl, dml)
         dml.query(
             f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT=1)")
         is_merge = wait_for(self.expected_split(
             False, table_name), timeout_seconds=150)
         assert is_merge is True, f"the table {table_name} is not merge into one partition"
-        dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
+        self.check_table_data(table_name, pk_types, all_types, index, ttl, dml)
+
+    def check_table_data(self, table_name, pk_types, all_types, index, ttl, dml):
+        columns = [
+            (prefix + cleanup_type_name(type_name), type_name, types)
+            for prefix, types in (("pk_", pk_types), ("col_", all_types), ("col_index_", index))
+            for type_name in types
+        ]
+        if ttl:
+            columns.append((f"ttl_{cleanup_type_name(ttl)}", ttl, ttl_types))
+
+        # Every schema has an Int64/pgint8 column identifying the generated row.
+        row_number_column = next(name for name, type_name, _ in columns if type_name in ("Int64", "pgint8"))
+        primary_key = ", ".join(f"pk_{cleanup_type_name(type_name)}" for type_name in pk_types)
+        rows = self.query(f"SELECT {', '.join(name for name, _, _ in columns)} FROM `{table_name}` ORDER BY {primary_key}")
+        row_numbers = [int(row[row_number_column]) for row in rows]
+        assert sorted(row_numbers) == list(range(1, len(columns) + 1)), f"Unexpected rows in {table_name}: {row_numbers}"
+
+        for row, number in zip(rows, row_numbers):
+            for name, type_name, types in columns:
+                actual = row[name]
+                if type_name == "Float":
+                    expected = struct.unpack("f", struct.pack("f", types[type_name](number)))[0]
+                elif type_name == "DyNumber":
+                    actual = Decimal(str(actual))
+                    expected = Decimal(str(types[type_name](number)))
+                elif type_name in ("Timestamp", "Timestamp64"):
+                    expected = datetime(1970, 1, 1) + timedelta(microseconds=types[type_name](number))
+                else:
+                    dml.assert_type(types, type_name, number, actual)
+                    continue
+                assert actual == expected, f"{table_name}: {name}, row {number}: expected {expected}, got {actual}"
+
+        # Check point reads across the key range after each transition.
+        for position in (0, len(rows) // 2, len(rows) - 1):
+            number = row_numbers[position]
+            query = dml.create_select_sql_request(
+                table_name, all_types, number, pk_types, number, index, number, ttl, number)
+            result = dml.query(query)
+            assert len(result) == 1 and result[0].count == 1, f"Point read failed in {table_name}, row {number}"
 
     def expected_split(self, is_split, table_name):
         def predicate():

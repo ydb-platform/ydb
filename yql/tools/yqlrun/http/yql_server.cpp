@@ -147,7 +147,6 @@ private:
 NSQLTranslation::TTranslationSettings GetTranslationSettings(const TYqlServer& server) {
     static const THashMap<TString, TString> clusters = {
         { "plato", TString(YtProviderName) },
-        { "plato_rtmr", TString(RtmrProviderName) },
         { "pg_catalog", TString(PgProviderName) },
         { "information_schema", TString(PgProviderName) },
     };
@@ -179,8 +178,7 @@ struct TTableFileHolder {
 };
 
 TProgramPtr MakeFileProgram(const TString& program, TYqlServer& yqlServer,
-    const THashMap<TString, TString>& tables, const THashMap<std::pair<TString, TString>,
-    TVector<std::pair<TString, TString>>>& /* rtmrTableAttributes */, const TString& tmpDir) {
+    const THashMap<TString, TString>& tables, const TString& tmpDir) {
 
     TVector<TDataProviderInitializer> dataProvidersInit;
 
@@ -235,13 +233,7 @@ TProgramPtr MakeFileProgram(const TString& program, const TString& input, const 
     tables[TString(YtProviderName).append('.').append(cluster).append(TStringBuf(".Output"))] = outputFile.Name();
     NFs::Remove(outputFile.Name());
 
-    THashMap<std::pair<TString, TString>, TVector<std::pair<TString, TString>>> rtmrTableAttributes;
-    auto node = NYT::NodeFromYsonString(attr);
-    if (node.IsMap() && node.HasKey(YqlRowSpecAttribute)) {
-        rtmrTableAttributes[std::make_pair("plato_rtmr", "Input")] = {{"_yql_row_spec", NYT::NodeToYsonString(node[YqlRowSpecAttribute])}};
-    }
-
-    return MakeFileProgram(program, yqlServer, tables, rtmrTableAttributes, tmpDir);
+    return MakeFileProgram(program, yqlServer, tables, tmpDir);
 }
 
 YQL_ACTION(Paste)
@@ -329,7 +321,7 @@ YQL_ACTION(Parse)
         Y_UNUSED(attr);
         Y_UNUSED(parameters);
         TTempDir tmpDir;
-        TProgramPtr prg = MakeFileProgram(program, YqlServer, {}, {}, tmpDir.Name());
+        TProgramPtr prg = MakeFileProgram(program, YqlServer, {}, tmpDir.Name());
 
         bool parsed = (options & TYqlAction::YqlProgram)
                 ? prg->ParseYql()
@@ -357,7 +349,7 @@ YQL_ACTION(Compile)
         Y_UNUSED(input);
         Y_UNUSED(attr);
         TTempDir tmpDir;
-        TProgramPtr prg = MakeFileProgram(program, YqlServer, {}, {}, tmpDir.Name());
+        TProgramPtr prg = MakeFileProgram(program, YqlServer, {}, tmpDir.Name());
         prg->SetParametersYson(parameters);
 
         bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer));

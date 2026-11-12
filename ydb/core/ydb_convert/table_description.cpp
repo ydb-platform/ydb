@@ -12,6 +12,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>

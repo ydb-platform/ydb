@@ -9,6 +9,7 @@
 #include <ydb/core/external_sources/object_storage/inference/infer_config.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/protos/external_sources.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>

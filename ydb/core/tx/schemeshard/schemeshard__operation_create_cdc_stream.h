@@ -44,18 +44,17 @@ void DoCreateStream(
 
 bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
 
-TMaybe<TChannelsBindings> CheckAggregatorCanBeCreated(
+TMaybe<TChannelsBindings> CheckCdcAggregatorCanBeCreated(
     const NKikimrSchemeOp::TCreateCdcStream& op,
     const TPath& streamPath,
     TOperationContext& context,
     const THolder<TProposeResponse>& result);
 
-void AddAggregator(
+// Registers the stream's CdcAggregator shard, sets Aggregated mode and makes the stream creation begin with CreateParts.
+void PlanCdcAggregatorCreation(
     const TOperationId& opId,
     const TPath& streamPath,
-    const TCdcStreamInfo::TPtr& stream,
     const TChannelsBindings& channelsBindings,
-    TTxState& txState,
     TOperationContext& context);
 
 class TConfigureParts: public TSubOperationState {

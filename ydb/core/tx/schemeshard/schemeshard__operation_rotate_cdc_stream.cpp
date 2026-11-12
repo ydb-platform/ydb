@@ -393,7 +393,7 @@ public:
 
         TMaybe<TChannelsBindings> aggregatorChannels;
         if (ShouldAggregateHeartbeats(newStreamDesc)) {
-            aggregatorChannels = CheckAggregatorCanBeCreated(newStreamOp, newStreamPath, context, result);
+            aggregatorChannels = CheckCdcAggregatorCanBeCreated(newStreamOp, newStreamPath, context, result);
             if (!aggregatorChannels) {
                 return result;
             }
@@ -446,11 +446,11 @@ public:
         newStreamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         newStreamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        if (aggregatorChannels) {
-            AddAggregator(OperationId, newStreamPath, newStream, *aggregatorChannels, txState, context);
-        }
-
         context.SS->CdcStreams.Set(pathId, newStream);
+
+        if (aggregatorChannels) {
+            PlanCdcAggregatorCreation(OperationId, newStreamPath, *aggregatorChannels, context);
+        }
 
         newStreamPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, tablePath, context); // for correct discard of ChildrenExist prop

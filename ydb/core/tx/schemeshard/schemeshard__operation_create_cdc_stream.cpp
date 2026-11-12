@@ -345,7 +345,7 @@ public:
 
         TMaybe<TChannelsBindings> aggregatorChannels;
         if (ShouldAggregateHeartbeats(streamDesc)) {
-            aggregatorChannels = CheckAggregatorCanBeCreated(op, streamPath, context, result);
+            aggregatorChannels = CheckCdcAggregatorCanBeCreated(op, streamPath, context, result);
             if (!aggregatorChannels) {
                 return result;
             }
@@ -386,11 +386,11 @@ public:
         streamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         streamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        if (aggregatorChannels) {
-            AddAggregator(OperationId, streamPath, stream, *aggregatorChannels, txState, context);
-        }
-
         context.SS->CdcStreams.Set(pathId, stream);
+
+        if (aggregatorChannels) {
+            PlanCdcAggregatorCreation(OperationId, streamPath, *aggregatorChannels, context);
+        }
 
         streamPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, tablePath, context); // for correct discard of ChildrenExist prop
@@ -1003,7 +1003,7 @@ bool ShouldAggregateHeartbeats(const NKikimrSchemeOp::TCdcStreamDescription& str
         && streamDesc.GetResolvedTimestampsIntervalMs() > 0;
 }
 
-TMaybe<TChannelsBindings> CheckAggregatorCanBeCreated(
+TMaybe<TChannelsBindings> CheckCdcAggregatorCanBeCreated(
         const NKikimrSchemeOp::TCreateCdcStream& op,
         const TPath& streamPath,
         TOperationContext& context,
@@ -1033,14 +1033,16 @@ TMaybe<TChannelsBindings> CheckAggregatorCanBeCreated(
     return channelsBindings;
 }
 
-void AddAggregator(
+void PlanCdcAggregatorCreation(
         const TOperationId& opId,
         const TPath& streamPath,
-        const TCdcStreamInfo::TPtr& stream,
         const TChannelsBindings& channelsBindings,
-        TTxState& txState,
         TOperationContext& context)
 {
+    auto* txState = context.SS->FindTx(opId);
+    Y_ABORT_UNLESS(txState);
+    const auto& stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
+
     const auto shardIdx = context.SS->RegisterShardInfo(
         TShardInfo::CdcAggregatorInfo(opId.GetTxId(), streamPath.Base()->PathId)
             .WithBindedChannels(channelsBindings));
@@ -1050,11 +1052,11 @@ void AddAggregator(
     stream->AlterData->HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated;
     stream->AlterData->AggregatorShardIdx = shardIdx;
 
-    txState.Shards.emplace_back(shardIdx, ETabletType::CdcAggregator, TTxState::CreateParts);
-    txState.State = TTxState::CreateParts;
+    txState->Shards.emplace_back(shardIdx, ETabletType::CdcAggregator, TTxState::CreateParts);
+    txState->State = TTxState::CreateParts;
 
     streamPath.Base()->IncShardsInside();
-    streamPath.DomainInfo()->AddInternalShards(txState, context.SS);
+    streamPath.DomainInfo()->AddInternalShards(*txState, context.SS);
 }
 
 TConfigureParts::TConfigureParts(TOperationId id)

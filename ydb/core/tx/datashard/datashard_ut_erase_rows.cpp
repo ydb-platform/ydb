@@ -1,14 +1,17 @@
 #include "defs.h"
+#include "change_record.h"
 #include "datashard_distributed_erase.h"
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb/library/aclib/user_context.h>
 
 #include <util/generic/bitmap.h>
 #include <util/string/printf.h>
@@ -1940,6 +1943,95 @@ tkey = 100, key = 4
         check("table-2", makeLimits(1, 2, 3), 2); // 1 PARTIAL (first 2 keys) + 1 final OK (last key + exhausted)
         check("table-3", makeLimits(100, 1, 3), 2); // 1 PARTIAL (for 3 keys) + 1 final OK when exhausted
         check("table-4", makeLimits(100, 1, 4), 1); // just final OK when exhausted
+    }
+
+    Y_UNIT_TEST_TWIN(ConditionalEraseRowsSyncIndexCdc, oldImages) {
+        using TEvChangeExchange = NChangeExchange::TEvChangeExchange;
+        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+
+        TPortManager pm;
+        NKikimrPQ::TPQConfig pqConfig;
+        pqConfig.SetEnableProtoSourceIdInfo(true);
+        pqConfig.SetTopicsAreFirstClassCitizen(true);
+        TServerSettings serverSettings(pm.GetPort(2134), {}, pqConfig);
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableChangefeedsOnIndexTables(true);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        CreateIndexedTable(server, sender, "/Root", "table-1");
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
+                (1, 10, 100, Timestamp("2020-01-01T00:00:00Z")),
+                (2, 20, 200, Timestamp("2030-01-01T00:00:00Z"));
+        )");
+
+        const THashMap<TString, TVector<ui32>> expectedKeys{
+            {"/Root/table-1", {1}},
+            {"/Root/table-1/by_skey/indexImplTable", {10, 1}},
+            {"/Root/table-1/by_tkey/indexImplTable", {100, 1}},
+        };
+        THashMap<TPathId, TVector<ui32>> streamKeys;
+        for (const auto& [path, key] : expectedKeys) {
+            const TShardedTableOptions::TCdcStream stream{
+                .Name = "stream",
+                .Mode = oldImages ? NKikimrSchemeOp::ECdcStreamModeNewAndOldImages : NKikimrSchemeOp::ECdcStreamModeUpdate,
+                .Format = NKikimrSchemeOp::ECdcStreamFormatJson,
+            };
+            const auto separator = path.rfind('/');
+            WaitTxNotification(server, sender, AsyncAlterAddStream(server,
+                path.substr(0, separator), path.substr(separator + 1), stream));
+            const auto description = Navigate(server, sender, path, TNavigate::OpTable);
+            const auto& streams = description->ResultSet.at(0).CdcStreams;
+            UNIT_ASSERT_VALUES_EQUAL(streams.size(), 1);
+            streamKeys.emplace(TPathId::FromProto(streams.front().GetPathId()), key);
+        }
+
+        // Keep the records on their source shards so their keys and versions can be checked.
+        TBlockEvents<TEvChangeExchange::TEvEnqueueRecords> enqueued(runtime);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const auto indexes = GetIndexes(server, sender, "/Root/table-1");
+        ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 4, currentTime, TUnit::AUTO, indexes);
+        const auto response = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"),
+            "key = 2, skey = 20, tkey = 200, value = 2030-01-01T00:00:00.000000Z\n");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1/by_skey/indexImplTable"),
+            "skey = 20, key = 2\n");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1/by_tkey/indexImplTable"),
+            "tkey = 200, key = 2\n");
+
+        SimulateSleep(server, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(enqueued.size(), expectedKeys.size());
+        TMaybe<TRowVersion> version;
+        for (const auto& event : enqueued) {
+            const auto& records = event->Get()->Records;
+            UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
+            runtime.Send(event->Sender, sender, new TEvChangeExchange::TEvRequestRecords({{records.front().Order}}));
+            const auto reply = runtime.GrabEdgeEventRethrow<TEvChangeExchange::TEvRecords>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Records.size(), 1);
+            const auto& record = static_cast<const NDataShard::TChangeRecord&>(*reply->Get()->Records.front());
+            UNIT_ASSERT(record.GetKind() == NDataShard::TChangeRecord::EKind::CdcDataChange);
+            UNIT_ASSERT(record.GetDataChange().HasErase());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetGroup(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetUserCtx()->GetUserSID(), "ttl@system");
+            const auto& key = streamKeys.at(record.GetPathId());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetKey().size(), key.size());
+            for (size_t i = 0; i < key.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(record.GetKey()[i].AsValue<ui32>(), key[i]);
+            }
+            streamKeys.erase(record.GetPathId());
+            const TRowVersion recordVersion(record.GetStep(), record.GetTxId());
+            UNIT_ASSERT_VALUES_EQUAL(recordVersion, version.GetOrElse(recordVersion));
+            version = recordVersion;
+        }
+        UNIT_ASSERT(streamKeys.empty());
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsAsyncIndex) {

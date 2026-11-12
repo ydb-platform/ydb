@@ -14,6 +14,26 @@ using NTabletFlatExecutor::TTransactionContext;
 
 namespace NDataShard {
 
+namespace {
+
+void ParseHnswSettings(TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr) {
+    table.HnswIndexes.clear();
+    for (const auto& index : descr.GetTableIndexes()) {
+        if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalHnsw || !index.HasHnswIndexDescription()) {
+            continue;
+        }
+        const auto& description = index.GetHnswIndexDescription();
+        if (description.HasSettings() && description.GetSettings().has_settings()
+                && description.HasEmbeddingColumnId()) {
+            table.HnswIndexes.emplace(TPathId(index.GetPathOwnerId(), index.GetLocalPathId()),
+                TUserTable::THnswIndexInfo{description.GetSettings().settings(),
+                    description.GetEmbeddingColumnId(), index.GetSchemaVersion()});
+        }
+    }
+}
+
+} // namespace
+
 TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid)
     : LocalTid(localTid)
     , ShadowTid(shadowTid)
@@ -81,6 +101,7 @@ void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
     GetSchema(schema);
 
     schema.MutableTableIndexes()->Add()->CopyFrom(indexDesc);
+    ParseHnswSettings(*this, schema);
     SetSchema(schema);
 }
 
@@ -124,6 +145,7 @@ void TUserTable::DropIndex(const TPathId& indexPathId) {
     for (auto it = indexes.begin(); it != indexes.end(); ++it) {
         if (indexPathId == TPathId(it->GetPathOwnerId(), it->GetLocalPathId())) {
             indexes.erase(it);
+            ParseHnswSettings(*this, schema);
             SetSchema(schema);
             return;
         }
@@ -344,6 +366,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         : NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
+    ParseHnswSettings(*this, descr);
     if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {
         UniqueIndexKeySize = descr.GetPartitionConfig().GetUniqueIndexKeySize();
     }
@@ -755,6 +778,27 @@ void TUserTable::ApplyAlter(
 
     schema.SetTableSchemaVersion(delta.GetTableSchemaVersion());
 
+    // Persist HNSW index descriptions with the table schema so restart and split
+    // recovery use the same graph settings. Other index types retain their
+    // existing add/drop handling.
+    for (const auto& index : delta.GetTableIndexes()) {
+        if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            continue;
+        }
+        auto& indexes = *schema.MutableTableIndexes();
+        auto it = FindIf(indexes, [&](const auto& existing) {
+            return existing.GetPathOwnerId() == index.GetPathOwnerId()
+                && existing.GetLocalPathId() == index.GetLocalPathId();
+        });
+        if (it != indexes.end()) {
+            it->CopyFrom(index);
+        } else {
+            indexes.Add()->CopyFrom(index);
+        }
+    }
+    // An omitted index preserves its metadata; an explicitly empty HNSW
+    // description disables the graph, including after a restart.
+    ParseHnswSettings(*this, schema);
     SetSchema(schema);
 }
 

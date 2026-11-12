@@ -12,6 +12,8 @@
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 namespace NTabletFlatExecutor {
@@ -490,6 +492,12 @@ struct TUserTable : public TThrRefBase {
     ui32 ShadowTid = 0;
     TString Name;
     TString Path;
+    struct THnswIndexInfo {
+        Ydb::Table::VectorIndexSettings Settings;
+        ui32 VectorColumnTag = 0;
+        ui64 SchemaVersion = 0;
+    };
+    TMap<TPathId, THnswIndexInfo> HnswIndexes;
     TMap<ui32, TStorageRoom::TPtr> Rooms;
     TMap<ui32, TUserFamily> Families;
     TMap<ui32, TUserColumn> Columns;

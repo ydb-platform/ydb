@@ -173,6 +173,7 @@ protected:
         IChangeSenderPathResolver* const resolver,
         IChangeSenderFactory* const senderFactory,
         const TActorId changeServer);
+    ~TChangeSender() = default;
 
     void RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 

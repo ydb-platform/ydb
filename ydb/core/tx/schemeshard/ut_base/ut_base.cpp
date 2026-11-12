@@ -10193,6 +10193,99 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(BlockStoreVolumeSpaceAllocatedSSD) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkSpace = [&](ui64 ssdBlocks, ui64 hddBlocks) {
+            TUserAttrs attrs;
+            if (ssdBlocks + hddBlocks) {
+                attrs.emplace_back("__volume_space_allocated", ToString((ssdBlocks + hddBlocks) * 4_KB));
+            }
+            if (ssdBlocks) {
+                attrs.emplace_back("__volume_space_allocated_ssd", ToString(ssdBlocks * 4_KB));
+            }
+            if (hddBlocks) {
+                attrs.emplace_back("__volume_space_allocated_hdd", ToString(hddBlocks * 4_KB));
+            }
+            auto checkAllocatedAttrs = [attrs](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                NLs::UserAttrsHas(attrs)(record);
+                size_t allocatedAttrsCount = 0;
+                for (const auto& attr : record.GetPathDescription().GetUserAttributes()) {
+                    if (TStringBuf(attr.GetKey()).StartsWith("__volume_space_allocated")) {
+                        ++allocatedAttrsCount;
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(allocatedAttrsCount, attrs.size());
+            };
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"), {checkAllocatedAttrs});
+
+            // Allocated space is reconstructed from volume configs on SchemeShard startup.
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"), {checkAllocatedAttrs});
+        };
+
+        NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
+        vdescr.SetName("SSDVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetBlockSize(4_KB);
+        vc.SetStorageMediaKind(1); // STORAGE_MEDIA_SSD
+        vc.SetSizeDecreaseAllowed(true);
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.AddPartitions()->SetBlockCount(24);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+
+        // Count all SSD partitions without any mixed-blob overhead.
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        checkSpace(40, 0);
+
+        // Hybrid and HDD volumes must not contribute to SSD allocation.
+        vdescr.SetName("HybridVolume");
+        vc.SetStorageMediaKind(2); // STORAGE_MEDIA_HYBRID
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        checkSpace(40, 40);
+
+        vdescr.SetName("HDDVolume");
+        vc.SetStorageMediaKind(3); // STORAGE_MEDIA_HDD
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        checkSpace(40, 80);
+
+        vdescr.SetName("SSDVolume");
+        vc.Clear();
+        vc.SetVersion(1);
+        vc.AddPartitions()->SetBlockCount(8);
+        vc.AddPartitions()->SetBlockCount(16);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        checkSpace(24, 80);
+
+        vc.SetVersion(2);
+        vc.MutablePartitions(0)->SetBlockCount(32);
+        vc.MutablePartitions(1)->SetBlockCount(48);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        checkSpace(80, 80);
+
+        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "SSDVolume");
+        env.TestWaitNotification(runtime, txId);
+        checkSpace(0, 80);
+
+        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "HybridVolume");
+        env.TestWaitNotification(runtime, txId);
+        checkSpace(0, 40);
+
+        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "HDDVolume");
+        env.TestWaitNotification(runtime, txId);
+        checkSpace(0, 0);
+    }
+
     Y_UNIT_TEST(BlockStoreVolumeLimits) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -10292,7 +10385,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // Change limit to be specifically about SSD
         TestUserAttrs(runtime, ++txId, "", "MyRoot",
-            AlterUserAttrs({{"__volume_space_limit_ssd", "147456"}}, {"__volume_space_limit"})); /* (32 + 4) x 4096 */
+            AlterUserAttrs({{"__volume_space_limit_ssd", "131072"}}, {"__volume_space_limit"})); /* 32 x 4096 */
         env.TestWaitNotification(runtime, txId);
 
         // Now we should be able to create any size volumes with the default kind
@@ -10316,7 +10409,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
             NLs::UserAttrsHas({
                 {"__volume_space_allocated", "790528"},
-                {"__volume_space_allocated_ssd", "147456"}})});
+                {"__volume_space_allocated_ssd", "131072"}})});
 
         // It's ok to decrease volume size
         vc.Clear();
@@ -10328,7 +10421,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
             NLs::UserAttrsHas({
                 {"__volume_space_allocated", "692224"},
-                {"__volume_space_allocated_ssd", "36864"}})});
+                {"__volume_space_allocated_ssd", "32768"}})});
 
         TestMkDir(runtime, txId++, "/MyRoot", "MyDir");
         env.TestWaitNotification(runtime, txId);
@@ -10349,7 +10442,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
             NLs::UserAttrsHas({
                 {"__volume_space_allocated", "790528"},
-                {"__volume_space_allocated_ssd", "147456"}})});
+                {"__volume_space_allocated_ssd", "131072"}})});
 
         // We cannot create another volume in a subdirectory (due to root limits)
         vdescr.SetName("BSVolume8");
@@ -10381,17 +10474,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
             NLs::UserAttrsHas({
                 {"__volume_space_allocated", "790528"},
-                {"__volume_space_allocated_ssd", "147456"}})});
+                {"__volume_space_allocated_ssd", "131072"}})});
 
         // New volume is counted towards subdomain volume limits
         TestDescribeResult(DescribePath(runtime, "/MyRoot/NBS"), {
             NLs::UserAttrsHas({
                 {"__volume_space_allocated", "98304"},
-                {"__volume_space_allocated_ssd", "110592"}})});
+                {"__volume_space_allocated_ssd", "98304"}})});
 
         // Apply limits on a subdomain
         TestUserAttrs(runtime, ++txId, "/MyRoot", "NBS",
-            AlterUserAttrs({{"__volume_space_limit_ssd", "221184"}})); /* (48 + 6) x 4096 */
+            AlterUserAttrs({{"__volume_space_limit_ssd", "196608"}})); /* 48 x 4096 */
         env.TestWaitNotification(runtime, txId);
 
         // We should be able to create another 24-block volume
@@ -10402,7 +10495,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/NBS"), {
             NLs::UserAttrsHas({
                 {"__volume_space_allocated", "196608"},
-                {"__volume_space_allocated_ssd", "221184"}})});
+                {"__volume_space_allocated_ssd", "196608"}})});
 
         // We shouldn't be able to create more ssd volumes
         vdescr.SetName("BSVolume3");

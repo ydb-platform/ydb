@@ -6872,9 +6872,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
             for (ui32 nodeIndex = 0; nodeIndex < 2; ++nodeIndex) {
                 TActorId nodeSender = runtime.AllocateEdgeActor(nodeIndex);
-                runtime.SendToPipe(hiveTablet, nodeSender, nodeMetrics[nodeIndex].Release(), nodeIndex, GetPipeConfigWithRetries());
-                TAutoPtr<IEventHandle> handle;
-                runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
+                // the second time is a periodic resend by local, it must not change anything
+                for (int attempt = 0; attempt < 2; ++attempt) {
+                    auto ev = MakeHolder<TEvHive::TEvTabletMetrics>();
+                    ev->Record = nodeMetrics[nodeIndex]->Record;
+                    runtime.SendToPipe(hiveTablet, nodeSender, ev.Release(), nodeIndex, GetPipeConfigWithRetries());
+                    TAutoPtr<IEventHandle> handle;
+                    runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
+                }
             }
         }
 
@@ -7186,6 +7191,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             return std::nullopt;
         };
 
+        // the first report is persisted along with the rest of the new tablet metrics, the second one
+        // changes the named resource only
+        reportUsage(1, true);
         reportUsage(3, false);
         RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
         {
@@ -7210,6 +7218,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         // nobody reports it: the estimate expires
         runtime.SimulateSleep(NHive::NAMED_RESOURCE_ESTIMATE_TIMEOUT + TDuration::Seconds(10));
+        UNIT_ASSERT(!getUsage());
+        RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
         UNIT_ASSERT(!getUsage());
 
         reportUsage(3, true);

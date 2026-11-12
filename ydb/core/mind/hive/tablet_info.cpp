@@ -444,7 +444,7 @@ bool TTabletInfo::HasMetric(EResourceToBalance resource) const {
 void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics) {
     TInstant now = TActivationContext::Now();
     const TVector<i64>& allowedMetricIds(GetTabletAllowedMetricIds());
-    // Resource accounting only needs scalars, so keep group vectors empty.
+    // Resource accounting only needs scalars and named resources, so keep group vectors empty.
     const TMetrics before = {
         .CPU = ResourceValues.CPU,
         .Memory = ResourceValues.Memory,
@@ -459,6 +459,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
         .GroupWriteIops = {},
         .ReadIops = ResourceValues.ReadIops,
         .WriteIops = ResourceValues.WriteIops,
+        .NamedResources = ResourceValues.NamedResources,
     };
     auto maximum = GetResourceMaximumValues();
     bool groupsChanged = false;
@@ -558,7 +559,8 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
             || before.Network != after.Network || before.Storage != after.Storage
             || before.ReadThroughput != after.ReadThroughput
             || before.WriteThroughput != after.WriteThroughput
-            || before.ReadIops != after.ReadIops || before.WriteIops != after.WriteIops) {
+            || before.ReadIops != after.ReadIops || before.WriteIops != after.WriteIops
+            || before.NamedResources != after.NamedResources) {
         MarkProtoMetricsDirty();
     }
     if (Node != nullptr) {
@@ -583,6 +585,7 @@ void TTabletInfo::CarryOverNamedResources() {
     if (!ResourceValues.NamedResources.CarryOverAsEstimate(deadline)) {
         return;
     }
+    MarkProtoMetricsDirty();
     if (Node != nullptr && IsResourceDrainingState(VolatileState)) {
         Node->UpdateResourceValues(this, before, ResourceValues);
     }
@@ -597,6 +600,7 @@ void TTabletInfo::DropExpiredNamedResourceEstimates() {
     if (!ResourceValues.NamedResources.DropExpiredEstimates(TActivationContext::Now())) {
         return;
     }
+    MarkProtoMetricsDirty();
     if (Node != nullptr && IsResourceDrainingState(VolatileState)) {
         Node->UpdateResourceValues(this, before, ResourceValues);
     }

@@ -52,18 +52,6 @@ public:
     TTabletIopsValue ReadIops;
     TTabletIopsValue WriteIops;
 
-    // Resources identified by name (see NKikimrTabletBase::TNamedResource).
-    struct TNamedValue {
-        ui64 Value = 0;
-        std::optional<bool> Transferable; // not set means transferable
-
-        bool operator==(const TNamedValue&) const = default;
-    };
-    THashMap<TString, TNamedValue> Named;
-
-    // Setting value to 0 reports 0 once and then forgets the resource.
-    void SetNamed(const TString& name, ui64 value, std::optional<bool> transferable = std::nullopt);
-
     void Fill(NKikimrTabletBase::TMetrics& metrics) const;
 };
 
@@ -93,7 +81,6 @@ protected:
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteThroughput;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelReadIops;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteIops;
-    THashMap<TString, TResourceMetricsValues::TNamedValue> SentNamed;
     TInstant LastUpdate;
 };
 

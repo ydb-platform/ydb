@@ -27,8 +27,9 @@ public:
         }
         const TString user = token ? token->GetUserSID() : TString();
         const auto& request = *GetProtoRequest();
-        if (request.database().empty()) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "database must not be empty");
+        const auto& database = GetDatabaseName();
+        if (database.empty()) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "x-ydb-database must not be empty");
         }
         if (request.storage_pool().empty() && !request.group()) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "storage_pool or group must be specified");
@@ -39,7 +40,6 @@ public:
         if (request.has_percent() && request.percent() > 100) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "percent must be between 0 and 100");
         }
-        Request->AddAuditLogPart("database", request.database());
         Request->AddAuditLogPart("storage_pool", request.storage_pool());
         Request->AddAuditLogPart("group", ToString(request.group()));
         auto event = std::make_unique<NHive::TEvReassignTablets::TEvCreateRequest>();
@@ -55,7 +55,7 @@ public:
         Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup);
         auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         auto& entry = navigate->ResultSet.emplace_back();
-        entry.Path = NKikimr::SplitPath(request.database());
+        entry.Path = NKikimr::SplitPath(database);
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         entry.RedirectRequired = false;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));

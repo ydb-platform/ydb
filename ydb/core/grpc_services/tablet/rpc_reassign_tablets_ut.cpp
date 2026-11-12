@@ -38,10 +38,11 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
 
         template <typename TEvRequest>
         auto Run(typename TEvRequest::TRequest request,
+                 const TString& database = "/Root/db",
                  TString token = NACLib::TUserToken("alice", {"admins"}).SerializeAsString()) {
             auto& runtime = *Server->GetRuntime();
             return runtime.WaitFuture(NRpcService::DoLocalRpc<TEvRequest>(
-                std::move(request), "", token, runtime.GetActorSystem(0)));
+                std::move(request), database, token, runtime.GetActorSystem(0)));
         }
     };
 
@@ -81,11 +82,10 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
         UNIT_ASSERT_VALUES_EQUAL(domain.DomainDescription->Description.StoragePoolsSize(), 1);
 
         Ydb::Tablet::ReassignTabletsRequest request;
-        request.set_database("/Root/reassign");
         request.set_storage_pool(domain.DomainDescription->Description.GetStoragePools(0).GetName());
         request.set_percent(0);
         const auto response = NRpcService::DoLocalRpc<TEvReassignTabletsRequest>(
-            std::move(request), "", "", runtime.GetActorSystem(0)).ExtractValueSync();
+            std::move(request), "/Root/reassign", "", runtime.GetActorSystem(0)).ExtractValueSync();
         UNIT_ASSERT(!response.operation().ready());
         Ydb::Tablet::ReassignTabletsMetadata metadata;
         UNIT_ASSERT(response.operation().metadata().UnpackTo(&metadata));
@@ -111,11 +111,10 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
 
         // Root database metadata has no explicit Hive; it uses the configured root Hive.
         Ydb::Tablet::ReassignTabletsRequest rootRequest;
-        rootRequest.set_database("/Root");
         rootRequest.set_storage_pool(domain.DomainDescription->Description.GetStoragePools(0).GetName());
         rootRequest.set_percent(0);
         const auto rootResponse = NRpcService::DoLocalRpc<TEvReassignTabletsRequest>(
-            std::move(rootRequest), "", "", runtime.GetActorSystem(0)).ExtractValueSync();
+            std::move(rootRequest), "/Root", "", runtime.GetActorSystem(0)).ExtractValueSync();
         UNIT_ASSERT(!rootResponse.operation().ready());
         UNIT_ASSERT_VALUES_EQUAL(*TOperationId(rootResponse.operation().id()).GetValue("hive_id").at(0),
             ToString(runtime.GetAppData().DomainsInfo->GetHive()));
@@ -124,16 +123,15 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
     Y_UNIT_TEST(RequiresAdministrator) {
         TTestEnv env;
         Ydb::Tablet::ReassignTabletsRequest start;
-        start.set_database("/Root/db");
         start.set_storage_pool("test-pool");
         Ydb::Operations::GetOperationRequest get;
         get.set_id(MakeReassignOperationId());
         Ydb::Operations::CancelOperationRequest cancel;
         cancel.set_id(get.id());
         for (const TString& token : {TString(), NACLib::TUserToken("reader", {"monitoring"}).SerializeAsString()}) {
-            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start, token).operation().status(), Ydb::StatusIds::UNAUTHORIZED);
-            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvGetOperationRequest>(get, token).operation().status(), Ydb::StatusIds::UNAUTHORIZED);
-            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvCancelOperationRequest>(cancel, token).status(), Ydb::StatusIds::UNAUTHORIZED);
+            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start, "/Root/db", token).operation().status(), Ydb::StatusIds::UNAUTHORIZED);
+            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvGetOperationRequest>(get, "/Root/db", token).operation().status(), Ydb::StatusIds::UNAUTHORIZED);
+            UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvCancelOperationRequest>(cancel, "/Root/db", token).status(), Ydb::StatusIds::UNAUTHORIZED);
         }
     }
 
@@ -141,8 +139,7 @@ Y_UNIT_TEST_SUITE(TabletService_ReassignTablets) {
         TTestEnv env;
         Ydb::Tablet::ReassignTabletsRequest start;
         start.set_storage_pool("test-pool");
-        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start).operation().status(), Ydb::StatusIds::BAD_REQUEST);
-        start.set_database("/Root/db");
+        UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start, "").operation().status(), Ydb::StatusIds::BAD_REQUEST);
         start.clear_storage_pool();
         UNIT_ASSERT_VALUES_EQUAL(env.Run<TEvReassignTabletsRequest>(start).operation().status(), Ydb::StatusIds::BAD_REQUEST);
         start.set_storage_pool("test-pool");

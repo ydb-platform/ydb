@@ -164,9 +164,11 @@ namespace NKikimr {
                     break;
                 case Ydb::Table::ColumnFamily::COMPRESSION_NONE:
                     family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
+                    family->ClearColumnCodecLevel();
                     break;
                 case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
                     family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+                    family->ClearColumnCodecLevel();
                     break;
                 case Ydb::Table::ColumnFamily::COMPRESSION_ZSTD:
                     family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecZSTD);

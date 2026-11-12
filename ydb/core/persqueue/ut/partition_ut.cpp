@@ -371,7 +371,8 @@ protected:
     void PersistVersionedOffset(TPartition& partition, const TActorId& sender,
                                 const NKikimrPQ::TVersionedConsumerOffset& source, ui64 localRevision,
                                 ui64 readRuleGeneration = 1, TMaybe<ui64> legacyOffset = Nothing());
-    void WaitCmdWrite(const TCmdWriteMatcher& matcher = {});
+    void WaitCmdWrite(const TCmdWriteMatcher& matcher = {}, bool requireAllUserInfos = false);
+    void WaitOffsetCmdWrite(const TCmdWriteMatcher& matcher = {});
     void WaitCmdWriteTx(const TCmdWriteTxMatcher& matcher = {});
     void SendCmdWriteResponse(NMsgBusProxy::EResponseStatus status);
     void WaitForReplicationDataPersisted(const TPartition& partition);
@@ -748,7 +749,7 @@ void TPartitionFixture::SendGetOffset(ui64 cookie,
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
+void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher, bool requireAllUserInfos)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
@@ -894,11 +895,18 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
     if (matcher.UserInfoCount.Defined()) {
         UNIT_ASSERT_VALUES_EQUAL(*matcher.UserInfoCount, userInfoCount);
     }
-    for (const auto& [index, userInfo] : matcher.UserInfos) {
-        if (userInfo.Consumer || userInfo.Session) {
-            UNIT_ASSERT_C(matchedUserInfos.contains(index), "Missing UserInfos matcher for index " << index);
+    if (requireAllUserInfos) {
+        for (const auto& [index, userInfo] : matcher.UserInfos) {
+            if (userInfo.Consumer || userInfo.Session) {
+                UNIT_ASSERT_C(matchedUserInfos.contains(index), "Missing UserInfos matcher for index " << index);
+            }
         }
     }
+}
+
+void TPartitionFixture::WaitOffsetCmdWrite(const TCmdWriteMatcher& matcher)
+{
+    WaitCmdWrite(matcher, true);
 }
 
 void TPartitionFixture::WaitCmdWriteTx(const TCmdWriteTxMatcher& matcher)
@@ -964,7 +972,7 @@ void TPartitionFixture::PersistReplicationData(const TPartition& partition,
     } else {
         SendEvent(event.Release(), sender, ActorId);
     }
-    WaitCmdWrite(matcher);
+    WaitOffsetCmdWrite(matcher);
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitForReplicationDataPersisted(partition);
 }
@@ -972,7 +980,7 @@ void TPartitionFixture::PersistReplicationData(const TPartition& partition,
 void TPartitionFixture::PersistPartitionConfig(const TConfigParams& config, const TCmdWriteMatcher& matcher)
 {
     SendChangePartitionConfig(config);
-    WaitCmdWrite(matcher);
+    WaitOffsetCmdWrite(matcher);
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitPartitionConfigChanged();
 }
@@ -3357,7 +3365,7 @@ void TPartitionFixture::EstablishReplicationSession(const TActorId& readSessionA
         1, 1, step, Ctx->Edge, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION);
     event->ReadSessionActor = readSessionActor;
     SendEvent(event.Release());
-    WaitCmdWrite();
+    WaitOffsetCmdWrite();
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = cookie});
     Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
@@ -3582,7 +3590,7 @@ Y_UNIT_TEST_F(ReplicationDataPersistsSourceRevisionsAcrossRestartAndRecreation, 
     ExpectSourceVersion(payloads, 4, 3, 2);
 
     SendSetOffset(102, "reader", 0, "");
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "reader", .Offset = 0,
+    WaitOffsetCmdWrite({.UserInfos = {{0, {.Consumer = "reader", .Offset = 0,
         .ReadRuleGeneration = 3, .OffsetRevision = 3}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = 102});
@@ -3661,7 +3669,7 @@ void TPartitionFixture::TestReplicateOffsetClampedToStart(bool important)
     // Creating a reader session does not change the requested offset. Retention
     // normalization happens before assigning the persisted source revision.
     SendCreateSession(102, "reader", "reader-session", 1, 1);
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "reader", .Offset = 7, .OffsetRevision = 1}}}});
+    WaitOffsetCmdWrite({.UserInfos = {{0, {.Consumer = "reader", .Offset = 7, .OffsetRevision = 1}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = 102});
     Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
@@ -3976,14 +3984,14 @@ Y_UNIT_TEST_F(VersionedReplicationDataAppliesNewerLowerUpdateDuringKvWrite, TPar
         .Consumer = "first", .Generation = 1, .ReadRuleGeneration = 1}}});
 
     SendEvent(MakeVersionedReplicationData("first", 8, 5, 0).Release());
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 8, .OffsetRevision = 1,
+    WaitOffsetCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 8, .OffsetRevision = 1,
         .ReplicatedOffset = MakeVersionedOffset(8, 5, 0)}}}});
 
     SendEvent(MakeVersionedReplicationData("first", 3, 5, 1).Release());
     Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 3, .OffsetRevision = 2,
+    WaitOffsetCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 3, .OffsetRevision = 2,
         .ReplicatedOffset = MakeVersionedOffset(3, 5, 1)}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitForReplicationDataPersisted(*partition);
@@ -3999,7 +4007,7 @@ Y_UNIT_TEST_F(VersionedReplicationDataConsumerRecreationRequiresCurrentSnapshot,
     const auto deletedMirrorer = CurrentMirrorer(*partition);
 
     SendChangePartitionConfig({.Version = 2, .MirrorFrom = mirror});
-    WaitCmdWrite({.DeleteRanges = {{0, {.Consumer = "first"}}}});
+    WaitOffsetCmdWrite({.DeleteRanges = {{0, {.Consumer = "first"}}}});
     SendEvent(MakeVersionedReplicationData("first", 8, 5, 3).Release(), deletedMirrorer, ActorId);
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitPartitionConfigChanged();
@@ -4009,7 +4017,7 @@ Y_UNIT_TEST_F(VersionedReplicationDataConsumerRecreationRequiresCurrentSnapshot,
 
     SendChangePartitionConfig({.Version = 3, .Consumers = {{
         .Consumer = "first", .Generation = 2, .ReadRuleGeneration = 2}}, .MirrorFrom = mirror});
-    WaitCmdWrite({.ExpectConfig = true, .UserInfos = {{0, {.Consumer = "first", .Offset = 0,
+    WaitOffsetCmdWrite({.ExpectConfig = true, .UserInfos = {{0, {.Consumer = "first", .Offset = 0,
         .ReadRuleGeneration = 2, .OffsetRevision = 0, .HasReplicatedOffset = false}}}});
     SendEvent(MakeVersionedReplicationData("first", 4, 5, 2).Release(), recreatedMirrorer, ActorId);
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
@@ -4042,7 +4050,7 @@ void TPartitionFixture::TestReplicationDataUsesFinalEmptyRange(bool versioned)
     Config.SetVersion(2);
     GetConsumer(Config, "first")->SetImportant(true);
     SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
-    WaitCmdWrite({.ExpectConfig = true});
+    WaitOffsetCmdWrite({.ExpectConfig = true});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitPartitionConfigChanged();
     TPartitionTestWrapper::SetMirrorVersionedConsumerOffsets(*partition, versioned);
@@ -4086,18 +4094,18 @@ Y_UNIT_TEST_F(VersionedReplicationDataDeferredWatermarkRejectsOffsetBeforeFinalR
     auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Config = initialConfig}, initialConfig);
     Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
     const auto mirrorer = CurrentMirrorer(*partition);
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 0}}}});
+    WaitOffsetCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 0}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     Config.SetVersion(2);
     GetConsumer(Config, "first")->SetImportant(true);
     SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
-    WaitCmdWrite({.ExpectConfig = true});
+    WaitOffsetCmdWrite({.ExpectConfig = true});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitPartitionConfigChanged();
 
     SendCreateSession(1, "first", "session", 1, 1);
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Session = "session", .Offset = 0}}}});
+    WaitOffsetCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Session = "session", .Offset = 0}}}});
 
     auto updatedMirror = mirror;
     updatedMirror.MutableCredentials()->SetOauthToken("updated-token");
@@ -4110,7 +4118,7 @@ Y_UNIT_TEST_F(VersionedReplicationDataDeferredWatermarkRejectsOffsetBeforeFinalR
 
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = 1});
-    WaitCmdWrite({.MetaStartOffset = 0, .MetaEndOffset = 0, .MetaMirroredOffset = 10, .ExpectConfig = true,
+    WaitOffsetCmdWrite({.MetaStartOffset = 0, .MetaEndOffset = 0, .MetaMirroredOffset = 10, .ExpectConfig = true,
         .UserInfos = {{0, {.Consumer = "first", .Session = "session", .Offset = 0,
             .HasReplicatedOffset = false}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
@@ -4135,7 +4143,7 @@ Y_UNIT_TEST_F(VersionedReplicationDataInitConfigBoundaryDoesNotStartOldMirrorer,
     auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
         .Config = oldConfig, .FillHead = true}, newConfig);
 
-    WaitCmdWrite({.ExpectConfig = true, .UserInfos = {{0, {.Consumer = "first", .Offset = 4,
+    WaitOffsetCmdWrite({.ExpectConfig = true, .UserInfos = {{0, {.Consumer = "first", .Offset = 4,
         .OffsetRevision = 3, .HasReplicatedOffset = false}}}});
     UNIT_ASSERT(!TPartitionTestWrapper::GetMirrorerActor(*partition));
     const auto retiredMirrorer = Ctx->Runtime->AllocateEdgeActor();
@@ -4160,7 +4168,7 @@ Y_UNIT_TEST_F(VersionedReplicationDataSurvivesRestartAndCredentialsOnlyChange, T
     ExpectConsumerState(*partition, 2, 3, MakeVersionedOffset(4, 5, 2));
 
     SendSetOffset(1, "first", 3, "");
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 3, .OffsetRevision = 4,
+    WaitOffsetCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 3, .OffsetRevision = 4,
         .ReplicatedOffset = MakeVersionedOffset(4, 5, 2)}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = 1});
@@ -4195,7 +4203,7 @@ Y_UNIT_TEST_F(VersionedReplicationDataStopResumeAndSourceChangeFenceOldActor, TP
     UNIT_ASSERT(!TPartitionTestWrapper::GetReplicatedOffset(*partition, "first"));
 
     SendSetOffset(1, "first", 2, "");
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 2, .OffsetRevision = 2,
+    WaitOffsetCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 2, .OffsetRevision = 2,
         .HasReplicatedOffset = false}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = 1});
@@ -4237,7 +4245,7 @@ Y_UNIT_TEST_F(VersionedReplicationDataPendingBeforeConsumerReinitIsDiscarded, TP
     const auto oldMirrorer = CurrentMirrorer(*partition);
 
     SendSetOffset(1, "first", 2, "");
-    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 2, .OffsetRevision = 4,
+    WaitOffsetCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 2, .OffsetRevision = 4,
         .ReplicatedOffset = MakeVersionedOffset(4, 5, 2)}}}});
     SendEvent(MakeVersionedReplicationData("first", 8, 5, 3).Release(), oldMirrorer, ActorId);
     SendChangePartitionConfig({.Version = 2, .Consumers = {
@@ -4246,7 +4254,7 @@ Y_UNIT_TEST_F(VersionedReplicationDataPendingBeforeConsumerReinitIsDiscarded, TP
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = 1});
 
-    WaitCmdWrite({.ExpectConfig = true, .UserInfos = {
+    WaitOffsetCmdWrite({.ExpectConfig = true, .UserInfos = {
         {0, {.Consumer = "first", .Offset = 0, .ReadRuleGeneration = 2, .OffsetRevision = 0,
             .HasReplicatedOffset = false}},
         {1, {.Consumer = "other", .Offset = 6, .ReadRuleGeneration = 1, .OffsetRevision = 2,

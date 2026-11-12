@@ -592,6 +592,14 @@ const TMaybe<TString>& TDiscoveryConverter::GetAccount_() const {
     return Account_;
 }
 
+TMaybe<TString> TDiscoveryConverter::TrySecondaryDiscoveryPath(const TString& lbRoot) {
+    if (lbRoot.empty() || !Account_.Defined() || Account_->empty() || FullModernName.empty()) {
+        return {};
+    }
+    SetDatabase(NKikimr::JoinPath({lbRoot, *Account_}));
+    return SecondaryPath;
+}
+
 void TDiscoveryConverter::SetDatabase(const TString& database) {
     if (database.empty()) {
         return;

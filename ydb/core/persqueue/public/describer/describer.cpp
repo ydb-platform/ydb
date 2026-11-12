@@ -1,6 +1,5 @@
 #include "describer.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
@@ -53,7 +52,12 @@ public:
         UsedSyncVersion = Settings.ForceSyncVersion;
 
         for (const auto& topic : TopicPaths) {
-            auto resolved = NNameResolver::ResolveName(DatabasePath, topic);
+            std::expected<NNameResolver::TResolvedName, TString> resolved;
+            if (Settings.ResolvedPaths) {
+                resolved = NNameResolver::ResolveSchemePath(DatabasePath, topic);
+            } else {
+                resolved = NNameResolver::ResolveName(DatabasePath, topic);
+            }
             if (!resolved) {
                 LOG_D("Name resolve failed",
                     {"topic", topic},
@@ -64,7 +68,8 @@ public:
             LOG_D("Name resolved",
                 {"topic", topic},
                 {"resolvedPath", resolved->Path},
-                {"navigateDatabase", resolved->NavigateDatabase});
+                {"navigateDatabase", resolved->NavigateDatabase},
+                {"resolvedPaths", Settings.ResolvedPaths});
             PathToOriginalPaths[resolved->Path].push_back(topic);
             PendingByDatabase[resolved->NavigateDatabase].insert(resolved->Path);
         }
@@ -113,10 +118,12 @@ public:
 
             bool isCDCStream = false;
             TString cdcStreamName;
+            bool isAsyncReplication = false;
 
             if (auto it = CDCPaths.find(realPath); it != CDCPaths.end()) {
                 isCDCStream = true;
                 cdcStreamName = it->second.CdcStreamName;
+                isAsyncReplication = it->second.IsAsyncReplication;
             }
 
             switch (entry.Status) {
@@ -157,7 +164,8 @@ public:
                         PathToOriginalPaths[streamImplPath] = std::move(originalsCopy);
                         CDCPaths[streamImplPath] = {
                             .CdcStreamName = entry.Self->Info.GetName(),
-                            .AccountDatabase = RequestDatabaseName
+                            .AccountDatabase = RequestDatabaseName,
+                            .IsAsyncReplication = entry.Attributes.contains("__async_replication")
                         };
                         break;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
@@ -187,6 +195,8 @@ public:
                                     .CdcStream = isCDCStream,
                                     .CdcStreamName = cdcStreamName,
                                     .CreateStep = entry.CreateStep,
+                                    .IsServerless = entry.DomainInfo && entry.DomainInfo->IsServerless(),
+                                    .IsAsyncReplication = isAsyncReplication,
                                     .Info = entry.PQGroupInfo,
                                     .Self = entry.Self,
                                     .SecurityObject = entry.SecurityObject
@@ -339,6 +349,7 @@ private:
     struct TCDCTopicInfo {
         TString CdcStreamName;
         TString AccountDatabase;
+        bool IsAsyncReplication = false;
     };
     absl::flat_hash_map<TString, TCDCTopicInfo> CDCPaths;
     absl::flat_hash_map<TString, TTopicInfo> Result;

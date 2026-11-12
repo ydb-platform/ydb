@@ -1,7 +1,9 @@
 #pragma once
 
-#include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
+
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
@@ -13,12 +15,11 @@ namespace NKikimr::NGRpcProxy::V1 {
 class TReadInitAndAuthActor : public NPQ::TBaseActor<TReadInitAndAuthActor>
                             , public NPQ::TConstantLogPrefix {
     using TBase = NPQ::TBaseActor<TReadInitAndAuthActor>;
-    using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
-    using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
+    using TEvDescribeTopicsResponse = NPQ::NDescriber::TEvDescribeTopicsResponse;
 
 public:
     TReadInitAndAuthActor(const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
-                          const TString& session, const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+                          const TString& session, const TString& database, const NActors::TActorId& newSchemeCache,
                           TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusiveConstPtr<NACLib::TUserToken> token,
                           const NPersQueue::TTopicsToConverter& topics, const TString& localCluster, bool skipReadRuleCheck = false);
 
@@ -51,15 +52,16 @@ private:
 
     void CloseSession(const TString& errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode code, const TActorContext& ctx);
 
-    void DescribeTopics(const NActors::TActorContext& ctx, bool showPrivate = false);
-    bool ProcessTopicSchemeCacheResponse(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
+    void DescribeTopics(const NActors::TActorContext& ctx);
+    void DescribePaths(absl::flat_hash_set<TString> topics);
+    bool ProcessTopicSchemeCacheResponse(const NPQ::NDescriber::TTopicInfo& topicInfo,
                                          THashMap<TString, TTopicHolder>::iterator topicsIter, const TActorContext& ctx);
     void HandleClientSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
     void SendCacheNavigateRequest(const TActorContext& ctx, const TString& path);
 
     void HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void FinishInitialization(const NActors::TActorContext& ctx);
-    bool CheckTopicACL(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& topic, const TActorContext& ctx);
+    bool CheckTopicACL(const NPQ::NDescriber::TTopicInfo& topicInfo, const TString& topic, const TActorContext& ctx);
     void CheckClientACL(const TActorContext& ctx);
 
     bool CheckACLPermissionsForNavigate(const TIntrusivePtr<TSecurityObject>& secObject,
@@ -72,8 +74,12 @@ private:
     const ui64 Cookie;
     const TString Session;
 
-    const TActorId MetaCacheId;
+    const TString Database;
     const TActorId NewSchemeCache;
+    TActorId DescriberId;
+    bool SecondaryDescribe = false;
+    // secondary scheme path -> Topics key (primary path)
+    THashMap<TString, TString> SecondaryToOriginal;
 
     const TString ClientId;
     const TString ClientPath;

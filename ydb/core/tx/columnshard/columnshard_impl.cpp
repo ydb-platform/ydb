@@ -638,7 +638,6 @@ private:
                 Changes->SetStage(NOlap::NChanges::EStage::AskAccessors);
                 break;
             case NOlap::NDataFetcher::EFetchingStage::AskDataResources:
-            case NOlap::NDataFetcher::EFetchingStage::AskGeneralResources:
                 Changes->SetStage(NOlap::NChanges::EStage::AskDataResources);
                 break;
             case NOlap::NDataFetcher::EFetchingStage::AskAccessorResources:

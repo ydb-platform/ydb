@@ -549,7 +549,7 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
 
 bool TTableSettings::IsSet() const {
     return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys
-        || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter
+        || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter || ReplicationMode || ReplicationConsistencyLevel
         || ReadReplicasSettings || TtlSettings || DataSourcePath || Location || ExternalSourceParameters
         || StoreExternalBlobs || ExternalDataChannelsCount || MetricsLevel;
 }

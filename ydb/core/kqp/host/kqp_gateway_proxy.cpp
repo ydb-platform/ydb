@@ -1407,6 +1407,53 @@ public:
             return tablePromise.GetFuture();
         }
 
+        if (req.has_set_replication_consistency_level() && !req.has_set_replication_mode()) {
+            IKqpGateway::TGenericResult errResult;
+            errResult.AddIssue(NYql::TIssue(
+                "REPLICATION_CONSISTENCY_LEVEL can only be set together with REPLICATION_MODE"));
+            errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
+            tablePromise.SetValue(errResult);
+            return tablePromise.GetFuture();
+        }
+
+        if (req.has_set_replication_mode()) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            // The public AlterTableRequest has no replication field, so the scheme transaction
+            // is built here. SchemeShard admits it only from a real cluster administrator.
+            std::pair<TString, TString> pathPair;
+            TString error;
+            if (!NSchemeHelpers::SplitTablePath(req.path(), GetDatabase(), pathPair, error, false)) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            modifyScheme.SetWorkingDir(pathPair.first);
+            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+            modifyScheme.SetAllowReplicationModeChange(true);
+            auto* alter = modifyScheme.MutableAlterTable();
+            alter->SetName(pathPair.second);
+            auto* config = alter->MutableReplicationConfig();
+            config->SetMode(req.set_replication_mode());
+            if (req.set_replication_mode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY) {
+                // The replication attaches an existing table only when it is a completed import,
+                // and only when the consistency level is the one its own configuration asks for.
+                config->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+                config->SetConsistencyLevel(req.has_set_replication_consistency_level()
+                    ? req.set_replication_consistency_level()
+                    : NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+            }
+            phyTx.MutableSchemeOperation()->MutableAlterTable()->CopyFrom(modifyScheme);
+            TGenericResult result;
+            result.SetSuccess();
+            tablePromise.SetValue(result);
+            return tablePromise.GetFuture();
+        }
+
         auto profilesFuture = Gateway->GetTableProfiles();
         auto sessionCtx = SessionCtx;
         profilesFuture.Subscribe(

@@ -2155,6 +2155,10 @@ private:
                 }
             } else if (name == "keyBloomFilter") {
                 meta->TableSettings.KeyBloomFilter = TString(setting.Value().Cast<TCoAtom>().Value());
+            } else if (name == "replicationMode") {
+                meta->TableSettings.ReplicationMode = TString(setting.Value().Cast<TCoAtom>().Value());
+            } else if (name == "replicationConsistencyLevel") {
+                meta->TableSettings.ReplicationConsistencyLevel = TString(setting.Value().Cast<TCoAtom>().Value());
             } else if (name == "readReplicasSettings") {
                 meta->TableSettings.ReadReplicasSettings = TString(
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()

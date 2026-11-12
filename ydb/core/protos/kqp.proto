@@ -287,6 +287,9 @@ message TKqpAlterTableRequest {
     repeated Ydb.Table.SetNotNullItem set_not_null = 23;
     repeated Ydb.Table.TableMultiColumnStatistics add_statistics = 24;
     repeated string drop_statistics = 25;
+    // ALTER TABLE ... SET (REPLICATION_MODE = 'READ_ONLY' | 'NONE'); administrators only
+    optional NKikimrSchemeOp.TTableReplicationConfig.EReplicationMode set_replication_mode = 26;
+    optional NKikimrSchemeOp.TTableReplicationConfig.EConsistencyLevel set_replication_consistency_level = 27;
 }
 
 message TRlPath {

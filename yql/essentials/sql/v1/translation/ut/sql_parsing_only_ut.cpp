@@ -5164,6 +5164,33 @@ Y_UNIT_TEST(AlterTableAlterIndexSetLocalBloomFppIsCorrect) {
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
+Y_UNIT_TEST(AlterTableSetReplicationModeIsCorrect) {
+    const auto result = SqlToYql("USE ydb;   ALTER TABLE table SET (REPLICATION_MODE = READ_ONLY)");
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    UNIT_ASSERT_C(result.Root->ToString().Contains("replicationMode"), result.Root->ToString());
+}
+
+Y_UNIT_TEST(AlterTableSetReplicationModeNoneIsCorrect) {
+    const auto result = SqlToYql("USE ydb;   ALTER TABLE table SET (REPLICATION_MODE = NONE)");
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+}
+
+Y_UNIT_TEST(CreateTableWithReplicationModeIsNotSupported) {
+    ExpectFailWithError("USE ydb;   CREATE TABLE table (key Uint32, PRIMARY KEY (key)) WITH (REPLICATION_MODE = READ_ONLY)",
+                        "<main>:1:69: Error: REPLICATION_MODE can only be set with ALTER TABLE\n");
+}
+
+Y_UNIT_TEST(AlterTableSetReplicationConsistencyLevelIsCorrect) {
+    const auto result = SqlToYql("USE ydb;   ALTER TABLE table SET (REPLICATION_MODE = READ_ONLY, REPLICATION_CONSISTENCY_LEVEL = GLOBAL)");
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    UNIT_ASSERT_C(result.Root->ToString().Contains("replicationConsistencyLevel"), result.Root->ToString());
+}
+
+Y_UNIT_TEST(AlterTableResetReplicationModeIsNotSupported) {
+    ExpectFailWithError("USE ydb;   ALTER TABLE table RESET (REPLICATION_MODE)",
+                        "<main>:1:37: Error: REPLICATION_MODE reset is not supported\n");
+}
+
 Y_UNIT_TEST(AlterTableAlterIndexResetReadReplicasSettingsIsNotSupported) {
     ExpectFailWithError("USE ydb;   ALTER TABLE table ALTER INDEX index RESET (READ_REPLICAS_SETTINGS)",
                         "<main>:1:55: Error: READ_REPLICAS_SETTINGS reset is not supported\n");

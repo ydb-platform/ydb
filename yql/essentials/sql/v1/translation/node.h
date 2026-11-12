@@ -1259,6 +1259,8 @@ struct TTableSettings {
     TNodePtr UniformPartitions;
     TVector<TVector<TNodePtr>> PartitionAtKeys;
     TMaybe<TIdentifier> KeyBloomFilter;
+    TMaybe<TIdentifier> ReplicationMode;
+    TMaybe<TIdentifier> ReplicationConsistencyLevel;
     TNodePtr ReadReplicasSettings;
     NYql::TResetableSetting<TTtlSettings, void> TtlSettings;
     NYql::TResetableSetting<TNodePtr, void> Tiering;
@@ -1273,7 +1275,7 @@ struct TTableSettings {
     TVector<NYql::TResetableSetting<std::pair<TIdentifier, TNodePtr>, TIdentifier>> ExternalSourceParameters;
 
     bool IsSet() const {
-        return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters || ExternalDataChannelsCount || MetricsLevel;
+        return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter || ReplicationMode || ReplicationConsistencyLevel || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters || ExternalDataChannelsCount || MetricsLevel;
     }
 };
 

@@ -25,7 +25,9 @@ using namespace NKikimr::NMiniKQL;
 namespace {
 
 bool CalcIsLiteralTx(const NKqpProto::TKqpPhyTx* tx) {
-    if (tx->GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
+    // Secret dependencies need the executor's secret resolution and permission
+    // checks even when the query contains only scalar computations.
+    if (tx->GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE || tx->SecretNamesSize() != 0) {
         return false;
     }
 

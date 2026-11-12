@@ -358,7 +358,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         UNIT_ASSERT_GE(disconnectCount, 3);
     }
 
-    void RunSimpleSnapshotsTest(size_t nodesCount, bool hasTable, bool manySnapshots = false) {
+    void RunSimpleSnapshotsTest(
+        size_t nodesCount, bool hasTable, bool manySnapshots = false, bool explicitVersion = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
         appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(2);
@@ -402,15 +403,27 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         for (ui32 i = 0; i < snapshotsCount; ++i) {
             const TActorId sender = runtime.AllocateEdgeActor(0);
             snapshotSenders.emplace_back(sender);
-            runtime.Send(
-                new IEventHandle(service1, sender,
-                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", hasTable ? TVector<::NKikimr::TTableId>{table} : TVector<::NKikimr::TTableId>{})),
-                0, true);
+            auto request = MakeHolder<TEvLongTxService::TEvAcquireReadSnapshot>(
+                "/dc-1", hasTable ? TVector<::NKikimr::TTableId>{ table } : TVector<::NKikimr::TTableId>{});
+            const TRowVersion requestedVersion(runtime.GetCurrentTime().MilliSeconds(), 123);
+            if (explicitVersion) {
+                request->Snapshot = requestedVersion;
+            }
+            runtime.Send(new IEventHandle(service1, sender, request.Release()), 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
             auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
             handles.emplace_back(std::move(msg->SnapshotHandle));
             snapshots.emplace_back(msg->Snapshot);
+            if (explicitVersion) {
+                UNIT_ASSERT_VALUES_EQUAL(msg->Snapshot, requestedVersion);
+                // A duplicate must not hand out an unregistered handle or release the existing one
+                runtime.Send(new IEventHandle(service1, sender, new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1",
+                                                                    { table }, requestedVersion)), 0, true);
+                const auto duplicate =
+                    runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(duplicate->Get()->Status, Ydb::StatusIds::BAD_REQUEST);
+            }
         }
 
         SimulateSleep(runtime, TDuration::Seconds(2));
@@ -495,6 +508,10 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
     Y_UNIT_TEST_TWIN(SimpleSnapshotsSingleNode, HasTable) {
         RunSimpleSnapshotsTest(1, HasTable);
+    }
+
+    Y_UNIT_TEST_TWIN(ExplicitSnapshotsManyNodes, HasTable) {
+        RunSimpleSnapshotsTest(4, HasTable, false, true);
     }
 
     Y_UNIT_TEST_TWIN(SimpleSnapshotsManyNodes, HasTable) {

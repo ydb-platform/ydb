@@ -1,4 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -453,6 +455,94 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         ExecDml(db, "INSERT INTO `/Root/CsAddNn` (Key) VALUES (2);");
         CompareYson(SelectYson(db, "SELECT Key, Extra FROM `/Root/DsAddNn` ORDER BY Key;"),
             SelectYson(db, "SELECT Key, Extra FROM `/Root/CsAddNn` ORDER BY Key;"));
+    }
+
+    Y_UNIT_TEST(CompactionAndActualizationKeepFill) {
+        auto cs = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/CsKeep` (
+                Key Uint32 NOT NULL,
+                Name Utf8,
+                Value Utf8 DEFAULT 'born',
+                Note Utf8,
+                PRIMARY KEY (Key)
+            ) WITH (STORE = COLUMN);
+        )");
+        ExecDml(db, "INSERT INTO `/Root/CsKeep` (Key, Name) VALUES (1, 'omit');");
+        ExecDml(db, "INSERT INTO `/Root/CsKeep` (Key, Name, Value, Note) VALUES (2, 'explicit', 'stored', NULL);");
+        ExecDml(db, "UPSERT INTO `/Root/CsKeep` (Key, Name) VALUES (3, 'new');");
+        ExecDml(db, "UPSERT INTO `/Root/CsKeep` (Key, Name, Value) VALUES (1, 'omit', 'kept');");
+        ExecDml(db, "UPSERT INTO `/Root/CsKeep` (Key, Name) VALUES (1, 'renamed');");
+        UNIT_ASSERT(cs->WaitCompactions(TDuration::Seconds(20)));
+        {
+            const auto row = SelectYson(db, "SELECT Name, Value, Note FROM `/Root/CsKeep` WHERE Key = 1;");
+            UNIT_ASSERT_STRING_CONTAINS(row, "renamed");
+            UNIT_ASSERT_STRING_CONTAINS(row, "kept");
+        }
+        {
+            const auto row = SelectYson(db, "SELECT Name, Value, Note FROM `/Root/CsKeep` WHERE Key = 2;");
+            UNIT_ASSERT_STRING_CONTAINS(row, "stored");
+            UNIT_ASSERT_STRING_CONTAINS(row, "#");
+        }
+        {
+            const auto row = SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 3;");
+            UNIT_ASSERT_STRING_CONTAINS(row, "born");
+        }
+
+        ExecDml(db, "REPLACE INTO `/Root/CsKeep` (Key, Name) VALUES (3, 'replaced');");
+        ExecDml(db, "UPDATE `/Root/CsKeep` SET Name = 'updated' WHERE Key = 2;");
+        ExecDml(db, "DELETE FROM `/Root/CsKeep` WHERE Key = 3;");
+        ExecDml(db, "UPSERT INTO `/Root/CsKeep` (Key, Name) VALUES (3, 'again');");
+        UNIT_ASSERT(cs->WaitCompactions(TDuration::Seconds(20)));
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 3;"), "born");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Name, Value, Note FROM `/Root/CsKeep` WHERE Key = 2;"), "updated");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 2;"), "stored");
+
+        ExecScheme(db, "ALTER TABLE `/Root/CsKeep` ADD COLUMN Extra Utf8 DEFAULT 'added';");
+        ExecScheme(db, "ALTER TABLE `/Root/CsKeep` ADD COLUMN Required Utf8 NOT NULL DEFAULT 'nn';");
+        ExecScheme(db, "ALTER OBJECT `/Root/CsKeep` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        const auto actualizedAfterAdd = cs->GetActualizationsCount().Val();
+        cs->WaitActualization(TDuration::Seconds(30), true);
+        UNIT_ASSERT_C(cs->GetActualizationsCount().Val() > actualizedAfterAdd, "scheme actualization did not rewrite portions");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Extra, Required FROM `/Root/CsKeep` WHERE Key = 1;"), "added");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Extra, Required FROM `/Root/CsKeep` WHERE Key = 1;"), "nn");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 1;"), "kept");
+
+        ExecScheme(db, "ALTER TABLE `/Root/CsKeep` ALTER COLUMN Value SET DEFAULT 'later';");
+        ExecScheme(db, "ALTER OBJECT `/Root/CsKeep` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        const auto actualizedAfterSet = cs->GetActualizationsCount().Val();
+        cs->WaitActualization(TDuration::Seconds(30), true);
+        UNIT_ASSERT_C(cs->GetActualizationsCount().Val() > actualizedAfterSet, "SET DEFAULT did not actualize portions");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 1;"), "kept");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 2;"), "stored");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 3;"), "born");
+        ExecDml(db, "INSERT INTO `/Root/CsKeep` (Key, Name) VALUES (4, 'after-set');");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value, Extra, Required FROM `/Root/CsKeep` WHERE Key = 4;"), "later");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Extra, Required FROM `/Root/CsKeep` WHERE Key = 4;"), "added");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Required FROM `/Root/CsKeep` WHERE Key = 4;"), "nn");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 1;"), "kept");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 4;"), "later");
+
+        ExecScheme(db, "ALTER TABLE `/Root/CsKeep` ALTER COLUMN Value DROP DEFAULT;");
+        ExecScheme(db, "ALTER OBJECT `/Root/CsKeep` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        const auto actualizedAfterDrop = cs->GetActualizationsCount().Val();
+        cs->WaitActualization(TDuration::Seconds(30), true);
+        UNIT_ASSERT_C(cs->GetActualizationsCount().Val() > actualizedAfterDrop, "DROP DEFAULT did not actualize portions");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 1;"), "kept");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 3;"), "born");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 4;"), "later");
+        ExecDml(db, "INSERT INTO `/Root/CsKeep` (Key, Name) VALUES (5, 'after-drop');");
+        {
+            const auto row = SelectYson(db, "SELECT Value FROM `/Root/CsKeep` WHERE Key = 5;");
+            UNIT_ASSERT_C(row.Contains("#"), row);
+        }
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Required FROM `/Root/CsKeep` WHERE Key = 5;"), "nn");
+        ExecScheme(db, "ALTER TABLE `/Root/CsKeep` ALTER COLUMN Required DROP DEFAULT;");
+        ExpectDmlError(db, "INSERT INTO `/Root/CsKeep` (Key, Name, Value) VALUES (6, 'missing-nn', 'x');",
+            "Missing not null column");
+        UNIT_ASSERT_STRING_CONTAINS(SelectYson(db, "SELECT Required FROM `/Root/CsKeep` WHERE Key = 1;"), "nn");
     }
 
     Y_UNIT_TEST(SparsedSetDefaultRejected) {

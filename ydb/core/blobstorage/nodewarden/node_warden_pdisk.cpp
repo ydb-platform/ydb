@@ -119,6 +119,8 @@ namespace NKikimr::NStorage {
         }
         if (pdisk.HasSpaceColorBorder()) {
             pdiskConfig->SpaceColorBorder = pdisk.GetSpaceColorBorder();
+        } else {
+            pdiskConfig->SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::CYAN;
         }
         if (pdisk.HasPDiskConfig()) {
             pdiskConfig->Apply(&pdisk.GetPDiskConfig());

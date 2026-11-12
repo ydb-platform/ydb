@@ -428,8 +428,7 @@ runs:
         YA_MAKE_COMMAND="./ya make ${params[@]}"
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
-        # harness-pqmask cold A/B: always full SM set + --retest; never graph_compare.
-        if false; then
+        if [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
@@ -472,9 +471,6 @@ runs:
         analytics start prepare_ya_make
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
-
-        # harness-pqmask cold A/B: disable bazel-remote reads/writes.
-        params+=(--no-bazel-remote-store)
 
         if [ ! -z "${{ fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}" ]; then
           params+=(--bazel-remote-store)

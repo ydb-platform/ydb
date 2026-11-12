@@ -381,24 +381,6 @@ class TCdcChangeSenderMain
     , public NChangeExchange::IChangeSenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
 {
-    struct TEvPrivate {
-        enum EEv {
-            EvRetryWriteHeartbeat = NChangeExchange::TEvChangeExchangePrivate::EvEnd,
-            EvEnd,
-        };
-
-        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE));
-
-        struct TEvRetryWriteHeartbeat: public TEventLocal<TEvRetryWriteHeartbeat, EvRetryWriteHeartbeat> {
-            const ui64 Cookie;
-
-            explicit TEvRetryWriteHeartbeat(ui64 cookie)
-                : Cookie(cookie)
-            {
-            }
-        };
-    };
-
     NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "CdcChangeSenderMain"},
@@ -558,7 +540,7 @@ class TCdcChangeSenderMain
 
         if (!IsHeartbeatAggregated()) {
             RemoveHeartbeats(Heartbeats.end());
-            WritingHeartbeat.reset();
+            Unconfirmed.reset();
         }
 
         Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
@@ -626,7 +608,6 @@ class TCdcChangeSenderMain
         const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
         if (TopicVersion && TopicVersion == topicVersion) {
             CreateSenders();
-            WriteHeartbeat();
             return Become(&TThis::StateMain);
         }
 
@@ -661,7 +642,6 @@ class TCdcChangeSenderMain
         }
 
         CreateSenders(NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
-        WriteHeartbeat();
         Become(&TThis::StateMain);
     }
 
@@ -703,14 +683,14 @@ class TCdcChangeSenderMain
             {"eventDetails", ev->Get()->ToString()});
         TVector<NChangeExchange::IChangeRecord::TPtr> records;
         for (auto& record : ev->Get()->Records) {
-            if (IsAggregatedHeartbeat(*record)) {
-                HoldHeartbeat(std::move(record));
+            if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcHeartbeat && IsHeartbeatAggregated()) {
+                HoldHeartbeat(*record);
             } else {
                 records.push_back(std::move(record));
             }
         }
         ProcessRecords(std::move(records));
-        WriteHeartbeat();
+        SendReadyHeartbeat();
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
@@ -720,14 +700,14 @@ class TCdcChangeSenderMain
             Undelivered.erase(order);
         }
         ForgetRecords(std::move(ev->Get()->Records));
-        WriteHeartbeat();
+        SendReadyHeartbeat();
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
-        WriteHeartbeat();
+        SendReadyHeartbeat();
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
@@ -751,16 +731,15 @@ class TCdcChangeSenderMain
             && Stream.AggregatorTabletId;
     }
 
-    bool IsAggregatedHeartbeat(const NChangeExchange::IChangeRecord& record) const {
-        return record.GetKind() == NChangeExchange::IChangeRecord::EKind::CdcHeartbeat
-            && IsHeartbeatAggregated();
-    }
+    void HoldHeartbeat(const NChangeExchange::IChangeRecord& record) {
+        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
+        THolder<IChangeRecordSerializer> serializer(CreateCdcStreamSerializer(Stream, DataShard.TabletId));
+        TSerializer visitor(*serializer, cmd);
+        record.Accept(visitor);
 
-    void HoldHeartbeat(NChangeExchange::IChangeRecord::TPtr record) {
-        const ui64 order = record->GetOrder();
-        Undelivered.erase(order);
-        Heartbeats.emplace(order, std::move(record));
-        ForgetRecords({order});
+        Undelivered.erase(record.GetOrder());
+        Heartbeats.emplace(record.GetOrder(), NPQ::THeartbeat::Parse(cmd.GetHeartbeat()));
+        ForgetRecords({record.GetOrder()});
     }
 
     void OnRecordsRemoved(const TVector<ui64>& orders) override {
@@ -769,55 +748,33 @@ class TCdcChangeSenderMain
         }
     }
 
-    void WriteHeartbeat() {
-        if (WritingHeartbeat || !IsHeartbeatAggregated()) {
+    void SendReadyHeartbeat() {
+        const auto ready = Undelivered ? Heartbeats.lower_bound(*Undelivered.begin()) : Heartbeats.end();
+        if (ready == Heartbeats.begin()) {
             return;
         }
 
-        WritingHeartbeat = TakeReadyHeartbeat();
-        if (WritingHeartbeat) {
-            SendHeartbeat();
-        }
-    }
-
-    std::optional<NPQ::THeartbeat> TakeReadyHeartbeat() {
-        const auto ready = Undelivered ? Heartbeats.lower_bound(*Undelivered.begin()) : Heartbeats.end();
-        if (ready == Heartbeats.begin()) {
-            return std::nullopt;
-        }
-
-        auto heartbeat = ParseHeartbeat(*std::prev(ready)->second);
+        Unconfirmed = std::prev(ready)->second;
         RemoveHeartbeats(ready);
-        return heartbeat;
+        ScheduleWriteHeartbeat(TDuration::Zero());
     }
 
-    NPQ::THeartbeat ParseHeartbeat(const NChangeExchange::IChangeRecord& record) const {
-        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
-        THolder<IChangeRecordSerializer> serializer(CreateCdcStreamSerializer(Stream, DataShard.TabletId));
-        TSerializer visitor(*serializer, cmd);
-        record.Accept(visitor);
-        return NPQ::THeartbeat::Parse(cmd.GetHeartbeat());
-    }
-
-    void SendHeartbeat() {
+    void ScheduleWriteHeartbeat(TDuration delay) {
         auto ev = MakeHolder<NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeat>();
         ev->RecipientTabletId = Stream.AggregatorTabletId;
         ev->SourceDataShardId = DataShard.TabletId;
-        ev->Heartbeat = *WritingHeartbeat;
+        ev->Heartbeat = *Unconfirmed;
 
-        YDB_LOG_DEBUG("Send heartbeat to CdcAggregatorService",
-            {"eventDetails", ev->ToString()});
-
-        Send(NCdcAggregator::MakeCdcAggregatorServiceId(SelfId().NodeId()), ev.Release(),
-            IEventHandle::FlagTrackDelivery, ++WriteHeartbeatCookie);
-        Schedule(WriteHeartbeatTimeout, new TEvPrivate::TEvRetryWriteHeartbeat(WriteHeartbeatCookie));
+        auto* handle = new IEventHandle(NCdcAggregator::MakeCdcAggregatorServiceId(SelfId().NodeId()), SelfId(),
+            ev.Release(), IEventHandle::FlagTrackDelivery, ++HeartbeatCookie);
+        if (delay) {
+            TActivationContext::Schedule(delay, handle);
+        } else {
+            TActivationContext::Send(handle);
+        }
     }
 
-    void RetryWriteHeartbeat(TDuration delay) {
-        Schedule(delay, new TEvPrivate::TEvRetryWriteHeartbeat(++WriteHeartbeatCookie));
-    }
-
-    void RemoveHeartbeats(TMap<ui64, NChangeExchange::IChangeRecord::TPtr>::iterator end) {
+    void RemoveHeartbeats(TMap<ui64, NPQ::THeartbeat>::iterator end) {
         TVector<ui64> remove;
         for (auto it = Heartbeats.begin(); it != end; it = Heartbeats.erase(it)) {
             remove.push_back(it->first);
@@ -834,52 +791,25 @@ class TCdcChangeSenderMain
 
         using EStatus = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult::EStatus;
         const auto& result = *ev->Get();
-
-        if (!WritingHeartbeat || ev->Cookie != WriteHeartbeatCookie) {
+        if (!Unconfirmed || ev->Cookie != HeartbeatCookie) {
             return;
         }
 
-        switch (result.Status) {
-        case EStatus::Written:
-            if (result.WrittenVersion >= WritingHeartbeat->Version) {
-                WritingHeartbeat.reset();
-                WriteHeartbeatBackoff.Reset();
-                return WriteHeartbeat();
-            }
-            YDB_LOG_WARN("CdcAggregatorService written version is behind the heartbeat, retrying",
-                {"heartbeatVersion", WritingHeartbeat->Version},
-                {"writtenVersion", result.WrittenVersion});
-            return RetryWriteHeartbeat(WriteHeartbeatBackoff.Next());
-        case EStatus::Retry:
-            YDB_LOG_INFO("CdcAggregatorService asked to retry heartbeat",
-                {"errorMessage", result.Error});
-            return RetryWriteHeartbeat(WriteHeartbeatBackoff.Next());
-        case EStatus::Rejected:
-            YDB_LOG_ERROR("CdcAggregatorService rejected heartbeat",
-                {"aggregatorTabletId", Stream.AggregatorTabletId},
-                {"errorMessage", result.Error});
-            return RetryWriteHeartbeat(RejectedHeartbeatRetryDelay);
+        if (result.Status == EStatus::Written && result.WrittenVersion >= Unconfirmed->Version) {
+            Unconfirmed.reset();
+            HeartbeatBackoff.Reset();
+            return;
         }
+
+        YDB_LOG_WARN("CdcAggregatorService has not written the heartbeat, retrying",
+            {"eventDetails", result.ToString()});
+        ScheduleWriteHeartbeat(result.Status == EStatus::Rejected ? RejectedHeartbeatRetryDelay : HeartbeatBackoff.Next());
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        if (!WritingHeartbeat || ev->Cookie != WriteHeartbeatCookie) {
-            return;
+        if (Unconfirmed && ev->Cookie == HeartbeatCookie) {
+            ScheduleWriteHeartbeat(HeartbeatBackoff.Next());
         }
-
-        YDB_LOG_WARN("CdcAggregatorService is unavailable, retrying heartbeat");
-        RetryWriteHeartbeat(WriteHeartbeatBackoff.Next());
-    }
-
-    void Handle(TEvPrivate::TEvRetryWriteHeartbeat::TPtr& ev) {
-        if (!WritingHeartbeat || ev->Get()->Cookie != WriteHeartbeatCookie) {
-            return;
-        }
-
-        if (auto heartbeat = TakeReadyHeartbeat()) {
-            WritingHeartbeat = std::move(heartbeat);
-        }
-        SendHeartbeat();
     }
 
     void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -931,7 +861,6 @@ public:
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvGone, Handle);
             hFunc(NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
-            hFunc(TEvPrivate::TEvRetryWriteHeartbeat, Handle);
             HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -958,14 +887,13 @@ private:
     THolder<NKikimr::TKeyDesc> KeyDesc;
     THashMap<ui32, ui64> PartitionToShard;
 
-    static constexpr TDuration WriteHeartbeatTimeout = TDuration::Seconds(30);
     static constexpr TDuration RejectedHeartbeatRetryDelay = TDuration::Minutes(1);
 
     TSet<ui64> Undelivered;
-    TMap<ui64, NChangeExchange::IChangeRecord::TPtr> Heartbeats;
-    std::optional<NPQ::THeartbeat> WritingHeartbeat;
-    ui64 WriteHeartbeatCookie = 0;
-    TBackoff WriteHeartbeatBackoff = TBackoff(TDuration::MilliSeconds(100), TDuration::Seconds(10));
+    TMap<ui64, NPQ::THeartbeat> Heartbeats;
+    std::optional<NPQ::THeartbeat> Unconfirmed;
+    ui64 HeartbeatCookie = 0;
+    TBackoff HeartbeatBackoff = TBackoff(TDuration::MilliSeconds(100), TDuration::Seconds(10));
 
 }; // TCdcChangeSenderMain
 

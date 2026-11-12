@@ -11,6 +11,7 @@
 
 namespace NKikimrBlobStorage {
     class TGroupInfo;
+    class TStorageConfig;
 }
 
 namespace NKikimr {
@@ -203,6 +204,12 @@ namespace NKikimr {
         inline TBridgePileId GetImplicitPileId(const TBridgeInfo *bridgeInfo) {
             return bridgeInfo && bridgeInfo->ImplicitPile ? bridgeInfo->ImplicitPile->BridgePileId : TBridgePileId();
         }
+
+        // Resolve the implicit pile from the exact storage config being processed. This matters for validation of a
+        // proposed config, which may restore the implicit pile before the committed TBridgeInfo is refreshed.
+        // Configs predating the pile registry keep using the reported bridge info as a compatibility fallback.
+        TBridgePileId GetImplicitPileId(const NKikimrBlobStorage::TStorageConfig *storageConfig,
+            const TBridgeInfo *fallbackBridgeInfo);
 
         // Resolve pile index of a node by its (optional) pile name against the list of configured pile names; node
         // without pile name gets the implicit pile. Returns nullopt when pile can't be resolved. Pile indices obtained

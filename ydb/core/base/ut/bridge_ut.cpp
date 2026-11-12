@@ -1,4 +1,5 @@
 #include <ydb/core/base/bridge.h>
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -64,6 +65,34 @@ Y_UNIT_TEST_SUITE(BridgePileRegistry) {
                 UNIT_ASSERT_EQUAL(TBridgePileId::FromPileIndex(*index), id);
             }
         }
+    }
+
+    Y_UNIT_TEST(StorageConfigImplicitPileTakesPrecedence) {
+        TBridgeInfo reported;
+        reported.Piles.resize(2);
+        reported.Piles[0].BridgePileId = TBridgePileId::FromPileIndex(0);
+        reported.Piles[1].BridgePileId = TBridgePileId::FromPileIndex(1);
+
+        NKikimrBlobStorage::TStorageConfig proposed;
+        auto *registry = proposed.MutableClusterStateDetails()->MutablePileRegistry();
+        registry->AddPiles()->SetName("original");
+        registry->AddPiles()->SetName("other");
+        TBridgePileId::FromPileIndex(0).CopyToProto(registry,
+            &NKikimrBridge::TPileRegistry::SetImplicitPileId);
+
+        // The proposed ADD restores the implicit pile before committed bridge info is refreshed.
+        UNIT_ASSERT(!NBridge::GetImplicitPileId(&reported));
+        UNIT_ASSERT_EQUAL(NBridge::GetImplicitPileId(&proposed, &reported), TBridgePileId::FromPileIndex(0));
+
+        // An explicit registry without an implicit pile also overrides stale reported state.
+        reported.ImplicitPile = &reported.Piles[1];
+        registry->ClearImplicitPileId();
+        UNIT_ASSERT(!NBridge::GetImplicitPileId(&proposed, &reported));
+
+        // Older storage configs without a pile registry retain the reported-state fallback.
+        proposed.ClearClusterStateDetails();
+        UNIT_ASSERT_EQUAL(NBridge::GetImplicitPileId(&proposed, &reported), TBridgePileId::FromPileIndex(1));
+        UNIT_ASSERT_EQUAL(NBridge::GetImplicitPileId(nullptr, &reported), TBridgePileId::FromPileIndex(1));
     }
 
     Y_UNIT_TEST(Validation) {

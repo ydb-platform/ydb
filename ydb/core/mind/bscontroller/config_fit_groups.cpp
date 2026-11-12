@@ -277,8 +277,8 @@ namespace NKikimr {
                     return group != nullptr;
                 });
 
-                const bool restoringInlinePile = State.BridgeInfo &&
-                    NBridge::GetImplicitPileId(State.BridgeInfo.get()) == bridgePileId;
+                const bool restoringInlinePile = NBridge::GetImplicitPileId(State.StorageConfig.get(),
+                    State.BridgeInfo.get()) == bridgePileId;
                 TGroupId groupId;
                 if (restoringInlinePile) {
                     TGroupInfo *mutableProxyGroup = State.Groups.FindForUpdate(proxyGroupId);
@@ -434,10 +434,16 @@ namespace NKikimr {
                         if (oldSpecies != newSpecies) {
                             auto& index = State.IndexGroupSpeciesToGroup.Unshare();
                             const auto oldIndexIt = index.find(oldSpecies);
-                            Y_ABORT_UNLESS(oldIndexIt != index.end());
+                            if (oldIndexIt == index.end()) {
+                                throw TExFitGroupError() << "GroupId# " << groupId
+                                    << " is missing from the group species index";
+                            }
                             auto& oldGroups = oldIndexIt->second;
                             const auto oldGroupIt = std::find(oldGroups.begin(), oldGroups.end(), groupId);
-                            Y_ABORT_UNLESS(oldGroupIt != oldGroups.end());
+                            if (oldGroupIt == oldGroups.end()) {
+                                throw TExFitGroupError() << "GroupId# " << groupId
+                                    << " is missing from its group species index entry";
+                            }
                             oldGroups.erase(oldGroupIt);
                             if (oldGroups.empty()) {
                                 index.erase(oldIndexIt);

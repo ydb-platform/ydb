@@ -1,6 +1,7 @@
 #include "bridge.h"
 
 #include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <util/generic/hash_set.h>
@@ -53,6 +54,18 @@ namespace NKikimr {
                 registry.MutablePiles(*index)->SetOriginal(true);
             }
             return registry;
+        }
+
+        TBridgePileId GetImplicitPileId(const NKikimrBlobStorage::TStorageConfig *storageConfig,
+                const TBridgeInfo *fallbackBridgeInfo) {
+            if (storageConfig && storageConfig->HasClusterStateDetails()) {
+                const auto& details = storageConfig->GetClusterStateDetails();
+                if (details.HasPileRegistry()) {
+                    return TBridgePileId::FromProto(&details.GetPileRegistry(),
+                        &NKikimrBridge::TPileRegistry::GetImplicitPileId);
+                }
+            }
+            return GetImplicitPileId(fallbackBridgeInfo);
         }
 
         TBridgePileId ResolvePileId(const NKikimrBridge::TPileRegistry& registry, const std::optional<TString>& pileName) {

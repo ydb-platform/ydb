@@ -35,9 +35,11 @@ private:
 
         const NMonitoring::TDynamicCounters::TCounterPtr& GetCounter(const ui32 index) {
             std::call_once(Registered, [this] {
+                std::vector<NMonitoring::TDynamicCounters::TCounterPtr> counters;
                 for (auto&& name : Names) {
-                    Counters.emplace_back(TBase::GetValue(name));
+                    counters.emplace_back(TBase::GetValue(name));
                 }
+                Counters = std::move(counters);
             });
             return Counters[index];
         }

@@ -39,7 +39,6 @@ private:
 public:
     TValueAggregationAgent(const TString& signalName, const TCommonCountersOwner& signalsOwner);
     void ResendStatus() const;
-    void UnregisterClient(std::list<TValueAggregationClient*>::iterator it);
 
     std::shared_ptr<TValueAggregationClient> GetClient();
 };

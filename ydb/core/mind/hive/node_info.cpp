@@ -388,6 +388,30 @@ ui64 TNodeInfo::GetMaxCountForTabletType(TTabletTypes::EType tabletType) const {
     return maxCount;
 }
 
+void TNodeInfo::SetTabletAvailabilityRestriction(TTabletTypes::EType tabletType, ui64 maxCount) {
+    TabletAvailabilityRestrictions[tabletType] = maxCount;
+    auto it = TabletAvailability.find(tabletType);
+    if (it != TabletAvailability.end()) {
+        it->second.UpdateRestriction(maxCount);
+    }
+}
+
+bool TNodeInfo::ResetTabletAvailabilityRestriction(TTabletTypes::EType tabletType) {
+    auto itRestriction = TabletAvailabilityRestrictions.find(tabletType);
+    bool hasRealRestriction = itRestriction != TabletAvailabilityRestrictions.end()
+        && itRestriction->second != MAX_TABLET_COUNT_DEFAULT_VALUE;
+    if (hasRealRestriction) {
+        TabletAvailabilityRestrictions.erase(itRestriction);
+        auto it = TabletAvailability.find(tabletType);
+        if (it != TabletAvailability.end()) {
+            it->second.RemoveRestriction();
+        }
+        return false;
+    }
+    SetTabletAvailabilityRestriction(tabletType, MAX_TABLET_COUNT_DEFAULT_VALUE);
+    return true;
+}
+
 bool TNodeInfo::IsOverloaded() const {
     auto maxValues = GetResourceMaximumValues() * Hive.GetResourceOvercommitment();
     auto normValues = NormalizeRawValues(GetResourceCurrentValues(), maxValues);

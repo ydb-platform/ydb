@@ -2563,9 +2563,22 @@ public:
     }
 
     void AddNotAppliedProblems() {
+        // The groups of a database are the groups of its storage pools, which are taken from the description
+        // of the database. Without the description the pre-filter is skipped and NeedFilter is recalculated
+        // without it, so the groups of the whole cluster are returned. A database whose description was
+        // received and has no storage pools is not such a case.
+        const bool databaseUnknown = Database && !DatabaseDescriptionReceived;
+        if (databaseUnknown) {
+            AddProblem("no-database-info");
+        }
+        // An empty list can be neither unfiltered nor unsorted, the same as in /viewer/nodes. FoundGroups is
+        // counted before the limit, so a page beyond the end of the list is not taken for an empty list.
+        if (FoundGroups == 0) {
+            return;
+        }
         // a flag is still set here when the requested operation could not be applied, usually because
         // the data it needs was not received, so the response is a page of unfiltered / ungrouped / unsorted data
-        if (NeedFilter) {
+        if (NeedFilter || databaseUnknown) {
             AddProblem("filter-not-applied");
         }
         if (NeedGroup) {
@@ -2573,14 +2586,6 @@ public:
         }
         if (NeedSort) {
             AddProblem("sort-not-applied");
-        }
-        // The groups of a database are the groups of its storage pools, which are taken from the description
-        // of the database. Without the description the pre-filter is skipped and NeedFilter is recalculated
-        // without it, so the groups of the whole cluster are returned. A database whose description was
-        // received and has no storage pools is not such a case.
-        if (Database && !DatabaseDescriptionReceived) {
-            AddProblem("no-database-info");
-            AddProblem("filter-not-applied");
         }
     }
 

@@ -57,8 +57,7 @@ PEERDIR(
     ydb/library/yql/udfs/common/knn
     ydb/library/yql/udfs/common/roaring
     ydb/library/yql/udfs/statistics_internal
-    yql/essentials/parser/pg_wrapper
-    yql/essentials/sql/pg
+    yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/compress_base
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/digest

@@ -354,6 +354,10 @@ message TRemoteTopicReaderSettings {
     optional string ConsumerName = 4;
     // Source index streams may disappear before the base-table DROP snapshot.
     optional bool RetryOnSchemeError = 5 [default = false];
+    // Prefix of the deduplication source id the destination shard keeps per partition.
+    // Empty: the bare partition index. Set for attach-mode replications (no initial scan),
+    // so a table that becomes a replica again does not skip the new stream's records.
+    optional string SourceIdPrefix = 6;
 }
 
 message TIndexBuildProgress {

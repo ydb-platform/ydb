@@ -9,8 +9,11 @@
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -48,6 +51,190 @@ Y_UNIT_TEST_SUITE(ReplicationTestEnv) {
 Y_UNIT_TEST_SUITE(StreamCreator) {
     using namespace NTestHelpers;
 
+<<<<<<< HEAD
+=======
+    Y_UNIT_TEST(TargetStreamPathsAreCanonical) {
+        const NKikimrReplication::TReplicationConfig config;
+        TReplication replication(1, TPathId(1, 1), config, "/Root");
+        const auto check = [&](const TReplication::ITarget::IConfig::TPtr& targetConfig, const TString& expected) {
+            const auto id = replication.AddTarget(targetConfig->GetKind(), targetConfig);
+            auto* target = replication.FindTarget(id);
+            target->SetStreamName("Stream");
+            UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), expected);
+        };
+
+        check(std::make_shared<TTargetTable::TTableConfig>("Root//Table/", "/Root/Replica"),
+            "/Root/Table/Stream");
+        check(std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root//Table/Index/", "/Root/Replica"),
+            "/Root/Table/Index/indexImplTable/Stream");
+        check(std::make_shared<TTargetTransfer::TTransferConfig>("/Root//Topic/", "/Root/Replica", config),
+            "/Root/Topic");
+    }
+
+    enum class EBootstrapStage {
+        Changefeed,
+        Consumer,
+        Retention,
+    };
+
+    void MissingSourceDnsName(EBootstrapStage stage, TDuration responseDelay = TDuration::Zero()) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+
+        TActorId creator;
+        bool responseDelayed = false;
+        auto delayedResponse = runtime.AddObserver<TEvYdbProxy::TEvAlterTableResponse>(
+            [&](TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
+                if (!responseDelay || responseDelayed) {
+                    return;
+                }
+                if (ev->Sender != env.GetYdbProxy() || ev->GetRecipientRewrite() != creator) {
+                    return;
+                }
+                if (!ev->Get()->Result.IsSuccess()) {
+                    return;
+                }
+
+                responseDelayed = true;
+                // Visit a timestamp past the old deadline before delivering the response.
+                runtime.Schedule(new IEventHandle(env.GetSender(), env.GetSender(), new TEvents::TEvWakeup()),
+                    responseDelay - TDuration::Seconds(1));
+                runtime.Schedule(ev.Release(), responseDelay);
+            });
+
+        TVector<TInstant> attempts;
+        const auto requestType = stage == EBootstrapStage::Changefeed
+            ? TEvYdbProxy::TEvAlterTableRequest::EventType
+            : TEvYdbProxy::TEvAlterTopicRequest::EventType;
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->Sender != creator || ev->GetTypeRewrite() != requestType) {
+                return;
+            }
+            if (stage != EBootstrapStage::Changefeed) {
+                const auto& settings = std::get<NYdb::NTopic::TAlterTopicSettings>(
+                    ev->Get<TEvYdbProxy::TEvAlterTopicRequest>()->GetArgs());
+                if (settings.SetRetentionPeriod_.has_value() != (stage == EBootstrapStage::Retention)) {
+                    return;
+                }
+            }
+            attempts.push_back(runtime.GetCurrentTime());
+            if (attempts.size() > 2) {
+                return;
+            }
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue("GRpc error: (14): DNS resolution failed: C-ares status is not ARES_SUCCESS qtype=AAAA: Domain name not found");
+            NYdb::TStatus status(NYdb::EStatus::TRANSPORT_UNAVAILABLE, std::move(issues));
+            IEventBase* response = stage == EBootstrapStage::Changefeed
+                ? static_cast<IEventBase*>(new TEvYdbProxy::TEvAlterTableResponse(std::move(status)))
+                : static_cast<IEventBase*>(new TEvYdbProxy::TEvAlterTopicResponse(std::move(status)));
+            runtime.Send(new IEventHandle(creator, env.GetYdbProxy(), response, 0, ev->Cookie));
+            ev.Reset();
+        });
+
+        creator = runtime.Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), TDuration::Seconds(10)));
+        runtime.EnableScheduleForActor(creator);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender(), TDuration::Seconds(30)));
+        const auto startedAt = runtime.GetCurrentTime();
+        runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+        // Real SDK requests progress independently of simulated time. The test
+        // runner's wall-clock timeout bounds these waits.
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(attempts.size(), 3);
+        UNIT_ASSERT(attempts[1] - attempts[0] >= TDuration::Seconds(10));
+        UNIT_ASSERT(attempts[2] - attempts[1] >= TDuration::Seconds(10));
+
+        if (responseDelay) {
+            UNIT_ASSERT(responseDelayed);
+            UNIT_ASSERT(runtime.GetCurrentTime() - startedAt >= responseDelay);
+        }
+
+        const auto desc = env.GetDescription("/Root/Table");
+        const auto& streams = desc.GetPathDescription().GetTable().GetCdcStreams();
+        UNIT_ASSERT_VALUES_EQUAL(streams.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(streams.at(0).GetName(), "Stream");
+        env.SendAsync(env.GetYdbProxy(), new TEvYdbProxy::TEvDescribeTopicRequest("/Root/Table/Stream", {}));
+        const auto topic = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicResponse>(env.GetSender());
+        UNIT_ASSERT(topic);
+        UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
+        const auto& topicDescription = topic->Get()->Result.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetPartitionWriteSpeedBytesPerSecond(), 10_MB);
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetPartitionWriteBurstBytes(), 1_MB);
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetRetentionPeriod(), TDuration::Seconds(1));
+        const auto& consumers = topicDescription.GetConsumers();
+        UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumers[0].GetConsumerName(), "replicationConsumer");
+    }
+
+    Y_UNIT_TEST(MissingSourceDnsNameDuringChangefeedCreationRetries) {
+        MissingSourceDnsName(EBootstrapStage::Changefeed);
+    }
+
+    Y_UNIT_TEST(MissingSourceDnsNameDuringConsumerCreationRetries) {
+        MissingSourceDnsName(EBootstrapStage::Consumer);
+    }
+
+    Y_UNIT_TEST(MissingSourceDnsNameWaitsBeyondSimulatedMinute) {
+        MissingSourceDnsName(EBootstrapStage::Consumer, TDuration::Minutes(2));
+    }
+
+    Y_UNIT_TEST(MissingSourceDnsNameDuringRetentionUpdateRetries) {
+        MissingSourceDnsName(EBootstrapStage::Retention);
+    }
+
+    Y_UNIT_TEST_TWIN(WriteSpeedWithConfiguredLimits, Allowed) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        auto& pqConfig = runtime.GetAppData().PQConfig;
+        pqConfig.AddValidWriteSpeedLimitsKbPerSec(1024);
+        if constexpr (Allowed) {
+            pqConfig.AddValidWriteSpeedLimitsKbPerSec(10240);
+        }
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+
+        const auto creator = runtime.Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
+        runtime.EnableScheduleForActor(creator);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender()));
+        runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status.GetStatus(),
+            Allowed ? NYdb::EStatus::SUCCESS : NYdb::EStatus::BAD_REQUEST,
+            result->Get()->Status.GetIssues().ToString());
+        if constexpr (!Allowed) {
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Status.GetIssues().ToString(), "write_speed");
+        }
+
+        env.SendAsync(env.GetYdbProxy(), new TEvYdbProxy::TEvDescribeTopicRequest("/Root/Table/Stream", {}));
+        const auto topic = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicResponse>(env.GetSender());
+        UNIT_ASSERT(topic);
+        UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
+        const auto& description = topic->Get()->Result.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionWriteSpeedBytesPerSecond(), Allowed ? 10_MB : 1_MB);
+        UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionWriteBurstBytes(), 1_MB);
+        UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), Allowed ? TDuration::Seconds(1) : TDuration::Hours(1));
+        UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+    }
+
+>>>>>>> e391b0c7fc1 (feat replication : set CDC topics to 10 MiB/s during bootstrap (#59117))
     void SessionAcquisitionFailure(Ydb::StatusIds::StatusCode failure) {
         TEnv env(true, ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
@@ -886,6 +1073,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             UNIT_ASSERT_VALUES_EQUAL(settings.AddConsumers_.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(settings.AddConsumers_[0].AvailabilityPeriod_, TDuration::Zero());
             UNIT_ASSERT(!settings.SetRetentionPeriod_);
+            UNIT_ASSERT(!settings.SetPartitionWriteSpeedBytesPerSecond_);
             setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(consumer->Cookie,
                 existing ? NYdb::EStatus::ALREADY_EXISTS : NYdb::EStatus::SUCCESS);
             setup.Finish();

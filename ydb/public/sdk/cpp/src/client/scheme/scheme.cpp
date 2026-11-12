@@ -113,6 +113,7 @@ TModifyPermissionsSettings::TModifyPermissionsSettings(const ::Ydb::Scheme::Modi
     if (request.clear_permissions()) {
         AddClearAcl();
     }
+    // The request describes changes, so an omitted value leaves inheritance unchanged.
     if (request.has_interrupt_inheritance()) {
         AddInterruptInheritance(request.interrupt_inheritance());
     }

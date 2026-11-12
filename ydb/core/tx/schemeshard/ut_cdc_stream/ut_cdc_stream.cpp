@@ -1,3 +1,4 @@
+#include <ydb/core/base/hive.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_create_cdc_stream.h>
@@ -5,10 +6,12 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
+#include <util/string/cast.h>
 #include <util/string/escape.h>
 #include <util/string/printf.h>
 
@@ -1476,9 +1479,11 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
     }
 
-    Y_UNIT_TEST(HeartbeatModeSurvivesReboot) {
+    Y_UNIT_TEST_FLAG(DropRestoredCdcAggregator, dropTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        const ui64 schemeShard = TTestTxConfig::SchemeShard;
+        const auto emptyDomain = DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription();
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -1488,6 +1493,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
+        const auto tableDomain = DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription();
 
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
@@ -1505,7 +1511,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             NLs::StreamHasAggregatorTabletId(false),
         });
 
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
             NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
@@ -1513,21 +1519,125 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         });
 
         const auto streamSelf = DescribePrivatePath(runtime, "/MyRoot/Table/Stream").GetPathDescription().GetSelf();
-        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+        const auto nextShard = LocalMiniKQL(runtime, schemeShard, Sprintf(R"(
             (
-                (let key '('('OwnerPathId (Uint64 '%lu)) '('LocalPathId (Uint64 '%lu))))
-                (let update '('('HeartbeatMode (Uint32 '%u))))
-                (return (AsList (UpdateRow 'CdcStream key update)))
+                (let key '('('Id (Uint64 '%lu))))
+                (return (AsList (SetResult 'NextShard (SelectRow 'SysParams key '('Value)))))
+            )
+        )", Schema::SysParam_NextShardIdx));
+        const TString nextShardValue = NClient::TValue::Create(nextShard)["NextShard"]["Value"];
+        const ui64 aggregatorShardIdx = FromString<ui64>(nextShardValue);
+
+        const auto hiveState = env.GetHiveState();
+        const ui64 dataShard = GetTableShards(runtime, schemeShard, "/MyRoot/Table").front();
+        const auto& channels = hiveState->Tablets.at(hiveState->TabletIdToOwner.at(dataShard)).BoundChannels;
+        UNIT_ASSERT(!channels.empty());
+        auto request = MakeHolder<TEvHive::TEvCreateTablet>(
+            schemeShard, aggregatorShardIdx, TTabletTypes::CdcAggregator, channels);
+        request->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
+        request->Record.MutableObjectDomain()->SetSchemeShard(tableDomain.GetDomainKey().GetSchemeShard());
+        request->Record.MutableObjectDomain()->SetPathId(tableDomain.GetDomainKey().GetPathId());
+        const auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, TTestTxConfig::Hive, sender, request.Release());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = runtime.GrabEdgeEvent<TEvHive::TEvCreateTabletReply>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrProto::OK);
+        const ui64 aggregatorTabletId = reply->Record.GetTabletID();
+        const auto aggregatorOwner = std::make_pair(schemeShard, aggregatorShardIdx);
+        UNIT_ASSERT(hiveState->TabletIdToOwner.at(aggregatorTabletId) == aggregatorOwner);
+        UNIT_ASSERT_VALUES_EQUAL(hiveState->Tablets.at(aggregatorOwner).Type, TTabletTypes::CdcAggregator);
+        UNIT_ASSERT(!hiveState->Tablets.at(aggregatorOwner).BootstrapperActorId);
+
+        TString channelWrites;
+        for (ui32 channelId = 0; channelId < channels.size(); ++channelId) {
+            const auto& channel = channels[channelId];
+            channelWrites += Sprintf(R"(
+                (UpdateRow 'ChannelsBinding
+                    '('('ShardId (Uint64 '%lu)) '('ChannelId (Uint32 '%u)))
+                    '('('PoolName (Utf8 '"%s")) '('Binding (String '"%s"))))
+            )", aggregatorShardIdx, channelId, EscapeC(channel.GetStoragePoolName()).c_str(),
+                EscapeC(channel.SerializeAsString()).c_str());
+        }
+        LocalMiniKQL(runtime, schemeShard, Sprintf(R"(
+            (
+                (let streamKey '('('OwnerPathId (Uint64 '%lu)) '('LocalPathId (Uint64 '%lu))))
+                (let streamValue '('('HeartbeatMode (Uint32 '%u))))
+                (let shardKey '('('ShardIdx (Uint64 '%lu))))
+                (let shardValue '(
+                    '('TabletId (Uint64 '%lu)) '('OwnerPathId (Uint64 '%lu))
+                    '('PathId (Uint64 '%lu)) '('LastTxId (Uint64 '%lu))
+                    '('TabletType (Uint32 '%u))))
+                (let nextKey '('('Id (Uint64 '%lu))))
+                (let nextValue '('('Value (Utf8 '"%lu"))))
+                (return (AsList
+                    (UpdateRow 'CdcStream streamKey streamValue)
+                    (UpdateRow 'Shards shardKey shardValue)
+                    (UpdateRow 'SysParams nextKey nextValue)
+                    %s
+                ))
             )
         )", streamSelf.GetSchemeshardId(), streamSelf.GetPathId(),
-            static_cast<ui32>(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated)));
+            static_cast<ui32>(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
+            aggregatorShardIdx, aggregatorTabletId, streamSelf.GetSchemeshardId(), streamSelf.GetPathId(), txId,
+            static_cast<ui32>(TTabletTypes::CdcAggregator), Schema::SysParam_NextShardIdx,
+            aggregatorShardIdx + 1, channelWrites.c_str()));
 
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+        const auto recovered = DescribePrivatePath(runtime, "/MyRoot/Table/Stream");
+        TestDescribeResult(recovered, {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
             NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
-            NLs::StreamHasAggregatorTabletId(false),
+            NLs::StreamHasAggregatorTabletId(true),
         });
+        UNIT_ASSERT_VALUES_EQUAL(recovered.GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId(), aggregatorTabletId);
+        UNIT_ASSERT(CheckLocalRowExists(runtime, schemeShard, "Shards", "ShardIdx", aggregatorShardIdx));
+
+        TSet<ui64> tabletIds;
+        TSet<ui64> shardIds;
+        for (const auto& [owner, tablet] : hiveState->Tablets) {
+            if (dropTable || tablet.Type != TTabletTypes::DataShard) {
+                UNIT_ASSERT_VALUES_EQUAL(owner.first, schemeShard);
+                tabletIds.insert(tablet.TabletId);
+                shardIds.insert(owner.second);
+            }
+        }
+        UNIT_ASSERT(tabletIds.contains(aggregatorTabletId));
+        if (dropTable) {
+            TestDropTable(runtime, ++txId, "/MyRoot", "Table");
+        } else {
+            TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamName: "Stream"
+            )");
+        }
+        env.TestWaitNotification(runtime, txId);
+        env.TestWaitTabletDeletion(runtime, tabletIds);
+        env.TestWaitShardDeletion(runtime, shardIds);
+
+        const auto& expectedDomain = dropTable ? emptyDomain : tableDomain;
+        const auto checkCleanup = [&] {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {dropTable ? NLs::PathNotExist : NLs::PathExist});
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl"), {NLs::PathNotExist});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+                NLs::PathsInsideDomain(expectedDomain.GetPathsInside()),
+                NLs::ShardsInsideDomain(expectedDomain.GetShardsInside()),
+                NLs::PQGroupsInsideDomain(expectedDomain.GetPQGroupsInside()),
+                NLs::PQPartitionsInsideDomain(expectedDomain.GetPQPartitionsInside()),
+            });
+            for (ui64 shardIdx : shardIds) {
+                UNIT_ASSERT(!hiveState->Tablets.contains({schemeShard, shardIdx}));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, schemeShard, "Shards", "ShardIdx", shardIdx));
+                UNIT_ASSERT(!CheckLocalRowExists(runtime, schemeShard, "ShardsToDelete", "ShardIdx", shardIdx));
+            }
+            for (ui64 tabletId : tabletIds) {
+                UNIT_ASSERT(!hiveState->TabletIdToOwner.contains(tabletId));
+            }
+        };
+        checkCleanup();
+        RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
+        checkCleanup();
     }
 
     void Metering(bool serverless) {

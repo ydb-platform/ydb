@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "blobstorage_burst_detector.h"
 #include "vdisk_costmodel.h"
 #include "vdisk_events.h"
 #include "vdisk_handle_class.h"
@@ -11,7 +12,6 @@
 #include <ydb/library/lockfree_bucket/lockfree_bucket.h>
 #include <util/system/compiler.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/util/light.h>
 
 #include <concepts>
 #include <type_traits>
@@ -348,7 +348,7 @@ private:
     std::atomic<ui64> DiskTimeAvailable = 1'000'000'000;
 
     TLockFreeBucket<TAppDataTimerMs<TInstantTimerMs>> Bucket;
-    TLight64 BurstDetector;
+    TBurstDetector BurstDetector;
     std::atomic<ui64> SeqnoBurstDetector = 0;
 
     TControlWrapper BurstThresholdNs;

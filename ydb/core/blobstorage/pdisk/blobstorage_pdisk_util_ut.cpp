@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         UNIT_ASSERT_EQUAL(state->Val(), 1);
         UNIT_ASSERT_EQUAL(count->Val(), 10);
 
-        // Reordering within the bounded window
+        // Resizing
         l.Set(false, 23);
         UNIT_ASSERT_EQUAL(state->Val(), 0);
         UNIT_ASSERT_EQUAL(count->Val(), 10);
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         UNIT_ASSERT_VALUES_EQUAL(count->Val(), 2);
     }
 
-    Y_UNIT_TEST(LightReorderingAcrossRingWrap) {
+    Y_UNIT_TEST(LightReorderingAcrossBufferGrowth) {
         TLight light;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
         light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("light"));
@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
             light.Set(false, seqno);
         }
         light.Set(true, 40); // a pending entry in the wrapped part of the ring
-        light.Set(false, 131); // a distant entry, still inside the bounded window
+        light.Set(false, 131); // requires growing by more than a factor of two
         UNIT_ASSERT_VALUES_EQUAL(count->Val(), 0);
 
         for (ui16 seqno = 32; seqno <= 130; ++seqno) {
@@ -406,119 +406,20 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         UNIT_ASSERT_VALUES_EQUAL(count->Val(), 3);
     }
 
-    Y_UNIT_TEST(Light64RecoversFromGapsAndIgnoresLateSamples) {
-        TLight64 light;
-        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("l")
-            .WithResyncCount("resyncs"));
-        auto state = counters->GetCounter("l_state");
-        auto count = counters->GetCounter("l_count");
-        auto resyncs = counters->GetCounter("resyncs", true);
-
-        light.Set(false, 1);
-        light.Set(true, 0); // startup inversion
-        light.Set(true, 1); // duplicate head
-        light.Set(true, 255); // last position inside the window
-        light.Set(false, 255); // duplicate pending, first observation wins
-        UNIT_ASSERT_VALUES_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(resyncs->Val(), 0);
-        light.Set(true, 257); // gap beyond the window; forget the missing history
-        UNIT_ASSERT_VALUES_EQUAL(state->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(resyncs->Val(), 1);
-        light.Set(false, 2); // a delayed producer cannot undo recovery
-        light.Set(false, 255);
-        light.Set(false, 257);
-        UNIT_ASSERT_VALUES_EQUAL(state->Val(), 1);
-        light.Set(false, 258);
-        light.Set(true, 259);
-        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 2);
-
-        // No truncation at either 32768 or 65536, nor at 32 bits.
-        for (ui64 seqno : {ui64(40000), ui64(65536), ui64(1) << 32}) {
-            light.Set(false, seqno);
-            UNIT_ASSERT_VALUES_EQUAL(state->Val(), 0);
-            light.Set(true, seqno + 1);
-            light.Set(false, seqno - 65536); // old (or underflowed) sequence
-            UNIT_ASSERT_VALUES_EQUAL(state->Val(), 1);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(resyncs->Val(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 5);
-    }
-
-    Y_UNIT_TEST(Light64KeepsProgressWithPermanentlyMissingSamples) {
-        TLight64 light;
-        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("l")
-            .WithResyncCount("resyncs"));
-        light.Set(false, 0);
-        // Never deliver odd sequence numbers; pass a whole ui16 cycle without
-        // unbounded allocation, head collisions, or permanently stopping progress.
-        for (ui64 seqno = 2; seqno <= 131072; seqno += 2) {
-            light.Set(true, seqno);
-        }
-        UNIT_ASSERT_GT(counters->GetCounter("resyncs", true)->Val(), 0);
-        light.Set(false, 131073);
-        light.Set(true, 131074);
-        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("l_state")->Val(), 1);
-        UNIT_ASSERT_GE(light.GetCount(), 2);
-    }
-
-    Y_UNIT_TEST(Light64ReorderingAcrossSequenceWrap) {
-        TLight64 light;
-        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("l"));
-        light.Set(false, Max<ui64>() - 1);
-        light.Set(false, 0);
-        light.Set(true, Max<ui64>());
-        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("l_state")->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(light.GetCount(), 1);
-        light.Set(true, 1);
-        UNIT_ASSERT_VALUES_EQUAL(light.GetCount(), 2);
-    }
-
-    Y_UNIT_TEST(LightLegacyRecoversFromAmbiguousGap) {
+    Y_UNIT_TEST(LightDuplicatesDoNotChangePendingCount) {
         TLight light;
         auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("l")
-            .WithResyncCount("resyncs"));
-        auto state = counters->GetCounter("l_state");
+        light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("l"));
         light.Set(false, 1);
-        light.Set(true, 40000); // cannot distinguish future from a very old sample
-        UNIT_ASSERT_VALUES_EQUAL(state->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("resyncs", true)->Val(), 1);
-        light.Set(false, 40001);
-        light.Set(true, 40002);
-        UNIT_ASSERT_VALUES_EQUAL(state->Val(), 1);
+        light.Set(true, 1); // duplicate head
+        light.Set(true, 3);
+        light.Set(false, 3); // duplicate pending observation
+        light.Set(false, 2);
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("l_state")->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(light.GetCount(), 1);
+        light.Set(false, 4);
+        light.Set(true, 5);
         UNIT_ASSERT_VALUES_EQUAL(light.GetCount(), 2);
-    }
-
-    Y_UNIT_TEST(LightGapExpiresWithoutFillingTheBuffer) {
-        TLight64 onUpdate;
-        TLight64 onSet;
-        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        onUpdate.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("update")
-            .WithResyncCount("update_resyncs"));
-        onSet.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("set")
-            .WithResyncCount("set_resyncs"));
-        for (auto* light : {&onUpdate, &onSet}) {
-            light->Set(false, 0);
-            light->Set(false, 3);
-            light->Set(true, 4); // newest must win, not the last arrival (2)
-            light->Set(false, 2);
-        }
-        Sleep(TDuration::MilliSeconds(1100));
-        onUpdate.Update();
-        onSet.Set(false, 1); // timeout recovery before handling the late sample
-        for (const TString& name : {TString("update"), TString("set")}) {
-            UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter(name + "_state")->Val(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter(name + "_resyncs", true)->Val(), 1);
-            UNIT_ASSERT_GE(counters->GetCounter(name + "_greenMs", true)->Val(), 1000);
-        }
-        for (auto* light : {&onUpdate, &onSet}) {
-            light->Set(false, 5);
-            light->Set(true, 6);
-            UNIT_ASSERT_VALUES_EQUAL(light->GetCount(), 2);
-        }
     }
 
     Y_UNIT_TEST(DriveEstimator) {

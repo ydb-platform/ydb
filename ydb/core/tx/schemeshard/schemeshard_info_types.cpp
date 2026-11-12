@@ -2009,9 +2009,18 @@ bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrCompaction::TCo
         }
     }
 
-    // The runtime policy derives omitted sizes by dividing by CountToCompact.
+    // Check constructor preconditions before building a runtime policy.
     for (size_t index = 0; index < policy.GenerationSize(); ++index) {
         const auto& generation = policy.GetGeneration(index);
+        if (generation.GetGenerationId() != index) {
+            err = TStringBuilder()
+                << "Compaction generation " << index
+                << ": expected GenerationId " << index
+                << ", got " << generation.GetGenerationId();
+            return false;
+        }
+
+        // The runtime policy derives omitted sizes by dividing by CountToCompact.
         if (generation.HasCountToCompact() && generation.GetCountToCompact() == 0 &&
             (!generation.HasExtraCompactionExpMaxSize() || !generation.HasUpliftPartSize()))
         {

@@ -6,6 +6,7 @@
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/ut/ut_common.h>
+#include <ydb/services/sqs_topic/limits.h>
 #include <ydb/services/sqs_topic/receipt.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
@@ -3181,6 +3182,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         auto consumerName = [](int i) { return std::format("ydb-sqs-consumer-{}", i); };
         auto queueUrlForConsumer = [&](int i) { return std::format("/v1/{}/{}/{}/{}/{}/{}", database.size(), database.c_str(), topicName.size(), topicName.c_str(), consumerName(i).size(), consumerName(i).c_str()); };
         const TDuration retentionPeriod = TDuration::Hours(10);
+        const TDuration expectedRetention = params.RetentionPeriod != TDuration::Zero() ? params.RetentionPeriod : retentionPeriod;
         if (params.Dlq) {
             UNIT_ASSERT(CreateDlqTopic(driver));
         }
@@ -3278,7 +3280,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["ReceiveMessageWaitTimeSeconds"], "10");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
-            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(expectedRetention.Seconds()));
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
             checkFifo(json);
             checkDlq(json);
@@ -3342,7 +3344,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 }}
             });
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
-            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(expectedRetention.Seconds()));
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
             checkFifo(json);
             checkDlq(json);
@@ -3545,6 +3547,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             description.GetPartitionWriteBurstMessages(),
             NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
+        UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), NKikimr::NSqsTopic::V1::TOPIC_RETENTION_PERIOD);
+        UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetConsumers()[0].GetAvailabilityPeriod(),
+            NKikimr::NSqsTopic::V1::DEFAULT_MESSAGE_RETENTION_PERIOD);
 
         driver.Stop(true);
     }
@@ -4049,16 +4056,39 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         });
         TString queueUrl = GetPathFromQueueUrlMap(json);
 
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
+        auto describe = [&]() -> NYdb::NTopic::TTopicDescription {
+            auto desc = client.DescribeTopic("TestSetAttrsRetention").GetValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            return desc.GetTopicDescription();
+        };
+
+        {
+            auto description = describe();
+            UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), NKikimr::NSqsTopic::V1::TOPIC_RETENTION_PERIOD);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(3600));
+        }
+
         SetQueueAttributes({
             {"QueueUrl", queueUrl},
             {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "7200"}}}
         });
+
+        {
+            auto description = describe();
+            UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), NKikimr::NSqsTopic::V1::TOPIC_RETENTION_PERIOD);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(7200));
+        }
 
         auto attrJson = GetQueueAttributes({
             {"QueueUrl", queueUrl},
             {"AttributeNames", NJson::TJsonArray{"MessageRetentionPeriod"}}
         });
         UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], "7200");
+        driver.Stop(true);
     }
 
     Y_UNIT_TEST_F(TestPurgeQueueInvalid, TFixture) {

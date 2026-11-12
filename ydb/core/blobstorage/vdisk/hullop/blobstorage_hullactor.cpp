@@ -162,6 +162,7 @@ namespace NKikimr {
         typedef ::NKikimr::TLevelIndexActor<TKey, TMemRec> TThis;
         typedef ::NKikimr::NHullComp::TTask<TKey, TMemRec> TCompactionTask;
         typedef ::NKikimr::NHullComp::TSelectorActor<TKey, TMemRec> TSelectorActor;
+        typedef ::NKikimr::NHullComp::TSelectorActorCoro<TKey, TMemRec> TSelectorActorCoro;
         typedef ::NKikimr::NHullComp::TSelected<TKey, TMemRec> TSelected;
 
         typedef ::NKikimr::TLevelSlice<TKey, TMemRec> TLevelSlice;
@@ -443,9 +444,15 @@ namespace NKikimr {
                 params.EmergencyMode = oos.GetLocalColor() >= static_cast<ESpaceColor>(
                     ui64(Config->HullCompEmergencyEnableAtColor));
             }
-            auto selector = std::make_unique<TSelectorActor>(HullDs->HullCtx, params, std::move(levelSnap),
-                std::move(barriersSnap), ctx.SelfID, std::move(CompactionTask), AllowGarbageCollection);
-            auto aid = RunInBatchPool(ctx, selector.release());
+            IActor* selector;
+            if (AppData()->FeatureFlags.GetEnableCoroutineCompactionSelector()) {
+                selector = new TSelectorActorCoro(HullDs->HullCtx, params, std::move(levelSnap),
+                    std::move(barriersSnap), ctx.SelfID, std::move(CompactionTask), AllowGarbageCollection);
+            } else {
+                selector = new TSelectorActor(HullDs->HullCtx, params, std::move(levelSnap),
+                    std::move(barriersSnap), ctx.SelfID, std::move(CompactionTask), AllowGarbageCollection);
+            }
+            auto aid = RunInBatchPool(ctx, selector);
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             return true;
         }

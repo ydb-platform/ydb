@@ -15,7 +15,6 @@ SRCS(
 
 PEERDIR(
     library/cpp/json
-    library/cpp/svnversion
     library/cpp/threading/future
     library/cpp/yson
     library/cpp/yson/json

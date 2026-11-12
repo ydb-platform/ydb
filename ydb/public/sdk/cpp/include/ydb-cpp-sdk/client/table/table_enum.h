@@ -9,6 +9,7 @@ namespace NTable {
 enum class EColumnFamilyCompression {
     None,
     LZ4,
+    ZSTD,
 };
 
 //! Column family cache mode
@@ -41,6 +42,7 @@ enum class EIndexType {
     LocalBloomFilter,
     LocalBloomNgramFilter,
     LocalMinMax,
+    GlobalHnsw,
 
     Unknown = std::numeric_limits<int>::max()
 };

@@ -51,6 +51,7 @@ private:
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvUpdateCounters, Handle);
             HFuncTraced(TEvPQ::TEvRewindCommitResult, HandleRewindCommit);
+            HFuncTraced(TEvPQ::TEvPersistDone, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             break;
@@ -71,6 +72,7 @@ private:
             HFuncTraced(TEvPQ::TEvUpdateCounters, Handle);
             HFuncTraced(TEvPQ::TEvReaderEventArrived, ProcessNextReaderEvent);
             HFuncTraced(TEvPQ::TEvRewindCommitResult, HandleRewindCommit);
+            HFuncTraced(TEvPQ::TEvPersistDone, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             break;
@@ -104,6 +106,7 @@ private:
 
     TString GetCurrentState() const;
 
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
     TMirrorer(
@@ -121,10 +124,12 @@ public:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvPersistDone::TPtr& ev, const TActorContext& ctx);
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);
     void TryToSplitMerge(const TActorContext& ctx);
+    void TryToSendReplicationData(const TActorContext& ctx);
     void HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx);
     void HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx);
     void HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& ev, const TActorContext& ctx);
@@ -145,6 +150,7 @@ private:
     const ui32 Partition;
     const bool IsLocalDC;
     ui64 EndOffset;
+    ui64 ConfirmedEndOffset = 0;
     ui64 OffsetToRead;
     TMaybe<ui64> LastReadOffset;
     NKikimrPQ::TMirrorPartitionConfig Config;
@@ -183,6 +189,11 @@ private:
     ui64 ReadFeatureId = 0;
     ui64 ReadFuturesInFlight = 0;
     TInstant LastReadEventTime;
+
+    y_absl::flat_hash_map<TString, ui64> OffsetsByConsumers;
+    y_absl::flat_hash_map<TString, ui64> ReplicatedOffsetsByConsumers;
+    TInstant LastReplicationDataTimestamp;
+    TMaybe<ui64> MirroredOffsetToSend;
 };
 
 bool AppendToWriteRequest(

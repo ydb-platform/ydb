@@ -128,6 +128,12 @@ TString GetResourceValuesHtml(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values, const TResourceRawValues& maximum);
 TString GetResourceValuesHtml(const NKikimrTabletBase::TMetrics& values);
+
+// value of a THiveConfig field in single-line text form; a repeated field is rendered as [a, b, c], an absent singular field as <unset>
+TString GetHiveConfigFieldText(const NKikimrConfig::THiveConfig& config, const google::protobuf::FieldDescriptor* field);
+
+// "Field: from -> to" for every field that differs between the two configs, "; "-separated; empty when they are equal
+TString GetHiveConfigDiffText(const NKikimrConfig::THiveConfig& from, const NKikimrConfig::THiveConfig& to);
 TString GetResourceValuesHtml(const TMetrics& values);
 NJson::TJsonValue GetResourceValuesJson(const NKikimrTabletBase::TMetrics& values);
 ui64 GetReadThroughput(const NKikimrTabletBase::TMetrics& values);
@@ -159,6 +165,7 @@ public:
 protected:
     friend class THiveBalancer;
     friend class THiveDrain;
+    friend struct TGetNodes;
     friend class THiveFill;
     friend class TReassignTabletWaitActor;
     friend class TMoveTabletWaitActor;
@@ -170,6 +177,7 @@ protected:
     friend class TDrainNodeWaitActor;
     friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
+    friend struct TTabletInfo;
     friend struct TLeaderTabletInfo;
     friend class TReassignTabletsActor;
     friend class TMoveDataActor;
@@ -261,10 +269,15 @@ protected:
 
     bool IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
-    void StartHiveBalancer(TBalancerSettings&& settings);
+    // balancerType is empty when the suppression is not about a specific type
+    void LogBalancerNotStarted(const TString& balancerType, EBalancerSuppressReason reason);
+    bool StartHiveBalancer(TBalancerSettings&& settings);
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
+    void StartPileDrain(TBridgePileInfo& pile);
+    bool HasTabletsToDrain(TBridgePileId pileId) const;
+    void ProcessPileDrains();
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
-    void StartHiveStorageBalancer(TStorageBalancerSettings settings);
+    bool StartHiveStorageBalancer(TStorageBalancerSettings settings);
     // starts a new reassign for every tablet in the list
     void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
     // continues reassigns of tablets that were left in the middle of it (e.g. by a Hive restart)
@@ -280,6 +293,10 @@ protected:
     ITransaction* CreateRestartTablet(TFullTabletId tabletId);
     ITransaction* CreateRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId);
     ITransaction* CreateForceRestartTablet(TFullTabletId tabletId);
+    ITransaction* CreateRestartTabletAfterBootUndelivered(TFullTabletId tabletId, ui64 bootAttemptId);
+    ui64 TrackBootAttempt(TTabletInfo& tablet, const TActorId& local);
+    void ClearBootAttempt(TTabletInfo& tablet);
+    TTabletInfo* FindStartingBootAttempt(ui64 bootAttemptId);
     ITransaction* CreateInitScheme();
     ITransaction* CreateAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie);
     ITransaction* CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie);
@@ -319,7 +336,7 @@ protected:
     ITransaction* CreateReleaseTabletsReply(TEvHive::TEvReleaseTabletsReply::TPtr event);
     ITransaction* CreateConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event);
     ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo = 0, ui64 cookie = 0);
-    ITransaction* CreateSwitchDrainOff(TDrainTarget target, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements);
+    ITransaction* CreateSwitchDrainOff(TDrainTarget target, NKikimrProto::EReplyStatus status, ui32 movements);
     ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
@@ -355,6 +372,12 @@ protected:
     std::unordered_map<TNodeId, TNodeInfo> Nodes;
     std::unordered_map<TSegmentId, TIntrusiveList<TNodeInfo, TSegmentNodesTag>> NodeSegments;
     std::unordered_map<TTabletId, TLeaderTabletInfo> Tablets;
+    struct TBootAttempt {
+        TFullTabletId TabletId;
+        TActorId Local;
+    };
+    std::unordered_map<ui64, TBootAttempt> BootAttempts;
+    ui64 LastBootAttemptId = 0;
     std::unordered_map<TOwnerIdxType::TValueType, TTabletId> OwnerToTablet;
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetrics;
@@ -408,6 +431,7 @@ protected:
     TBootQueue BootQueue;
     bool ProcessWaitQueueScheduled = false;
     bool ProcessBootQueueScheduled = false;
+    bool ProcessPileDrainsScheduled = false;
     bool ProcessBootQueuePostponed = false;
     TInstant LastConnect;
     TInstant ProcessBootQueuePostponedUntil;
@@ -421,6 +445,9 @@ protected:
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     std::unordered_set<TNodeId> BalancerNodes; // all nodes, affected by running balancers
     EBalancerType LastBalancerTrigger = EBalancerType::Manual;
+    ui32 NextBalancerRunId = 0; // stamps the tablets a balancer run counted, see TTabletInfo::BalancerRunId
+    // last "balancer not started" line written at INFO, repeats of it go to DEBUG
+    std::optional<std::pair<TString, EBalancerSuppressReason>> LastBalancerSuppression;
     std::array<TBalancerStats, EBalancerTypeSize> BalancerStats;
     NKikimrHive::EMigrationState MigrationState = NKikimrHive::EMigrationState::MIGRATION_UNKNOWN;
     i32 MigrationProgress = 0;
@@ -463,6 +490,7 @@ protected:
     std::queue<TTabletId> ResumeTenantTabletsQueue;
     bool NotEnoughResources = false;
     std::queue<TFullTabletId> ProcessTabletMetricsQueue;
+    ui64 LastProtoMetricsRevision = 0;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -612,6 +640,7 @@ protected:
     void Handle(TEvPrivate::TEvCheckTabletNodeAlive::TPtr&);
     void HandleInit(TEvPrivate::TEvProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessBootQueue::TPtr&);
+    void Handle(TEvPrivate::TEvProcessPileDrains::TPtr&);
     void Handle(TEvPrivate::TEvPostponeProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr&);
     void HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&);
@@ -776,7 +805,7 @@ public:
             NKikimr::NHive::TResourceNormalizedValues deltaNormalized);
     void ResetTotalResourceValues();
     void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
-    void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
+    void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local);
     ui32 GetDataCenters();
     void AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
@@ -809,6 +838,11 @@ public:
     TTabletMetricsAggregates DefaultResourceMetricsAggregates;
     ui64 MetricsWindowSize = TDuration::Minutes(1).MilliSeconds();
     const TTabletMetricsAggregates& GetDefaultResourceMetricsAggregates() const;
+    ui64 AllocateProtoMetricsRevision() {
+        const ui64 revision = ++LastProtoMetricsRevision;
+        Y_ABORT_UNLESS(revision != 0);
+        return revision;
+    }
     bool CheckForForwardTabletRequest(TTabletId tabletId, NKikimrHive::TForwardRequest& forwardRequest);
     TSubDomainKey GetRootDomainKey() const;
     TString GetLogPrefix() const;

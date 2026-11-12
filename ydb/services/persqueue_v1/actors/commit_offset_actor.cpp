@@ -43,11 +43,6 @@ TCommitOffsetActor::~TCommitOffsetActor() = default;
 
 void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     TBase::Bootstrap(ctx);
-    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
-        Reply(Ydb::StatusIds::PRECONDITION_FAILED,
-            NYql::TIssues{NYql::TIssue("Consumer offset commits are disabled")}, ctx);
-        return;
-    }
     Become(&TThis::StateFunc);
 
     auto request = dynamic_cast<const Ydb::Topic::CommitOffsetRequest*>(GetProtoRequest());
@@ -130,6 +125,12 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
     }
     AFL_ENSURE(TopicAndTablets.size() == 1);
     auto& [_, topicInitInfo] = *TopicAndTablets.begin();
+
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications() && !topicInitInfo.IsAsyncReplication) {
+        Reply(Ydb::StatusIds::PRECONDITION_FAILED,
+            NYql::TIssues{NYql::TIssue("Consumer offset commits are disabled")}, ctx);
+        return;
+    }
 
     if (topicInitInfo.Partitions.find(PartitionId) == topicInitInfo.Partitions.end()) {
         AnswerError("partition id not found in topic", PersQueue::ErrorCode::WRONG_PARTITION_NUMBER, ctx);

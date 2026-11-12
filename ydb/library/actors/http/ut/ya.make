@@ -9,6 +9,7 @@ PEERDIR(
     contrib/libs/poco/Net
     ydb/core/security/certificate_check/test_utils
     ydb/library/actors/testlib
+    ydb/library/actors/async
 )
 
 
@@ -18,6 +19,7 @@ SRCS(
     http_obfuscation_ut.cpp
     http_tls_init_ut.cpp
     http_ut.cpp
+    http_proxy_cookie_ut.cpp
     http2_ut.cpp
     tls_client_connection.cpp
 )

@@ -6,6 +6,7 @@
 #include "viewer_pdiskinfo.h"
 #include "viewer_helper.h"
 #include "wb_merge.h"
+#include <ydb/core/base/path.h>
 
 template<>
 struct std::hash<NKikimrBlobStorage::TVSlotId> {
@@ -116,7 +117,7 @@ protected:
         , Initiator(ev->Sender)
         , Event(std::move(ev))
     {
-        const auto params = NormalizePathParameters(Event->Get()->Request.GetParams());
+        const auto params = NormalizePathParameters(Event->Get()->Request.GetParams(), Event->Get()->PathNormalizer.value_or(nullptr));
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         InitConfig(params);
@@ -141,6 +142,9 @@ protected:
 public:
     void Bootstrap() override {
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
+        if (FilterTenant && AppData()->FeatureFlags.GetEnableRelativePaths()) {
+            FilterTenant = PrependDomainIfNeeded("/" + domains->GetDomain()->Name, FilterTenant);
+        }
 
         if (FilterTenant.empty()) {
             RequestConsoleListTenants();

@@ -9,11 +9,11 @@ $customer_total_return = (
         ca_state AS ctr_state,
         Sum(wr_return_amt) AS ctr_total_return
     FROM
-        `/Root/test/ds/web_returns`
+        `web_returns`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/customer_address`
+        `customer_address`
     WHERE
         wr_returned_date_sk == d_date_sk
         AND d_year == 2002
@@ -40,9 +40,9 @@ SELECT
 FROM
     $customer_total_return AS ctr1
 ,
-    `/Root/test/ds/customer_address`
+    `customer_address`
 ,
-    `/Root/test/ds/customer`
+    `customer`
 WHERE
     ctr1.ctr_total_return > (
         SELECT

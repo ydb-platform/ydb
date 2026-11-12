@@ -1,0 +1,1 @@
+typedef interface IProcessorArchitecture IProcessorArchitecture;

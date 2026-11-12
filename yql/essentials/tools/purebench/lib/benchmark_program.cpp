@@ -2,7 +2,6 @@
 
 #include <yql/essentials/public/purecalc/purecalc.h>
 #include <yql/essentials/public/purecalc/io_specs/arrow/spec.h>
-#include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/public/udf/arrow/util.h>
@@ -20,8 +19,10 @@
 #include <library/cpp/yson/node/node_visitor.h>
 #include <library/cpp/yson/writer.h>
 
+#include <util/generic/array_ref.h>
 #include <util/stream/null.h>
 #include <util/stream/str.h>
+#include <util/string/cast.h>
 
 #include <type_traits>
 #include <utility>
@@ -308,7 +309,7 @@ NPureCalc::IProgramFactoryPtr MakeFactory(const TBenchmarkProgramOptions& option
     NPureCalc::TProgramFactoryOptions factoryOptions;
     factoryOptions.SetUDFsDir(options.UdfsDirectory);
     factoryOptions.SetLLVMSettings(options.LLVMSettings);
-    factoryOptions.SetBlockEngineSettings(options.BlockEngineSettings);
+    factoryOptions.SetBlockEngineSettings(ToString(options.BlockEngineMode));
     factoryOptions.SetLanguageVersion(options.LanguageVersion);
     factoryOptions.SetExprOutputStream(exprOutput);
     factoryOptions.SetUseWorkerPool(true);
@@ -380,6 +381,29 @@ struct TScalarBenchmarkInput {
     }
 };
 
+// Arrow input conversion moves Datums from the supplied batch. Reuse one
+// scratch batch so the source batches stay intact for subsequent runs.
+class TBlockInputStream final: public NPureCalc::IStream<arrow::compute::ExecBatch*> {
+public:
+    explicit TBlockInputStream(TConstArrayRef<arrow::compute::ExecBatch> batches)
+        : Batches_(batches)
+    {
+    }
+
+    arrow::compute::ExecBatch* Fetch() override {
+        if (NextBatch_ == Batches_.size()) {
+            return nullptr;
+        }
+        Batch_ = Batches_[NextBatch_++];
+        return &Batch_;
+    }
+
+private:
+    const TConstArrayRef<arrow::compute::ExecBatch> Batches_;
+    size_t NextBatch_ = 0;
+    arrow::compute::ExecBatch Batch_;
+};
+
 struct TBlockBenchmarkInput {
     using TInputSpec = NPureCalc::TArrowInputSpec;
     using TOutputSpec = NPureCalc::TArrowOutputSpec;
@@ -404,8 +428,8 @@ struct TBlockBenchmarkInput {
 
     template <typename TRun>
     auto WithInput(const TRun& run) const {
-        auto input = NPureCalc::StreamFromVector(Data);
-        return run(input.Get());
+        TBlockInputStream input(Data);
+        return run(&input);
     }
 };
 
@@ -424,16 +448,12 @@ public:
     }
 
     TBenchmarkPreparationResult PrepareBenchmark(IOutputStream* exprOutput) override {
-        PreparationResult_.Clear();
-        if (!BenchmarkInput_) {
-            CompileGenerationQuery(exprOutput);
-        }
-        if (!MeasuredProgram_) {
-            CompileBenchmarkQueries(exprOutput);
-        }
+        YQL_ENSURE(!PreparationStarted_, "PrepareBenchmark() can only be called once");
+        PreparationStarted_ = true;
+        CompileGenerationQuery(exprOutput);
+        CompileBenchmarkQueries(exprOutput);
         BenchmarkInput_->Generate(Options_.GeneratorInputRows);
         RunAndMeasureProgram(*MeasuredProgram_);
-        RunAndMeasureProgram(*MeasuredProgramWithOutput_);
         if (Options_.EnableCalibration) {
             RunAndMeasureProgram(*CalibrationProgram_);
         }
@@ -447,6 +467,7 @@ public:
             return {.Statistics = MakeStatistics(RunAndMeasureProgram(*MeasuredProgram_)), .Output = Nothing()};
         }
         YQL_ENSURE(outputMode == EOutputMode::Collect, "Unsupported output mode");
+        PrepareOutputProgram();
         const auto started = TMonotonic::Now();
         auto output = BenchmarkInput_->WithInput([&](auto* input) {
             auto handle = MeasuredProgramWithOutput_->Apply(input);
@@ -480,7 +501,6 @@ private:
         }
         auto factory = MakeFactory(Options_, /*exprOutput=*/nullptr);
         auto measuredProgram = CompileBenchmarkQuery(factory, TDiscardOutputSpec(outputSchemaPlaceholder), Options_.MeasuredQuery);
-        auto measuredProgramWithOutput = CompileBenchmarkQuery(factory, TPrintOutputSpec(outputSchemaPlaceholder), Options_.MeasuredQuery);
         THolder<TProgram> calibrationProgram;
         if (Options_.EnableCalibration) {
             const TString calibrationQuery = Options_.MeasuredQuerySyntax == ESyntax::PG
@@ -489,8 +509,16 @@ private:
             calibrationProgram = CompileBenchmarkQuery(factory, TDiscardOutputSpec(outputSchemaPlaceholder), calibrationQuery);
         }
         MeasuredProgram_ = std::move(measuredProgram);
-        MeasuredProgramWithOutput_ = std::move(measuredProgramWithOutput);
         CalibrationProgram_ = std::move(calibrationProgram);
+    }
+
+    void PrepareOutputProgram() {
+        if (!MeasuredProgramWithOutput_) {
+            auto program = CompileBenchmarkQuery(MakeFactory(Options_, nullptr),
+                                                 TPrintOutputSpec(NYT::TNode::CreateEntity()), Options_.MeasuredQuery);
+            RunAndMeasureProgram(*program);
+            MeasuredProgramWithOutput_ = std::move(program);
+        }
     }
 
     template <typename TQueryOutputSpec>
@@ -524,6 +552,7 @@ private:
     }
 
     TBenchmarkProgramOptions Options_;
+    bool PreparationStarted_ = false;
     TMaybe<TBenchmarkPreparationResult> PreparationResult_;
     THolder<TBenchmarkInput> BenchmarkInput_;
     THolder<TProgram> MeasuredProgram_;
@@ -667,7 +696,7 @@ TString ToYson(const TQueryOutput& result) {
 }
 
 THolder<IBenchmarkProgram> CreateBenchmarkProgram(const TBenchmarkProgramOptions& options) {
-    if (options.BlockEngineSettings == "disable") {
+    if (options.BlockEngineMode == EBlockEngineMode::Disable) {
         return MakeHolder<TBenchmarkProgram<TScalarBenchmarkInput>>(options);
     }
     return MakeHolder<TBenchmarkProgram<TBlockBenchmarkInput>>(options);

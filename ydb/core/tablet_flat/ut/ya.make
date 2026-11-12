@@ -40,6 +40,7 @@ SRCS(
     ut_stat.cpp
     ut_comp_gen.cpp
     ut_compaction.cpp
+    ut_compaction_outputs.cpp
     ut_compaction_fulltext.cpp
     ut_compaction_multi.cpp
     ut_direct_part.cpp
@@ -48,6 +49,7 @@ SRCS(
     ut_decimal.cpp    
     ut_charge.cpp
     ut_part.cpp
+    ut_part_layout.cpp
     ut_part_multi.cpp
     ut_proto.cpp
     ut_pages.cpp
@@ -65,6 +67,7 @@ SRCS(
     ut_tier_predicate.cpp
     ut_vacuum.cpp
     ut_versions.cpp
+    ut_scan_delta.cpp
     ut_backup.cpp
 )
 

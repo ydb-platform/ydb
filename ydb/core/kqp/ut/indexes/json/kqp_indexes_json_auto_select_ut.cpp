@@ -1234,7 +1234,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
                 R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value FALSE ON ERROR))");
             ValidateAutoSelectWithDecl(db, declarations,
                 R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Bool NULL ON EMPTY NULL ON ERROR))");
-            ValidateAutoSelectWithDecl(db, declarations,
+            ValidateNoAutoSelectWithDecl(db, declarations,
                 R"(JSON_EXISTS(Text, 'strict $.k1' PASSING $p AS value ERROR ON ERROR))");
 
             ValidateNoAutoSelectWithDecl(db, declarations,

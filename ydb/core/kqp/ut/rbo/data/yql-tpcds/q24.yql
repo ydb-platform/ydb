@@ -17,17 +17,17 @@ $ssales = (
         i_size,
         Sum(ss_sales_price) AS netpaid
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/store_returns`
+        `store_returns`
     ,
-        `/Root/test/ds/store`
+        `store`
     ,
-        `/Root/test/ds/item`
+        `item`
     ,
-        `/Root/test/ds/customer`
+        `customer`
     ,
-        `/Root/test/ds/customer_address`
+        `customer_address`
     WHERE
         ss_ticket_number == sr_ticket_number
         AND ss_item_sk == sr_item_sk

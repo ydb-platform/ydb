@@ -4733,7 +4733,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             // it the same way, statistics included: KQP never saw the first reply.
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 2,
                 NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT(result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             const auto& echoed = result.GetTxLocks().at(0);
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriterIndex(), 0u);
@@ -4795,12 +4794,12 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         {
             // A duplicate delivery of the same multi-operation batch must be detected
-            // as a duplicate, not rejected as STATUS_BAD_REQUEST.
+            // as a duplicate (replayed stats, no STATUS_BAD_REQUEST): duplicates
+            // answer with a plain completed result.
             TVector<TUncommittedWriteOp> ops{{1, 11, 1}, {2, 22, 2}};
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns,
                 lockTxId, lockNodeId, 0, ops,
                 NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT(result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             const auto& echoed = result.GetTxLocks().at(0);
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriterIndex(), 0u);
@@ -4858,22 +4857,31 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         {
-            // Partial overlap: the batch starts at current instead of current + 1.
-            // current == 2, batch [2, 3] — must start at 3, not 2.
+            // Partial overlap (mixed group): the batch starts at current instead of
+            // current + 1. current == 2, batch [2, 3]. The leading position 2 was
+            // already applied: its op is skipped (key 2 keeps its original value) and
+            // the tail is applied as a continuation. This reproduces how a re-routed
+            // batch after a split mixes already applied positions with new ones.
             TVector<TUncommittedWriteOp> ops{{2, 222, 2}, {3, 33, 3}};
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns,
                 lockTxId, lockNodeId, 0, ops,
-                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("must continue the writer chain"),
-                result.GetIssues(0).message());
-            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("at 3"),
-                result.GetIssues(0).message());
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
+            lock = result.GetTxLocks().at(0);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 3u);
+
+            // The reply reports the sum of the duplicate and new operations'
+            // statistics: position 2's original delivery (the [1, 2] batch, 2 rows
+            // never seen by the writer if its reply was lost) plus the fresh tail
+            // op for key 3.
+            const auto& access = result.GetTxStats().GetTableAccessStats(0);
+            UNIT_ASSERT_VALUES_EQUAL(access.GetUpdateRow().GetRows(), 3u);
         }
 
         CommitLock(runtime, sender, shard, lock);
 
         auto tableState = ReadTable(server, shards, tableId);
-        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 22\n");
+        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 22\nkey = 3, value = 33\n");
     }
 
     // A write that applies no rows still takes a position in the chain
@@ -4916,7 +4924,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         {
             auto result = updateMissingRow(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT(result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             const auto& echoed = result.GetTxLocks().at(0);
             UNIT_ASSERT(!echoed.GetHasWrites());
@@ -4965,7 +4972,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 222, 0, 2,
                 NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT(result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks().at(0)).GetWriteSeqNum(), 2u);
         }
 
@@ -5022,7 +5028,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1,
                 NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT(result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             const auto& echoed = result.GetTxLocks().at(0);
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriterIndex(), 0u);
@@ -5074,7 +5079,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1,
                 NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT(result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             const auto& echoed = result.GetTxLocks().at(0);
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriteSeqNum(), 1u);
@@ -5130,14 +5134,12 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         {
             auto result = insertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
-            UNIT_ASSERT(!result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1u);
             UNIT_ASSERT(result.GetIssues(0).message().Contains("Conflict with existing key."));
         }
 
         {
             auto result = insertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
-            UNIT_ASSERT(!result.GetIsDuplicate());
         }
 
         {
@@ -5151,7 +5153,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         NKikimrDataEvents::TLock lock;
         {
             auto result = insertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT(!result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             lock = result.GetTxLocks().at(0);
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 1u);
@@ -5204,7 +5205,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         {
             auto result = insertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
-            UNIT_ASSERT(!result.GetIsDuplicate());
         }
 
         RebootTablet(runtime, shard, sender);
@@ -5220,7 +5220,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         NKikimrDataEvents::TLock lock;
         {
             auto result = insertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT(!result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             lock = result.GetTxLocks().at(0);
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 1u);
@@ -5277,21 +5276,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         {
             auto result = upsertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
-            UNIT_ASSERT(!result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1u);
             UNIT_ASSERT(result.GetIssues(0).message().Contains("Write conflict with concurrent transaction."));
         }
 
         {
             auto result = upsertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
-            UNIT_ASSERT(!result.GetIsDuplicate());
         }
 
         RebootTablet(runtime, shard, sender);
 
         {
             auto result = upsertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
-            UNIT_ASSERT(!result.GetIsDuplicate());
         }
 
         auto tableState = ReadTable(server, shards, tableId);
@@ -5331,13 +5327,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         // The in-memory state actor transfers the lock state, including the serialized result.
         RebootTablet(runtime, shard, sender);
 
-        // A duplicate of the multi-op batch must replay the stored result with both rows' stats.
+        // A duplicate of the multi-op batch must answer with stats that merge the
+        // stored result (both rows) into the fresh delivery's stats.
         {
             TVector<TUncommittedWriteOp> ops{{1, 11, 1}, {2, 22, 2}};
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns,
                 lockTxId, lockNodeId, 0, ops,
                 NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT(result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             const auto& echoed = result.GetTxLocks().at(0);
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(echoed).GetWriteSeqNum(), 2u);

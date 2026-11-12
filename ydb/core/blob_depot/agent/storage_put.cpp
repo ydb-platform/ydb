@@ -283,11 +283,11 @@ namespace NKikimr::NBlobDepot {
                 CheckBlocks(); // just restart request
             }
 
-            void OnIdAllocated(bool success) override {
+            void OnIdAllocated(bool success, const TString& errorReason) override {
                 if (success) {
                     IssuePuts();
                 } else {
-                    EndWithError(NKikimrProto::ERROR, "out of space");
+                    EndWithError(NKikimrProto::ERROR, errorReason);
                 }
             }
 

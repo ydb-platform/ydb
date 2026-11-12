@@ -10,7 +10,7 @@
 {%-             for jnis_arg in jnis_args -%}
 {%-                 set jnis = split(jnis_arg|replace('jnis=', ''), ',') -%}
 {%-                 for jni in jnis %}
-        "$arcadia_root/{{ dirname(jni) }}",
+        "$output_root/{{ dirname(jni) }}",
 {%-                 endfor -%}
 {%-             endfor %}
     ).joinToString(":")

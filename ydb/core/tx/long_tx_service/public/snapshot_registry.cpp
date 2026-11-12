@@ -2,6 +2,8 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#include <algorithm>
+
 namespace NKikimr {
 
 namespace {
@@ -44,6 +46,34 @@ namespace {
             return result;
         }
 
+        void ForEachActiveSnapshot(const NKikimr::TTableId& tableId,
+            const TRowVersion& from, const TRowVersion& to,
+            TFunctionRef<void(const TRowVersion&)> visitor) const override
+        {
+            if (from >= to) {
+                return;
+            }
+
+            const auto& tableVersions = GetSnapshotVersions(NormalizeTableId(tableId));
+            const auto& allTableVersions = GetSnapshotVersions(NKikimr::TTableId{});
+            auto tableIt = std::lower_bound(tableVersions.begin(), tableVersions.end(), from);
+            const auto tableEnd = std::lower_bound(tableIt, tableVersions.end(), to);
+            auto allIt = std::lower_bound(allTableVersions.begin(), allTableVersions.end(), from);
+            const auto allEnd = std::lower_bound(allIt, allTableVersions.end(), to);
+
+            while (tableIt != tableEnd || allIt != allEnd) {
+                const TRowVersion version = tableIt == tableEnd ? *allIt
+                    : allIt == allEnd ? *tableIt : std::min(*tableIt, *allIt);
+                visitor(version);
+                while (tableIt != tableEnd && *tableIt == version) {
+                    ++tableIt;
+                }
+                while (allIt != allEnd && *allIt == version) {
+                    ++allIt;
+                }
+            }
+        }
+
         TRowVersion GetBorder() const override {
             return SnapshotBorder;
         }
@@ -52,7 +82,15 @@ namespace {
             return OldestCollectionTime;
         }
         
-    private:        
+    private:
+        const TVector<TRowVersion>& GetSnapshotVersions(const NKikimr::TTableId& tableId) const {
+            if (const auto it = Snapshots.find(tableId); it != Snapshots.end()) {
+                return it->second;
+            }
+            static const TVector<TRowVersion> empty;
+            return empty;
+        }
+
         bool HasSnapshotImpl(const NKikimr::TTableId& tableId, const TRowVersion& version) const {
             auto snapshotsIter = Snapshots.find(tableId);
             if (snapshotsIter == Snapshots.end()) {
@@ -140,6 +178,19 @@ namespace {
         TInstant OldestCollectionTime;
         THashMap<NKikimr::TTableId, TVector<TRowVersion>> Snapshots;
     };
+}
+
+void IImmutableSnapshotRegistry::ForEachActiveSnapshot(const NKikimr::TTableId& tableId,
+    const TRowVersion& from, const TRowVersion& to,
+    TFunctionRef<void(const TRowVersion&)> visitor) const
+{
+    if (from >= to) {
+        return;
+    }
+    const auto snapshots = GetActiveSnapshots(tableId);
+    for (auto it = snapshots.lower_bound(from); it != snapshots.end() && *it < to; ++it) {
+        visitor(*it);
+    }
 }
 
 IImmutableSnapshotRegistryHolderPtr CreateImmutableSnapshotRegistryHolder() {

@@ -360,6 +360,7 @@ PEERDIR(
     contrib/libs/lz4
     contrib/libs/openssl
 
+    library/cpp/containers/absl
     library/cpp/openssl/init
     library/cpp/openssl/io
     library/cpp/threading/thread_local
@@ -392,6 +393,7 @@ PEERDIR(
     library/cpp/yt/system
     library/cpp/yt/threading
 
+    yt/yt/library/cgroup
     yt/yt/library/syncmap
     yt/yt/library/undumpable
     yt/yt/library/ytprof/api

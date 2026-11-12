@@ -1,0 +1,10 @@
+<tmp_path>/program.sql:<main>:39:17: Error: Failed to execute:
+CUSTOM_EXCEPTHOOK
+True
+Traceback (most recent call last):
+  File "embedded:f", line 31, in f
+Exception
+
+
+	$udf = Python3::f(Callable<(String)->String>, $script);
+	                ^

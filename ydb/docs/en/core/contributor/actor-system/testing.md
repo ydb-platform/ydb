@@ -44,8 +44,8 @@ Skipped waits still charge 10 ms to the dispatch wait budget controlled by `SetD
 - Are event payload and TActorContext lifetimes respected across suspension?
 - Does shutdown call PassAway once and tolerate events while tasks drain?
 - Can every long wait be cancelled, timed out, or force-destroyed safely?
-- Does request/reply echo a unique cookie (not 0 for concurrent waits) and
-  tolerate stale replies?
+- Does reply correlation distinguish a stale attempt from the current one, and
+  are stale replies tolerated?
 - Does a remote protocol handle timeout, duplicate/ambiguous outcome, and a new
   Interconnect session?
 - Are large events serializable, bounded, and released promptly?
@@ -60,8 +60,9 @@ Skipped waits still charge 10 ms to the dispatch wait budget controlled by `SetD
   that is itself the direct co_await operand?
 - Do lambda closures and every borrowed reference outlive the full await?
 - Is large incoming event data released before long suspension?
-- Is each ActorWaitForEvent cookie unique among live waits (not 0), and are
-  late replies handled by StateFunc?
+- Is each ActorWaitForEvent cookie fresh for its request attempt (not 0, not
+  reused while an earlier reply may arrive), and are late replies handled by
+  StateFunc?
 - After each suspension, are actor state, pointers, generations, and shutdown
   status revalidated?
 - Can cancellation reach every potentially infinite wait?

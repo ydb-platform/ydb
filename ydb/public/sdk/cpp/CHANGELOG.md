@@ -1,6 +1,42 @@
+## v3.27.0
+
+* Fixed static login credentials failing permanently when the initial Login operation returns a transient service error.
+
+* Added draft `TBridgeClient::Rollback()` to roll a cluster converted into a bridged one back to ordinary mode, and `TBridgeClient::GetRollbackStatus()` to show the progress of the rollback.
+
+* Topic and PersQueue writers now schedule RAW and pre-encoded messages on the configured compression executor, reducing request construction on the caller thread.
+
+* Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
+
+* Added `TGetClusterStateSettings::IncludePileConnectivity()` and `TGetClusterStateResult::GetPileConnectivity()` for optional bridge static-node connectivity reports.
+* Added `TGetClusterStateSettings::IncludeUnbridgedStatus()` and `TGetClusterStateResult::GetUnbridgedStatus()` to report node configuration when the cluster has no bridge state.
+
+* Added `TUpdateClusterStateSettings::ExpectedGeneration()` to apply a bridge cluster state update only if the cluster state still has the given generation.
+* Added draft bridge synchronization APIs for pile, database, and group diagnostics.
+
+* Fixed Topic write-session path handling: paths starting with `/` remain absolute, and relative database names are left for server-side resolution.
+
+* Added draft `TBridgeClient::SetDatabaseBridgeMode()` to atomically change a database's bridge mode. `TSetDatabaseBridgeModeSettings::RetainPileName()` selects the pile to retain when disabling bridge mode.
+
+* Fixed PersQueue topic settings losing replication-consumer and consumer-offset-mirroring attributes when copied from DescribeTopic into CreateTopic or AlterTopic settings.
+
+* Fixed Topic producer retries touching the producer after it was destroyed. Write sessions keep a snapshot of the retry policy and no longer read producer settings from the gRPC thread.
+
+* Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
+
+* Fixed a Topic read session crash (Panic in `OnUserRetrievedEvent`) when an unrecoverable stream read error tore down the session while data events were still queued for delivery; the teardown now releases the accounting for undelivered events exactly once.
+
+## v3.26.0
+
+* Federated topic read sessions now follow federation membership. After the initial discovery, databases that join the federation are read and databases that leave it are dropped; partition sessions of a dropped database get `TPartitionSessionClosedEvent` with the `ConnectionLost` reason. A listed database that becomes unavailable keeps its subsession. The refresh period is `TFederatedTopicClientSettings::FederationDiscoveryInterval` (30 seconds by default).
+
+* Fixed Query session shutdown racing with session pool return.
+
 * Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
 
 ## v3.25.0
+
+* Added recognition of Solomon volumes in Scheme API results and a draft `NKeyValue::TKeyValueClient::DropVolume()` method.
 
 * Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.
 

@@ -14,8 +14,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 
-// MiniKQL filters the true twin under sanitizers because that variant normally enables LLVM.
-// BlockJoin is not an LLVM toggle, so use the generic YDB helper that registers both variants.
+// BlockJoin is not an LLVM toggle; register both twins under sanitizers.
 #undef Y_UNIT_TEST_TWIN
 #undef Y_UNIT_TEST_QUAD
 #include <ydb/library/testlib/helpers.h>
@@ -337,6 +336,40 @@ TJoinTestData EmptyRightInnerTestData() {
     constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
     td.JoinMemoryConstraint = joinMemory;
     td.Kind = EJoinKind::Left;
+    return td;
+}
+
+TJoinTestData SerializedListKeySpillingTestData() {
+    auto td = LeftJoinSpillingTestData();
+    auto& setup = *td.Setup;
+    auto& pb = *setup.PgmBuilder;
+    auto dummy = setup.BuildGraph(pb.NewDataLiteral<ui64>(0));
+    const auto& factory = dummy->GetContext().HolderFactory;
+    auto* type = pb.NewDataType(NUdf::EDataSlot::Uint64);
+    auto* rowType = pb.NewTupleType({pb.NewListType(type), type});
+    const auto wrapKey = [&](TypeAndValue& source) {
+        TUnboxedValueVector rows;
+        auto iter = source.Value.GetListIterator();
+        NUdf::TUnboxedValue row;
+        while (iter.Next(row)) {
+            NUdf::TUnboxedValue* keyItem = nullptr;
+            NUdf::TUnboxedValue key = factory.CreateDirectArrayHolder(1, keyItem);
+            keyItem[0] = row.GetElement(0);
+            NUdf::TUnboxedValue* items = nullptr;
+            NUdf::TUnboxedValue wrapped = factory.CreateDirectArrayHolder(2, items);
+            items[0] = std::move(key);
+            items[1] = row.GetElement(1);
+            rows.push_back(std::move(wrapped));
+        }
+        source.Type = pb.NewListType(rowType);
+        source.Value = factory.VectorAsArray(rows);
+    };
+    wrapKey(td.Left);
+    wrapKey(td.Right);
+    td.Renames = {{1, EJoinSide::kLeft}, {1, EJoinSide::kRight}};
+    td.Result = ConvertVectorsToTuples(setup, TVector<ui64>{13, 14, 15, 16, 17},
+        TVector<std::optional<ui64>>{std::nullopt, std::nullopt, 0, std::nullopt, 1});
+    td.ExpectsSpilling = true;
     return td;
 }
 
@@ -2700,6 +2733,94 @@ void TestOutputRowsOperatorStat(TJoinTestData td, bool blockJoin) {
 
 } // namespace
 
+Y_UNIT_TEST_SUITE(TDqHashJoinPgTypesTest) {
+    Y_UNIT_TEST_TWIN(RejectPgType, BlockJoin) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* pgType = pb.NewPgType(23); // int4
+        auto source = [&](TVector<TType*> columns) {
+            if constexpr (BlockJoin) {
+                for (auto*& type : columns) {
+                    type = pb.NewBlockType(type, TBlockType::EShape::Many);
+                }
+                columns.push_back(pb.LastScalarIndexBlock());
+            }
+            auto* multi = pb.NewMultiType(columns);
+            auto* inputType = BlockJoin ? pb.NewStreamType(multi) : pb.NewFlowType(multi);
+            TCallableBuilder builder(*setup.Env, "ExternalNode", inputType);
+            return TRuntimeNode(builder.Build(), false);
+        };
+        auto* returnType = BlockJoin
+            ? pb.NewStreamType(pb.NewMultiType({pb.NewBlockType(intType, TBlockType::EShape::Many),
+                                                pb.LastScalarIndexBlock()}))
+            : pb.NewFlowType(pb.NewMultiType({intType}));
+        const auto lhs = source({pgType, intType});
+        const auto rhs = source({intType, intType});
+        const auto join = BlockJoin
+            ? pb.DqBlockHashJoin(lhs, rhs, EJoinKind::Inner, {0}, {0}, {0, 0}, {}, returnType)
+            : pb.DqScalarHashJoin(lhs, rhs, EJoinKind::Inner, {0}, {0}, {0, 0}, {}, returnType);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(setup.BuildGraph(join), yexception,
+            "PG types are not supported in hash join");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TDqHashJoinResourceKeyTest) {
+    template <bool BlockJoin>
+    TRuntimeNode MakeHashJoin(TDqSetup<false>& setup, TVector<TType*> leftColumns, TVector<TType*> rightColumns,
+                              const TVector<ui32>& leftKeys, const TVector<ui32>& rightKeys, TType* returnItemType) {
+        auto& pb = setup.GetDqProgramBuilder();
+        auto source = [&](TVector<TType*> columns) {
+            if constexpr (BlockJoin) {
+                for (auto*& type : columns) {
+                    type = pb.NewBlockType(type, TBlockType::EShape::Many);
+                }
+                columns.push_back(pb.LastScalarIndexBlock());
+            }
+            auto* multi = pb.NewMultiType(columns);
+            // ExternalNode is a stream node. Scalar hash join needs a wide flow, which ToFlow
+            // produces from a wide stream. A flow-typed ExternalNode is not IComputationWideFlowNode.
+            TCallableBuilder builder(*setup.Env, "ExternalNode", pb.NewStreamType(multi));
+            TRuntimeNode stream(builder.Build(), false);
+            if constexpr (BlockJoin) {
+                return stream;
+            }
+            return pb.ToFlow(stream, {});
+        };
+        auto* returnType = BlockJoin
+            ? pb.NewStreamType(pb.NewMultiType({pb.NewBlockType(returnItemType, TBlockType::EShape::Many),
+                                                pb.LastScalarIndexBlock()}))
+            : pb.NewFlowType(pb.NewMultiType({returnItemType}));
+        const auto lhs = source(std::move(leftColumns));
+        const auto rhs = source(std::move(rightColumns));
+        if constexpr (BlockJoin) {
+            return pb.DqBlockHashJoin(lhs, rhs, EJoinKind::Inner, leftKeys, rightKeys, {0, 0}, {}, returnType);
+        } else {
+            return pb.DqScalarHashJoin(lhs, rhs, EJoinKind::Inner, leftKeys, rightKeys, {0, 0}, {}, returnType);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(RejectResourceKey, BlockJoin) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* resourceType = pb.NewResourceType("Test.Resource");
+        const auto join = MakeHashJoin<BlockJoin>(setup, {resourceType, intType}, {resourceType, intType}, {0}, {0}, intType);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(setup.BuildGraph(join), yexception,
+            "Resource types are not supported as hash join keys");
+    }
+
+    Y_UNIT_TEST_TWIN(AllowResourcePayload, BlockJoin) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* resourceType = pb.NewResourceType("Test.Resource");
+        const auto join = MakeHashJoin<BlockJoin>(setup, {intType, resourceType}, {intType, resourceType}, {0}, {0}, intType);
+        auto graph = setup.BuildGraph(join);
+        UNIT_ASSERT(graph.Get() != nullptr);
+    }
+}
+
 Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
     Y_UNIT_TEST(InnerAndCrossKeepPreservedSide) {
         const auto inner = DispatchPhysicalJoin(EJoinKind::Inner, ESide::Build, false);
@@ -2715,6 +2836,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
 }
 
 Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
+    Y_UNIT_TEST(TestSerializedListKeySpilling) {
+        Test(SerializedListKeySpillingTestData(), false);
+    }
+
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
         Test(BasicInnerJoinTestData(), BlockJoin);
     }
@@ -3192,7 +3317,7 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         TestWithSlowSpiller(CrossJoinSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestBlockSpilling) { 
+    Y_UNIT_TEST(TestBlockSpilling) {
         Test(SpillingTestData(), true);
     }
     Y_UNIT_TEST(TestFinalDumpSpillingIsBatched) {
@@ -3202,10 +3327,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestBlockJoinWithoutSpilling) {
         Test(BasicInnerJoinTestData(), true, false);
     }
-    Y_UNIT_TEST(TestBigStrings) { 
+    Y_UNIT_TEST(TestBigStrings) {
         Test(BigStringsTestData(), true);
     }
-    Y_UNIT_TEST(TestSmallStrings) { 
+    Y_UNIT_TEST(TestSmallStrings) {
         Test(SmallStringsTestData(), true);
     }
     Y_UNIT_TEST(TestOutputBufferBounded) {

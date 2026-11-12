@@ -595,6 +595,40 @@ Y_UNIT_TEST(BatchedMessagesWriteWithoutFeatureFlagFails) {
     PQGetPartInfo(0, 0, tc);
 }
 
+Y_UNIT_TEST(CmdWriteRejectsExplicitHashLongerThan255) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString ownerCookie = CmdSetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, 0).first;
+    auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* partitionRequest = request->Record.MutablePartitionRequest();
+    partitionRequest->SetPartition(0);
+    partitionRequest->SetOwnerCookie(ownerCookie);
+    partitionRequest->SetMessageNo(1);
+
+    auto* write = partitionRequest->AddCmdWrite();
+    write->SetSourceId("source");
+    write->SetSeqNo(1);
+    write->SetData("data");
+    write->SetLogicalMessageCount(1);
+    write->SetExplicitHash(TString(256, 'h'));
+
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
+        [](const TEvPersQueue::TEvResponse& event) {
+            return event.Record.GetErrorCode() != NPersQueue::NErrorCode::OK;
+        });
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(
+        static_cast<ui32>(response->Record.GetErrorCode()),
+        static_cast<ui32>(NPersQueue::NErrorCode::BAD_REQUEST));
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetErrorReason(), "too long explicit hash");
+}
+
 Y_UNIT_TEST(BatchedMessagesWriteWithoutMaxSeqNoFails) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;
@@ -1106,6 +1140,91 @@ void AssertReadMessage(
     UNIT_ASSERT_VALUES_EQUAL(actual.GetSeqNo(), static_cast<i64>(expected.SeqNo));
     UNIT_ASSERT_VALUES_EQUAL(actual.GetLogicalMessageCount(), expected.LogicalMessageCount);
     UNIT_ASSERT_VALUES_EQUAL(actual.GetData(), expected.Data);
+}
+
+void TestMirroredOffsetSurvivesRestart(bool kafkaBatch) {
+    for (bool prefill : {false, true}) {
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        tc.Prepare();
+        tc.Runtime->SetScheduledLimit(50000);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+        SetEnableTopicMessagesBatching(tc);
+
+        TActorId partitionActor;
+        tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvPQ::TEvInitComplete::EventType
+                && ev->Get<TEvPQ::TEvInitComplete>()->Partition == TPartitionId(0)) {
+                partitionActor = ev->Sender;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+        // No mirror rule: only KV can restore MirroredOffset after the restart.
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+        PQGetPartInfo(0, 0, tc);
+        UNIT_ASSERT(partitionActor);
+        tc.Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+
+        TVector<TExpectedReadMessage> expected;
+        if (prefill) {
+            CmdWrite(0, "sourceid_before_gap", {{1, "before-gap"}}, tc);
+            expected.push_back({.SeqNo = 1, .Offset = 0, .Data = "before-gap"});
+        }
+        constexpr ui64 mirroredOffset = 1000;
+        // Only an empty partition advances its boundaries to the replicated position.
+        const ui64 expectedStartOffset = prefill ? 0 : mirroredOffset;
+        const ui64 expectedEndOffset = prefill ? 1 : mirroredOffset;
+        auto replicationData = MakeHolder<TEvPQ::TEvReplicationData>();
+        replicationData->MirroredOffset = mirroredOffset;
+        tc.Runtime->Send(new IEventHandle(partitionActor, tc.Edge, replicationData.Release(), 0, 17));
+        tc.Runtime->SimulateSleep(TDuration::Seconds(1));
+        PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
+
+        PQTabletRestart(tc);
+        PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
+
+        const TVector<TString> values = {"after-gap", TString(1_MB, 'x')};
+        if (kafkaBatch) {
+            // No explicit write offset: both native and Kafka writes must use the restored floor.
+            CmdWriteKafkaBatch(0, "sourceid_after_gap", 1, values, tc);
+            NKikimrPQClient::TDataChunk chunk;
+            chunk.SetChunkType(NKikimrPQClient::TDataChunk::REGULAR);
+            chunk.SetCodec(static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1));
+            chunk.SetData(MakeKafkaBatchPayload(values));
+            expected.push_back({.SeqNo = 1, .LogicalMessageCount = 2,
+                .Offset = mirroredOffset, .Data = chunk.SerializeAsString()});
+        } else {
+            CmdWrite(0, "sourceid_after_gap", {{1, values[0]}, {2, values[1]}}, tc);
+            expected.push_back({.SeqNo = 1, .Offset = mirroredOffset, .Data = values[0]});
+            expected.push_back({.SeqNo = 2, .Offset = mirroredOffset + 1, .Data = values[1]});
+        }
+
+        auto checkReads = [&] {
+            for (ui64 readOffset : {ui64(0), mirroredOffset / 2}) {
+                size_t index = prefill && readOffset > 0 ? 1 : 0;
+                while (index < expected.size()) {
+                    const auto result = CmdReadAndGetResult(MakeBatchAwareReadSettings(readOffset, mirroredOffset + 2), tc);
+                    UNIT_ASSERT(result.ResultSize() > 0);
+                    UNIT_ASSERT(index + result.ResultSize() <= expected.size());
+                    for (const auto& message : result.GetResult()) {
+                        AssertReadMessage(message, expected[index++]);
+                        readOffset = message.GetOffset() + message.GetLogicalMessageCount();
+                    }
+                }
+            }
+        };
+        checkReads();
+        PQTabletRestart(tc);
+        checkReads();
+    }
+}
+
+Y_UNIT_TEST(MirroredOffsetSurvivesRestart) {
+    TestMirroredOffsetSurvivesRestart(false);
+}
+
+Y_UNIT_TEST(MirroredOffsetSurvivesRestartKafkaBatch) {
+    TestMirroredOffsetSurvivesRestart(true);
 }
 
 void ReadAndAssertBatchAwareMessages(
@@ -5080,6 +5199,53 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlob) {
     PQGetPartInfo(1, 2, tc);
 
     WaitRetentionCleanup(tc, 2, 2, retentionSeconds);
+}
+
+void TestLegacyRetentionIdlePartition(bool subDomainOutOfSpace) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
+    constexpr ui32 retentionSeconds = 5;
+
+    PQTabletPrepare({.maxCountInPartition = 1000, .deleteTime = retentionSeconds, .partitions = 1,
+        .lowWatermark = 100, .meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS,
+        .AddDefaultConsumer = false}, {}, tc);
+
+    TString s{32, 'c'};
+    ui32 pp = 8 + 4 + 2 + 9;
+    TVector<std::pair<ui64, TString>> data;
+    for (ui32 i = 0; i < 10; ++i) {
+        data.push_back({i + 1, s.substr(pp)});
+    }
+    CmdWrite(0, "sourceid0", data, tc, false, {}, true);
+    CmdWrite(0, "sourceid1", data, tc, false);
+    CmdWrite(0, "sourceid2", data, tc, false);
+    PQGetPartInfo(0, 30, tc);
+
+    if (subDomainOutOfSpace) {
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, new TEvPQ::TEvSubDomainStatus(true), 0, GetPipeConfigWithRetries());
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvPQ::EvSubDomainStatus, 2);
+        tc.Runtime->DispatchEvents(options);
+    }
+
+    for (ui32 i = 0; i < 10; ++i) {
+        tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(retentionSeconds + 1));
+        DispatchUntilWakeup(tc);
+    }
+
+    PQGetPartInfo(20, 30, tc);
+}
+
+Y_UNIT_TEST(TestLegacyRetentionIdlePartition) {
+    TestLegacyRetentionIdlePartition(false);
+}
+
+Y_UNIT_TEST(TestLegacyRetentionIdlePartitionSubDomainOutOfSpace) {
+    TestLegacyRetentionIdlePartition(true);
 }
 
 Y_UNIT_TEST(TestRetentionDeletesLastBlobInFwz) {

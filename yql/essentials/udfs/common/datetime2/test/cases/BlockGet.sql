@@ -1,36 +1,31 @@
-/* syntax version 1 */
+$rows = [
+    <|fdate: Date("2018-11-22"), fdatetime: Datetime("2018-11-22T21:20:19Z"), ftimestamp: Timestamp("2018-11-22T21:20:19.345678Z")|>,
+];
+
 pragma UseBlocks;
-insert into @t
-    select
-        Unwrap(cast(fdate as Date)) as `date`,
-        Unwrap(cast(fdatetime as Datetime)) as `datetime`,
-        Unwrap(cast(ftimestamp as Timestamp)) as `timestamp`,
-    from Input;
-commit;
 
 SELECT
-    DateTime::GetHour(`date`) as date_hour,
-    DateTime::GetMinute(`date`) as date_minute,
-    DateTime::GetSecond(`date`) as date_second,
-    DateTime::GetMillisecondOfSecond(`date`) as date_msec,
-    DateTime::GetMicrosecondOfSecond(`date`) as date_usec,
-    DateTime::GetTimezoneId(`date`) as date_tz,
-    DateTime::GetTimezoneName(`date`) as date_tzname,
+    DateTime::GetHour(fdate) as date_hour,
+    DateTime::GetMinute(fdate) as date_minute,
+    DateTime::GetSecond(fdate) as date_second,
+    DateTime::GetMillisecondOfSecond(fdate) as date_msec,
+    DateTime::GetMicrosecondOfSecond(fdate) as date_usec,
+    DateTime::GetTimezoneId(fdate) as date_tz,
+    DateTime::GetTimezoneName(fdate) as date_tzname,
 
-    DateTime::GetHour(`datetime`) as datetime_hour,
-    DateTime::GetMinute(`datetime`) as datetime_minute,
-    DateTime::GetSecond(`datetime`) as datetime_second,
-    DateTime::GetMillisecondOfSecond(`datetime`) as datetime_msec,
-    DateTime::GetMicrosecondOfSecond(`datetime`) as datetime_usec,
-    DateTime::GetTimezoneId(`datetime`) as datetime_tz,
-    DateTime::GetTimezoneName(`datetime`) as datetime_tzname,
+    DateTime::GetHour(fdatetime) as datetime_hour,
+    DateTime::GetMinute(fdatetime) as datetime_minute,
+    DateTime::GetSecond(fdatetime) as datetime_second,
+    DateTime::GetMillisecondOfSecond(fdatetime) as datetime_msec,
+    DateTime::GetMicrosecondOfSecond(fdatetime) as datetime_usec,
+    DateTime::GetTimezoneId(fdatetime) as datetime_tz,
+    DateTime::GetTimezoneName(fdatetime) as datetime_tzname,
 
-    DateTime::GetHour(`timestamp`) as timestamp_hour,
-    DateTime::GetMinute(`timestamp`) as timestamp_minute,
-    DateTime::GetSecond(`timestamp`) as timestamp_second,
-    DateTime::GetMillisecondOfSecond(`timestamp`) as timestamp_msec,
-    DateTime::GetMicrosecondOfSecond(`timestamp`) as timestamp_usec,
-    DateTime::GetTimezoneId(`timestamp`) as timestamp_tz,
-    DateTime::GetTimezoneName(`timestamp`) as timestamp_tzname,
-FROM @t;
-
+    DateTime::GetHour(ftimestamp) as timestamp_hour,
+    DateTime::GetMinute(ftimestamp) as timestamp_minute,
+    DateTime::GetSecond(ftimestamp) as timestamp_second,
+    DateTime::GetMillisecondOfSecond(ftimestamp) as timestamp_msec,
+    DateTime::GetMicrosecondOfSecond(ftimestamp) as timestamp_usec,
+    DateTime::GetTimezoneId(ftimestamp) as timestamp_tz,
+    DateTime::GetTimezoneName(ftimestamp) as timestamp_tzname,
+FROM AS_TABLE($rows);

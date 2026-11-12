@@ -9,9 +9,9 @@ $cs_ui = (
         Sum(cs_ext_list_price) AS sale,
         Sum(cr_refunded_cash + cr_reversed_charge + cr_store_credit) AS refund
     FROM
-        `/Root/test/ds/catalog_sales`
+        `catalog_sales`
     ,
-        `/Root/test/ds/catalog_returns`
+        `catalog_returns`
     WHERE
         cs_item_sk == cr_item_sk
         AND cs_order_number == cr_order_number
@@ -43,41 +43,41 @@ $cross_sales = (
         Sum(ss_list_price) AS s2,
         Sum(ss_coupon_amt) AS s3
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/store_returns`
+        `store_returns`
     ,
         $cs_ui AS cs_ui
     ,
-        `/Root/test/ds/date_dim` AS d1
+        `date_dim` AS d1
     ,
-        `/Root/test/ds/date_dim` AS d2
+        `date_dim` AS d2
     ,
-        `/Root/test/ds/date_dim` AS d3
+        `date_dim` AS d3
     ,
-        `/Root/test/ds/store`
+        `store`
     ,
-        `/Root/test/ds/customer`
+        `customer`
     ,
-        `/Root/test/ds/customer_demographics` AS cd1
+        `customer_demographics` AS cd1
     ,
-        `/Root/test/ds/customer_demographics` AS cd2
+        `customer_demographics` AS cd2
     ,
-        `/Root/test/ds/promotion`
+        `promotion`
     ,
-        `/Root/test/ds/household_demographics` AS hd1
+        `household_demographics` AS hd1
     ,
-        `/Root/test/ds/household_demographics` AS hd2
+        `household_demographics` AS hd2
     ,
-        `/Root/test/ds/customer_address` AS ad1
+        `customer_address` AS ad1
     ,
-        `/Root/test/ds/customer_address` AS ad2
+        `customer_address` AS ad2
     ,
-        `/Root/test/ds/income_band` AS ib1
+        `income_band` AS ib1
     ,
-        `/Root/test/ds/income_band` AS ib2
+        `income_band` AS ib2
     ,
-        `/Root/test/ds/item`
+        `item`
     WHERE
         ss_store_sk == s_store_sk
         AND ss_sold_date_sk == d1.d_date_sk

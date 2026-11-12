@@ -145,6 +145,8 @@ public:
         if (settings.FederationAccount_) (*props.mutable_attributes())["_federation_account"] = ToString(*settings.FederationAccount_);
         if (settings.MetricsLevel_.has_value()) { props.set_metrics_level(*settings.MetricsLevel_); }
         if (settings.AdvancedMonitoringSettings_.has_value()) (*props.mutable_attributes())["_advanced_monitoring"] = *settings.AdvancedMonitoringSettings_;
+        if (settings.ReplicationConsumer_.has_value()) (*props.mutable_attributes())["_ydb_replication_consumer"] = *settings.ReplicationConsumer_;
+        if (settings.MirrorConsumerOffsets_.has_value()) (*props.mutable_attributes())["_ydb_mirror_consumer_offsets"] = *settings.MirrorConsumerOffsets_ ? "true" : "false";
 
         for (const auto& readRule : settings.ReadRules_) {
             Ydb::PersQueue::V1::TopicSettings::ReadRule& rrProps = *props.add_read_rules();

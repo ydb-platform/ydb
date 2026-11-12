@@ -56,6 +56,8 @@ static IChangeRecordSerializer* CreateCdcStreamSerializer(const TUserTable::TCdc
         .ShardId = shardId,
         .UserSIDs = stream.UserSIDs,
         .TraceIds = stream.TraceIds,
+        .Compression = stream.Compression,
+        .CompressionLevel = stream.CompressionLevel,
     });
 }
 

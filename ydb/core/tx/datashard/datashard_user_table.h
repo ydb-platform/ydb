@@ -374,6 +374,7 @@ struct TUserTable : public TThrRefBase {
         using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
         using EState = NKikimrSchemeOp::ECdcStreamState;
         using EHeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatMode;
+        using ECompression = NKikimrSchemeOp::ECdcStreamCompression;
 
         TString Name;
         EMode Mode;
@@ -387,6 +388,8 @@ struct TUserTable : public TThrRefBase {
         bool TraceIds = false;
         EHeartbeatMode HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect;
         ui64 AggregatorTabletId = 0;
+        ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionNone;
+        i32 CompressionLevel = 0;
 
         TCdcStream() = default;
 
@@ -402,6 +405,8 @@ struct TUserTable : public TThrRefBase {
             , TraceIds(streamDesc.GetTraceIds())
             , HeartbeatMode(streamDesc.GetHeartbeatMode())
             , AggregatorTabletId(streamDesc.GetAggregatorTabletId())
+            , Compression(streamDesc.GetCompression())
+            , CompressionLevel(streamDesc.HasCompressionLevel() ? streamDesc.GetCompressionLevel() : 0)
         {
             if (const auto& awsRegion = streamDesc.GetAwsRegion()) {
                 AwsRegion = awsRegion;

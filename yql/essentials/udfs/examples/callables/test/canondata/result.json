@@ -1,7 +1,7 @@
 {
-    "test.test[TestReturnNamedArgCallable]": [
+    "test.test[TestReturnNamedArgCallable-Results]": [
         {
-            "uri": "file://test.test_TestReturnNamedArgCallable_/results.txt"
+            "uri": "file://test.test_TestReturnNamedArgCallable-Results_/results.txt"
         }
     ]
 }

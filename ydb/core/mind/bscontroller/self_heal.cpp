@@ -1115,6 +1115,9 @@ namespace NKikimr::NBsController {
             }
         }
         FillInSelfHealGroups(*ev, nullptr);
+        // the snapshot is as fresh as the last config transaction; with a smaller number self-heal would take the groups
+        // it has just changed for not updated yet, and would not touch them until their next change
+        ev->ConfigTxSeqNo = NextConfigTxSeqNo - 1;
         ev->GroupLayoutSanitizerEnabled = GroupLayoutSanitizerEnabled;
         ev->AllowMultipleRealmsOccupation = AllowMultipleRealmsOccupation;
         ev->DonorMode = DonorMode;

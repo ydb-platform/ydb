@@ -106,7 +106,7 @@ enum ESimpleCounters {
 
     COUNTER_OLAP_STORE_COUNT = 88                         [(CounterOpts) = {Name: "OlapStores"}];
     COUNTER_COLUMN_TABLE_COUNT = 89                       [(CounterOpts) = {Name: "ColumnTables"}];
-    COUNTER_DEPRECATED_90 = 90                            [(CounterOpts) = {Name: "OlapMetaShards"}];
+    COUNTER_DEPRECATED_90 = 90                            [deprecated = true];
     COUNTER_COLUMN_SHARDS = 91                            [(CounterOpts) = {Name: "ColumnShards"}];
 
     COUNTER_DISK_SPACE_TABLES_DATA_BYTES = 92             [(CounterOpts) = {Name: "DiskSpaceTablesDataBytes"}];
@@ -242,11 +242,11 @@ enum ESimpleCounters {
     COUNTER_SHARDS_QUOTA = 190 [(CounterOpts) = {Name: "ShardsQuota"}];
     COUNTER_SHARDS = 191       [(CounterOpts) = {Name: "Shards"}];
 
-    COUNTER_SHRED_QUEUE_SIZE = 192          [(CounterOpts) = {Name: "ShredQueueSize"}];
-    COUNTER_SHRED_QUEUE_RUNNING = 193       [(CounterOpts) = {Name: "ShredQueueRunning"}];
+    COUNTER_SHRED_QUEUE_SIZE_DEPRECATED = 192          [deprecated = true];
+    COUNTER_SHRED_QUEUE_RUNNING_DEPRECATED = 193       [deprecated = true];
 
-    COUNTER_TENANT_SHRED_QUEUE_SIZE = 194          [(CounterOpts) = {Name: "TenantShredQueueSize"}];
-    COUNTER_TENANT_SHRED_QUEUE_RUNNING = 195       [(CounterOpts) = {Name: "TenantShredQueueRunning"}];
+    COUNTER_TENANT_SHRED_QUEUE_SIZE_DEPRECATED = 194          [deprecated = true];
+    COUNTER_TENANT_SHRED_QUEUE_RUNNING_DEPRECATED = 195       [deprecated = true];
 
     COUNTER_SYS_VIEW_COUNT = 196                    [(CounterOpts) = {Name: "SysViewCount"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateSysView = 197     [(CounterOpts) = {Name: "InFlightOps/CreateSysView"}];
@@ -463,11 +463,11 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxDropTransfer = 113           [(CounterOpts) = {Name: "FinishedOps/DropTransfer"}];
     COUNTER_FINISHED_OPS_TxDropTransferCascade = 114    [(CounterOpts) = {Name: "FinishedOps/DropTransferCascade"}];
 
-    COUNTER_SHRED_OK = 115                   [(CounterOpts) = {Name: "ShredOK"}];
-    COUNTER_SHRED_TIMEOUT = 116              [(CounterOpts) = {Name: "ShredTimeout"}];
+    COUNTER_SHRED_OK_DEPRECATED = 115        [deprecated = true];
+    COUNTER_SHRED_TIMEOUT_DEPRECATED = 116   [deprecated = true];
 
-    COUNTER_TENANT_SHRED_OK = 117                   [(CounterOpts) = {Name: "TenantShredOK"}];
-    COUNTER_TENANT_SHRED_TIMEOUT = 118              [(CounterOpts) = {Name: "TenantShredTimeout"}];
+    COUNTER_TENANT_SHRED_OK_DEPRECATED = 117        [deprecated = true];
+    COUNTER_TENANT_SHRED_TIMEOUT_DEPRECATED = 118   [deprecated = true];
 
     COUNTER_FINISHED_OPS_TxCreateSysView = 119              [(CounterOpts) = {Name: "FinishedOps/CreateSysView"}];
     COUNTER_FINISHED_OPS_TxDropSysView = 120                [(CounterOpts) = {Name: "FinishedOps/DropSysView"}];
@@ -752,7 +752,7 @@ enum ETxTypes {
 
     TXTYPE_FILESTORE_CONFIG_RESULT = 46                   [(TxTypeOpts) = {Name: "TxFileStoreConfigResult"}];
 
-    TXTYPE_MAKEBILL_INDEX_BUILD = 47                      [(TxTypeOpts) = {Name: "TxBillingIndexBuild"}];
+    TXTYPE_MAKEBILL_INDEX_BUILD_DEPRECATED = 47           [deprecated = true];
 
     TXTYPE_CREATE_IMPORT = 48                             [(TxTypeOpts) = {Name: "TxCreateImport"}];
     TXTYPE_GET_IMPORT = 49                                [(TxTypeOpts) = {Name: "TxGetImport"}];
@@ -762,9 +762,9 @@ enum ETxTypes {
     TXTYPE_LIST_IMPORTS = 53                              [(TxTypeOpts) = {Name: "TxListImports"}];
     TXTYPE_IMPORT_PROGRESS = 54                           [(TxTypeOpts) = {Name: "TxImportProgress"}];
     TXTYPE_SERVERLESS_STORAGE_BILLING = 55                [(TxTypeOpts) = {Name: "TxServerlessStorageBilling"}];
-    TXTYPE_OLAPSHARD_PROPOSE_RESULT = 56                  [(TxTypeOpts) = {Name: "TxOlapShardProposeResult"}];
+    TXTYPE_OLAPSHARD_PROPOSE_RESULT_DEPRECATED = 56       [deprecated = true];
     TXTYPE_COLUMNSHARD_PROPOSE_RESULT = 57                [(TxTypeOpts) = {Name: "TxColumnShardProposeResult"}];
-    TXTYPE_OLAPSHARD_NOTIFY_TX_COMPLETION_RESULT = 58     [(TxTypeOpts) = {Name: "TxOlapShardNotifyTxCompletionResult"}];
+    TXTYPE_OLAPSHARD_NOTIFY_TX_COMPLETION_RESULT_DEPRECATED = 58     [deprecated = true];
     TXTYPE_COLUMNSHARD_NOTIFY_TX_COMPLETION_RESULT = 59   [(TxTypeOpts) = {Name: "TxColumnShardNotifyTxCompletionResult"}];
 
     TXTYPE_FIND_TABLET_SUBDOMAIN_PATH_ID = 60             [(TxTypeOpts) = {Name: "TxFindTabletSubDomainPathId"}];
@@ -791,12 +791,12 @@ enum ETxTypes {
     TXTYPE_ALTER_REPLICATION_RESULT = 75                  [(TxTypeOpts) = {Name: "TxAlterReplicationResult"}];
     TXTYPE_DROP_REPLICATION_RESULT = 76                   [(TxTypeOpts) = {Name: "TxDropReplicationResult"}];
 
-    TXTYPE_CREATE_BLOB_DEPOT_RESULT = 77                  [(TxTypeOpts) = {Name: "TxCreateBlobDepotResult"}];
-    TXTYPE_ALTER_BLOB_DEPOT_RESULT = 78                   [(TxTypeOpts) = {Name: "TxAlterBlobDepotResult"}];
-    TXTYPE_DROP_BLOB_DEPOT_RESULT = 79                    [(TxTypeOpts) = {Name: "TxDropBlobDepotResult"}];
+    TXTYPE_CREATE_BLOB_DEPOT_RESULT_DEPRECATED = 77       [deprecated = true];
+    TXTYPE_ALTER_BLOB_DEPOT_RESULT_DEPRECATED = 78        [deprecated = true];
+    TXTYPE_DROP_BLOB_DEPOT_RESULT_DEPRECATED = 79         [deprecated = true];
     TXTYPE_BLOB_DEPOT_CONFIG_RESULT = 80                  [(TxTypeOpts) = {Name: "TxBlobDepotConfigResult"}];
 
-    TXTYPE_ADD_BACKGROUND_TASK_RESULT = 81                [(TxTypeOpts) = {Name: "TxAddBackgroundTaskResult"}];
+    TXTYPE_ADD_BACKGROUND_TASK_RESULT_DEPRECATED = 81     [deprecated = true];
 
     TXTYPE_CDC_STREAM_SCAN_PROGRESS = 82                  [(TxTypeOpts) = {Name: "TxCdcStreamScanProgress"}];
 
@@ -806,9 +806,9 @@ enum ETxTypes {
 
     TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT = 86    [(TxTypeOpts) = {Name: "TxSequenceShardGetSequenceResult"}];
 
-    TXTYPE_CREATE_BACKUP_COLLECTION_RESULT = 87                 [(TxTypeOpts) = {Name: "TxCreateBackupCollectionResult"}];
-    TXTYPE_ALTER_BACKUP_COLLECTION_RESULT = 88                  [(TxTypeOpts) = {Name: "TxAlterBackupCollectionResult"}];
-    TXTYPE_DROP_BACKUP_COLLECTION_RESULT = 89                   [(TxTypeOpts) = {Name: "TxDropBackupCollectionResult"}];
+    TXTYPE_CREATE_BACKUP_COLLECTION_RESULT_DEPRECATED = 87      [deprecated = true];
+    TXTYPE_ALTER_BACKUP_COLLECTION_RESULT_DEPRECATED = 88       [deprecated = true];
+    TXTYPE_DROP_BACKUP_COLLECTION_RESULT_DEPRECATED = 89        [deprecated = true];
 
     TXTYPE_LIST_USERS = 90                                       [(TxTypeOpts) = {Name: "TxListUsers"}];
     TXTYPE_UNMARK_RESTORE_TABLES = 91                     [(TxTypeOpts) = {Name: "TxUnmarkRestoreTables"}];
@@ -824,7 +824,7 @@ enum ETxTypes {
     TXTYPE_ADD_SHARDS_SHRED = 98 [(TxTypeOpts) = {Name: "TxAddShardsShred"}];
     TXTYPE_CANCEL_SHARDS_SHRED = 99 [(TxTypeOpts) = {Name: "TxCancelShardsShred"}];
 
-    TXTYPE_DEPRECATED_100 = 100 [(TxTypeOpts) = {Name: "TxDeprecated100"}]; // was TXTYPE_LOGIN_FINALIZE
+    TXTYPE_DEPRECATED_100 = 100 [deprecated = true]; // was TXTYPE_LOGIN_FINALIZE
 
     TXTYPE_PROGRESS_INCREMENTAL_RESTORE = 101 [(TxTypeOpts) = {Name: "TxProgressIncrementalRestore"}];
     TXTYPE_INCREMENTAL_RESTORE_SHARD_RESPONSE = 102 [(TxTypeOpts) = {Name: "TxIncrementalRestoreShardResponse"}];
@@ -845,7 +845,7 @@ enum ETxTypes {
     TXTYPE_LIST_FORCED_COMPACTION = 114     [(TxTypeOpts) = {Name: "TxListForcedCompaction"}];
     TXTYPE_PROGRESS_FORCED_COMPACTION = 115 [(TxTypeOpts) = {Name: "TxProgressForcedCompaction"}];
 
-    TXTYPE_DEPRECATED_116 = 116 [(TxTypeOpts) = {Name: "TxDeprecated116"}]; // was TXTYPE_USER_HASHES_MIGRATION
+    TXTYPE_DEPRECATED_116 = 116 [deprecated = true]; // was TXTYPE_USER_HASHES_MIGRATION
 
     TXTYPE_TABLE_PARTITIONS_STORAGE_FORMAT_SWITCH = 117 [(TxTypeOpts) = {Name: "TxTablePartitionsFormatSwitch"}];
     TXTYPE_TABLE_PARTITIONS_STORAGE_FORMAT_SWEEP_STEP = 118 [(TxTypeOpts) = {Name: "TxTablePartitionsFormatSweepStep"}];

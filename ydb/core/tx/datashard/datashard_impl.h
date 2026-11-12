@@ -1502,6 +1502,9 @@ class TDataShard
     // change sending
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx);
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx);
+    void WaitChangeRecordsVisibility(const TActorId& recipient, ui64 order, ui64 step);
+    void ActivateChangeRecordsWaitingVisibility(const TActorContext& ctx);
+    void PromoteCdcReadVisibility(const TRowVersion& version);
     void ScheduleRequestChangeRecords(const TActorContext& ctx);
     void ScheduleRemoveChangeRecords(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestChangeRecords::TPtr& ev, const TActorContext& ctx);
@@ -3263,7 +3266,14 @@ private:
     THashSet<ui64> ReceiveActivationsFrom;
 
     // out
+    struct TChangeRecordsVisibilityWait {
+        ui64 Order;
+        ui64 Step;
+    };
+
     THashMap<TActorId, TSet<TRequestedRecord>> ChangeRecordsRequested;
+    // One barrier for the first blocked record; later records remain requested.
+    THashMap<TActorId, TChangeRecordsVisibilityWait> ChangeRecordsWaitingVisibility;
     TSet<ui64> ChangeRecordsToRemove; // ui64 is order
     bool RequestChangeRecordsInFly = false;
     bool RemoveChangeRecordsInFly = false;

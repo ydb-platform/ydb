@@ -5,6 +5,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_bridge.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/monitoring/monitoring.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <library/cpp/time_provider/monotonic.h>
@@ -18,7 +19,7 @@
 namespace NBridgeSkipper {
 
 // The two GetClusterState variants have independent outstanding-call slots.
-enum class EYdbMethod { PlainState, ConnectivityState, SelfCheck, Update };
+enum class EYdbMethod { PlainState, ConnectivityState, SelfCheck, Update, Inventory };
 
 // The metric and log name of a method.
 TString ToString(EYdbMethod method);
@@ -56,6 +57,26 @@ struct TSelfCheckResult {
     std::optional<TSelfCheckReply> Reply;
     std::optional<ui32> ResponderNodeId;
 };
+
+struct TDiscoveredEndpoint {
+    TEndpoint Endpoint;
+    TString Pile;
+    ui32 NodeId = 0;
+};
+
+struct TInventoryResult {
+    TRpcResult Rpc;
+    std::vector<TDiscoveredEndpoint> Endpoints;
+    TString Error;
+};
+
+class TRedactor;
+
+// Raw MainConfig/StorageConfig supply the discovery database with main-first merging;
+// no conventional root name is assumed. Throws without copying server YAML.
+TString DiscoveryDatabase(TStringBuf yaml, TStringBuf storageYaml = {});
+TInventoryResult DecodeInventoryResult(const NYdb::NDiscovery::TListEndpointsResult& result,
+    TRpcResult rpc, const TRedactor& redactor, TStringBuf scheme);
 
 struct TUpdateResult {
     TRpcResult Rpc;
@@ -137,6 +158,10 @@ public:
     // True: an attempt was accepted and completed owns its eventual result.
     virtual bool Update(TRpcRequest request, TPlan plan, TUpdateAuthorization authorization,
         std::function<void(TUpdateResult)> completed) = 0;
+    virtual void Discover(TRpcRequest request, std::function<void(TInventoryResult)> completed) = 0;
+    // Owning actor only; removal requires all endpoint invocations to settle.
+    virtual void AddEndpoint(const TEndpoint& endpoint, const TString& pile) = 0;
+    virtual void RemoveEndpoint(const TString& endpoint) = 0;
     // Coordinator only. The actor system must outlive this drain and its callbacks.
     virtual void Stop() = 0;
 };

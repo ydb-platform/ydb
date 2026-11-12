@@ -15,6 +15,7 @@ struct TEvSkipper {
         EvStateReply,
         EvSelfCheckReply,
         EvUpdateReply,
+        EvInventoryReply,
         EvStop,
         EvStopped,
         EvCommand,
@@ -61,6 +62,14 @@ struct TEvSkipper {
         TSelfCheckResult Result;
 
         explicit TEvSelfCheckReply(TSelfCheckResult result)
+            : Result(std::move(result)) {
+        }
+    };
+
+    struct TEvInventoryReply : NActors::TEventLocal<TEvInventoryReply, EvInventoryReply> {
+        TInventoryResult Result;
+
+        explicit TEvInventoryReply(TInventoryResult result)
             : Result(std::move(result)) {
         }
     };

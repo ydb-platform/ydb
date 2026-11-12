@@ -60,17 +60,6 @@ void PrepareTablesToUnpack(TSession session) {
             PRIMARY KEY (Key)
         );
 
-        CREATE TABLE `/Root/PgKey` (
-            Key pgint4,
-            Value String,
-            PRIMARY KEY (Key)
-        );
-        CREATE TABLE `/Root/PgComplexKey` (
-            Key pgint4,
-            Fk pgint4,
-            Value String,
-            PRIMARY KEY (Key, Fk)
-        );
     )").GetValueSync();
     UNIT_ASSERT_C(result1.IsSuccess(), result1.GetIssues().ToString());
 
@@ -127,19 +116,6 @@ void PrepareTablesToUnpack(TSession session) {
             ("5", "-1"),
             ("3", "3");
 
-        REPLACE INTO `/Root/PgKey` (Key, Value) VALUES
-            (100p, "Value20"),
-            (101p, "Value21"),
-            (102p, "Value22"),
-            (103p, "Value23");
-        REPLACE INTO `/Root/PgComplexKey` (Key, Fk, Value) VALUES
-            (null, null, "NullValue"),
-            (1p, 101p, "Value1"),
-            (2p, 102p, "Value1"),
-            (2p, 103p, "Value3"),
-            (3p, 103p, "Value2"),
-            (4p, 104p, "Value2"),
-            (5p, 105p, "Value3");
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(result2.IsSuccess(), result2.GetIssues().ToString());
 
@@ -458,21 +434,6 @@ Y_UNIT_TEST(PointJoin) {
         {"/Root/SimpleKey", "/Root/UintComplexKeyWithIndex/Index/indexImplTable"},
         TParamsBuilder().AddParam("$p").Int32(3).Build().Build());
 
-    Test(
-        R"(
-            DECLARE $p as pgint4;
-            SELECT l.Key, l.Fk, l.Value, r.Key, r.Value FROM `/Root/PgKey` AS r
-            INNER JOIN `/Root/PgComplexKey` AS l
-               ON l.Fk = r.Key
-            WHERE l.Key = 1 + $p and l.Key = l.Key
-            ORDER BY r.Value
-        )",
-        R"([
-            ["2";"102";["Value1"];"102";["Value22"]];
-            ["2";"103";["Value3"];"103";["Value23"]]
-        ])",
-        {"/Root/PgKey"},
-        TParamsBuilder().AddParam("$p").Pg(TPgValue(TPgValue::VK_TEXT, "1", TPgType("pgint4"))).Build().Build());
 }
 
 Y_UNIT_TEST(SqlInJoin) {
@@ -529,20 +490,6 @@ Y_UNIT_TEST(SqlInJoin) {
         {"/Root/SimpleKey", "/Root/UintComplexKeyWithIndex/Index/indexImplTable"},
         TParamsBuilder().AddParam("$p").Int32(3).Build().Build());
 
-    Test(
-        R"(
-            DECLARE $p AS pgint4;
-            $rows = (SELECT Key FROM `/Root/PgKey`);
-            SELECT Key, Fk, Value FROM `/Root/PgComplexKey`
-                WHERE Fk IN $rows AND Key = 1 + $p
-                ORDER BY Key, Fk
-        )",
-        R"([
-            ["2";"102";["Value1"]];
-            ["2";"103";["Value3"]]
-        ])",
-        {"/Root/PgKey"},
-        TParamsBuilder().AddParam("$p").Pg(TPgValue(TPgValue::VK_TEXT, "1", TPgType("pgint4"))).Build().Build());
 }
 
 } // suite

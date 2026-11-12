@@ -1,5 +1,6 @@
 #include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "kqp_host_impl.h"
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
 #include <ydb/core/kqp/tracing/kqp_compile_trace_transformer.h>
 #include "kqp_statement_rewrite.h"
 
@@ -1946,7 +1947,7 @@ private:
             return nullptr;
         }
 
-        auto transformer = TTransformationPipeline(TypesCtx)
+        auto transformer = TTransformationPipeline(TypesCtx, CreateKqpTypeAnnCallableFactory(*TypesCtx))
             .AddServiceTransformers()
             .AddPreTypeAnnotation()
             .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
@@ -2305,7 +2306,7 @@ private:
             return CreateCompileTraceEnd(getTrace, name, &passes);
         };
 
-        YqlTransformer = TTransformationPipeline(TypesCtx)
+        YqlTransformer = TTransformationPipeline(TypesCtx, CreateKqpTypeAnnCallableFactory(*TypesCtx))
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
@@ -2376,7 +2377,7 @@ private:
                 false
             );
 
-        YqlTransformerNewRBO = TTransformationPipeline(TypesCtx)
+        YqlTransformerNewRBO = TTransformationPipeline(TypesCtx, CreateKqpTypeAnnCallableFactory(*TypesCtx))
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("YqlTransformerNewRBO", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransformNewRBO")
@@ -2404,7 +2405,7 @@ private:
             .Add(endTrace("Prepare physical query"), "TraceEndPreparePhysicalQuery")
             .Build();
 
-        DataQueryAstTransformer = TTransformationPipeline(TypesCtx)
+        DataQueryAstTransformer = TTransformationPipeline(TypesCtx, CreateKqpTypeAnnCallableFactory(*TypesCtx))
             .AddServiceTransformers()
             .AddIntentDeterminationTransformer()
             .AddTableMetadataLoaderTransformer()

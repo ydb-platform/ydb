@@ -43,6 +43,8 @@ class TestExecuteSchemeOperations(object):
         (False, "SELECT Pg::version()"),
         (False, "SELECT Pg::abs(1)"),
         (False, "SELECT ToPg(1)"),
+        (False, "SELECT EvaluateExpr(FromPg(Pg::abs(1)))"),
+        (False, "SELECT Nothing(ParseType('pgint4'))"),
     ])
     def test_pg_types_are_not_supported(self, scheme_query, query):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())

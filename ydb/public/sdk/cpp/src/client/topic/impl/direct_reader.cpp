@@ -487,13 +487,16 @@ void TDirectReadSession::DeletePartitionSessionImpl(TPartitionSessionId partitio
     }
 }
 
-void TDirectReadSession::AbortImpl(TPlainStatus&& status) {
+void TDirectReadSession::AbortImpl(TPlainStatus&& status, TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Abort");
     if (State < EState::CLOSING) {
         State = EState::CLOSED;
-        ControlCallbacks->AbortSession(std::move(status));
+        // Terminal handlers may close this reader and cancel its callback context.
+        deferred.DeferCallback([callbacks = ControlCallbacks, status = std::move(status)]() mutable {
+            callbacks->AbortSession(std::move(status));
+        });
     }
 }
 
@@ -598,7 +601,7 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
 
         if (!Reconnect(errorStatus)) {
             with_lock (Lock) {
-                AbortImpl(std::move(errorStatus));
+                AbortImpl(std::move(errorStatus), deferred);
             }
         }
     }
@@ -670,7 +673,7 @@ void TDirectReadSession::DelayStartRequestImpl(TDirectReadPartitionSession& part
 
     TMaybe<TDuration> delay = partitionSession.RetryState->GetNextRetryDelay(status.Status);
     if (!delay.Defined()) {
-        AbortImpl(std::move(status));
+        AbortImpl(std::move(status), deferred);
         return;
     }
 
@@ -865,9 +868,9 @@ void TDirectReadSession::OnConnectTimeout(
 void TDirectReadSession::OnConnect(
     TPlainStatus&& status,
     IDirectReadProcessor::TPtr&& connection,
-    const NYdbGrpc::IQueueClientContextPtr& connectContext
+    const NYdbGrpc::IQueueClientContextPtr& connectContext,
+    TDeferredActions<false>& deferred
 ) {
-    TDeferredActions<false> deferred;
     with_lock (Lock) {
         if (ConnectContext != connectContext) {
             return;
@@ -899,7 +902,7 @@ void TDirectReadSession::OnConnect(
                     status.Status,
                     MakeIssueWithSubIssues(
                         TStringBuilder() << "Failed to establish connection to server \"" << status.Endpoint << "\". Attempts done: " << ConnectionAttemptsDone,
-                        status.Issues)));
+                        status.Issues)), deferred);
             }
         }
     }
@@ -991,8 +994,9 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
         connectCallback =
             [cbContext = this->SelfContext, connectContext]
             (TPlainStatus&& st, IDirectReadProcessor::TPtr&& connection) {
+                TDeferredActions<false> deferred;
                 if (auto self = cbContext->LockShared()) {
-                    self->OnConnect(std::move(st), std::move(connection), connectContext);
+                    self->OnConnect(std::move(st), std::move(connection), connectContext, deferred);
                 }
             };
 

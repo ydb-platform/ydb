@@ -183,6 +183,42 @@ Y_UNIT_TEST(RemoveModuleMissingIsNoOp) {
     UNIT_ASSERT_VALUES_EQUAL(*registry->FindUdfPath("Foo"), "/lib/foo");
 }
 
+Y_UNIT_TEST(RemoveModuleIfOwnedPreservesForeignAndStaticModules) {
+    for (const TString& path : {TString("/lib/foo"), TString()}) {
+        auto registry = MakeRegistry();
+        registry->AddModule(path, "Foo", new TStubUdfModule());
+        Dyn(registry.Get())->SetSystemModulePaths({{"Foo", "wasm:Foo"}});
+
+        Dyn(registry.Get())->RemoveModuleIfOwned("Foo", "wasm:Foo");
+        Dyn(registry.Get())->RemoveModuleIfOwned("Missing", "wasm:Missing");
+
+        UNIT_ASSERT(registry->IsLoadedUdfModule("Foo"));
+        UNIT_ASSERT_VALUES_EQUAL(*registry->FindUdfPath("Foo"), path);
+        UNIT_ASSERT(registry->GetModuleFunctions("Foo").contains("Func"));
+    }
+}
+
+Y_UNIT_TEST(RemoveModuleIfOwnedPreservesSiblingAndReplacement) {
+    auto registry = MakeRegistry();
+    registry->AddModule("wasm:Foo", "Foo", new TStubUdfModule());
+    registry->AddModule("wasm:Foo", "Sibling", new TStubUdfModule());
+
+    Dyn(registry.Get())->RemoveModuleIfOwned("Foo", "wasm:Foo");
+    UNIT_ASSERT(!registry->IsLoadedUdfModule("Foo"));
+    UNIT_ASSERT(registry->IsLoadedUdfModule("Sibling"));
+
+    // A delayed unload from the old owner cannot erase a replacement.
+    registry->AddModule("/lib/native", "Foo", new TStubUdfModule("Replacement"));
+    Dyn(registry.Get())->RemoveModuleIfOwned("Foo", "wasm:Foo");
+    UNIT_ASSERT(registry->GetModuleFunctions("Foo").contains("Replacement"));
+    UNIT_ASSERT_VALUES_EQUAL(*registry->FindUdfPath("Foo"), "/lib/native");
+
+    Dyn(registry.Get())->RemoveModuleIfOwned("Sibling", "wasm:Foo");
+    UNIT_ASSERT(!registry->FindUdfPath("Sibling").Defined());
+    registry->AddModule("wasm:Foo", "Again", new TStubUdfModule());
+    UNIT_ASSERT(registry->IsLoadedUdfModule("Again"));
+}
+
 Y_UNIT_TEST(RemoveModuleDropsLibraryEntryWhenLastModule) {
     auto registry = MakeRegistry();
     const TString path = "/lib/shared";

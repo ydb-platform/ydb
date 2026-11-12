@@ -72,10 +72,15 @@ EExecutionStatus TTruncateUnit::Execute(
 
     txc.DB.Truncate(localTid);
 
+    // Retained points can exist below the old low watermark. Record their
+    // destruction too, so a registry entry cannot make them readable again.
+    const auto truncateVersion = DataShard.GetMvccVersion(op.Get());
+    txc.DB.RemoveRowVersions(localTid, TRowVersion::Min(), truncateVersion);
+
     // Truncate drops every row version, so nothing below this operation can be read any more.
     // Advancing the low watermark keeps a stale snapshot read failing loudly instead of silently
     // returning no rows.
-    DataShard.GetSnapshotManager().AdvanceWatermark(txc.DB, DataShard.GetMvccVersion(op.Get()));
+    DataShard.GetSnapshotManager().AdvanceWatermark(txc.DB, truncateVersion);
 
     auto userTable = DataShard.AlterTableSchemaVersion(actorCtx, txc, pathId, version);
 

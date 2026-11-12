@@ -7,16 +7,6 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxLoadEverything : public TTransactionBase<THive> {
-    bool CanWaitForLocal(const TNodeInfo& node) const {
-        if (!node.IsUnknown()) {
-            return false;
-        }
-        const auto* pile = Self->BridgeInfo ? Self->BridgeInfo->FindPile(node.BridgePileId) : nullptr;
-        // A known disconnected pile cannot resynchronize its old placement.
-        // Keep the existing resync path when current pile information is absent.
-        return !pile || NBridge::PileStateTraits(pile->State).AllowsConnection;
-    }
-
 public:
     TTxLoadEverything(THive *hive)
         : TBase(hive)
@@ -575,7 +565,7 @@ public:
                     }
                 } else {
                     auto it = Self->Nodes.find(tablet.NodeId);
-                    if (it != Self->Nodes.end() && CanWaitForLocal(it->second)) {
+                    if (it != Self->Nodes.end() && it->second.IsUnknown()) {
                         tablet.BecomeUnknown(&it->second);
                     } else {
                         tablet.NodeId = 0;
@@ -756,7 +746,7 @@ public:
                         follower.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     } else {
                         auto it = Self->Nodes.find(nodeId);
-                        if (it != Self->Nodes.end() && CanWaitForLocal(it->second)) {
+                        if (it != Self->Nodes.end() && it->second.IsUnknown()) {
                             follower.BecomeUnknown(&it->second);
                         } else {
                             follower.BecomeStopped(EHiveEventReason::LoadedFromDatabase);

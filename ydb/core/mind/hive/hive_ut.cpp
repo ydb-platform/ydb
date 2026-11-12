@@ -11954,13 +11954,29 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             };
             UNIT_ASSERT_C(waitUntil(runningInSurvivingPile),
                 "tablets waited for transport or resync from the disconnected pile after Hive restart");
+            UNIT_ASSERT_C(oldPings.empty(), "Hive tried to ping a node in the disconnected pile");
 
-            // These Locals are still alive. A late report must reject their old
-            // instances, without reviving the old placement or restarting new ones.
             std::vector<ui32> generations;
             for (ui64 tablet : tablets) {
                 generations.push_back(GetHiveTabletInfo(runtime, hiveTablet, tablet, senderA).GetGeneration());
             }
+
+            // Reload the cleaned placement while all old-pile reports remain
+            // blocked. Surviving instances should resync without being restarted.
+            bridge.Unsubscribe(hiveActor);
+            RebootTablet(runtime, hiveTablet, senderA);
+            hiveActor = GetHiveActor(runtime, hiveTablet);
+            bridge.Subscribe(hiveActor);
+            runtime.EnableScheduleForActor(hiveActor);
+            UNIT_ASSERT_C(waitUntil(runningInSurvivingPile),
+                "surviving placement did not recover after a second Hive restart");
+            UNIT_ASSERT_C(oldPings.empty(), "Hive pinged the disconnected pile after reloading the cleaned placement");
+            for (size_t i = 0; i < tablets.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(GetHiveTabletInfo(runtime, hiveTablet, tablets[i], senderA).GetGeneration(), generations[i]);
+            }
+
+            // These Locals are still alive. A late report must reject their old
+            // instances, without reviving the old placement or restarting new ones.
             TBlockEvents<TEvLocal::TEvStopTablet> rejected(runtime, [&](const auto& ev) {
                 return oldPileNode(ev->GetRecipientRewrite().NodeId());
             });

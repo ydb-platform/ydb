@@ -662,15 +662,23 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     RequestPoolsInformation();
     Schedule(TDuration::Minutes(5), new TEvPrivate::TEvLogHangingRequests);
     std::vector<TNodeInfo*> unimportantNodes; // ping nodes with tablets first
+    std::vector<std::pair<TNodeId, TActorId>> nodesToKill;
     unimportantNodes.reserve(Nodes.size());
     for (auto& [id, node] : Nodes) {
         if (node.IsUnknown() && node.Local) {
-            if (node.GetTabletsTotal() > 0) {
+            const auto* pile = BridgeInfo ? BridgeInfo->FindPile(node.BridgePileId) : nullptr;
+            if (pile && !NBridge::PileStateTraits(pile->State).AllowsConnection) {
+                nodesToKill.emplace_back(id, node.Local);
+            } else if (node.GetTabletsTotal() > 0) {
                 node.Ping();
             } else {
                 unimportantNodes.push_back(&node);
             }
         }
+    }
+    // KillNode may erase the node, so finish collecting nodes before calling it.
+    for (const auto& [nodeId, local] : nodesToKill) {
+        KillNode(nodeId, local, EHiveEventReason::PileUpdate);
     }
     for (auto* node : unimportantNodes) {
         node->Ping();

@@ -35,7 +35,7 @@ public:
 
     void Set(bool state, ui64 seqno) {
         TGuard<TSpinLock> g(Lock);
-        const auto now = Now();
+        const NHPTimer::STime now = Now();
         RecoverExpiredGap(now);
         if (!FilledCount) {
             Reset(state, seqno, now, false);
@@ -54,7 +54,7 @@ public:
             return;
         }
 
-        auto& item = Data[(HeadIdx + diff) % Capacity];
+        TItem& item = Data[(HeadIdx + diff) % Capacity];
         if (item.Filled) {
             return; // Duplicate pending observation.
         }
@@ -83,7 +83,7 @@ public:
 
     void Update() {
         TGuard<TSpinLock> g(Lock);
-        const auto now = Now();
+        const NHPTimer::STime now = Now();
         RecoverExpiredGap(now);
         Advance(Data[HeadIdx].State, now);
     }

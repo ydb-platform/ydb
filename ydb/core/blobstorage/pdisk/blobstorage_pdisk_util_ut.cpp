@@ -335,8 +335,8 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
             TLight light;
             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
             light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("light"));
-            auto state = counters->GetCounter("light_state");
-            auto count = counters->GetCounter("light_count");
+            NMonitoring::TDynamicCounters::TCounterPtr state = counters->GetCounter("light_state");
+            NMonitoring::TDynamicCounters::TCounterPtr count = counters->GetCounter("light_count");
 
             // Seqno issuance and Set can be reordered by the producer threads.
             // The first arrival establishes the baseline, even across ui16 wrap.
@@ -360,8 +360,8 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         TLight light;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
         light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("light"));
-        auto state = counters->GetCounter("light_state");
-        auto count = counters->GetCounter("light_count");
+        NMonitoring::TDynamicCounters::TCounterPtr state = counters->GetCounter("light_state");
+        NMonitoring::TDynamicCounters::TCounterPtr count = counters->GetCounter("light_count");
 
         light.Set(false, 100);
         light.Set(true, 102); // wait for 101
@@ -382,8 +382,8 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         TLight light;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
         light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("light"));
-        auto state = counters->GetCounter("light_state");
-        auto count = counters->GetCounter("light_count");
+        NMonitoring::TDynamicCounters::TCounterPtr state = counters->GetCounter("light_state");
+        NMonitoring::TDynamicCounters::TCounterPtr count = counters->GetCounter("light_count");
 
         for (ui16 seqno = 0; seqno <= 31; ++seqno) {
             light.Set(false, seqno);
@@ -408,7 +408,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
 
     Y_UNIT_TEST(LightDuplicatesDoNotChangePendingCount) {
         TLight light;
-        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         light.Initialize(counters, TLightCounterConfig::WithDefaultLightSet("l"));
         light.Set(false, 1);
         light.Set(true, 1); // duplicate head

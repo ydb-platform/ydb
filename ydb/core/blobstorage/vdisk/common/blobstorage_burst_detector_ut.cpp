@@ -8,11 +8,11 @@ namespace NKikimr {
 Y_UNIT_TEST_SUITE(TBurstDetectorTest) {
     Y_UNIT_TEST(RecoversFromGapsAndIgnoresLateSamples) {
         TBurstDetector light;
-        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         light.Initialize(counters);
-        auto state = counters->GetCounter("BurstDetector_state");
-        auto count = counters->GetCounter("BurstDetector_count");
-        auto resyncs = counters->GetCounter("BurstDetector_resyncs", true);
+        NMonitoring::TDynamicCounters::TCounterPtr state = counters->GetCounter("BurstDetector_state");
+        NMonitoring::TDynamicCounters::TCounterPtr count = counters->GetCounter("BurstDetector_count");
+        NMonitoring::TDynamicCounters::TCounterPtr resyncs = counters->GetCounter("BurstDetector_resyncs", true);
 
         light.Set(false, 1);
         light.Set(true, 0); // startup inversion
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TBurstDetectorTest) {
 
     Y_UNIT_TEST(KeepsProgressWithPermanentlyMissingSamples) {
         TBurstDetector light;
-        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         light.Initialize(counters);
         light.Set(false, 0);
         // Never deliver odd sequence numbers; pass a whole ui16 cycle without
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(TBurstDetectorTest) {
 
     Y_UNIT_TEST(ReorderingAcrossSequenceWrap) {
         TBurstDetector light;
-        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         light.Initialize(counters);
         light.Set(false, Max<ui64>() - 1);
         light.Set(false, 0);
@@ -77,12 +77,12 @@ Y_UNIT_TEST_SUITE(TBurstDetectorTest) {
     Y_UNIT_TEST(GapExpiresWithoutFillingTheBuffer) {
         TBurstDetector onUpdate;
         TBurstDetector onSet;
-        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        auto updateCounters = counters->GetSubgroup("test", "update");
-        auto setCounters = counters->GetSubgroup("test", "set");
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TIntrusivePtr<NMonitoring::TDynamicCounters> updateCounters = counters->GetSubgroup("test", "update");
+        TIntrusivePtr<NMonitoring::TDynamicCounters> setCounters = counters->GetSubgroup("test", "set");
         onUpdate.Initialize(updateCounters);
         onSet.Initialize(setCounters);
-        for (auto* light : {&onUpdate, &onSet}) {
+        for (TBurstDetector* light : {&onUpdate, &onSet}) {
             light->Set(false, 0);
             light->Set(false, 3);
             light->Set(true, 4); // newest must win, not the last arrival (2)
@@ -91,12 +91,12 @@ Y_UNIT_TEST_SUITE(TBurstDetectorTest) {
         Sleep(TDuration::MilliSeconds(1100));
         onUpdate.Update();
         onSet.Set(false, 1); // timeout recovery before handling the late sample
-        for (const auto& group : {updateCounters, setCounters}) {
+        for (const TIntrusivePtr<NMonitoring::TDynamicCounters>& group : {updateCounters, setCounters}) {
             UNIT_ASSERT_VALUES_EQUAL(group->GetCounter("BurstDetector_state")->Val(), 1);
             UNIT_ASSERT_VALUES_EQUAL(group->GetCounter("BurstDetector_resyncs", true)->Val(), 1);
             UNIT_ASSERT_GE(group->GetCounter("BurstDetector_greenMs", true)->Val(), 1000);
         }
-        for (auto* light : {&onUpdate, &onSet}) {
+        for (TBurstDetector* light : {&onUpdate, &onSet}) {
             light->Set(false, 5);
             light->Set(true, 6);
             UNIT_ASSERT_VALUES_EQUAL(light->GetCount(), 2);

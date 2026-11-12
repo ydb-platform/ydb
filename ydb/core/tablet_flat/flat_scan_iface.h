@@ -192,14 +192,14 @@ namespace NTable {
         }
 
     public:
-        // Called immediately before each Feed overload. Exactly one pointer
-        // identifies the source of the lock/delta or, for a reconstructed row,
+        // Called immediately before each Feed overload. The variant contains a
+        // non-null pointer to the source of the lock/delta or, for a reconstructed row,
         // the source of its newest fragment. Other cells may come from older
         // sources: this metadata does not provide per-cell provenance.
         // Interpret blob cells by their ELargeObj representation, not by the
         // reported source. Unmaterialized external blob cells contain TGlobId
         // for both memtables and parts (see TConf::LargeEdge).
-        // The pointers are borrowed from the scan and must not be retained
+        // The pointer is borrowed from the scan and must not be retained
         // beyond its lifetime. Existing consumers may ignore this metadata.
         virtual void SetSource(const TVersionScanSource&) {
         }

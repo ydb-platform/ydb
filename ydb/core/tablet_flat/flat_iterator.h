@@ -814,9 +814,9 @@ inline typename TTableIterBase<TIteratorOps>::TSource TTableIterBase<TIteratorOp
     const TIteratorId ai = TReverseIter(Inactive)->IteratorId;
     switch (ai.Type) {
         case EType::Mem:
-            return {MemIters[ai.Index]->MemTable, nullptr};
+            return MemIters[ai.Index]->MemTable;
         case EType::Run:
-            return {nullptr, RunIters[ai.Index]->Part()};
+            return RunIters[ai.Index]->Part();
         default:
             Y_TABLET_ERROR("Unexpected iterator type");
     }

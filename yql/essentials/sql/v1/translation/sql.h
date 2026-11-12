@@ -32,4 +32,5 @@ bool SplitQueryToStatements(const TLexers& lexers, const TParsers& parsers, cons
                             const NSQLTranslation::TTranslationSettings& settings);
 
 NSQLTranslation::TTranslatorPtr MakeTranslator(const TLexers& lexers, const TParsers& parsers);
+bool IsKnownSimpleFlag(TStringBuf flag);
 } // namespace NSQLTranslationV1

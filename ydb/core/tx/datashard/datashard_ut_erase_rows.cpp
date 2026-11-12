@@ -1,12 +1,14 @@
 #include "defs.h"
 #include "change_record.h"
 #include "datashard_distributed_erase.h"
+#include "datashard_impl.h"
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx.h>
@@ -2032,6 +2034,140 @@ tkey = 100, key = 4
             version = recordVersion;
         }
         UNIT_ASSERT(streamKeys.empty());
+    }
+
+    Y_UNIT_TEST(ConditionalEraseRowsSyncIndexCdcVolatileDependency) {
+        using TEvChangeExchange = NChangeExchange::TEvChangeExchange;
+        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+
+        TPortManager pm;
+        NKikimrPQ::TPQConfig pqConfig;
+        pqConfig.SetEnableProtoSourceIdInfo(true);
+        pqConfig.SetTopicsAreFirstClassCitizen(true);
+        TServerSettings settings(pm.GetPort(2134), {}, pqConfig);
+        settings.SetDomainName("Root").SetUseRealThreads(false)
+            .SetEnableChangefeedsOnIndexTables(true)
+            .SetEnableDataColumnForIndexTable(true)
+            .SetEnableDataShardVolatileTransactions(true);
+        settings.AppConfig->MutableFeatureFlags()->SetEnableVolatileTransactionArbiters(false);
+
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"skey", "Uint32", false, false},
+                {"payload", "Uint32", false, false},
+                {"ts", "Timestamp", false, false},
+            })
+            .Indexes({{"by_skey", {"skey"}, {"payload"}}}));
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table-1` (key, skey, payload, ts) VALUES
+                (1, 10, 100, Timestamp("2020-01-01T00:00:00Z")),
+                (2, 20, 200, Timestamp("2020-01-01T00:00:00Z")),
+                (3, 30, 300, Timestamp("2030-01-01T00:00:00Z"));
+        )");
+
+        const TString indexPath = "/Root/table-1/by_skey/indexImplTable";
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root/table-1/by_skey", "indexImplTable", {
+            .Name = "stream",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatJson,
+        }));
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const auto indexes = GetIndexes(server, sender, "/Root/table-1");
+        const auto indexTablet = GetTableShards(server, sender, indexPath).at(0);
+        auto* indexShard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ResolveTablet(runtime, indexTablet)));
+        UNIT_ASSERT(indexShard);
+
+        // Let the main table commit, but leave the covering index update undecided.
+        ui64 writeTxId = 0;
+        TBlockEvents<TEvTxProcessing::TEvReadSet> readSets(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTabletDest() == indexTablet && (!writeTxId || record.GetTxId() == writeTxId)) {
+                writeTxId = record.GetTxId();
+                return true;
+            }
+            return false;
+        });
+        TBlockEvents<TEvChangeExchange::TEvEnqueueRecords> enqueued(runtime);
+        auto writeResult = KqpSimpleSend(runtime, R"(
+            UPSERT INTO `/Root/table-1` (key, skey, payload, ts) VALUES
+                (2, 20, 222, Timestamp("2020-01-01T00:00:00Z"));
+        )");
+        runtime.WaitFor("uncommitted index update", [&] {
+            const auto* info = indexShard->GetVolatileTxManager().FindByTxId(writeTxId);
+            return info && info->State == NDataShard::EVolatileTxState::Waiting;
+        }, TDuration::Seconds(10));
+        SimulateSleep(server, TDuration::Seconds(1));
+        UNIT_ASSERT_STRING_CONTAINS(ReadShardedTable(server, "/Root/table-1"), "key = 2, skey = 20, payload = 222");
+
+        ui64 eraseTxId = 0;
+        auto observeErase = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+            if (ev->Get()->Record.GetTxKind() == NKikimrTxDataShard::TX_KIND_DISTRIBUTED_ERASE) {
+                eraseTxId = ev->Get()->Record.GetTxId();
+            }
+        });
+        bool eraseFinished = false;
+        auto observeResult = runtime.AddObserver<TEvResponse>([&](auto& ev) {
+            if (ev->Get()->Record.GetStatus() == TEvResponse::ProtoRecordType::OK) {
+                eraseFinished = true;
+            }
+        });
+
+        // The first expired row is collected before the second row discovers the dependency.
+        ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 4, currentTime, TUnit::AUTO, indexes);
+        runtime.WaitFor("TTL blocked on the index update", [&] {
+            const auto* info = indexShard->GetVolatileTxManager().FindByTxId(writeTxId);
+            return eraseTxId && info && info->BlockedOperations.contains(eraseTxId);
+        }, TDuration::Seconds(10));
+        UNIT_ASSERT(!eraseFinished);
+        UNIT_ASSERT(enqueued.empty());
+
+        readSets.Stop().Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(writeResult))), "<empty>");
+        const auto response = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"),
+            "key = 3, skey = 30, payload = 300, ts = 2030-01-01T00:00:00.000000Z\n");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, indexPath), "skey = 30, key = 3, payload = 300\n");
+
+        SimulateSleep(server, TDuration::Seconds(1));
+        THashMap<ui32, ui32> expectedOldImages{{1, 100}, {2, 222}};
+        size_t writeChanges = 0;
+        for (const auto& event : enqueued) {
+            for (const auto& info : event->Get()->Records) {
+                runtime.Send(event->Sender, sender, new TEvChangeExchange::TEvRequestRecords({{info.Order}}));
+                const auto reply = runtime.GrabEdgeEventRethrow<TEvChangeExchange::TEvRecords>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Records.size(), 1);
+                const auto& record = static_cast<const NDataShard::TChangeRecord&>(*reply->Get()->Records.front());
+                const auto& change = record.GetDataChange();
+                UNIT_ASSERT(record.GetKind() == NDataShard::TChangeRecord::EKind::CdcDataChange);
+                if (record.GetTxId() == writeTxId) {
+                    // Updating a covering index produces an erase followed by an upsert.
+                    UNIT_ASSERT(record.GetUserCtx()->GetUserSID() != "ttl@system");
+                    ++writeChanges;
+                    continue;
+                }
+                UNIT_ASSERT(change.HasErase());
+                UNIT_ASSERT_VALUES_EQUAL(record.GetTxId(), eraseTxId);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetUserCtx()->GetUserSID(), "ttl@system");
+                UNIT_ASSERT_VALUES_EQUAL(record.GetKey().size(), 2);
+                const auto key = record.GetKey()[1].AsValue<ui32>();
+                UNIT_ASSERT_VALUES_EQUAL(record.GetKey()[0].AsValue<ui32>(), key * 10);
+                UNIT_ASSERT_C(expectedOldImages.contains(key), "Unexpected or duplicate TTL event for key " << key);
+                UNIT_ASSERT(change.HasOldImage());
+                UNIT_ASSERT(!change.HasNewImage());
+                const TSerializedCellVec oldImage(change.GetOldImage().GetData());
+                UNIT_ASSERT_VALUES_EQUAL(oldImage.GetCells().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(oldImage.GetCells()[0].AsValue<ui32>(), expectedOldImages.at(key));
+                expectedOldImages.erase(key);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(writeChanges, 2);
+        UNIT_ASSERT(expectedOldImages.empty());
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsAsyncIndex) {

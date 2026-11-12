@@ -1,11 +1,15 @@
 #include "ut_helpers/ut_backup_restore_common.h"
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/lib/value/value.h>
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/query/table_checksum.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/mvcc_version.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -16,8 +20,10 @@
 #include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/wrappers/events/get_object.h>
@@ -27,6 +33,7 @@
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
+#include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -10519,6 +10526,684 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
         }
     };
+
+    enum class EChecksumRetryCase {
+        Recovery,
+        Expiry,
+        PermanentError,
+        Cancellation,
+        LateSuccess,
+    };
+
+    auto MockChecksumSnapshot(TTestActorRuntime & runtime, TVector<TMaybe<TRowVersion>>* requests = nullptr) {
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardSnapshotLocking(true);
+        runtime.RegisterService(NLongTxService::MakeLongTxServiceID(runtime.GetNodeId()), runtime.AllocateEdgeActor());
+        return runtime.AddObserver<NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot>([&, requests](auto& ev) {
+            auto* request = ev->Get();
+            if (requests) {
+                requests->push_back(request->Snapshot);
+            }
+            auto handle = NKqp::TSnapshotHandle(std::make_shared<std::atomic<bool>>(true));
+            const auto snapshot =
+                request->Snapshot.GetOrElse(TRowVersion(runtime.GetCurrentTime().MilliSeconds(), 123));
+            runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                             new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult(
+                                 request->DatabaseName, snapshot, std::move(handle), {})), 0, true);
+            ev.Reset();
+        });
+    }
+
+    auto AcknowledgeChecksumSnapshot(TTestActorRuntime & runtime, TActorId owner) {
+        return runtime.AddObserver<NBackup::TEvTableChecksum::TEvSnapshotAcquired>([&, owner](auto& ev) {
+            if (ev->Recipient == owner) {
+                runtime.Send(new IEventHandle(ev->Sender, owner, new NBackup::TEvTableChecksum::TEvStart()), 0, true);
+                ev.Reset();
+            }
+        });
+    }
+
+    void TableChecksumRetries(
+        EChecksumRetryCase scenario, Ydb::StatusIds::StatusCode transient = Ydb::StatusIds::UNAVAILABLE) {
+        TTestBasicRuntime runtime;
+        TTestEnv testEnv(runtime, TTestEnvOptions().SetupKqpProxy(true));
+        const auto edge = runtime.AllocateEdgeActor();
+        ui32 attempts = 0;
+        TVector<TMaybe<TRowVersion>> snapshotRequests;
+        auto snapshotService = MockChecksumSnapshot(runtime, &snapshotRequests);
+        auto checkpoints = AcknowledgeChecksumSnapshot(runtime, edge);
+        auto sessions = runtime.AddObserver<NKqp::TEvKqp::TEvCreateSessionRequest>([&](auto& ev) {
+            if (ev->Get()->Record.GetRequest().GetDatabase() != "/MyRoot") {
+                return;
+            }
+            ++attempts;
+            auto response = MakeHolder<NKqp::TEvKqp::TEvCreateSessionResponse>();
+            response->Record.SetYdbStatus(
+                scenario == EChecksumRetryCase::PermanentError ? Ydb::StatusIds::BAD_REQUEST : transient);
+            runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), response.Release()), 0, true);
+            ev.Reset();
+        });
+        TBlockEvents<NBackup::TEvTableChecksum::TEvResult> results(runtime);
+        const auto query =
+            runtime.Register(NBackup::CreateTableChecksumQuery(edge, 100, 0, "/MyRoot", "/MyRoot/Table", true));
+        runtime.Send(new IEventHandle(query, edge, new NBackup::TEvTableChecksum::TEvStart()), 0, true);
+        TMaybe<TInstant> firstFailure;
+        while (true) {
+            runtime.WaitFor("checksum attempt result", [&] {
+                return !results.empty();
+            });
+            auto& event = results.front();
+            auto& result = *event->Get();
+            if (event->GetRecipientRewrite() == edge) {
+                const auto elapsed = runtime.GetCurrentTime() - *firstFailure;
+                if (scenario == EChecksumRetryCase::Recovery || scenario == EChecksumRetryCase::LateSuccess) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::SUCCESS);
+                    UNIT_ASSERT_VALUES_EQUAL(result.Checksum.Count, 1);
+                    UNIT_ASSERT_VALUES_EQUAL(result.Checksum.Hash, 17);
+                    UNIT_ASSERT_GE(elapsed,
+                        scenario == EChecksumRetryCase::Recovery ? TDuration::Minutes(1) : TDuration::Minutes(5));
+                } else if (scenario == EChecksumRetryCase::PermanentError) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::BAD_REQUEST);
+                    UNIT_ASSERT_VALUES_EQUAL(attempts, 1);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(result.Status, transient);
+                    UNIT_ASSERT_GE(elapsed, TDuration::Minutes(5));
+                    UNIT_ASSERT_LT(elapsed, TDuration::Minutes(5) + TDuration::Seconds(20));
+                }
+                if (scenario != EChecksumRetryCase::PermanentError) {
+                    UNIT_ASSERT_GT(attempts, 3);
+                }
+                const auto finalAttempts = attempts;
+                UNIT_ASSERT_VALUES_EQUAL(snapshotRequests.size(), 1);
+                results.clear();
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
+                runtime.SimulateSleep(TDuration::MilliSeconds(1));
+                UNIT_ASSERT_VALUES_EQUAL(attempts, finalAttempts);
+                UNIT_ASSERT(results.empty());
+                return;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(event->GetRecipientRewrite(), query);
+            UNIT_ASSERT_C(attempts < 100, "Checksum retry window must expire");
+            if (!firstFailure) {
+                firstFailure = runtime.GetCurrentTime();
+            }
+            const auto elapsed = runtime.GetCurrentTime() - *firstFailure;
+            const bool recover = (scenario == EChecksumRetryCase::Recovery && elapsed >= TDuration::Minutes(1)) ||
+                                 (scenario == EChecksumRetryCase::LateSuccess && elapsed >= TDuration::Minutes(5));
+            if (recover) {
+                result.Status = Ydb::StatusIds::SUCCESS;
+                result.Checksum = { .Count = 1, .Hash = 17 };
+                result.Error.clear();
+            }
+            const bool firstAttempt = attempts == 1;
+            results.Unblock(1);
+            runtime.SimulateSleep(TDuration::MilliSeconds(500));
+            if (firstAttempt && scenario != EChecksumRetryCase::PermanentError) {
+                UNIT_ASSERT_VALUES_EQUAL(attempts, 1);
+                UNIT_ASSERT_C(results.empty(), "Transient checksum retry must have a pause");
+            }
+            if (scenario == EChecksumRetryCase::Cancellation) {
+                runtime.Send(new IEventHandle(query, edge, new TEvents::TEvPoisonPill()), 0, true);
+                runtime.SimulateSleep(TDuration::MilliSeconds(1));
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
+                runtime.SimulateSleep(TDuration::MilliSeconds(1));
+                UNIT_ASSERT_VALUES_EQUAL(attempts, 1);
+                UNIT_ASSERT(results.empty());
+                return;
+            }
+            if (results.empty()) {
+                runtime.AdvanceCurrentTime(TDuration::Seconds(15));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryRecoversAfterTabletStartup) {
+        TableChecksumRetries(EChecksumRetryCase::Recovery);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryWindow) {
+        TableChecksumRetries(EChecksumRetryCase::Expiry);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryOverloaded) {
+        TableChecksumRetries(EChecksumRetryCase::Expiry, Ydb::StatusIds::OVERLOADED);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryAborted) {
+        TableChecksumRetries(EChecksumRetryCase::Expiry, Ydb::StatusIds::ABORTED);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryBadSession) {
+        TableChecksumRetries(EChecksumRetryCase::Recovery, Ydb::StatusIds::BAD_SESSION);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryExpiredSession) {
+        TableChecksumRetries(EChecksumRetryCase::Recovery, Ydb::StatusIds::SESSION_EXPIRED);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryBusySession) {
+        TableChecksumRetries(EChecksumRetryCase::Recovery, Ydb::StatusIds::SESSION_BUSY);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryInternalError) {
+        TableChecksumRetries(EChecksumRetryCase::Recovery, Ydb::StatusIds::INTERNAL_ERROR);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryUndetermined) {
+        TableChecksumRetries(EChecksumRetryCase::Recovery, Ydb::StatusIds::UNDETERMINED);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryPermanentError) {
+        TableChecksumRetries(EChecksumRetryCase::PermanentError);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryCancellation) {
+        TableChecksumRetries(EChecksumRetryCase::Cancellation);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetrySuccessAfterWindow) {
+        TableChecksumRetries(EChecksumRetryCase::LateSuccess);
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumRetryMalformedResult, InvalidType) {
+        TTestBasicRuntime runtime;
+        TTestEnv testEnv(runtime, TTestEnvOptions().SetupKqpProxy(true));
+        const auto edge = runtime.AllocateEdgeActor();
+        auto snapshotService = MockChecksumSnapshot(runtime);
+        auto checkpoints = AcknowledgeChecksumSnapshot(runtime, edge);
+        auto sessions = runtime.AddObserver<NKqp::TEvKqp::TEvCreateSessionRequest>([&](auto& ev) {
+            auto response = MakeHolder<NKqp::TEvKqp::TEvCreateSessionResponse>();
+            response->Record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
+            response->Record.MutableResponse()->SetSessionId(
+                TStringBuilder() << "ydb://session/3?node_id=" << runtime.GetNodeId(0) << "&id=MS0yLTMtNA%3D%3D");
+            runtime.Send(
+                new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), response.Release(), 0, ev->Cookie), 0, true);
+            ev.Reset();
+        });
+        ui32 attempts = 0;
+        auto queries = runtime.AddObserver<NKqp::TEvKqp::TEvQueryRequest>([&](auto& ev) {
+            if (!ev->Get()->GetQuery().Contains("StablePickle")) {
+                return;
+            }
+            ++attempts;
+            auto response = MakeHolder<NKqp::TEvKqp::TEvQueryResponse>();
+            response->Record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
+            if (InvalidType) {
+                auto* result = response->Record.MutableResponse()->AddYdbResults();
+                auto* count = result->add_columns();
+                count->set_name("count");
+                count->mutable_type()->set_type_id(Ydb::Type::UTF8);
+                auto* hash = result->add_columns();
+                hash->set_name("hash");
+                hash->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+                auto* row = result->add_rows();
+                row->add_items()->set_text_value("invalid");
+                row->add_items()->set_uint64_value(17);
+            }
+            runtime.Send(
+                new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), response.Release(), 0, ev->Cookie), 0, true);
+            ev.Reset();
+        });
+        TBlockEvents<NBackup::TEvTableChecksum::TEvResult> results(runtime, [&](auto& ev) {
+            return ev->GetRecipientRewrite() == edge;
+        });
+        const auto query =
+            runtime.Register(NBackup::CreateTableChecksumQuery(edge, 100, 0, "/MyRoot", "/MyRoot/Table", true));
+        runtime.Send(new IEventHandle(query, edge, new NBackup::TEvTableChecksum::TEvStart()), 0, true);
+        runtime.WaitFor("invalid checksum result rejected", [&] {
+            return !results.empty();
+        });
+        const auto& result = *results.front()->Get();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::GENERIC_ERROR, result.Error);
+        UNIT_ASSERT_STRING_CONTAINS(result.Error, "invalid table checksum query result");
+        UNIT_ASSERT_VALUES_EQUAL(attempts, 1);
+        results.clear();
+        runtime.AdvanceCurrentTime(TDuration::Minutes(6));
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(attempts, 1);
+        UNIT_ASSERT(results.empty());
+    }
+
+    template <bool IsFs>
+    void TableChecksumValidation(bool cancel) {
+        TTestBasicRuntime runtime;
+        TTestEnv testEnv(runtime, TTestEnvOptions());
+        const auto data = GenerateTestData(R"(
+            columns { name: "key" type { optional_type { item { type_id: UTF8 } } } }
+            columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
+            primary_key: "key"
+        )",
+            { { "a", 1 } });
+        auto files = ConvertTestData(data);
+        files["/metadata.json"] = R"({"version":0,"table_checksum":{"version":1,"count":"1","hash":"17"}})";
+        TImportEnv<IsFs> storage(files, DefaultImportItems());
+        storage.SetupRuntime(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(false);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(false);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(false);
+        runtime.GetAppData().FeatureFlags.SetEnableBackupTableChecksum(true);
+        using namespace NKikimr::NSchemeShard;
+        TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(runtime);
+        const ui64 id = 100;
+        AsyncImport(runtime, id, "/MyRoot", storage.Request);
+        runtime.WaitFor("post-import checksum validation", [&] {
+            return starts.size() == 1;
+        });
+        const auto firstRecipient = starts[0]->GetRecipientRewrite();
+        const auto firstOwner = starts[0]->Sender;
+        if (cancel) {
+            TestCancelImport(runtime, id + 1, "/MyRoot", id);
+            testEnv.TestWaitNotification(runtime, id);
+            runtime.Send(new IEventHandle(
+                firstOwner, firstRecipient, new NBackup::TEvTableChecksum::TEvResult(id, 0, Ydb::StatusIds::SUCCESS,
+                                                { .Count = 1, .Hash = 17 }, "")));
+            TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        } else {
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            runtime.WaitFor("resumed checksum validation", [&] {
+                return starts.size() == 2;
+            });
+            runtime.Send(new IEventHandle(
+                firstOwner, firstRecipient, new NBackup::TEvTableChecksum::TEvResult(id, 0, Ydb::StatusIds::SUCCESS,
+                                                { .Count = 1, .Hash = 17 }, "")));
+            const auto status = TestGetImport(runtime, id, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(
+                status.GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA);
+            const auto& resumed = starts[1];
+            runtime.Send(new IEventHandle(resumed->Sender, resumed->GetRecipientRewrite(),
+                new NBackup::TEvTableChecksum::TEvResult(
+                    id, 0, Ydb::StatusIds::SUCCESS, { .Count = 1, .Hash = 17 }, "")));
+            runtime.Send(new IEventHandle(resumed->GetRecipientRewrite(), {}, new TEvents::TEvPoisonPill()));
+            testEnv.TestWaitNotification(runtime, id);
+            TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumValidationRecovery, IsFs) {
+        TableChecksumValidation<IsFs>(false);
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumValidationCancellation, IsFs) {
+        TableChecksumValidation<IsFs>(true);
+    }
+
+    template <bool IsFs>
+    void TableChecksumCheckpointRecovery(bool lostHistory) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().SetupKqpProxy(true));
+        auto files = ConvertTestData(GenerateTestData(R"(
+            columns { name: "key" type { optional_type { item { type_id: UTF8 } } } }
+            columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
+            primary_key: "key"
+        )",
+            { { "a", 1 } }));
+        // External metadata cannot supply the private validation checkpoint
+        files["/metadata.json"] =
+            R"({"version":0,"table_checksum":{"version":1,"count":"1","hash":"17"},"checksum_snapshot":"1:1"})";
+        TImportEnv<IsFs> storage(files, DefaultImportItems());
+        storage.SetupRuntime(runtime);
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableBackupTableChecksum(true);
+        flags.SetEnableExportFiltering(false);
+        flags.SetEnableEncryptedExport(false);
+        flags.SetEnableDataShardDirectPartImport(false);
+
+        TVector<TMaybe<TRowVersion>> snapshotRequests;
+        auto snapshots = MockChecksumSnapshot(runtime, &snapshotRequests);
+        TMaybe<TRowVersion> checkpoint;
+        auto acquired = runtime.AddObserver<NBackup::TEvTableChecksum::TEvSnapshotAcquired>([&](auto& ev) {
+            checkpoint = ev->Get()->Snapshot;
+        });
+        auto sessions = runtime.AddObserver<NKqp::TEvKqp::TEvCreateSessionRequest>([&](auto& ev) {
+            auto response = MakeHolder<NKqp::TEvKqp::TEvCreateSessionResponse>();
+            response->Record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
+            response->Record.MutableResponse()->SetSessionId(
+                TStringBuilder() << "ydb://session/3?node_id=" << runtime.GetNodeId(0) << "&id=MS0yLTMtNA%3D%3D");
+            runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.Release(), 0, ev->Cookie), 0, true);
+            ev.Reset();
+        });
+        ui32 queries = 0;
+        auto execute = runtime.AddObserver<NKqp::TEvKqp::TEvQueryRequest>([&](auto& ev) {
+            if (!ev->Get()->GetQuery().Contains("StablePickle")) {
+                return;
+            }
+            ++queries;
+            UNIT_ASSERT(checkpoint);
+            UNIT_ASSERT(ev->Get()->GetMvccVersion());
+            UNIT_ASSERT_VALUES_EQUAL(*ev->Get()->GetMvccVersion(), NKqp::FormatMvccVersion(*checkpoint));
+            auto response = MakeHolder<NKqp::TEvKqp::TEvQueryResponse>();
+            response->Record.SetYdbStatus(lostHistory ? Ydb::StatusIds::PRECONDITION_FAILED : Ydb::StatusIds::SUCCESS);
+            if (!lostHistory) {
+                auto* result = response->Record.MutableResponse()->AddYdbResults();
+                result->add_columns()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+                result->add_columns()->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(
+                    Ydb::Type::UINT64);
+                auto* row = result->add_rows();
+                row->add_items()->set_uint64_value(1);
+                row->add_items()->set_uint64_value(17);
+            }
+            runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.Release(), 0, ev->Cookie), 0, true);
+            ev.Reset();
+        });
+        TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(runtime);
+        const ui64 id = 100;
+        AsyncImport(runtime, id, "/MyRoot", storage.Request);
+        runtime.WaitFor("validation actor created", [&] {
+            return starts.size() == 1;
+        });
+        starts.Unblock(1);
+        runtime.WaitFor("checkpoint committed before SELECT", [&] {
+            return starts.size() == 1;
+        });
+        UNIT_ASSERT(checkpoint);
+        UNIT_ASSERT_VALUES_EQUAL(queries, 0);
+        UNIT_ASSERT_VALUES_EQUAL(snapshotRequests.size(), 1);
+        UNIT_ASSERT(!snapshotRequests.front());
+        starts.clear();
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        runtime.WaitFor("validation resumes after restart", [&] {
+            return starts.size() == 1;
+        });
+        starts.Stop().Unblock();
+        env.TestWaitNotification(runtime, id);
+        TestGetImport(runtime, id, "/MyRoot", lostHistory ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(snapshotRequests.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(snapshotRequests.back(), checkpoint);
+        UNIT_ASSERT_VALUES_EQUAL(queries, 1);
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumCheckpointRecovery, IsFs) {
+        TableChecksumCheckpointRecovery<IsFs>(false);
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumCheckpointUnavailableOnRecovery, IsFs) {
+        TableChecksumCheckpointRecovery<IsFs>(true);
+    }
+
+    template <bool IsFs>
+    void TableChecksumDestinationRemoved(bool reboot, bool recreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv testEnv(runtime, TTestEnvOptions());
+        const auto data = GenerateTestData(R"(
+            columns { name: "key" type { optional_type { item { type_id: UTF8 } } } }
+            columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
+            primary_key: "key"
+        )",
+            { { "a", 1 } });
+        auto files = ConvertTestData(data);
+        files["/metadata.json"] = R"({"version":0,"table_checksum":{"version":1,"count":"1","hash":"17"}})";
+        TImportEnv<IsFs> storage(files, DefaultImportItems());
+        storage.SetupRuntime(runtime);
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableExportFiltering(false);
+        flags.SetEnableEncryptedExport(false);
+        flags.SetEnableDataShardDirectPartImport(false);
+        flags.SetEnableBackupTableChecksum(true);
+        ui32 restores = 0;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore) {
+                    ++restores;
+                }
+            }
+        });
+        TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(runtime);
+        const ui64 id = 100;
+        AsyncImport(runtime, id, "/MyRoot", storage.Request);
+        runtime.WaitFor("post-import checksum validation", [&] {
+            return starts.size() == 1;
+        });
+        const auto originalPathId = DescribePath(runtime, "/MyRoot/Table").GetPathId();
+        TestDropTable(runtime, id + 1, "/MyRoot", "Table");
+        testEnv.TestWaitNotification(runtime, id + 1);
+        ui64 replacementPathId = 0;
+        if (recreate) {
+            TestCreateTable(runtime, id + 2, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "replacement" Type: "Uint64" }
+                KeyColumnNames: ["replacement"]
+            )");
+            testEnv.TestWaitNotification(runtime, id + 2);
+            replacementPathId = DescribePath(runtime, "/MyRoot/Table").GetPathId();
+            UNIT_ASSERT_UNEQUAL(replacementPathId, originalPathId);
+        }
+        if (reboot) {
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        } else {
+            const auto& start = starts.front();
+            runtime.Send(new IEventHandle(start->Sender, start->GetRecipientRewrite(),
+                new NBackup::TEvTableChecksum::TEvResult(
+                    id, 0, Ydb::StatusIds::SUCCESS, { .Count = 1, .Hash = 17 }, "")));
+            runtime.Send(new IEventHandle(start->GetRecipientRewrite(), {}, new TEvents::TEvPoisonPill()));
+        }
+        testEnv.TestWaitNotification(runtime, id);
+        const auto status = TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(status.GetResponse().GetEntry().GetIssues()),
+            "destination table is no longer available");
+        UNIT_ASSERT_VALUES_EQUAL(restores, 1);
+        UNIT_ASSERT_VALUES_EQUAL(starts.size(), 1);
+        if (recreate) {
+            const auto table = DescribePath(runtime, "/MyRoot/Table");
+            TestDescribeResult(table, { NLs::Finished });
+            UNIT_ASSERT_VALUES_EQUAL(table.GetPathId(), replacementPathId);
+        } else {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), { NLs::PathNotExist });
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TableChecksumDroppedDestination, IsFs, Reboot) {
+        TableChecksumDestinationRemoved<IsFs>(Reboot, false);
+    }
+
+    Y_UNIT_TEST_QUAD(TableChecksumRecreatedDestination, IsFs, Reboot) {
+        TableChecksumDestinationRemoved<IsFs>(Reboot, true);
+    }
+
+    template <bool IsFs>
+    void TableChecksumMetadataRecovery(bool unknownVersion, bool skipChecksumValidation) {
+        TTestBasicRuntime runtime;
+        TTestEnv testEnv(runtime, TTestEnvOptions());
+        const auto data = GenerateTestData(R"(
+            columns { name: "key" type { optional_type { item { type_id: UTF8 } } } }
+            columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
+            primary_key: "key"
+        )",
+            { { "a", 1 } });
+        TImportEnv<IsFs> storage(ConvertTestData(data), DefaultImportItems(),
+            skipChecksumValidation ? "skip_checksum_validation: true" : "");
+        storage.SetupRuntime(runtime);
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableExportFiltering(false);
+        flags.SetEnableEncryptedExport(false);
+        flags.SetEnableDataShardDirectPartImport(false);
+        flags.SetEnableBackupTableChecksum(true);
+        ui64 restoreTxId = 0;
+        ui32 restores = 0;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore) {
+                    restoreTxId = ev->Get()->Record.GetTxId();
+                    ++restores;
+                }
+            }
+        });
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> completions(runtime, [&](auto& ev) {
+            return restoreTxId != 0 && ev->Get()->Record.GetTxId() == restoreTxId;
+        });
+        TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(runtime);
+        const ui64 id = 100;
+        AsyncImport(runtime, id, "/MyRoot", storage.Request);
+        runtime.WaitFor("restore completed before import recovery", [&] {
+            return !completions.empty();
+        });
+
+        // An older binary could persist the checksum even when validation was skipped
+        const TString metadata = unknownVersion
+                                     ? R"({"version":0,"table_checksum":{"version":999,"count":"1","hash":"17"}})"
+                                     : R"({"version":0,"table_checksum":{"version":1,"count":"1","hash":"17"}})";
+        TStringStream escaped;
+        NYql::EscapeArbitraryAtom(metadata, '"', &escaped);
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        const auto status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"((
+            (let key '('('ImportId (Uint64 '%lu)) '('Index (Uint32 '0))))
+            (let row '('('Metadata (String '%s))))
+            (return (AsList (UpdateRow 'ImportItems key row)))
+        ))", id, escaped.Str().c_str()), result, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+        completions.Stop();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        testEnv.TestWaitNotification(runtime, id);
+        TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(starts.empty());
+        UNIT_ASSERT_VALUES_EQUAL(restores, 1);
+        NKqp::CompareYson(data.Data[0].YsonStr,
+            ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", { "key" }, { "key", "value" }));
+    }
+
+    Y_UNIT_TEST_QUAD(TableChecksumSkipValidationRecovery, IsFs, UnknownVersion) {
+        TableChecksumMetadataRecovery<IsFs>(UnknownVersion, true);
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumUnsupportedVersionRecovery, IsFs) {
+        TableChecksumMetadataRecovery<IsFs>(true, false);
+    }
+
+    template <bool IsFs>
+    void TableChecksumParallel(bool cancel, bool disableChecksumOnRecovery = false) {
+        TTestBasicRuntime runtime;
+        TTestEnv testEnv(runtime, TTestEnvOptions());
+        const auto data = GenerateTestData(R"(
+            columns { name: "key" type { optional_type { item { type_id: UTF8 } } } }
+            columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
+            primary_key: "key"
+        )",
+            { { "a", 1 } });
+        const auto tableFiles = ConvertTestData(data);
+        constexpr ui32 tables = 6;
+        THashMap<TString, TString> files;
+        TVector<TImportItem> items;
+        for (ui32 idx = 0; idx < tables; ++idx) {
+            const TString prefix = TStringBuilder() << "table" << idx;
+            for (const auto& [name, content] : tableFiles) {
+                files[TStringBuilder() << "/" << prefix << name] = content;
+            }
+            files[TStringBuilder() << "/" << prefix << "/metadata.json"] =
+                R"({"version":0,"table_checksum":{"version":1,"count":"1","hash":"17"}})";
+            items.push_back({ prefix, TStringBuilder() << "/MyRoot/Table" << idx });
+        }
+        TImportEnv<IsFs> storage(files, items);
+        storage.SetupRuntime(runtime);
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableExportFiltering(false);
+        flags.SetEnableEncryptedExport(false);
+        flags.SetEnableDataShardDirectPartImport(false);
+        flags.SetEnableBackupTableChecksum(true);
+        THashSet<ui64> restoreTxIds;
+        auto restores = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore) {
+                    restoreTxIds.insert(ev->Get()->Record.GetTxId());
+                }
+            }
+        });
+        THashSet<ui64> completedRestores;
+        auto completions = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>([&](auto& ev) {
+            const auto txId = ev->Get()->Record.GetTxId();
+            if (restoreTxIds.contains(txId)) {
+                completedRestores.insert(txId);
+            }
+        });
+        TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(runtime);
+        const ui64 id = 100;
+        AsyncImport(runtime, id, "/MyRoot", storage.Request);
+        runtime.WaitFor("all checksum checks started in parallel", [&] {
+            return starts.size() == tables;
+        });
+
+        using EState = TImportInfo::EState;
+        const auto readStates = [&] {
+            const auto stored = ReadSystemTable(
+                runtime, TTestTxConfig::SchemeShard, "ImportItems", { "ImportId", "Index" }, { "State", "WaitTxId" });
+            const auto value = NClient::TValue::Create(stored);
+            const auto rows = value["Result"]["List"];
+            THashMap<EState, ui32> counts;
+            for (size_t idx = 0; idx < rows.Size(); ++idx) {
+                const ui8 state = rows[static_cast<int>(idx)]["State"];
+                const ui64 waitTxId = rows[static_cast<int>(idx)]["WaitTxId"];
+                if (static_cast<EState>(state) == EState::Transferring) {
+                    // An older binary can subscribe to this completed restore and continue normally
+                    UNIT_ASSERT(restoreTxIds.contains(waitTxId));
+                } else if (static_cast<EState>(state) == EState::Done) {
+                    UNIT_ASSERT_VALUES_EQUAL(waitTxId, 0);
+                }
+                ++counts[static_cast<EState>(state)];
+            }
+            return counts;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(readStates().Value(EState::Transferring, 0u), tables);
+        UNIT_ASSERT_VALUES_EQUAL(completedRestores.size(), tables);
+        UNIT_ASSERT_VALUES_EQUAL(restoreTxIds.size(), tables);
+        const auto complete = [&](size_t index) {
+            const auto& start = starts[index];
+            // Only the item owning this query actor accepts the synthetic result
+            for (ui32 idx = 0; idx < tables; ++idx) {
+                runtime.Send(new IEventHandle(start->Sender, start->GetRecipientRewrite(),
+                    new NBackup::TEvTableChecksum::TEvResult(
+                        id, idx, Ydb::StatusIds::SUCCESS, { .Count = 1, .Hash = 17 }, "")));
+            }
+            runtime.Send(new IEventHandle(start->GetRecipientRewrite(), {}, new TEvents::TEvPoisonPill()));
+        };
+        if (cancel) {
+            TestCancelImport(runtime, id + 1, "/MyRoot", id);
+            testEnv.TestWaitNotification(runtime, id);
+            for (size_t idx = 0; idx < tables; ++idx) {
+                complete(idx);
+            }
+            TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT_VALUES_EQUAL(starts.size(), tables);
+            return;
+        }
+
+        flags.SetEnableBackupTableChecksum(!disableChecksumOnRecovery);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        if (disableChecksumOnRecovery) {
+            testEnv.TestWaitNotification(runtime, id);
+            TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(starts.size(), tables);
+            UNIT_ASSERT_VALUES_EQUAL(readStates().Value(EState::Done, 0u), tables);
+            UNIT_ASSERT_VALUES_EQUAL(restoreTxIds.size(), tables);
+            return;
+        }
+        runtime.WaitFor("all checksum checks resumed in parallel", [&] {
+            return starts.size() == 2 * tables;
+        });
+        const auto recovered = readStates();
+        UNIT_ASSERT_VALUES_EQUAL(recovered.Value(EState::Transferring, 0u), tables);
+        const auto status = TestGetImport(runtime, id, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(
+            status.GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA);
+
+        for (size_t idx = tables; idx < 2 * tables; ++idx) {
+            complete(idx);
+        }
+        testEnv.TestWaitNotification(runtime, id);
+        TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(starts.size(), 2 * tables);
+        UNIT_ASSERT_VALUES_EQUAL(restoreTxIds.size(), tables);
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumParallelRecovery, IsFs) {
+        TableChecksumParallel<IsFs>(false);
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumParallelCancellation, IsFs) {
+        TableChecksumParallel<IsFs>(true);
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumDisabledOnRecovery, IsFs) {
+        TableChecksumParallel<IsFs>(false, true);
+    }
 
     template <bool IsFs>
     void ShouldSucceed(

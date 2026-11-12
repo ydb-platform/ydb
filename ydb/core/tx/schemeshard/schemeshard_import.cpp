@@ -5,6 +5,10 @@
 #include "schemeshard_import_helpers.h"
 
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/core/kqp/common/simple/mvcc_version.h>
+
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <util/generic/xrange.h>
 
@@ -12,6 +16,31 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+    TString TImportInfo::TItem::SerializeMetadata() const {
+        const auto data = Metadata.Serialize();
+        if (!ChecksumSnapshot) {
+            return data;
+        }
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(data, &json, true);
+        // This checkpoint is private to the persisted import, never exported to metadata.json
+        json["checksum_snapshot"] = NKqp::FormatMvccVersion(*ChecksumSnapshot);
+        return NJson::WriteJson(&json, false);
+    }
+
+    void TImportInfo::TItem::DeserializeMetadata(const TString& data, bool readTableChecksum) {
+        Metadata = NBackup::TMetadata::Deserialize(data, readTableChecksum);
+        ChecksumSnapshot.Clear();
+        if (readTableChecksum) {
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(data, &json, true);
+            if (json.Has("checksum_snapshot")) {
+                ChecksumSnapshot = NKqp::ParseMvccVersion(json["checksum_snapshot"].GetStringSafe());
+                Y_ENSURE(ChecksumSnapshot, "Invalid stored import checksum snapshot");
+            }
+        }
+    }
 
 namespace {
 
@@ -401,9 +430,9 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
         );
     }
 
-    db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
-        NIceDb::TUpdate<Schema::ImportItems::Metadata>(item.Metadata.Serialize())
-    );
+    db.Table<Schema::ImportItems>()
+        .Key(importInfo.Id, itemIdx)
+        .Update(NIceDb::TUpdate<Schema::ImportItems::Metadata>(item.SerializeMetadata()));
 
     db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::Changefeeds>(item.Changefeeds)
@@ -510,6 +539,14 @@ bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
         default:
             return true;
     }
+}
+
+void TSchemeShard::Handle(NBackup::TEvTableChecksum::TEvResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressImport(ev), ctx);
+}
+
+void TSchemeShard::Handle(NBackup::TEvTableChecksum::TEvSnapshotAcquired::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressImport(ev), ctx);
 }
 
 } // NSchemeShard

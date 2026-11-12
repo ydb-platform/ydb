@@ -5875,6 +5875,12 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     if (LocalIndexMigratorId) {
         ctx.Send(LocalIndexMigratorId, new TEvents::TEvPoisonPill());
     }
+    for (TActorId query : RunningTableChecksumQueries) {
+        ctx.Send(query, new TEvents::TEvPoisonPill());
+    }
+    for (auto& [id, info] : Exports) {
+        info->ChecksumSnapshots.clear();
+    }
     for (TActorId schemeUploader : RunningExportSchemeUploaders) {
         ctx.Send(schemeUploader, new TEvents::TEvPoisonPill());
     }
@@ -6216,6 +6222,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvExportSchemeUploadResult, Handle);
         HFuncTraced(TEvPrivate::TEvExportUploadMetadataResult, Handle);
         HFuncTraced(TEvPrivate::TEvExportCompletionUploadResult, Handle);
+        HFuncTraced(NBackup::TEvTableChecksum::TEvResult, Handle);
+        HFuncTraced(NBackup::TEvTableChecksum::TEvSnapshotAcquired, Handle);
+        HFuncTraced(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);

@@ -25,6 +25,8 @@
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 
+#include <ydb/core/backup/query/table_checksum.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
@@ -1714,6 +1716,7 @@ public:
     THashMap<TTxId, THashSet<TIndexBuildId>> TxIdToDependentIndexBuild;
     // This set is needed to kill all the running scheme uploaders on SchemeShard death.
     THashSet<TActorId> RunningExportSchemeUploaders;
+    THashSet<TActorId> RunningTableChecksumQueries;
 
     // Incremental restore transaction tracking
     THashMap<TTxId, ui64> TxIdToIncrementalRestore;
@@ -1724,7 +1727,7 @@ public:
     static void PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
     void PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
     static void PersistExportPathId(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
-    static void PersistExportState(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
+    static void PersistExportState(NIceDb::TNiceDb& db, TExportInfo& exportInfo);
     static void PersistExportMetadata(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
     static void PersistExportItemState(NIceDb::TNiceDb& db, const TExportInfo& exportInfo, ui32 targetIdx);
     static void EraseEncryptionKey(NIceDb::TNiceDb& db, TExportInfo& exportInfo); // Erases encryption key (if any) for the export after moving to the final state and persists it in the database
@@ -1814,6 +1817,8 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(NBackup::TEvTableChecksum::TEvResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(NBackup::TEvTableChecksum::TEvSnapshotAcquired::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvIndexBuilder::TEvCreateResponse::TPtr& ev);
@@ -1828,6 +1833,9 @@ public:
     void Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NBackup::TEvTableChecksum::TEvResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NBackup::TEvTableChecksum::TEvSnapshotAcquired::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev, const TActorContext& ctx);
 
     void ResumeImports(const TVector<ui64>& ids, const TActorContext& ctx);
     // } // NImport

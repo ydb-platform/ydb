@@ -45,6 +45,7 @@
 #include <ydb/core/tablet_flat/flat_table_column.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/message_seqno.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/util/counted_leaky_bucket.h>
 #include <ydb/core/util/pb.h>
@@ -3903,6 +3904,8 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    bool EnableBackupTableChecksum = false;
+    TMap<TRowVersion, std::optional<NKqp::TSnapshotHandle>> ChecksumSnapshots;
     bool EnableChecksums = false;
     bool EnablePermissions = false;
     bool IncludeIndexData = false;
@@ -4022,6 +4025,12 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
             CreateConsumers,
         };
 
+        // In-memory progress; the persisted state stays Transferring until validation completes
+        enum class EChecksumState : ui8 {
+            None,
+            Validating,
+        };
+
         TString DstPathName;
         TPathId DstPathId;
         TString SrcPrefix;
@@ -4040,9 +4049,12 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
         EChangefeedState ChangefeedState = EChangefeedState::CreateChangefeed;
+        EChecksumState ChecksumState = EChecksumState::None;
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
+        TActorId ChecksumActor;
+        TMaybe<TRowVersion> ChecksumSnapshot;
         int NextIndexIdx = 0;
         int NextChangefeedIdx = 0;
         TString Issue;
@@ -4067,6 +4079,9 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         TString ToString(ui32 idx) const;
 
+        TString SerializeMetadata() const;
+        void DeserializeMetadata(const TString& data, bool readTableChecksum);
+
         static bool IsDone(const TItem& item);
     };
 
@@ -4084,6 +4099,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TMaybe<NBackup::TSchemaMapping> SchemaMapping;
     TActorId SchemaMappingGetter;
 
+    bool EnableBackupTableChecksum = false;
     EState State = EState::Invalid;
     TString Issue;
     TVector<TItem> Items;
@@ -4166,6 +4182,10 @@ public:
         return Visit([](const auto& settings) {
             return settings.skip_checksum_validation();
         });
+    }
+
+    bool ShouldValidateTableChecksum() const {
+        return EnableBackupTableChecksum && !GetSkipChecksumValidation();
     }
 
     Ydb::Import::ImportFromS3Settings::IndexPopulationMode GetIndexPopulationMode() const {

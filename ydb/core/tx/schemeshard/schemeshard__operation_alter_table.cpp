@@ -681,6 +681,10 @@ public:
         TPath path = pathId
             ? TPath::Init(pathId, context.SS)
             : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        // A replication-mode change needs a real cluster administrator: it bypasses every
+        // protection a replica table has. "All users are admins by default" does not count.
+        const bool replicationModeChange = Transaction.GetAllowReplicationModeChange()
+            && IsAdministrator(AppData(), context.UserToken.Get()) && !AppData()->AdministrationAllowedSIDs.empty();
         {
             TPath::TChecker checks = path.Check();
             checks
@@ -692,7 +696,12 @@ public:
                 .IsTable()
                 .NotUnderOperation();
 
-            if (checks && !Transaction.GetInternal()) {
+            if (Transaction.GetAllowReplicationModeChange() && !replicationModeChange) {
+                result->SetError(NKikimrScheme::StatusAccessDenied,
+                    "Changing the replication mode of a table requires a cluster administrator");
+                return result;
+            }
+            if (checks && !Transaction.GetInternal() && !replicationModeChange) {
                 checks
                     .NotAsyncReplicaTable()
                     .NotBackupTable();
@@ -820,7 +829,7 @@ public:
         NKikimrScheme::EStatus status;
         TTableInfo::TAlterDataPtr alterData = ParseParams(
             path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context,
-            Transaction.GetInternal());
+            Transaction.GetInternal() || replicationModeChange);
         if (!alterData) {
             result->SetError(status, errStr);
             return result;
@@ -1036,6 +1045,35 @@ static ISubOperation::TPtr CheckIndexAlterPath(TOperationId id, const TPath& pat
 }
 
 // A table's detailed metrics level covers its indexes, including clearing the setting.
+// A replication-mode change applies to the table and to the implementation tables of its
+// synchronous and unique indexes, which are independent replication targets (target_discoverer.cpp).
+static void CollectIndexImplTableReplicationModeAlters(TIndexImplTableAlters& alters,
+        const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
+{
+    const auto& alter = tx.GetAlterTable();
+    if (!tx.GetAllowReplicationModeChange() || !alter.HasReplicationConfig()) {
+        return;
+    }
+
+    for (const auto& [_, childPathId] : tablePath.Base()->GetChildren()) {
+        const auto& child = context.SS->PathsById.at(childPathId);
+        if (child->Dropped() || !child->IsTableIndex() || !context.SS->IsLocalId(childPathId)) {
+            continue;
+        }
+        const auto& index = context.SS->Indexes.at(childPathId);
+        if (index->Type != NKikimrSchemeOp::EIndexTypeGlobal && index->Type != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+            continue;
+        }
+        for (const auto& [_, implTablePathId] : child->GetChildren()) {
+            const auto& implTable = context.SS->PathsById.at(implTablePathId);
+            if (implTable->Dropped() || !implTable->IsTable()) {
+                continue;
+            }
+            *alters[implTablePathId].MutableReplicationConfig() = alter.GetReplicationConfig();
+        }
+    }
+}
+
 static void CollectIndexImplTableMetricsAlters(TIndexImplTableAlters& alters,
         const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
 {
@@ -1135,6 +1173,7 @@ static ISubOperation::TPtr AppendIndexImplTableAlters(TVector<ISubOperation::TPt
         return reject;
     }
     CollectIndexImplTableMetricsAlters(alters, tx, tablePath, context);
+    CollectIndexImplTableReplicationModeAlters(alters, tx, tablePath, context);
 
     THashSet<TPathId> pathsToCheck;
     for (const auto& [implTablePathId, _] : alters) {
@@ -1168,6 +1207,7 @@ static ISubOperation::TPtr AppendIndexImplTableAlters(TVector<ISubOperation::TPt
         }
         auto scheme = TransactionTemplate(indexPath.PathString(), NKikimrSchemeOp::ESchemeOpAlterTable);
         scheme.SetInternal(true);
+        scheme.SetAllowReplicationModeChange(tx.GetAllowReplicationModeChange());
         alter.SetName(implTablePath.LeafName());
         *scheme.MutableAlterTable() = std::move(alter);
         result.push_back(CreateAlterTable(NextPartId(id, result), scheme));

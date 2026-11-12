@@ -2545,6 +2545,35 @@ public:
                                 return SyncError();
                             }
 
+                        } else if (name == "replicationMode") {
+                            auto val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
+                            if (val == "read_only") {
+                                alterTableRequest.set_set_replication_mode(
+                                    NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+                            } else if (val == "none") {
+                                alterTableRequest.set_set_replication_mode(
+                                    NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+                            } else {
+                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
+                                    TStringBuilder() << "Unknown replication mode '" << val
+                                        << "', expected READ_ONLY or NONE"));
+                                return SyncError();
+                            }
+
+                        } else if (name == "replicationConsistencyLevel") {
+                            auto val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
+                            if (val == "row") {
+                                alterTableRequest.set_set_replication_consistency_level(
+                                    NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+                            } else if (val == "global") {
+                                alterTableRequest.set_set_replication_consistency_level(
+                                    NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL);
+                            } else {
+                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
+                                    TStringBuilder() << "Unknown replication consistency level '" << val
+                                        << "', expected ROW or GLOBAL"));
+                                return SyncError();
+                            }
                         } else if (name == "readReplicasSettings") {
                             if (!ParseReadReplicasSettings(*alterTableRequest.mutable_set_read_replicas_settings(), setting, ctx)) {
                                 return SyncError();

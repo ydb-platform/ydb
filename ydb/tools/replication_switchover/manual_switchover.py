@@ -10,7 +10,7 @@ ones a state file does not yet record as done, so an interrupted flip is resumed
 
     init      record the pair, the tables, the current primary and its replication object
     preflight step 0: health, TTL/vector-index refusal, changefeed paths of every target
-    fence     step 2: demote every table (and sync index impl table) on the primary
+    fence     step 2: ALTER TABLE ... SET (REPLICATION_MODE = READ_ONLY, ...) on every primary table
     rollback  undo fence (only before promote)
     drain     step 3: every changefeed consumer has committed its end offset
     promote   step 4: STATE = 'DONE' on the replica side, tables writable; then step 5, compare
@@ -28,7 +28,7 @@ ones a state file does not yet record as done, so an interrupted flip is resumed
 
 Requirements: both clusters on a build with TRemoteTopicReaderSettings.SourceIdPrefix (a table that
 becomes a replica for the second time would otherwise skip the new stream's records); the legacy
-gRPC service on at least one node per cluster (`ydbd db schema exec` sends the demote); row tables
+gRPC service is not needed; `ydbd db schema describe` is used read-only to inspect tables; row tables
 with synchronous, unique or async indexes; no TTL; no DDL on the tables during a flip.
 """
 import argparse
@@ -60,10 +60,12 @@ class StepError(RuntimeError):
 # ---- clusters ---------------------------------------------------------------------------------
 
 class Cluster:
-    def __init__(self, name, endpoint, database, extra_create_settings=""):
+    def __init__(self, name, endpoint, database, extra_create_settings="", token=None):
         self.name, self.endpoint, self.database = name, endpoint, database
         self.extra_create_settings = extra_create_settings
-        self.driver = ydb.Driver(endpoint=endpoint, database=database, credentials=ydb.AnonymousCredentials())
+        self.token = token
+        credentials = ydb.AccessTokenCredentials(token) if token else ydb.AnonymousCredentials()
+        self.driver = ydb.Driver(endpoint=endpoint, database=database, credentials=credentials)
         self.driver.wait(timeout=120, fail_fast=False)
         self.pool = ydb.QuerySessionPool(self.driver)
 
@@ -94,17 +96,26 @@ class Cluster:
 
     # legacy service calls
     def ydbd(self, *args):
-        return subprocess.run([YDBD, "-s", self.endpoint, *args], capture_output=True, text=True)
+        env = dict(os.environ, YDB_TOKEN=self.token) if self.token else None
+        return subprocess.run([YDBD, "-s", self.endpoint, *args], capture_output=True, text=True, env=env)
 
-    def schema_exec(self, proto_text, tag):
-        path = f"/tmp/switchover_{self.name}_{tag}.pb.txt"
-        with open(path, "w") as f:
-            f.write(proto_text)
-        out = self.ydbd("db", "schema", "exec", path)
-        if out.returncode != 0:
-            raise StepError(f"{self}: schema exec {tag} failed rc={out.returncode}\n"
-                            f"{out.stdout[-800:]}\n{out.stderr[-800:]}")
-        return out.stdout
+    def drop_index_changefeed(self, index_path, changefeed):
+        """AlterTable(<table>/<index>, drop_changefeeds=[name]). The SDK's alter_table has no
+        changefeed parameters, so the request is built directly and run like the SDK does.
+        Returns the error of an already dropped changefeed instead of raising, like try_sql."""
+        from ydb import _apis, _session_impl
+        session = self.driver.table_client.session().create()
+        request = _apis.ydb_table.AlterTableRequest(session_id=session.session_id, path=index_path,
+                                                    drop_changefeeds=[changefeed])
+        try:
+            operation = self.driver(request, _apis.TableService.Stub, _apis.TableService.AlterTable,
+                                    _session_impl.AlterTableOperation, None, (self.driver,))
+        except Exception as e:
+            return str(e)
+        # The alter is already complete: waiting on it would poll an operation with no id.
+        if not operation.ready:
+            operation.wait()
+        return None
 
     def describe_proto(self, path):
         out = self.ydbd("db", "schema", "describe", "-P", path)
@@ -135,7 +146,9 @@ class Cluster:
         return info
 
     def cli(self, *args):
-        out = subprocess.run([YDB_CLI, "-e", self.endpoint, "-d", self.database, *args], capture_output=True, text=True)
+        env = dict(os.environ, YDB_TOKEN=self.token) if self.token else None
+        out = subprocess.run([YDB_CLI, "-e", self.endpoint, "-d", self.database, *args], capture_output=True, text=True,
+                             env=env)
         if out.returncode != 0:
             raise StepError(f"{self}: ydb {' '.join(args)} failed: {out.stderr[-500:]}")
         return out.stdout
@@ -168,36 +181,6 @@ def wait_for(pred, timeout, what, interval=1.0):
             last = f"error: {str(e)[:120]}"
         time.sleep(interval)
     raise StepError(f"timeout waiting for {what}; last: {last!r}")
-
-
-def replication_config_proto(working_dir, name, mode, consistency):
-    cfg = f"Mode: {mode}"
-    if mode == "REPLICATION_MODE_READ_ONLY":
-        cfg += f"\n      ConsistencyLevel: CONSISTENCY_LEVEL_{consistency}\n      ImportState: IMPORTED"
-    return f"""ModifyScheme {{
-  OperationType: ESchemeOpAlterTable
-  WorkingDir: "{working_dir}"
-  Internal: true
-  AlterTable {{
-    Name: "{name}"
-    ReplicationConfig {{
-      {cfg}
-    }}
-  }}
-}}
-"""
-
-
-def drop_cdc_proto(working_dir, name, stream):
-    return f"""ModifyScheme {{
-  OperationType: ESchemeOpDropCdcStream
-  WorkingDir: "{working_dir}"
-  DropCdcStream {{
-    TableName: "{name}"
-    StreamName: "{stream}"
-  }}
-}}
-"""
 
 
 def parse_duration(text):
@@ -328,11 +311,11 @@ class State:
 # ---- the switchover ----------------------------------------------------------------------------
 
 class Switchover:
-    def __init__(self, state, extra_create_settings="", s3=None):
+    def __init__(self, state, extra_create_settings="", s3=None, token=None):
         self.st = state
         self.s3 = s3
         state.require("clusters", "tables", "primary")
-        self.clusters = {n: Cluster(n, c["endpoint"], c["database"], extra_create_settings)
+        self.clusters = {n: Cluster(n, c["endpoint"], c["database"], extra_create_settings, token)
                          for n, c in state.d["clusters"].items()}
         self.tables = state.d["tables"]
 
@@ -405,11 +388,14 @@ class Switchover:
     def fence(self, cluster=None):
         p = cluster or self.primary
         for t in self.tables:
-            for wd, name, path in self.demotable(p, t):
-                if p.table_info(path)["mode"] == "READ_ONLY":
-                    continue
-                p.schema_exec(replication_config_proto(wd, name, "REPLICATION_MODE_READ_ONLY", self.consistency),
-                              f"demote_{name}_{abs(hash(path))}")
+            # One statement demotes the table and the implementation tables of its sync indexes.
+            if all(p.table_info(path)["mode"] == "READ_ONLY" for _, _, path in self.demotable(p, t)):
+                continue
+            # The consistency level must be the one the reverse replication will ask for: the
+            # controller attaches an existing table only when both match exactly.
+            p.sql(f"ALTER TABLE `{p.path(t)}` SET (REPLICATION_MODE = READ_ONLY"
+                  f", REPLICATION_CONSISTENCY_LEVEL = {self.consistency})")
+            for _, _, path in self.demotable(p, t):
                 wait_for(lambda path=path: p.table_info(path)["mode"] == "READ_ONLY", 60, f"{path} read-only")
                 log("fence: demoted", path)
         for t in self.tables:
@@ -427,9 +413,8 @@ class Switchover:
             raise StepError("rollback is only possible before promote; the replica is already writable")
         p = self.primary
         for t in self.tables:
-            for wd, name, path in self.demotable(p, t):
-                p.schema_exec(replication_config_proto(wd, name, "REPLICATION_MODE_NONE", self.consistency),
-                              f"undo_{name}_{abs(hash(path))}")
+            p.sql(f"ALTER TABLE `{p.path(t)}` SET (REPLICATION_MODE = NONE)")
+            for _, _, path in self.demotable(p, t):
                 wait_for(lambda path=path: p.table_info(path)["mode"] == "NONE", 60, f"{path} writable")
                 log("rollback: writable again", path)
         for k in ("fence", "drain"):
@@ -495,10 +480,8 @@ class Switchover:
             desc = r.describe_replication(rep) if r.replication_exists(rep) else {}
             log("promote: DONE did not finish in time:", json.dumps(desc)[:300], "; clearing replica mode by hand")
             for t in self.tables:
-                for wd, name, path in self.demotable(r, t):
-                    if r.table_info(path)["mode"] != "NONE":
-                        r.schema_exec(replication_config_proto(wd, name, "REPLICATION_MODE_NONE", self.consistency),
-                                      f"clear_{name}_{abs(hash(path))}")
+                if any(r.table_info(path)["mode"] != "NONE" for _, _, path in self.demotable(r, t)):
+                    r.sql(f"ALTER TABLE `{r.path(t)}` SET (REPLICATION_MODE = NONE)")
             wait_for(lambda: all(r.table_info(x)["mode"] == "NONE" for x in targets), 60, "tables writable")
         st.flip["promoted_at"] = time.time()
         st.mark("promote")
@@ -521,12 +504,16 @@ class Switchover:
         for path in st.d.get("stale", {}).get(r.name, []):
             table, cf = path.rsplit("/", 1)
             if table.endswith("/indexImplTable"):
-                wd, name = table.rsplit("/", 1)
-                r.schema_exec(drop_cdc_proto(wd, name, cf), f"dropcdc_{cf}")
+                # No statement drops a changefeed of an index implementation table, but the Table
+                # API does when addressed by the index path, as the replication controller itself
+                # does. Drop by the recorded name only: the live changefeed of the next replication
+                # sits next to the stale one.
+                err = r.drop_index_changefeed(table[:-len("/indexImplTable")], cf)
             else:
                 err = r.try_sql(f"ALTER TABLE `{table}` DROP CHANGEFEED `{cf}`")
-                if err and "not found" not in err.lower() and "does not exist" not in err.lower():
-                    raise StepError(f"cleanup: {path}: {err[:200]}")
+            if err and not any(m in err.lower() for m in
+                               ("not found", "does not exist", "hasn't been resolved")):
+                raise StepError(f"cleanup: {path}: {err[:200]}")
             log("cleanup: dropped stale changefeed", path)
         st.d.setdefault("stale", {})[r.name] = []
         st.mark("cleanup-changefeeds")
@@ -709,8 +696,8 @@ class Writer(threading.Thread):
 
 
 def rehearse(args, state_path):
-    a = Cluster("A", args.a_endpoint, args.a_database, args.extra_create_settings)
-    b = Cluster("B", args.b_endpoint, args.b_database, args.extra_create_settings)
+    a = Cluster("A", args.a_endpoint, args.a_database, args.extra_create_settings, args.token)
+    b = Cluster("B", args.b_endpoint, args.b_database, args.extra_create_settings, args.token)
     tables = [f"{args.table_prefix}{i}" for i in range(args.tables)]
     for c in (a, b):
         for n in range(1, 50):
@@ -755,7 +742,7 @@ def rehearse(args, state_path):
             "stale": {"A": [], "B": []}, "next_rep": 2, "flips_done": 0,
             "skip_global_tx_wait": bool(args.skip_global_tx_wait)}
     st.save()
-    sw = Switchover(st, args.extra_create_settings, s3)
+    sw = Switchover(st, args.extra_create_settings, s3, args.token)
     next_key = args.rows
     results = []
     for i in range(args.flips):
@@ -811,6 +798,8 @@ def rehearse(args, state_path):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--state-file", default="switchover_state.json")
+    ap.add_argument("--token", default=os.environ.get("YDB_TOKEN"),
+                    help="access token for both clusters; REPLICATION_MODE changes need a cluster administrator")
     ap.add_argument("--extra-create-settings", default="",
                     help="appended inside WITH (...) of every CREATE ASYNC REPLICATION, "
                          "e.g. \", TOKEN_SECRET_PATH = 'x'\"")
@@ -869,10 +858,10 @@ def main():
                 "replication_cluster": "B" if args.primary == "A" else "A",
                 "stale": {"A": [], "B": []}, "next_rep": 2, "flips_done": 0}
         st.save()
-        sw = Switchover(st, args.extra_create_settings, S3.from_args(args))
+        sw = Switchover(st, args.extra_create_settings, S3.from_args(args), args.token)
         sw.status()
         return 0
-    sw = Switchover(st, args.extra_create_settings, S3.from_args(args))
+    sw = Switchover(st, args.extra_create_settings, S3.from_args(args), args.token)
     try:
         if args.cmd == "seed":
             if not sw.s3:

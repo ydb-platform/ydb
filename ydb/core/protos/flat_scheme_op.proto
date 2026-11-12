@@ -2148,6 +2148,9 @@ message TModifyScheme {
 
     optional TBackupCollectionDescription CreateBackupCollection = 74;
     optional TBackupCollectionDescription AlterBackupCollection = 75;
+    // Lets an AlterTable change ReplicationConfig.Mode of an existing table (demote to a read-only
+    // replica for a manual switchover, or back). Honoured only for a real cluster administrator.
+    optional bool AllowReplicationModeChange = 97 [default = false];
     optional TBackupCollectionDescription DropBackupCollection = 76;
     optional TBackupBackupCollection BackupBackupCollection = 78;
     optional TBackupBackupCollection BackupIncrementalBackupCollection = 79;

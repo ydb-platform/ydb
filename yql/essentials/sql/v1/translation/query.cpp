@@ -238,6 +238,14 @@ INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETableSetti
         const auto& ref = tableSettings.KeyBloomFilter.GetRef();
         settings = L(settings, Q(Y(Q("keyBloomFilter"), BuildQuotedAtom(ref.Pos, ref.Name))));
     }
+    if (tableSettings.ReplicationMode) {
+        const auto& ref = tableSettings.ReplicationMode.GetRef();
+        settings = L(settings, Q(Y(Q("replicationMode"), BuildQuotedAtom(ref.Pos, ref.Name))));
+    }
+    if (tableSettings.ReplicationConsistencyLevel) {
+        const auto& ref = tableSettings.ReplicationConsistencyLevel.GetRef();
+        settings = L(settings, Q(Y(Q("replicationConsistencyLevel"), BuildQuotedAtom(ref.Pos, ref.Name))));
+    }
     if (tableSettings.ReadReplicasSettings) {
         settings = L(settings, Q(Y(Q("readReplicasSettings"), tableSettings.ReadReplicasSettings)));
     }

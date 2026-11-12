@@ -553,6 +553,8 @@ struct TTableSettings {
     TMaybe<ui64> UniformPartitions;
     TVector<TVector<std::pair<EDataSlot, TString>>> PartitionAtKeys;
     TMaybe<TString> KeyBloomFilter;
+    TMaybe<TString> ReplicationMode;
+    TMaybe<TString> ReplicationConsistencyLevel;
     TMaybe<TString> ReadReplicasSettings;
     TResetableSetting<TTtlSettings, void> TtlSettings;
     TMaybe<TString> PartitionByHashFunction;

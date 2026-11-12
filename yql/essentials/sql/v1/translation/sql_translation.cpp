@@ -2788,6 +2788,32 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
             Ctx_.Error() << to_upper(id.Name) << " value should be an identifier";
             return false;
         }
+    } else if (to_lower(id.Name) == "replication_mode") {
+        if (!alter) {
+            Ctx_.Error() << to_upper(id.Name) << " can only be set with ALTER TABLE";
+            return false;
+        }
+        if (reset) {
+            Ctx_.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!StoreId(*value, settings.ReplicationMode, *this)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be an identifier: READ_ONLY or NONE";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "replication_consistency_level") {
+        if (!alter) {
+            Ctx_.Error() << to_upper(id.Name) << " can only be set with ALTER TABLE";
+            return false;
+        }
+        if (reset) {
+            Ctx_.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!StoreId(*value, settings.ReplicationConsistencyLevel, *this)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be an identifier: ROW or GLOBAL";
+            return false;
+        }
     } else if (to_lower(id.Name) == "read_replicas_settings") {
         if (reset) {
             Ctx_.Error() << to_upper(id.Name) << " reset is not supported";

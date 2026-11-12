@@ -58,6 +58,15 @@ static void FillStoragePool(TStoragePoolHolder* out, TAddStoragePoolFunc<TStorag
     std::invoke(func, out)->set_media(in.GetPreferredPoolKind());
 }
 
+// Only the KQP request carries a replication-mode change; the public request has no such field.
+static bool HasReplicationSettings(const Ydb::Table::AlterTableRequest*) {
+    return false;
+}
+
+static bool HasReplicationSettings(const NKikimrKqp::TKqpAlterTableRequest* req) {
+    return req->has_set_replication_mode() || req->has_set_replication_consistency_level();
+}
+
 template <typename TRequest>
 static THashSet<EAlterOperationKind> GetAlterOperationKindsImpl(const TRequest* req)
 {
@@ -73,6 +82,7 @@ static THashSet<EAlterOperationKind> GetAlterOperationKindsImpl(const TRequest* 
         req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED ||
         req->has_set_read_replicas_settings() ||
         req->add_statistics_size() || req->drop_statistics_size() ||
+        HasReplicationSettings(req) ||
         req->metrics_settings_action_case() !=
             TRequest::METRICS_SETTINGS_ACTION_NOT_SET)
     {

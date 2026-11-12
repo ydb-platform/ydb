@@ -4729,6 +4729,115 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(AlterTableReplicationMode) {
+        // ALTER TABLE ... SET (REPLICATION_MODE = READ_ONLY | NONE) demotes a table and the
+        // implementation tables of its synchronous indexes to read-only replicas, and back. It is
+        // the fence of a manual replication switchover and is admitted from a real cluster
+        // administrator only.
+        TKikimrRunner kikimr;
+        kikimr.GetTestClient().GrantConnect("user@builtin");
+        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+
+        auto adminSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
+            .AuthToken("root@builtin")).CreateSession().GetValueSync().GetSession();
+        auto userSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
+            .AuthToken("user@builtin")).CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(adminSession);
+        {
+            // The non-administrator must reach the schemeshard check, not an ACL denial before it.
+            auto result = adminSession.ExecuteSchemeQuery(
+                "GRANT ALL ON `/Root/SecondaryKeys` TO `user@builtin`;").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        const TString tablePath = "/Root/SecondaryKeys";
+        const TString implTablePath = "/Root/SecondaryKeys/Index/indexImplTable";
+
+        const auto replicaMode = [&](const TString& path) {
+            auto desc = kikimr.GetTestClient().Ls(path);
+            return desc->Record.GetPathDescription().GetTable().GetReplicationConfig().GetMode();
+        };
+        const auto replicaConsistency = [&](const TString& path) {
+            auto desc = kikimr.GetTestClient().Ls(path);
+            return desc->Record.GetPathDescription().GetTable().GetReplicationConfig().GetConsistencyLevel();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(replicaMode(tablePath), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+
+        {
+            auto result = userSession.ExecuteSchemeQuery(
+                "ALTER TABLE `/Root/SecondaryKeys` SET (REPLICATION_MODE = READ_ONLY);").GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), "a non-administrator must not change the replication mode");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "cluster administrator");
+        }
+        {
+            auto result = adminSession.ExecuteSchemeQuery(
+                "ALTER TABLE `/Root/SecondaryKeys` SET (REPLICATION_MODE = SOMETHING);").GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown replication mode");
+        }
+        {
+            auto result = adminSession.ExecuteSchemeQuery(
+                "ALTER TABLE `/Root/SecondaryKeys` SET (REPLICATION_MODE = READ_ONLY);").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(replicaMode(tablePath), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(replicaMode(implTablePath), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        // Row consistency by default, which is what an async replication asks for unless told otherwise.
+        UNIT_ASSERT_VALUES_EQUAL(replicaConsistency(tablePath), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+        UNIT_ASSERT_VALUES_EQUAL(replicaConsistency(implTablePath), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+        {
+            // A demoted table rejects writes and still serves reads.
+            auto result = adminSession.ExecuteDataQuery(
+                "UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (100, 100, \"fenced\");",
+                TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "replicated table");
+            auto read = adminSession.ExecuteDataQuery(
+                "SELECT COUNT(*) FROM `/Root/SecondaryKeys`;", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+        }
+        {
+            auto result = adminSession.ExecuteSchemeQuery(
+                "ALTER TABLE `/Root/SecondaryKeys` SET (REPLICATION_MODE = NONE);").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(replicaMode(tablePath), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+        UNIT_ASSERT_VALUES_EQUAL(replicaMode(implTablePath), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+        {
+            auto result = adminSession.ExecuteDataQuery(
+                "UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (100, 100, \"writable\");",
+                TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            // The consistency level of a globally consistent replication travels in the same statement.
+            auto result = adminSession.ExecuteSchemeQuery(
+                "ALTER TABLE `/Root/SecondaryKeys` SET (REPLICATION_MODE = READ_ONLY,"
+                " REPLICATION_CONSISTENCY_LEVEL = GLOBAL);").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(replicaConsistency(tablePath), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL);
+        UNIT_ASSERT_VALUES_EQUAL(replicaConsistency(implTablePath), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL);
+        {
+            auto result = adminSession.ExecuteSchemeQuery(
+                "ALTER TABLE `/Root/SecondaryKeys` SET (REPLICATION_CONSISTENCY_LEVEL = ROW);").GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "together with REPLICATION_MODE");
+        }
+        {
+            auto result = adminSession.ExecuteSchemeQuery(
+                "ALTER TABLE `/Root/SecondaryKeys` SET (REPLICATION_MODE = READ_ONLY,"
+                " REPLICATION_CONSISTENCY_LEVEL = SOMETHING);").GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown replication consistency level");
+        }
+        {
+            auto result = adminSession.ExecuteSchemeQuery(
+                "ALTER TABLE `/Root/SecondaryKeys` SET (REPLICATION_MODE = NONE);").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(replicaConsistency(tablePath), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN);
+    }
+
     Y_UNIT_TEST_TWIN(AlterIndexImplTable, VectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAccessToIndexImplTables(true);

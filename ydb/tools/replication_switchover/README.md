@@ -33,6 +33,24 @@ manual_switchover.py --state-file sw.json flip
 
 `rollback` undoes the fence before `promote`. `status` prints the state file and the clusters' view.
 
+## Seeding from a backup
+
+The replica side can be created without a CDC initial scan, from an S3 backup, which is the
+documented procedure for large tables (`INITIAL_SCAN = FALSE`, export on the primary, import into
+the placeholders, `STANDBY`):
+
+```
+manual_switchover.py --state-file sw.json --s3-endpoint https://storage.example.net --s3-bucket mybucket \
+    --s3-access-key ... --s3-secret-key ... seed [--prefix migration-2026-11]
+```
+
+`seed` creates the replication object on the replica side, waits until every changefeed and
+placeholder exists (the backup must be taken after the changefeeds, or the changes in between are
+lost), runs `ydb export s3` on the primary and `ydb import s3 --index-population-mode Build` on the
+replica side, attaches with `STANDBY` and waits until the replica equals the primary. With the S3
+options given, `reseed` after a failover uses the same path instead of an initial scan, and
+`rehearse --seed backup` rehearses the whole procedure from a backup.
+
 ## Unplanned failover
 
 ```
@@ -67,7 +85,8 @@ late (observed once at 53 s, GLOBAL, on the changefeed of a replication attached
   the new stream's records without it.
 - The legacy gRPC service on at least one node per cluster and an administrator token for
   `ydbd db schema exec`; `--extra-create-settings` passes credentials into the `CREATE ASYNC
-  REPLICATION` statements.
+  REPLICATION` statements. Seeding from a backup needs an S3 bucket reachable from both clusters
+  (`--s3-*` options, or `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`).
 - Row tables; synchronous, unique and async indexes are fine; vector indexes and TTL are refused.
 - No DDL on the tables during a flip.
 - `STATE = 'DONE'` does not wait for anything by itself. The fence and the drain are what make it

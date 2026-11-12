@@ -209,6 +209,92 @@ def parse_duration(text):
     return {"ms": v / 1000, "s": v, "m": v * 60, "h": v * 3600, None: v}[m.group(2)]
 
 
+# ---- seeding from a backup ----------------------------------------------------------------------
+
+class S3:
+    """S3 connection for `ydb export s3` / `ydb import s3`; endpoint is host[:port], scheme separate."""
+
+    def __init__(self, endpoint, bucket, access_key, secret_key, scheme="http", virtual_addressing=False):
+        if "://" in endpoint:
+            scheme, endpoint = endpoint.split("://", 1)
+        self.endpoint, self.bucket, self.scheme = endpoint.rstrip("/"), bucket, scheme
+        self.access_key, self.secret_key = access_key, secret_key
+        self.virtual_addressing = virtual_addressing
+
+    def args(self):
+        return ["--s3-endpoint", self.endpoint, "--scheme", self.scheme, "--bucket", self.bucket,
+                "--access-key", self.access_key, "--secret-key", self.secret_key,
+                "--use-virtual-addressing", "true" if self.virtual_addressing else "false"]
+
+    def env(self):
+        return {}
+
+    @staticmethod
+    def from_args(args):
+        if not getattr(args, "s3_endpoint", None):
+            return None
+        return S3(args.s3_endpoint, args.s3_bucket, args.s3_access_key, args.s3_secret_key)
+
+
+def s3_operation(cluster, operation, s3, items, extra=()):
+    """Start an export or import and wait for it; items are (source, destination) pairs."""
+    cmd = [operation, "s3", *s3.args()]
+    for src, dst in items:
+        cmd += ["--item", f"Source={src},Destination={dst}"]
+    cmd += list(extra) + ["--format", "proto-json-base64"]
+    result = json.loads(cluster.cli(*cmd))
+    op_id = result["id"]
+
+    def done():
+        r = json.loads(cluster.cli("operation", "get", op_id, "--format", "proto-json-base64"))
+        if not r.get("ready"):
+            return False
+        if r.get("status") != "SUCCESS":
+            raise StepError(f"{cluster}: {operation} {op_id} failed: {json.dumps(r)[:600]}")
+        return True
+    wait_for(done, 900, f"{operation} {op_id} on {cluster}", 2.0)
+    cluster.cli("operation", "forget", op_id)
+    log(f"{operation} ok on {cluster}: {op_id}")
+
+
+def seed_from_backup(src, dst, tables, rep, s3, consistency, extra_create_settings, prefix):
+    """Create the replication without an initial scan, back the source tables up to S3, restore them
+    into the placeholders and attach. This is the documented initial-sync procedure for large data."""
+    pairs = ", ".join(f"`{src.path(t)}` AS `{dst.path(t)}`" for t in tables)
+    level = ", CONSISTENCY_LEVEL = 'GLOBAL', COMMIT_INTERVAL = Interval('PT1S')" if consistency == "GLOBAL" else ""
+    if not dst.replication_exists(rep):
+        dst.sql(f"CREATE ASYNC REPLICATION `{rep}` FOR {pairs} "
+                f"WITH (CONNECTION_STRING = '{src.endpoint}/?database={src.database}', INITIAL_SCAN = FALSE{level}"
+                f"{extra_create_settings})")
+
+    # Every changefeed must exist before the backup is taken, or changes between the backup and the
+    # changefeed's creation would be lost; the placeholders must exist for the import to replace.
+    def ready():
+        d = dst.describe_replication(rep)
+        if "error" in d:
+            raise StepError(f"seed: {rep}: {d['error']}")
+        items = d.get("items", [])
+        if not items or not all(i.get("source_changefeed_name") for i in items):
+            return False
+        return all(dst.table_info(t)["mode"] == "READ_ONLY" for t in tables)
+    wait_for(ready, 300, "changefeeds and placeholders for the seed", 2.0)
+    log("seed: changefeeds and placeholders ready on", src, "/", dst)
+
+    s3_operation(src, "export", s3, [(src.path(t), f"{prefix}/{t}") for t in tables])
+    s3_operation(dst, "import", s3, [(f"{prefix}/{t}", dst.path(t)) for t in tables],
+                 extra=["--index-population-mode", "Build"])
+    dst.sql(f"ALTER ASYNC REPLICATION `{rep}` SET (STATE = 'STANDBY')")
+
+    def running():
+        d = dst.describe_replication(rep)
+        if "error" in d:
+            raise StepError(f"seed: {rep}: {d['error']}")
+        return "running" in d
+    wait_for(running, 300, "seeded replication running", 2.0)
+    wait_for(lambda: all(dst.digest(t) == src.digest(t) for t in tables), 600, "seeded replica caught up", 2.0)
+    log("seed ok:", rep, "attached; replica equals the source")
+
+
 # ---- state ------------------------------------------------------------------------------------
 
 class State:
@@ -242,8 +328,9 @@ class State:
 # ---- the switchover ----------------------------------------------------------------------------
 
 class Switchover:
-    def __init__(self, state, extra_create_settings=""):
+    def __init__(self, state, extra_create_settings="", s3=None):
         self.st = state
+        self.s3 = s3
         state.require("clusters", "tables", "primary")
         self.clusters = {n: Cluster(n, c["endpoint"], c["database"], extra_create_settings)
                          for n, c in state.d["clusters"].items()}
@@ -566,12 +653,16 @@ class Switchover:
         n = st.d.get("next_rep", 2)
         rep = f"{lc.database}/R{n}"
         st.d["next_rep"] = n + 1
-        pairs = ", ".join(f"`{p.path(t)}` AS `{lc.path(t)}`" for t in self.tables)
-        level = ", CONSISTENCY_LEVEL = 'GLOBAL'" if self.consistency == "GLOBAL" else ""
-        lc.sql(f"CREATE ASYNC REPLICATION `{rep}` FOR {pairs} "
-               f"WITH (CONNECTION_STRING = '{p.endpoint}/?database={p.database}'{level}{lc.extra_create_settings})")
-        wait_for(lambda: "running" in lc.describe_replication(rep), 180, "reseed replication running")
-        wait_for(lambda: all(lc.digest(t) == p.digest(t) for t in self.tables), 600, "reseed initial scan", 2.0)
+        if self.s3:
+            seed_from_backup(p, lc, self.tables, rep, self.s3, self.consistency, lc.extra_create_settings,
+                             f"reseed-{n}-{int(time.time())}")
+        else:
+            pairs = ", ".join(f"`{p.path(t)}` AS `{lc.path(t)}`" for t in self.tables)
+            level = ", CONSISTENCY_LEVEL = 'GLOBAL'" if self.consistency == "GLOBAL" else ""
+            lc.sql(f"CREATE ASYNC REPLICATION `{rep}` FOR {pairs} "
+                   f"WITH (CONNECTION_STRING = '{p.endpoint}/?database={p.database}'{level}{lc.extra_create_settings})")
+            wait_for(lambda: "running" in lc.describe_replication(rep), 180, "reseed replication running")
+            wait_for(lambda: all(lc.digest(t) == p.digest(t) for t in self.tables), 600, "reseed initial scan", 2.0)
         st.d.update({"replication": rep, "replication_cluster": lost, "lost": None})
         st.save()
         log(f"reseed done: {lc} is a replica of {p} again through {rep}")
@@ -639,13 +730,23 @@ def rehearse(args, state_path):
             values = ", ".join(f"({k}ul, 'init{k}'u)" for k in range(off, min(off + 500, args.rows)))
             a.sql(f"UPSERT INTO `{a.path(t)}` (key, value) VALUES {values}")
     rep = f"{b.database}/R1"
-    pairs = ", ".join(f"`{a.path(t)}` AS `{b.path(t)}`" for t in tables)
-    level = ", CONSISTENCY_LEVEL = 'GLOBAL', COMMIT_INTERVAL = Interval('PT1S')" if args.consistency == "GLOBAL" else ""
-    b.sql(f"CREATE ASYNC REPLICATION `{rep}` FOR {pairs} "
-          f"WITH (CONNECTION_STRING = '{a.endpoint}/?database={a.database}'{level}{args.extra_create_settings})")
-    wait_for(lambda: all(b.digest(t) == a.digest(t) for t in tables), 600, "initial copy", 2.0)
-    wait_for(lambda: "running" in b.describe_replication(rep), 120, "R1 running")
-    log("rehearse: setup done:", len(tables), "tables,", args.rows, "rows each, primary A, replication", rep)
+    s3 = S3.from_args(args)
+    if args.seed == "backup":
+        if not s3:
+            raise StepError("--seed backup needs --s3-endpoint, --s3-bucket, --s3-access-key, --s3-secret-key")
+        seed_from_backup(a, b, tables, rep, s3, args.consistency, args.extra_create_settings,
+                         f"rehearse-{int(time.time())}")
+    else:
+        pairs = ", ".join(f"`{a.path(t)}` AS `{b.path(t)}`" for t in tables)
+        level = ""
+        if args.consistency == "GLOBAL":
+            level = ", CONSISTENCY_LEVEL = 'GLOBAL', COMMIT_INTERVAL = Interval('PT1S')"
+        b.sql(f"CREATE ASYNC REPLICATION `{rep}` FOR {pairs} "
+              f"WITH (CONNECTION_STRING = '{a.endpoint}/?database={a.database}'{level}{args.extra_create_settings})")
+        wait_for(lambda: all(b.digest(t) == a.digest(t) for t in tables), 600, "initial copy", 2.0)
+        wait_for(lambda: "running" in b.describe_replication(rep), 120, "R1 running")
+    log("rehearse: setup done:", len(tables), "tables,", args.rows, "rows each, primary A, replication", rep,
+        "seed", args.seed)
 
     st = State(state_path)
     st.d = {"clusters": {"A": {"endpoint": a.endpoint, "database": a.database},
@@ -654,7 +755,7 @@ def rehearse(args, state_path):
             "stale": {"A": [], "B": []}, "next_rep": 2, "flips_done": 0,
             "skip_global_tx_wait": bool(args.skip_global_tx_wait)}
     st.save()
-    sw = Switchover(st, args.extra_create_settings)
+    sw = Switchover(st, args.extra_create_settings, s3)
     next_key = args.rows
     results = []
     for i in range(args.flips):
@@ -713,6 +814,11 @@ def main():
     ap.add_argument("--extra-create-settings", default="",
                     help="appended inside WITH (...) of every CREATE ASYNC REPLICATION, "
                          "e.g. \", TOKEN_SECRET_PATH = 'x'\"")
+    ap.add_argument("--s3-endpoint", default=os.environ.get("S3_ENDPOINT"),
+                    help="host[:port] or scheme://host[:port]")
+    ap.add_argument("--s3-bucket", default=os.environ.get("S3_BUCKET"))
+    ap.add_argument("--s3-access-key", default=os.environ.get("S3_ACCESS_KEY", "test"))
+    ap.add_argument("--s3-secret-key", default=os.environ.get("S3_SECRET_KEY", "test"))
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def pair_args(sp):
@@ -729,6 +835,8 @@ def main():
     for name in ("preflight", "fence", "rollback", "drain", "promote", "compare", "cleanup-changefeeds",
                  "create-reverse", "attach", "probe", "drop-old", "flip", "failover", "fence-lost", "reseed", "status"):
         sub.add_parser(name)
+    sp = sub.add_parser("seed", help="create the replication from the primary to the replica side from an S3 backup")
+    sp.add_argument("--prefix", default=None, help="S3 key prefix for the backup (default: seed-<time>)")
     sp = sub.add_parser("rehearse", help="create tables and a replication, flip back and forth under writes")
     pair_args(sp)
     sp.add_argument("--tables", type=int, default=1)
@@ -740,6 +848,8 @@ def main():
     sp.add_argument("--consistency", choices=["ROW", "GLOBAL"], default="ROW")
     sp.add_argument("--write-seconds", type=float, default=5.0)
     sp.add_argument("--failover-after", type=int, default=0, help="after this flip, rehearse an unplanned failover")
+    sp.add_argument("--seed", choices=["scan", "backup"], default="scan",
+                    help="initial sync: CDC initial scan, or S3 backup and restore into placeholders")
     sp.add_argument("--skip-global-tx-wait", action="store_true",
                     help="rely on the server's consistent DONE (EnableConsistentReplicationDone) "
                          "for the GLOBAL drain")
@@ -759,11 +869,21 @@ def main():
                 "replication_cluster": "B" if args.primary == "A" else "A",
                 "stale": {"A": [], "B": []}, "next_rep": 2, "flips_done": 0}
         st.save()
-        sw = Switchover(st, args.extra_create_settings)
+        sw = Switchover(st, args.extra_create_settings, S3.from_args(args))
         sw.status()
         return 0
-    sw = Switchover(st, args.extra_create_settings)
+    sw = Switchover(st, args.extra_create_settings, S3.from_args(args))
     try:
+        if args.cmd == "seed":
+            if not sw.s3:
+                raise StepError("seed needs --s3-endpoint and --s3-bucket")
+            n = st.d.get("next_rep", 2)
+            rep = f"{sw.replica.database}/R{n}"
+            seed_from_backup(sw.primary, sw.replica, sw.tables, rep, sw.s3, sw.consistency,
+                             sw.replica.extra_create_settings, args.prefix or f"seed-{int(time.time())}")
+            st.d.update({"replication": rep, "replication_cluster": sw.replica.name, "next_rep": n + 1, "lost": None})
+            st.save()
+            return 0
         getattr(sw, args.cmd.replace("-", "_"))()
     except StepError as e:
         log("FAILED:", e)

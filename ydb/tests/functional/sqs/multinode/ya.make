@@ -27,9 +27,12 @@ PEERDIR(
 )
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(20)
 
-# 15 collected cases: fifo/std x table format, stop-node, and recompile.
-# A larger split only schedules empty chunks.
-SPLIT_FACTOR(15)
+# SQS tests are not CPU or disk intensive,
+# but they use sleeping for some events,
+# so it would be secure to increase split factor.
+# This increasing of split factor reduces test time
+# to 15-20 seconds.
 
 END()

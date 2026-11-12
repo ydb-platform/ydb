@@ -3586,6 +3586,7 @@ struct TCdcStreamSettings {
     using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
     using EState = NKikimrSchemeOp::ECdcStreamState;
     using ECompression = NKikimrSchemeOp::ECdcStreamCompression;
+    using EHeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatMode;
 
     #define OPTION(type, name) \
         TSelf&& With##name(type value) && { \
@@ -3605,6 +3606,7 @@ struct TCdcStreamSettings {
     OPTION(bool, TraceIds);
     OPTION(ECompression, Compression);
     OPTION(i32, CompressionLevel);
+    OPTION(EHeartbeatMode, HeartbeatMode);
 
     #undef OPTION
 };
@@ -3658,6 +3660,7 @@ struct TCdcStreamInfo
             .WithCompressionLevel(desc.HasCompressionLevel()
                 ? desc.GetCompressionLevel()
                 : (desc.GetCompression() == NKikimrSchemeOp::ECdcStreamCompressionZstd ? 3 : 0))
+            .WithHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect)
         );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
@@ -3688,6 +3691,7 @@ struct TCdcStreamInfo
         if (CompressionLevel) {
             desc.SetCompressionLevel(CompressionLevel);
         }
+        desc.SetHeartbeatMode(HeartbeatMode);
     }
 
     void FinishAlter() {
@@ -3695,12 +3699,14 @@ struct TCdcStreamInfo
 
         AlterVersion = AlterData->AlterVersion;
         static_cast<TCdcStreamSettings&>(*this) = static_cast<TCdcStreamSettings&>(*AlterData);
+        AggregatorShardIdx = AlterData->AggregatorShardIdx;
 
         AlterData.Reset();
     }
 
     ui64 AlterVersion = 1;
     TCdcStreamInfo::TPtr AlterData = nullptr;
+    TShardIdx AggregatorShardIdx = InvalidShardIdx;
 
     TMap<TShardIdx, TShardStatus> ScanShards;
     THashSet<TShardIdx> PendingShards;

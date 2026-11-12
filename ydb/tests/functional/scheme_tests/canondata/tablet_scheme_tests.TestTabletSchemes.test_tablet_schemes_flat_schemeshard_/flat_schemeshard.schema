@@ -7387,6 +7387,11 @@
                 "ColumnId": 14,
                 "ColumnName": "CompressionLevel",
                 "ColumnType": "Int32"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "HeartbeatMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -7406,7 +7411,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7504,6 +7510,11 @@
                 "ColumnId": 14,
                 "ColumnName": "CompressionLevel",
                 "ColumnType": "Int32"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "HeartbeatMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -7523,7 +7534,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,

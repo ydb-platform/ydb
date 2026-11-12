@@ -2359,7 +2359,8 @@ void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) 
         NIceDb::TUpdate<Schema::CdcStream::UserSIDs>(alterData->UserSIDs),
         NIceDb::TUpdate<Schema::CdcStream::TraceIds>(alterData->TraceIds),
         NIceDb::TUpdate<Schema::CdcStream::Compression>(alterData->Compression),
-        NIceDb::TUpdate<Schema::CdcStream::CompressionLevel>(alterData->CompressionLevel)
+        NIceDb::TUpdate<Schema::CdcStream::CompressionLevel>(alterData->CompressionLevel),
+        NIceDb::TUpdate<Schema::CdcStream::HeartbeatMode>(alterData->HeartbeatMode)
     );
 
     db.Table<Schema::CdcStreamAlterData>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
@@ -2390,7 +2391,8 @@ void TSchemeShard::PersistCdcStreamAlterData(NIceDb::TNiceDb& db, const TPathId&
         NIceDb::TUpdate<Schema::CdcStreamAlterData::UserSIDs>(alterData->UserSIDs),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::TraceIds>(alterData->TraceIds),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::Compression>(alterData->Compression),
-        NIceDb::TUpdate<Schema::CdcStreamAlterData::CompressionLevel>(alterData->CompressionLevel)
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::CompressionLevel>(alterData->CompressionLevel),
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::HeartbeatMode>(alterData->HeartbeatMode)
     );
 }
 

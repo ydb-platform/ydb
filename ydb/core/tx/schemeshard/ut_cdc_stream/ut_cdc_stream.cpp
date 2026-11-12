@@ -1443,6 +1443,93 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(HeartbeatModeCannotBeSetInRequest) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (const char* setting : TVector<const char*>{
+            "HeartbeatMode: ECdcStreamHeartbeatModeAggregated",
+            "HeartbeatMode: ECdcStreamHeartbeatModeDirect",
+            "AggregatorTabletId: 72075186224037888",
+        }) {
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                  ResolvedTimestampsIntervalMs: 1000
+                  %s
+                }
+            )", setting), {{NKikimrScheme::StatusInvalidParameter, "HeartbeatMode and AggregatorTabletId"}});
+        }
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(HeartbeatModeSurvivesReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              ResolvedTimestampsIntervalMs: 1000
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
+            NLs::StreamHasAggregatorTabletId(false),
+        });
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect),
+            NLs::StreamHasAggregatorTabletId(false),
+        });
+
+        const auto streamSelf = DescribePrivatePath(runtime, "/MyRoot/Table/Stream").GetPathDescription().GetSelf();
+        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('OwnerPathId (Uint64 '%lu)) '('LocalPathId (Uint64 '%lu))))
+                (let update '('('HeartbeatMode (Uint32 '%u))))
+                (return (AsList (UpdateRow 'CdcStream key update)))
+            )
+        )", streamSelf.GetSchemeshardId(), streamSelf.GetPathId(),
+            static_cast<ui32>(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated)));
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
+            NLs::StreamHasAggregatorTabletId(false),
+        });
+    }
+
     void Metering(bool serverless) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()

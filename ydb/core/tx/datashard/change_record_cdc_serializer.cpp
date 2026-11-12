@@ -30,6 +30,8 @@
 
 namespace NKikimr::NDataShard {
 
+constexpr int DEFAULT_ZSTD_COMPRESSION_LEVEL = 3;
+
 class TBaseSerializer: public IChangeRecordSerializer {
     static NKikimrPQClient::TDataChunk MakeDataChunk() {
         NKikimrPQClient::TDataChunk data;
@@ -335,7 +337,7 @@ protected:
         case NKikimrSchemeOp::ECdcStreamCompressionZstd: {
             TString compressed;
             TStringOutput output(compressed);
-            TZstdCompress compressor(&output, Opts.CompressionLevel ? Opts.CompressionLevel : 3);
+            TZstdCompress compressor(&output, Opts.CompressionLevel ? Opts.CompressionLevel : DEFAULT_ZSTD_COMPRESSION_LEVEL);
             compressor.Write(json.data(), json.size());
             compressor.Finish();
             data.SetCodec(NPersQueueCommon::ZSTD);

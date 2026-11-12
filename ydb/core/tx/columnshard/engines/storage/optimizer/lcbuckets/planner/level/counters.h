@@ -9,6 +9,8 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 using TPortionCategoryCounterAgents = NColumnShard::TPortionCategoryCounterAgents;
 using TPortionCategoryCounters = NColumnShard::TPortionCategoryCounters;
 
+static constexpr ui32 LEVELS_COUNT = 10;
+
 class TLevelAgents {
 private:
     const ui32 LevelId;
@@ -32,7 +34,7 @@ public:
     TGlobalCounters()
         : TBase("LeveledCompactionOptimizer")
     {
-        for (ui32 i = 0; i <= 10; ++i) {
+        for (ui32 i = 0; i < LEVELS_COUNT; ++i) {
             Levels.emplace_back(std::make_shared<TLevelAgents>(i, *this));
         }
     }
@@ -62,7 +64,7 @@ public:
     std::vector<TLevelCounters> Levels;
 
     TCounters() {
-        for (ui32 i = 0; i < 10; ++i) {
+        for (ui32 i = 0; i < LEVELS_COUNT; ++i) {
             Levels.emplace_back(i);
         }
     }

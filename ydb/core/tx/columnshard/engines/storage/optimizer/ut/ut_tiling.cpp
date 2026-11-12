@@ -197,15 +197,18 @@ Y_UNIT_TEST_SUITE(TilingCounterUnits) {
         auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
         NColumnShard::TCommonCountersOwner owner("TilingCounterUnits", root);
         TPortionCategoryCounterAgents agents(owner, "test");
-        const auto maxOverload =
-            root->GetSubgroup("module_id", "TilingCounterUnits")->GetSubgroup("category", "test")->GetCounter("Value/Overload/Max", false);
+        const auto group = root->GetSubgroup("module_id", "TilingCounterUnits")->GetSubgroup("category", "test");
 
         auto low = std::make_shared<TPortionCategoryCounters>(agents);
         const auto assertMaxOverload = [&](const ui64 expected) {
             UNIT_ASSERT_VALUES_EQUAL(low->GetMaxOverloadLevel(), expected);
+            const auto maxOverload = group->FindCounter("Value/Overload/Max");
+            UNIT_ASSERT(maxOverload);
             UNIT_ASSERT_VALUES_EQUAL(maxOverload->Val(), expected);
         };
         low->SetOverload(3);
+        // Registered by the first GetMaxOverloadLevel
+        UNIT_ASSERT(!group->FindCounter("Value/Overload/Max"));
         assertMaxOverload(3);
 
         {

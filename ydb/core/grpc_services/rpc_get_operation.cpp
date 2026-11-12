@@ -465,8 +465,7 @@ private:
         Ydb::Tablet::ReassignTabletsMetadata metadata;
         metadata.set_selected_tablets(record.GetSelectedTablets());
         metadata.set_completed_tablets(record.GetCompletedTablets());
-        const auto status = record.GetCancelled() ? StatusIds::CANCELLED
-            : record.GetCompletedTablets() == record.GetSelectedTablets() ? StatusIds::SUCCESS : StatusIds::GENERIC_ERROR;
+        const auto status = record.GetCancelled() ? StatusIds::CANCELLED : StatusIds::SUCCESS;
         ReplyGetOperationResponse(record.GetReady(), ctx, metadata, status);
     }
 

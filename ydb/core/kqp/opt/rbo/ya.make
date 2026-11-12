@@ -24,6 +24,7 @@ SRCS(
     remove_redundant_sorts.cpp
     analysis/logical_liveness.cpp
     explain/kqp_connection_explain.cpp
+    explain/kqp_explain_context.cpp
     explain/kqp_expression_explain.cpp
     explain/kqp_operator_explain.cpp
     explain/kqp_plan_to_json.cpp
@@ -59,8 +60,14 @@ PEERDIR(
     ydb/core/kqp/tracing
     ydb/library/formats/arrow/protos
     yql/essentials/core/extract_predicate
+    yql/essentials/public/decimal
+    yql/essentials/types/uuid
+    yql/essentials/utils
 )
 
 END()
 
-RECURSE_FOR_TESTS(ut)
+RECURSE_FOR_TESTS(
+    ut
+    explain/ut
+)

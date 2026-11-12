@@ -79,8 +79,8 @@ Conversion functions for vector data convert an array of elements into a byte st
   - `3` — `Int8` (1 byte per element)
   - `4` — `Float16` (2 bytes per element, [IEEE-754 binary16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format))
   - `5` — `BFloat16` (2 bytes per element, [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format))
-  - `6`: `Float8E4M3` (1 byte per element, E4M3FN)
-  - `7`: `Float8E5M2` (1 byte per element, E5M2)
+  - `6`: `Float8E4M3` (1 byte per element, [E4M3FN](https://developer.nvidia.com/blog/floating-point-8-an-introduction-to-efficient-lower-precision-ai-training/))
+  - `7`: `Float8E5M2` (1 byte per element, [E5M2](https://developer.nvidia.com/blog/floating-point-8-an-introduction-to-efficient-lower-precision-ai-training/))
   - `8`: `Uint4` (4 bits per element)
   - `9`: `Int4` (4 bits per element)
   - `10` — `Bit` (1 bit per element)
@@ -327,7 +327,7 @@ $facts = AsList(
 
 An ML model can do quantization, or it can be done manually with YQL.
 
-The following examples show quantization to FP8 and integer vector formats in YQL.
+The following examples show quantization in YQL.
 
 #### Float -> FP8 {#approximate-vector-search-scalar-quantization-fp8}
 

@@ -64,7 +64,7 @@ Import vectors from files (CSV, TSV, or Parquet, optionally gzip-compressed). Th
 
 For CSV/TSV files, embeddings must be encoded as a list of floats, e.g., `"[ 1.0, 2.0, 3.0 ]"`. For Parquet files, embeddings can be a list of `float32` values or already serialized YDB binary embeddings.
 
-When importing numeric lists with `--vector-type int4` or `--vector-type uint4`, coordinates are clamped to `[-8, 7]` or `[0, 15]`, respectively, and fractional values are truncated toward zero. No scale factor is applied. NaN is converted to zero, and infinities are clamped to the corresponding range boundary.
+Numeric list imports with --vector-type int4 or --vector-type uint4 truncate toward zero and clamp to [-8, 7] or [0, 15], respectively, without scaling. NaN becomes 0, and infinities clamp to the corresponding bounds.
 
 Example:
 
@@ -101,8 +101,6 @@ For more details on `--kmeans-tree-*` index building parameters, see [kmeans-tre
 ### Generating synthetic data {#load-generator}
 
 Generate random vectors and load them into the table. Vector components are sampled from a uniform distribution and serialized into YDB binary embedding format.
-
-For `int4` and `uint4`, coordinates are sampled uniformly from all integers in `[-8, 7]` and `[0, 15]`, respectively.
 
 ```bash
 {{ ydb-cli }} workload vector import generator

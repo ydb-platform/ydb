@@ -61,21 +61,7 @@ TEngineLogsCounters::TEngineLogsCounters()
     ActualizationTaskSizeRemove = TBase::GetHistogram("Actualization/RemoveTasks/Size", NMonitoring::ExponentialHistogram(18, 2));
     ActualizationTaskSizeEvict = TBase::GetHistogram("Actualization/EvictTasks/Size", NMonitoring::ExponentialHistogram(18, 2));
 
-    ActualizationSkipRWProgressCount = TBase::GetDeriviative("Actualization/Skip/RWProgress/Count");
-    ActualizationSkipTooFreshPortion = TBase::GetHistogram("Actualization//Skip/TooFresh/Duration", NMonitoring::LinearHistogram(12, 0, 360));
-
-    PortionNoTtlColumnCount = TBase::GetDeriviative("Ttl/PortionNoTtlColumn/Count");
-    PortionNoTtlColumnBytes = TBase::GetDeriviative("Ttl/PortionNoTtlColumn/Bytes");
-
-    PortionNoBorderCount = TBase::GetDeriviative("Ttl/PortionNoBorder/Count");
-    PortionNoBorderBytes = TBase::GetDeriviative("Ttl/PortionNoBorder/Bytes");
-
-    GranuleOptimizerLocked = TBase::GetDeriviative("Optimizer/Granules/Locked");
-
     IndexMetadataUsageBytes = TBase::GetValue("IndexMetadata/Usage/Bytes");
-
-    StatUsageForTTLCount = TBase::GetDeriviative("Ttl/StatUsageForTTLCount/Count");
-    ChunkUsageForTTLCount = TBase::GetDeriviative("Ttl/ChunkUsageForTTLCount/Count");
 
     BadPortionsCount = TBase::GetValue("BadPortions/Count");
 

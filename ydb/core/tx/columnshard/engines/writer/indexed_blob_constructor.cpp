@@ -22,36 +22,13 @@ TIndexedWriteController::TIndexedWriteController(
 }
 
 void TIndexedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
-    Buffer.InitReadyInstant(TMonotonic::Now());
     auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(Buffer));
     ctx.Send(DstActor, result.release());
-}
-
-void TIndexedWriteController::DoOnStartSending() {
-    Buffer.InitStartSending(TMonotonic::Now());
 }
 
 void TWideSerializedBatch::InitBlobId(const TUnifiedBlobId& id) {
     AFL_VERIFY(!Range.BlobId.GetTabletId());
     Range.BlobId = id;
-}
-
-void TWritingBuffer::InitReadyInstant(const TMonotonic /*instant*/) {
-    //     for (auto&& aggr : Aggregations) {
-    //        aggr->MutableWriteMeta().SetWriteMiddle5StartInstant(instant);
-    //     }
-}
-
-void TWritingBuffer::InitStartSending(const TMonotonic /*instant*/) {
-    //     for (auto&& aggr : Aggregations) {
-    //         aggr->MutableWriteMeta().SetWriteMiddle4StartInstant(instant);
-    //     }
-}
-
-void TWritingBuffer::InitReplyReceived(const TMonotonic /*instant*/) {
-    //    for (auto&& aggr : Aggregations) {
-    //        aggr->MutableWriteMeta().SetWriteMiddle6StartInstant(instant);
-    //    }
 }
 
 std::vector<NKikimr::NOlap::TWritingBlob> TWritingBuffer::GroupIntoBlobs() {

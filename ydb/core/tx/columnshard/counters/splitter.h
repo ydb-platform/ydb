@@ -59,31 +59,6 @@ public:
     }
 };
 
-class TBlobResultCounters: public TCommonCountersOwner {
-private:
-    using TBase = TCommonCountersOwner;
-    NMonitoring::TDynamicCounters::TCounterPtr BlobsCount;
-    NMonitoring::TDynamicCounters::TCounterPtr BlobsBytes;
-    NMonitoring::THistogramPtr BlobsBytesHistogram;
-
-public:
-    TBlobResultCounters(const TCommonCountersOwner& owner, const TString& blobsType)
-        : TBase(owner)
-    {
-        DeepSubGroup("blobs_type", blobsType);
-
-        BlobsCount = TBase::GetDeriviative("DataSerialization/Bytes");
-        BlobsBytes = TBase::GetDeriviative("DataSerialization/Count");
-        BlobsBytesHistogram = TBase::GetHistogram("DataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
-    }
-
-    void OnBlobData(const ui64 size) const {
-        BlobsCount->Add(1);
-        BlobsBytes->Add(size);
-        BlobsBytesHistogram->Collect(size);
-    }
-};
-
 class TSplitterCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
@@ -92,8 +67,6 @@ public:
     TSplitterCounters(const TCommonCountersOwner& owner);
     const TSplitterCaseCounters SimpleSplitter;
     const TSplitterCaseCounters BySizeSplitter;
-    const TBlobResultCounters SplittedBlobs;
-    const TBlobResultCounters MonoBlobs;
 };
 
 }   // namespace NKikimr::NColumnShard

@@ -136,6 +136,7 @@ class CanonicalCaptureAuditFileOutput:
         self.__canonize_field(json_record, 'end_time')
         self.__canonize_field(json_record, 'remote_address')
         self.__canonize_field(json_record, 'tx_id')
+        self.__canonize_field(json_record, 'tablet_id')
         self.__canonize_apply_regex(json_record, r'txid=\d+', 'txid=<canonized_txid>')
         self.__canonize_apply_regex(json_record, r'cmstid=\d+', 'txid=<canonized_cmstid>')
         self.__canonize_apply_regex(json_record, r'OwnerId: \d+', 'OwnerId: <canonized_owner_id>')

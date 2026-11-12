@@ -99,6 +99,11 @@ message ImportFromS3Settings {
     // If encryption_settings field is not specified,
     // the resulting data is considered not encrypted.
     Ydb.Export.EncryptionSettings encryption_settings = 15;
+
+    // Patterns (PCRE) for paths excluded from import operation.
+    // - Patterns are matched against the database object names stored in the backup listing.
+    // - Object is excluded from import operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 17;
 }
 
 message ImportFromS3Result {
@@ -154,6 +159,11 @@ message ListObjectsInS3ExportSettings {
     // If encryption_settings field is not specified,
     // the resulting data is considered not encrypted.
     Ydb.Export.EncryptionSettings encryption_settings = 11;
+
+    // Patterns (PCRE) for paths excluded from import operation.
+    // - Patterns are matched against the database object names stored in the backup listing.
+    // - Object is excluded from import operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 12;
 }
 
 message ListObjectsInS3ExportResult {

@@ -30,6 +30,7 @@ enum class EInternalActorType {
     DNS_RESOLVER,
     INTERCONNECT_PROXY_WRAPPER,
     ACTOR_COROUTINE,
+    INTERCONNECT_RDMA_CQ,
 };
 
 enum class EInternalActorSystemActivity {

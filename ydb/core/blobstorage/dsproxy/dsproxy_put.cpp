@@ -474,8 +474,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                     (History, PutImpl.PrintHistory()));
         }
 
-        if (ResponsesSent == PutImpl.Blobs.size()) {
-            STLOG(PutImpl.WasNotOkResponses() && PopAllowToken(HandleClass) ? PRI_NOTICE : PRI_DEBUG,
+        if (ResponsesSent == PutImpl.Blobs.size() && IS_LOG_PRIORITY_ENABLED(PutImpl.ResultPriority, LogCtx.LogComponent) && PopAllowToken(HandleClass)) {
+            STLOG(PutImpl.ResultPriority,
                     BS_PROXY_PUT, BPP72, "Query history",
                     (GroupId, Info->GroupID),
                     (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
@@ -706,6 +706,7 @@ public:
     bool EncodeQuantum() {
         const ui64 endTime = GetCycleCountFast() + DurationToCycles(MaxQuantumDuration);
         bool firstIteration = true;
+        IRcBufAllocator* const allocator = TlsActivationContext->ActorSystem()->GetRcBufAllocator();
         while (Min(BlobsEncrypted, BlobsSplit) < PutImpl.Blobs.size()) {
             if (!firstIteration && endTime <= GetCycleCountFast()) {
                 return false;
@@ -724,7 +725,8 @@ public:
             } else { // BlobsSplit < BlobsEncrypted -- then we split it
                 auto& blob = PutImpl.Blobs[BlobsSplit];
                 const auto crcMode = static_cast<TErasureType::ECrcMode>(blob.BlobId.CrcMode());
-                if (ErasureSplit(crcMode, Info->Type, blob.Buffer, PartSets[BlobsSplit], &ErasureSplitContext)) {
+                if (ErasureSplit(crcMode, Info->Type, blob.Buffer, PartSets[BlobsSplit],
+                        &ErasureSplitContext, allocator)) {
                     ++BlobsSplit;
                     ErasureSplitContext = TErasureSplitContext::Init(MaxBytesToSplitAtOnce);
                 }

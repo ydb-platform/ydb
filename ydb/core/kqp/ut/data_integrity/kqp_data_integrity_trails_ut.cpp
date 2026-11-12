@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         UNIT_ASSERT_C(!readLock.empty() && readLock == brokenLock, "read lock should be broken");
     }
 
-    Y_UNIT_TEST(BrokenReadLockAbortedTx) {
+    Y_UNIT_TEST_TWIN(BrokenReadLockAbortedTx, UseSink) {
         TStringStream ss;
         {
             TKikimrSettings serverSettings;

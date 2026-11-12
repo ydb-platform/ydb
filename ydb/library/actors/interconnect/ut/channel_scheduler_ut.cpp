@@ -10,11 +10,11 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
         auto common = MakeIntrusive<TInterconnectProxyCommon>();
         common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
-        ctr->SetPeerInfo(1, "peer", "1");
+        ctr->SetPeerInfo("peer", "1", "peer");
         auto callback = [](THolder<IEventBase>) {};
         TEventHolderPool pool(common, callback);
         TSessionParams p;
-        TChannelScheduler scheduler(1, {}, ctr, 64 << 20, p);
+        TChannelScheduler scheduler(1, {}, ctr, 64 << 20, p, nullptr);
 
         ui32 numEvents = 0;
 
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
             auto ev = MakeHolder<IEventHandle>(1, 0, TActorId(), TActorId(), MakeIntrusive<TEventSerializedData>(payload, TEventSerializationInfo{}), 0);
             auto& ch = scheduler.GetOutputChannel(channel);
             const bool wasWorking = ch.IsWorking();
-            ch.Push(*ev, pool);
+            ch.Push(*ev, pool, TInstant::Zero()/*Do not account time outside AS*/);
             if (!wasWorking) {
                 scheduler.AddToHeap(ch, 0);
             }

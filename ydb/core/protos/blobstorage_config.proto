@@ -502,6 +502,13 @@ message TClusterBalancingSettings {
     optional uint64 IterationIntervalMs = 2;
     optional uint32 MaxReplicatingPDisks = 3;
     optional uint32 MaxReplicatingVDisks = 4;
+    optional bool PreferLessOccupiedRack = 5;
+    optional bool WithAttentionToReplication = 6;
+}
+
+message TSelfHealSettings {
+    optional bool PreferLessOccupiedRack = 1;
+    optional bool WithAttentionToReplication = 2;
 }
 
 message TUpdateSettings {
@@ -541,6 +548,7 @@ message TBscConfig {
     optional bool UseSelfHealLocalPolicy = 13;
     optional bool TryToRelocateBrokenDisksLocallyFirst = 14;
     optional TClusterBalancingSettings ClusterBalancingSettings = 15;
+    optional TSelfHealSettings SelfHealSettings = 16;
 }
 
 message TBoxStoragePoolId {
@@ -834,6 +842,25 @@ message TReassignedItem {
     string ToPath = 7;
 }
 
+message TGroupMapperError {
+    message TStats {
+        string Domain = 1;
+        uint32 AllSlotsAreOccupied = 2;
+        uint32 NotEnoughSpace = 3;
+        uint32 NotAcceptingNewSlots = 4;
+        uint32 NotOperational = 5;
+        uint32 Decommission = 6;
+    }
+    TStats TotalStats = 1;
+    repeated TStats MatchingDomainsStats = 2;
+    uint32 MissingFailRealmsCount = 3;
+    uint32 FailRealmsWithMissingDomainsCount = 4;
+    uint32 DomainsWithMissingDisksCount = 5;
+    uint32 OkDisksCount = 6;
+    string RealmLocationKey = 7;
+    string DomainLocationKey = 8;
+}
+
 message TConfigResponse {
     message TStatus {
         enum EFailReason {
@@ -872,6 +899,7 @@ message TConfigResponse {
                 string DiskSerialNumber = 15;
                 uint32 GroupGenerationProvided = 16;
                 uint32 GroupGenerationExpected = 17;
+                TGroupMapperError GroupMapperError = 18;
             }
         }
 

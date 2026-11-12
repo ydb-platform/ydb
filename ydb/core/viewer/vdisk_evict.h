@@ -26,6 +26,7 @@ protected:
     using TBase = TViewerPipeClient;
 
     TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> Response;
+    bool Force = false;
 
 
 public:
@@ -47,7 +48,6 @@ public:
         ui32 failRealmIdx = 0;
         ui32 failDomainIdx = 0;
         ui32 vDiskIdx = 0;
-        bool force = false;
         TString vdisk_id = Params.Get("vdisk_id");
         if (vdisk_id) {
             TVector<TString> parts = StringSplitter(vdisk_id).Split('-').SkipEmpty();
@@ -76,12 +76,12 @@ public:
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"), "BadRequest");
         }
 
-        force = FromStringWithDefault<bool>(Params.Get("force"), false);
-        if (force && !Viewer->CheckAccessAdministration(Event->Get())) {
+        Force = FromStringWithDefault<bool>(Params.Get("force"), false);
+        if (Force && !Viewer->CheckAccessAdministration(Event->Get())) {
             return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN(), "BadRequest");
         }
 
-        Response = RequestBSControllerVDiskEvict(groupId, groupGeneration, failRealmIdx, failDomainIdx, vDiskIdx, force);
+        Response = RequestBSControllerVDiskEvict(groupId, groupGeneration, failRealmIdx, failDomainIdx, vDiskIdx, Force);
         TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
@@ -104,13 +104,7 @@ public:
                 json["result"] = true;
             } else {
                 json["result"] = false;
-                TString error;
-                bool forceRetryPossible = false;
-                Viewer->TranslateFromBSC2Human(Response->Record.GetResponse(), error, forceRetryPossible);
-                json["error"] = error;
-                if (forceRetryPossible && Viewer->CheckAccessAdministration(Event->Get())) {
-                    json["forceRetryPossible"] = true;
-                }
+                Viewer->BSCError2JSON(Response->Record.GetResponse(), json, Force);
             }
             json["debugMessage"] = Response->Record.ShortDebugString();
         } else {

@@ -22,7 +22,7 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_mon.h>
@@ -603,9 +603,8 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.Certificate = appConfig.GetMonitoringConfig().GetMonitoringCertificate();
         monConfig.MaxRequestsPerSecond = appConfig.GetMonitoringConfig().GetMaxRequestsPerSecond();
         monConfig.InactivityTimeout = TDuration::Parse(appConfig.GetMonitoringConfig().GetInactivityTimeout());
-        if (appConfig.GetMonitoringConfig().HasMonitoringCertificateFile()) {
-            monConfig.Certificate = TUnbufferedFileInput(appConfig.GetMonitoringConfig().GetMonitoringCertificateFile()).ReadAll();
-        }
+        monConfig.CertificateFile = appConfig.GetMonitoringConfig().GetMonitoringCertificateFile();
+        monConfig.PrivateKeyFile = appConfig.GetMonitoringConfig().GetMonitoringPrivateKeyFile();
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
         if (includeHostName) {
             if (appConfig.HasNameserviceConfig() && appConfig.GetNameserviceConfig().NodeSize() > 0) {

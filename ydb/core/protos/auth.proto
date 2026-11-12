@@ -7,11 +7,11 @@ message TAuthConfig {
     optional TUserRegistryConfig UserRegistryConfig = 1;
     optional TTVMConfig TVMConfig = 2;
     optional string StaffApiUserToken = 3 [(Ydb.sensitive) = true];
-    optional string BlackBoxEndpoint = 4 [default = "blackbox.yandex-team.ru"];
-    optional string AccessServiceEndpoint = 5 [default = "as.private-api.cloud.yandex.net:4286"];
-    optional string UserAccountServiceEndpoint = 6 [default = "api-adapter.private-api.cloud.yandex.net:8443"];
-    optional string ServiceAccountServiceEndpoint = 7 [default = "api-adapter.private-api.cloud.yandex.net:8443"];
-    optional string StaffEndpoint = 10 [default = "staff-api.yandex-team.ru"];
+    optional string BlackBoxEndpoint = 4;
+    optional string AccessServiceEndpoint = 5;
+    optional string UserAccountServiceEndpoint = 6;
+    optional string ServiceAccountServiceEndpoint = 7;
+    optional string StaffEndpoint = 10;
     optional uint32 GrpcCacheSize = 16 [default = 1024];
     optional uint64 GrpcSuccessLifeTime = 17 [default = 60000]; // ms
     optional uint64 GrpcErrorLifeTime = 18 [default = 10000]; // ms
@@ -42,7 +42,7 @@ message TAuthConfig {
     optional string TVMExpireTime = 54 [default = "2m"]; // the same for TVM tickets
     optional string MinErrorRefreshTime = 55 [default = "1s"]; // min period for refresh of error ticket
     optional string MaxErrorRefreshTime = 56 [default = "1m"]; // max period for refresh of error ticket
-    optional string PathToRootCA = 60 [default = "/etc/ssl/certs/YandexInternalRootCA.pem"]; // root CA certificate PEM/x509
+    optional string PathToRootCA = 60; // root CA certificate PEM/x509
     optional uint32 AccessServiceGrpcKeepAliveTimeMs = 70 [default = 10000]; // CLOUD-27573
     optional uint32 AccessServiceGrpcKeepAliveTimeoutMs = 71 [default = 1000]; // CLOUD-27573
     optional TStaffApiTvmSettings StaffApiTvmSettings = 72;

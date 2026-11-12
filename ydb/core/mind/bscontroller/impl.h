@@ -184,6 +184,10 @@ public:
             return VDiskStatus.value_or(NKikimrBlobStorage::EVDiskStatus::ERROR);
         }
 
+        bool IsReplicatingWithPhantomsOnly() const {
+            return GetStatus() == NKikimrBlobStorage::EVDiskStatus::REPLICATING && OnlyPhantomsRemain;
+        }
+
         void PutInVSlotReadyTimestampQ(TMonotonic now) {
             const TMonotonic readyAfter = now + ReadyStablePeriod; // vdisk will be treated as READY one shortly, but not now
             Y_ABORT_UNLESS(VSlotReadyTimestampIter == TVSlotReadyTimestampQ::iterator());
@@ -1544,6 +1548,8 @@ private:
     NKikimrBlobStorage::TPDiskSpaceColor::E PDiskSpaceColorBorder
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
+    TSelfHealSettings SelfHealSettings;
+    
     TClusterBalancingSettings ClusterBalancingSettings;
 
     TActorId SystemViewsCollectorId;

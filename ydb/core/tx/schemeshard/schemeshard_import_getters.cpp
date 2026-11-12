@@ -9,6 +9,7 @@
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
@@ -1204,8 +1205,16 @@ public:
                 return false;
             }
         }
-        if (NBackup::NormalizeExportPrefix(Request->Get()->Record.GetSettings().prefix()).empty()) {
+        const auto& settings = req.GetSettings();
+        if (NBackup::NormalizeExportPrefix(settings.prefix()).empty()) {
             Reply(Ydb::StatusIds::BAD_REQUEST, "Empty S3 prefix specified");
+            return false;
+        }
+
+        try {
+            ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
+        } catch (const std::exception& ex) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid regexp: " << ex.what());
             return false;
         }
         return true;
@@ -1374,7 +1383,11 @@ public:
                 continue;
             }
 
-            if (PageSize && pos >= StartPos + PageSize) { // Calc only items that suit filter
+            if (IsExcludedFromListing(item.ObjectPath)) {
+                continue;
+            }
+
+            if (PageSize && pos >= StartPos + PageSize) { // Calc only items that suit filters
                 NextPos = pos;
                 break;
             }
@@ -1393,6 +1406,15 @@ public:
         Reply();
     }
 
+    bool IsExcludedFromListing(const TString& path) const {
+        for (const auto& regexp : ExcludeRegexps) {
+            if (regexp.Match(path.c_str())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 private:
     TEvImport::TEvListObjectsInS3ExportRequest::TPtr Request;
     Ydb::Import::ListObjectsInS3ExportResult Result;
@@ -1400,6 +1422,7 @@ private:
     size_t PageSize = 0;
     size_t NextPos = 0;
     TPathFilter PathFilter;
+    std::vector<TRegExMatch> ExcludeRegexps;
 };
 
 IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv) {

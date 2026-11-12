@@ -30,3 +30,8 @@ message TEvTestResponse {
 
 message TEvTestStartPolling {
 }
+
+message TEvTestSerialization {
+    optional uint64 BlobID = 1;
+    optional bytes Buffer = 2;
+}

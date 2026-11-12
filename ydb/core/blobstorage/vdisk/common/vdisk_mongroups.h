@@ -198,6 +198,15 @@ public:                                                                         
                 COUNTER_INIT(HugeUsedChunks, false);
                 COUNTER_INIT_IF_EXTENDED(HugeCanBeFreedChunks, false);
                 COUNTER_INIT_IF_EXTENDED(HugeLockedChunks, false);
+                COUNTER_INIT(CapacityAlertGreen, false);
+                COUNTER_INIT(CapacityAlertCyan, false);
+                COUNTER_INIT(CapacityAlertLightYellow, false);
+                COUNTER_INIT(CapacityAlertYellow, false);
+                COUNTER_INIT(CapacityAlertLightOrange, false);
+                COUNTER_INIT(CapacityAlertPreOrange, false);
+                COUNTER_INIT(CapacityAlertOrange, false);
+                COUNTER_INIT(CapacityAlertRed, false);
+                COUNTER_INIT(CapacityAlertBlack, false);
             }
 
             COUNTER_DEF(DskOutOfSpace);
@@ -208,6 +217,15 @@ public:                                                                         
             COUNTER_DEF(HugeUsedChunks);       // chunks used by huge heap
             COUNTER_DEF(HugeCanBeFreedChunks); // number of chunks that can be freed after defragmentation
             COUNTER_DEF(HugeLockedChunks);
+            COUNTER_DEF(CapacityAlertGreen);
+            COUNTER_DEF(CapacityAlertCyan);
+            COUNTER_DEF(CapacityAlertLightYellow);
+            COUNTER_DEF(CapacityAlertYellow);
+            COUNTER_DEF(CapacityAlertLightOrange);
+            COUNTER_DEF(CapacityAlertPreOrange);
+            COUNTER_DEF(CapacityAlertOrange);
+            COUNTER_DEF(CapacityAlertRed);
+            COUNTER_DEF(CapacityAlertBlack);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -607,10 +625,12 @@ public:                                                                         
             {
                 COUNTER_INIT_IF_EXTENDED(DefragBytesRewritten, true);
                 COUNTER_INIT_IF_EXTENDED(DefragThreshold, false);
+                COUNTER_INIT_IF_EXTENDED(SpaceInHugeChunksCouldBeFreedViaCompaction, false);
             }
 
             COUNTER_DEF(DefragBytesRewritten);
             COUNTER_DEF(DefragThreshold);
+            COUNTER_DEF(SpaceInHugeChunksCouldBeFreedViaCompaction);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

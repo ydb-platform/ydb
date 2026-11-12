@@ -27,6 +27,7 @@ namespace NActors {
             EvQueryStats,
             EvStats,
             EvPassAwayIfNeeded,
+            EvRdmaPendingHandshake,
         };
 
         struct TEvCleanupEventQueue : TEventLocal<TEvCleanupEventQueue, EvCleanupEventQueue> {};
@@ -53,6 +54,7 @@ namespace NActors {
             enum XDCFlags {
                 NONE = 0,
                 MSG_ZERO_COPY_SEND = 1,
+                RDMA_READ = 1 << 1,
             };
             ui8 XDCFlags;
         };
@@ -133,8 +135,9 @@ namespace NActors {
                 cFunc(EvPassAwayIfNeeded, HandlePassAwayIfNeeded)                               \
                 hFunc(TEvSubscribeForConnection, Handle);                                       \
                 hFunc(TEvReportConnection, Handle);                                             \
+                cFunc(EvRdmaPendingHandshake, HandleRdmaDelayedHandshake)                       \
                 default:                                                                        \
-                    Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);                        \
+                    Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);                       \
             }                                                                                   \
         }                                                                                       \
         if (profiled) {                                                                         \
@@ -218,6 +221,8 @@ namespace NActors {
                 PassAwayScheduled = false;
             }
         }
+
+
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PendingActivation
@@ -391,6 +396,7 @@ namespace NActors {
         std::shared_ptr<IInterconnectMetrics> Metrics;
 
         void HandleClosePeerSocket();
+        void HandleClosePeerSocket(std::span<const char> logEntry);
         void HandleCloseInputSession();
         void HandlePoisonSession();
 
@@ -400,6 +406,7 @@ namespace NActors {
         void ScheduleCleanupEventQueue();
         void HandleCleanupEventQueue();
         void CleanupEventQueue();
+        void HandleRdmaDelayedHandshake();
 
         // hold all events before connection is established
         struct TPendingSessionEvent {
@@ -530,6 +537,7 @@ namespace NActors {
 
         THolder<TProgramInfo> RemoteProgramInfo;
         NInterconnect::TSecureSocketContext::TPtr SecureContext;
+        TDuration DelayedRdmaHandshakeTimeout;
 
         void Handle(TEvGetSecureSocket::TPtr ev) {
             auto socket = MakeIntrusive<NInterconnect::TSecureSocket>(*ev->Get()->Socket, SecureContext);

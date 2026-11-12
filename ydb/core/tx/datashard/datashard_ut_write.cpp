@@ -1828,6 +1828,132 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         CheckReadLocksPrepareOnCdcQueueOverflow(false, true);
     }
 
+    enum class EReadOnlyPrepareLocks {
+        None,
+        Empty,
+        RollbackWrites,
+        Read,
+        BrokenRead,
+        MissingRead,
+    };
+
+    void CheckReadOnlyPrepareOnCdcQueueOverflow(bool volatileTransactions, EReadOnlyPrepareLocks locksKind) {
+        auto [runtime, server, sender] = CreateCdcQueueServer(volatileTransactions);
+        TShardedTableOptions tableOptions;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "source", tableOptions);
+        const ui64 shard = shards.at(0);
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "source", {
+            .Name = "cdc",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeKeysOnly,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatJson,
+        }));
+        tableId = ResolveTableId(server, sender, "/Root/source");
+
+        const ui64 lockTxId = 1234567890001;
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
+        std::optional<NKikimrDataEvents::TLock> txLock;
+        if (locksKind == EReadOnlyPrepareLocks::RollbackWrites) {
+            const auto buffered = UncommittedWrite(runtime, sender, shard, tableId,
+                tableOptions.Columns_, lockTxId, runtime.GetNodeId(0), 2, 20, 0, 0);
+            UNIT_ASSERT_VALUES_EQUAL(buffered.GetTxLocks().size(), 1u);
+            txLock = buffered.GetTxLocks(0);
+            UNIT_ASSERT(txLock->GetHasWrites());
+        } else if (locksKind == EReadOnlyPrepareLocks::Read ||
+                   locksKind == EReadOnlyPrepareLocks::BrokenRead ||
+                   locksKind == EReadOnlyPrepareLocks::MissingRead) {
+            const auto sourceInfo = GetTablesByPathId(server, shard).first;
+            auto request = GetBaseReadRequest(tableId,
+                sourceInfo.at(tableId.PathId).GetDescription(), 1, NKikimrDataEvents::FORMAT_CELLVEC);
+            request->Record.SetLockTxId(lockTxId);
+            request->Record.SetLockNodeId(runtime.GetNodeId(0));
+            AddKeyQuery(*request, { locksKind == EReadOnlyPrepareLocks::BrokenRead ? 1u : 2u });
+            const auto result = SendRead(server, shard, request.release(), sender);
+            UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(result.get()), "");
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTxLocks().size(), 1u);
+            txLock = result->Record.GetTxLocks(0);
+            UNIT_ASSERT(txLock->GetCounter() < TSysTables::TLocksTable::TLock::ErrorMin);
+            UNIT_ASSERT(!txLock->GetHasWrites());
+            if (locksKind == EReadOnlyPrepareLocks::MissingRead) {
+                txLock->SetLockId(lockTxId + 1);
+            }
+        }
+
+        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> blockedChanges(runtime);
+        UpsertOneKeyValue(runtime, sender, shard, tableId, tableOptions.Columns_,
+            1, 10, 100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        runtime.WaitFor("blocked CDC change", [&]{ return !blockedChanges.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(ReadChangeQueueSize(runtime, shard), 1u);
+
+        const ui64 transactionId = 10000;
+        const auto mode = volatileTransactions
+            ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
+            : NKikimrDataEvents::TEvWrite::MODE_PREPARE;
+        auto request = std::make_unique<NEvents::TDataEvents::TEvWrite>(transactionId, mode);
+        if (locksKind != EReadOnlyPrepareLocks::None) {
+            auto* locks = request->Record.MutableLocks();
+            locks->SetOp(locksKind == EReadOnlyPrepareLocks::RollbackWrites
+                ? NKikimrDataEvents::TKqpLocks::Rollback : NKikimrDataEvents::TKqpLocks::Commit);
+            locks->AddSendingShards(shard);
+            if (txLock) {
+                *locks->AddLocks() = *txLock;
+            }
+        }
+        const auto prepared = Write(runtime, sender, shard, std::move(request),
+            NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+        SendProposeToCoordinator(runtime, sender, { shard }, {
+            .TxId = transactionId,
+            .Coordinator = prepared.GetDomainCoordinators(0),
+            .MinStep = prepared.GetMinStep(),
+            .MaxStep = prepared.GetMaxStep(),
+            .Volatile = volatileTransactions,
+        });
+        const auto response = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+        const bool broken = locksKind == EReadOnlyPrepareLocks::BrokenRead || locksKind == EReadOnlyPrepareLocks::MissingRead;
+        const auto expectedStatus = broken ? NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN
+                                           : NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), expectedStatus,
+            response->Get()->Record.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetTxId(), transactionId);
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "key = 1, value = 10\n");
+        UNIT_ASSERT_VALUES_EQUAL(ReadChangeQueueSize(runtime, shard), 1u);
+        UpsertOneKeyValue(runtime, sender, shard, tableId, tableOptions.Columns_, 3, 30, 10001,
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
+        blockedChanges.Stop().Unblock();
+
+        if (locksKind == EReadOnlyPrepareLocks::RollbackWrites) {
+            runtime.WaitFor("CDC queue drained", [&]{ return ReadChangeQueueSize(runtime, shard) == 0; });
+            auto check = std::make_unique<NEvents::TDataEvents::TEvWrite>(10002, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            check->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            *check->Record.MutableLocks()->AddLocks() = *txLock;
+            Write(runtime, sender, shard, std::move(check), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+            UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "key = 1, value = 10\n");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ReadOnlyPrepareWithoutLocksOnCdcQueueOverflow, Volatile) {
+        CheckReadOnlyPrepareOnCdcQueueOverflow(Volatile, EReadOnlyPrepareLocks::None);
+    }
+
+    Y_UNIT_TEST_TWIN(ReadOnlyPrepareWithEmptyLocksOnCdcQueueOverflow, Volatile) {
+        CheckReadOnlyPrepareOnCdcQueueOverflow(Volatile, EReadOnlyPrepareLocks::Empty);
+    }
+
+    Y_UNIT_TEST_TWIN(ReadOnlyRollbackOnCdcQueueOverflow, Volatile) {
+        CheckReadOnlyPrepareOnCdcQueueOverflow(Volatile, EReadOnlyPrepareLocks::RollbackWrites);
+    }
+
+    Y_UNIT_TEST_TWIN(ReadOnlyPrepareWithoutReceivingShardsOnCdcQueueOverflow, Volatile) {
+        CheckReadOnlyPrepareOnCdcQueueOverflow(Volatile, EReadOnlyPrepareLocks::Read);
+    }
+
+    Y_UNIT_TEST_TWIN(ReadOnlyPrepareRejectsBrokenReadLocksOnCdcQueueOverflow, Volatile) {
+        CheckReadOnlyPrepareOnCdcQueueOverflow(Volatile, EReadOnlyPrepareLocks::BrokenRead);
+    }
+
+    Y_UNIT_TEST_TWIN(ReadOnlyPrepareRejectsMissingReadLocksOnCdcQueueOverflow, Volatile) {
+        CheckReadOnlyPrepareOnCdcQueueOverflow(Volatile, EReadOnlyPrepareLocks::MissingRead);
+    }
+
     enum class EReadLocksChange {
         BufferedWrite,
         ReadConflict,
@@ -2324,9 +2450,40 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         };
         const auto rejectedStatus =
             replicated ? NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST : NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR;
+        prepareLocks(9999, buffered.GetTxLocks(0), rejectedStatus);
         auto requestWriteLock = buffered.GetTxLocks(0);
         requestWriteLock.SetHasWrites(false);
-        prepareLocks(10000, requestWriteLock, rejectedStatus);
+        const ui64 invalidTransactionId = 10000;
+        const auto invalidPrepared = prepareLocks(invalidTransactionId, requestWriteLock, NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+        auto invalidTargetRequest = MakeWriteRequestOneKeyValue(
+            invalidTransactionId, mode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, targetTableId, tableOptions.Columns_, 1, 10);
+        configureLocks(invalidTargetRequest->Record.MutableLocks());
+        const auto invalidTargetPrepared =
+            Write(runtime, sender, targetShard, std::move(invalidTargetRequest), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+        SendProposeToCoordinator(runtime, sender, { shard, targetShard }, {
+            .TxId = invalidTransactionId,
+            .Coordinator = invalidTargetPrepared.GetDomainCoordinators(0),
+            .MinStep = Max(invalidPrepared.GetMinStep(), invalidTargetPrepared.GetMinStep()),
+            .MaxStep = Min(invalidPrepared.GetMaxStep(), invalidTargetPrepared.GetMaxStep()),
+            .Volatile = volatileTransactions,
+        });
+        THashSet<ui64> abortedShards;
+        for (size_t responseIndex = 0; responseIndex < 2; ++responseIndex) {
+            const auto response = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+            const auto& result = response->Get()->Record;
+            if (result.GetOrigin() == shard || !volatileTransactions) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, result.ShortDebugString());
+            } else {
+                UNIT_ASSERT_C(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN ||
+                              result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, result.ShortDebugString());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxId(), invalidTransactionId);
+            abortedShards.insert(result.GetOrigin());
+        }
+        UNIT_ASSERT(abortedShards.contains(shard));
+        UNIT_ASSERT(abortedShards.contains(targetShard));
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, targetShards, targetTableId), "");
         UpsertOneKeyValue(
             runtime, sender, shard, tableId, tableOptions.Columns_, 3, 30, 10001, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, rejectedStatus);
 

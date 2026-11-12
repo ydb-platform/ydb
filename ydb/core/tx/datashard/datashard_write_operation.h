@@ -70,7 +70,7 @@ public:
     bool HasWrites() const {
         return TxInfo().HasWrites();
     }
-    bool IsReadOnlyPrepareStepForShard(const TSysLocks& sysLocks) const;
+    bool IsReadOnlyPrepare(const TSysLocks& sysLocks) const;
     bool HasLockedWrites() const {
         return HasWrites() && LockTxId;
     }
@@ -125,7 +125,6 @@ public:
     }
 
 private:
-    bool IsAtPrepareStep() const;
     void ComputeTxSize();
 
 private:

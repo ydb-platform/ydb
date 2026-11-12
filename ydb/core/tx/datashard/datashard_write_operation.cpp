@@ -22,38 +22,6 @@
 namespace NKikimr {
 namespace NDataShard {
 
-namespace {
-
-bool IsReadLockForTable(const TLockInfo& lock, const TPathId& tableId) {
-    return lock.GetReadTables().contains(tableId);
-}
-
-bool IsLockInheritedFromShard(const TLockInfo& lock, ui64 shardId) {
-    return lock.GetAncestorLocks().contains(shardId);
-}
-
-bool IsReadOnlyLock(const NKikimrDataEvents::TLock& lockProto, const TSysLocks& sysLocks, bool allowAncestorLocks) {
-    const ui64 tabletId = sysLocks.SelfShardId();
-    if (lockProto.GetHasWrites() || (lockProto.GetDataShard() != tabletId && !allowAncestorLocks)) {
-        return false;
-    }
-
-    const auto lock = sysLocks.GetRawLock(lockProto.GetLockId());
-    if (!lock || lock->IsBroken() || lock->IsWriteLock()) {
-        return false;
-    }
-    const TPathId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
-    if (!IsReadLockForTable(*lock, tableId)) {
-        return false;
-    }
-    if (lockProto.GetDataShard() != tabletId) {
-        return IsLockInheritedFromShard(*lock, lockProto.GetDataShard());
-    }
-    return true;
-}
-
-}
-
 TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev,
         const NWilson::TTraceId& traceId, bool mvccSnapshotRead)
     : KeyValidator(*self)
@@ -125,26 +93,12 @@ TValidatedWriteTx::~TValidatedWriteTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
 }
 
-bool TValidatedWriteTx::IsAtPrepareStep() const {
-    return !IsImmediate;
-}
-
-bool TValidatedWriteTx::IsReadOnlyPrepareStepForShard(const TSysLocks& sysLocks) const {
-    if (!Ready() || !IsAtPrepareStep()) {
+bool TValidatedWriteTx::IsReadOnlyPrepare(const TSysLocks& sysLocks) const {
+    if (!Ready() || IsImmediate || HasOperations() || LockTxId != 0) {
         return false;
     }
-    if (HasOperations()) {
-        return false;
-    }
-    if (LockTxId != 0) {
-        return false;
-    }
-    if (!KqpLocks || KqpLocks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit) {
-        return false;
-    }
-    // Writers in ReceivingShards need these locks checked before committing their writes.
-    if (KqpLocks->LocksSize() == 0 || KqpLocks->ReceivingShardsSize() == 0) {
-        return false;
+    if (!KqpLocks || KqpLocks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit || KqpLocks->LocksSize() == 0) {
+        return true;
     }
 
     const auto& sendingShards = KqpLocks->GetSendingShards();
@@ -158,7 +112,11 @@ bool TValidatedWriteTx::IsReadOnlyPrepareStepForShard(const TSysLocks& sysLocks)
 
     const bool allowAncestorLocks = AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
     for (const auto& lockProto : KqpLocks->GetLocks()) {
-        if (!IsReadOnlyLock(lockProto, sysLocks, allowAncestorLocks)) {
+        if (lockProto.GetDataShard() != sysLocks.SelfShardId() && !allowAncestorLocks) {
+            return false;
+        }
+        const auto lock = sysLocks.GetRawLock(lockProto.GetLockId());
+        if (lockProto.GetHasWrites() || (lock && lock->IsWriteLock())) {
             return false;
         }
     }

@@ -233,5 +233,4 @@ struct TKeyMatch {
 
 TKeyMatch MatchKey(const std::shared_ptr<TTreeNode>& node, const TVector<TString>& keyColumns, const TMaybe<size_t>& maxRanges);
 
-
 } // namespace NKikimr::NKqp

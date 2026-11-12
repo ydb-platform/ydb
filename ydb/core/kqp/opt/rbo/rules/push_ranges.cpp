@@ -525,8 +525,8 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         }
     }
 
-    // The extractor results of the candidates, by candidate, when rule-based
-    TVector<IPredicateRangeExtractor::TBuildResult> built;
+    // The extractor results of the candidates, by candidate: every one when rule-based, those built for point prefixes otherwise
+    TVector<std::optional<IPredicateRangeExtractor::TBuildResult>> built;
     auto matchKey = [&](const TVector<TString>& keyColumns, std::optional<IPredicateRangeExtractor::TBuildResult>& result) {
         if (costBasedSelection) {
             return MatchKey(normalizedPredicate, keyColumns, settings.MaxRanges);
@@ -555,10 +555,19 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         }
     };
 
+    // Point prefixes come from what the extractor builds, which the prediction may miss, e.g. for a constant expression.
+    // The build is kept with the candidate, so the extractor runs at most once for each.
+    auto extractedPointPrefixLen = [&](const TVector<TString>& keyColumns, std::optional<IPredicateRangeExtractor::TBuildResult>& result) {
+        if (!result) {
+            result = extractor->BuildComputeNode(keyColumns, ctx, typeCtx);
+        }
+        return result->PointPrefixLen;
+    };
+
     std::optional<IPredicateRangeExtractor::TBuildResult> mainBuilt;
     auto mainMatch = matchKey(mainKeyColumns, mainBuilt);
     if (allPointPrefixes) {
-        addPointPrefix(mainMeta, mainMatch.PointPrefixLen, mainKeyColumns);
+        addPointPrefix(mainMeta, extractedPointPrefixLen(mainKeyColumns, mainBuilt), mainKeyColumns);
     }
 
     auto mainScore = ScoreKeyOrder(mainMatch, mainKeyColumns.size(), sortColumns, mainKeyColumns, true);
@@ -570,12 +579,11 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         .Score = std::move(mainScore),
     });
     SetTableSize(candidates.front(), mainMeta);
-    if (mainBuilt) {
-        built.push_back(std::move(*mainBuilt));
-    }
+    built.push_back(std::move(mainBuilt));
 
+    TVector<TString> filterPhysical;
     if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !candidates.front().Score.PointCoversKey) {
-        const auto filterPhysical = FilterPhysicalColumns(*filter, *read, props);
+        filterPhysical = FilterPhysicalColumns(*filter, *read, props);
         for (const auto& index : mainMeta.Indexes) {
             if (!IsSelectableIndex(index)) {
                 continue;
@@ -593,14 +601,15 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             auto indexKeyColumns = ResolveExposedKeyColumns(extractorNames, indexMeta->KeyColumnNames);
             std::optional<IPredicateRangeExtractor::TBuildResult> indexBuilt;
             auto indexMatch = matchKey(indexKeyColumns, indexBuilt);
-            if (indexMatch.UsedPrefixLen == 0) {
-                continue;
-            }
 
             // A lookup join fetches the rows it finds in a non-covering index from the main table and applies
             // the whole predicate to them, so the index needs neither to cover the read nor the predicate.
             if (allPointPrefixes) {
-                addPointPrefix(*indexMeta, indexMatch.PointPrefixLen, indexKeyColumns);
+                addPointPrefix(*indexMeta, extractedPointPrefixLen(indexKeyColumns, indexBuilt), indexKeyColumns);
+            }
+
+            if (indexMatch.UsedPrefixLen == 0) {
+                continue;
             }
 
             const bool covering = IsCovering(*read, *indexMeta, props.InfoUnitRegistry);
@@ -625,9 +634,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                 .Score = std::move(score),
             });
             SetTableSize(candidates.back(), mainMeta);
-            if (indexBuilt) {
-                built.push_back(std::move(*indexBuilt));
-            }
+            built.push_back(std::move(indexBuilt));
         }
     }
 
@@ -641,12 +648,12 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
     if (!costBasedSelection) {
         winnerIdx = order.front();
-        chosen = std::move(built[winnerIdx]);
+        chosen = std::move(*built[winnerIdx]);
     } else {
         // An index whose ranges the extractor builds shorter than matched is rejected; the main table is always accepted
         for (const size_t idx : order) {
             const auto& candidate = candidates[idx];
-            chosen = extractor->BuildComputeNode(candidate.KeyColumns, ctx, typeCtx);
+            chosen = built[idx] ? std::move(*built[idx]) : extractor->BuildComputeNode(candidate.KeyColumns, ctx, typeCtx);
             if (idx == 0 || (chosen.ComputeNode && chosen.UsedPrefixLen >= candidate.Match.UsedPrefixLen)) {
                 winnerIdx = idx;
                 break;
@@ -674,7 +681,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             rangeInfo.LiteralRange = BuildLiteralRange(lookupResult, winner.KeyColumns, *schemeType, read->Pos, ctx);
         }
 
-        const auto lookupReadColumns = BuildIndexReadColumns(mainMeta.KeyColumnNames, FilterPhysicalColumns(*filter, *read, props));
+        const auto lookupReadColumns = BuildIndexReadColumns(mainMeta.KeyColumnNames, filterPhysical);
         TUnorderedIUs indexColumns;
         THashMap<TString, TInfoUnitId> indexIds;
         for (const auto& col : lookupReadColumns) {

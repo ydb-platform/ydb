@@ -89,10 +89,17 @@ bool EstimateCandidateCosts(TVector<TReadCandidate>& candidates, TOpRead& read, 
         return false;
     }
 
-    // The rule does not require plan metadata, so the read's own is computed here.
-    read.ComputeMetadata(rboCtx, props);
+    // The rule does not require plan metadata. A plan-wide pass has usually computed it, and computing it again would map the
+    // read's columns in the lineage a second time, so the read's own is computed only when none of them is mapped yet.
     if (!read.Props.Metadata) {
-        return false;
+        const auto& columns = read.GetColumns();
+        if (std::any_of(columns.begin(), columns.end(), [&](TInfoUnitId id) { return props.ColumnLineage.Find(id) != nullptr; })) {
+            return false;
+        }
+        read.ComputeMetadata(rboCtx, props);
+        if (!read.Props.Metadata) {
+            return false;
+        }
     }
 
     auto stats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(read, props.ColumnLineage, false, rboCtx.TypeCtx));
@@ -135,9 +142,19 @@ TVector<size_t> OrderCandidates(const TVector<TReadCandidate>& candidates, bool 
     TVector<size_t> order(candidates.size());
     std::iota(order.begin(), order.end(), 0);
 
-    // Stable, so the main table, the first candidate, stays ahead on equal costs
+    // Stable, so the main table, the first candidate, stays ahead on ties
     std::stable_sort(order.begin(), order.end(), [&](size_t lhs, size_t rhs) {
-        return costBased ? candidates[lhs].Cost < candidates[rhs].Cost : IsBetterCandidate(candidates[lhs], candidates[rhs]);
+        if (!costBased) {
+            return IsBetterCandidate(candidates[lhs], candidates[rhs]);
+        }
+        // A read in the order of a consuming TopSort, with no filter between them,
+        // takes the TopSort and stops early, so it goes first
+        const auto& left = candidates[lhs];
+        const auto& right = candidates[rhs];
+        if (left.Score.SortMatchesAndNoResidual != right.Score.SortMatchesAndNoResidual) {
+            return left.Score.SortMatchesAndNoResidual;
+        }
+        return left.Cost < right.Cost;
     });
 
     return order;

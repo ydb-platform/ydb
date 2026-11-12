@@ -329,7 +329,7 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Statistics = TRBOStatistics();
     Props.Statistics->ERows = tableData.Metadata->RecordsCount;
     Props.Statistics->EBytes = tableData.Metadata->DataSize;
-    Props.Cost = 0.0; // Cost remains zero regradless of read type
+    Props.Cost = 0.0; // Cost remains zero regardless of read type
 
     auto overrideStats = ctx.KqpCtx.GetOverrideStatistics();
     if (overrideStats) {

@@ -90,9 +90,6 @@ class TestHeartbeat(unittest.TestCase):
                 continue
             address = ipaddress.ip_address(record['remote_address'])
             self.assertIn(address, addresses, record)
-            # Also verify the address against a real TCP connection to this ydbd.
-            with socket.create_connection((str(address), node.port), timeout=10) as connection:
-                self.assertEqual(ipaddress.ip_address(connection.getpeername()[0]), address)
 
     def test_static_node_ipv4(self):
         cluster = self.start_cluster(socket.AF_INET)

@@ -16,8 +16,6 @@ The following capabilities are **no longer supported**:
 | --- | --- |
 | **PostgreSQL wire protocol (pgwire)** | Connecting with psql, pgAdmin, and PostgreSQL drivers (lib/pq, psycopg2, JDBC in PostgreSQL mode) on port 5432 |
 | **PostgreSQL SQL dialect** | Queries with `--!syntax_pg`, `ydb sql --syntax pg`, and the `enable_pg_syntax` cluster setting |
-| **PostgreSQL column types** | `pgint4`, `pgtext`, and other PG types, including use with the `enable_table_pg_types` setting |
-| **Pg:: UDFs** | PostgreSQL-style functions and literals inside YQL |
 | **PostgreSQL-oriented tooling** | `ydb tools pg-convert` and workflows based on `pg_dump` import into the compatibility layer |
 | **PostgreSQL-style system views** | `.sys/pg_tables`, `.sys/pg_class`, and related pgwire catalog views |
 
@@ -37,6 +35,8 @@ For a step-by-step overview of supported client options, see [Getting started](.
 Removing PostgreSQL compatibility does **not** affect these separate features:
 
 * **[Federated Query](../concepts/query_execution/federated_query/postgresql.md)** — run YQL queries against **external** PostgreSQL clusters
+* **[Pg:: UDFs](../yql/reference/udf/list/index.md)** — PostgreSQL-style functions and literals inside YQL
+* **PostgreSQL column types** (`pgint4`, `pgtext`, and others) — optional table column types in YQL, controlled by the `enable_table_pg_types` setting
 
 ## Questions and feedback
 

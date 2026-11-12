@@ -6,6 +6,8 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CDC_AGGREGATOR
 
 namespace NKikimr::NCdcAggregator {
@@ -36,7 +38,9 @@ STFUNC(TCdcAggregator::StateInit) {
 }
 
 STFUNC(TCdcAggregator::StateWork) {
+    YDB_LOG_CREATE_CONTEXT({"tabletId", TabletID()});
     switch (ev->GetTypeRewrite()) {
+        HFunc(TEvCdcAggregator::TEvConfigureTracking, Handle);
         HFunc(TEvCdcAggregator::TEvWriteHeartbeats, Handle);
         HFunc(TEvCdcAggregator::TEvPartitioningChanged, Handle);
         HFunc(TEvCdcAggregator::TEvDescribeTracking, Handle);
@@ -45,8 +49,7 @@ STFUNC(TCdcAggregator::StateWork) {
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
             YDB_LOG_WARN("Unexpected event",
-                {"tabletId", TabletID()},
-                {"eventType", ev->GetTypeRewrite()});
+                        {"eventType", ev->GetTypeRewrite()});
         }
     }
 }
@@ -56,9 +59,18 @@ void TCdcAggregator::SwitchToWork(const TActorContext& ctx) {
     Become(&TThis::StateWork);
 }
 
+void TCdcAggregator::PersistStreamChanges(NIceDb::TNiceDb& db, const TStreamChanges& changes) {
+    for (const auto dataShardId : changes.ErasedSources) {
+        db.Table<Schema::Sources>().Key(dataShardId).Delete();
+    }
+
+    for (const auto dataShardId : changes.AddedSources) {
+        db.Table<Schema::Sources>().Key(dataShardId).Update();
+    }
+}
+
 void TCdcAggregator::Handle(TEvCdcAggregator::TEvWriteHeartbeats::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE("Handle",
-        {"tabletId", TabletID()},
         {"ev", ev->Get()->ToString()});
 
     auto result = MakeHolder<TEvCdcAggregator::TEvWriteHeartbeatsResult>();
@@ -67,23 +79,18 @@ void TCdcAggregator::Handle(TEvCdcAggregator::TEvWriteHeartbeats::TPtr& ev, cons
     ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
 }
 
-void TCdcAggregator::Handle(TEvCdcAggregator::TEvPartitioningChanged::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_TRACE("Handle",
-        {"tabletId", TabletID()},
-        {"ev", ev->Get()->ToString()});
-
-    auto result = MakeHolder<TEvCdcAggregator::TEvPartitioningChangedAck>();
-    result->Record.SetStatus(NKikimrCdcAggregator::TEvPartitioningChangedAck::NOT_READY);
-    result->Record.SetOrigin(TabletID());
-    ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
-}
-
 void TCdcAggregator::Handle(TEvCdcAggregator::TEvDescribeTracking::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE("Handle",
-        {"tabletId", TabletID()},
         {"ev", ev->Get()->ToString()});
 
-    ctx.Send(ev->Sender, new TEvCdcAggregator::TEvDescribeTrackingResult(), 0, ev->Cookie);
+    TVector<ui64> sources(Stream.GetSources().begin(), Stream.GetSources().end());
+    std::sort(sources.begin(), sources.end());
+
+    auto result = MakeHolder<TEvCdcAggregator::TEvDescribeTrackingResult>();
+    for (const auto dataShardId : sources) {
+        result->Record.AddSources()->SetDataShardId(dataShardId);
+    }
+    ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
 }
 
 IActor* CreateCdcAggregator(const TActorId& tablet, TTabletStorageInfo* info) {

@@ -82,6 +82,9 @@
 /ydb/core/protos/schemeshard @ydb-platform/schemeshard
 /ydb/core/tx/scheme_board @ydb-platform/schemeshard
 /ydb/core/tx/schemeshard @ydb-platform/schemeshard
+/ydb/core/tx/schemeshard/ut_column_build @ydb-platform/qp
+/ydb/core/tx/schemeshard/ut_column_build_reboots @ydb-platform/qp
+/ydb/core/tx/schemeshard/ut_generated_columns @ydb-platform/qp
 /ydb/tests/functional/limits @ydb-platform/schemeshard
 /ydb/tests/functional/scheme_shard @ydb-platform/schemeshard
 /ydb/tests/functional/tenants/test_dynamic_tenants.py @ydb-platform/schemeshard

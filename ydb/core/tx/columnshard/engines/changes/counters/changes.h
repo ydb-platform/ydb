@@ -27,42 +27,11 @@ enum class EStage: ui32 {
     Written,
     Finished,
     Aborted,
-
-    COUNT
 };
 
 class TChangesCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
-
-public:
-    class TTaskCounters: NColumnShard::TCommonCountersOwner {
-        using TBase = NColumnShard::TCommonCountersOwner;
-
-    private:
-        NMonitoring::TDynamicCounters::TCounterPtr TasksChanges;
-        NMonitoring::TDynamicCounters::TCounterPtr TasksCount;
-
-    public:
-        void Inc() const {
-            TasksChanges->Inc();
-            TasksCount->Inc();
-        }
-
-        void Dec() const {
-            TasksChanges->Dec();
-            TasksCount->Dec();
-        }
-
-        TTaskCounters(const NColumnShard::TCommonCountersOwner& owner)
-            : TBase(owner)
-            , TasksChanges(TBase::GetDeriviative("Tasks/Count"))
-            , TasksCount(TBase::GetValue("Tasks/Count"))
-        {
-        }
-    };
-
-private:
     std::array<std::shared_ptr<NCounters::TStateSignalsOperator<EStage>>, static_cast<size_t>(NBlobOperations::EConsumer::COUNT)>
         StagesByConsumer;
 

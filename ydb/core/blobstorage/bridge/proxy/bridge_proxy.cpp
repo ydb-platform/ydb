@@ -1057,8 +1057,8 @@ namespace NKikimr {
             for (const auto& request : requests) {
                 YDB_LOG_INFO("Request restarted as it waits for pile out of data quorum",
                     {"marker", "BPB12"},
-                    {RequestId, request->RequestId},
-                    {GroupId, GroupId});
+                    {"RequestId", request->RequestId},
+                    {"GroupId", GroupId});
 
                 for (ui64 cookie : std::exchange(request->CookiesInFlight, {})) {
                     RequestsInFlight.erase(cookie); // the responses of the subrequests are of no use anymore

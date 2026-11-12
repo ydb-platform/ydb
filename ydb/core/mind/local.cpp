@@ -401,12 +401,14 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
 
         if (HiveGeneration && hiveGen > HiveGeneration) {
-            // The new Hive is already reachable. Discard the retry delay
-            // accumulated while reconnecting to its predecessor.
+            // The pipe may already be connecting to this Hive. Let it discard
+            // an obsolete retry delay without interrupting that connection.
             HiveGeneration = hiveGen;
+            // Resync while BootQueue still identifies the previous Hive, so
+            // its in-flight boots are discarded before adopting the new one.
+            Connected = false;
             if (HivePipeClient) {
-                NTabletPipe::CloseClient(ctx, HivePipeClient);
-                HandlePipeDestroyed(ctx);
+                ctx.Send(HivePipeClient, new TEvTabletPipe::TEvClientUpdateGeneration(hiveGen, sender));
             }
         }
 

@@ -9,8 +9,8 @@ namespace NKikimr::NArrow::NMerger {
 
 void TMergePartialStream::PutControlPoint(const TSortableBatchPosition& point, const bool deepCopy) {
     YDB_LOG_VERIFY(point.IsSameSortingSchema(*SortSchema),
-        {"point", point.DebugJson()},
-        {"schema", SortSchema->ToString()});
+        {"point", point.DebugJson()}/*
+        {"schema", SortSchema->ToString()}*/);
     Y_ABORT_UNLESS(point.IsReverseSort() == Reverse);
     Y_ABORT_UNLESS(++ControlPoints == 1);
 

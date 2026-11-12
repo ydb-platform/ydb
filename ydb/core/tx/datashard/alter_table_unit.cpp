@@ -28,6 +28,7 @@ TFamilyKey FamilyKey(const TUserTable& table, ui32 id) {
 
 struct TFamilySettings {
     NTable::NPage::ECodec Codec = NTable::NPage::ECodec::Plain;
+    ui32 CodecLevel = 1;
     NTable::NPage::ECacheMode CacheMode = NTable::NPage::ECacheMode::Regular;
     TString DataPoolKind;
 
@@ -43,6 +44,7 @@ TMap<TFamilyKey, TFamilySettings> FamilySettings(const TUserTable& table) {
         const auto& data = family.StorageConfig.GetData();
         const TFamilySettings settings{
             .Codec = family.Codec,
+            .CodecLevel = family.Codec == NTable::NPage::ECodec::ZSTD ? family.GetCodecLevel() : 1,
             .CacheMode = family.CacheMode,
             .DataPoolKind = data.GetAllowOtherKinds() ? TString{} : data.GetPreferredPoolKind(),
         };

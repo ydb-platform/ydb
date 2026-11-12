@@ -82,3 +82,52 @@ Update one selected baseline:
 ```
 
 Review generated baseline changes and rerun without canonization to verify them.
+
+## Correctness tests
+
+The `statistics/correctness` target runs TPCH and TPCDS at scale 0.1 with both
+row and column tables in `KqpCorrectnessAnalyzedStatistics`. It uses the same
+data generation, decimal schemas, base-statistics snapshots and per-table
+`ANALYZE` as the join-order tests. TPCH covers all 22 queries; TPCDS retains the
+join-order suite's exclusions for queries 17 and 44.
+
+Each test loads and analyzes the dataset once. For each selected query, it
+disables NewRBO, executes the old optimizer, enables NewRBO, and executes again,
+with fallback disabled throughout. Configuration updates are acknowledged by
+every compiler and invalidate cached plans before execution. It immediately compares
+result-set counts, column names and types, and values against the old
+optimizer's results. Both results are released before the next query.
+Truncated results fail the test. No canonical data is read or written.
+
+NewRBO executions collect full runtime statistics and check that the simplified
+plan contains finite, nonnegative `A-Rows` for every join except scalar cross joins,
+without internal correlation metadata. BlockHash cross joins are checked too. Complete
+plans are saved under `testing_out_stuff/<benchmark>_sf0.1_<row|column>/q<N>.analyze.json`.
+The adjacent `q<N>.join-stats.json` records join counts and the nodes missing
+`A-Rows` or `A-Size`. Missing `A-Rows` fails the test; missing `A-Size` is reported.
+
+`KqpJoinStatisticsAnalyzed` runs this validation independently of the old optimizer
+on all 22 TPCH and all 99 TPCDS queries, for both storage types. It includes TPCDS
+17 and 44 and accumulates failures so later queries still run. Run the full validation:
+
+```bash
+./ya make --build relwithdebinfo -tA ydb/core/kqp/ut/rbo/statistics/correctness \
+    -F 'KqpJoinStatisticsAnalyzed::*' 2>&1 | tail -n 60
+```
+
+`CORRECTNESS_QUERIES` also selects individual queries in this suite.
+
+Run all four benchmark/storage combinations:
+
+```bash
+./ya make --build relwithdebinfo -tA ydb/core/kqp/ut/rbo/statistics/correctness 2>&1 | tail -n 60
+```
+
+Use `CORRECTNESS_QUERIES` to select comma-separated query IDs, including the
+otherwise excluded queries when investigating them:
+
+```bash
+./ya make --build relwithdebinfo -tA ydb/core/kqp/ut/rbo/statistics/correctness \
+    -F 'KqpCorrectnessAnalyzedStatistics::TPCH*' \
+    --test-param CORRECTNESS_QUERIES=2,5 2>&1 | tail -n 60
+```

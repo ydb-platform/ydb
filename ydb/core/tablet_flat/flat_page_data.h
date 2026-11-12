@@ -1,6 +1,7 @@
 #pragma once
 
 #include "flat_page_base.h"
+#include "flat_page_codec.h"
 #include "flat_page_label.h"
 #include "flat_row_nulls.h"
 #include "util_basics.h"
@@ -8,7 +9,6 @@
 
 #include <ydb/library/actors/util/shared_data.h>
 
-#include <library/cpp/blockcodecs/codecs.h>
 #include <util/generic/buffer.h>
 
 namespace NKikimr {
@@ -252,17 +252,15 @@ namespace NPage {
                 if (data.Codec != ECodec::Plain) {
                     /* Compressed, should convert to regular page */
 
-                    Y_ENSURE(data == ECodec::LZ4, "Only LZ4 encoding allowed");
-
-                    Codec = Codec ? Codec : NBlockCodecs::Codec("lz4fast");
-                    auto size = Codec->DecompressedLength(data.Page);
+                    const auto* codec = GetBlockCodec(data.Codec);
+                    auto size = codec->DecompressedLength(data.Page);
 
                     // We expect original page had the same label size as a compressed page
                     size_t labelSize = reinterpret_cast<const char*>(data.Page.data()) - reinterpret_cast<const char*>(base);
 
                     Decoded = TSharedData::Uninitialized(labelSize + size);
 
-                    size = Codec->Decompress(data.Page, Decoded.mutable_begin() + labelSize);
+                    size = codec->Decompress(data.Page, Decoded.mutable_begin() + labelSize);
 
                     Decoded.TrimBack(labelSize + size);
                     ::memcpy(Decoded.mutable_begin(), base, labelSize);
@@ -372,12 +370,9 @@ namespace NPage {
         }
 
     private:
-        using ICodec = NBlockCodecs::ICodec;
-
         TSharedData Decoded;
         TBlock Page;
         TRowId BaseRow_ = Max<TRowId>();
-        const ICodec *Codec = nullptr;
     };
 }
 }

@@ -47,17 +47,18 @@ PEERDIR(
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
     ydb/core/kqp/opt/rbo/html_log
-    ydb/core/kqp/opt/rbo/rules
     ydb/core/kqp/opt/rbo/physical_conversion
+    ydb/core/kqp/opt/rbo/rules
+    ydb/core/kqp/provider
+    ydb/core/kqp/query_plan
+    ydb/core/kqp/tracing
+    ydb/library/formats/arrow/protos
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
     ydb/library/yql/providers/s3/expr_nodes
     ydb/library/yql/providers/s3/statistics
     ydb/library/yql/utils/plan
-    ydb/core/kqp/provider
-    ydb/core/kqp/tracing
-    ydb/library/formats/arrow/protos
     yql/essentials/core/extract_predicate
 )
 

@@ -37,6 +37,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/xml/document/xml-document.h>
@@ -136,6 +137,8 @@ TString ExecuteExplainAnalyze(NYdb::NQuery::TSession& session, const TString& qu
     result.GetIssues().PrintTo(Cerr);
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
     auto plan = TString{*result.GetStats()->GetPlan()};
+    UNIT_ASSERT_C(!plan.Contains("\"RuntimeStatsType\""), plan);
+    UNIT_ASSERT_C(!plan.Contains("\"UseStageStats\""), plan);
     PrintPlan(plan, /*analyzeMode=*/true);
     return plan;
 }
@@ -589,7 +592,185 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         AssertRboCpuValues(fullScan, 7, 7, simplifiedPlan);
     }
 
-    Y_UNIT_TEST(ExplainAnalyzeDuplicateOperatorIdUsesFirstMatch) {
+    Y_UNIT_TEST(ExplainAnalyzeRuntimeStatsMatchTypesWithinStage) {
+        const TString txPlan = R"json({
+            "Plans": [{
+                "StageGuid": "stage-1",
+                "Operators": [
+                    {"Name": "Map [Join := 1]", "OperatorId": 1},
+                    {"Name": "Filter", "OperatorId": 2, "RuntimeStatsType": "Filter"},
+                    {"Name": "Aggregate", "OperatorId": 3, "RuntimeStatsType": "Aggregation"},
+                    {"Name": "InnerJoin (BlockHash)", "OperatorId": 4, "RuntimeStatsType": "Join"},
+                    {"Name": "InnerJoin (Lookup)", "OperatorId": 5}
+                ],
+                "Stats": {"Operator": [
+                    {"Type": "Join", "Id": "0", "Rows": {"Sum": 50}, "Bytes": {"Sum": 500}},
+                    {"Type": "Aggregation", "Id": "0", "Rows": {"Sum": 10}, "Bytes": {"Sum": 100}},
+                    {"Type": "Filter", "Id": "0", "Rows": {"Sum": 20}, "Bytes": {"Sum": 200}}
+                ]},
+                "Plans": [{
+                    "StageGuid": "stage-2",
+                    "Operators": [{"Name": "Other filter", "OperatorId": 6, "RuntimeStatsType": "Filter"}],
+                    "Stats": {"Operator": [
+                        {"Type": "Filter", "Id": "0", "Rows": {"Sum": 70}, "Bytes": {"Sum": 700}}
+                    ]}
+                }]
+            }],
+            "SimplifiedPlan": {
+                "Operators": [{"Name": "Map [Join := 1]", "OperatorId": 1}],
+                "Plans": [
+                    {"Operators": [{"Name": "Filter", "OperatorId": 2}]},
+                    {"Operators": [{"Name": "Aggregate", "OperatorId": 3}]},
+                    {"Operators": [{"Name": "InnerJoin (BlockHash)", "OperatorId": 4}]},
+                    {"Operators": [{"Name": "InnerJoin (Lookup)", "OperatorId": 5}]},
+                    {"Operators": [{"Name": "Other filter", "OperatorId": 6}]}
+                ]
+            }
+        })json";
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(txPlan, &json, true);
+        for (bool reverse : {false, true}) {
+            if (reverse) {
+                auto& stats = json["Plans"][0]["Stats"]["Operator"].GetArraySafe();
+                std::reverse(stats.begin(), stats.end());
+            }
+            NKqpProto::TKqpStatsQuery queryStats;
+            const auto plan = SerializeRBOAnalyzePlan({WriteJson(json, false)}, queryStats);
+            UNIT_ASSERT_C(!plan.Contains("\"RuntimeStatsType\""), plan);
+            UNIT_ASSERT_C(!plan.Contains("\"OperatorId\""), plan);
+            const auto simplified = GetSimplifiedPlan(plan);
+            for (const auto& [name, rows] : TVector<std::pair<TString, int>>{
+                    {"Filter", 20}, {"Aggregate", 10}, {"InnerJoin (BlockHash)", 50}, {"Other filter", 70}}) {
+                const auto& op = FindRequiredOperatorByStringField(simplified, "Name", name);
+                UNIT_ASSERT_VALUES_EQUAL_C(op["A-Rows"].GetDoubleSafe(), rows, plan);
+                UNIT_ASSERT_VALUES_EQUAL_C(op["A-Size"].GetDoubleSafe(), rows * 10, plan);
+            }
+            for (const auto& name : {"Map [Join := 1]", "InnerJoin (Lookup)"}) {
+                const auto& op = FindRequiredOperatorByStringField(simplified, "Name", name);
+                UNIT_ASSERT_C(!op.Has("A-Rows") && !op.Has("A-Size"), plan);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeAmbiguousRuntimeStatsUseStageFallback) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "StageGuid": "stage-1",
+                "Operators": [
+                    {"Name": "Map", "OperatorId": 1},
+                    {"Name": "Filter", "OperatorId": 2, "RuntimeStatsType": "Filter", "UseStageStats": true}
+                ],
+                "Stats": {"OutputRows": {"Sum": 7}, "OutputBytes": {"Sum": 70}, "Operator": [
+                    {"Type": "Filter", "Id": "0", "Rows": {"Sum": 20}, "Bytes": {"Sum": 200}}
+                ]}
+            }],
+            "SimplifiedPlan": {
+                "Operators": [{"Name": "Map", "OperatorId": 1}],
+                "Plans": [{"Operators": [{"Name": "Filter", "OperatorId": 2}]}]
+            }
+        })";
+
+        for (bool duplicateOperator : {false, true}) {
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(txPlan, &json, true);
+            auto& stage = json["Plans"][0];
+            if (duplicateOperator) {
+                // Count all execution candidates, including ones absent from
+                // the simplified plan. Their counters may already be combined.
+                auto duplicate = stage["Operators"][1];
+                duplicate["OperatorId"] = 3;
+                duplicate.EraseValue("UseStageStats");
+                stage["Operators"].AppendValue(duplicate);
+            } else {
+                auto duplicate = stage["Stats"]["Operator"][0];
+                duplicate["Id"] = "1";
+                stage["Stats"]["Operator"].AppendValue(duplicate);
+            }
+            const auto simplified = GetRboAnalyzeSimplifiedPlan(WriteJson(json, false));
+            const auto& filter = FindRequiredOperatorByStringField(simplified, "Name", "Filter");
+            UNIT_ASSERT_VALUES_EQUAL_C(filter["A-Rows"].GetDoubleSafe(), 7, simplified);
+            UNIT_ASSERT_VALUES_EQUAL_C(filter["A-Size"].GetDoubleSafe(), 70, simplified);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ExplainAnalyzeRuntimeStatsFallbackPerMetric, RowsOnly) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "Broadcast", "PlanNodeType": "Connection", "Stats": {"Tasks": 4},
+                "Plans": [{
+                    "StageGuid": "stage-1",
+                    "Operators": [{"Name": "Filter", "OperatorId": 1, "RuntimeStatsType": "Filter"}],
+                    "Stats": {
+                        "Operator": [{"Type": "Filter", "Id": "0"}],
+                        "OutputRows": {"Sum": 80}, "OutputBytes": {"Sum": 800}, "CpuTimeUs": {"Max": 7000}
+                    }
+                }]
+            }],
+            "SimplifiedPlan": {"Operators": [{"Name": "Filter", "OperatorId": 1}]}
+        })";
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(txPlan, &json, true);
+        auto& stat = json["Plans"][0]["Plans"][0]["Stats"]["Operator"][0];
+        stat[RowsOnly ? "Rows" : "Bytes"]["Sum"] = RowsOnly ? 17 : 170;
+        const auto simplified = GetRboAnalyzeSimplifiedPlan(WriteJson(json, false));
+        const auto& filter = FindRequiredOperatorByStringField(simplified, "Name", "Filter");
+        UNIT_ASSERT_VALUES_EQUAL_C(filter["A-Rows"].GetDoubleSafe(), RowsOnly ? 17 : 20, simplified);
+        UNIT_ASSERT_VALUES_EQUAL_C(filter["A-Size"].GetDoubleSafe(), RowsOnly ? 200 : 170, simplified);
+        AssertRboCpuValues(filter, 7, 7, simplified);
+    }
+
+    Y_UNIT_TEST_TWIN(ExplainAnalyzeStageStatsUseLastNonMapOperator, MultipleNonMap) {
+        NTests::TIdTestContext ctx;
+        const auto a = ctx.Id("a");
+        const auto b = ctx.Id("b");
+        TIntrusivePtr<IOperator> input = ctx.Read({a});
+        if (MultipleNonMap) {
+            input = MakeIntrusive<TOpFilter>(input, ctx.Pos, ctx.Constant());
+        }
+        auto root = ctx.Root(ctx.Copies(input, {{b, a}}), {{b, "b"}});
+        root->PlanProps.InfoUnitRegistry.FinalizeDisplayNames({a, b});
+        TAssignStagesStage().RunStage(*root, ctx.RboCtx);
+        for (const auto& item : *root) {
+            item.Current->Props.Statistics.emplace();
+            item.Current->Props.Cost = 0;
+        }
+
+        ui64 nodeId = 0;
+        ui32 operatorId = 0;
+        THashMap<IOperator*, ui32> operatorIds;
+        auto execution = root->GetExecutionJson(nodeId, operatorId, operatorIds);
+        auto& stage = execution["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(stage["Operators"].GetArraySafe().size(), MultipleNonMap ? 3 : 2);
+        stage["Stats"]["OutputRows"]["Sum"] = 42;
+        stage["Stats"]["OutputBytes"]["Sum"] = 420;
+        stage["Stats"]["CpuTimeUs"]["Max"] = 7000;
+        NJson::TJsonValue txPlan;
+        txPlan["Plans"].AppendValue(execution);
+        txPlan["SimplifiedPlan"] = root->GetExplainJson(nodeId, operatorIds);
+
+        NKqpProto::TKqpStatsQuery queryStats;
+        const auto plan = SerializeRBOAnalyzePlan({WriteJson(txPlan, false)}, queryStats);
+        UNIT_ASSERT_C(!plan.Contains("\"UseStageStats\""), plan);
+        const auto simplified = GetSimplifiedPlan(plan);
+        const auto& scan = FindRequiredOperatorByStringField(simplified, "Name", "TableFullScan");
+        if (MultipleNonMap) {
+            UNIT_ASSERT_C(!scan.Has("A-Rows") && !scan.Has("A-Size"), plan);
+            const auto& filter = FindRequiredOperatorByStringField(simplified, "Name", "Filter");
+            UNIT_ASSERT_VALUES_EQUAL_C(filter["A-Rows"].GetDoubleSafe(), 42, plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(filter["A-Size"].GetDoubleSafe(), 420, plan);
+            AssertNoRboCpuValues(filter, simplified);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(scan["A-Rows"].GetDoubleSafe(), 42, plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(scan["A-Size"].GetDoubleSafe(), 420, plan);
+        }
+        AssertNoRboCpuValues(scan, simplified);
+        const auto* map = FindOperatorByNamePrefix(simplified, "Map");
+        UNIT_ASSERT(map);
+        AssertRboCpuValues(*map, 7, 7, simplified);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeDuplicateExecutionOperatorIdUsesFirstMatch) {
         const TString txPlan = R"({
             "Plans": [{
                 "Node Type": "FirstExec", "StageGuid": "stage-first",
@@ -616,8 +797,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(first.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, simplifiedPlan);
         UNIT_ASSERT_VALUES_EQUAL_C(first.GetMapSafe().at("A-Size").GetDoubleSafe(), 60, simplifiedPlan);
         AssertRboCpuValues(first, 7, 7, simplifiedPlan);
-        UNIT_ASSERT_C(!second.GetMapSafe().contains("A-Rows"), simplifiedPlan);
-        UNIT_ASSERT_C(!second.GetMapSafe().contains("A-Size"), simplifiedPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(second["A-Rows"].GetDoubleSafe(), 6, simplifiedPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(second["A-Size"].GetDoubleSafe(), 60, simplifiedPlan);
         AssertNoRboCpuValues(second, simplifiedPlan);
     }
 

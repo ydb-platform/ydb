@@ -1,5 +1,5 @@
 RECURSE(
     public
-    stream
+    service
     tablet
 )

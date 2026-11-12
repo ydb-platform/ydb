@@ -1337,7 +1337,6 @@ public:
 
     TColumnFamilyBuilder& SetData(const std::string& media);
     TColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression);
-    //! ZSTD level: 0..22. Omitted means 1; 0 selects the ZSTD library default (3).
     TColumnFamilyBuilder& SetCompressionLevel(std::int32_t level);
     TColumnFamilyBuilder& SetCacheMode(EColumnFamilyCacheMode cacheMode);
     TColumnFamilyBuilder& SetKeepInMemory(bool enabled);

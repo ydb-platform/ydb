@@ -1264,7 +1264,8 @@ bool TPartitionConfigMerger::ApplyChanges(
     const TAppData *appData, const bool isServerlessDomain, TString &errDescr)
 {
     for (const auto& family : changes.GetColumnFamilies()) {
-        if (family.GetColumnCodec() == NKikimrSchemeOp::ColumnCodecZSTD
+        if ((family.GetColumnCodec() == NKikimrSchemeOp::ColumnCodecZSTD
+                || family.HasColumnCodecLevel())
             && !appData->FeatureFlags.GetEnableRowTableZstdCompression())
         {
             errDescr = "ZSTD compression for row tables is disabled";

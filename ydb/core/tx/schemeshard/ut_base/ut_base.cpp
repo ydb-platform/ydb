@@ -3006,6 +3006,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 {NKikimrScheme::StatusInvalidParameter});
         }
 
+        const auto beforeDisable = describeTable("/MyRoot/Table1");
+        featureFlags.SetEnableRowTableZstdCompression(false);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"_(
+            Name: "Table1"
+            PartitionConfig { ColumnFamilies { Id: 0 ColumnCodecLevel: 0 } }
+        )_", {NKikimrScheme::StatusInvalidParameter});
+        UNIT_ASSERT_VALUES_EQUAL(beforeDisable.DebugString(), describeTable("/MyRoot/Table1").DebugString());
+
         TestAlterTable(runtime, ++txId, "/MyRoot", R"_(
                         Name: "Table1"
                         PartitionConfig {
@@ -3022,6 +3030,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT(
             !t3.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies(0).HasColumnCodecLevel());
 
+        featureFlags.SetEnableRowTableZstdCompression(true);
         TestAlterTable(runtime, ++txId, "/MyRoot", R"_(
             Name: "Table1"
             PartitionConfig { ColumnFamilies { Id: 0 ColumnCodecLevel: 5 } }

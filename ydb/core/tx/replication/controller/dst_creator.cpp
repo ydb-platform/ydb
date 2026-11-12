@@ -76,6 +76,23 @@ bool CheckColumnFamilySettings(
     return false;
 }
 
+bool AreLiteralDefaultsEqual(
+        const NKikimrSchemeOp::TColumnDescription& expected,
+        const NKikimrSchemeOp::TColumnDescription& actual)
+{
+    if (expected.HasDefaultFromLiteral() != actual.HasDefaultFromLiteral()) {
+        return false;
+    }
+
+    if (!expected.HasDefaultFromLiteral()) {
+        return true;
+    }
+
+    const auto& expectedDefault = expected.GetDefaultFromLiteral();
+    const auto& actualDefault = actual.GetDefaultFromLiteral();
+    return expectedDefault.SerializeAsString() == actualDefault.SerializeAsString();
+}
+
 bool IsImported(const NKikimrSchemeOp::TTableDescription& table) {
     return table.GetReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED;
 }
@@ -660,10 +677,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return false;
             }
 
-            const auto& actualColumn = *it->second;
-            if (column.HasDefaultFromLiteral() != actualColumn.HasDefaultFromLiteral()
-                || (column.HasDefaultFromLiteral()
-                    && column.GetDefaultFromLiteral().SerializeAsString() != actualColumn.GetDefaultFromLiteral().SerializeAsString())) {
+            if (!AreLiteralDefaultsEqual(column, *it->second)) {
                 error = TStringBuilder() << "Column literal default mismatch"
                     << ": name: " << column.GetName();
                 return false;

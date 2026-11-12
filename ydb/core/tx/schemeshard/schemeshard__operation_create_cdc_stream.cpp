@@ -110,7 +110,6 @@ private:
 class TNewCdcStream: public TSubOperation {
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
         case TTxState::ConfigureParts:
@@ -124,7 +123,6 @@ class TNewCdcStream: public TSubOperation {
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
         case TTxState::CreateParts:
             return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:

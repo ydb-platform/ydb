@@ -8,13 +8,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-<<<<<<< HEAD
-=======
 #include <thread>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
-
->>>>>>> 9999a3580af (Fix node crash on bridge pile takedown with in-flight gRPC requests (#56646))
 namespace NKikimr {
 namespace NGRpcServer {
 namespace NTest {

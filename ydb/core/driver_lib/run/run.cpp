@@ -198,40 +198,6 @@ namespace NKikimr {
 
 namespace {
 
-<<<<<<< HEAD
-    void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
-        auto wrapper = grpcServersWrapper.lock();
-        if (!wrapper) {
-            return;
-        }
-        if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
-            return;
-        }
-        if (isDisabled) {
-            wrapper->IsDisabled.store(true, std::memory_order_release);
-        }
-        TGuard<TMutex> guard = wrapper->Guard();
-        for (auto& [name, server] : wrapper->Servers) {
-            if (!server) {
-                continue;
-            }
-            server->Stop();
-        }
-        wrapper->Servers.clear();
-    }
-<<<<<<< HEAD
-=======
-=======
-// client_certificate_authorization (request/required) applies to grpc_config.ssl_port only.
-void FillGrpcSslDataFromClientCertificateAuthorization(
-    NYdbGrpc::TSslData& sslData,
-    const NKikimrConfig::TAppConfig& appConfig
-) {
-    const auto& clientCertificateAuthorization = appConfig.GetClientCertificateAuthorization();
-    sslData.DoRequestClientCertificate = clientCertificateAuthorization.GetRequestClientCertificate();
-    sslData.ClientCertificateRequired = clientCertificateAuthorization.GetClientCertificateRequired();
-}
-
 template <typename TFunc>
 void ForEachGRpcServer(TGRpcServersWrapper& wrapper, TFunc&& func) {
     for (auto* servers : {&wrapper.Servers, &wrapper.RetiredServers}) {
@@ -263,7 +229,6 @@ void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper) {
 
     TGuard<TMutex> guard = wrapper->Guard();
     ForEachGRpcServer(*wrapper, [](NYdbGrpc::TGRpcServer& server) { server.Stop(); });
->>>>>>> 9999a3580af (Fix node crash on bridge pile takedown with in-flight gRPC requests (#56646))
 
     // Do not destroy TGRpcServer objects here.
     // KikimrStop() calls StopGRpcServers() before ActorSystem->Cleanup(), so destroying the
@@ -272,13 +237,8 @@ void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper) {
     // destroys their holding actors. The servers are destroyed later when
     // GRpcServersWrapper (a shared_ptr member of TKikimrRunner) is released in
     // ~TKikimrRunner(), which runs after ActorSystem.Destroy().
->>>>>>> 99c51a5c8e6 (Fix  Y_VERIFY assert on shutdown due to access to dangling pointers (#53001))
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-=======
 // Destroys retired servers that no request context references anymore.
 // Their completion queues keep polling until then, so stop them first.
 void ReleaseDrainedServers(TGRpcServers& retired) {
@@ -294,7 +254,6 @@ void ReleaseDrainedServers(TGRpcServers& retired) {
     }
 }
 
->>>>>>> 9999a3580af (Fix node crash on bridge pile takedown with in-flight gRPC requests (#56646))
 // Prepare the wrapper for a new generation of servers created by
 // TGRpcServersManager::Start(). The servers being replaced were stopped (or, on
 // the very first start, never started), but actors may still hold request
@@ -324,18 +283,13 @@ void RetireReplacedServers(TGRpcServersWrapper& wrapper) {
 
 } // anonymous namespace
 
->>>>>>> f7dc04e7b16 (grpc: keep replaced gRPC servers alive until their requests drain (#56598))
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     std::weak_ptr<TGRpcServersWrapper> GRpcServersWrapper;
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     bool Started = false;
     bool StopScheduled = false;
-<<<<<<< HEAD
-    bool WaitingForDisconnectRequest = false;
-=======
     bool RetiredServersCheckScheduled = false;
-    THashSet<TActorId> DisconnectRequests;
->>>>>>> 9999a3580af (Fix node crash on bridge pile takedown with in-flight gRPC requests (#56646))
+    bool WaitingForDisconnectRequest = false;
     TDuration WarmupTimeout = TDuration::Zero();
     bool WarmupReceived = false;
 
@@ -2534,15 +2488,14 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         ActorSystem->Stop();
     }
 
-<<<<<<< HEAD
-    if (YqSharedResources) {
-        YqSharedResources->Stop();
-=======
     // Actors may reply to in-flight requests until the actor system stops;
     // grpc threads must stop before ActorSystem->Cleanup() destroys mailboxes they send to.
     if (GRpcServersManager) {
         StopGRpcServers(GRpcServersWrapper);
->>>>>>> 9999a3580af (Fix node crash on bridge pile takedown with in-flight gRPC requests (#56646))
+    }
+
+    if (YqSharedResources) {
+        YqSharedResources->Stop();
     }
 
     if (ModuleFactories) {

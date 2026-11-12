@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
+
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/services/services.pb.h>
@@ -10,13 +12,12 @@
 #include <ydb/tests/tools/kqprun/runlib/settings.h>
 #include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
 
-
 namespace NKqpRun {
 
 constexpr ui64 DEFAULT_STORAGE_SIZE = 32_GB;
 constexpr TDuration TENANT_CREATION_TIMEOUT = TDuration::Seconds(30);
 
-struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
+struct TYdbSetupSettings: public NKikimrRun::TServerSettings {
     enum class EVerbosity {
         None,
         Info,
@@ -40,23 +41,27 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
     };
 
     ui32 DcCount = 1;
+    bool UseRealInterconnect = false;
     std::map<TString, TStorageMeta::TTenant> Tenants;
     TDuration HealthCheckTimeout = TDuration::Seconds(10);
     EHealthCheck HealthCheckLevel = EHealthCheck::NodesCount;
     bool SameSession = false;
+    std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
 
     bool DisableDiskMock = false;
     bool FormatStorage = false;
     std::optional<TString> PDisksPath;
     std::optional<ui64> DiskSize;
 
+    TString TraceFile;
+    TString TraceDataset = "kqprun";
+    ui8 TraceLevel = 15;
     bool TraceOptEnabled = false;
     EVerbosity VerbosityLevel = EVerbosity::Info;
     NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
 
     NYql::IPqGateway::TPtr PqGateway;
 };
-
 
 struct TRunnerOptions {
     enum class ETraceOptType {
@@ -84,7 +89,6 @@ struct TRunnerOptions {
     TYdbSetupSettings YdbSettings;
 };
 
-
 struct TRequestOptions {
     TString Query;
     NKikimrKqp::EQueryAction Action;
@@ -94,9 +98,10 @@ struct TRequestOptions {
     TString Database;
     TDuration Timeout;
     size_t QueryId = 0;
+    TString QueryLabel;
     std::unordered_map<TString, Ydb::TypedValue> Params;
     std::optional<TVector<NACLib::TSID>> GroupSIDs = std::nullopt;
     Ydb::Table::QueryStatsCollection_Mode StatsCollectionMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
 };
 
-}  // namespace NKqpRun
+}   // namespace NKqpRun

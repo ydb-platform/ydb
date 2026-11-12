@@ -1,10 +1,10 @@
 Metadata-Version: 2.1
 Name: numpy
-Version: 2.2.6
+Version: 2.3.5
 Summary: Fundamental package for array computing in Python
 Author: Travis E. Oliphant et al.
 Maintainer-Email: NumPy Developers <numpy-discussion@python.org>
-License: Copyright (c) 2005-2024, NumPy Developers.
+License: Copyright (c) 2005-2025, NumPy Developers.
          All rights reserved.
          
          Redistribution and use in source and binary forms, with or without
@@ -119,7 +119,7 @@ License: Copyright (c) 2005-2024, NumPy Developers.
          Files: numpy.libs/libscipy_openblas*.so
          Description: bundled in OpenBLAS
          Availability: https://github.com/OpenMathLib/OpenBLAS/
-         License: BSD-3-Clause-Attribution
+         License: BSD-3-Clause-Open-MPI
            Copyright (c) 1992-2013 The University of Tennessee and The University
                                    of Tennessee Research Foundation.  All rights
                                    reserved.
@@ -174,7 +174,7 @@ License: Copyright (c) 2005-2024, NumPy Developers.
          Files: numpy.libs/libgfortran*.so
          Description: dynamically linked to files compiled with gcc
          Availability: https://gcc.gnu.org/git/?p=gcc.git;a=tree;f=libgfortran
-         License: GPL-3.0-with-GCC-exception
+         License: GPL-3.0-or-later WITH GCC-exception-3.1
            Copyright (C) 2002-2017 Free Software Foundation, Inc.
          
            Libgfortran is free software; you can redistribute it and/or modify
@@ -208,7 +208,7 @@ License: Copyright (c) 2005-2024, NumPy Developers.
          
          Version 3.1, 31 March 2009
          
-         Copyright (C) 2009 Free Software Foundation, Inc. <http://fsf.org/>
+         Copyright (C) 2009 Free Software Foundation, Inc. <https://fsf.org/>
          
          Everyone is permitted to copy and distribute verbatim copies of this
          license document, but changing it is not allowed.
@@ -282,7 +282,7 @@ License: Copyright (c) 2005-2024, NumPy Developers.
                              GNU GENERAL PUBLIC LICENSE
                                 Version 3, 29 June 2007
          
-          Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>
+          Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
           Everyone is permitted to copy and distribute verbatim copies
           of this license document, but changing it is not allowed.
          
@@ -926,7 +926,7 @@ License: Copyright (c) 2005-2024, NumPy Developers.
              GNU General Public License for more details.
          
              You should have received a copy of the GNU General Public License
-             along with this program.  If not, see <http://www.gnu.org/licenses/>.
+             along with this program.  If not, see <https://www.gnu.org/licenses/>.
          
          Also add information on how to contact you by electronic and paper mail.
          
@@ -945,14 +945,14 @@ License: Copyright (c) 2005-2024, NumPy Developers.
            You should also get your employer (if you work as a programmer) or school,
          if any, to sign a "copyright disclaimer" for the program, if necessary.
          For more information on this, and how to apply and follow the GNU GPL, see
-         <http://www.gnu.org/licenses/>.
+         <https://www.gnu.org/licenses/>.
          
            The GNU General Public License does not permit incorporating your program
          into proprietary programs.  If your program is a subroutine library, you
          may consider it more useful to permit linking proprietary applications with
          the library.  If this is what you want to do, use the GNU Lesser General
          Public License instead of this License.  But first, please read
-         <http://www.gnu.org/philosophy/why-not-lgpl.html>.
+         <https://www.gnu.org/licenses/why-not-lgpl.html>.
          
          Name: libquadmath
          Files: numpy.libs/libquadmath*.so
@@ -983,10 +983,10 @@ Classifier: License :: OSI Approved :: BSD License
 Classifier: Programming Language :: C
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: 3 :: Only
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Topic :: Software Development
@@ -1002,7 +1002,7 @@ Project-URL: source, https://github.com/numpy/numpy
 Project-URL: download, https://pypi.org/project/numpy/#files
 Project-URL: tracker, https://github.com/numpy/numpy/issues
 Project-URL: release notes, https://numpy.org/doc/stable/release
-Requires-Python: >=3.10
+Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 
 <h1 align="center">
@@ -1021,15 +1021,16 @@ https://stackoverflow.com/questions/tagged/numpy)
 [![Nature Paper](https://img.shields.io/badge/DOI-10.1038%2Fs41586--020--2649--2-blue)](
 https://doi.org/10.1038/s41586-020-2649-2)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/numpy/numpy/badge)](https://securityscorecards.dev/viewer/?uri=github.com/numpy/numpy)
+[![Typing](https://img.shields.io/pypi/types/numpy)](https://pypi.org/project/numpy/)
 
 
 NumPy is the fundamental package for scientific computing with Python.
 
-- **Website:** https://www.numpy.org
+- **Website:** https://numpy.org
 - **Documentation:** https://numpy.org/doc
 - **Mailing list:** https://mail.python.org/mailman/listinfo/numpy-discussion
 - **Source code:** https://github.com/numpy/numpy
-- **Contributing:** https://www.numpy.org/devdocs/dev/index.html
+- **Contributing:** https://numpy.org/devdocs/dev/index.html
 - **Bug reports:** https://github.com/numpy/numpy/issues
 - **Report a security vulnerability:** https://tidelift.com/docs/security
 

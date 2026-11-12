@@ -53,6 +53,7 @@ message TIssuesIds {
         CORE_GC_NODES_LIMIT_EXCEEDED = 1500;
         CORE_GC_STRINGS_LIMIT_EXCEEDED = 1501;
         CORE_RUNTIME_ERROR = 1502;
+        CORE_REPEAT_TRANSFORM_LIMIT_EXCEEDED = 1503;
 
 // kikimr
         KIKIMR_LOCKS_INVALIDATED = 2001;
@@ -215,6 +216,9 @@ message TIssuesIds {
         FMR_UNKNOWN_ERROR = 9000;
         FMR_NEED_FALLBACK = 9001;
         FMR_UDF_TERMINATE = 9002;
+
+// spark
+        SPARK_UNSUPPORTED_PROTO_ELEMENT = 10000;
 
 // range [200000, 399999) reserved for KiKiMR issue codes, do not use!
 

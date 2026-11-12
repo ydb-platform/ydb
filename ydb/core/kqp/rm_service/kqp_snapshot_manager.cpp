@@ -63,7 +63,8 @@ private:
         if (MvccSnapshot) {
             AFL_ENSURE(ev->Get()->Tables.empty());
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, std::move(ev->Get()->TableIds), std::move(Orbit)));
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, std::move(ev->Get()->TableIds), std::move(Orbit)),
+                0, 0, std::move(ev->TraceId));
 
             Become(&TThis::StateAwaitAcquireResult);
         } else {
@@ -72,13 +73,13 @@ private:
             req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
             req->Record.SetDatabaseName(Database);
             auto* createSnapshot = req->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
-            for (const TString& tablePath : Tables) {
-                createSnapshot->AddTables()->SetTablePath(tablePath);
+            for (const auto& table : Tables) {
+                createSnapshot->AddTables()->CopyFrom(table);
             }
             createSnapshot->SetTimeoutMs(SnapshotTimeout.MilliSeconds());
             createSnapshot->SetIgnoreSystemViews(true);
 
-            Send(MakeTxProxyID(), req.Release());
+            Send(MakeTxProxyID(), req.Release(), 0, 0, std::move(ev->TraceId));
             Become(&TThis::StateAwaitCreation);
         }
     }
@@ -214,8 +215,12 @@ private:
         req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
         req->Record.SetDatabaseName(Database);
         auto* refreshSnapshot = req->Record.MutableTransaction()->MutableRefreshVolatileSnapshot();
-        for (const TString& tablePath : Tables) {
-            refreshSnapshot->AddTables()->SetTablePath(tablePath);
+        for (const auto& table : Tables) {
+            auto* target = refreshSnapshot->AddTables();
+            target->SetTablePath(table.GetTablePath());
+            if (table.HasKeyRange()) {
+                target->MutableKeyRange()->CopyFrom(table.GetKeyRange());
+            }
         }
         refreshSnapshot->SetIgnoreSystemViews(true);
         refreshSnapshot->SetSnapshotStep(Snapshot.Step);
@@ -266,8 +271,12 @@ private:
         req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
         req->Record.SetDatabaseName(Database);
         auto* discardSnapshot = req->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();
-        for (const TString& tablePath : Tables) {
-            discardSnapshot->AddTables()->SetTablePath(tablePath);
+        for (const auto& table : Tables) {
+            auto* target = discardSnapshot->AddTables();
+            target->SetTablePath(table.GetTablePath());
+            if (table.HasKeyRange()) {
+                target->MutableKeyRange()->CopyFrom(table.GetKeyRange());
+            }
         }
         discardSnapshot->SetIgnoreSystemViews(true);
         discardSnapshot->SetSnapshotStep(Snapshot.Step);
@@ -304,7 +313,7 @@ private:
 
 private:
     const TString Database;
-    TVector<TString> Tables;
+    TVector<NKikimrTxUserProxy::TCreateVolatileSnapshotTx::TTable> Tables;
     TActorId ClientActorId;
     IKqpGateway::TKqpSnapshot Snapshot;
     NLWTrace::TOrbit Orbit;

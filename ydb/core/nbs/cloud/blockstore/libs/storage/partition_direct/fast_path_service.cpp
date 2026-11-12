@@ -11,7 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/chaos_injector_control.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -493,9 +493,21 @@ void TFastPathService::QueryRemoveHost(
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
-ui64 TFastPathService::GenerateLsn()
+ui64 TFastPathService::OnWriteStarted()
 {
+    ++InflightWriteCount;
     return ++SequenceGenerator;
+}
+
+void TFastPathService::OnWriteFinished()
+{
+    const size_t previous = InflightWriteCount.fetch_sub(1);
+    Y_ABORT_UNLESS(previous > 0);
+}
+
+size_t TFastPathService::GetInflightWriteCount() const
+{
+    return InflightWriteCount.load();
 }
 
 void TFastPathService::StopTablet(const TString& reason)
@@ -534,6 +546,7 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
     return {
         .LsnCounter = SequenceGenerator.load(),
+        .InflightWriteCount = InflightWriteCount.load(),
         .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetDetailedStat()},
     };
 }
@@ -600,11 +613,13 @@ NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
     TVector<NThreading::TFuture<TDbgSnapshot>> futures;
     if (dbgIndex) {
         if (*dbgIndex < DirectBlockGroups.size()) {
-            futures.push_back(DirectBlockGroups[*dbgIndex]->BuildMonSnapshot());
+            futures.push_back(DirectBlockGroups[*dbgIndex]->BuildMonSnapshot(
+                EDbgMonSnapshotDetail::PerVChunk));
         }
     } else {
         for (const auto& dbg: DirectBlockGroups) {
-            futures.push_back(dbg->BuildMonSnapshot());
+            futures.push_back(
+                dbg->BuildMonSnapshot(EDbgMonSnapshotDetail::Summary));
         }
     }
 

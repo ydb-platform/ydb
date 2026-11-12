@@ -4,7 +4,7 @@
 #include <yt/yt/library/profiling/summary.h>
 #include <yt/yt/library/profiling/histogram_snapshot.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NProfiling {
 
@@ -89,7 +89,7 @@ public:
     TSummarySnapshot<T> GetSummaryAndReset() override;
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     TSummarySnapshot<T> Value_;
 };
 

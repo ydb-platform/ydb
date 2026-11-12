@@ -22,7 +22,7 @@ public:
   // Enforce strong typing for the root pointer
   std::unique_ptr<ComposableSamplerConfiguration> root;
 
-  void Accept(SamplerConfigurationVisitor *visitor) const override;
+  void Accept(ComposableSamplerConfigurationVisitor *visitor) const override;
 };
 
 }  // namespace configuration

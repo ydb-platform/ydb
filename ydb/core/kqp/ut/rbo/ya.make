@@ -1,13 +1,14 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(16)
 
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
-    kqp_rbo_yql_ut.cpp
-    kqp_rbo_olap_ut.cpp
+    kqp_rbo_copy_ut.cpp
+    kqp_rbo_global_ut.cpp
 )
 
 PEERDIR(
@@ -17,6 +18,7 @@ PEERDIR(
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     ydb/library/benchmarks/queries/tpch
+    ydb/library/plan2svg
     ydb/public/lib/ut_helpers
     ydb/library/yql/udfs/statistics_internal
     ydb/core/kqp/ut/olap/helpers
@@ -54,3 +56,20 @@ NO_COMPILER_WARNINGS()
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    join_order
+    statistics
+    effects
+    olap
+    basic
+    reads
+    joins
+    aggregation
+    subqueries
+    explain
+    metadata
+    physical
+    fallback
+    workloads
+)

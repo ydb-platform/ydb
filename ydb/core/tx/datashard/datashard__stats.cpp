@@ -83,22 +83,23 @@ public:
         Y_ENSURE(false, "IPages::Locate(TPart*, ...) shouldn't be used here");
     }
 
-    const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override {
-        Y_ENSURE(groupId.IsMain(), "Unsupported column group");
+    const TSharedData* TryGetPage(const TPart*, const TPageLocation&, TGroupId) override {
+        Y_ENSURE(false, "IPages::TryGetPage(...) shouldn't be used here");
+    }
 
+    const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
         auto partStore = CheckedCast<const TPartStore*>(part);
-        auto info = partStore->PageCollections.at(groupId.Index).Get();
-        auto type = info->GetPageType(pageId);
-        Y_ENSURE(type == EPage::FlatIndex || type == EPage::BTreeIndex);
+        auto info = partStore->PageCollections.at(part->IndexSlot(groupId)).Get();
+        Y_ENSURE(NPage::IsIndexPage(location.Type));
 
-        auto& partPages = Pages[part];
-        auto page = partPages.FindPtr(pageId);
+        auto& partPages = Pages[info];
+        auto page = partPages.FindPtr(location.Offset);
         if (page != nullptr) {
             return page;
         }
 
-        PagesSize += info->GetPageSize(pageId);
-        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, info->PageCollection, { pageId }));
+        PagesSize += location.Size;
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, info->PageCollection, { location }));
 
         Interrupt();
         auto ev = WaitForSpecificEvent<NSharedCache::TEvResult>(&TTableStatsCoroBuilder::ProcessUnexpectedEvent);
@@ -112,11 +113,11 @@ public:
         Resume();
 
         for (auto& loaded : ev->Get()->Pages) {
-            partPages.emplace(pageId, TPinnedPageRef(loaded.Page).GetData());
+            partPages.emplace(loaded.Offset, TPinnedPageRef(loaded.Page).GetData());
             PageRefs.emplace_back(std::move(loaded.Page));
         }
 
-        page = partPages.FindPtr(pageId);
+        page = partPages.FindPtr(location.Offset);
         Y_ENSURE(page != nullptr);
 
         return page;
@@ -225,7 +226,7 @@ private:
         CoroutineDeadline = GetCycleCountFast() + DurationToCycles(MaxCoroutineExecutionTime);
     }
 
-    THashMap<const TPart*, THashMap<TPageId, TSharedData>> Pages;
+    THashMap<const NTabletFlatExecutor::TPrivatePageCache::TPageCollection*, THashMap<TPageOffset, TSharedData>> Pages;
     TVector<TSharedPageRef> PageRefs;
     ui64 PagesSize = 0;
     ui64 CoroutineDeadline;

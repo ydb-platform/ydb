@@ -1,6 +1,8 @@
-YQL_UDF_TEST()
+YQL_UDF_MINITEST()
 
-DEPENDS(yql/essentials/udfs/common/topfreq)
+DEPENDS(
+    yql/essentials/udfs/common/topfreq/impl
+)
 
 TIMEOUT(300)
 

@@ -13,8 +13,9 @@
 #include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
 #include <library/cpp/yt/assert/assert.h>
+
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <util/datetime/base.h>
 #include <util/random/random.h>
@@ -107,15 +108,15 @@ private:
                 periodic->ScheduleOutOfBand();
             }
         } catch (const std::exception& e) {
-            YT_LOG_ERROR("DoPingTransaction has failed (TransactionId: %v, Error: %v)",
-                GetGuidAsString(transactionId),
-                e.what());
+            YT_TLOG_ERROR("Failed to ping transaction")
+                .With("TransactionId", transactionId)
+                .With("Error", e.what());
         }
     }
 
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     THashMap<TTransactionId, std::shared_ptr<NConcurrency::TPeriodicExecutorPtr>> Transactions_;
 
     NConcurrency::IThreadPoolPtr PingerPool_;
@@ -126,7 +127,7 @@ private:
 
 ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config, IRawClientPtr rawClient)
 {
-    YT_LOG_DEBUG("Using async transaction pinger");
+    YT_TLOG_DEBUG("Using async transaction pinger");
 
     return MakeIntrusive<TSharedTransactionPinger>(config->AsyncTxPingerPoolThreads, std::move(rawClient));
 }

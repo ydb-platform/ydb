@@ -10,7 +10,7 @@ private:
     using TBase = IResourceProcessor;
     const ui32 KeyColumnId;
 
-    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
+    virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     virtual bool IsAggregation() const override {
         return false;
@@ -18,7 +18,7 @@ private:
 
 public:
     explicit TDistinctMarkerProcessor(const ui32 keyColumnId)
-        : TBase({ TColumnChainInfo(keyColumnId) }, {}, EProcessorType::Filter)
+        : TBase({ TColumnChainInfo(keyColumnId) }, {}, EProcessorType::DistinctMarker)
         , KeyColumnId(keyColumnId)
     {
         AFL_VERIFY(KeyColumnId);

@@ -492,6 +492,11 @@ TEST_P(HugePageAwareAllocatorTest, ReleasingSmall) {
   const bool old_subrelease = allocator_->forwarder().hpaa_subrelease();
   allocator_->forwarder().set_hpaa_subrelease(/*value=*/true);
 
+  const absl::Duration old_skip_subrelease_interval =
+      allocator_->forwarder().filler_skip_subrelease_interval();
+  allocator_->forwarder().set_filler_skip_subrelease_interval(
+      absl::ZeroDuration());
+
   absl::Duration old_skip_subrelease_short_interval =
       allocator_->forwarder().filler_skip_subrelease_short_interval();
   allocator_->forwarder().set_filler_skip_subrelease_short_interval(
@@ -523,6 +528,8 @@ TEST_P(HugePageAwareAllocatorTest, ReleasingSmall) {
   }
 
   allocator_->forwarder().set_hpaa_subrelease(old_subrelease);
+  allocator_->forwarder().set_filler_skip_subrelease_interval(
+      old_skip_subrelease_interval);
   allocator_->forwarder().set_filler_skip_subrelease_short_interval(
       old_skip_subrelease_short_interval);
   allocator_->forwarder().set_filler_skip_subrelease_long_interval(
@@ -1622,7 +1629,7 @@ using FakeHugePageAwareAllocator =
     huge_page_allocator_internal::HugePageAwareAllocator<
         huge_page_allocator_internal::FakeStaticForwarder>;
 struct SpanDeleter {
-  explicit SpanDeleter(absl::Nonnull<FakeHugePageAwareAllocator*> allocator)
+  explicit SpanDeleter(FakeHugePageAwareAllocator* absl_nonnull allocator)
       : allocator(*allocator) {}
 
   void operator()(Span* s) ABSL_LOCKS_EXCLUDED(pageheap_lock) {

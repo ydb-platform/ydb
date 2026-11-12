@@ -6,7 +6,7 @@ namespace NFq {
 
 struct TEvControlPlaneStorageInternal {
     // Private
-    struct TEvDbRequestResult : public NActors::TEventLocal<TEvDbRequestResult, TEvControlPlaneStorage::EvDbRequestResult> {
+    struct TEvDbRequestResult: public NActors::TEventLocal<TEvDbRequestResult, TEvControlPlaneStorage::EvDbRequestResult> {
         explicit TEvDbRequestResult(const NYdb::TAsyncStatus& status, std::shared_ptr<std::vector<NYdb::TResultSet>> resultSets = nullptr)
             : Status(status)
             , ResultSets(std::move(resultSets))
@@ -18,4 +18,4 @@ struct TEvControlPlaneStorageInternal {
     };
 };
 
-}
+}   // namespace NFq

@@ -23,7 +23,7 @@ void AddCboWarning(TRBOContext& ctx, const TString& message);
 
 std::shared_ptr<TCboRunTiming> AddCboRunTrace(
     TRBOContext& ctx,
-    const TIntrusivePtr<TOpCBOTree>& cboTree,
+    const TInfoUnitRegistry& registry,
     const std::shared_ptr<TJoinOptimizerNode>& initialJoinTree,
     const TVector<TCBOLeaf>& leaves,
     const TCBOSettings& settings,

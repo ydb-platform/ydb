@@ -143,11 +143,17 @@ const typename TTaggedStatistics<TTags>::TSummaryMap& TTaggedStatistics<TTags>::
 }
 
 template <class TTags>
-void TTaggedStatistics<TTags>::Persist(const TStreamPersistenceContext& context)
+template <class C>
+void TTaggedStatistics<TTags>::Save(C& context) const
 {
-    using NYT::Persist;
+    NYT::Save(context, Data_);
+}
 
-    Persist(context, Data_);
+template <class TTags>
+template <class C>
+void TTaggedStatistics<TTags>::Load(C& context)
+{
+    NYT::Load(context, Data_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

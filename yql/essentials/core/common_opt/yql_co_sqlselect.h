@@ -2,7 +2,29 @@
 
 #include "yql_co.h"
 
+#include <tuple>
+#include <utility>
+
 namespace NYql {
+
+std::tuple<TNodeMap<ui32>, THashMap<ui32, const TExprNode*>> GatherSubLinksWithOriginal(
+    const TExprNode::TPtr& root,
+    const TExprNode::TPtr& originalRoot);
+
+std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
+    TPositionHandle pos,
+    const TExprNode::TPtr& list,
+    const TExprNode::TPtr& root,
+    const TExprNode::TPtr& originalArg,
+    const TNodeMap<ui32>& subLinks,
+    const THashMap<ui32, const TExprNode*>& originalSubLinks,
+    const TVector<TString>& inputAliases,
+    const TExprNode::TListType& cleanedInputs,
+    TExprContext& ctx,
+    TOptimizeContext& optCtx,
+    bool isYql,
+    const TString& leftPrefix = {},
+    TVector<TString>* sublinkColumns = nullptr);
 
 TExprNode::TPtr ExpandSqlSelect(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
 

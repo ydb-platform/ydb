@@ -779,8 +779,11 @@ void TTablet::HandleByLeader(TEvTablet::TEvFollowerListRefresh::TPtr &ev) {
             }
         }
 
-        if (infoIt != LeaderInfo.end() && infoIt->first == *it)
+        // the follower is in the list, so it is done here; the loops after this one handle only the absent ones
+        if (infoIt != LeaderInfo.end() && infoIt->first == *it) {
             infoIt->second.PresentInList = true;
+            ++infoIt;
+        }
     }
 
     while (infoIt != LeaderInfo.end()) {
@@ -1568,41 +1571,27 @@ void TTablet::SendBarriersForCutHistory() {
     }
 
     constexpr ui32 channelId = 0;
-    const auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
-    if (historyToCut.empty()) {
-        return;
-    }
-
     const ui64 tabletId = TabletID();
     const ui32 gen = StateStorageInfo.KnownGeneration;
-    const auto& channelHistory = Info->Channels[channelId].History;
 
-    std::unordered_set<ui32> seenGroups;
-    auto allHistoryIt = channelHistory.begin();
-    bool sentHardGc = false;
-    for (const auto* historyEntry : historyToCut) {
-        while (allHistoryIt != channelHistory.end() && allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
-            seenGroups.insert(allHistoryIt->GroupID);
-            ++allHistoryIt;
-        }
-        if (!seenGroups.contains(historyEntry->GroupID)) {
-            const auto nextFromGeneration = std::next(historyEntry)->FromGeneration;
-            ++GcInFly;
-            SendToBSProxy(SelfId(), historyEntry->GroupID,
-                new TEvBlobStorage::TEvCollectGarbage(
-                    tabletId, gen, ++GcCounter, channelId,
-                    true,
-                    nextFromGeneration - 1, Max<ui32>(),
-                    nullptr, nullptr, TInstant::Max(),
-                    false, TWriteSource::GcLogChannel, true
-                )
-            );
-            sentHardGc = true;
-        }
-        CutHistoryStatus = ECutHistoryStatus::SentBarrier;
-        ++allHistoryIt;
+    auto hardBarriers = HistoryCutter.GetHardBarriers(channelId);
+
+    for (const auto& [groupId, collectGeneration] : hardBarriers) {
+        ++GcInFly;
+        SendToBSProxy(SelfId(), groupId,
+            new TEvBlobStorage::TEvCollectGarbage(
+                tabletId, gen, ++GcCounter, channelId,
+                true,
+                collectGeneration, Max<ui32>(),
+                nullptr, nullptr, TInstant::Max(),
+                false, TWriteSource::GcLogChannel, true
+            )
+        );
     }
-    if (CutHistoryStatus == ECutHistoryStatus::SentBarrier && !sentHardGc) {
+
+    if (!hardBarriers.empty()) {
+        CutHistoryStatus = ECutHistoryStatus::SentBarrier;
+    } else {
         SendCutTabletHistory();
     }
 }
@@ -2588,7 +2577,9 @@ void TTablet::Bootstrap() {
     }
     ReportTabletStateChange(TTabletStateInfo::Created, SuggestedGeneration); // useless?
     StateStorageInfo.ProxyID = MakeStateStorageProxyID();
-    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)));
+    TEvStateStorage::TProxyOptions lookupOptions(TEvStateStorage::TProxyOptions::SigAsync);
+    lookupOptions.WaitForAllRingGroups = true;
+    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, lookupOptions));
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBootstrap>(SuggestedGeneration, true, StateStorageInfo.ProxyID));
     }

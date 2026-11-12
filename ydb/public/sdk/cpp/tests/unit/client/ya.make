@@ -8,7 +8,9 @@ RECURSE(
     endpoints
     iam
     iam_private
+    login
     oauth2_token_exchange
+    oidc
     observability
     params
     query

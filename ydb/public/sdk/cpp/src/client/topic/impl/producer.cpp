@@ -641,6 +641,9 @@ void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
     }
 
     if (partitionIt->second.IsSplitted() || Producer->SplittedPartitionWorkers.contains(partition)) {
+        std::lock_guard lock(Lock);
+        SubscribedPartitions.erase(partition);
+        ReadyFutures.erase(partition);
         partitionIt->second.Future(NThreading::MakeFuture());
         return;
     }
@@ -649,6 +652,13 @@ void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
     auto newFuture = wrappedSession->Session->WaitEvent();
     std::weak_ptr<TProducer> producer = Producer->shared_from_this();
     std::weak_ptr<TEventsWorker> self = shared_from_this();
+
+    {
+        // Arm the subscription before Subscribe(): WaitEvent() may run the callback
+        // synchronously, and that callback takes Lock itself.
+        std::lock_guard lock(Lock);
+        SubscribedPartitions.insert(partition);
+    }
 
     newFuture.Subscribe([self, producer, partition](const NThreading::TFuture<void>&) {
         auto producerPtr = producer.lock();
@@ -663,11 +673,25 @@ void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
 
         {
             std::lock_guard lock(selfPtr->Lock);
+            if (!selfPtr->SubscribedPartitions.contains(partition)) {
+                return;
+            }
             selfPtr->ReadyFutures.insert(partition);
         }
         producerPtr->RunMainWorker(static_cast<std::int64_t>(partition));
     });
-    partitionIt->second.Future(newFuture);
+
+    {
+        std::lock_guard lock(Lock);
+        if (!SubscribedPartitions.contains(partition)) {
+            return;
+        }
+        // The callback above may have run synchronously and mutated Partitions.
+        auto subscribedPartition = Producer->Partitions.find(partition);
+        if (subscribedPartition != Producer->Partitions.end()) {
+            subscribedPartition->second.Future(newFuture);
+        }
+    }
 }
 
 std::optional<TSessionClosedEvent> TProducer::TEventsWorker::GetSessionClosedEvent() {
@@ -870,6 +894,11 @@ NThreading::TFuture<void> TProducer::TEventsWorker::WaitEvent() {
 }
 
 void TProducer::TEventsWorker::UnsubscribeFromPartition(std::uint32_t partition) {
+    // SubscribeToPartition's WaitEvent callback inserts into ReadyFutures on the gRPC
+    // thread. Clear the subscription under the same Lock so that insert cannot race
+    // with erase, and a callback that already lost the race does not resurrect the partition.
+    std::lock_guard lock(Lock);
+    SubscribedPartitions.erase(partition);
     ReadyFutures.erase(partition);
     auto partitionIt = Producer->Partitions.find(partition);
     if (partitionIt != Producer->Partitions.end()) {
@@ -1498,35 +1527,37 @@ void TProducer::TMessagesWorker::RebuildPendingMessagesIndex(std::uint32_t parti
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TProducer::TProducerRetryPolicy
 
-TProducer::TProducerRetryPolicy::TProducerRetryPolicy(TProducer* producer)
-    : Producer(producer)
+TProducer::TProducerRetryPolicy::TProducerRetryPolicy(::IRetryPolicy<EStatus>::TPtr userPolicy)
+    : UserPolicy(userPolicy ? std::move(userPolicy) : NYdb::NTopic::IRetryPolicy::GetDefaultPolicy())
 {}
 
 typename TProducer::TProducerRetryPolicy::IRetryState::TPtr TProducer::TProducerRetryPolicy::CreateRetryState() const {
     struct TRetryState : public IRetryState {
-        TRetryState(TProducer* producer)
-            : Producer(producer)
+        explicit TRetryState(::IRetryPolicy<EStatus>::TPtr userPolicy)
+            : UserPolicy(std::move(userPolicy))
         {}
-        ~TRetryState() = default;
+
         TMaybe<TDuration> GetNextRetryDelay(EStatus status) override {
+            // OVERLOADED closes this session so the producer can switch partitions
+            // (HandleAutoPartitioning). A user retry would keep the session on the
+            // inactive partition, so the user policy must not see this status.
             if (status == EStatus::OVERLOADED) {
                 return Nothing();
             }
 
             if (!UserRetryState) {
-                auto policy = Producer->Settings.RetryPolicy_ ? Producer->Settings.RetryPolicy_ : NYdb::NTopic::IRetryPolicy::GetDefaultPolicy();
-                UserRetryState = policy->CreateRetryState();
+                UserRetryState = UserPolicy->CreateRetryState();
             }
 
             return UserRetryState->GetNextRetryDelay(status);
         }
 
     private:
-        TProducer* Producer;
+        ::IRetryPolicy<EStatus>::TPtr UserPolicy;
         IRetryState::TPtr UserRetryState;
     };
-    
-    return std::make_unique<TRetryState>(Producer);
+
+    return std::make_unique<TRetryState>(UserPolicy);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1738,7 +1769,7 @@ TProducer::TProducer(
     SessionsWorker = std::make_shared<TSessionsWorker>(this);
     MessagesWorker = std::make_shared<TMessagesWorker>(this);
     EventsWorker = std::make_shared<TEventsWorker>(this);
-    RetryPolicy = std::make_shared<TProducerRetryPolicy>(this);
+    RetryPolicy = std::make_shared<TProducerRetryPolicy>(Settings.RetryPolicy_);
 
     if (Settings.AsyncExecutionMode_) {
         MainWorkerThread = SystemThreadFactory()->Run([this] {
@@ -2001,7 +2032,9 @@ void TProducer::RunUserEventLoop() {
 
 bool TProducer::IsFederation(const std::string& endpoint) {
     std::string_view host = GetHost(endpoint);
-    return host == "logbroker.yandex.net" || host == "logbroker-prestable.yandex.net";
+    return host == "logbroker.yandex.net" ||
+           host == "logbroker-prestable.yandex.net" ||
+           host.ends_with(".lbk.logbroker.yandex.net");
 }
 
 void TProducer::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSession, std::optional<TSessionClosedEvent> sessionClosedEvent) {

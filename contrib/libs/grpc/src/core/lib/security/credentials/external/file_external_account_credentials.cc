@@ -137,4 +137,8 @@ void FileExternalAccountCredentials::RetrieveSubjectToken(
   cb(TString(content), y_absl::OkStatus());
 }
 
+y_absl::string_view FileExternalAccountCredentials::CredentialSourceType() {
+  return "file";
+}
+
 }  // namespace grpc_core

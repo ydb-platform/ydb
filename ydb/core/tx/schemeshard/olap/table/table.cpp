@@ -90,6 +90,14 @@ TColumnTableInfo::TPtr TColumnTableInfo::BuildTableWithAlter(const TColumnTableI
     return alterData;
 }
 
+TColumnTableInfo::TPtr TColumnTableInfo::Clone() const {
+    auto copy = std::make_shared<TColumnTableInfo>(*this);
+    if (AlterData) {
+        copy->AlterData = AlterData->Clone();
+    }
+    return copy;
+}
+
 void TColumnTableInfo::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, const TShardIdx shardIdx, const TPartitionStats& newStats, TInstant now) {
     Stats.Aggregated.PartCount = GetColumnShards().size();
     Stats.PartitionStats[shardIdx]; // insert if none

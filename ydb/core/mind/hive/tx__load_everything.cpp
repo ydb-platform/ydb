@@ -22,6 +22,7 @@ public:
         TDomainsInfo* domainsInfo = appData->DomainsInfo.Get();
         TTabletId rootHiveId = domainsInfo->GetHive();
         bool isRootHive = (rootHiveId == Self->TabletID());
+        const bool bridgeMode = IsBridgeMode(TActivationContext::AsActorContext());
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -29,6 +30,7 @@ public:
         Self->NodeSegments.clear();
         Self->TabletCategories.clear();
         Self->Tablets.clear();
+        Self->BootAttempts.clear();
         Self->OwnerToTablet.clear();
         Self->ObjectToTabletMetrics.clear();
         Self->TabletTypeToTabletMetrics.clear();
@@ -39,6 +41,8 @@ public:
         Self->Domains.clear();
         Self->BlockedOwners.clear();
         Self->BridgePiles.clear();
+        Self->RecentNodeEvents.Clear();
+        Self->RecentTabletEvents.Clear();
 
         Self->ResetTotalResourceValues();
 
@@ -199,7 +203,7 @@ public:
         if (Self->CurrentConfig.HasWarmUpEnabled()) {
             Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
         } else {
-            if (IsBridgeMode(TActivationContext::AsActorContext())) {
+            if (bridgeMode) {
                 Self->WarmUp = false;
             } else {
                 Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled() && !Self->AreWeRootHive();
@@ -341,12 +345,21 @@ public:
                 return false;
             }
             while (!bridgePileRowset.EndOfSet()) {
-                ++numPiles;
                 TBridgePileId pileId = TBridgePileId::FromLocalDb(bridgePileRowset.GetValue<Schema::BridgePile::Id>());
+                if (!bridgeMode) {
+                    // left from the time the cluster was prepared for bridge mode, before it was rolled back
+                    db.Table<Schema::BridgePile>().Key(pileId.GetLocalDb()).Delete();
+                    if (!bridgePileRowset.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
+                ++numPiles;
                 auto& pileInfo = Self->GetPile(pileId);
                 pileInfo.State = bridgePileRowset.GetValue<Schema::BridgePile::State>();
                 pileInfo.IsPrimary = bridgePileRowset.GetValue<Schema::BridgePile::IsPrimary>();
                 pileInfo.IsPromoted = bridgePileRowset.GetValue<Schema::BridgePile::IsPromoted>();
+                pileInfo.Drain = bridgePileRowset.GetValueOrDefault<Schema::BridgePile::Drain>();
                 if (!bridgePileRowset.Next()) {
                     return false;
                 }
@@ -366,19 +379,7 @@ public:
                 TNodeId nodeId = nodeRowset.GetValue<Schema::Node::ID>();
                 TNodeInfo& node = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first->second;
                 node.Local = nodeRowset.GetValue<Schema::Node::Local>();
-                node.SetDown(nodeRowset.GetValue<Schema::Node::Down>());
-                node.SetFreeze(nodeRowset.GetValue<Schema::Node::Freeze>());
-                node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
-                node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
-                node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
-                node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
                 node.Name = nodeRowset.GetValueOrDefault<Schema::Node::Name>();
-                node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
-                if (node.BecomeUpOnRestart) {
-                    // If a node must become up on restart, it must have been down
-                    // That was not persisted to avoid issues with downgrades
-                    node.SetDown(true);
-                }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {
@@ -386,12 +387,37 @@ public:
                         node.LocationAcquired = true;
                     }
                 }
-                node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
-                node.BridgePileId = TBridgePileId::FromLocalDb(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
+                node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
                 if (!node.ServicedDomains) {
                     node.ServicedDomains = { Self->RootDomainKey };
                 }
                 node.LastSeenServicedDomains = node.ServicedDomains; // to keep Down and Freeze flags on restarts
+                node.BridgePileId = TBridgePileId::FromLocalDb(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
+                if (node.BridgePileId && !bridgeMode) {
+                    // the cluster has been prepared for bridge mode and rolled back; piles are not used without bridge
+                    // mode, and the ones nodes had then would split balancing segments with nodes registered later
+                    node.BridgePileId = {};
+                    db.Table<Schema::Node>().Key(nodeId).UpdateToNull<Schema::Node::BridgePileId>();
+                } else if (const auto implicitPileId = NBridge::GetImplicitPileId(Self->BridgeInfo.get());
+                        !node.BridgePileId && implicitPileId) {
+                    // node was registered before the cluster got its single-pile bridge config (it is being converted into
+                    // bridged one), so it implicitly belongs to the only pile; its Local may survive Hive restart and
+                    // register again without the change of actor id, so the pile is assigned here
+                    node.BridgePileId = implicitPileId;
+                    db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
+                }
+                node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
+                node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
+                node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
+                node.SetDown(nodeRowset.GetValue<Schema::Node::Down>(), EHiveEventReason::LoadedFromDatabase);
+                node.SetFreeze(nodeRowset.GetValue<Schema::Node::Freeze>(), EHiveEventReason::LoadedFromDatabase);
+                node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
+                if (node.BecomeUpOnRestart) {
+                    // If a node must become up on restart, it must have been down
+                    // That was not persisted to avoid issues with downgrades
+                    node.SetDown(true, EHiveEventReason::LoadedFromDatabase);
+                }
+                node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
                 if (!(bool)node.Local) {
                     // it's safe to call here, because there is no any tablets in the node yet
                     node.BecomeDisconnected();
@@ -535,7 +561,7 @@ public:
                             || !tablet.LockedToActor
                             || !Self->CurrentConfig.GetLockedTabletsSendMetrics())
                     {
-                        tablet.BecomeStopped();
+                        tablet.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     }
                 } else {
                     auto it = Self->Nodes.find(tablet.NodeId);
@@ -543,7 +569,7 @@ public:
                         tablet.BecomeUnknown(&it->second);
                     } else {
                         tablet.NodeId = 0;
-                        tablet.BecomeStopped();
+                        tablet.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     }
                 }
                 tablet.InitTabletMetrics();
@@ -624,7 +650,8 @@ public:
                         tablet->TabletStorageInfo->Channels.emplace_back();
                         tablet->TabletStorageInfo->Channels.back().Channel = tablet->TabletStorageInfo->Channels.size() - 1;
                     }
-                    TTabletChannelInfo::THistoryEntry entry(generationId, groupId, timestamp);
+                    ui32 version = tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::Version>();
+                    TTabletChannelInfo::THistoryEntry entry(generationId, groupId, timestamp, version);
                     auto deletedAtGeneration = tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::DeletedAtGeneration>();
                     if (deletedAtGeneration) {
                         tablet->DeletedHistory.emplace(channelId, entry, deletedAtGeneration);
@@ -670,7 +697,7 @@ public:
                     followerGroup.NodeFilter.AllowedNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedNodes>();
                     followerGroup.NodeFilter.AllowedDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::NewAllowedDataCenterIds>();
 
-                    followerGroup.RequireAllDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>();
+                    followerGroup.SetRequireAllDataCenters(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>());
                     followerGroup.LocalNodeOnly = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>();
                     followerGroup.FollowerCountPerDataCenter = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>();
                     followerGroup.RequireDifferentNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireDifferentNodes>();
@@ -716,13 +743,13 @@ public:
                         Self->DataCenters[dc].Followers[{tabletId, followerGroup.Id}].push_back(std::prev(tablet->Followers.end()));
                     }
                     if (nodeId == 0) {
-                        follower.BecomeStopped();
+                        follower.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     } else {
                         auto it = Self->Nodes.find(nodeId);
                         if (it != Self->Nodes.end() && it->second.IsUnknown()) {
                             follower.BecomeUnknown(&it->second);
                         } else {
-                            follower.BecomeStopped();
+                            follower.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                         }
                     }
                     follower.InitTabletMetrics();

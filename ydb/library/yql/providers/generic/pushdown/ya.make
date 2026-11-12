@@ -1,10 +1,8 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_generic_match_predicate.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 PEERDIR(
     ydb/library/yql/providers/generic/connector/api/service/protos

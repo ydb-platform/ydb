@@ -2,17 +2,6 @@ default:
   oss: true
   ya_make: true
 
-rtmr:
-  backend_name: RTMR
-  backend_name_lower: rtmr
-  rtmr: true
-  example_cluster: rtmr_yql_alpha
-  feature_not_null: true 
-  feature_column_container_type: true
-  feature_mapreduce: true
-  process_command: PROCESS STREAM
-  select_command: SELECT STREAM
-  feature_temp_table: true
 
 ydb:
   backend_name: YDB

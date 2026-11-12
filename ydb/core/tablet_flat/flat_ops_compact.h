@@ -2,7 +2,9 @@
 
 #include "flat_scan_iface.h"
 #include "flat_scan_spent.h"
+#include "flat_saved_row.h"
 #include "flat_writer_bundle.h"
+#include "flat_compaction_outputs.h"
 #include "flat_sausage_chop.h"
 #include "flat_row_misc.h"
 #include "flat_part_writer.h"
@@ -33,6 +35,7 @@ namespace NTabletFlatExecutor {
         struct TResult {
             NTable::TPartView Part;
             TDeque<NTable::TScreen::THole> Growth;
+            ui32 OutputId = 0;
         };
 
         using TResults = TDeque<TResult>;
@@ -47,6 +50,16 @@ namespace NTabletFlatExecutor {
             , YellowStopChannels(std::move(yellowStopChannels))
         {
 
+        }
+
+        static THolder<NTable::TCompactionResult> MakeCompactionResult(const TResults& results) {
+            auto result = MakeHolder<NTable::TCompactionResult>(
+                results ? results.front().Part.Epoch() : NTable::TEpoch::Max(), results.size());
+            for (const auto& output : results) {
+                result->Parts.emplace_back(output.Part);
+                Y_ENSURE(result->PartOutputIds.emplace(output.Part->Label, output.OutputId).second);
+            }
+            return result;
         }
 
         bool Success = false;
@@ -65,48 +78,6 @@ namespace NTabletFlatExecutor {
         using TRow = NTable::TRowState;
         using TPartWriter = NTable::TPartWriter;
 
-        // Deep-copy of a TRowState for fulltext buffering
-        struct TSavedRow {
-            NTable::ERowOp Op = NTable::ERowOp::Absent;
-            TString Buf;
-            struct TSlot { ui32 Offset = 0; ui32 Size = 0; NTable::TCellOp CellOp; };
-            TVector<TSlot> Slots;
-
-            void Save(const NTable::TRowState& row) {
-                Op = row.GetRowState();
-                Slots.resize(row.Size());
-                Buf.clear();
-                for (ui32 i = 0; i < row.Size(); i++) {
-                    Slots[i].CellOp = row.GetCellOp(i);
-                    const auto& cell = row.Get(i);
-                    Slots[i].Offset = Buf.size();
-                    if (!cell.IsNull()) {
-                        Slots[i].Size = cell.Size();
-                        Buf.append(cell.Data(), cell.Size());
-                    } else {
-                        Slots[i].Size = 0;
-                    }
-                }
-            }
-
-            void Restore(NTable::TRowState& out) const {
-                out.Init(Slots.size());
-                out.Touch(Op);
-                if (Op == NTable::ERowOp::Erase || Op == NTable::ERowOp::Reset) {
-                    return;
-                }
-                for (ui32 i = 0; i < Slots.size(); i++) {
-                    if (Slots[i].CellOp != NTable::ECellOp::Empty) {
-                        TCell cell;
-                        if (Slots[i].Size > 0) {
-                            cell = TCell(Buf.data() + Slots[i].Offset, Slots[i].Size);
-                        }
-                        out.Set(i, Slots[i].CellOp, cell);
-                    }
-                }
-            }
-        };
-
         // Per-key buffer for fulltext compaction
         struct TFtKeyBuf {
             // Part of the key (Gen + MaxId). Current token is stored outside
@@ -118,14 +89,14 @@ namespace NTabletFlatExecutor {
             ui64 LockTxId = 0;
 
             // Deltas
-            struct TDelta { ui64 TxId; TSavedRow Row; };
+            struct TDelta { ui64 TxId; NTable::TSavedRow Row; };
             TVector<TDelta> SavedDeltas;
             TVector<ui64> SavedDeltaOrder;
 
             // Committed versions (descending order)
             struct TVersion {
                 TRowVersion Ver;
-                TSavedRow Row;
+                NTable::TSavedRow Row;
                 bool Added = true;
                 TString Segment;
             };
@@ -191,7 +162,7 @@ namespace NTabletFlatExecutor {
             }
             Y_ENSURE(FtKeyColPos.size() >= 3);
             PrefixSize = FtKeyColPos.size()-3;
-            FtMinRowVersion = Conf->Layout.MinRowVersion;
+            FtMinRowVersion = Conf->Outputs.front().Layout.MinRowVersion;
         }
 
     public:
@@ -497,8 +468,6 @@ namespace NTabletFlatExecutor {
         using TEvPutResult = TEvBlobStorage::TEvPutResult;
         using ELockMode = NTable::ELockMode;
         using TScheme = NTable::TRowScheme;
-        using TPartWriter = NTable::TPartWriter;
-        using TBundle = NWriter::TBundle;
         using TStorage = TIntrusivePtr<TTabletStorageInfo>;
         using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
@@ -506,13 +475,14 @@ namespace NTabletFlatExecutor {
     public:
         constexpr static ui64 MaxFlight = 20ll * (1ll << 20);
 
-        TOpsCompact(TActorId owner, TLogoBlobID mask, TAutoPtr<TCompactCfg> conf)
+        TOpsCompact(TActorId owner, TLogoBlobID mask, TAutoPtr<TCompactCfg> conf,
+                THolder<ICompactionRouter> router)
             : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TOpsCompact::Inbox), NKikimrServices::TActivity::OPS_COMPACT_A)
             , Mask(mask)
             , Owner(owner)
             , Conf(std::move(conf))
+            , Outputs(Mask, *Conf, std::move(router))
         {
-            Bundle = new TBundle(Mask, Conf->Writer);
         }
 
         ~TOpsCompact()
@@ -548,7 +518,7 @@ namespace NTabletFlatExecutor {
             NTable::IScan::TConf conf;
 
             conf.NoErased = false; /* emit erase markers */
-            conf.LargeEdge = Conf->Layout.LargeEdge;
+            conf.LargeEdge = Outputs.GetScanLargeEdge();
 
             return { EScan::Feed, conf };
         }
@@ -556,18 +526,12 @@ namespace NTabletFlatExecutor {
         EScan Seek(TLead &lead, ui64 seq) override
         {
             if (seq == 0) /* on first Seek() init compaction */ {
-                Y_ENSURE(!Writer, "Initial IScan::Seek(...) called twice");
-
                 const auto tags = Scheme->Tags();
-
                 lead.To(tags, { }, NTable::ESeek::Lower);
 
-                auto *scheme = new NTable::TPartScheme(Scheme->Cols);
-
-                Writer = new TPartWriter(scheme, tags, *Bundle, Conf->Layout, Conf->Epoch);
-
+                Outputs.Start(*Scheme);
                 if (Conf->IsFulltextCompact) {
-                    FtState = TFulltextCompact::Init(Conf.Get(), Scheme, Writer);
+                    FtState = TFulltextCompact::Init(Conf.Get(), Scheme, Outputs.GetWriter(0));
                 }
 
                 return EScan::Feed;
@@ -579,9 +543,9 @@ namespace NTabletFlatExecutor {
                 }
 
                 if (!Finished) {
-                    WriteStats = Writer->Finish();
-                    Results = Bundle->Results();
+                    Results = Outputs.Finish(WriteStats);
                     Y_ENSURE(WriteStats.Parts == Results.size());
+
                     WriteTxStatus();
                     Finished = true;
                 }
@@ -606,7 +570,7 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            Writer->BeginKey(key);
+            Outputs.BeginKey(key);
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl
@@ -666,7 +630,7 @@ namespace NTabletFlatExecutor {
 
             // We write the first (latest) lock we observe
             if (!IsLocked) {
-                Writer->AddKeyLock(mode, txId);
+                Outputs.AddKeyLock(mode, txId);
                 IsLocked = true;
             }
 
@@ -693,7 +657,7 @@ namespace NTabletFlatExecutor {
                 for (ui64 txId : DeltasOrder) {
                     auto it = Deltas.find(txId);
                     Y_ENSURE(it != Deltas.end(), "Unexpected failure to find txId " << txId);
-                    Writer->AddKeyDelta(it->second, txId);
+                    Outputs.AddKeyDelta(it->second, txId);
                 }
 
                 Deltas.clear();
@@ -727,7 +691,7 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            Writer->AddKeyVersion(row, rowVersion);
+            Outputs.AddKeyVersion(row, rowVersion);
 
             return Flush(false /* intermediate, sleep or feed */);
         }
@@ -744,7 +708,7 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            ui32 written = Writer->EndKey();
+            ui32 written = Outputs.EndKey();
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " end key { written " << written << " row versions }";
@@ -759,6 +723,7 @@ namespace NTabletFlatExecutor {
         {
             if (!Conf->Frozen && !Conf->TxStatus) {
                 // Nothing to compact
+                return;
             }
 
             absl::flat_hash_map<ui64, std::optional<TRowVersion>> status;
@@ -818,7 +783,7 @@ namespace NTabletFlatExecutor {
                 return;
             }
 
-            auto dataId = Bundle->WriteExtra(data);
+            auto dataId = Outputs.WriteExtra(data);
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " written tx status " << dataId.Lead << " size=" << dataId.Bytes;
@@ -848,16 +813,14 @@ namespace NTabletFlatExecutor {
                     auto resultingPageCollection = MakeIntrusive<NTable::TLoader::TPageCollection>(pageCollection.PageCollection);
                     auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
                     auto gcList = SharedCachePages->GCList;
-                    auto addPage = [&saveCompactedPages, &pageCollection, &resultingPageCollection, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
-                        auto pageId = loadedPage.PageId;
-                        auto pageSize = pageCollection.PageCollection->Page(pageId).Size;
-                        auto sharedPage = MakeIntrusive<TPage>(pageId, pageSize, nullptr);
+                    auto addPage = [&saveCompactedPages, &resultingPageCollection, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
+                        auto sharedPage = MakeIntrusive<TPage>(loadedPage.Location.Offset, loadedPage.Location.Size, loadedPage.Location.Type, loadedPage.Location.Crc32, nullptr);
                         sharedPage->ProvideBody(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
                         if (sticky) {
-                            resultingPageCollection->AddStickyPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                            resultingPageCollection->AddStickyPage(loadedPage.Location.Offset, loadedPage.Location.Size, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, loadedPage.Location.Type));
                         } else {
-                            resultingPageCollection->AddPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                            resultingPageCollection->AddPage(loadedPage.Location.Offset, loadedPage.Location.Size, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, loadedPage.Location.Type));
                         }
                     };
                     for (auto &page : pageCollection.StickyPages) {
@@ -872,10 +835,17 @@ namespace NTabletFlatExecutor {
                     resultingPageCollections.push_back(std::move(resultingPageCollection));
                 }
 
+                TVector<NTable::TPageCollectionComponents> comps(result.PageCollections.size());
+                NTable::TPartComponents parts{
+                    .PageCollectionComponents = std::move(comps),
+                    .Opaque = std::move(result.Overlay),
+                    .Epoch = NTable::TEpoch::Max(),
+                };
+
+                // Pass pre-built collections with MakeUsed refs so shared cache sees active refs
                 NTable::TLoader loader(
-                    std::move(resultingPageCollections),
-                    { },
-                    std::move(result.Overlay));
+                    std::move(parts),
+                    std::move(resultingPageCollections));
 
                 // do not preload index as it may be already offloaded
                 auto fetch = loader.Run({.PreloadIndex = false, .PreloadData = false});
@@ -892,6 +862,7 @@ namespace NTabletFlatExecutor {
                 auto& res = prod->Results.emplace_back();
                 res.Part = loader.Result();
                 res.Growth = std::move(result.Growth);
+                res.OutputId = result.OutputId;
                 Y_ENSURE(res.Part, "Unexpected result without a part after compaction");
             }
 
@@ -903,7 +874,7 @@ namespace NTabletFlatExecutor {
                 logl
                     << NFmt::Do(*this) << " end=" << status
                     << ", " << Blobs << " blobs " << WriteStats.Rows << "r"
-                    << " (max " << Conf->Layout.MaxRows << ")"
+                    << " (max " << Conf->Outputs.front().Layout.MaxRows << ")"
                     << ", put " << NFmt::If(Spent.Get());
 
                 for (const auto &result : prod->Results) {
@@ -957,8 +928,11 @@ namespace NTabletFlatExecutor {
 
         EScan Flush(bool last)
         {
-            for (NPageCollection::TGlob& one : Bundle->GetBlobsToSave())
+            // Only completed blobs count towards Flushing. Unfinished pages in
+            // any output must not put the scan to sleep without in-flight I/O.
+            for (NPageCollection::TGlob& one : Outputs.GetBlobsToSave()) {
                 FlushToBs(std::move(one));
+            }
 
             EScan scan = EScan::Sleep;
 
@@ -967,6 +941,8 @@ namespace NTabletFlatExecutor {
             } else {
                 scan = (Flushing >= MaxFlight ? EScan::Sleep : EScan::Feed);
             }
+            Y_DEBUG_ABORT_UNLESS(scan != EScan::Sleep || Failed || Writing > 0,
+                "Compaction stopped for writes without an in-flight request");
 
             Spent->Alter(scan != EScan::Sleep);
 
@@ -1020,7 +996,7 @@ namespace NTabletFlatExecutor {
                 }
             }
 
-            Conf->Writer.ChannelsShares.Update(channel, msg.ApproximateFreeSpaceShare);
+            Outputs.UpdateChannelsShares(channel, msg.ApproximateFreeSpaceShare);
 
             const auto ok = (msg.Status == NKikimrProto::OK);
 
@@ -1106,10 +1082,11 @@ namespace NTabletFlatExecutor {
         IDriver * Driver = nullptr;
         THolder<TCompactCfg> Conf;
         TIntrusiveConstPtr<TScheme> Scheme;
-        TAutoPtr<TBundle> Bundle;
-        TIntrusivePtr<TPartWriter> Writer;
+
+        TCompactionOutputs Outputs;
+
         NTable::TWriteStats WriteStats;
-        TVector<TBundle::TResult> Results;
+        TVector<TCompactionOutputs::TResult> Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
         const NScheme::TTypeRegistry * Registry = nullptr;
         NSharedCache::TSharedCachePages * SharedCachePages;

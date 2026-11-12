@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_opt_log_effects.cpp
@@ -22,12 +22,11 @@ PEERDIR(
     ydb/library/json_index
     ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/cbo/solver
+    ydb/core/kqp/tracing
     yql/essentials/core/extract_predicate
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/providers/dq/expr_nodes
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

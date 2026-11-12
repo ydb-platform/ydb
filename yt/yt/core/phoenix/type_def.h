@@ -28,8 +28,9 @@ struct _
 //! Defines a Phoenix-enabled opaque class.
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type, typeTagValue)
 
-//! A handy helper for registering Phoenix fields.
-#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...)
+//! Defines metadata declared by PHOENIX_DECLARE_EXTERNAL_TYPE;
+//! the registration body follows the macro, as for an in-class type.
+#define PHOENIX_DEFINE_EXTERNAL_TYPE(type)
 
 ////////////////////////////////////////////////////////////////////////////////
 

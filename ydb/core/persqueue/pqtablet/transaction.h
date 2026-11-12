@@ -43,8 +43,6 @@ struct TDistributedTransaction : TLogPrefix {
     void OnReadSetAck(ui64 tabletId);
     void OnTxDone(const TEvPQ::TEvTxDone& event);
 
-    void AddPlanStepSender(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event);
-
     bool GetSkipSrcIdInfo() const;
 
     using EDecision = NKikimrTx::TReadSetData::EDecision;
@@ -135,8 +133,6 @@ struct TDistributedTransaction : TLogPrefix {
     NWilson::TTraceId GetExecuteSpanTraceId();
 
     TMaybe<NKikimrPQ::TError> Error;
-
-    THashMap<TActorId, std::unique_ptr<TEvTxProcessing::TEvPlanStep>> PlanStepSenders;
 
 private:
     NWilson::TSpan CreateSpan(const char* name, ui64 tabletId);

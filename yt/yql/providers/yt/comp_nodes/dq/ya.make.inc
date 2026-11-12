@@ -51,8 +51,6 @@ ELSE()
     )
 ENDIF()
 
-YQL_LAST_ABI_VERSION()
-
 ADDINCL(
     ${ORIG_SRC_DIR}
 )

@@ -32,6 +32,7 @@ namespace NActors {
             ES_INTERCONNECT_RDMA = 13,
             ES_RETRO_TRACING = 14,
             ES_CGROUP = 15,
+            ES_INMEMORY_METRICS = 16,
 
             ES_USERSPACE = 4096,
 
@@ -65,6 +66,11 @@ namespace NActors {
 
             TEvBlob(const TString& blob) noexcept
                 : Blob(blob)
+            {
+            }
+
+            TEvBlob(TString&& blob) noexcept
+                : Blob(std::move(blob))
             {
             }
 

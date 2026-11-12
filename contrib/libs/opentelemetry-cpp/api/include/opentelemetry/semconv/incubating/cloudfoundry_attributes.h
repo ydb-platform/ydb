@@ -121,7 +121,7 @@ static constexpr const char *kCloudfoundrySystemId = "cloudfoundry.system.id";
   <p>
   CloudFoundry defines the @code instance_id @endcode in the <a
   href="https://github.com/cloudfoundry/loggregator-api#v2-envelope">Loggregator v2 envelope</a>. It
-  is used for logs and metrics emitted by CloudFoundry. It is supposed to contain the vm id for
+  is used for logs and metrics emitted by CloudFoundry. It is supposed to contain the vm ID for
   CloudFoundry components. <p> When system components are instrumented, values from the <a
   href="https://bosh.io/docs/jobs/#properties-spec">Bosh spec</a> should be used. The @code
   system.instance.id @endcode should be set to @code spec.id @endcode.

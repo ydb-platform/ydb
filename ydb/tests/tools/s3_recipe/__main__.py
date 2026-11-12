@@ -20,12 +20,7 @@ def start(argv):
     port = pm.get_port()
     url = "http://localhost:{port}".format(port=port)  # S3 libs require DNS name for S3 endpoint
     check_url = "http://[::1]:{port}".format(port=port)
-    cmd = [
-        yatest.common.binary_path(MOTO_SERVER_PATH),
-        "s3",
-        "--host", "::1",
-        "--port", str(port)
-    ]
+    cmd = [yatest.common.binary_path(MOTO_SERVER_PATH), "s3", "--host", "::1", "--port", str(port)]
 
     def is_s3_ready():
         try:
@@ -36,12 +31,7 @@ def start(argv):
             logging.debug(err)
             return False
 
-    recipes_common.start_daemon(
-        command=cmd,
-        environment=None,
-        is_alive_check=is_s3_ready,
-        pid_file_name=PID_FILENAME
-    )
+    recipes_common.start_daemon(command=cmd, environment=None, is_alive_check=is_s3_ready, pid_file_name=PID_FILENAME)
 
     set_env("S3_ENDPOINT", url)
     logging.debug(f"S3 recipe has been started, url: {url}")

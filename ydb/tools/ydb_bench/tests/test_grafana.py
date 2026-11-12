@@ -4,7 +4,7 @@ import subprocess
 import unittest
 from unittest import mock
 
-from ydb.tools.ydb_bench.lib import grafana, monitoring_settings_ui
+from ydb.tools.ydb_bench.lib import grafana, monitoring_settings_ui, web
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 
 
@@ -116,6 +116,75 @@ class GrafanaTest(unittest.TestCase):
                 self.client.execute('catalog')
             self.assertNotIn('secret', str(error.exception))
             self.assertIn('403', str(error.exception))
+
+    @unittest.skipUnless(shutil.which('node'), 'node is required for dashboard link checks')
+    def test_config_cache_and_stable_reservation_button(self):
+        script = monitoring_settings_ui.JS
+        script += web._JS[
+            web._JS.index('function renderLocalYdbProfile(') : web._JS.index('async function mountLocalYdbProfile(')
+        ]
+        script += r'''
+const assert=require('assert');
+let now=1000,requests=[],opened;
+Date.now=()=>now;
+api=path=>{assert.equal(path,'/api/grafana/config');return new Promise((resolve,reject)=>requests.push({resolve,reject}))};
+class Element{
+  constructor(){this.isConnected=true;this.children=[];this.dataset={}}
+  querySelector(){return this.children[0]||null}
+  replaceChildren(){this.children=[]}
+  append(value){this.children.push(value)}
+}
+document={createElement:()=>new Element(),querySelector:()=>({remove(){}})};
+showGrafanaChooser=(...args)=>opened=args;
+esc=String;displayError=String;savedYdbConfigurationHtml=()=>'';
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+(async()=>{
+  const first=new Element(),second=new Element();
+  let a=mountGrafana(first,'run',{profile:'a'},1,2),b=mountGrafana(second,'run',{profile:'b'},1,2);
+  assert.equal(requests.length,1);
+  requests[0].resolve({configured:true,local_id:'host'});await Promise.all([a,b]);
+  const button=first.children[0];
+  for(let i=0;i<5;i++)await mountGrafana(first,'run',{profile:'a'},1,10+i);
+  assert.equal(first.children[0],button);assert.equal(requests.length,1);
+  button.onclick();assert.equal(opened[4],14);
+  now+=30001;a=mountGrafana(first,'run',{profile:'a'},1,20);
+  assert.equal(first.children[0],button);assert.equal(requests.length,2);
+  requests[1].reject(Error('temporary'));await a;
+  assert.equal(first.children[0],button);
+  await mountGrafana(first,'run',{},1,21);assert.equal(requests.length,2);
+  invalidateGrafanaConfig();a=mountGrafana(first,'run',{},1,22);
+  requests[2].resolve({configured:false});await a;
+  assert.equal(first.children.length,0);
+  await mountGrafana(first,'run',{},1,23);assert.equal(requests.length,3);
+  invalidateGrafanaConfig();a=mountGrafana(first,'run',{},1,24);
+  invalidateGrafanaConfig();b=mountGrafana(first,'run',{},1,25);
+  requests[4].resolve({configured:false});await b;
+  requests[3].resolve({configured:true});await a;
+  assert.equal(first.children.length,0);
+  invalidateGrafanaConfig();a=mountGrafana(first,'run',{},1,26);
+  requests[5].reject(Error('offline'));await a;
+  await mountGrafana(first,'run',{},1,27);assert.equal(requests.length,6);
+  now+=10001;a=mountGrafana(first,'run',{},1,28);
+  requests[6].resolve({configured:true,local_id:'host'});await a;
+  assert.equal(first.children.length,1);
+  const detached=new Element();detached.isConnected=false;
+  await mountGrafana(detached,'run',{},1,2);assert.equal(detached.children.length,0);
+  await mountGrafana(first,'run',{},NaN,2);assert.equal(first.children.length,0);
+  const container={dataset:{localYdbRunId:'run'},parts:{},rebuilds:0,
+    querySelector(key){return this.parts[key]||null},
+    set innerHTML(value){this.rebuilds++;this.parts={
+      '[data-reservation-body]':{},'[data-reservation-status]':{},'[data-reservation-grafana]':new Element()}}};
+  const data={parameters:{mode:'deploy'},state:'running',progress:{phase:'cluster-ready'},
+    benchmark:'dedicated-ydb',profile:'test',started_at:'2026-09-28T00:00:00Z'};
+  renderLocalYdbProfile(container,data);await tick();
+  const control=container.parts['[data-reservation-grafana]'].children[0];assert(control);
+  for(let i=0;i<5;i++){renderLocalYdbProfile(container,data);await tick()}
+  assert.equal(container.rebuilds,1);
+  assert.equal(container.parts['[data-reservation-grafana]'].children[0],control);
+  assert.equal(requests.length,7);
+})().catch(error=>{console.error(error);process.exitCode=1});
+'''
+        subprocess.run([shutil.which('node'), '-e', script], check=True, capture_output=True, timeout=10)
 
     @unittest.skipUnless(shutil.which('node'), 'node is required for dashboard link checks')
     def test_link_context_and_no_sample_count(self):

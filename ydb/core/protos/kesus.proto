@@ -99,6 +99,24 @@ message TEvDescribeSemaphoreChanged {
     bool OwnersChanged = 3;
 }
 
+message TSemaphoreDescription {
+    string Name = 1;
+    uint64 Limit = 2;
+    bytes Data = 3;
+
+    // Number of tokens currently acquired by owners.
+    uint64 Count = 4;
+    bool Ephemeral = 5;
+}
+
+// Only persistent semaphore descriptions are returned.
+message TEvDescribeSemaphores {}
+
+message TEvDescribeSemaphoresResult {
+    TKesusError Error = 1;
+    repeated TSemaphoreDescription Semaphores = 2;
+}
+
 message TEvCreateSemaphore {
     string KesusPath = 1;
     uint64 ProxyGeneration = 2;
@@ -465,6 +483,7 @@ message TEvUpdateConsumptionState {
         uint64 ResourceId = 1;
         bool ConsumeResource = 2;
         double Amount = 3;
+        bool CloseSession = 4;
     }
     repeated TResourceInfo ResourcesInfo = 1;
     NActorsProto.TActorId ActorID = 2;

@@ -38,6 +38,7 @@ namespace NKikimr::NBlobDepot {
 
     private:
         class TTxUpdateBlock;
+        class TTxQueryBlocks;
         class TTxDeleteTabletData;
         class TBlockProcessorActor;
 
@@ -63,8 +64,12 @@ namespace NKikimr::NBlobDepot {
         // for good; from that moment on none of the tablet's data is needed and nothing can ever be
         // written for it again. We must not wait for the hard barrier that Hive sends next -- a
         // VDisk that has seen this block is free to drop the barrier records themselves, so during
-        // decommission they may never reach us.
+        // decommission they may never reach us. Unless EnableCollectByCompleteDeletionBlock is on, no
+        // tablet is considered deleted and its data waits for that hard barrier as usual.
         bool IsTabletDeleted(ui64 tabletId) const {
+            if (!Self->CollectByCompleteDeletionBlock) {
+                return false;
+            }
             const auto it = Blocks.find(tabletId);
             return it != Blocks.end() && IsCompleteTabletDeletionBlock(it->second.BlockedGeneration);
         }

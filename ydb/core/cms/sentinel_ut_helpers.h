@@ -71,6 +71,35 @@ class TTestEnv: public TCmsTestEnv {
     }
 
 public:
+    void UpdateConfig() {
+        Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateConfig));
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvSentinel::TEvConfigUpdated::EventType);
+        UNIT_ASSERT(DispatchEvents(options));
+    }
+
+    TSet<TPDiskID> GetSentinelPDisks() {
+        auto request = MakeHolder<TEvCms::TEvGetSentinelStateRequest>();
+        request->Record.SetShow(NKikimrCms::TGetSentinelStateRequest::ALL);
+        auto* range = request->Record.AddRanges();
+        range->SetBegin(0);
+        range->SetEnd(Max<ui32>());
+        Send(new IEventHandle(Sentinel, GetSender(), request.Release()));
+
+        TAutoPtr<IEventHandle> handle;
+        auto* response = GrabEdgeEventRethrow<TEvCms::TEvGetSentinelStateResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        TSet<TPDiskID> result;
+        for (const auto& pdisk : response->Record.GetPDisks()) {
+            result.emplace(pdisk.GetId().GetNodeId(), pdisk.GetId().GetDiskId());
+        }
+        return result;
+    }
+
+    TActorId GetSentinelActor() const {
+        return Sentinel;
+    }
+
     void SetPDiskStateImpl(const TSet<TPDiskID>& ids, EPDiskState state) {
         for (const auto& id : ids) {
             Y_ABORT_UNLESS(MockNodes.contains(id.NodeId));
@@ -117,7 +146,7 @@ public:
                         NCms::TCms::AddHostState(State->ClusterInfo, *nodeInfo, record, State->ClusterInfo->GetTimestamp());
                     }
                 }
-                Send(ev->Sender, TActorId(), response.Release());
+                Send(ev->Sender, TActorId(), response.Release(), 0, true);
                 return TTestActorRuntime::EEventAction::DROP;
             }
 
@@ -145,6 +174,24 @@ public:
             info->PileId = id % numPiles;
             State->ClusterInfo->NodeIdToPileId[id] = *info->PileId;
         }
+    }
+
+    // bridge info as node warden reports it, with piles assigned the way MockBridgeModePiles() does; piles without the
+    // state given are synchronized
+    void MockBridgeInfo(ui32 numPiles, const std::vector<NKikimrBridge::TClusterState::EPileState>& states = {}) {
+        auto info = std::make_shared<TBridgeInfo>();
+        info->Piles.resize(numPiles);
+        for (ui32 i = 0; i < numPiles; ++i) {
+            auto& pile = info->Piles[i];
+            pile.BridgePileId = TBridgePileId::FromPileIndex(i);
+            pile.State = i < states.size() ? states[i] : NKikimrBridge::TClusterState::SYNCHRONIZED;
+        }
+        for (const auto& [id, _] : State->ClusterInfo->AllNodes()) {
+            auto& pile = info->Piles[id % numPiles];
+            pile.StaticNodeIds.push_back(id);
+            info->StaticNodeIdToPile[id] = &pile;
+        }
+        State->BridgeInfo = std::move(info);
     }
 
     TPDiskID RandomPDiskID() const {

@@ -89,6 +89,8 @@ namespace NTabletFlatExecutor {
 
         bool HasError() const noexcept { return Failed; }
         const TString& Error() const noexcept { return ErrorText; }
+        const TVector<ui32>& GetYellowMoveChannels() const noexcept { return YellowMoveChannels; }
+        const TVector<ui32>& GetYellowStopChannels() const noexcept { return YellowStopChannels; }
 
         // Backpressure: false means the owner should wait for in-flight puts to
         // complete (TEvPutResult) before feeding more rows.
@@ -218,6 +220,10 @@ namespace NTabletFlatExecutor {
                     SeenYellowStopChannels[channel] = true;
                     YellowStopChannels.push_back(channel);
                 }
+                // Keep the channels available to the owner on failure, and stop
+                // before draining any more queued blobs.
+                Fail(TStringBuilder() << "Cannot write direct part: out of disk space (yellow stop) on channel " << channel);
+                return;
             }
 
             Cfg.Writer.ChannelsShares.Update(channel, msg.ApproximateFreeSpaceShare);
@@ -258,17 +264,19 @@ namespace NTabletFlatExecutor {
                     auto resultingPageCollection = MakeIntrusive<NTable::TLoader::TPageCollection>(pageCollection.PageCollection);
                     auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
                     auto gcList = SharedCachePages->GCList;
-                    auto addPage = [&saveCompactedPages, &pageCollection, &resultingPageCollection, &gcList]
+                    auto addPage = [&saveCompactedPages, &resultingPageCollection, &gcList]
                         (NPageCollection::TLoadedPage& loadedPage, bool sticky) {
-                        auto pageId = loadedPage.PageId;
-                        auto pageSize = pageCollection.PageCollection->Page(pageId).Size;
-                        auto sharedPage = MakeIntrusive<TPage>(pageId, pageSize, nullptr);
+                        auto& location = loadedPage.Location;
+                        auto sharedPage = MakeIntrusive<TPage>(location.Offset, location.Size,
+                            location.Type, location.Crc32, nullptr);
                         sharedPage->ProvideBody(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
                         if (sticky) {
-                            resultingPageCollection->AddStickyPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                            resultingPageCollection->AddStickyPage(location.Offset, location.Size,
+                                TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, location.Type));
                         } else {
-                            resultingPageCollection->AddPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                            resultingPageCollection->AddPage(location.Offset, location.Size,
+                                TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, location.Type));
                         }
                     };
                     for (auto &page : pageCollection.StickyPages) {
@@ -283,7 +291,15 @@ namespace NTabletFlatExecutor {
                     pageCollections.push_back(std::move(resultingPageCollection));
                 }
 
-                NTable::TLoader loader(std::move(pageCollections), { }, std::move(res.Overlay));
+                TVector<NTable::TPageCollectionComponents> comps(res.PageCollections.size());
+                NTable::TPartComponents parts{
+                    .PageCollectionComponents = std::move(comps),
+                    .Opaque = std::move(res.Overlay),
+                    .Epoch = NTable::TEpoch::Max(),
+                };
+
+                // Pass pre-built collections so the shared cache sees active refs for the written pages.
+                NTable::TLoader loader(std::move(parts), std::move(pageCollections));
 
                 auto fetch = loader.Run({.PreloadIndex = false, .PreloadData = false});
                 Y_ENSURE(!fetch, "Just written part needs to load page collection pages");

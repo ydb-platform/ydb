@@ -187,6 +187,9 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            *index.MutableHnswIndexDescription() = std::get<NKikimrSchemeOp::THnswIndexDescription>(SpecializedIndexDescription);
+            break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -200,6 +203,9 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
 
     if (IsRebuild) {
         result->SetIsRebuild(true);
+        if (!RebuildIndexName.empty()) {
+            result->SetRebuildIndexName(RebuildIndexName);
+        }
     }
 }
 
@@ -499,6 +505,7 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
         case ESubState::FulltextIndexBorders:
         case ESubState::FulltextRowIdSrc:
         case ESubState::FulltextIndexPrefixBorders:
+        case ESubState::RebuildReplacing:
             return true;
     }
     return false;

@@ -115,9 +115,9 @@ public:
 
     THolder<TProposeResponse> Propose(
         const TString& owner,
-        TOperationContext& context) override;
+        TProposeContext& context) override;
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TDropFileStore");
     }
 
@@ -157,7 +157,7 @@ private:
 
 THolder<TProposeResponse> TDropFileStore::Propose(
     const TString& owner,
-    TOperationContext& context)
+    TProposeContext& context)
 {
     Y_UNUSED(owner);
 
@@ -215,6 +215,12 @@ THolder<TProposeResponse> TDropFileStore::Propose(
     txState.MinStep = TStepId(1);
     txState.State = TTxState::DeleteParts;
 
+    // Undo-safety contract: the first direct DB write follows — from here
+    // on this Propose is undo-unsafe. Single-part suboperation only
+    // (enforced at ignite time in ProcessOperationParts): a failed propose
+    // aborts the whole transaction and the txc rolls everything back.
+    // All validations MUST stay above this line — a SetError/return after
+    // it would leave unreverted memory changes.
     NIceDb::TNiceDb db(context.GetDB());
 
     auto fs = context.SS->FileStoreInfos.at(path.Base()->PathId);

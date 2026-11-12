@@ -122,8 +122,8 @@ bool TClientReader::Retry(
         CreateRequest(rangeIndex, rowIndex);
         return true;
     } catch (const std::exception& ex) {
-        YT_LOG_ERROR("Client reader retry failed: %v",
-            ex.what());
+        YT_TLOG_ERROR("Client reader retry failed")
+            .With("Error", ex.what());
 
         return false;
     }

@@ -22,6 +22,8 @@ private:
     NArrow::NSSA::TKernelsRegistry KernelsRegistry;
     std::optional<THashSet<ui32>> OverrideProcessingColumnsSet;
     std::optional<std::vector<ui32>> OverrideProcessingColumnsVector;
+    // Unit tests turn hints on without AppData feature flags. Production uses EnableCsPatternIndexHints.
+    bool PatternIndexHintsEnabled = false;
 
 public:
     bool IsGenerated(const ui32 columnId) const {
@@ -97,6 +99,10 @@ public:
         OverrideProcessingColumnsSet = std::move(columnsSet);
     }
 
+    void SetPatternIndexHintsEnabled(const bool value) {
+        PatternIndexHintsEnabled = value;
+    }
+
     [[nodiscard]] TConclusionStatus Init(
         const NArrow::NSSA::IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram) noexcept;
     [[nodiscard]] TConclusionStatus Init(
@@ -113,7 +119,7 @@ public:
     }
 
     [[nodiscard]] TConclusion<std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>> ApplyProgram(
-        std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& collection, const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const;
+        std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& collection) const;
     [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> ApplyProgram(
         const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const;
 

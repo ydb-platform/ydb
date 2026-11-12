@@ -1,0 +1,9 @@
+/* custom error: No such column: a */
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    a
+FROM (
+    SELECT
+        1 AS A
+);

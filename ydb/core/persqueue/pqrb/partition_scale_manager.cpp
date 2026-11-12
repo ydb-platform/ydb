@@ -185,27 +185,84 @@ TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionBoundary> TP
     };
 }
 
+ui32 TPartitionScaleManager::FirstFreePartitionId() const {
+    ui32 id = 0;
+    while (PartitionGraph.GetPartition(id) != nullptr) {
+        if (id == Max<ui32>()) {
+            return id;
+        }
+        ++id;
+    }
+    return id;
+}
+
+bool TPartitionScaleManager::PrescribedChildrenContinueSequence(const TPartitionSplit& split, ui32 nextPartitionId, ui32& nextAfter) const {
+    // Splits without prescribed ids take the next free ids inside SchemeShard.
+    if (split.ChildPartitionIdsSize() == 0) {
+        nextAfter = nextPartitionId;
+        return true;
+    }
+
+    std::vector<ui32> freshChildren;
+    freshChildren.reserve(split.ChildPartitionIdsSize());
+    for (const ui32 childId : split.GetChildPartitionIds()) {
+        if (PartitionGraph.GetPartition(childId) == nullptr) {
+            freshChildren.push_back(childId);
+        }
+    }
+    if (freshChildren.empty()) {
+        nextAfter = nextPartitionId;
+        return true;
+    }
+
+    std::ranges::sort(freshChildren);
+    for (size_t i = 0; i < freshChildren.size(); ++i) {
+        if (freshChildren[i] != nextPartitionId + static_cast<ui32>(i)) {
+            return false;
+        }
+    }
+    nextAfter = nextPartitionId + static_cast<ui32>(freshChildren.size());
+    return true;
+}
+
 TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionSplit> TPartitionScaleManager::BuildSplitRequest(size_t& allowedSplitsCount) {
     std::vector<TPartitionSplit> splitsToApply;
     const std::vector splitCandidates = ReorderSplits();
     size_t checkedSplits = 0;
+    // SchemeShard rejects the whole alter when prescribed child ids skip a free id
+    // ("Gap in the partition indices"). Parents finish reading out of id order, so a
+    // later split (children 32, 33) can be pending before the one that creates 28, 29.
+    // Send only the contiguous prefix and leave the rest pending.
+    ui32 nextPartitionId = FirstFreePartitionId();
     for (const ui32 partitionId : splitCandidates) {
         if (allowedSplitsCount <= 0) {
             break;
         }
-        ++checkedSplits;
         auto it = PartitionsToSplit.find(partitionId);
         if (it == PartitionsToSplit.end()) {
+            ++checkedSplits;
             continue;
         }
         TBuildSplitScaleRequestResult req = BuildSplitScaleRequest(it->second);
-        if (req.Split) {
-            splitsToApply.push_back(std::move(*req.Split));
-            --allowedSplitsCount;
-        }
         if (req.Remove) {
             PartitionsToSplit.erase(partitionId);
         }
+        if (!req.Split) {
+            ++checkedSplits;
+            continue;
+        }
+        ui32 nextAfter = nextPartitionId;
+        if (!PrescribedChildrenContinueSequence(*req.Split, nextPartitionId, nextAfter)) {
+            LOG_D("Postpone split to keep prescribed partition ids contiguous",
+                {"partition", partitionId},
+                {"nextPartitionId", nextPartitionId},
+                {"firstChild", req.Split->GetChildPartitionIds(0)});
+            break;
+        }
+        splitsToApply.push_back(std::move(*req.Split));
+        nextPartitionId = nextAfter;
+        --allowedSplitsCount;
+        ++checkedSplits;
     }
     return {
         .Requests = std::move(splitsToApply),

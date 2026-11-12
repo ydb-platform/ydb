@@ -120,11 +120,13 @@ void TBaseFixture::Init()
          TPBufferKey pBufferKey,
          TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
+         const TBlockChecksums& checksums,
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
         Y_UNUSED(hostIndex);
         Y_UNUSED(pBufferKey);
+        Y_UNUSED(checksums);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
@@ -155,9 +157,11 @@ void TBaseFixture::Init()
          THostIndex hostIndex,
          TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
+         const TBlockChecksums& checksums,
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
+        Y_UNUSED(checksums);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(FreshDDisk, hostIndex);
@@ -225,6 +229,18 @@ void TBaseFixture::Init()
         return NThreading::MakeFuture<TDBGRestoreResponse>(
             {.Error = MakeError(S_OK)});
     };
+}
+
+void TBaseFixture::TearDown(NUnitTest::TTestContext& context)
+{
+    Y_UNUSED(context);
+
+    // Keep DirectBlockGroup alive across the join. ~TVChunk runs on the
+    // executor thread and must not drop the last TExecutor reference there:
+    // TExecutor::Stop() would Join() the thread it is running on.
+    if (DirectBlockGroup) {
+        DirectBlockGroup->GetExecutor()->Stop();
+    }
 }
 
 TGuardedSgList TBaseFixture::MakeSgList() const

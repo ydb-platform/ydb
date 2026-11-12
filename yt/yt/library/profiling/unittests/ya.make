@@ -48,3 +48,9 @@ END()
 RECURSE(
     deps
 )
+
+IF (OS_LINUX AND ARCH_X86_64 OR OS_LINUX AND ARCH_AARCH64)
+    RECURSE(
+        dynamic_tls
+    )
+ENDIF()

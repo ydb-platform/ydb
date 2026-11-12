@@ -7,9 +7,9 @@
 #include <grpcpp/resource_quota.h>
 #include <grpcpp/security/credentials.h>
 #include <grpcpp/support/channel_arguments.h>
-#include <stdint.h>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <fstream>
 #include <iterator>
 #include <memory>
@@ -757,20 +757,20 @@ bool OtlpGrpcClient::ForceFlush(
   while (timeout_steady > std::chrono::steady_clock::duration::zero() &&
          request_counter > async_data_->finished_request_counter.load(std::memory_order_acquire))
   {
-    // When changes of running_sessions_ and notify_one/notify_all happen between predicate
-    // checking and waiting, we should not wait forever.We should cleanup gc sessions here as soon
-    // as possible to call FinishSession() and cleanup resources.
+    // A completion can land between the loop condition and the wait, so the wait is bounded and the
+    // condition re-read on every wakeup. Never wait past the caller's deadline.
+    const std::chrono::steady_clock::duration wait_interval =
+        (std::min)(std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                       async_data_->export_timeout),
+                   timeout_steady);
+
     std::chrono::steady_clock::time_point start_timepoint = std::chrono::steady_clock::now();
-    if (std::cv_status::timeout !=
-        async_data_->session_waker.wait_for(lock, async_data_->export_timeout))
-    {
-      break;
-    }
+    async_data_->session_waker.wait_for(lock, wait_interval);
 
     timeout_steady -= std::chrono::steady_clock::now() - start_timepoint;
   }
 
-  return timeout_steady > std::chrono::steady_clock::duration::zero();
+  return request_counter <= async_data_->finished_request_counter.load(std::memory_order_acquire);
 #else
   return true;
 #endif

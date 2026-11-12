@@ -23,7 +23,7 @@ class TAlterLogin: public TSubOperationBase {
 public:
     using TSubOperationBase::TSubOperationBase;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "");
 
         NIceDb::TNiceDb db(context.GetTxc().DB); // do not track is there are direct writes happen
@@ -233,7 +233,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterLogin");
     }
 

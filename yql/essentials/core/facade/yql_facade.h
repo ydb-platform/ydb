@@ -69,6 +69,7 @@ public:
     void SetUdfResolverLogfile(const TString& path);
     void SetUdfBridgeBinaryPath(const TString& path);
     void AddRemoteLayersProvider(const TString& alias, NLayers::IRemoteLayerProviderPtr provider);
+    void SetTranslatorsRegistry(NSQLTranslation::TTranslatorsRegistry translatorsRegistry);
 
     TProgramPtr Create(
         const TFile& file,
@@ -111,6 +112,7 @@ private:
     TMaybe<TString> UdfResolverLogfile_;
     TString BridgeBinaryPath_;
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
+    NSQLTranslation::TTranslatorsRegistry TranslatorsRegistry_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -291,6 +293,7 @@ public:
     void SetValidateOptions(NUdf::EValidateMode validateMode);
     void SetDisableNativeUdfSupport(bool disable);
     void SetUseTableMetaFromGraph(bool use);
+    void SetStrictConfigValidation(bool strict);
 
     void SetProgressWriter(TOperationProgressWriter writer) {
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
@@ -405,7 +408,8 @@ private:
         EHiddenMode hiddenMode,
         const TQContext& qContext,
         THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders,
-        TString bridgeBinaryPath);
+        TString bridgeBinaryPath,
+        NSQLTranslation::TTranslatorsRegistry translatorsRegistry);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
@@ -488,6 +492,7 @@ private:
     NUdf::EValidateMode ValidateMode_ = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport_ = false;
     bool UseTableMetaFromGraph_ = false;
+    bool StrictConfigValidation_ = false;
     TString BridgeBinaryPath_;
     TMaybe<TSet<TString>> UsedClusters_;
     TMaybe<TSet<TString>> UsedProviders_;
@@ -513,6 +518,7 @@ private:
     bool FuzzUntypedLambda_ = false;
     bool FuzzUniversal_ = false;
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
+    const NSQLTranslation::TTranslatorsRegistry TranslatorsRegistry_;
 };
 
 TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context);

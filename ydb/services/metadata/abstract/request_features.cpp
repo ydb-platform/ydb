@@ -7,39 +7,47 @@ namespace NYql {
 
 TFeaturesExtractor::TFeature::TFeature(TString&& value)
     : Value(std::move(value))
-{}
+{
+}
 
 TFeaturesExtractor::TFeature::TFeature(const TString& value)
     : Value(value)
-{}
+{
+}
 
 TFeaturesExtractor::TFeature::TFeature(TStringBuf value)
     : Value(TString(value))
-{}
+{
+}
 
 TFeaturesExtractor::TFeature::TFeature(THashMap<TString, TFeature>&& value)
     : Value(std::move(value))
-{}
+{
+}
 
 TFeaturesExtractor::TFeaturesExtractor(const THashMap<TString, TString>& features, const std::unordered_set<TString>& resetFeatures)
     : Features(features.begin(), features.end())
     , ResetFeatures(resetFeatures)
-{}
+{
+}
 
 TFeaturesExtractor::TFeaturesExtractor(THashMap<TString, TString>&& features, std::unordered_set<TString>&& resetFeatures)
     : Features(std::make_move_iterator(features.begin()), std::make_move_iterator(features.end()))
     , ResetFeatures(std::move(resetFeatures))
-{}
+{
+}
 
 TFeaturesExtractor::TFeaturesExtractor(TFeatures&& features, std::unordered_set<TString>&& resetFeatures)
     : Features(std::move(features))
     , ResetFeatures(std::move(resetFeatures))
-{}
+{
+}
 
 TFeaturesExtractor::TFeaturesExtractor(const TFeatures& features, const std::unordered_set<TString>& resetFeatures)
     : Features(features)
     , ResetFeatures(resetFeatures)
-{}
+{
+}
 
 bool TFeaturesExtractor::IsFinished() const {
     return Features.empty() && ResetFeatures.empty();
@@ -120,4 +128,4 @@ void TFeaturesExtractor::GetRemainedFeatures(const TFeatures& features, const TS
     }
 }
 
-} // namespace NYql
+}   // namespace NYql

@@ -121,7 +121,7 @@ public:
         tableInfo->AlterVersion += 1;
         tableInfo->MutablePartitionConfig().ClearShadowData();
         tableInfo->MutablePartitionConfig().MutableCompactionPolicy()->SetKeepEraseMarkers(false);
-        context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
+        context.SS->PersistTableAltered(db, txState->TargetPathId, tableInfo);
 
         auto tablePath = context.SS->PathsById.at(txState->TargetPathId);
         context.SS->ClearDescribePathCaches(tablePath);
@@ -238,7 +238,7 @@ class TPrepareIndexValidation: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         auto& publish = Transaction.GetPrepareIndexValidation();
@@ -317,9 +317,9 @@ public:
             }
         }
 
-        if (context.SS->TablesWithSnapshots.contains(tablePathId)) {
+        if (context.SS->HasTableSnapshot(tablePathId)) {
             errStr = TStringBuilder()
-                << "Snapshots already present for table"
+                << "Snapshot with the same txId already present for table"
                 << ", tableId:" << tablePathId
                 << ", txId: " << OperationId.GetTxId();
             result->SetError(TEvSchemeShard::EStatus::StatusAlreadyExists, errStr);
@@ -342,15 +342,14 @@ public:
         context.OnComplete.ActivateTx(OperationId);
 
         context.DbChanges.PersistTableSnapshot(tablePathId, OperationId.GetTxId());
-        context.SS->TablesWithSnapshots.emplace(tablePathId, OperationId.GetTxId());
-        context.SS->SnapshotTables[OperationId.GetTxId()].insert(tablePathId);
+        context.SS->AddTableSnapshot(tablePathId, OperationId.GetTxId());
         context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Add(1);
 
         SetState(NextState());
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TPrepareIndexValidation");
     }
 

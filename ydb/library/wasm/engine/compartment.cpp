@@ -1,40 +1,36 @@
-#include "wavm_private_imports.h"
 #include "intrinsics.h"
 #include "system_libraries.h"
+#include "wavm_private_imports.h"
 
 #include <ydb/library/wasm/api/compartment.h>
-
 #include <ydb/library/wasm/engine/builtins.h>
 
+#include <contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h>
 #include <library/cpp/resource/resource.h>
-
 #include <library/cpp/yt/assert/assert.h>
-#include <library/cpp/yt/error/error.h>
 #include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/error/error.h>
 #include <library/cpp/yt/memory/new.h>
 #include <library/cpp/yt/memory/ref_counted.h>
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/tls.h>
 #include <library/cpp/yt/string/format.h>
-
-#include <contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h>
-
 #include <util/datetime/base.h>
-#include <util/system/thread.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
 #include <util/system/event.h>
 #include <util/system/mutex.h>
+#include <util/system/thread.h>
 #include <util/system/type_name.h>
 
 #if defined(_asan_enabled_) || defined(_lsan_enabled_)
 #include <sanitizer/lsan_interface.h>
 #endif
 
-#include <memory>
 #include <exception>
 #include <limits>
 #include <list>
+#include <memory>
 
 using NYT::FormatValue;
 using NYT::MakeFormattableView;
@@ -62,7 +58,7 @@ static constexpr I64 Padding = 64;
 
 static constexpr I64 SystemLibsSize = 30_MB;
 static constexpr I64 StackMaxSize = 64_KB;
-static constexpr I64 MaxMemorySize  = 128_GB;
+static constexpr I64 MaxMemorySize = 128_GB;
 
 static constexpr I64 MemoryBase = 0;
 static constexpr I64 SystemLibsLow = MemoryBase;
@@ -82,8 +78,7 @@ static constexpr U64 MinGlobalOffsetTableSize = 2048;
 // (WAVM maxTable64Elems * sizeof(Element)), which OOMs Create()/Clone loops.
 static constexpr U64 MaxGlobalOffsetTableSize = 1ull << 20;
 
-struct TMemoryLayoutData
-{
+struct TMemoryLayoutData {
     Runtime::GCPointer<Runtime::Memory> LinearMemory;
     Runtime::GCPointer<Runtime::Table> GlobalOffsetTable;
     Runtime::GCPointer<Runtime::Global> StackPointer;
@@ -101,12 +96,31 @@ struct TMemoryLayoutData
     static void Clear(TMemoryLayoutData* data);
 };
 
+// WAVM returns null when the compartment-wide mutable-global slots are full.
+// Its module instantiator does not check this before initializeGlobal.
+void EnsureMutableGlobalCapacity(Runtime::Compartment* compartment, Uptr required)
+{
+    Uptr available = 0;
+    for (U32 index = 0; index < Runtime::maxMutableGlobals; ++index) {
+        available += !compartment->globalDataAllocationMask.contains(index);
+    }
+    THROW_ERROR_EXCEPTION_IF(required > available, "WebAssembly mutable global limit exceeded");
+}
+
+Runtime::Global* CreateCheckedGlobal(Runtime::Compartment* compartment, IR::GlobalType type, std::string name)
+{
+    auto* global = Runtime::createGlobal(compartment, type, std::move(name));
+    THROW_ERROR_EXCEPTION_IF(!global, "WebAssembly mutable global limit exceeded");
+    return global;
+}
+
 TMemoryLayoutData BuildMemoryLayoutData(Runtime::Compartment* compartment)
 {
-    static const auto mutableI64Global = IR::GlobalType{IR::ValueType::i64, true};
-    static const auto immutableI64Global = IR::GlobalType{IR::ValueType::i64, false};
-    static const auto immutableI32Global = IR::GlobalType{IR::ValueType::i32, false};
+    static const auto mutableI64Global = IR::GlobalType{ IR::ValueType::i64, true };
+    static const auto immutableI64Global = IR::GlobalType{ IR::ValueType::i64, false };
+    static const auto immutableI32Global = IR::GlobalType{ IR::ValueType::i32, false };
 
+    // clang-format off
     auto data = TMemoryLayoutData{
         .LinearMemory = Runtime::createMemory(
             compartment,
@@ -126,22 +140,23 @@ TMemoryLayoutData BuildMemoryLayoutData(Runtime::Compartment* compartment)
             },
             nullptr,
             "__global_offset_table"),
-        .StackPointer = Runtime::createGlobal(compartment, mutableI64Global, "__stack_pointer"),
-        .HeapBase = Runtime::createGlobal(compartment, mutableI64Global, "__heap_base"),
-        .MemoryBase = Runtime::createGlobal(compartment, immutableI64Global, "__memory_base"),
-        .TableBase = Runtime::createGlobal(compartment, immutableI64Global, "__table_base"),
-        .TableBase32 = Runtime::createGlobal(compartment, immutableI32Global, "__table_base32"),
-        .StackLow = Runtime::createGlobal(compartment, mutableI64Global, "__stack_low"),
-        .StackHigh = Runtime::createGlobal(compartment, mutableI64Global, "__stack_high"),
+        .StackPointer = CreateCheckedGlobal(compartment, mutableI64Global, "__stack_pointer"),
+        .HeapBase = CreateCheckedGlobal(compartment, mutableI64Global, "__heap_base"),
+        .MemoryBase = CreateCheckedGlobal(compartment, immutableI64Global, "__memory_base"),
+        .TableBase = CreateCheckedGlobal(compartment, immutableI64Global, "__table_base"),
+        .TableBase32 = CreateCheckedGlobal(compartment, immutableI32Global, "__table_base32"),
+        .StackLow = CreateCheckedGlobal(compartment, mutableI64Global, "__stack_low"),
+        .StackHigh = CreateCheckedGlobal(compartment, mutableI64Global, "__stack_high"),
     };
+    // clang-format on
 
-    initializeGlobal(data.StackPointer, IR::Value{StackPointer});
-    initializeGlobal(data.HeapBase, IR::Value{HeapBase});
-    initializeGlobal(data.MemoryBase, IR::Value{MemoryBase});
-    initializeGlobal(data.TableBase, IR::Value{TableBase});
-    initializeGlobal(data.TableBase32, IR::Value{TableBase32});
-    initializeGlobal(data.StackLow, IR::Value{StackLow});
-    initializeGlobal(data.StackHigh, IR::Value{StackHigh});
+    initializeGlobal(data.StackPointer, IR::Value{ StackPointer });
+    initializeGlobal(data.HeapBase, IR::Value{ HeapBase });
+    initializeGlobal(data.MemoryBase, IR::Value{ MemoryBase });
+    initializeGlobal(data.TableBase, IR::Value{ TableBase });
+    initializeGlobal(data.TableBase32, IR::Value{ TableBase32 });
+    initializeGlobal(data.StackLow, IR::Value{ StackLow });
+    initializeGlobal(data.StackHigh, IR::Value{ StackHigh });
 
     return data;
 }
@@ -197,10 +212,8 @@ void CoerceImportIndexTypesToLayout(IR::Module& irModule, const TMemoryLayoutDat
         }
         if (elemSegment.baseOffset.type == IR::InitializerExpression::Type::i32_const) {
             elemSegment.baseOffset = IR::InitializerExpression(static_cast<I64>(elemSegment.baseOffset.i32));
-        } else if (
-            elemSegment.baseOffset.type == IR::InitializerExpression::Type::global_get &&
-            tableBaseImport != std::numeric_limits<Uptr>::max() &&
-            elemSegment.baseOffset.ref == tableBase32Import)
+        } else if (elemSegment.baseOffset.type == IR::InitializerExpression::Type::global_get &&
+                   tableBaseImport != std::numeric_limits<Uptr>::max() && elemSegment.baseOffset.ref == tableBase32Import)
         {
             elemSegment.baseOffset.ref = tableBaseImport;
         }
@@ -219,12 +232,7 @@ Runtime::ModuleRef LoadModuleFromBytecode(TRef bytecode)
     auto loadError = WASM::LoadError();
     auto wasmModule = Runtime::ModuleRef();
 
-    bool succeeded = Runtime::loadBinaryModule(
-        std::bit_cast<const U8*>(bytecode.Begin()),
-        bytecode.size(),
-        wasmModule,
-        featureSpec,
-        &loadError);
+    bool succeeded = Runtime::loadBinaryModule(std::bit_cast<const U8*>(bytecode.Begin()), bytecode.size(), wasmModule, featureSpec, &loadError);
 
     if (!succeeded) {
         THROW_ERROR_EXCEPTION("Could not load binary module: %v", loadError.message);
@@ -245,20 +253,12 @@ IR::Module ParseWast(TStringBuf wast)
     const TString terminated(wast);
     auto wastErrors = std::vector<WAST::Error>();
 
-    bool succeeded = WAST::parseModule(
-        terminated.data(),
-        terminated.size() + 1,
-        irModule,
-        wastErrors);
+    bool succeeded = WAST::parseModule(terminated.data(), terminated.size() + 1, irModule, wastErrors);
 
     if (!succeeded) {
-        THROW_ERROR_EXCEPTION(
-            "Incorrect Wast file: %v",
-            MakeFormattableView(
-                wastErrors,
-                [] (TStringBuilderBase* builder, const auto& error) {
-                    FormatValue(builder, error.message, "v");
-                }));
+        THROW_ERROR_EXCEPTION("Incorrect Wast file: %v", MakeFormattableView(wastErrors, [](TStringBuilderBase* builder, const auto& error) {
+            FormatValue(builder, error.message, "v");
+        }));
     }
 
     return irModule;
@@ -266,9 +266,14 @@ IR::Module ParseWast(TStringBuf wast)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TNamedGlobalOffsetTableElements
-{
-    THashMap<std::string, int> Functions;
+struct TNamedGlobalOffsetTableElements {
+    struct TFunctionEntry {
+        Uptr Slot;
+        // Instance indices remain valid when the compartment is cloned.
+        Uptr InstanceIndex;
+    };
+
+    THashMap<std::string, TFunctionEntry> Functions;
     THashMap<std::string, int> DataEntries;
 };
 
@@ -288,6 +293,32 @@ Uptr GetActiveElemSegmentSize(const IR::ElemSegment& elemSegment)
     }
 }
 
+// Segment offsets use the module's relocation base, not the table capacity.
+// Evaluate before resolving GOT.func: newly allocated slots must be above all
+// incoming active segments, or instantiation can overwrite the resolved pointer.
+Uptr GetActiveElemSegmentOffset(const IR::Module& module, const IR::ElemSegment& segment, Uptr tableBase)
+{
+    THROW_ERROR_EXCEPTION_IF(segment.tableIndex != 0, "Unsupported module: elem segment table index must be 0");
+    const auto& offset = segment.baseOffset;
+    switch (offset.type) {
+        case IR::InitializerExpression::Type::i32_const:
+            return static_cast<U32>(offset.i32);
+        case IR::InitializerExpression::Type::i64_const:
+            return static_cast<U64>(offset.i64);
+        case IR::InitializerExpression::Type::global_get:
+            if (offset.ref < module.globals.imports.size()) {
+                const auto& global = module.globals.imports[offset.ref];
+                if (global.exportName == "__table_base" || global.exportName == "__table_base32") {
+                    return tableBase;
+                }
+            }
+            break;
+        default:
+            break;
+    }
+    THROW_ERROR_EXCEPTION("Unsupported active elem segment offset");
+}
+
 void EnsureGlobalOffsetTableCapacity(Runtime::Table* globalOffsetTable, Uptr requiredSize)
 {
     const Uptr currentSize = Runtime::getTableNumElements(globalOffsetTable);
@@ -296,20 +327,13 @@ void EnsureGlobalOffsetTableCapacity(Runtime::Table* globalOffsetTable, Uptr req
     }
 
     const auto growResult = Runtime::growTable(globalOffsetTable, requiredSize - currentSize, nullptr);
-    THROW_ERROR_EXCEPTION_IF(
-        growResult != Runtime::GrowResult::success,
-        "WebAssembly grow GOT error: failed to grow global offset table to %v elements",
-        requiredSize);
+    THROW_ERROR_EXCEPTION_IF(growResult != Runtime::GrowResult::success,
+        "WebAssembly grow GOT error: failed to grow global offset table to %v elements", requiredSize);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(EKnownImage,
-    (Empty)
-    (MinimalRuntime)
-    (Standard)
-    (QueryLanguage)
-);
+DEFINE_ENUM(EKnownImage, (Empty)(MinimalRuntime)(Standard)(QueryLanguage));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -332,9 +356,7 @@ auto SaveAndRestoreCompartment(IWebAssemblyCompartment* compartment, const TFunc
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TWebAssemblyCompartment
-    : public IWebAssemblyCompartment
-{
+class TWebAssemblyCompartment: public IWebAssemblyCompartment {
 public:
     TWebAssemblyCompartment() = default;
 
@@ -356,27 +378,22 @@ public:
         YT_ASSERT(collected);
     }
 
-    void AddModule(TRef bytecode, TStringBuf name = "") override
-    {
+    void AddModule(TRef bytecode, TStringBuf name = "") override {
         auto wavmModule = LoadModuleFromBytecode(bytecode);
         CoerceImportIndexTypesToLayout(wavmModule->ir, MemoryLayoutData_);
         auto linkResult = LinkModule(wavmModule->ir);
-        AddExportsToGlobalOffsetTable(wavmModule->ir);
         InstantiateModule(wavmModule, linkResult, name);
     }
 
-    void AddModule(TStringBuf wast, TStringBuf name = "") override
-    {
+    void AddModule(TStringBuf wast, TStringBuf name = "") override {
         auto irModule = ParseWast(wast);
         CoerceImportIndexTypesToLayout(irModule, MemoryLayoutData_);
         auto wavmModule = Runtime::compileModule(irModule);
         auto linkResult = LinkModule(wavmModule->ir);
-        AddExportsToGlobalOffsetTable(wavmModule->ir);
         InstantiateModule(wavmModule, linkResult, name);
     }
 
-    void AddPrecompiledModule(const TModuleBytecode& bytecode, TStringBuf name = "") override
-    {
+    void AddPrecompiledModule(const TModuleBytecode& bytecode, TStringBuf name = "") override {
         if (!bytecode.ObjectCode) {
             THROW_ERROR_EXCEPTION("Precompiled module object code is required");
         }
@@ -398,11 +415,8 @@ public:
                 irModule = IR::Module(std::move(featureSpec));
 
                 auto loadError = WASM::LoadError();
-                bool succeeded = WASM::loadBinaryModule(
-                    std::bit_cast<const U8*>(bytecode.Data.begin()),
-                    bytecode.Data.size(),
-                    irModule,
-                    &loadError);
+                bool succeeded =
+                    WASM::loadBinaryModule(std::bit_cast<const U8*>(bytecode.Data.begin()), bytecode.Data.size(), irModule, &loadError);
 
                 if (!succeeded) {
                     THROW_ERROR_EXCEPTION("Could not load WebAssembly module: %v", loadError.message);
@@ -418,21 +432,16 @@ public:
 
         Runtime::ModuleRef wavmModule;
         if (bytecode.Format == EBytecodeFormat::Binary) {
-            wavmModule = Runtime::loadPrecompiledModule(
-                irModule,
-                objectCode,
-                std::bit_cast<const U8*>(bytecode.Data.begin()),
-                bytecode.Data.size());
+            wavmModule =
+                Runtime::loadPrecompiledModule(irModule, objectCode, std::bit_cast<const U8*>(bytecode.Data.begin()), bytecode.Data.size());
         } else {
             wavmModule = Runtime::loadPrecompiledModule(irModule, objectCode);
         }
         auto linkResult = LinkModule(wavmModule->ir);
-        AddExportsToGlobalOffsetTable(wavmModule->ir);
         InstantiateModule(wavmModule, linkResult, name);
     }
 
-    void AddSdk(const TModuleBytecode& bytecode) override
-    {
+    void AddSdk(const TModuleBytecode& bytecode) override {
         YT_ASSERT(!RuntimeLibraryInstance_);
         YT_ASSERT(Compartment_->instances.size() == 1);
 
@@ -457,11 +466,8 @@ public:
                 auto irModule = IR::Module(std::move(featureSpec));
 
                 auto loadError = WASM::LoadError();
-                bool succeeded = WASM::loadBinaryModule(
-                    std::bit_cast<const U8*>(bytecode.Data.begin()),
-                    bytecode.Data.size(),
-                    irModule,
-                    &loadError);
+                bool succeeded =
+                    WASM::loadBinaryModule(std::bit_cast<const U8*>(bytecode.Data.begin()), bytecode.Data.size(), irModule, &loadError);
 
                 if (!succeeded) {
                     THROW_ERROR_EXCEPTION("Could not load WebAssembly runtime library: %v", loadError.message);
@@ -471,7 +477,6 @@ public:
 
                 auto sdkModule = Runtime::compileModule(irModule);
                 auto linkResult = LinkModule(sdkModule->ir);
-                AddExportsToGlobalOffsetTable(sdkModule->ir);
                 InstantiateModule(sdkModule, linkResult, "env");
                 RuntimeLibraryInstance_ = Instances_.back();
 
@@ -482,8 +487,7 @@ public:
 
     // Strip erases the linking metadata. This can speed up the clone operation.
     // After stripping, the compartment can execute loaded functions, but further linking is no longer possible.
-    void Strip() override
-    {
+    void Strip() override {
         YT_ASSERT(!Stripped_);
         Stripped_ = true;
 
@@ -513,8 +517,7 @@ public:
         GlobalOffsetTableElements_.DataEntries.clear();
     }
 
-    void* GetFunction(const std::string& name) override
-    {
+    void* GetFunction(const std::string& name) override {
         for (const auto& it : Instances_) {
             if (auto* function = Runtime::asFunction(Runtime::getInstanceExport(it, name)); function != nullptr) {
                 return static_cast<void*>(function);
@@ -523,30 +526,36 @@ public:
         return nullptr;
     }
 
-    void* GetFunction(size_t index) override
-    {
+    void* GetFunctionInSameModule(void* exportedFunction, const std::string& name) override {
+        auto* reference = Runtime::asObject(static_cast<Runtime::Function*>(exportedFunction));
+        for (const auto& instance : Instances_) {
+            for (auto* object : Runtime::getInstanceExports(instance)) {
+                if (object == reference) {
+                    return static_cast<void*>(Runtime::asFunctionNullable(Runtime::getInstanceExport(instance, name)));
+                }
+            }
+        }
+        return nullptr;
+    }
+
+    void* GetFunction(size_t index) override {
         auto* tableElement = Runtime::getTableElement(GetGlobalOffsetTable(), std::bit_cast<Uptr>(index));
         return static_cast<void*>(Runtime::asFunction(tableElement));
     }
 
-    void* GetContext() override
-    {
+    void* GetContext() override {
         return static_cast<void*>(Context_);
     }
 
     // See IWebAssemblyCompartment::AllocateBytes: may return 0 (malloc OOM).
     // Missing runtime / export / traps → THROW_ERROR_EXCEPTION (not Exception*).
-    uintptr_t AllocateBytes(size_t length) override
-    {
-        static const auto signature = IR::FunctionType(/*inResults*/ {IR::ValueType::i64}, /*inParams*/ {IR::ValueType::i64});
-        THROW_ERROR_EXCEPTION_IF(
-            !RuntimeLibraryInstance_,
-            "WebAssembly AllocateBytes failed: no runtime library (AddSdk) linked");
+    uintptr_t AllocateBytes(size_t length) override {
+        static const auto signature = IR::FunctionType(/*inResults*/ { IR::ValueType::i64 }, /*inParams*/ { IR::ValueType::i64 });
+        THROW_ERROR_EXCEPTION_IF(!RuntimeLibraryInstance_, "WebAssembly AllocateBytes failed: no runtime library (AddSdk) linked");
         auto* mallocFunction = Runtime::getTypedInstanceExport(RuntimeLibraryInstance_, "malloc", signature);
         THROW_ERROR_EXCEPTION_IF(
-            mallocFunction == nullptr,
-            "WebAssembly AllocateBytes failed: runtime has no \"malloc\" export with signature (i64)->(i64)");
-        auto arguments = std::array<IR::UntaggedValue, 1>{std::bit_cast<Uptr>(length)};
+            mallocFunction == nullptr, "WebAssembly AllocateBytes failed: runtime has no \"malloc\" export with signature (i64)->(i64)");
+        auto arguments = std::array<IR::UntaggedValue, 1>{ std::bit_cast<Uptr>(length) };
         auto result = IR::UntaggedValue{};
         SaveAndRestoreCompartment(this, [&] {
             try {
@@ -560,32 +569,21 @@ public:
         return result.u64;
     }
 
-    uintptr_t AllocateDetachedBytes(size_t length) override
-    {
+    uintptr_t AllocateDetachedBytes(size_t length) override {
         if (length == 0) {
             return 0;
         }
-        THROW_ERROR_EXCEPTION_IF(
-            !MemoryLayoutData_.LinearMemory,
-            "WebAssembly AllocateDetachedBytes failed: no linear memory");
+        THROW_ERROR_EXCEPTION_IF(!MemoryLayoutData_.LinearMemory, "WebAssembly AllocateDetachedBytes failed: no linear memory");
         const Uptr pageBytes = IR::numBytesPerPage;
         // length + pageBytes - 1 must not wrap: a hostile size would ask
         // growMemory for a tiny page count and hand back an undersized region.
-        THROW_ERROR_EXCEPTION_IF(
-            length > std::numeric_limits<Uptr>::max() - (pageBytes - 1),
-            "WebAssembly AllocateDetachedBytes failed: length %v overflows page rounding",
-            length);
+        THROW_ERROR_EXCEPTION_IF(length > std::numeric_limits<Uptr>::max() - (pageBytes - 1),
+            "WebAssembly AllocateDetachedBytes failed: length %v overflows page rounding", length);
         const Uptr pagesToGrow = (static_cast<Uptr>(length) + pageBytes - 1) / pageBytes;
         Uptr oldPages = 0;
-        const auto growResult = Runtime::growMemory(
-            MemoryLayoutData_.LinearMemory,
-            pagesToGrow,
-            &oldPages);
-        THROW_ERROR_EXCEPTION_IF(
-            growResult != Runtime::GrowResult::success,
-            "WebAssembly AllocateDetachedBytes failed: growMemory result %v, length %v",
-            static_cast<int>(growResult),
-            length);
+        const auto growResult = Runtime::growMemory(MemoryLayoutData_.LinearMemory, pagesToGrow, &oldPages);
+        THROW_ERROR_EXCEPTION_IF(growResult != Runtime::GrowResult::success,
+            "WebAssembly AllocateDetachedBytes failed: growMemory result %v, length %v", static_cast<int>(growResult), length);
         return static_cast<uintptr_t>(oldPages * pageBytes);
     }
 
@@ -596,9 +594,8 @@ public:
     //! has no reason to grow memory, so it cannot trap or re-enter the host.
     //! That is what makes it safe to run while a UDF frame is live, where
     //! calling "malloc" would not be.
-    bool ReserveGuestHeapBelow(uintptr_t offset) override
-    {
-        static const auto signature = IR::FunctionType(/*inResults*/ {IR::ValueType::i64}, /*inParams*/ {IR::ValueType::i64});
+    bool ReserveGuestHeapBelow(uintptr_t offset) override {
+        static const auto signature = IR::FunctionType(/*inResults*/ { IR::ValueType::i64 }, /*inParams*/ { IR::ValueType::i64 });
         if (!RuntimeLibraryInstance_) {
             return false;
         }
@@ -606,8 +603,8 @@ public:
         if (!sbrkFunction) {
             return false;
         }
-        const auto callSbrk = [&] (i64 increment) -> uintptr_t {
-            auto arguments = std::array<IR::UntaggedValue, 1>{std::bit_cast<Uptr>(increment)};
+        const auto callSbrk = [&](i64 increment) -> uintptr_t {
+            auto arguments = std::array<IR::UntaggedValue, 1>{ std::bit_cast<Uptr>(increment) };
             auto result = IR::UntaggedValue{};
             SaveAndRestoreCompartment(this, [&] {
                 try {
@@ -634,17 +631,13 @@ public:
         return callSbrk(static_cast<i64>(offset - currentBreak)) != sbrkFailure;
     }
 
-    void FreeBytes(uintptr_t offset) override
-    {
-        static const auto signature = IR::FunctionType(/*inResults*/ {}, /*inParams*/ {IR::ValueType::i64});
-        THROW_ERROR_EXCEPTION_IF(
-            !RuntimeLibraryInstance_,
-            "WebAssembly FreeBytes failed: no runtime library (AddSdk) linked");
+    void FreeBytes(uintptr_t offset) override {
+        static const auto signature = IR::FunctionType(/*inResults*/ {}, /*inParams*/ { IR::ValueType::i64 });
+        THROW_ERROR_EXCEPTION_IF(!RuntimeLibraryInstance_, "WebAssembly FreeBytes failed: no runtime library (AddSdk) linked");
         auto* freeFunction = Runtime::getTypedInstanceExport(RuntimeLibraryInstance_, "free", signature);
         THROW_ERROR_EXCEPTION_IF(
-            freeFunction == nullptr,
-            "WebAssembly FreeBytes failed: runtime has no \"free\" export with signature (i64)->()");
-        auto arguments = std::array<IR::UntaggedValue, 1>{std::bit_cast<Uptr>(offset)};
+            freeFunction == nullptr, "WebAssembly FreeBytes failed: runtime has no \"free\" export with signature (i64)->()");
+        auto arguments = std::array<IR::UntaggedValue, 1>{ std::bit_cast<Uptr>(offset) };
         SaveAndRestoreCompartment(this, [&] {
             try {
                 Runtime::invokeFunction(Context_, freeFunction, signature, arguments.data(), {});
@@ -656,13 +649,11 @@ public:
         });
     }
 
-    void SetTimeout(std::optional<TDuration> timeout) override
-    {
+    void SetTimeout(std::optional<TDuration> timeout) override {
         Timeout_ = timeout;
     }
 
-    virtual void SetDeadline(std::optional<TInstant> deadline) override
-    {
+    virtual void SetDeadline(std::optional<TInstant> deadline) override {
         if (!deadline || *deadline == TInstant::Max()) {
             Timeout_ = std::nullopt;
         } else {
@@ -670,8 +661,7 @@ public:
         }
     }
 
-    void StartDeadlineTimer() override
-    {
+    void StartDeadlineTimer() override {
         if (!Timeout_) {
             Deadline_ = std::nullopt;
         } else {
@@ -685,47 +675,39 @@ public:
         }
     }
 
-    std::optional<struct timespec> GetDeadline() const
-    {
+    std::optional<struct timespec> GetDeadline() const {
         return Deadline_;
     }
 
-    void* GetHostPointer(uintptr_t offset, size_t length) override
-    {
+    void* GetHostPointer(uintptr_t offset, size_t length) override {
         char* bytes = Runtime::memoryArrayPtr<char>(MemoryLayoutData_.LinearMemory, std::bit_cast<ui64>(offset), length);
         return static_cast<void*>(bytes);
     }
 
-    uintptr_t GetCompartmentOffset(void* hostAddress) override
-    {
+    uintptr_t GetCompartmentOffset(void* hostAddress) override {
         ui64 hostAddressAsUint = std::bit_cast<ui64>(hostAddress);
         ui64 baseAddress = std::bit_cast<ui64>(Runtime::getMemoryBaseAddress(MemoryLayoutData_.LinearMemory));
         ui64 memoryNumBytes = Runtime::getMemoryNumPages(MemoryLayoutData_.LinearMemory) * IR::numBytesPerPage;
-        THROW_ERROR_EXCEPTION_IF(
-            hostAddressAsUint < baseAddress || hostAddressAsUint - baseAddress >= memoryNumBytes,
+        THROW_ERROR_EXCEPTION_IF(hostAddressAsUint < baseAddress || hostAddressAsUint - baseAddress >= memoryNumBytes,
             "WebAssembly host pointer is outside linear memory");
         return static_cast<uintptr_t>(hostAddressAsUint - baseAddress);
     }
 
-    size_t GetLinearMemorySize() const override
-    {
+    size_t GetLinearMemorySize() const override {
         return Runtime::getMemoryNumPages(MemoryLayoutData_.LinearMemory) * IR::numBytesPerPage;
     }
 
-    std::unique_ptr<IWebAssemblyCompartment> Clone() const override
-    {
+    std::unique_ptr<IWebAssemblyCompartment> Clone() const override {
         auto result = std::unique_ptr<TWebAssemblyCompartment>(new TWebAssemblyCompartment());
         Clone(*this, result.get());
         return result;
     }
 
-    Runtime::Memory* GetLinearMemory() const
-    {
+    Runtime::Memory* GetLinearMemory() const {
         return MemoryLayoutData_.LinearMemory;
     }
 
-    Runtime::Table* GetGlobalOffsetTable() const
-    {
+    Runtime::Table* GetGlobalOffsetTable() const {
         return MemoryLayoutData_.GlobalOffsetTable;
     }
 
@@ -735,8 +717,7 @@ public:
 private:
     friend class TLinker;
 
-    struct TLinkingData
-    {
+    struct TLinkingData {
         std::vector<std::unique_ptr<Runtime::WeakFunction>> WeakFunctions;
         std::vector<std::pair<std::string, Uptr>> GlobalsToWeakFunctionsToPatch;
     };
@@ -765,7 +746,7 @@ private:
     std::optional<TDuration> Timeout_;
     std::optional<struct timespec> Deadline_;
 
-    void AddExportsToGlobalOffsetTable(IR::Module& irModule);
+    void AddExportsToGlobalOffsetTable(const IR::Module& irModule, Runtime::Instance* instance, Uptr tableBase);
     void InstantiateModule(const Runtime::ModuleRef& wavmModule, const Runtime::LinkResult& linkResult, TStringBuf debugName);
     void ApplyDataRelocationsAndCallConstructors(Runtime::Instance* instance);
 
@@ -774,21 +755,15 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TLinker
-    : public Runtime::Resolver
-{
+class TLinker: public Runtime::Resolver {
 public:
     TLinker(TWebAssemblyCompartment* compartment, const IR::Module* incomingModule)
         : Compartment_(compartment)
         , IncomingModule_(incomingModule)
-    { }
-
-    bool resolve(
-        const std::string& moduleName,
-        const std::string& objectName,
-        IR::ExternType type,
-        Runtime::Object*& outObject) override
     {
+    }
+
+    bool resolve(const std::string& moduleName, const std::string& objectName, IR::ExternType type, Runtime::Object*& outObject) override {
         if (auto result = ResolveMemoryLayoutGlobals(moduleName, objectName, type); result.has_value()) {
             outObject = *result;
             return true;
@@ -847,9 +822,7 @@ private:
     const IR::Module* const IncomingModule_;
 
     std::optional<Runtime::Object*> ResolveMemoryLayoutGlobals(
-        const std::string& /*moduleName*/,
-        const std::string& objectName,
-        IR::ExternType type)
+        const std::string& /*moduleName*/, const std::string& objectName, IR::ExternType type)
     {
         Runtime::Object* candidate = nullptr;
         if (objectName == "__linear_memory" || objectName == "memory") {
@@ -863,20 +836,21 @@ private:
         } else if (objectName == "__memory_base") {
             YT_VERIFY(std::ssize(Compartment_->MemoryLayoutData_.MemoryBases) == std::ssize(Compartment_->Modules_) + 1);
             Uptr newMemoryBase = Compartment_->MemoryLayoutData_.MemoryBases.back();
-            auto* result = Runtime::createGlobal(Compartment_->Compartment_, IR::GlobalType{IR::ValueType::i64, false}, "__memory_base");
+            auto* result = CreateCheckedGlobal(Compartment_->Compartment_, IR::GlobalType{ IR::ValueType::i64, false }, "__memory_base");
             Runtime::initializeGlobal(result, newMemoryBase);
             candidate = Runtime::asObject(result);
         } else if (objectName == "__table_base") {
             YT_VERIFY(std::ssize(Compartment_->MemoryLayoutData_.TableBases) == std::ssize(Compartment_->Modules_) + 1);
             Uptr newTableBase = Compartment_->MemoryLayoutData_.TableBases.back();
-            auto* result = Runtime::createGlobal(Compartment_->Compartment_, IR::GlobalType{IR::ValueType::i64, false}, "__table_base");
+            auto* result = CreateCheckedGlobal(Compartment_->Compartment_, IR::GlobalType{ IR::ValueType::i64, false }, "__table_base");
             Runtime::initializeGlobal(result, newTableBase);
             candidate = Runtime::asObject(result);
         } else if (objectName == "__table_base32") {
             YT_VERIFY(std::ssize(Compartment_->MemoryLayoutData_.TableBases) == std::ssize(Compartment_->Modules_) + 1);
             Uptr newTableBase = Compartment_->MemoryLayoutData_.TableBases.back();
-            auto* result = Runtime::createGlobal(Compartment_->Compartment_, IR::GlobalType{IR::ValueType::i32, false}, "__table_base");
-            THROW_ERROR_EXCEPTION_IF(newTableBase > std::numeric_limits<I32>::max(), "WebAssembly linkage error: new table base is bigger than max i32 value");
+            auto* result = CreateCheckedGlobal(Compartment_->Compartment_, IR::GlobalType{ IR::ValueType::i32, false }, "__table_base");
+            THROW_ERROR_EXCEPTION_IF(
+                newTableBase > std::numeric_limits<I32>::max(), "WebAssembly linkage error: new table base is bigger than max i32 value");
             Runtime::initializeGlobal(result, static_cast<I32>(newTableBase));
             candidate = Runtime::asObject(result);
         } else if (objectName == "__stack_low") {
@@ -892,10 +866,7 @@ private:
         return std::nullopt;
     }
 
-    std::optional<Runtime::Object*> ResolveIntrinsics(
-        const std::string& moduleName,
-        const std::string& objectName,
-        IR::ExternType type)
+    std::optional<Runtime::Object*> ResolveIntrinsics(const std::string& moduleName, const std::string& objectName, IR::ExternType type)
     {
         if (moduleName == "env" || moduleName == "wasi_snapshot_preview1") {
             if (type.kind == IR::ExternKind::function) {
@@ -903,9 +874,7 @@ private:
                 // over host intrinsic stubs. Returning a stub with a different
                 // signature trips WAVM's isA assert in Linker.cpp.
                 if (Compartment_->RuntimeLibraryInstance_) {
-                    auto* fromRuntime = Runtime::getInstanceExport(
-                        Compartment_->RuntimeLibraryInstance_,
-                        objectName);
+                    auto* fromRuntime = Runtime::getInstanceExport(Compartment_->RuntimeLibraryInstance_, objectName);
                     if (fromRuntime != nullptr && Runtime::isA(fromRuntime, type)) {
                         return fromRuntime;
                     }
@@ -922,9 +891,7 @@ private:
     }
 
     std::optional<Runtime::Object*> ResolveFunctionFromGlobalOffsetTable(
-        const std::string& moduleName,
-        const std::string& objectName,
-        IR::ExternType type)
+        const std::string& moduleName, const std::string& objectName, IR::ExternType type)
     {
         if (moduleName != "GOT.func") {
             return std::nullopt;
@@ -935,18 +902,28 @@ private:
             return std::nullopt;
         }
 
-        Uptr indexInGOT = it->second;
+        const auto entry = it->second;
+        // Pending weak exports are patched immediately after instantiation.
+        // For loaded exports, never reuse a slot replaced by another module or
+        // by guest table.set/table.init code.
+        if (entry.InstanceIndex < Compartment_->Instances_.size()) {
+            auto* expected = Runtime::getInstanceExport(Compartment_->Instances_[entry.InstanceIndex], objectName);
+            auto* table = Compartment_->GetGlobalOffsetTable();
+            if (!expected || entry.Slot >= Runtime::getTableNumElements(table) || Runtime::getTableElement(table, entry.Slot) != expected) {
+                Compartment_->GlobalOffsetTableElements_.Functions.erase(it);
+                return std::nullopt;
+            }
+        }
+        Uptr indexInGOT = entry.Slot;
         auto globalType = asGlobalType(type);
         globalType.isMutable = true;
-        auto result = Runtime::createGlobal(Compartment_->Compartment_, globalType, std::string(objectName));
+        auto result = CreateCheckedGlobal(Compartment_->Compartment_, globalType, std::string(objectName));
         Runtime::initializeGlobal(result, indexInGOT);
         return Runtime::asObject(result);
     }
 
     std::optional<Runtime::Object*> ResolveAlreadyLoadedFunctionAndInsertIntoGlobalOffsetTable(
-        const std::string& moduleName,
-        const std::string& objectName,
-        IR::ExternType type)
+        const std::string& moduleName, const std::string& objectName, IR::ExternType type)
     {
         if (moduleName != "GOT.func") {
             return std::nullopt;
@@ -954,7 +931,8 @@ private:
 
         YT_ASSERT(!ResolveFunctionFromGlobalOffsetTable(moduleName, objectName, type).has_value());
 
-        for (const auto& instance : Compartment_->Instances_) {
+        for (Uptr instanceIndex = 0; instanceIndex < Compartment_->Instances_.size(); ++instanceIndex) {
+            const auto& instance = Compartment_->Instances_[instanceIndex];
             auto* object = Runtime::getInstanceExport(instance, objectName);
             // |type| here is the GOT.func *global* import type, not the function
             // signature — only require a function export by name.
@@ -963,7 +941,7 @@ private:
                 auto growResult = Runtime::growTable(Compartment_->GetGlobalOffsetTable(), 1, &indexInGOT);
                 THROW_ERROR_EXCEPTION_IF(growResult != Runtime::GrowResult::success, "WebAssembly grow GOT error");
                 Runtime::setTableElement(Compartment_->GetGlobalOffsetTable(), indexInGOT, object);
-                Compartment_->GlobalOffsetTableElements_.Functions[objectName] = indexInGOT;
+                Compartment_->GlobalOffsetTableElements_.Functions[objectName] = { indexInGOT, instanceIndex };
                 return ResolveFunctionFromGlobalOffsetTable(moduleName, objectName, type);
             }
         }
@@ -971,18 +949,14 @@ private:
         return std::nullopt;
     }
 
-    std::optional<Runtime::Object*> ResolveWeakFunction(
-        const std::string& /*moduleName*/,
-        const std::string& objectName,
-        IR::ExternType type)
+    std::optional<Runtime::Object*> ResolveWeakFunction(const std::string& /*moduleName*/, const std::string& objectName, IR::ExternType type)
     {
         if (type.kind == IR::ExternKind::function) {
             for (const auto& incomingModuleExport : IncomingModule_->exports) {
                 if (incomingModuleExport.name == objectName) {
                     auto name = std::string("wasm!env!" + CppDemangle(TString(objectName)));
-                    Compartment_->LinkingData_.WeakFunctions.emplace_back(std::move(std::make_unique<Runtime::WeakFunction>(
-                        std::move(name),
-                        incomingModuleExport.index)));
+                    Compartment_->LinkingData_.WeakFunctions.emplace_back(
+                        std::move(std::make_unique<Runtime::WeakFunction>(std::move(name), incomingModuleExport.index)));
                     return Compartment_->LinkingData_.WeakFunctions.back().get();
                 }
             }
@@ -992,9 +966,7 @@ private:
     }
 
     std::optional<Runtime::Object*> ResolveMemoryFromGlobalOffsetTable(
-        const std::string& moduleName,
-        const std::string& objectName,
-        IR::ExternType type)
+        const std::string& moduleName, const std::string& objectName, IR::ExternType type)
     {
         if (moduleName != "GOT.mem") {
             return std::nullopt;
@@ -1010,16 +982,14 @@ private:
         I64 indexInGOT = it->second;
         auto globalType = asGlobalType(type);
         globalType.isMutable = true;
-        auto result = Runtime::createGlobal(Compartment_->Compartment_, globalType, std::string(demangled));
+        auto result = CreateCheckedGlobal(Compartment_->Compartment_, globalType, std::string(demangled));
         YT_ASSERT(result != nullptr);
         Runtime::initializeGlobal(result, indexInGOT);
         return Runtime::asObject(result);
     }
 
     std::optional<Runtime::Object*> ResolveAlreadyLoadedObject(
-        const std::string& /*moduleName*/,
-        const std::string& objectName,
-        IR::ExternType type)
+        const std::string& /*moduleName*/, const std::string& objectName, IR::ExternType type)
     {
         for (const auto& instance : Compartment_->Instances_) {
             auto* object = Runtime::getInstanceExport(instance, objectName);
@@ -1033,10 +1003,7 @@ private:
         return std::nullopt;
     }
 
-    std::optional<Runtime::Object*> ResolveMisc(
-        const std::string& /*moduleName*/,
-        const std::string& objectName,
-        IR::ExternType type)
+    std::optional<Runtime::Object*> ResolveMisc(const std::string& /*moduleName*/, const std::string& objectName, IR::ExternType type)
     {
         if (objectName == "__cpp_exception") {
             return Compartment_->ExceptionType_;
@@ -1045,10 +1012,7 @@ private:
         if (objectName == "emscripten_console_trace") {
             auto globalType = asGlobalType(type);
             globalType.isMutable = true;
-            auto result = Runtime::createGlobal(
-                Compartment_->Compartment_,
-                globalType,
-                std::string(objectName));
+            auto result = CreateCheckedGlobal(Compartment_->Compartment_, globalType, std::string(objectName));
             Runtime::initializeGlobal(Runtime::asGlobal(result), static_cast<I64>(0));
             return result;
         }
@@ -1057,9 +1021,7 @@ private:
     }
 
     std::optional<Runtime::Object*> ResolveGlobalsPointingToWeakFunctions(
-        const std::string& moduleName,
-        const std::string& objectName,
-        IR::ExternType type)
+        const std::string& moduleName, const std::string& objectName, IR::ExternType type)
     {
         if (type.kind != IR::ExternKind::global) {
             return std::nullopt;
@@ -1071,7 +1033,7 @@ private:
                 auto growResult = Runtime::growTable(Compartment_->GetGlobalOffsetTable(), 1, &indexInGOT);
                 THROW_ERROR_EXCEPTION_IF(growResult != Runtime::GrowResult::success, "WebAssembly grow GOT error");
                 Compartment_->LinkingData_.GlobalsToWeakFunctionsToPatch.emplace_back(objectName, indexInGOT);
-                Compartment_->GlobalOffsetTableElements_.Functions[objectName] = indexInGOT;
+                Compartment_->GlobalOffsetTableElements_.Functions[objectName] = { indexInGOT, Compartment_->Instances_.size() };
                 return ResolveFunctionFromGlobalOffsetTable(moduleName, objectName, type);
             }
         }
@@ -1080,9 +1042,7 @@ private:
     }
 
     std::optional<Runtime::Object*> ResolveGlobalsPointingToMemory(
-        const std::string& moduleName,
-        const std::string& objectName,
-        IR::ExternType type)
+        const std::string& moduleName, const std::string& objectName, IR::ExternType type)
     {
         if (type.kind != IR::ExternKind::global || moduleName != "GOT.mem") {
             return std::nullopt;
@@ -1099,10 +1059,7 @@ private:
                 }
                 auto globalType = asGlobalType(type);
                 globalType.isMutable = true;
-                auto outObject = Runtime::createGlobal(
-                    Compartment_->Compartment_,
-                    globalType,
-                    std::string(objectName));
+                auto outObject = CreateCheckedGlobal(Compartment_->Compartment_, globalType, std::string(objectName));
                 auto incomingGlobal = IncomingModule_->globals.defs[exportedDataEntry.index - IncomingModule_->globals.imports.size()];
                 Runtime::initializeGlobal(Runtime::asGlobal(outObject), incomingGlobal.initializer.i64);
                 return outObject;
@@ -1144,52 +1101,88 @@ void EnsureFunctionDebugNamesFromExports(IR::Module& irModule)
 
 Runtime::LinkResult TWebAssemblyCompartment::LinkModule(const IR::Module& irModule)
 {
+    Uptr requiredSize = MemoryLayoutData_.TableBases.back();
+    for (const auto& tableImport : irModule.tables.imports) {
+        requiredSize = std::max(requiredSize, tableImport.type.size.min);
+    }
+    for (const auto& segment : irModule.elemSegments) {
+        if (segment.type != IR::ElemSegment::Type::active) {
+            continue;
+        }
+        const auto offset = GetActiveElemSegmentOffset(irModule, segment, MemoryLayoutData_.TableBases.back());
+        const auto size = GetActiveElemSegmentSize(segment);
+        THROW_ERROR_EXCEPTION_IF(offset > MaxGlobalOffsetTableSize || size > MaxGlobalOffsetTableSize - offset,
+            "WebAssembly active elem segment exceeds table limit");
+        requiredSize = std::max(requiredSize, offset + size);
+    }
+    EnsureGlobalOffsetTableCapacity(GetGlobalOffsetTable(), requiredSize);
+
     auto linker = TLinker(this, &irModule);
+    // Invalidate slots before resolving imports: this incoming module may both
+    // overwrite an old slot and import the function that used to occupy it.
+    // Fallback allocations are above the active segments reserved above.
+    for (Uptr tableIndex = 0; tableIndex < irModule.tables.imports.size(); ++tableIndex) {
+        const auto& tableImport = irModule.tables.imports[tableIndex];
+        Runtime::Object* table = nullptr;
+        if (!linker.resolve(tableImport.moduleName, tableImport.exportName, tableImport.type, table) ||
+            table != Runtime::asObject(GetGlobalOffsetTable())) {
+            continue;
+        }
+        for (const auto& segment : irModule.elemSegments) {
+            if (segment.type != IR::ElemSegment::Type::active || segment.tableIndex != tableIndex) {
+                continue;
+            }
+            const auto offset = GetActiveElemSegmentOffset(irModule, segment, MemoryLayoutData_.TableBases.back());
+            const auto size = GetActiveElemSegmentSize(segment);
+            for (auto it = GlobalOffsetTableElements_.Functions.begin(); it != GlobalOffsetTableElements_.Functions.end();) {
+                const auto slot = it->second.Slot;
+                if (slot >= offset && slot - offset < size) {
+                    GlobalOffsetTableElements_.Functions.erase(it++);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
     auto linkResult = Runtime::linkModule(irModule, linker);
 
     if (!linkResult.success) {
-        THROW_ERROR_EXCEPTION(
-            "WebAssembly linkage error. Missing: %v",
-            MakeFormattableView(
-                linkResult.missingImports,
-                [] (TStringBuilderBase* builder, const auto& missingImport) {
-                    FormatValue(builder, missingImport.exportName, "v");
-                }));
+        THROW_ERROR_EXCEPTION("WebAssembly linkage error. Missing: %v",
+            MakeFormattableView(linkResult.missingImports, [](TStringBuilderBase* builder, const auto& missingImport) {
+                FormatValue(builder, missingImport.exportName, "v");
+            }));
     }
 
     return linkResult;
 }
 
-void TWebAssemblyCompartment::AddExportsToGlobalOffsetTable(IR::Module& irModule)
+void TWebAssemblyCompartment::AddExportsToGlobalOffsetTable(const IR::Module& irModule, Runtime::Instance* instance, Uptr tableBase)
 {
-    EnsureFunctionDebugNamesFromExports(irModule);
-
-    IR::DisassemblyNames disassemblyNames;
-    getDisassemblyNames(irModule, disassemblyNames);
-
-    auto exportedFunctions = THashSet<std::string>();
+    THashMap<Uptr, std::vector<std::string>> exportedFunctions;
     for (const auto& item : irModule.exports) {
         if (item.kind == IR::ExternKind::function) {
-            exportedFunctions.insert(CppDemangle(TString(item.name)));
+            exportedFunctions[item.index].push_back(item.name);
         }
     }
 
-    // TODO: Index from evaluated active elem segment baseOffset (__table_base /
-    // const), not table capacity. Min GOT size is 2048 while segments land at
-    // table_base (often 0), so getTableNumElements() mis-records GOT.func slots.
-    Uptr baseOffset = Runtime::getTableNumElements(GetGlobalOffsetTable());
     for (const auto& elementSegment : irModule.elemSegments) {
-        if (elementSegment.type != IR::ElemSegment::Type::active) {
+        if (elementSegment.type != IR::ElemSegment::Type::active || instance->tables[elementSegment.tableIndex] != GetGlobalOffsetTable()) {
             continue;
         }
-
-        auto indexExportedFunction = [&](int tableIndex, Uptr functionIndex) {
-            if (functionIndex >= disassemblyNames.functions.size()) {
+        const auto baseOffset = GetActiveElemSegmentOffset(irModule, elementSegment, tableBase);
+        const auto indexExportedFunction = [&](Uptr tableIndex, Uptr functionIndex) {
+            const auto slot = baseOffset + tableIndex;
+            // Inspect final contents: later active segments (including ref.null)
+            // may have overwritten this function while instantiating the module.
+            if (Runtime::getTableElement(GetGlobalOffsetTable(), slot) != Runtime::asObject(instance->functions[functionIndex])) {
                 return;
             }
-            const auto& functionName = disassemblyNames.functions[functionIndex].name;
-            if (exportedFunctions.contains(functionName)) {
-                GlobalOffsetTableElements_.Functions[functionName] = baseOffset + tableIndex;
+            // Export names are the linking ABI; debug names may be stripped,
+            // demangled or unrelated, and one function may have several aliases.
+            if (const auto it = exportedFunctions.find(functionIndex); it != exportedFunctions.end()) {
+                for (const auto& name : it->second) {
+                    GlobalOffsetTableElements_.Functions[name] = { slot, Instances_.size() - 1 };
+                }
             }
         };
 
@@ -1225,33 +1218,21 @@ void TWebAssemblyCompartment::AddExportsToGlobalOffsetTable(IR::Module& irModule
 }
 
 void TWebAssemblyCompartment::InstantiateModule(
-    const Runtime::ModuleRef& wavmModule,
-    const Runtime::LinkResult& linkResult,
-    TStringBuf debugName)
+    const Runtime::ModuleRef& wavmModule, const Runtime::LinkResult& linkResult, TStringBuf debugName)
 {
     YT_VERIFY(linkResult.success);
 
     EnsureFunctionDebugNamesFromExports(wavmModule->ir);
-
-    {
-        const Uptr tableBase = MemoryLayoutData_.TableBases.back();
-        Uptr requiredTableSize = tableBase;
-        for (const auto& elemSegment : wavmModule->ir.elemSegments) {
-            // TODO: Use evaluated active segment baseOffset + size (see MemoryBases TODO).
-            requiredTableSize = std::max(
-                requiredTableSize,
-                tableBase + GetActiveElemSegmentSize(elemSegment));
-        }
-        EnsureGlobalOffsetTableCapacity(GetGlobalOffsetTable(), requiredTableSize);
+    Uptr mutableDefinitions = 0;
+    for (const auto& global : wavmModule->ir.globals.defs) {
+        mutableDefinitions += global.type.isMutable;
     }
+    EnsureMutableGlobalCapacity(Compartment_, mutableDefinitions);
 
     Runtime::Instance* instance = nullptr;
     try {
         instance = Runtime::instantiateModule(
-            Compartment_,
-            wavmModule,
-            Runtime::ImportBindings{linkResult.resolvedImports},
-            std::string(debugName.data(), debugName.size()));
+            Compartment_, wavmModule, Runtime::ImportBindings{ linkResult.resolvedImports }, std::string(debugName.data(), debugName.size()));
     } catch (WAVM::Runtime::Exception* ex) {
         const auto description = WAVM::Runtime::describeException(ex);
         WAVM::Runtime::destroyException(ex);
@@ -1274,21 +1255,12 @@ void TWebAssemblyCompartment::InstantiateModule(
         MemoryLayoutData_.MemoryBases.push_back(newMemoryBase);
     }
 
-    {
-        // TODO: Same as MemoryBases — max end of active elem segments via evaluated
-        // __table_base offset, not sum of segment sizes (ignore passive).
-        Uptr lastTableBase = MemoryLayoutData_.TableBases.back();
-        Uptr newTableBase = lastTableBase;
-        for (auto& elemSegment : wavmModule->ir.elemSegments) {
-            THROW_ERROR_EXCEPTION_IF(elemSegment.tableIndex != 0, "Unsupported module: elem segment table index must be 0");
-            newTableBase += GetActiveElemSegmentSize(elemSegment);
-        }
-        MemoryLayoutData_.TableBases.push_back(newTableBase);
-    }
+    const auto tableBase = MemoryLayoutData_.TableBases.back();
+    // LinkModule reserved active segments before resolving GOT.func. Include
+    // slots allocated during linking so subsequent modules cannot reuse them.
+    MemoryLayoutData_.TableBases.push_back(Runtime::getTableNumElements(GetGlobalOffsetTable()));
 
-    {
-        LinkingData_.WeakFunctions.clear();
-    }
+    { LinkingData_.WeakFunctions.clear(); }
 
     {
         for (auto& [name, indexInGOT] : LinkingData_.GlobalsToWeakFunctionsToPatch) {
@@ -1299,30 +1271,60 @@ void TWebAssemblyCompartment::InstantiateModule(
         LinkingData_.GlobalsToWeakFunctionsToPatch.clear();
     }
 
+    AddExportsToGlobalOffsetTable(wavmModule->ir, instance, tableBase);
     ApplyDataRelocationsAndCallConstructors(instance);
 }
 
 void TWebAssemblyCompartment::ApplyDataRelocationsAndCallConstructors(Runtime::Instance* instance)
 {
-    auto callIfDefined = [this] (Runtime::Instance* instance, const IR::FunctionType& signature, const std::string& name) {
-        if (auto* function = getTypedInstanceExport(instance, name, signature)) {
-            auto arguments = std::array<IR::UntaggedValue, 0>{};
-            SaveAndRestoreCompartment(this, [&] {
-                try {
-                    Runtime::invokeFunction(Context_, function, signature, arguments.data(), {});
-                } catch (WAVM::Runtime::Exception* ex) {
-                    auto description = WAVM::Runtime::describeException(ex);
-                    WAVM::Runtime::destroyException(ex);
-                    THROW_ERROR_EXCEPTION("WAVM Runtime Exception: %Qv", description);
-                }
-            });
+    // Initialization runs before the invocation runtime arms its deadline. Bound
+    // all guest starts/hooks together, without resetting an existing deadline or
+    // changing the timeout configured for subsequent UDF invocations.
+    const auto savedDeadline = Deadline_;
+    Y_DEFER {
+        Deadline_ = savedDeadline;
+        if (GetCurrentCompartment() == this) {
+            SetCurrentCompartment(this);
         }
     };
+    static constexpr time_t InitializationBudgetSeconds = 1;
+    auto initializationDeadline = Runtime::getInstant();
+    initializationDeadline.tv_sec += InitializationBudgetSeconds;
+    const auto restrictDeadline = [&](const std::optional<struct timespec>& deadline) {
+        if (deadline && (deadline->tv_sec < initializationDeadline.tv_sec ||
+                            (deadline->tv_sec == initializationDeadline.tv_sec && deadline->tv_nsec < initializationDeadline.tv_nsec))) {
+            initializationDeadline = *deadline;
+        }
+    };
+    restrictDeadline(savedDeadline);
+    if (auto* caller = GetCurrentCompartment()) {
+        restrictDeadline(static_cast<TWebAssemblyCompartment*>(caller)->GetDeadline());
+    }
+    Deadline_ = initializationDeadline;
 
-    static const auto VoidToVoidSignature = IR::FunctionType(/*inResults*/ {}, /*inParams*/ {});
-    callIfDefined(instance, VoidToVoidSignature, "__wasm_apply_data_relocs");
-    callIfDefined(instance, VoidToVoidSignature, "__wasm_apply_global_relocs");
-    callIfDefined(instance, VoidToVoidSignature, "__wasm_call_ctors");
+    TCompactVector<Runtime::Function*, 4> called;
+    const auto call = [this, &called](Runtime::Function* function) {
+        if (!function || std::find(called.begin(), called.end(), function) != called.end()) {
+            return;
+        }
+        called.push_back(function);
+        SaveAndRestoreCompartment(this, [&] {
+            try {
+                Runtime::invokeFunction(Context_, function, IR::FunctionType({}, {}), nullptr, nullptr);
+            } catch (WAVM::Runtime::Exception* ex) {
+                auto description = WAVM::Runtime::describeException(ex);
+                WAVM::Runtime::destroyException(ex);
+                THROW_ERROR_EXCEPTION("WAVM Runtime Exception: %Qv", description);
+            }
+        });
+    };
+    // wasm-ld emits __wasm_apply_global_relocs as the start function, which
+    // need not be exported. WAVM instantiates it but leaves execution to us.
+    call(Runtime::getStartFunction(instance));
+    static const auto VoidToVoidSignature = IR::FunctionType({}, {});
+    for (const auto* name : { "__wasm_apply_global_relocs", "__wasm_apply_data_relocs", "__wasm_call_ctors" }) {
+        call(Runtime::getTypedInstanceExport(instance, name, VoidToVoidSignature));
+    }
 }
 
 void TWebAssemblyCompartment::Clone(const TWebAssemblyCompartment& source, TWebAssemblyCompartment* destination)
@@ -1398,11 +1400,7 @@ Runtime::ModuleRef LoadBuiltinSdk()
     auto bytecode = GetBuiltinSdk();
 
     auto loadError = WASM::LoadError();
-    bool succeeded = WASM::loadBinaryModule(
-        std::bit_cast<const U8*>(bytecode.Data.begin()),
-        bytecode.Data.size(),
-        irModule,
-        &loadError);
+    bool succeeded = WASM::loadBinaryModule(std::bit_cast<const U8*>(bytecode.Data.begin()), bytecode.Data.size(), irModule, &loadError);
 
     if (!succeeded) {
         THROW_ERROR_EXCEPTION("Could not load WebAssembly system libraries: %v", loadError.message);
@@ -1446,7 +1444,7 @@ void CheckStackDepth()
     }
 }
 
-} // namespace
+}   // namespace
 
 std::unique_ptr<TWebAssemblyCompartment> CreateImage(EKnownImage image)
 {
@@ -1458,22 +1456,15 @@ std::unique_ptr<TWebAssemblyCompartment> CreateImage(EKnownImage image)
     compartment->MemoryLayoutData_ = BuildMemoryLayoutData(compartment->Compartment_);
 
     if (image == EKnownImage::MinimalRuntime) {
-        compartment->IntrinsicsInstance_ = Intrinsics::instantiateModule(
-            compartment->Compartment_,
-            {WAVM_INTRINSIC_MODULE_REF(empty)},
-            "env");
+        compartment->IntrinsicsInstance_ = Intrinsics::instantiateModule(compartment->Compartment_, { WAVM_INTRINSIC_MODULE_REF(empty) }, "env");
     } else {
-        compartment->IntrinsicsInstance_ = Intrinsics::instantiateModule(
-            compartment->Compartment_,
-            {WAVM_INTRINSIC_MODULE_REF(standard)},
-            "env");
+        compartment->IntrinsicsInstance_ =
+            Intrinsics::instantiateModule(compartment->Compartment_, { WAVM_INTRINSIC_MODULE_REF(standard) }, "env");
     }
 
     if (image != EKnownImage::MinimalRuntime) {
-        compartment->ExceptionType_ = Runtime::createExceptionType(
-            compartment->Compartment_,
-            IR::ExceptionType{IR::TypeTuple{IR::ValueType::i64}},
-            "__cpp_exception");
+        compartment->ExceptionType_ =
+            Runtime::createExceptionType(compartment->Compartment_, IR::ExceptionType{ IR::TypeTuple{ IR::ValueType::i64 } }, "__cpp_exception");
     }
 
     auto runtimeModule = Runtime::ModuleRef();
@@ -1493,7 +1484,6 @@ std::unique_ptr<TWebAssemblyCompartment> CreateImage(EKnownImage image)
 
     if (runtimeModule) {
         auto linkResult = compartment->LinkModule(runtimeModule->ir);
-        compartment->AddExportsToGlobalOffsetTable(runtimeModule->ir);
         compartment->InstantiateModule(runtimeModule, linkResult, "env");
         compartment->RuntimeLibraryInstance_ = compartment->Instances_.back();
     }
@@ -1501,7 +1491,6 @@ std::unique_ptr<TWebAssemblyCompartment> CreateImage(EKnownImage image)
     if (image == EKnownImage::QueryLanguage) {
         auto wasmModule = LoadBuiltinUdfs();
         auto linkResult = compartment->LinkModule(wasmModule->ir);
-        compartment->AddExportsToGlobalOffsetTable(wasmModule->ir);
         compartment->InstantiateModule(wasmModule, linkResult, "env");
     }
 
@@ -1525,14 +1514,13 @@ static TWebAssemblyCompartment* CreateLeakyImageSingleton(EKnownImage image)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TCachedSdkImage
-    : public NYT::TRefCounted
-{
+struct TCachedSdkImage: public NYT::TRefCounted {
     std::unique_ptr<IWebAssemblyCompartment> Compartment;
 
     explicit TCachedSdkImage(std::unique_ptr<IWebAssemblyCompartment> compartment)
         : Compartment(std::move(compartment))
-    { }
+    {
+    }
 };
 
 using TCachedSdkImagePtr = NYT::TIntrusivePtr<TCachedSdkImage>;
@@ -1555,9 +1543,7 @@ static TCachedSdkImagePtr CreateLeakyCachedSdkImage(const TModuleBytecode& bytec
     return New<TCachedSdkImage>(std::move(compartment));
 }
 
-class TSdkImageCache
-    : public NYT::TRefCounted
-{
+class TSdkImageCache: public NYT::TRefCounted {
 public:
     static constexpr size_t DefaultCapacity = 5;
 
@@ -1567,18 +1553,14 @@ public:
         std::shared_ptr<TInFlight> inFlight;
         bool isCreator = false;
 
-        with_lock (Lock_) {
+        with_lock(Lock_) {
             if (auto it = Cache_.find(key)) {
-                Y_ABORT_UNLESS(
-                    it->second.Bytecode == bytecode,
-                    "TSdkImageCache: bytecode key collision");
+                Y_ABORT_UNLESS(it->second.Bytecode == bytecode, "TSdkImageCache: bytecode key collision");
                 Touch(it);
                 return it->second.Image;
             }
             if (auto it = InFlight_.find(key)) {
-                Y_ABORT_UNLESS(
-                    it->second->Bytecode == bytecode,
-                    "TSdkImageCache: in-flight bytecode key collision");
+                Y_ABORT_UNLESS(it->second->Bytecode == bytecode, "TSdkImageCache: in-flight bytecode key collision");
                 inFlight = it->second;
             } else {
                 inFlight = std::make_shared<TInFlight>();
@@ -1600,7 +1582,7 @@ public:
         try {
             auto cachedImage = CreateLeakyCachedSdkImage(bytecode);
 
-            with_lock (Lock_) {
+            with_lock(Lock_) {
                 if (Cache_.size() >= DefaultCapacity) {
                     EvictLru();
                 }
@@ -1616,7 +1598,7 @@ public:
             inFlight->Done.Signal();
             return cachedImage;
         } catch (...) {
-            with_lock (Lock_) {
+            with_lock(Lock_) {
                 InFlight_.erase(key);
                 inFlight->Error = std::current_exception();
             }
@@ -1626,16 +1608,14 @@ public:
     }
 
 private:
-    struct TInFlight
-    {
+    struct TInFlight {
         TModuleBytecode Bytecode;
         TManualEvent Done;
         TCachedSdkImagePtr Image;
         std::exception_ptr Error;
     };
 
-    struct TCacheEntry
-    {
+    struct TCacheEntry {
         TCachedSdkImagePtr Image;
         TModuleBytecode Bytecode;
         std::list<TModuleBytecodeKey>::iterator LruIt;
@@ -1726,12 +1706,9 @@ void SetCurrentCompartment(IWebAssemblyCompartment* compartment)
 {
     CurrentCompartment() = compartment;
     if (compartment) {
-        Runtime::Table::setCurrentTable(
-            static_cast<TWebAssemblyCompartment*>(compartment)->GetGlobalOffsetTable());
-        Runtime::Memory::setCurrentMemory(
-            static_cast<TWebAssemblyCompartment*>(compartment)->GetLinearMemory());
-        Runtime::setCurrentDeadline(
-            static_cast<TWebAssemblyCompartment*>(compartment)->GetDeadline());
+        Runtime::Table::setCurrentTable(static_cast<TWebAssemblyCompartment*>(compartment)->GetGlobalOffsetTable());
+        Runtime::Memory::setCurrentMemory(static_cast<TWebAssemblyCompartment*>(compartment)->GetLinearMemory());
+        Runtime::setCurrentDeadline(static_cast<TWebAssemblyCompartment*>(compartment)->GetDeadline());
     } else {
         Runtime::Table::setCurrentTable(nullptr);
         Runtime::Memory::setCurrentMemory(nullptr);
@@ -1741,4 +1718,4 @@ void SetCurrentCompartment(IWebAssemblyCompartment* compartment)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

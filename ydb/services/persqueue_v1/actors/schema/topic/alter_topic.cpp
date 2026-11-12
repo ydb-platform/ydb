@@ -20,10 +20,31 @@ public:
     void DoAction() {
         Become(&TAlterTopicActor::StateWork);
 
+        // The schema actor owns the rewritten copy; the inbound request stays intact.
+        auto request = *GetProtoRequest();
+        request.set_path(NormalizeTopicPath(request.path()));
+        for (auto& consumer : *request.mutable_add_consumers()) {
+            if (consumer.shared_consumer_type().dead_letter_policy().has_move_action()) {
+                auto* moveAction = consumer.mutable_shared_consumer_type()->mutable_dead_letter_policy()->mutable_move_action();
+                moveAction->set_dead_letter_queue(NormalizeTopicPath(moveAction->dead_letter_queue()));
+            }
+        }
+        for (auto& consumer : *request.mutable_alter_consumers()) {
+            if (consumer.alter_shared_consumer_type().has_alter_dead_letter_policy()) {
+                auto* policy = consumer.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy();
+                if (policy->has_set_move_action()) {
+                    auto* moveAction = policy->mutable_set_move_action();
+                    moveAction->set_dead_letter_queue(NormalizeTopicPath(moveAction->dead_letter_queue()));
+                } else if (policy->alter_move_action().has_set_dead_letter_queue()) {
+                    auto* moveAction = policy->mutable_alter_move_action();
+                    moveAction->set_set_dead_letter_queue(NormalizeTopicPath(moveAction->set_dead_letter_queue()));
+                }
+            }
+        }
         Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
             .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
-            .Request = *GetProtoRequest(),
+            .Request = std::move(request),
             .UserToken = GetUserToken()
         }));
     }

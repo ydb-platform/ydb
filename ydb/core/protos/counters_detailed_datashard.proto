@@ -10,6 +10,8 @@ option java_package = "ru.yandex.kikimr.proto";
  */
 option (SourceCountersTabletTypeName) = "DataShard";
 
+// The enum values are wire slots of TDbCounters (sys_view.proto): append-only, never remove or renumber an entry.
+
 /**
  * Public detailed metrics (GAUGE), mapped from DataShard low level metrics.
  */

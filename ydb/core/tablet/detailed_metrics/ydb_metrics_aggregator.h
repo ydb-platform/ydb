@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ydb_metrics_mapper.h"
+
 #include <ydb/core/base/tablet_types.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -26,25 +28,21 @@ namespace NKikimr {
      *           * table.datashard.bar
      *           * table.datashard.baz
      *
-     *       In addition, this class takes any number of groups with source counters.
-     *       Each source group is assumed to define exactly the same counters
-     *       (table.datashard.foo, table.datashard.bar and so on).
+     *       The target counters always carry the Aggregate names.
      *
-     *       This class aggregates each counter across all source groups into the corresponding
-     *       target counter. In the example above, it takes the table.datashard.foo counter
-     *       across all source groups, adds all values together and stores the result
-     *       in the table.datashard.foo counter in the target group using the same name.
-     *       This process is repeated for table.datashard.bar and table.datashard.baz.
+     *       In addition, this class takes any number of groups with source counters.
+     *       Each source group defines the same metrics under the names of its own scope
+     *       (see EYdbMetricNameScope): an Aggregate source as table.datashard.foo,
+     *       a Partition source as table.datashard.partition.foo. A follower source may omit
+     *       the LeaderOnly metrics; every other name must exist.
+     *
+     *       This class aggregates each metric across all source groups into the target counter
+     *       of the Aggregate name. For example, it adds table.datashard.foo of every Aggregate
+     *       source and table.datashard.partition.foo of every Partition source into
+     *       table.datashard.foo of the target group.
      *
      *       In other words, this class takes M groups of N source counters
      *       and aggregates them into a single group of N counters.
-     *
-     * @note Instances of this class can be stacked on top of each other. For example,
-     *       one instance may be used to aggregate all detailed metrics from all followers
-     *       (and the leader) into a single set of counters corresponding
-     *       to the entire partition. Then another instance of this class may be used
-     *       to aggregate all detailed metrics from all partitions into a single set
-     *       of counters corresponding to the entire table.
      */
     class TYdbMetricsAggregator: public TThrRefBase {
     public:
@@ -61,12 +59,16 @@ namespace NKikimr {
          *
          * @param[in] sourceGroupId The ID of the source group to add
          * @param[in] sourceCounterGroup The counter group where the source counters are looked up
-         * @param[in] isFollowerSource Exclude this source from LeaderOnly counters
+         * @param[in] isFollowerSource When true, skip LeaderOnly metrics when looking up source counters
+         * @param[in] sourceNameScope The scope for the source metric names; determines which names
+         *            are looked up in the sourceCounterGroup (Aggregate or Partition).
+         *            The target counters always use Aggregate scope.
          */
         virtual void AddSourceCountersGroup(
             const TString& sourceGroupId,
             NMonitoring::TDynamicCounterPtr sourceCounterGroup,
-            bool isFollowerSource = false) = 0;
+            bool isFollowerSource = false,
+            EYdbMetricNameScope sourceNameScope = EYdbMetricNameScope::Aggregate) = 0;
 
         /**
          * Remove an existing group of source counters from the given group of target counters.

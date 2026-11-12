@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.8.3)
+VERSION(2.8.4)
 
-ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/archive/R_2_8_3.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/archive/R_2_8_4.tar.gz)
 
 PEERDIR(
     contrib/libs/libc_compat

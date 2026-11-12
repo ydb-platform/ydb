@@ -20,14 +20,7 @@ namespace trace
 
 ComposableProbabilitySampler::ComposableProbabilitySampler(double ratio)
 {
-  if (ratio > 1.0)
-  {
-    ratio = 1.0;
-  }
-  if (ratio < 0.0)
-  {
-    ratio = 0.0;
-  }
+  ratio              = ValidateRatio(ratio, "ComposableProbabilitySampler");
   uint64_t threshold = CalculateThreshold(ratio);
   // A threshold of kMaxThreshold means 0% sampling. The specification asks for
   // this to behave like ComposableAlwaysOff: a non-probabilistic drop.

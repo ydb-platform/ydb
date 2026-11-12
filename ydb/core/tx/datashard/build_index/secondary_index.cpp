@@ -47,7 +47,8 @@ static std::shared_ptr<NTxProxy::TUploadTypes> BuildTypes(const TUserTable& tabl
     }
     for (size_t i = 0; i < buildSettings.columnSize(); i++) {
         const auto& column = buildSettings.column(i);
-        result->emplace_back(column.GetColumnName(), column.default_from_literal().type());
+        const auto& type = column.default_from_literal().type();
+        result->emplace_back(column.GetColumnName(), type.has_optional_type() ? type.optional_type().item() : type);
     }
     return result;
 }
@@ -341,7 +342,7 @@ protected:
         }
     }
 
-    void HandleWakeup(const NActors::TActorContext& /*ctx*/) {
+    virtual void HandleWakeup(const NActors::TActorContext& /*ctx*/) {
         YDB_LOG_DEBUG("Retrying row upload",
             {"debug", Debug()});
 
@@ -361,6 +362,9 @@ protected:
                        "Mismatch"
                            << " Uploader: " << Uploader.ToString()
                            << " ev->Sender: " << ev->Sender.ToString());
+            // The uploader has replied and is about to die, so a new one may be
+            // registered for the next batch.
+            Uploader = {};
         } else {
             Y_ENSURE(Driver == nullptr);
             return;
@@ -417,6 +421,17 @@ protected:
     }
 
     void Upload(bool isRetry = false) {
+        if (Uploader) {
+            // Only one upload may be in flight: WriteBuf is not cleared until the
+            // current uploader replies, and a late reply from a superseded uploader
+            // would trip the sender check in Handle().
+            YDB_LOG_DEBUG("Upload already in flight, skipping",
+                {"uploaderActorId", Uploader},
+                {"isRetry", isRetry},
+                {"debug", Debug()});
+            return;
+        }
+
         if (isRetry) {
             ++RetryCount;
         } else {
@@ -479,6 +494,7 @@ public:
 class TBuildColumnsScan final: public TBuildScanUpload<NKikimrServices::TActivity::BUILD_COLUMNS_SCAN_ACTOR> {
     TVector<TCell> Value;
     TString ValueSerialized;
+    ui32 SequenceRetryCount = 0;
 
     struct TSequenceColumn {
         size_t ColumnIdx;
@@ -613,7 +629,8 @@ public:
 private:
     STFUNC(SequenceStateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleNextVal);
+            HFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleNextVal);
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
                 this->StateWork(ev);
         }
@@ -661,13 +678,27 @@ private:
         }
     }
 
-    void HandleNextVal(NSequenceProxy::TEvSequenceProxy::TEvNextValResult::TPtr& ev) {
+    void HandleWakeup(const NActors::TActorContext& ctx) override {
+        if (!SequenceColumns.empty()) {
+            TopUpSequenceRequests();
+        }
+        TBuildScanUpload<NKikimrServices::TActivity::BUILD_COLUMNS_SCAN_ACTOR>::HandleWakeup(ctx);
+    }
+
+    void HandleNextVal(NSequenceProxy::TEvSequenceProxy::TEvNextValResult::TPtr& ev, const NActors::TActorContext& ctx) {
         const size_t colIdx = ev->Cookie;
         Y_ENSURE(colIdx < SequenceColumns.size());
         auto& seqCol = SequenceColumns[colIdx];
         if (seqCol.InFlight > 0) {
             --seqCol.InFlight;
         }
+
+        if (ev->Get()->Status == Ydb::StatusIds::UNAVAILABLE) {
+            // Retry UNAVAILABLE errors
+            ctx.Schedule(GetRetryWakeupTimeoutBackoff(SequenceRetryCount++), new TEvents::TEvWakeup());
+            return;
+        }
+        SequenceRetryCount = 0;
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             UploadStatus.StatusCode = ev->Get()->Status;
@@ -893,7 +924,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         if (request.GetTabletId() != TabletID()) {
             badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
         }
-        if (!IsStateActive()) {
+        if (!IsStateActive() || IsUserTableWriteBlocked()) {
             badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
         }
         if (!GetUserTables().contains(tableId.PathId.LocalPathId)) {
@@ -969,4 +1000,3 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

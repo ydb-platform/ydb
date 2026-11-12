@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.28.0)
+VERSION(1.29.0)
 
-ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.28.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.29.0.tar.gz)
 
 PEERDIR(
     contrib/libs/curl
@@ -83,12 +83,14 @@ SRCS(
     ext/src/http/client/curl/http_client_curl.cc
     ext/src/http/client/curl/http_client_factory_curl.cc
     ext/src/http/client/curl/http_operation_curl.cc
+    ext/src/http/client/curl/http_time_util.cc
     sdk/src/common/base64.cc
     sdk/src/common/disabled.cc
     sdk/src/common/empty_attributes.cc
     sdk/src/common/env_variables.cc
     sdk/src/common/global_log_handler.cc
     sdk/src/common/random.cc
+    sdk/src/instrumentationscope/instrumentation_scope.cc
     sdk/src/logs/batch_log_record_processor.cc
     sdk/src/logs/batch_log_record_processor_factory.cc
     sdk/src/logs/batch_log_record_processor_options.cc
@@ -138,11 +140,14 @@ SRCS(
     sdk/src/metrics/state/sync_metric_storage.cc
     sdk/src/metrics/state/temporal_metric_storage.cc
     sdk/src/metrics/sync_instruments.cc
+    sdk/src/metrics/view/attributes_processor.cc
     sdk/src/metrics/view/instrument_selector_factory.cc
     sdk/src/metrics/view/meter_selector_factory.cc
+    sdk/src/metrics/view/predicate.cc
     sdk/src/metrics/view/view_factory.cc
     sdk/src/metrics/view/view_registry.cc
     sdk/src/metrics/view/view_registry_factory.cc
+    sdk/src/resource/detail/percent_decode.cc
     sdk/src/resource/resource.cc
     sdk/src/resource/resource_detector.cc
     sdk/src/trace/batch_span_processor.cc
@@ -163,11 +168,15 @@ SRCS(
     sdk/src/trace/samplers/ot_trace_state.cc
     sdk/src/trace/samplers/parent.cc
     sdk/src/trace/samplers/parent_factory.cc
+    sdk/src/trace/samplers/probability.cc
+    sdk/src/trace/samplers/probability_factory.cc
+    sdk/src/trace/samplers/rule_based_predicate.cc
     sdk/src/trace/samplers/trace_id_ratio.cc
     sdk/src/trace/samplers/trace_id_ratio_factory.cc
     sdk/src/trace/simple_processor_factory.cc
     sdk/src/trace/span.cc
     sdk/src/trace/span_data.cc
+    sdk/src/trace/span_limits.cc
     sdk/src/trace/tracer.cc
     sdk/src/trace/tracer_config.cc
     sdk/src/trace/tracer_context.cc

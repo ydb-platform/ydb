@@ -54,6 +54,12 @@ void TStartShuffleCommand::Register(TRegistrar registrar)
             return command->Options.Schema;
         })
         .Default();
+    registrar.ParameterWithUniversalAccessor<NCompression::ECodec>(
+        "codec",
+        [] (TThis* command) -> auto& {
+            return command->Options.Codec;
+        })
+        .Default(NCompression::ECodec::None);
 }
 
 void TStartShuffleCommand::DoExecute(ICommandContextPtr context)

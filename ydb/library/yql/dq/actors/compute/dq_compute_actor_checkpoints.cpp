@@ -1,5 +1,5 @@
-#include "dq_compute_actor_checkpoints.h"
 #include "dq_checkpoints.h"
+#include "dq_compute_actor_checkpoints.h"
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/dq.h>
@@ -8,6 +8,7 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 #include <algorithm>
+#include <utility>
 
 #define LOG_T(s) \
     LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "[" << GraphId << "] Task: " << Task.GetId() << ". " << s)
@@ -56,8 +57,13 @@ TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
 
 std::vector<ui64> TaskIdsFromLoadPlan(const NDqProto::NDqStateLoadPlan::TTaskPlan& plan) {
     std::vector<ui64> taskIds;
+
+    if (const auto& program = plan.GetProgram(); program.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN && !program.HasState() && program.HasForeignTaskId()) {
+        taskIds.push_back(program.GetForeignTaskId());
+    }
+
     for (const auto& sourcePlan : plan.GetSources()) {
-        if (sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
+        if (sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN && !sourcePlan.HasState()) {
             for (const auto& foreignTaskSource : sourcePlan.GetForeignTasksSources()) {
                 taskIds.push_back(foreignTaskSource.GetTaskId());
             }
@@ -68,16 +74,25 @@ std::vector<ui64> TaskIdsFromLoadPlan(const NDqProto::NDqStateLoadPlan::TTaskPla
     return taskIds;
 }
 
+const TComputeActorState& FindTaskState(
+    const ui64 taskId,
+    const std::vector<TComputeActorState>& states,
+    const std::vector<ui64>& taskIds)
+{
+    // Find state index
+    const auto stateIndexIt = std::lower_bound(taskIds.begin(), taskIds.end(), taskId);
+    YQL_ENSURE(stateIndexIt != taskIds.end() && *stateIndexIt == taskId, "Task " << taskId << " was not found in plan");
+    const size_t stateIndex = std::distance(taskIds.begin(), stateIndexIt);
+    YQL_ENSURE(stateIndex < states.size(), "Missing checkpoint state for task " << taskId);
+    return states[stateIndex];
+}
+
 const TSourceState& FindSourceState(
     const NDqProto::NDqStateLoadPlan::TSourcePlan::TForeignTaskSource& foreignTaskSource,
     const std::vector<TComputeActorState>& states,
     const std::vector<ui64>& taskIds)
 {
-    // Find state index
-    const auto stateIndexIt = std::lower_bound(taskIds.begin(), taskIds.end(), foreignTaskSource.GetTaskId());
-    YQL_ENSURE(stateIndexIt != taskIds.end(), "Task id was not found in plan");
-    const size_t stateIndex = std::distance(taskIds.begin(), stateIndexIt);
-    const TComputeActorState& state = states[stateIndex];
+    const auto& state = FindTaskState(foreignTaskSource.GetTaskId(), states, taskIds);
     for (const TSourceState& sourceState : state.Sources) {
         if (sourceState.InputIndex == foreignTaskSource.GetInputIndex()) {
             return sourceState;
@@ -94,30 +109,69 @@ TComputeActorState CombineForeignState(
     const std::vector<ui64>& taskIds)
 {
     TComputeActorState state;
-    state.MiniKqlProgram.ConstructInPlace().Data.Version = TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion;
-    YQL_ENSURE(plan.GetProgram().GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Unsupported program state type. Plan: " << plan);
+    auto& program = state.MiniKqlProgram.ConstructInPlace();
+    program.Data.Version = TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion;
+
+    if (const auto& programPlan = plan.GetProgram(); programPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
+        if (programPlan.HasState()) {
+            program.Data.Blob = programPlan.GetState();
+            program.RuntimeVersion = NDqProto::RUNTIME_VERSION_YQL_1_0;
+        } else {
+            YQL_ENSURE(programPlan.HasForeignTaskId(), "Foreign program checkpoint requires explicit state or a task ID");
+            const auto& saved = FindTaskState(programPlan.GetForeignTaskId(), states, taskIds);
+            YQL_ENSURE(saved.MiniKqlProgram, "Missing program checkpoint for task " << programPlan.GetForeignTaskId());
+            program = *saved.MiniKqlProgram;
+        }
+    } else {
+        YQL_ENSURE(programPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Unsupported program state type. Plan must be either empty or foreign but got: " << plan);
+    }
+
     for (const auto& sinkPlan : plan.GetSinks()) {
         YQL_ENSURE(sinkPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Unsupported sink state type. Plan: " << sinkPlan);
     }
+
     for (const auto& sourcePlan : plan.GetSources()) {
-        YQL_ENSURE(sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY || sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN, "Unsupported sink state type. Plan: " << sourcePlan);
-        if (sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
+        if (const auto stateType = sourcePlan.GetStateType(); stateType == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
             state.Sources.push_back({});
             auto& sourceState = state.Sources.back();
             sourceState.InputIndex = sourcePlan.GetInputIndex();
-            for (const auto& foreignTaskSource : sourcePlan.GetForeignTasksSources()) {
-                const TSourceState& srcSourceState = FindSourceState(foreignTaskSource, states, taskIds);
-                for (const TStateData& data : srcSourceState.Data) {
-                    sourceState.Data.emplace_back(data);
+
+            if (sourcePlan.HasState()) {
+                sourceState.Data.emplace_back(sourcePlan.GetState(), sourcePlan.GetStateVersion());
+            } else {
+                for (const auto& foreignTaskSource : sourcePlan.GetForeignTasksSources()) {
+                    const TSourceState& srcSourceState = FindSourceState(foreignTaskSource, states, taskIds);
+                    for (const TStateData& data : srcSourceState.Data) {
+                        sourceState.Data.emplace_back(data);
+                    }
                 }
             }
             YQL_ENSURE(sourceState.DataSize(), "No data was loaded to source " << sourcePlan.GetInputIndex());
+        } else {
+            YQL_ENSURE(sourcePlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Unsupported source state type. Plan must be either empty or foreign but got: " << sourcePlan);
         }
     }
+
     return state;
 }
 
-} // namespace
+NDqProto::ECheckpointingMode GetInputsCheckpointingMode(const google::protobuf::RepeatedPtrField<NDqProto::TTaskInput>& inputs) {
+    for (const auto& input : inputs) {
+        if (const TString& srcType = input.GetSource().GetType(); srcType && IsInfiniteSourceType(srcType)) {
+            return NDqProto::CHECKPOINTING_MODE_DEFAULT;
+        }
+
+        for (const auto& channel : input.GetChannels()) {
+            if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                return NDqProto::CHECKPOINTING_MODE_DEFAULT;
+            }
+        }
+    }
+
+    return NDqProto::CHECKPOINTING_MODE_DISABLED;
+}
+
+} // anonymous namespace
 
 //// TPendingCheckpointBase
 
@@ -231,7 +285,7 @@ void TDqComputeActorCheckpoints::TPendingCommitCheckpoint::Clear() {
 
 //// TDqComputeActorCheckpoints
 
-TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, TDqTaskSettings task, ICallbacks* computeActor)
+TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, TDqTaskSettings task, ICallbacks* computeActor, TIntrusivePtr<TCheckpointContext> checkpointContext)
     : TActor(&TDqComputeActorCheckpoints::StateFunc)
     , Owner(owner)
     , TxId(txId)
@@ -241,7 +295,10 @@ TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const NActors::TActorId& 
     , ComputeActor(computeActor)
     , PendingSaveStateCheckpoint(Task)
     , PendingCommitCheckpoint(Task)
-{}
+    , CheckpointContext(std::move(checkpointContext))
+{
+    Y_ABORT_UNLESS(CheckpointContext);
+}
 
 void TDqComputeActorCheckpoints::Init(NActors::TActorId computeActorId, NActors::TActorId checkpointsId) {
     EventsQueue.Init(TxId, computeActorId, checkpointsId);
@@ -340,6 +397,8 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvNewCheckpointCoordinato
 
     PendingCommitCheckpoint.Clear();
     PendingSaveStateCheckpoint.Clear();
+    CheckpointContext->PendingSaveCheckpoint.Clear();
+    CheckpointContext->LastCommittedCheckpoint.Clear();
 
     if (resumeInputs) {
         ComputeActor->ResumeInputsByCheckpoint();
@@ -383,45 +442,50 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvRestoreFromCheckpoint::
     }
 
     ComputeActor->Stop();
+    CheckpointContext->LastCommittedCheckpoint.Clear();
     StateLoadPlan = ev->Get()->Record.GetStateLoadPlan();
     const auto& checkpoint = ev->Get()->Record.GetCheckpoint();
     LOG_CP_D(checkpoint, "TEvRestoreFromCheckpoint, StateLoadPlan = " << StateLoadPlan);
     switch (StateLoadPlan.GetStateType()) {
-    case NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY:
-        {
-            EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::OK, NYql::TIssues{}));
+        case NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY: {
+            EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::OK, NYql::TIssues{}), ev->Cookie);
             break;
         }
-    case NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN:
-        {
+        case NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN: {
             Send(
                 CheckpointStorage,
                 new TEvDqCompute::TEvGetTaskState(
                     GraphId,
                     {Task.GetId()},
                     ev->Get()->Record.GetCheckpoint(),
-                    CheckpointCoordinator->Generation));
+                    CheckpointCoordinator->Generation), 0, ev->Cookie);
             break;
         }
-    case NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN:
-        {
+        case NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN: {
+            const auto& taskIds = TaskIdsFromLoadPlan(StateLoadPlan);
+            if (taskIds.empty()) {
+                RestoringTaskRunnerForCheckpoint = checkpoint;
+                RestoringTaskRunnerForEvent = ev->Cookie;
+                ComputeActor->LoadState(CombineForeignState(StateLoadPlan, {}, taskIds), checkpoint);
+                break;
+            }
+
             Send(
                 CheckpointStorage,
                 new TEvDqCompute::TEvGetTaskState(
                     GraphId,
-                    TaskIdsFromLoadPlan(StateLoadPlan),
+                    taskIds,
                     ev->Get()->Record.GetCheckpoint(),
-                    CheckpointCoordinator->Generation));
+                    CheckpointCoordinator->Generation), 0, ev->Cookie);
             break;
         }
-    default:
-        {
+        default: {
             auto message = TStringBuilder() << "Unsupported state type: "
                   << NDqProto::NDqStateLoadPlan::EStateType_Name(StateLoadPlan.GetStateType()) << " (" << static_cast<int>(StateLoadPlan.GetStateType()) << ")";
             LOG_CP_E(checkpoint, message);
             NYql::TIssues issues;
             issues.AddIssue(message);
-            EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::INTERNAL_ERROR, issues));
+            EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::INTERNAL_ERROR, issues), ev->Cookie);
             break;
         }
     }
@@ -471,6 +535,8 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
 }
 
 void TDqComputeActorCheckpoints::AfterStateLoading(const TMaybe<TString>& error) {
+    NDqProto::NDqStateLoadPlan::TTaskPlan{}.Swap(&StateLoadPlan);
+
     auto& checkpoint = RestoringTaskRunnerForCheckpoint;
     if (error.Defined()) {
         auto message = TStringBuilder() << "Failed to load state: " << error << ", ABORTED";
@@ -577,6 +643,10 @@ NDqProto::TCheckpoint TDqComputeActorCheckpoints::GetPendingCheckpoint() const {
     return *PendingSaveStateCheckpoint.Checkpoint;
 }
 
+TIntrusiveConstPtr<TCheckpointContext> TDqComputeActorCheckpoints::GetCheckpointContext() const {
+    return CheckpointContext;
+}
+
 void TDqComputeActorCheckpoints::DoCheckpoint() {
     Y_ABORT_UNLESS(CheckpointCoordinator);
     Y_ABORT_UNLESS(PendingSaveStateCheckpoint);
@@ -607,6 +677,7 @@ bool TDqComputeActorCheckpoints::SaveState() {
         resultEv->Record.SetStatus(NDqProto::TEvSaveTaskStateResult::INTERNAL_ERROR);
         EventsQueue.Send(std::move(resultEv));
         PendingSaveStateCheckpoint.Clear();
+        CheckpointContext->PendingSaveCheckpoint.Clear();
 
         return false;
     }
@@ -628,6 +699,7 @@ void TDqComputeActorCheckpoints::RegisterCheckpoint(const NDqProto::TCheckpoint&
 
 void TDqComputeActorCheckpoints::StartCheckpoint(const NDqProto::TCheckpoint& checkpoint) {
     PendingSaveStateCheckpoint = checkpoint;
+    CheckpointContext->PendingSaveCheckpoint = checkpoint;
     PendingSaveStateCheckpoint.SavingToDatabase = false;
     StartSlowCheckpointsMonitoring();
 }
@@ -709,6 +781,7 @@ void TDqComputeActorCheckpoints::TryToSavePendingCheckpoint() {
         LOG_PCP_D("Task checkpoint is done. Send to storage");
         const auto startTime = PendingSaveStateCheckpoint.CheckpointStartTime;
         PendingSaveStateCheckpoint.Clear();
+        CheckpointContext->PendingSaveCheckpoint.Clear();
         PendingSaveStateCheckpoint.CheckpointStartTime = startTime;
         PendingSaveStateCheckpoint.SavingToDatabase = true;
     }
@@ -718,10 +791,20 @@ void TDqComputeActorCheckpoints::TryToFinishPendingCommitCheckpoint() {
     Y_ABORT_UNLESS(PendingCommitCheckpoint);
     if (PendingCommitCheckpoint.IsReady()) {
         const auto& checkpoint = *PendingCommitCheckpoint.Checkpoint;
+        const auto& lastCommitted = CheckpointContext->LastCommittedCheckpoint;
+        const bool advanced = !lastCommitted || std::pair(checkpoint.GetGeneration(), checkpoint.GetId()) > std::pair(lastCommitted->GetGeneration(), lastCommitted->GetId());
+        if (advanced) {
+            CheckpointContext->LastCommittedCheckpoint = checkpoint;
+        }
+
         EventsQueue.Send(new TEvDqCompute::TEvStateCommitted(checkpoint.GetId(), checkpoint.GetGeneration(), Task.GetId()), PendingCommitCheckpoint.Cookie);
 
         LOG_CP_D(*PendingCommitCheckpoint.Checkpoint, "Task checkpoint commit done.");
         PendingCommitCheckpoint.Clear();
+
+        if (advanced) {
+            ComputeActor->ResumeExecution(EResumeSource::CheckpointCommit);
+        }
     }
 }
 
@@ -730,22 +813,16 @@ void TDqComputeActorCheckpoints::PassAway() {
     NActors::TActor<TDqComputeActorCheckpoints>::PassAway();
 }
 
-static bool IsInfiniteSourceType(const TString& sourceType) {
+bool IsInfiniteSourceType(const TString& sourceType) {
     return sourceType == PqSource;
 }
 
+NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NDqProto::TDqTask& task) {
+    return GetInputsCheckpointingMode(task.GetInputs());
+}
+
 NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task) {
-    for (const auto& input : task.GetInputs()) {
-        if (const TString& srcType = input.GetSource().GetType(); srcType && IsInfiniteSourceType(srcType)) {
-            return NDqProto::CHECKPOINTING_MODE_DEFAULT;
-        }
-        for (const auto& channel : input.GetChannels()) {
-            if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
-                return NDqProto::CHECKPOINTING_MODE_DEFAULT;
-            }
-        }
-    }
-    return NDqProto::CHECKPOINTING_MODE_DISABLED;
+    return GetInputsCheckpointingMode(task.GetInputs());
 }
 
 bool IsIngress(const TDqTaskSettings& task) {

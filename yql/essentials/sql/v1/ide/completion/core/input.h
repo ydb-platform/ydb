@@ -1,12 +1,15 @@
 #pragma once
 
 #include <yql/essentials/sql/v1/ide/pure_ast/cursor_text.h>
+#include <yql/essentials/sql/v1/ide/pure_ast/parse_tree.h>
 
 #include <util/generic/string.h>
 
 namespace NSQLComplete {
 
-using TCompletionInput = NSQLPureAST::TCursorText;
+struct TCompletionInput: NSQLPureAST::TCursorText {
+    NSQLPureAST::IParseTree::TPtr ParseTree = nullptr;
+};
 
 struct TMaterializedInput {
     TString Text;

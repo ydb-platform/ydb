@@ -33,6 +33,7 @@ TIssues BuildIssues(long httpCode, const TString& s3ErrorCode, const TString& me
     return issues;
 }
 
+// clang-format off
 static const THashMap<TStringBuf, NDqProto::StatusIds::StatusCode> S3ErrorToStatusCode = {
     { "BucketMaxSizeExceeded"sv, NDqProto::StatusIds::LIMIT_EXCEEDED },
     { "CloudTotalAliveSizeQuotaExceed"sv, NDqProto::StatusIds::LIMIT_EXCEEDED },
@@ -43,6 +44,7 @@ static const THashMap<TStringBuf, NDqProto::StatusIds::StatusCode> S3ErrorToStat
     { "AccessDenied"sv, NDqProto::StatusIds::BAD_REQUEST },
     { "NoSuchBucket"sv, NDqProto::StatusIds::BAD_REQUEST }
 };
+// clang-format on
 
 NDqProto::StatusIds::StatusCode StatusFromS3ErrorCode(const TString& s3ErrorCode) {
     if (s3ErrorCode.empty()) {
@@ -76,12 +78,15 @@ TS3Result::TS3Result(const TString& body)
 
 TSourceErrorHandler::TSourceErrorHandler(ui64 inputIndex)
     : InputIndex(inputIndex)
-{}
+{
+}
 
-void TSourceErrorHandler::CanonizeFatalError(TIssues& issues, NYql::NDqProto::StatusIds::StatusCode& fatalCode, const std::source_location& location) {
+void TSourceErrorHandler::CanonizeFatalError(
+    TIssues& issues, NYql::NDqProto::StatusIds::StatusCode& fatalCode, const std::source_location& location) {
     if (fatalCode == NDqProto::StatusIds::UNSPECIFIED) {
         fatalCode = NDqProto::StatusIds::INTERNAL_ERROR;
-        issues.AddIssue(TStringBuilder() << "Got fatal error with unspecified error code from " << location.file_name() << ":" << location.line() << ":" << location.column() << ", please contact internal support.");
+        issues.AddIssue(TStringBuilder() << "Got fatal error with unspecified error code from " << location.file_name() << ":" << location.line()
+                                         << ":" << location.column() << ", please contact internal support.");
     }
 }
 
@@ -94,4 +99,4 @@ void TSourceErrorHandler::OnFatalError(TIssues issues, NYql::NDqProto::StatusIds
     SendError(std::make_unique<IDqComputeActorAsyncInput::TEvAsyncInputError>(InputIndex, issues, fatalCode));
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

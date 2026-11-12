@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/public/config.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -58,7 +59,7 @@ TUserInfo::TUserInfo(
     const std::optional<TString>& committedMetadata
 )
     : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important, availabilityPeriod,
-                    readFromTimestamp, partitionSession, pipeClient, committedMetadata}
+                    readFromTimestamp, partitionSession, pipeClient, {}, committedMetadata}
     , ActualTimestamps(false)
     , WriteTimestamp(TInstant::Zero())
     , CreateTimestamp(TInstant::Zero())
@@ -154,7 +155,7 @@ void TUserInfo::ReadDone(const TActorContext& ctx, const TInstant& now, ui64 rea
                     TMultiCounter(GetServiceCounters(AppData(ctx)->Counters, "pqproxy|readSession"),
                                     labels, {{"ClientDC", clientDC},
                                             {"Client", User},
-                                            {"ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx)}},
+                                            {"ConsumerPath", MetricsConsumerName(User)}},
                                     {"BytesReadFromDC"}, true)).first;
             }
         }
@@ -171,14 +172,14 @@ void TUserInfo::ReadDone(const TActorContext& ctx, const TInstant& now, ui64 rea
     ReadTimestamp = now;
 }
 
-static TUserInfo::TPerPartitionCounters CreateDetailedMetricsForSubgroup(const TActorContext& ctx, const TString& user, NMonitoring::TDynamicCounterPtr subgroup) {
+static TUserInfo::TPerPartitionCounters CreateDetailedMetricsForSubgroup(const TString& user, NMonitoring::TDynamicCounterPtr subgroup) {
     AFL_ENSURE(subgroup);
 
     bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
 
-    auto consumerSubgroup = fcc
-        ? subgroup->GetSubgroup("consumer", user)
-        : subgroup->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(user, ctx));
+    auto consumerSubgroup = subgroup->GetSubgroup(
+        fcc ? "consumer" : "ConsumerPath",
+        MetricsConsumerName(user));
 
     auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
         return consumerSubgroup->GetExpiringNamedCounter(
@@ -198,11 +199,11 @@ static TUserInfo::TPerPartitionCounters CreateDetailedMetricsForSubgroup(const T
     return counters;
 }
 
-void TUserInfo::SetupDetailedMetrics(const TActorContext& ctx, TConstArrayRef<NMonitoring::TDynamicCounterPtr> subgroups) {
+void TUserInfo::SetupDetailedMetrics(const TActorContext&, TConstArrayRef<NMonitoring::TDynamicCounterPtr> subgroups) {
     TVector<TPerPartitionCounters> counters;
     counters.reserve(subgroups.size());
     for (const auto& subgroup : subgroups) {
-        counters.push_back(CreateDetailedMetricsForSubgroup(ctx, User, subgroup));
+        counters.push_back(CreateDetailedMetricsForSubgroup(User, subgroup));
     }
     PerPartitionCounters.swap(counters);
 }
@@ -215,7 +216,7 @@ void TUserInfo::SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {
     AFL_ENSURE(subgroup);
     TVector<std::pair<TString, TString>> subgroups;
     if (!NoConsumer) {
-        subgroups.push_back({"consumer", User});
+        subgroups.push_back({"consumer", MetricsConsumerName(User)});
     }
 
     BytesRead = TMultiCounter(subgroup, {}, subgroups, {"topic.read.bytes"}, true, "name");
@@ -236,12 +237,12 @@ void TUserInfo::SetupTopicCounters(const TActorContext& ctx, const TString& dcId
     };
     auto aggr = NPersQueue::GetLabels(TopicConverter);
     TVector<std::pair<TString, TString>> additional_labels = {{"Client", User},
-                                {"ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx)}
+                                {"ConsumerPath", MetricsConsumerName(User)}
                             };
 
     Counter.SetCounter(subgroup("readingTime"),
                         {{"Client", User},
-                        {"ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx)},
+                        {"ConsumerPath", MetricsConsumerName(User)},
                         {"host", dcId},
                         {"Partition", partition}},
                         {"sensor", "ReadTime", true});
@@ -574,19 +575,23 @@ TIntrusivePtr<TUserInfo> TUsersInfoStorage::CreateUserInfo(const TActorContext& 
     const TDetailedCounterSubgroup partitionSubgroup = GetPartitionCounterSubgroup(ctx);
     const TDetailedCounterSubgroup consumerSubgroup = consumerConfig ? GetConsumerCounterSubgroup(ctx, *consumerConfig) : TDetailedCounterSubgroup{};
 
-    return MakeIntrusive<TUserInfo>(
+    auto userInfo = MakeIntrusive<TUserInfo>(
         ctx, StreamCountersSubgroup, FilterDetailedMetricsSubgroups(partitionSubgroup, consumerSubgroup),
         user, readRuleGeneration, important, availabilityPeriod, TopicConverter, Partition,
         session, partitionSessionId, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,
         meterRead, pipeClient, anyCommits, committedMetadata
     );
+    if (consumerConfig) {
+        userInfo->Type = consumerConfig->GetType();
+    }
+    return userInfo;
 }
 
 TUserInfoBase TUsersInfoStorage::CreateUserInfo(const TString& user,
                                             TMaybe<ui64> readRuleGeneration) const
 {
     return TUserInfoBase{user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration,
-                          "", 0, 0, 0, false, false, TDuration::Zero(), {}, 0, {}};
+                          "", 0, 0, 0, false, false, TDuration::Zero(), {}, 0, {}, {}};
 }
 
 TUserInfo& TUsersInfoStorage::Create(

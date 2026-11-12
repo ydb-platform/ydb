@@ -42,7 +42,7 @@ private:
     void SendRequest(const TActorContext &ctx) {
         const auto req = GetProtoRequest();
 
-        const std::pair<TString, TString> pathPair = SplitPath(req->path());
+        const std::pair<TString, TString> pathPair = SplitPath(Request_->NormalizePath(req->path()));
 
         const auto& workingDir = pathPair.first;
         const auto& name = pathPair.second;
@@ -81,8 +81,7 @@ private:
                 break;
                 case Ydb::Scheme::PermissionsAction::kRevoke: {
                     for (const auto& n : perm.revoke().permission_names()) {
-                        auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(n);
-                        acl.RemoveAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, perm.revoke().subject(), aclAttrs.InheritanceType);
+                        RevokeYdbPermission(n, perm.revoke().subject(), acl);
                     }
                 }
                 break;

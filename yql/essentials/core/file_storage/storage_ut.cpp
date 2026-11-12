@@ -105,7 +105,7 @@ Y_UNIT_TEST(CleanUp) {
     UNIT_ASSERT(fileInStorage->GetPath().Exists());
 
     auto rootPath = storage->GetRoot();
-    storage.Destroy();
+    storage.reset();
 // On Windows, the lock file is not removed when deleting a folder recursively (for some reason).
 // Mute the test path because, in production, TStorage is usually not created in temporary mode:
 // the rootPath (and locks folder) will still exist even after the TStorage instance is destroyed.
@@ -198,7 +198,7 @@ Y_UNIT_TEST(PersistStorage) {
     UNIT_ASSERT_EQUAL(storage->GetCount(), 1);
     UNIT_ASSERT_EQUAL(storage->GetOccupiedSize(), DATA.size());
 
-    storage.Destroy();
+    storage.reset();
     UNIT_ASSERT(!fileInStorage->GetPath().Exists()); // hardlink was deleted
     UNIT_ASSERT(rootPath.Exists());
     UNIT_ASSERT((rootPath / "locks").Exists());

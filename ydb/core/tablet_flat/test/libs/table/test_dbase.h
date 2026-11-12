@@ -113,15 +113,19 @@ namespace NTest {
 
             WriteVersion = writeVersion;
             WriteTxId = 0;
+            WriteSavepointSeqNum = 0;
 
             return *this;
         }
 
-        TDbExec& WriteTx(ui64 txId) {
+        TDbExec& WriteTx(ui64 txId, ui32 savepointSeqNum = 0) {
             Y_ENSURE(OnTx != EOnTx::None);
+            // txId 0 would silently switch Add to committed updates, dropping the savepoint seq num
+            Y_ENSURE(txId != 0, "WriteTx requires a non-zero txId");
 
             WriteVersion = TRowVersion::Min();
             WriteTxId = txId;
+            WriteSavepointSeqNum = savepointSeqNum;
 
             return *this;
         }
@@ -156,7 +160,7 @@ namespace NTest {
             auto pair = tool.Split(row, true, rop != ERowOp::Erase);
 
             if (WriteTxId != 0) {
-                Base->UpdateTx(table, rop, pair.Key, pair.Ops, WriteTxId);
+                Base->UpdateTx(table, rop, pair.Key, pair.Ops, WriteTxId, WriteSavepointSeqNum);
             } else {
                 Base->Update(table, rop, pair.Key, pair.Ops, WriteVersion);
             }
@@ -372,7 +376,7 @@ namespace NTest {
                 Base = new TDatabase{ };
 
                 for (const auto &it: RedoLog)
-                    Base->RollUp(it->Stamp, it->Scheme, it->Redo, it->Annex);
+                    Base->RollUp(it->Stamp, it->Scheme, it->Redo, it->Annex, { });
 
                 UNIT_ASSERT(serial == Base->Head().Serial);
             }
@@ -526,6 +530,7 @@ namespace NTest {
             WriteVersion = TRowVersion::Min();
             ReadTxId = 0;
             WriteTxId = 0;
+            WriteSavepointSeqNum = 0;
 
             return *this;
         }
@@ -545,6 +550,7 @@ namespace NTest {
         TRowVersion WriteVersion = TRowVersion::Min();
         ui64 ReadTxId = 0;
         ui64 WriteTxId = 0;
+        ui32 WriteSavepointSeqNum = 0;
     };
 
 }

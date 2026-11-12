@@ -18,6 +18,8 @@ public:
 
     virtual py::tuple filled(double lower_level, double upper_level) = 0;
 
+    virtual const char* get_name() const = 0;
+
     virtual py::sequence lines(double level) = 0;
 
     virtual py::list multi_filled(const LevelArray levels);

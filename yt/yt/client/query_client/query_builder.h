@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "table_hint.h"
 
 #include <util/generic/string.h>
 
@@ -34,6 +35,7 @@ public:
 
     void SetSource(std::string source, int syntaxVersion = 1, bool subquerySource = false);
     void SetSource(std::string source, std::string alias, int syntaxVersion = 1, bool subquerySource = false);
+    void SetSourceHint(TTableHint hint);
 
     int AddSelectExpression(std::string expression);
     int AddSelectExpression(std::string expression, std::string alias);
@@ -88,6 +90,7 @@ private:
     bool SourceIsQuery_ = false;
     int SyntaxVersion_ = 1;
     std::optional<std::string> SourceAlias_;
+    std::optional<TTableHint> SourceHint_;
     std::vector<TEntryWithAlias> SelectEntries_;
     std::vector<std::string> WhereConjuncts_;
     std::vector<TOrderByEntry> OrderByEntries_;

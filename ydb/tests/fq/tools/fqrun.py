@@ -79,7 +79,9 @@ class FqRun:
 
         proc_result = yatest.common.process.execute(cmd.strip().split(), check_exit_code=False, cwd=self.res_dir)
         if proc_result.exit_code != 0 and check_error:
-            assert 0, f'Command\n{cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err}\n\nlog file:\n{yql_utils.read_res_file(log_file)[1]}'
+            assert (
+                0
+            ), f'Command\n{cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err}\n\nlog file:\n{yql_utils.read_res_file(log_file)[1]}'
 
         results, log_results = yql_utils.read_res_file(results_file)
         ast, log_ast = yql_utils.read_res_file(ast_file)

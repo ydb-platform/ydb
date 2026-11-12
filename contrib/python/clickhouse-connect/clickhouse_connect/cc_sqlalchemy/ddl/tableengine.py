@@ -11,7 +11,7 @@ from sqlalchemy.sql.elements import ClauseElement, ColumnElement, TextClause
 from sqlalchemy.sql.schema import SchemaItem
 
 from clickhouse_connect.cc_sqlalchemy.sql.sqlparse import split_top_level, walk_sql
-from clickhouse_connect.driver.binding import format_str, quote_identifier
+from clickhouse_connect.driver.binding import _decode_ch_string_literal, format_str, quote_identifier
 from clickhouse_connect.driver.parser import parse_callable
 
 logger = logging.getLogger(__name__)
@@ -526,24 +526,6 @@ def _find_clause_markers(sql: str) -> list[tuple[int, str]]:
                 markers.append((i, clause))
                 break
     return markers
-
-
-_CH_STRING_ESCAPES = {"\\": "\\", "'": "'", '"': '"', "`": "`", "n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "0": "\0"}
-
-
-def _decode_ch_string_literal(literal: str) -> str:
-    inner = literal[1:-1].replace("''", "'")
-    out: list[str] = []
-    i = 0
-    while i < len(inner):
-        ch = inner[i]
-        if ch == "\\" and i + 1 < len(inner):
-            out.append(_CH_STRING_ESCAPES.get(inner[i + 1], inner[i + 1]))
-            i += 2
-        else:
-            out.append(ch)
-            i += 1
-    return "".join(out)
 
 
 def _parse_settings_clause(raw_settings: str) -> dict[str, Any]:

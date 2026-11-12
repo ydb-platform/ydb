@@ -36,7 +36,8 @@ public:
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
         TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
-        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets)
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets,
+        const TString& optLLVM)
         : TBaseComputation(ctx.Mutables, this, EValueRepresentation::Boxed, EValueRepresentation::Boxed)
         , Width(AS_TYPE(TStructType, itemType)->GetMembersCount())
         , CodecCtx(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory)
@@ -47,7 +48,7 @@ public:
         , Inflight(inflight)
         , Timeout(timeout)
     {
-        Specs.SetUseSkiff("", TMkqlIOSpecs::ESystemField::RowIndex | TMkqlIOSpecs::ESystemField::RangeIndex);
+        Specs.SetUseSkiff(optLLVM, TMkqlIOSpecs::ESystemField::RowIndex | TMkqlIOSpecs::ESystemField::RangeIndex);
         Specs.Init(CodecCtx, inputSpec, inputGroups, tableNames, itemType, {}, {}, jobStats);
         Specs.SetTableOffsets(tableOffsets);
     }

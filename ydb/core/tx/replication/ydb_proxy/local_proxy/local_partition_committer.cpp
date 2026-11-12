@@ -1,6 +1,7 @@
 #include "local_partition_actor.h"
 #include "local_proxy.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/writer/common.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -68,6 +69,11 @@ protected:
 
 private:
     void DoCommitOffset() {
+        if (!AppData()->FeatureFlags.GetEnableClientModifications()) {
+            Send(Parent, MakeResponse(NYdb::EStatus::PRECONDITION_FAILED, "Consumer offset commits are disabled"));
+            PassAway();
+            return;
+        }
         YDB_LOG_TRACE("DoCommit");
 
         NTabletPipe::SendData(SelfId(), PartitionPipeClient, MakeCommitRequest().release());

@@ -1,5 +1,6 @@
 #include "read_balancer__balancing.h"
 
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <ydb/core/persqueue/common/common_app.h>
 
@@ -42,7 +43,11 @@ void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
                                     __stream << ", ";
                                 }
                             }
-                            TABLED() { __stream << (family->Session ? family->Session->SessionName : ""); }
+                            TABLED() {
+                                if (family->Session) {
+                                    __stream << EncodeHtmlPcdata(family->Session->SessionName);
+                                }
+                            }
                             TABLED() { __stream << "Active " << family->ActivePartitionCount << " / Inactive " << family->InactivePartitionCount << " / Locked " << family->LockedPartitions.size(); }
                         }
                     }
@@ -176,6 +181,7 @@ void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
                         TABLEH() { __stream << "<span title=\"All partitions / Active / Inactive / Releasing\">Statistics</span>"; };
                         TABLEH() { __stream << "Client node"; }
                         TABLEH() { __stream << "Proxy node"; }
+                        TABLEH() { }
                     }
                 }
                 TABLEBODY() {
@@ -201,13 +207,28 @@ void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
 
                         TABLER() {
                             TABLED() { __stream << ++i; }
-                            TABLED() { __stream << session->SessionName; }
+                            TABLED() { __stream << EncodeHtmlPcdata(session->SessionName); }
                             TABLED() { __stream << (session->Partitions.empty() ? "" : JoinRange(", ", session->Partitions.begin(), session->Partitions.end())); }
                             TABLED() { __stream << session->Families.size() << " / " << session->ActiveFamilyCount << " / " << session->ReleasingFamilyCount; }
                             TABLED() { __stream << (session->ActivePartitionCount + session->InactivePartitionCount + session->ReleasingPartitionCount)
                                            << " / " << session->ActivePartitionCount << " / " << session->InactivePartitionCount << " / " << session->ReleasingPartitionCount; }
-                            TABLED() { __stream << session->ClientNode; }
+                            TABLED() { __stream << EncodeHtmlPcdata(session->ClientNode); }
                             TABLED() { __stream << session->ProxyNodeId; }
+                            TABLED() {
+                                if (!session->SessionName.empty()) {
+                                    // TabletID must be in the POST body: tablet_monitoring_proxy routes
+                                    // form-urlencoded POSTs by PostParams, not by the query string.
+                                    __stream << "<form method=\"POST\" action=\"?TabletID=" << TopicActor.TabletID()
+                                        << "#" << consumerAnchor << "\" "
+                                        << "onsubmit=\"return confirm('Stop reading session \\'' + this.elements.namedItem('session').value + '\\'?');\">"
+                                        << "<input type=\"hidden\" name=\"TabletID\" value=\"" << TopicActor.TabletID() << "\"/>"
+                                        << "<input type=\"hidden\" name=\"action\" value=\"kill_session\"/>"
+                                        << "<input type=\"hidden\" name=\"consumer\" value=\"" << EncodeHtmlPcdata(consumerName) << "\"/>"
+                                        << "<input type=\"hidden\" name=\"session\" value=\"" << EncodeHtmlPcdata(session->SessionName) << "\"/>"
+                                        << "<button type=\"submit\" class=\"btn btn-danger btn-xs\">Kill</button>"
+                                        << "</form>";
+                                }
+                            }
                         }
                     }
                     TABLER() {
@@ -217,6 +238,7 @@ void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
                         TABLED() { __stream << familyAllCount << " / " << activeFamilyCount << " / " << releasingFamilyCount; }
                         TABLED() { __stream << (activePartitionCount + inactivePartitionCount + releasingPartitionCount) << " / " << activePartitionCount << " / "
                                        << inactivePartitionCount << " / " << releasingPartitionCount; }
+                        TABLED() { }
                         TABLED() { }
                         TABLED() { }
                     }

@@ -14,20 +14,7 @@ namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NDetail {
-
-template <class TThis>
-class TYsonSerializeBaseTypesRegistrar;
-
-} // namespace NDetail
-
-#define PHOENIX_DECLARE_YSON_DUMPABLE_MIXIN__PROLOGUE(type) \
-private: \
-    template <class TThis> \
-    friend class ::NYT::NPhoenix::NDetail::TYsonSerializeBaseTypesRegistrar
-
 #define PHOENIX_DECLARE_YSON_DUMPABLE_MIXIN(type) \
-    PHOENIX_DECLARE_YSON_DUMPABLE_MIXIN__PROLOGUE(type); \
 public: \
     friend void Serialize(const type& obj, ::NYT::NYson::IYsonConsumer* consumer); \
     \

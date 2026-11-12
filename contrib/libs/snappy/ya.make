@@ -6,9 +6,9 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.2.2)
+VERSION(1.3.1)
 
-ORIGINAL_SOURCE(https://github.com/google/snappy/archive/1.2.2.tar.gz)
+ORIGINAL_SOURCE(https://github.com/google/snappy/archive/1.3.1.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include

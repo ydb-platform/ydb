@@ -12,6 +12,8 @@
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 namespace NTabletFlatExecutor {
@@ -33,8 +35,10 @@ struct TUserTable : public TThrRefBase {
 
         TUserFamily(const NKikimrSchemeOp::TFamilyDescription& family)
             : ColumnCodec(family.GetColumnCodec())
+            , ColumnCodecLevel(family.HasColumnCodecLevel() ? TMaybe<i32>(family.GetColumnCodecLevel()) : TMaybe<i32>())
             , ColumnCache(family.GetColumnCache())
             , ColumnCacheMode(family.GetColumnCacheMode())
+            , StorageConfig(family.GetStorageConfig())
             , OuterThreshold(SaveGetThreshold(family.GetStorageConfig().GetDataThreshold()))
             , ExternalThreshold(SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold()))
             , Storage(family.GetStorage())
@@ -50,6 +54,12 @@ struct TUserTable : public TThrRefBase {
             if (family.HasColumnCodec()) {
                 ColumnCodec = family.GetColumnCodec();
                 Codec = ToDbCodec(ColumnCodec);
+                if (Codec != ECodec::ZSTD) {
+                    ColumnCodecLevel.Clear();
+                }
+            }
+            if (family.HasColumnCodecLevel()) {
+                ColumnCodecLevel = family.GetColumnCodecLevel();
             }
             if (family.HasColumnCache()) {
                 ColumnCache = family.GetColumnCache();
@@ -62,11 +72,35 @@ struct TUserTable : public TThrRefBase {
             if (family.GetStorageConfig().HasDataThreshold()) {
                 OuterThreshold = SaveGetThreshold(family.GetStorageConfig().GetDataThreshold());
             }
-            if (family.GetStorageConfig().GetExternalThreshold()) {
+            if (family.GetStorageConfig().HasExternalThreshold()) {
                 ExternalThreshold = SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold());
             }
             if (family.HasStorage()) {
                 Storage = family.GetStorage();
+            }
+            if (family.HasStorageConfig()) {
+                const auto& srcStorage = family.GetStorageConfig();
+                if (srcStorage.HasSysLog()) {
+                    StorageConfig.MutableSysLog()->CopyFrom(srcStorage.GetSysLog());
+                }
+                if (srcStorage.HasLog()) {
+                    StorageConfig.MutableLog()->CopyFrom(srcStorage.GetLog());
+                }
+                if (srcStorage.HasData()) {
+                    StorageConfig.MutableData()->CopyFrom(srcStorage.GetData());
+                }
+                if (srcStorage.HasExternal()) {
+                    StorageConfig.MutableExternal()->CopyFrom(srcStorage.GetExternal());
+                }
+                if (srcStorage.HasDataThreshold()) {
+                    StorageConfig.SetDataThreshold(srcStorage.GetDataThreshold());
+                }
+                if (srcStorage.HasExternalThreshold()) {
+                    StorageConfig.SetExternalThreshold(srcStorage.GetExternalThreshold());
+                }
+                if (srcStorage.HasExternalChannelsCount()) {
+                    StorageConfig.SetExternalChannelsCount(srcStorage.GetExternalChannelsCount());
+                }
             }
             Room.Reset(new TStorageRoom(family.GetRoom()));
         }
@@ -84,8 +118,10 @@ struct TUserTable : public TThrRefBase {
         }
 
         NKikimrSchemeOp::EColumnCodec ColumnCodec;
+        TMaybe<i32> ColumnCodecLevel;
         NKikimrSchemeOp::EColumnCache ColumnCache;
         NKikimrSchemeOp::EColumnCacheMode ColumnCacheMode;
+        NKikimrSchemeOp::TStorageConfig StorageConfig;
         ui32 OuterThreshold;
         ui32 ExternalThreshold;
         NKikimrSchemeOp::EColumnStorage Storage;
@@ -95,6 +131,10 @@ struct TUserTable : public TThrRefBase {
         ECache Cache;
         ECacheMode CacheMode;
         TStorageRoom::TPtr Room;
+
+        ui32 GetCodecLevel() const {
+            return ColumnCodecLevel.GetOrElse(1);
+        }
 
         ui32 MainChannel() const {
             if (!*Room) {
@@ -216,8 +256,9 @@ struct TUserTable : public TThrRefBase {
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
                     return ECodec::Plain;
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD: // FIXME: not supported
                     return ECodec::LZ4;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
+                    return ECodec::ZSTD;
                 // keep no default
             }
             Y_ENSURE(false, "unexpected");
@@ -269,6 +310,10 @@ struct TUserTable : public TThrRefBase {
         ui32 Family = 0;
         bool NotNull = false;
         bool SetNotNullInProgress = false;
+        // Set when the column default is a sequence: the path as written in the DDL
+        // (possibly relative to the table). The data shard resolves it against its own
+        // table path when it needs to address the sequence.
+        TString DefaultFromSequence;
 
         TUserColumn(NScheme::TTypeInfo type, TString typeMod, TString name, bool isKey = false)
             : Type(type)
@@ -362,16 +407,19 @@ struct TUserTable : public TThrRefBase {
     struct TReplicationConfig {
         NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode Mode;
         NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel ConsistencyLevel;
+        NKikimrSchemeOp::TTableReplicationConfig::EImportState ImportState;
 
         TReplicationConfig()
             : Mode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
             , ConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN)
+            , ImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORT_STATE_NONE)
         {
         }
 
         TReplicationConfig(const NKikimrSchemeOp::TTableReplicationConfig& config)
             : Mode(config.GetMode())
             , ConsistencyLevel(config.GetConsistencyLevel())
+            , ImportState(config.GetImportState())
         {
         }
 
@@ -386,6 +434,7 @@ struct TUserTable : public TThrRefBase {
         void Serialize(NKikimrSchemeOp::TTableReplicationConfig& proto) const {
             proto.SetMode(Mode);
             proto.SetConsistencyLevel(ConsistencyLevel);
+            proto.SetImportState(ImportState);
         }
     };
 
@@ -456,6 +505,12 @@ struct TUserTable : public TThrRefBase {
     ui32 ShadowTid = 0;
     TString Name;
     TString Path;
+    struct THnswIndexInfo {
+        Ydb::Table::VectorIndexSettings Settings;
+        ui32 VectorColumnTag = 0;
+        ui64 SchemaVersion = 0;
+    };
+    TMap<TPathId, THnswIndexInfo> HnswIndexes;
     TMap<ui32, TStorageRoom::TPtr> Rooms;
     TMap<ui32, TUserFamily> Families;
     TMap<ui32, TUserColumn> Columns;

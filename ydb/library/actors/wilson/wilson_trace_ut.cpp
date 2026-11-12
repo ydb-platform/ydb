@@ -3,6 +3,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/byteorder.h>
 
+#include <cstring>
+#include <new>
+
 using namespace NWilson;
 
 using TTrace = std::array<ui64, 2>;
@@ -27,7 +30,52 @@ inline T HostToBig(T val) noexcept {
     return LittleToBig(HostToLittle(val));
 }
 
+// Constructs the trace id in memory filled with the given byte, so that a field the constructor leaves
+// unset keeps that byte and shows up in the serialized form and in operator==
+template<class... TArgs>
+TTraceId::TSerializedTraceId& ConstructOver(ui8 fill, TTraceId::TSerializedTraceId& out, TArgs&&... args) {
+    alignas(TTraceId) unsigned char storage[sizeof(TTraceId)];
+    memset(storage, fill, sizeof(storage));
+    auto* traceId = new (storage) TTraceId(std::forward<TArgs>(args)...);
+    traceId->Serialize(&out);
+    traceId->~TTraceId();
+    return out;
+}
+
 Y_UNIT_TEST_SUITE(TTraceId) {
+    Y_UNIT_TEST(ConstructorInitializesAllBytes) {
+        const TTrace trace{0x0af7651916cd43dd, 0x8448eb211c80319c};
+        TTraceId::TSerializedTraceId zeroed, filled;
+        ConstructOver(0x00, zeroed, trace, 0xb7ad6b7169203331, 3, 100, true);
+        ConstructOver(0xff, filled, trace, 0xb7ad6b7169203331, 3, 100, true);
+        UNIT_ASSERT(memcmp(zeroed, filled, sizeof(zeroed)) == 0);
+
+        ConstructOver(0x00, zeroed, trace);
+        ConstructOver(0xff, filled, trace);
+        UNIT_ASSERT(memcmp(zeroed, filled, sizeof(zeroed)) == 0);
+
+        ConstructOver(0x00, zeroed);
+        ConstructOver(0xff, filled);
+        UNIT_ASSERT(memcmp(zeroed, filled, sizeof(zeroed)) == 0);
+    }
+
+    Y_UNIT_TEST(Equality) {
+        const TTrace trace{0x0af7651916cd43dd, 0x8448eb211c80319c};
+        const TTraceId a(trace, 0xb7ad6b7169203331, 3, 100);
+        const TTraceId same(trace, 0xb7ad6b7169203331, 3, 100);
+        UNIT_ASSERT(a == same);
+        UNIT_ASSERT(!(a == TTraceId(trace, 0xb7ad6b7169203332, 3, 100)));
+        UNIT_ASSERT(!(a == TTraceId(trace, 0xb7ad6b7169203331, 4, 100)));
+        UNIT_ASSERT(!(a == TTraceId(trace, 0xb7ad6b7169203331, 3, 99)));
+        UNIT_ASSERT(!(a == TTraceId(trace, 0xb7ad6b7169203331, 3, 100, true)));
+        UNIT_ASSERT(!(a == TTraceId(TTrace{trace[0], trace[1] + 1}, 0xb7ad6b7169203331, 3, 100)));
+
+        TTraceId::TSerializedTraceId data;
+        a.Serialize(&data);
+        UNIT_ASSERT(TTraceId(data) == a);
+        UNIT_ASSERT(TTraceId() == TTraceId());
+    }
+
     Y_UNIT_TEST(GenerateTraceIdBench) {
         ui64 x= 0;
         auto now = TInstant::Now();

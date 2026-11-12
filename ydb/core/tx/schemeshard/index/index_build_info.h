@@ -1,5 +1,7 @@
 #pragma once
 
+#include "index_utils.h"
+
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
@@ -125,6 +127,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // dense seq) that the posting scan then reads so doc ids arrive ascending and densely packed.
         FulltextRowIdSrc = 203,
         FulltextIndexPrefixBorders = 204,
+
+        RebuildReplacing = 300,
     };
 
     struct TColumnBuildInfo {
@@ -208,6 +212,13 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     bool IsRebuild = false;
 
     TString IndexName;
+    // Empty for builds started before online rebuilds were supported.
+    TString RebuildIndexName;
+
+    const TString& GetBuildIndexName() const {
+        return RebuildIndexName.empty() ? IndexName : RebuildIndexName;
+    }
+
     TVector<TString> IndexColumns;
     TVector<TString> DataColumns;
     TVector<TString> FillIndexColumns;
@@ -226,6 +237,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::THnswIndexDescription,
         NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
 
     struct TKMeans {
@@ -241,13 +253,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // progress
         enum EState : ui32 {
             Sample = 0,
-            Reshuffle,
+            ReshuffleLegacy, // deprecated, should not be used in new code
             MultiLocal,
             Recompute,
             Filter,
             FilterBorders,
             RebuildDrop,    // dropping old impl tables for rebuild
             RebuildCreate,  // creating new impl tables for rebuild
+            Reshuffle,
+            UploadClusters, // new version of Sample+Upload which runs after Reshuffle
         };
         ui32 Level = 1;
         ui32 Round = 0;
@@ -584,6 +598,7 @@ public:
                     row.template GetValue<Schema::IndexBuild::TableLocalId>());
 
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
+        indexInfo->RebuildIndexName = row.template GetValueOrDefault<Schema::IndexBuild::RebuildIndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
         indexInfo->CancelRequested =
@@ -739,6 +754,13 @@ public:
                     indexInfo->SpecializedIndexDescription = std::move(desc);
                     break;
                 }
+                case NKikimrSchemeOp::TIndexCreationConfig::kHnswIndexDescription: {
+                    auto& desc = *creationConfig.MutableHnswIndexDescription();
+                    TString createError;
+                    Y_ENSURE(NKikimr::NKMeans::ValidateHnswSettingsPartial(desc.GetSettings(), createError), createError);
+                    indexInfo->SpecializedIndexDescription = std::move(desc);
+                    break;
+                }
                 case NKikimrSchemeOp::TIndexCreationConfig::kFulltextIndexDescription: {
                     auto& desc = *creationConfig.MutableFulltextIndexDescription();
                     indexInfo->SpecializedIndexDescription = std::move(desc);
@@ -821,7 +843,7 @@ public:
         return CancelRequested;
     }
 
-    TString InvalidBuildKind() {
+    TString InvalidBuildKind() const {
         return TStringBuilder() << "Invalid index build kind " << static_cast<int>(BuildKind)
             << " for index type " << static_cast<int>(IndexType);
     }
@@ -862,10 +884,7 @@ public:
     }
 
     bool IsBuildFulltextCompact() const {
-        return BuildKind == EBuildKind::BuildFulltext && (
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
+        return BuildKind == EBuildKind::BuildFulltext && NTableIndex::IsCompactFulltextIndex(IndexType);
     }
 
     // A compact fulltext build that uses __ydb_row_id as the doc id: it runs a prepass building the

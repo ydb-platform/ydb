@@ -521,11 +521,11 @@ namespace {
         const TExprBase& defaultExpr, TPositionHandle pos, const TString& name, const TKikimrTableDescription* table, TExprContext& ctx,
         const TTypeAnnotationContext& typesCtx, std::function<void(TExprNode::TPtr)> onRepeat, const bool columnNotNull)
     {
-        if (!defaultType) {
+        if (!defaultType || defaultExpr.Maybe<TCoNull>().IsValid()) {
             return std::nullopt;
         }
 
-        if (defaultType->HasNull() || IsPgNullExprNode(defaultExpr)) {
+        if (!IsYqlNullExprNode(defaultExpr) && (defaultType->HasNull() || IsPgNullExprNode(defaultExpr))) {
             if (columnNotNull) {
                 if (table) {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
@@ -535,19 +535,6 @@ namespace {
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Default expr " << name
                         << " is nullable or optional, but column has not null constraint."));
-                }
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (defaultExpr.Maybe<TCoNull>().IsValid()) {
-                if (table) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                        << " Column: \"" << name
-                        << "\". Default expr with null is not supported. Use DROP DEFAULT to replace the default value by null."));
-                } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                        << "Default expr " << name << " is null, but default expr with null is not supported. Try to set the column without DEFAULT clause instead."));
                 }
                 return IGraphTransformer::TStatus::Error;
             }
@@ -873,6 +860,12 @@ namespace {
                     << " column is already set: "
                     << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
                 return false;
+            }
+
+            if (IsYqlNullExprNode(constrValue)) {
+                columnMeta.DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL;
+                columnMeta.DefaultFromLiteral.Clear();
+                return true;
             }
 
             columnMeta.SetDefaultFromLiteral();
@@ -1599,6 +1592,10 @@ private:
                 }
             }
 
+            if (columnMeta.DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL) {
+                columnMeta.DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
+            }
+
             if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
                 return TStatus::Error;
             }
@@ -2207,12 +2204,37 @@ private:
                 meta->TableSettings.ExternalDataChannelsCount = FromString<ui32>(
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 );
+            } else if (name == "setMetricsLevel") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics is off"));
+                    return TStatus::Error;
+                }
+                auto raw = TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                Ydb::Table::MetricsSettings::MetricsLevel level;
+                TString error;
+                if (!ParseTablesMetricsLevel(raw, level, error)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), error));
+                    return TStatus::Error;
+                }
+                meta->TableSettings.MetricsLevel = level;
+            } else if (name == "resetMetricsLevel") {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    "Can't reset METRICS_LEVEL"));
+                return TStatus::Error;
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     TStringBuilder() << "Unknown table profile setting: " << name));
                 return TStatus::Error;
             }
         }
+
+        if (meta->StoreType == EStoreType::Column && meta->TableSettings.MetricsLevel) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()),
+                "METRICS_LEVEL is not supported for column tables"));
+            return TStatus::Error;
+        }
+
         return TStatus::Ok;
     }
 
@@ -2471,13 +2493,6 @@ private:
                         }
 
                         if (column) {
-                            if (!column->IsDefaultKindDefined()) {
-                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                    << " Column: \"" << name
-                                    << "\" has no default to drop"));
-                                return TStatus::Error;
-                            }
                             if (column->IsDefaultFromSequence()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
                                     << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
@@ -2637,6 +2652,16 @@ private:
                         && !CheckEqHeightHistogramColumnTypes(
                             columnNames, table->Metadata->Columns, columnsPos, ctx)) {
                     return TStatus::Error;
+                }
+            } else if (name == "setTableSettings" && table->Metadata->IsOlap()) {
+                auto listNode = action.Value().Cast<TCoNameValueTupleList>();
+                for (const auto& setting : listNode) {
+                    auto settingName = setting.Name().Value();
+                    if (settingName == "setMetricsLevel" || settingName == "resetMetricsLevel") {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                            "METRICS_LEVEL is not supported for column tables"));
+                        return TStatus::Error;
+                    }
                 }
             } else if (name != "setTableSettings"
                     && name != "addChangefeed"
@@ -2899,6 +2924,8 @@ private:
                 "ca_cert",
                 "consistency_level",
                 "commit_interval",
+                "initial_scan",
+                "availability_period",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
             return settings;
@@ -3040,11 +3067,41 @@ private:
     }
 
     virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext& ctx) override {
-        // there is will be checking on feature flag
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
 
         if (!node.TablePath().Value()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.TablePath().Pos()), "TablePath can't be empty."));
+            return TStatus::Error;
+        }
+
+        bool unsafe = false;
+        for (const auto& setting : node.Settings()) {
+            const auto name = setting.Name().Value();
+            if (name != "UNSAFE") {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown TRUNCATE TABLE setting: " << name));
+                return TStatus::Error;
+            }
+
+            // The grammar only admits a bool literal here, so this cannot be anything else.
+            unsafe = setting.Value().Cast<TCoBool>().Literal().Value() == "true";
+        }
+
+        if (unsafe && !SessionCtx->Config().FeatureFlags.GetEnableUnsafeTruncateTable()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                "TRUNCATE TABLE ... WITH (unsafe = true) is disabled. Please contact your system administrator to enable it"));
+            return TStatus::Error;
+        }
+
+        if (unsafe && !SessionCtx->Config().EnableUnsafeTruncateTable.Get().GetOrElse(false)) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                "TRUNCATE TABLE ... WITH (unsafe = true) requires PRAGMA kikimr.EnableUnsafeTruncateTable=\"true\" in the query"));
+            return TStatus::Error;
+        }
+
+        if (unsafe && !SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()),
+            TString(node.TablePath().Value()), node.Pos(), ctx))
+        {
             return TStatus::Error;
         }
 
@@ -3064,7 +3121,7 @@ private:
         }
 
         static const THashSet<TString> supportedSettings = {
-            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR"
+            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR", "TABLES_METRICS_LEVEL"
         };
 
         for (const auto& setting : node.Settings()) {
@@ -3097,6 +3154,24 @@ private:
             }
             if (name == "MAX_CHILDREN_IN_DIR") {
                 if (!ValidateInteger(ctx, value, name)) {
+                    return TStatus::Error;
+                }
+            }
+            if (name == "TABLES_METRICS_LEVEL") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "TABLES_METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics is off"));
+                    return TStatus::Error;
+                }
+                if (!value.Maybe<TCoDataCtor>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Value of the TABLES_METRICS_LEVEL must be a string or an integer."));
+                    return TStatus::Error;
+                }
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel metricsLevel;
+                TString error;
+                if (!ParseDatabaseTablesMetricsLevel(value.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value(), metricsLevel, error)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), error));
                     return TStatus::Error;
                 }
             }
@@ -3243,6 +3318,22 @@ private:
             return status;
         }
 
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleKillSession(TKiKillSession node, TExprContext& ctx) override {
+        if (!EnsureWorldType(node.World().Ref(), ctx)
+            || !EnsureSpecificDataSink(node.DataSink().Ref(), KikimrProviderName, ctx)
+            || !EnsureSpecificDataType(node.SessionId().Ref(), EDataSlot::Utf8, ctx))
+        {
+            return TStatus::Error;
+        }
+        if (!node.SessionId().Maybe<TCoUtf8>() && !node.SessionId().Maybe<TCoParameter>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.SessionId().Pos()),
+                "KILL SESSION expects a session identifier or an Utf8 parameter"));
+            return TStatus::Error;
+        }
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
@@ -3455,10 +3546,17 @@ private:
     }
 
     virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) override {
-        if (auto sampleRate = node.SampleRate(); sampleRate && !sampleRate.Maybe<TCoDouble>()) {
-            ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
-                "ANALYZE SAMPLE rate must evaluate to Double"));
-            return TStatus::Error;
+        if (auto sampleRate = node.SampleRate(); sampleRate) {
+            if (!sampleRate.Maybe<TCoDouble>()) {
+                ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                    "ANALYZE SAMPLE rate must evaluate to Double"));
+                return TStatus::Error;
+            }
+            if (!SessionCtx->Config().FeatureFlags.GetEnableAnalyzeSampling()) {
+                ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                    "ANALYZE sampling is disabled"));
+                return TStatus::Error;
+            }
         }
 
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);

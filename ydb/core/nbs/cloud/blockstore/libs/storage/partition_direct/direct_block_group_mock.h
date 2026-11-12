@@ -100,6 +100,7 @@ public:
             THostIndex hostIndex,
             TBlockRange16 range,
             const TGuardedSgList& guardedSglist,
+            const TBlockChecksums& checksums,
             const NWilson::TTraceId& traceId)>;
     using TWriteBlocksToPBufferHandler =
         std::function<NThreading::TFuture<TDBGWriteBlocksResponse>(
@@ -108,6 +109,7 @@ public:
             TPBufferKey pBufferKey,
             TBlockRange16 range,
             const TGuardedSgList& guardedSglist,
+            const TBlockChecksums& checksums,
             const NWilson::TTraceId& traceId)>;
     using TWriteBlocksToManyPBuffersHandler = std::function<void(
         ui32 vChunkIndex,
@@ -117,6 +119,7 @@ public:
         TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId,
         TWriteBlocksToManyPBuffersCallback callback)>;
     using TSyncWithPBufferHandler =
@@ -164,6 +167,10 @@ public:
     TWriteBlocksToDDiskHandler WriteBlocksToDDiskHandler;
     TWriteBlocksToPBufferHandler WriteBlocksToPBufferHandler;
     TWriteBlocksToManyPBuffersHandler WriteBlocksToManyPBuffersHandler;
+
+    // Checksums of the last WriteBlocksToDDisk, WriteBlocksToPBuffer or
+    // WriteBlocksToManyPBuffers call.
+    TBlockChecksums LastWriteChecksums;
     TSyncWithPBufferHandler SyncWithPBufferHandler;
     TBatchEraseFromPBufferHandler BatchEraseFromPBufferHandler;
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
@@ -174,13 +181,19 @@ public:
     TOnRemoveHostSucceededHandler OnRemoveHostSucceededHandler;
     TOnRemoveHostFailedHandler OnRemoveHostFailedHandler;
     TTakeCopyRangeBudgetHandler TakeCopyRangeBudgetHandler;
+    std::function<void(EDDiskBalanceStrategy)> BalanceDDisksHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
+    THashMap<ui32, THostIndex> PendingDDiskAllocations;
     TArenaAllocatorPoolPtr ArenaAllocatorPool;
 
     TDirectBlockGroupMock();
 
     void Register(TVChunkWeakPtr vChunk) override;
+    THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) override;
+    void AllocateDDiskPromotion(ui32 vChunkId, THostIndex hostIndex) override;
+    void CommitDDiskPromotion(const TVChunkConfig& config) override;
+    THostMask SelectDDiskForDemote(THostMask candidates) const override;
 
     TExecutorPtr GetExecutor() override;
     TArenaAllocatorPoolPtr GetArenaAllocatorPool() override;
@@ -219,6 +232,7 @@ public:
         THostIndex hostIndex,
         TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
@@ -227,6 +241,7 @@ public:
         TPBufferKey pBufferKey,
         TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) override;
 
     void WriteBlocksToManyPBuffers(
@@ -237,6 +252,7 @@ public:
         TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId,
         TWriteBlocksToManyPBuffersCallback callback) override;
 
@@ -280,7 +296,10 @@ public:
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
-    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot(
+        EDbgMonSnapshotDetail detail) const override;
+
+    void BalanceDDisks(EDDiskBalanceStrategy strategy) override;
 
     NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
         EVChunkStatsDetail detail) const override;

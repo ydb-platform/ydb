@@ -36,7 +36,7 @@ public:
         return fake;
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         YDB_LOG_DEBUG_CTX(context.Ctx, "Execute cancel tx",
             {"txId", TxId},
             {"targetTxId", TargetTxId},
@@ -83,7 +83,7 @@ public:
         return proposeResult;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TTxCancelTx");
     }
 

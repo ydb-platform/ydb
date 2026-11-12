@@ -17,6 +17,9 @@ void TDbsControllerActor::HandleNodeMaintenancePermissionRequest(
     TVector<ui32> nodeIds{
         ev->Get()->Record.GetNodeIds().begin(),
         ev->Get()->Record.GetNodeIds().end()};
+    THashSet<ui32> lockedNodes{
+        ev->Get()->Record.GetLockedNodes().begin(),
+        ev->Get()->Record.GetLockedNodes().end()};
     ExecuteTx(
         ctx,
         CreateTx<TNodeMaintenancePermission>(
@@ -24,7 +27,8 @@ void TDbsControllerActor::HandleNodeMaintenancePermissionRequest(
                 ev->Sender,
                 ev->Cookie,
                 MakeIntrusive<TCallContext>()),
-            nodeIds));
+            nodeIds,
+            lockedNodes));
 }
 
 void TDbsControllerActor::HandleDiskMaintenancePermissionRequest(
@@ -52,7 +56,11 @@ bool TDbsControllerActor::PrepareNodeMaintenancePermission(
 
     THashMap<TDbsControllerDatabase::TDirectKey, ui64> dependentDbgs;
 
-    if (!db.GetAffectedDBGsWithNodeCounts(args.NodeIds, dependentDbgs)) {
+    if (!db.GetAffectedDBGsWithNodeCounts(
+            args.NodeIds,
+            args.LockedNodes,
+            dependentDbgs))
+    {
         return false;
     }
 

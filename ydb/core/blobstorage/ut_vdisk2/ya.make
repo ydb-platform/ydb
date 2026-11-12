@@ -1,9 +1,10 @@
 UNITTEST()
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(10)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 IF (SANITIZER_TYPE)
     ENV(TIMEOUT=400)
@@ -12,6 +13,7 @@ ENDIF()
 SRCS(
     defs.h
     env.h
+    blob_stat.cpp
     huge.cpp
     compaction.cpp
     space_report.cpp

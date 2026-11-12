@@ -2,6 +2,88 @@
 #include <ydb/core/util/lz4_data_generator.h>
 
 Y_UNIT_TEST_SUITE(GarbageCollection) {
+    // Hive deletes a tablet for good with a Max<ui32>() generation block followed by a Max/Max hard barrier.
+    // With EnableCollectByCompleteDeletionBlock the block alone collects the data, otherwise it waits for
+    // the barrier as it always did.
+    void TestCompleteDeletionBlock(bool collectByCompleteDeletionBlock) {
+        TFeatureFlags featureFlags;
+        featureFlags.SetEnableCollectByCompleteDeletionBlock(collectByCompleteDeletionBlock);
+        TEnvironmentSetup env({
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .FeatureFlags = featureFlags,
+        });
+        auto& runtime = env.Runtime;
+
+        env.CreateBoxAndPool(1, 1);
+        auto info = env.GetGroupInfo(env.GetGroups().front());
+
+        const ui64 tabletId = 1;
+        const ui8 channel = 0;
+        const TString data = FastGenDataForLZ4(1000);
+        const TLogoBlobID id(tabletId, 1, 1, channel, data.size(), 0);
+        // node restarts kill edge actors, so each request gets its own one
+        auto newEdge = [&] { return runtime->AllocateEdgeActor(1, __FILE__, __LINE__); };
+
+        TActorId edge = newEdge();
+        runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false)->Get()->Status,
+            NKikimrProto::OK);
+
+        auto compactAndCheck = [&](NKikimrProto::EReplyStatus expected) {
+            env.Sim(TDuration::Seconds(10)); // let it get spread and synced
+            for (const auto& vdisk : info->GetVDisks()) {
+                env.CompactVDisk(info->GetActorId(vdisk.VDiskIdShort));
+            }
+            const TActorId edge = newEdge();
+            runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, expected);
+        };
+
+        compactAndCheck(NKikimrProto::OK);
+
+        edge = newEdge();
+        runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvBlock(tabletId, Max<ui32>(), TInstant::Max()));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false)->Get()->Status,
+            NKikimrProto::OK);
+
+        const auto expectedAfterBlock = collectByCompleteDeletionBlock ? NKikimrProto::NODATA : NKikimrProto::OK;
+        compactAndCheck(expectedAfterBlock);
+
+        // after a restart the deleted tablets are taken from the blocks database, not from the incoming block
+        for (const auto& vdisk : info->GetVDisks()) {
+            env.RestartNode(info->GetActorId(vdisk.VDiskIdShort).NodeId());
+        }
+        compactAndCheck(expectedAfterBlock);
+
+        edge = newEdge();
+        runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(tabletId, Max<ui32>(), Max<ui32>(),
+                channel, true, Max<ui32>(), Max<ui32>(), nullptr, nullptr, TInstant::Max(), false, true));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge, false)->Get()->Status,
+            NKikimrProto::OK);
+
+        compactAndCheck(NKikimrProto::NODATA);
+    }
+
+    Y_UNIT_TEST(CompleteDeletionBlockCollectsData) {
+        TestCompleteDeletionBlock(true);
+    }
+
+    Y_UNIT_TEST(CompleteDeletionBlockWaitsForBarrierWhenDisabled) {
+        TestCompleteDeletionBlock(false);
+    }
+
     Y_UNIT_TEST(EmptyGcCmd) {
         TEnvironmentSetup env({
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     library/cpp/deprecated/split
@@ -22,4 +22,7 @@ RECURSE(
     pg_dummy
     settings
     v1
+)
+RECURSE_FOR_TESTS(
+    ut
 )

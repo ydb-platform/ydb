@@ -40,19 +40,18 @@ private:
     YDB_READONLY(ui32, IntervalsCount, 0);
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     bool MergingStartedFlag = false;
-    TAtomic SourceStartedFlag = 0;
     std::shared_ptr<TFetchingScript> FetchingPlan;
     ui32 CurrentPlanStepIndex = 0;
     YDB_READONLY(TPKRangeFilter::EUsageClass, UsageClass, TPKRangeFilter::EUsageClass::PartialUsage);
 
-    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
-    virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
-    virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
+    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<NCommon::TDataSourceLease> self) override;
+    virtual void DoBuildStageResult() override;
+    virtual void DoOnEmptyStageData() override;
 
-    virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
+    virtual TConclusion<NCommon::TExecutionResult> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
         AFL_VERIFY(false);
-        return false;
+        return NCommon::TExecutionResult::Done();
     }
 
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
@@ -92,18 +91,14 @@ private:
     }
 
 protected:
-    THashMap<ui32, TFetchingInterval*> Intervals;
-
     TAtomic FilterStageFlag = 0;
     bool IsReadyFlag = false;
-
-    virtual void DoAbort() = 0;
 
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
 
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
+    virtual NCommon::TExecutionResult DoStartFetchingAccessor(const TFetchingScriptCursor& step) = 0;
 
 public:
     static bool CheckTypeCast(const EType type) {
@@ -114,9 +109,11 @@ public:
     virtual bool NeedAccessorsFetching() const = 0;
     virtual ui64 PredictAccessorsMemory() const = 0;
 
-    bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
-        return DoStartFetchingAccessor(sourcePtr, step);
+    NCommon::TExecutionResult StartFetchingAccessor(const TFetchingScriptCursor& step) {
+        return DoStartFetchingAccessor(step);
     }
+
+    static void StartProcessing(std::unique_ptr<NCommon::TDataSourceLease> sourceLease, const ui64 memoryGroupId);
 
     virtual TInternalPathId GetPathId() const override = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
@@ -150,11 +147,6 @@ public:
         MergingStartedFlag = true;
     }
 
-    void Abort() {
-        Intervals.clear();
-        DoAbort();
-    }
-
     NJson::TJsonValue DebugJsonForMemory() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("details", DoDebugJsonForMemory());
@@ -176,8 +168,6 @@ public:
     bool IsDataReady() const {
         return IsReadyFlag;
     }
-
-    void RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr);
 
     IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const bool isConflicting,
         const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& finish, const TSnapshot& recordSnapshotMin,
@@ -202,10 +192,6 @@ public:
         }
         Y_ABORT_UNLESS(Start.Compare(Finish) != std::partial_ordering::greater);
     }
-
-    virtual ~IDataSource() {
-        AFL_VERIFY(Intervals.empty());
-    }
 };
 
 class TPortionDataSource: public IDataSource {
@@ -217,8 +203,7 @@ private:
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
-    virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
+    virtual NCommon::TExecutionResult DoStartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
 
     virtual NJson::TJsonValue DoDebugJson() const override {
@@ -243,13 +228,11 @@ private:
         return result;
     }
 
-    virtual void DoAbort() override;
-
     virtual TInternalPathId GetPathId() const override {
         return Portion->GetPathId();
     }
 
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
+    virtual NCommon::TExecutionResult DoStartFetchingAccessor(const TFetchingScriptCursor& step) override;
 
 public:
     static bool CheckTypeCast(const EType type) {

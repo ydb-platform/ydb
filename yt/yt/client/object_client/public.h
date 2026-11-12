@@ -288,6 +288,8 @@ DEFINE_ENUM(EObjectType,
     ((Master)                                       (600))
     ((MasterCell)                                   (601))
     ((SysNode)                                      (602))
+    ((MasterCellGroup)                              (603))
+    ((MasterCellGroupMap)                           (604))
     // Next two types would end with 'a' and 'b' in hex.
     ((AliceAvenueEndpoint)                          (618))
     ((BobAvenueEndpoint)                            (619))

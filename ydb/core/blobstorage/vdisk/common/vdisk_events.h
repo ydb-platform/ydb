@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_syncstate.h>
+#include <ydb/core/blobstorage/contracts/blobstorage_proxy_config.h>
 #include <ydb/core/blobstorage/base/blobstorage_oos_defs.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
@@ -501,7 +502,8 @@ namespace NKikimr {
 
         template<typename TQueryRecord>
         static inline TInstant GetReceivedTimestamp(const TQueryRecord *queryRecord, TInstant now) {
-            if (queryRecord && queryRecord->HasMsgQoS() && queryRecord->GetMsgQoS().HasExecTimeStats()) {
+            if (queryRecord && queryRecord->HasMsgQoS() && queryRecord->GetMsgQoS().HasExecTimeStats()
+                    && queryRecord->GetMsgQoS().GetExecTimeStats().HasReceivedTimestamp()) {
                 return TInstant::MicroSeconds(queryRecord->GetMsgQoS().GetExecTimeStats().GetReceivedTimestamp());
             }
             return now;
@@ -1160,6 +1162,8 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         bool IsInternal = false;
+        // Local read checks can report CORRUPTED without starting recovery. Not serialized.
+        bool SuppressCorruptedBlobRestoration = false;
 
         TEvVGet() = default;
 
@@ -1965,7 +1969,7 @@ namespace NKikimr {
                 Record.SetGeneration(actual->ActualGen);
             }
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            if (status == NKikimrProto::OK) {
+            if (status == NKikimrProto::OK || status == NKikimrProto::ALREADY) {
                 Record.SetIncarnationGuid(incarnationGuid);
             }
         }
@@ -3105,57 +3109,6 @@ namespace NKikimr {
         TString ToString() const override {
             return TStringBuilder() << "{TEvVGenerationChange NewVDiskId# " << NewVDiskId << " NewInfo# "
                 << NewInfo->ToString() << "}" ;
-        }
-    };
-
-    struct TNodeLayoutInfo : TThrRefBase {
-        // indexed by NodeId
-        TNodeLocation SelfLocation;
-        TVector<TNodeLocation> LocationPerOrderNumber;
-
-        TNodeLayoutInfo(const TNodeLocation& selfLocation, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-                THashMap<ui32, TNodeLocation>& map)
-            : SelfLocation(selfLocation)
-            , LocationPerOrderNumber(info->GetTotalVDisksNum())
-        {
-            for (ui32 i = 0; i < LocationPerOrderNumber.size(); ++i) {
-                LocationPerOrderNumber[i] = map[info->GetActorId(i).NodeId()];
-            }
-        }
-    };
-
-    using TNodeLayoutInfoPtr = TIntrusivePtr<TNodeLayoutInfo>;
-
-    struct TEvBlobStorage::TEvConfigureProxy
-        : public TEventLocal<TEvBlobStorage::TEvConfigureProxy, TEvBlobStorage::EvConfigureProxy>
-    {
-        TIntrusivePtr<TBlobStorageGroupInfo> Info;
-        TNodeLayoutInfoPtr NodeLayoutInfo;
-        TIntrusivePtr<TStoragePoolCounters> StoragePoolCounters;
-
-        TEvConfigureProxy(TIntrusivePtr<TBlobStorageGroupInfo> info, TNodeLayoutInfoPtr nodeLayoutInfo,
-                TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = nullptr)
-            : Info(std::move(info))
-            , NodeLayoutInfo(std::move(nodeLayoutInfo))
-            , StoragePoolCounters(std::move(storagePoolCounters))
-        {}
-
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvConfigureProxy Info# ";
-            if (Info) {
-                str << Info->ToString();
-            } else {
-                str << "nullptr";
-            }
-            str << " StoragePoolCounters# ";
-            if (StoragePoolCounters) {
-                str << "specified";
-            } else {
-                str << "nullptr";
-            }
-            str << "}";
-            return str.Str();
         }
     };
 

@@ -2,6 +2,8 @@
 #include "blobstorage_skeletonfront.h"
 #include "blobstorage_skeletonerr.h"
 #include "blobstorage_skeleton.h"
+#include "skeleton_vrestore_part.h"
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/base/html.h>
@@ -724,6 +726,10 @@ namespace NKikimr {
         std::vector<std::pair<TString, TString>> CountersChain;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskCountersBase;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskAsyncCountersBase;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskAsyncCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskSpaceReportCountersBase;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskSpaceReportCounters;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> SkeletonFrontGroup;
         ::NMonitoring::TDynamicCounters::TCounterPtr AccessDeniedMessages;
         std::unique_ptr<TIntQueueClass> IntQueueAsyncGets;
@@ -744,11 +750,11 @@ namespace NKikimr {
         NMonGroup::TReplGroup ReplMonGroup;
         NMonGroup::TSyncerGroup SyncerMonGroup;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
-        NMonGroup::TCostGroup CostGroup;
         NMonGroup::TTimerGroup TimerGroup;
         NMonGroup::TCounterGroup CounterGroup;
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         bool HasUnreadableBlobs = false;
+        bool OnlyPhantomsRemain = false; // as reported by Skeleton along with the VDisk status
         TInstant LastSanitizeTime = TInstant::Zero();
         TInstant LastSanitizeWithErrorTime = TInstant::Zero();
         ui64 NextUniqueMessageId = 1;
@@ -808,7 +814,18 @@ namespace NKikimr {
             VCtx = MakeIntrusive<TVDiskContext>(ctx.SelfID, GInfo->PickTopology(), VDiskCounters, SelfVDiskId,
                         TActivationContext::ActorSystem(), baseInfo.DeviceType, baseInfo.PDiskId, baseInfo.DonorMode,
                         baseInfo.ReplPDiskReadQuoter, baseInfo.ReplPDiskWriteQuoter, baseInfo.ReplNodeRequestQuoter,
-                        baseInfo.ReplNodeResponseQuoter);
+                        baseInfo.ReplNodeResponseQuoter, VDiskSpaceReportCounters, VDiskAsyncCounters);
+
+            // report every change of local chunk space color to the NodeWarden right away (it forwards the report to
+            // BS_CONTROLLER); from then on NodeWarden takes this VDisk's color from these reports only
+            if (TActorSystem *actorSystem = VCtx->ActorSystem; actorSystem && !baseInfo.DonorMode) {
+                const ui32 nodeId = ctx.SelfID.NodeId();
+                VCtx->GetOutOfSpaceState().SetLocalChunkColorChangedCallback([actorSystem, nodeId, vdiskId = SelfVDiskId,
+                        pdiskId = baseInfo.PDiskId, vslotId = baseInfo.VDiskSlotId](NPDisk::TStatusFlags flags, ui64 sequence) {
+                    actorSystem->Send(MakeBlobStorageNodeWardenID(nodeId), new TEvBlobStorage::TEvControllerUpdateDiskStatus(
+                        vdiskId, nodeId, pdiskId, vslotId, flags, sequence));
+                });
+            }
 
             // create IntQueues
             IntQueueAsyncGets = std::make_unique<TIntQueueClass>(
@@ -879,7 +896,8 @@ namespace NKikimr {
             StartTimestamp = TActivationContext::Monotonic();
             TimerGroup.SkeletonFrontUptimeSeconds() = 0;
             CounterGroup.VDiskCount() = 1;
-            Become(&TThis::StateLocalRecoveryInProgress);
+            Become(GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)
+                ? &TThis::StateDatabaseError : &TThis::StateLocalRecoveryInProgress);
         }
 
         bool Sanitize(const TActorContext &ctx) {
@@ -1056,6 +1074,10 @@ namespace NKikimr {
                             }
                         }
                         {
+                            str << "<a class=\"btn btn-default\" href=\"?type=spacereportvisual&force=1\">"
+                                << "VDisk Space Report</a> ";
+                            str << "<a class=\"btn btn-default\" href=\"?type=restorepart&amp;GroupId="
+                                << SelfVDiskId.GroupID.GetRawId() << "\">Restore Part</a> ";
                             str << "<a class=\"btn btn-default\" href=\"?type=restart\" "
                                 << (
                                     IsVDiskRestartAllowed(VDiskMonGroup.VDiskState())
@@ -1205,7 +1227,10 @@ namespace NKikimr {
             NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E replicationStatus =
                     NKikimrWhiteboard::TVDiskDetailedReplicationStatus::Replicated;
             if (!replicated) {
-                if (!ReplMonGroup.ReplIsHoldingToken()) {
+                if (OnlyPhantomsRemain) {
+                    // the last replication pass has finished with only phantom-like blobs unreplicated
+                    replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly;
+                } else if (!ReplMonGroup.ReplIsHoldingToken()) {
                     replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::WaitingForToken;
                 } else if (!unreplicatedNonPhantoms && unreplicatedPhantoms) {
                     replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly;
@@ -1213,9 +1238,14 @@ namespace NKikimr {
                     replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::InProgress;
                 }
             }
+            // the VDisk may be shown as replicated one when only phantom-like blobs remain, but NodeWarden is always
+            // told the truth
+            const bool reportReplicated = replicated ||
+                (OnlyPhantomsRemain && AppData()->FeatureFlags.GetReportPhantomsOnlyVDisksAsReady());
             // send a message to Whiteboard
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags,
-                replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, replicationStatus, unsyncedVDisks, light, HasUnreadableBlobs);
+                reportReplicated, unreplicatedPhantoms, unreplicatedNonPhantoms, replicationStatus, unsyncedVDisks, light,
+                HasUnreadableBlobs);
             if (ReplMonGroup.ReplUnreplicatedVDisks()) {
                 const i64 a = ReplMonGroup.ReplWorkUnitsDone();
                 const i64 b = ReplMonGroup.ReplWorkUnitsRemaining();
@@ -1268,9 +1298,23 @@ namespace NKikimr {
             SetReceivedTime(ev);
             TInstant now = TAppData::TimeProvider->Now();
             FillInCostSettingsAndTimestampIfApplicable(ev->Get()->Record, now);
-            Reply(ev, ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk is in error state", now);
-            // NOTE: VDisk is in StateDatabaseError state, it means recovery failed.
-            //       VDisk returns VDISK_ERROR_STATE status to all requests (outside).
+            if (GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
+                const NKikimrBlobStorage::TVDiskID* targetId = nullptr;
+                if constexpr (requires { ev->Get()->Record.GetVDiskID(); }) {
+                    targetId = &ev->Get()->Record.GetVDiskID();
+                } else if constexpr (requires { ev->Get()->Record.GetTargetVDiskID(); }) {
+                    targetId = &ev->Get()->Record.GetTargetVDiskID();
+                }
+                if (targetId) {
+                    const TVDiskID target = VDiskIDFromVDiskID(*targetId);
+                    if (target.SameExceptGeneration(SelfVDiskId) && target.GroupGeneration != SelfVDiskId.GroupGeneration) {
+                        return Reply(ev, ctx, NKikimrProto::RACE, "group generation mismatch", now);
+                    }
+                }
+                Reply(ev, ctx, NKikimrProto::ERROR, "VDisk fail realm is excluded", now);
+            } else {
+                Reply(ev, ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk is in error state", now);
+            }
         }
 
         template <class TEventPtr>
@@ -1286,6 +1330,14 @@ namespace NKikimr {
 
         void DatabaseErrorHandle(TEvBlobStorage::TEvMonStreamQuery::TPtr& ev, const TActorContext& ctx) {
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("ERROR"), 0, ev->Cookie);
+        }
+
+        void DatabaseErrorHandle(TEvBlobStorage::TEvVCheckReadiness::TPtr& ev, const TActorContext& ctx) {
+            if (GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
+                HandleCheckReadiness(ev, ctx);
+            } else {
+                Reply(ev, ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk is in error state", TAppData::TimeProvider->Now());
+            }
         }
 
         void DatabaseNotReadyHandle(TEvBlobStorage::TEvMonStreamQuery::TPtr& ev, const TActorContext& ctx) {
@@ -1401,12 +1453,10 @@ namespace NKikimr {
                     // TEvVPatchXorDiff's cost is included in cost of other Patch operations
                 } else {
                     if (clientId.GetType() == NBackpressure::EQueueClientType::DSProxy) {
-                        CostGroup.SkeletonFrontUserCostNs() += cost;
                         if (VCtx->CostTracker) {
                             VCtx->CostTracker->CountUserCost<TEvent>(advancedCost);
                         }
                     } else {
-                        CostGroup.SkeletonFrontInternalCostNs() += cost;
                         if (VCtx->CostTracker) {
                             VCtx->CostTracker->CountInternalCost<TEvent>(advancedCost);
                         }
@@ -1810,6 +1860,16 @@ namespace NKikimr {
             SetRacingGroupInfo(ev->Get()->Record, response->Record, GInfo);
             ctx.Send(ev->Sender, response.release(), flags, ev->Cookie);
         }
+
+        void Reply(TEvVRestorePart::TPtr& ev, const TActorContext& ctx,
+                NKikimrProto::EReplyStatus status, const TString& errorReason, TInstant /*now*/) {
+            auto result = std::make_unique<TEvVRestorePartResult>();
+            result->Record.SetStatus(status);
+            result->Record.SetErrorReason(errorReason);
+            result->Record.SetResponseOrigin(NKikimrBlobStorage::TEvVRestorePartResult::SKELETON_FRONT);
+            const ui32 flags = IEventHandle::MakeFlags(ev->GetChannel(), 0);
+            ctx.Send(ev->Sender, result.release(), flags, ev->Cookie);
+        }
         // FIXME: don't forget about counters
 
 
@@ -1841,6 +1901,18 @@ namespace NKikimr {
             auto aid = Register(CreateFrontSkeletonGetLogoBlobRequestHandler(SelfVDiskId, SelfId(), SkeletonId,
                 Config, Top, ev));
             ActiveActors.Insert(aid, __FILE__, __LINE__, TActivationContext::AsActorContext(), NKikimrServices::BLOBSTORAGE);
+        }
+
+        void Handle(TEvVRestorePart::TPtr& ev, const TActorContext& ctx) {
+            if (!GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
+                return DatabaseAccessDeniedHandle(ev, ctx);
+            }
+            auto aid = Register(CreateVRestorePartActor(SelfVDiskId, SelfId(), SkeletonId, Config, Top, ev));
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+        }
+
+        void HandleVRestorePartNotReady(TEvVRestorePart::TPtr& ev, const TActorContext& ctx) {
+            Reply(ev, ctx, NKikimrProto::NOTREADY, "VDisk is not ready for VRestorePart", TAppData::TimeProvider->Now());
         }
 
 
@@ -2019,6 +2091,11 @@ namespace NKikimr {
             UpdateWhiteboard(ctx);
         }
 
+        void Handle(TEvStatusUpdate::TPtr ev, const TActorContext& ctx) {
+            OnlyPhantomsRemain = ev->Get()->OnlyPhantomsRemain;
+            UpdateWhiteboard(ctx);
+        }
+
         void Handle(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate::TPtr ev, const TActorContext& ctx) {
             auto& record = ev->Get()->Record;
             VDiskIDFromVDiskID(SelfVDiskId, record.MutableVDiskId());
@@ -2059,6 +2136,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvVDiskStatRequest, Handle)
             hFunc(TEvGetLogoBlobRequest, Handle)
+            HFunc(TEvVRestorePart, HandleVRestorePartNotReady)
             HFunc(TEvFrontRecoveryStatus, Handle)
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
@@ -2107,6 +2185,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvVDiskStatRequest, Handle)
             hFunc(TEvGetLogoBlobRequest, Handle)
+            HFunc(TEvVRestorePart, HandleVRestorePartNotReady)
             HFunc(TEvFrontRecoveryStatus, Handle)
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
@@ -2118,11 +2197,13 @@ namespace NKikimr {
             fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(TEvReportScrubStatus, Handle)
+            HFunc(TEvStatusUpdate, Handle)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
         )
 
         STRICT_STFUNC(StateDatabaseError,
+            IgnoreFunc(TEvFrontRecoveryStatus)
             HFunc(TEvBlobStorage::TEvVMovedPatch, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVPatchStart, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVPatchDiff, DatabaseErrorHandle)
@@ -2154,6 +2235,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvVDiskStatRequest, Handle)
             hFunc(TEvGetLogoBlobRequest, Handle)
+            HFunc(TEvVRestorePart, HandleVRestorePartNotReady)
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvGone, Handle)
@@ -2163,6 +2245,7 @@ namespace NKikimr {
             fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(TEvReportScrubStatus, Handle)
+            HFunc(TEvStatusUpdate, Handle)
             IgnoreFunc(TEvVDiskRequestCompleted)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
@@ -2331,6 +2414,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvVDiskStatRequest, Handle)
             hFunc(TEvGetLogoBlobRequest, Handle)
+            HFunc(TEvVRestorePart, Handle)
             // TEvFrontRecoveryStatus
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
@@ -2342,6 +2426,7 @@ namespace NKikimr {
             fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(TEvReportScrubStatus, Handle)
+            HFunc(TEvStatusUpdate, Handle)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
             hFunc(TEvMinHugeBlobSizeUpdate, Handle)
@@ -2381,11 +2466,10 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_SKELETON_FRONT;
         }
 
-        static TIntrusivePtr<::NMonitoring::TDynamicCounters> CreateVDiskCounters(
+        static std::vector<std::pair<TString, TString>> CreateCountersChain(
                 TIntrusivePtr<TVDiskConfig> cfg,
-                TIntrusivePtr<TBlobStorageGroupInfo> info,
-                TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-                std::vector<std::pair<TString, TString>>& chain) {
+                TIntrusivePtr<TBlobStorageGroupInfo> info) {
+            std::vector<std::pair<TString, TString>> chain;
             // add 'storagePool' label
             chain.emplace_back("storagePool", cfg->BaseInfo.StoragePoolName);
 
@@ -2405,6 +2489,12 @@ namespace NKikimr {
             const auto media = cfg->BaseInfo.DeviceType;
             chain.emplace_back("media", to_lower(NPDisk::DeviceTypeStr(media, true)));
 
+            return chain;
+        }
+
+        static TIntrusivePtr<::NMonitoring::TDynamicCounters> CreateVDiskCounters(
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                const std::vector<std::pair<TString, TString>>& chain) {
             for (const auto& [name, value] : chain) {
                 counters = counters->GetSubgroup(name, value);
             }
@@ -2421,8 +2511,13 @@ namespace NKikimr {
             , Top(GInfo->PickTopology())
             , SelfVDiskId(GInfo->GetVDiskId(Config->BaseInfo.VDiskIdShort))
             , SkeletonId()
+            , CountersChain(CreateCountersChain(Config, GInfo))
             , VDiskCountersBase(GetServiceCounters(counters, "vdisks"))
-            , VDiskCounters(CreateVDiskCounters(Config, GInfo, VDiskCountersBase, CountersChain))
+            , VDiskCounters(CreateVDiskCounters(VDiskCountersBase, CountersChain))
+            , VDiskAsyncCountersBase(GetServiceCounters(counters, "vdisks_async"))
+            , VDiskAsyncCounters(CreateVDiskCounters(VDiskAsyncCountersBase, CountersChain))
+            , VDiskSpaceReportCountersBase(GetServiceCounters(counters, "vdisk_space_report"))
+            , VDiskSpaceReportCounters(CreateVDiskCounters(VDiskSpaceReportCountersBase, CountersChain))
             , SkeletonFrontGroup(VDiskCounters->GetSubgroup("subsystem", "skeletonfront"))
             , AccessDeniedMessages(SkeletonFrontGroup->GetCounter("AccessDeniedMessages", true))
 
@@ -2471,19 +2566,29 @@ namespace NKikimr {
             , ReplMonGroup(VDiskCounters, "subsystem", "repl")
             , SyncerMonGroup(VDiskCounters, "subsystem", "syncer")
             , VDiskMonGroup(VDiskCounters, "subsystem", "state")
-            , CostGroup(VDiskCounters, "subsystem", "cost")
             , TimerGroup(VDiskCounters, "subsystem", "timer")
             , CounterGroup(VDiskCounters, "subsystem", "counter")
         {
             ReplMonGroup.ReplUnreplicatedVDisks() = 1;
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::Initial);
+            // Donors stay at zero, so the gauges count the disks that serve the group. A donor never touches them:
+            // its counter chain may coincide with the acceptor's when both live on the same PDisk.
+            if (!Config->BaseInfo.DonorMode) {
+                VDiskMonGroup.SetHeapAllocatorStripe(Config->UseHeapAllocator);
+            }
         }
 
         void PassAway() override {
             const TActorContext& ctx = TActivationContext::AsActorContext();
             DisconnectClients(ctx);
             ActiveActors.KillAndClear(ctx);
+            // Zero before the unlink so a scrape during teardown does not keep a stale 1.
+            if (!Config->BaseInfo.DonorMode) {
+                VDiskMonGroup.ClearHeapAllocatorMode();
+            }
             VDiskCountersBase->RemoveSubgroupChain(CountersChain);
+            VDiskAsyncCountersBase->RemoveSubgroupChain(CountersChain);
+            VDiskSpaceReportCountersBase->RemoveSubgroupChain(CountersChain);
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Gone, 0,
                 MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), nullptr, 0));
             TActorBootstrapped::PassAway();

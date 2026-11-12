@@ -54,9 +54,10 @@ from clickhouse_connect.driver.common import (
     coerce_bool,
     coerce_show_clickhouse_errors,
     dict_copy,  # noqa: F401  (compatibility re-export)
+    format_uri_host,
 )
 from clickhouse_connect.driver.ctypes import RespBuffCls
-from clickhouse_connect.driver.exceptions import DataError, ProgrammingError
+from clickhouse_connect.driver.exceptions import DataError, Error, ProgrammingError
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.options import check_arrow, check_numpy, check_pandas, check_polars
@@ -67,15 +68,17 @@ from clickhouse_connect.driver.query import (
     TzSource,
     arrow_buffer,
 )
+from clickhouse_connect.driver.rustcodec import NativeCodec, _make_native_transform
 from clickhouse_connect.driver.streaming import (
     QueuedStreamSource,
+    ReadAheadSource,
     StreamingFileAdapter,
     StreamingInsertSource,
     StreamingResponseSource,
     start_streaming_response,
 )
 from clickhouse_connect.driver.summary import QuerySummary
-from clickhouse_connect.driver.transform import NativeTransform
+from clickhouse_connect.driver.transform import NativeTransform, Transform
 from clickhouse_connect.driver.types import Closable
 
 logger = logging.getLogger(__name__)
@@ -156,6 +159,7 @@ class AsyncClient(Client):
         form_encode_query_params: bool = False,
         rename_response_column: str | None = None,
         headers: dict[str, str] | None = None,
+        native_codec: NativeCodec | None = None,
     ):
         """
         Async HTTP Client using aiohttp. Initialization is handled via _initialize().
@@ -163,7 +167,7 @@ class AsyncClient(Client):
         proxy_path = proxy_path.lstrip("/")
         if proxy_path:
             proxy_path = "/" + proxy_path
-        self.uri = f"{interface}://{host}:{port}{proxy_path}"
+        self.uri = f"{interface}://{format_uri_host(host)}:{port}{proxy_path}"
         self.url = self.uri
         self._rename_response_column = rename_response_column
         self._initial_settings = settings
@@ -252,13 +256,16 @@ class AsyncClient(Client):
             connector_kwargs["enable_cleanup_closed"] = True
 
         self._write_format = "Native"
-        self._transform = NativeTransform()
+        self._transform: Transform = _make_native_transform(native_codec)
         self._client_settings: dict[str, str] = {}
         self._initialized = False
         self._reported_libs: set[str] = set()
         self.headers["User-Agent"] = self.headers["User-Agent"].replace("mode:sync;", "mode:async;")
         if headers:
             self.headers.update(headers)
+        if not isinstance(self._transform, NativeTransform):
+            # The codec is a client-level choice, so the tag is applied at construction rather than per call.
+            add_integration_tag(self.headers, self._reported_libs, "clickhouse-connect-core")
 
         # Store aiohttp-specific params for deferred initialization
         self._compress_param = compress
@@ -406,7 +413,9 @@ class AsyncClient(Client):
         if isinstance(operation, CommandOp):
             return await self.command(operation.text, settings=settings, use_database=operation.use_database)
         if isinstance(operation, QueryOp):
-            return await self.query(operation.text, settings=settings, query_formats=dict(_INTERNAL_QUERY_FORMATS))
+            context = self.create_query_context(query=operation.text, settings=settings, query_formats=dict(_INTERNAL_QUERY_FORMATS))
+            context.internal = True
+            return await self._query_with_context(context)
         if isinstance(operation, RawQueryOp):
             return await self.raw_query(operation.text, settings=settings, fmt=operation.fmt)
         raise TypeError(f"Unsupported operation type: {type(operation).__name__}")
@@ -492,8 +501,11 @@ class AsyncClient(Client):
         query_result.summary = execution.summary
 
         # Attach streaming_source to query_result.source to ensure it gets closed
-        #  when the query result is closed (e.g. by StreamContext.__exit__)
-        query_result.source = streaming_source
+        #  when the query result is closed (e.g. by StreamContext.__exit__). The rust codec wraps the
+        #  byte source in a ReadAheadSource whose close() stops the read-ahead thread and chains through
+        #  to streaming_source, so do not clobber it.
+        if not isinstance(query_result.source, ReadAheadSource):
+            query_result.source = streaming_source
 
         return query_result
 
@@ -1192,6 +1204,13 @@ class AsyncClient(Client):
 
         async def rebuild_body():
             nonlocal active_source
+            recorded = context.insert_exception
+            if isinstance(recorded, Error):
+                # Deterministic client-side refusal; a rebuilt insert would fail identically.
+                context.insert_exception = None
+                raise recorded
+            # Reset so a failure on the rebuilt attempt is not masked by the first attempt's error.
+            context.insert_exception = None
             await active_source.close(timeout=None)
             context.current_row = 0
             context.current_block = 0

@@ -1638,11 +1638,15 @@ bool TYqlRowSpecInfo::HasNonNativeDescendingSort() const {
     return false;
 }
 
-bool TYqlRowSpecInfo::HasNativeDescendingSort() const {
+bool TYqlRowSpecInfo::HasDifferentDescendingSortRepresentation(const TYqlRowSpecInfo& with) const {
     YQL_ENSURE(SortMembers.size() <= SortedBy.size());
     YQL_ENSURE(SortMembers.size() <= SortDirections.size());
-    for (size_t i = 0; i < SortMembers.size(); ++i) {
-        if (!SortDirections[i] && SortedBy[i] == SortMembers[i] && Type->FindItem(SortMembers[i])) {
+    const size_t resultSize = Min<size_t>(SortMembers.size(), with.SortMembers.size());
+    for (size_t i = 0; i < resultSize; ++i) {
+        if (SortMembers[i] != with.SortMembers[i] || SortDirections[i] != with.SortDirections[i]) {
+            break;
+        }
+        if (!SortDirections[i] && (SortedBy[i] == SortMembers[i]) != (with.SortedBy[i] == with.SortMembers[i])) {
             return true;
         }
     }

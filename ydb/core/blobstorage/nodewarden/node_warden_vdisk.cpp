@@ -76,6 +76,7 @@ namespace NKikimr::NStorage {
         YDB_LOG_DEBUG("StartLocalVDiskActor",
             {"marker", "NW23"},
             {"slayInFlight", SlayInFlight.contains(vslotId)},
+            {"doWipe", vdisk.Config.GetDoWipe()},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vslotId},
             {"PDiskGuid", pdiskGuid},
@@ -84,6 +85,17 @@ namespace NKikimr::NStorage {
             {"PDisksWaitingToStart", PDisksWaitingToStart.contains(vslotId.PDiskId)});
 
         if (SlayInFlight.contains(vslotId)) {
+            return;
+        }
+
+        if (!donorMode && EjectedGroups.contains(vdisk.GetGroupId())) {
+            return; // its group is gone, only the destruction of this slot is yet to come
+        }
+
+        // A record that asks for a wipe is a command, not a configuration to run with: it carries the settings of the
+        // moment the wipe was requested. BS_CONTROLLER answers the WIPED report with a fresh record, and the VDisk
+        // starts from that one, so settings changed during the wipe (e.g. the heap allocator one) are not lost.
+        if (vdisk.Config.GetDoWipe()) {
             return;
         }
 
@@ -240,6 +252,9 @@ namespace NKikimr::NStorage {
                     ddiskConfig.IntegrityChecksumCacheBytes =
                         Cfg->DDiskConfig->GetIntegrityChecksumCacheBytes();
                 }
+                if (Cfg->DDiskConfig->HasDevNullMode()) {
+                    ddiskConfig.DevNullMode = Cfg->DDiskConfig->GetDevNullMode();
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {
@@ -388,6 +403,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->EnableChecksumReadValidationOnVDisk = EnableChecksumReadValidationOnVDisk;
             vdiskConfig->EnableChecksumWriteValidationOnVDisk = EnableChecksumWriteValidationOnVDisk;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
+            vdiskConfig->SpaceReportPeriodSeconds = SpaceReportPeriodSeconds;
 
             vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 
@@ -432,6 +448,16 @@ namespace NKikimr::NStorage {
             if (Cfg->VDiskConfigPreprocessor) {
                 Cfg->VDiskConfigPreprocessor(*vdiskConfig);
             }
+
+            // Latched for this start from the record held right now. A pool value, including 0, replaces the global
+            // one. A record that arrives later, even the BS_CONTROLLER one replacing a record read from the cache, does
+            // not restart the VDisk: a new N is picked up by the next start (node or PDisk restart, TEvAskRestartVDisk).
+            const ui32 numLeadingDisks = vdisk.Config.HasVDiskHeapAllocatorNumLeadingDisks()
+                ? vdisk.Config.GetVDiskHeapAllocatorNumLeadingDisks()
+                : VDiskHeapAllocatorNumLeadingDisks;
+            const ui32 heapOrderNumber = groupInfo->GetOrderNumber(TVDiskIdShort(vdiskId));
+            vdiskConfig->UseHeapAllocator = Cfg->FeatureFlags->GetEnableVDiskHeapAllocator()
+                && heapOrderNumber < numLeadingDisks;
 
             // issue initial report to whiteboard before creating actor to avoid races
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
@@ -517,8 +543,28 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet) {
+    void TNodeWarden::ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet, bool isStatic) {
+        THashMap<TPDiskKey, ui64> pdiskGuids;
+        if (!isStatic) {
+            for (const auto& pdisk : StaticServices.GetPDisks()) {
+                pdiskGuids.emplace(pdisk, pdisk.GetPDiskGuid());
+            }
+            for (const auto& pdisk : DynamicServices.GetPDisks()) {
+                pdiskGuids.emplace(pdisk, pdisk.GetPDiskGuid());
+            }
+        }
         for (const auto& vdisk : serviceSet.GetVDisks()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            if (!isStatic && loc.GetNodeID() == LocalNodeId && !vdisk.GetDoDestroy() && !vdisk.GetDoWipe()
+                    && vdisk.GetEntityStatus() != NKikimrBlobStorage::DESTROY) {
+                const auto it = pdiskGuids.find(TPDiskKey(loc.GetNodeID(), loc.GetPDiskID()));
+                if (it == pdiskGuids.end() || it->second != loc.GetPDiskGuid()) {
+                    YDB_LOG_NOTICE("Ignoring VDisk with unknown or superseded PDisk identity",
+                        {"marker", "NW125"}, {"vdisk", vdisk});
+                    ControllerServicesDropped = true;
+                    continue;
+                }
+            }
             ApplyLocalVDiskInfo(vdisk);
         }
     }
@@ -536,7 +582,8 @@ namespace NKikimr::NStorage {
         //
         // The main idea of this command is when VDisk is created, it does not change its configuration. It may be
         // wiped out several times, it may become a donor or read-only and then it may be destroyed. That is a possible life cycle
-        // of a VDisk in the occupied slot.
+        // of a VDisk in the occupied slot. The heap-allocator knob is the exception: it is stored on the record and
+        // latched the next time this VDisk starts, without restarting a running disk.
 
         if (!vdisk.HasVDiskID() || !vdisk.HasVDiskLocation()) {
             YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "weird VDisk configuration",
@@ -571,12 +618,19 @@ namespace NKikimr::NStorage {
         if (!vdisk.GetDoDestroy() && vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
             const ui32 groupId = vdisk.GetVDiskID().GetGroupID();
             if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
-                Groups[groupId].MustSubscribe = true;
+                if (!std::exchange(Groups[groupId].MustSubscribe, true) && PipeClientId) {
+                    // A delayed placement may arrive after RegisterNode has omitted this group.
+                    // Subscribe on the current pipe as well as on subsequent reconnects.
+                    SendToController(std::make_unique<TEvBlobStorage::TEvControllerGetGroup>(
+                        LocalNodeId, &groupId, &groupId + 1));
+                }
             }
         }
 
         const TPDiskKey pdiskKey(vslotId.NodeId, vslotId.PDiskId);
-        const bool pdiskMissing = !LocalPDisks.contains(pdiskKey);
+        const auto pdiskIt = LocalPDisks.find(pdiskKey);
+        const bool pdiskMissing = pdiskIt == LocalPDisks.end()
+            || pdiskIt->second.Record.GetPDiskGuid() != loc.GetPDiskGuid();
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
             if (record.UnderlyingPDiskDestroyed || pdiskMissing) {
                 PoisonLocalVDisk(record);
@@ -698,8 +752,9 @@ namespace NKikimr::NStorage {
         if (!vdisk.RuntimeData) {
             return;
         }
-        if (newInfo->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
-            return; // group is decomitted, VDisks will be deleted soon
+        if (newInfo->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE || !newInfo->GetTotalVDisksNum()) {
+            // group has no VDisks anymore (it is decommitted, or it has lost its inline pile), they will be deleted soon
+            return;
         }
 
         TIntrusivePtr<TBlobStorageGroupInfo>& currentInfo = vdisk.RuntimeData->GroupInfo;
@@ -710,6 +765,17 @@ namespace NKikimr::NStorage {
 
         if (newInfo->GetActorId(orderNumber) != vdiskServiceId) {
             // this disk is in donor mode, we don't care about generation change; donor modes are operated by BSC solely
+            return;
+        }
+
+        ui32 failRealm = vdisk.GetVDiskId().FailRealm;
+        bool wasFailed = currentInfo->IsFailRealmExcluded(failRealm);
+        bool isFailed = newInfo->IsFailRealmExcluded(failRealm);
+        if (wasFailed != isFailed) {
+            PoisonLocalVDisk(vdisk);
+            // Keep receiving group updates while the previous incarnation is shutting down.
+            Groups.at(vdisk.GetGroupId()).VDisksOfGroup.PushBack(&vdisk);
+            StartLocalVDiskActor(vdisk);
             return;
         }
 

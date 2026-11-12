@@ -210,6 +210,7 @@ struct XdsRouteConfigResource : public XdsResourceType::ResourceData {
       return domains == other.domains && routes == other.routes &&
              typed_per_filter_config == other.typed_per_filter_config;
     }
+    TString ToString() const;
   };
 
   std::vector<VirtualHost> virtual_hosts;

@@ -1,13 +1,12 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
+    expand_insert_revert.cpp
+    expand_replicate.cpp
     inline_join_filters.cpp
-    map/push_map_elements_into_map.cpp
-    map/push_map_elements_through_aggregate.cpp
-    map/push_map_elements_through_input.cpp
-    map/push_map_elements_through_union_all.cpp
     propagate_topsort_through_stage.cpp
     pull_up_map_over_cbo.cpp
+    push_map_elements_through_input.cpp
 )
 
 JOIN_SRCS(
@@ -15,6 +14,7 @@ JOIN_SRCS(
     expand_cbo_tree.cpp
     expand_distinct_aggregation.cpp
     expand_grouping_sets.cpp
+    expand_whole_partition_window.cpp
 )
 
 JOIN_SRCS(
@@ -47,11 +47,14 @@ JOIN_SRCS(
 JOIN_SRCS(
     all_push_filter.cpp
     push_filter_into_join.cpp
+    push_filter_through_aggregate.cpp
+    push_filter_through_union_all.cpp
     push_filter_under_map.cpp
 )
 
 JOIN_SRCS(
     all_push_olap.cpp
+    push_olap_aggregate.cpp
     push_olap_filter.cpp
     push_olap_projection.cpp
 )
@@ -59,14 +62,13 @@ JOIN_SRCS(
 JOIN_SRCS(
     all_push_rest_1.cpp
     push_limit_into_sort.cpp
+    push_top_sort_through_union_all.cpp
     push_ranges.cpp
-    map/push_rename_into_producer.cpp
     push_simple_join_filter.cpp
 )
 
 JOIN_SRCS(
     all_rewrite.cpp
-    map/rewrite_to_preferred_alias.cpp
     rewrite_join_to_index_lookup_join.cpp
     rewrite_right_join.cpp
 )
@@ -78,6 +80,7 @@ JOIN_SRCS(
     build_initial_cbo_tree.cpp
     constant_folding_stage.cpp
     decorrelation/dependent_join_pushdown.cpp
+    decorrelation/pull_up_correlated_predicate.cpp
     disable_blocks_on_columns_limit.cpp
     eliminate_left_join.cpp
     fuse_filters.cpp
@@ -87,9 +90,6 @@ JOIN_SRCS(
     all_misc_2.cpp
     merge_union_all.cpp
     peephole_predicate.cpp
-    map/prune_dead_outputs.cpp
-    map/remove_identity_map.cpp
-    map/rename_to_append.cpp
 )
 
 PEERDIR(
@@ -97,7 +97,5 @@ PEERDIR(
     ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/cbo/solver
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

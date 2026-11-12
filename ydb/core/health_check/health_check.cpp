@@ -12,6 +12,7 @@
 
 #include <util/random/shuffle.h>
 
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
@@ -125,6 +126,7 @@ public:
         PoolState,
         GroupState,
         VDiskState,
+        VDiskNoData,
         PDiskState,
         NodeState,
         VDiskSpace,
@@ -276,7 +278,7 @@ public:
     struct TSelfCheckResult {
         struct TIssueRecord {
             Ydb::Monitoring::IssueLog IssueLog;
-            ETags Tag;
+            ETags Tag = ETags::None;
         };
 
         Ydb::Monitoring::StatusFlag::Status OverallStatus = Ydb::Monitoring::StatusFlag::GREY;
@@ -410,6 +412,15 @@ public:
                           ETags setTag = ETags::None,
                           std::initializer_list<ETags> includeTags = {}) {
             ReportStatus(status, message, setTag, includeTags, IssueRecords);
+        }
+
+        // nothing is known, which is neither healthy nor failed
+        void ReportNoData(const TString& message, ETags setTag, std::initializer_list<ETags> includeTags = {}) {
+            ReportStatus(Ydb::Monitoring::StatusFlag::GREY, message, setTag, includeTags);
+            if (OverallStatus == Ydb::Monitoring::StatusFlag::GREEN) {
+                // ReportStatus(GREY) alone keeps GREEN, as GREY is the lowest status
+                OverallStatus = Ydb::Monitoring::StatusFlag::GREY;
+            }
         }
 
         bool HasTags(std::initializer_list<ETags> tags) const {
@@ -754,6 +765,7 @@ public:
             TTabletId TabletId;
             TString Key;
             TMonotonic StartTime;
+            bool Cancelled = false;
         };
 
         std::unordered_map<TTabletId, TTabletState> TabletStates;
@@ -793,6 +805,15 @@ public:
                 RequestsInFlight.erase(itRequest);
             }
             return tabletId;
+        }
+
+        bool CancelRequest(ui64 requestId) {
+            auto itRequest = RequestsInFlight.find(requestId);
+            if (itRequest == RequestsInFlight.end() || itRequest->second.Cancelled) {
+                return false;
+            }
+            itRequest->second.Cancelled = true;
+            return true;
         }
     };
 
@@ -1279,6 +1300,23 @@ public:
         }
     }
 
+    enum class EWhiteboardReplyState {
+        Received, // the node answered, a disk missing from the answer is a failure
+        Unreachable, // a request to the node was undelivered or its session dropped at least once, and no later retry answered
+        Missing, // no answer by the deadline, nothing is known about the disks of the node
+    };
+
+    template<typename TResponseMap>
+    EWhiteboardReplyState GetWhiteboardReplyState(const TResponseMap& responses, TNodeId nodeId) const {
+        if (auto it = responses.find(nodeId); it != responses.end() && it->second.IsOk()) {
+            return EWhiteboardReplyState::Received;
+        }
+        if (UnavailableStorageNodes.contains(nodeId)) {
+            return EWhiteboardReplyState::Unreachable;
+        }
+        return EWhiteboardReplyState::Missing;
+    }
+
     [[nodiscard]] TRequestResponse<TEvNodeWardenStorageConfig> RequestStorageConfig() {
         TRequestResponse<TEvNodeWardenStorageConfig> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName<TEvNodeWardenQueryStorageConfig>()));
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false), 0/*flags*/, 0/*cookie*/, response.Span.GetTraceId());
@@ -1365,21 +1403,23 @@ public:
         }
         if (ev->Get()->SourceType == TEvWhiteboard::EvVDiskStateRequest) {
             if (NodeVDiskState.count(nodeId) && NodeVDiskState[nodeId].Error(error)) {
+                // the node stays unavailable unless a retry gets the reply
+                UnavailableStorageNodes.insert(nodeId);
                 if (RetryRequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId)) {
                     NodeVDiskState.erase(nodeId);
                 } else {
                     RequestDone("undelivered of TEvVDiskStateRequest");
-                    UnavailableStorageNodes.insert(nodeId);
                 }
             }
         }
         if (ev->Get()->SourceType == TEvWhiteboard::EvPDiskStateRequest) {
             if (NodePDiskState.count(nodeId) && NodePDiskState[nodeId].Error(error)) {
+                // the node stays unavailable unless a retry gets the reply
+                UnavailableStorageNodes.insert(nodeId);
                 if (RetryRequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId)) {
                     NodePDiskState.erase(nodeId);
                 } else {
                     RequestDone("undelivered of TEvPDiskStateRequest");
-                    UnavailableStorageNodes.insert(nodeId);
                 }
             }
         }
@@ -1406,19 +1446,21 @@ public:
             }
         }
         if (NodeVDiskState.count(nodeId) && NodeVDiskState[nodeId].Error(error)) {
+            // the node stays unavailable unless a retry gets the reply
+            UnavailableStorageNodes.insert(nodeId);
             if (RetryRequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId)) {
                 NodeVDiskState.erase(nodeId);
             } else {
                 RequestDone("node disconnected with TEvVDiskStateRequest");
-                UnavailableStorageNodes.insert(nodeId);
             }
         }
         if (NodePDiskState.count(nodeId) && NodePDiskState[nodeId].Error(error)) {
+            // the node stays unavailable unless a retry gets the reply
+            UnavailableStorageNodes.insert(nodeId);
             if (RetryRequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId)) {
                 NodePDiskState.erase(nodeId);
             } else {
                 RequestDone("node disconnected with TEvPDiskStateRequest");
-                UnavailableStorageNodes.insert(nodeId);
             }
         }
         if (NodeBSGroupState.count(nodeId) && NodeBSGroupState[nodeId].Error(error)) {
@@ -1478,8 +1520,9 @@ public:
                 GetPartitionStatsResult[tabletId].Error(error);
             }
             TabletRequests.TabletStates[tabletId].IsUnresponsive = true;
-            for (const auto& [requestId, requestState] : TabletRequests.RequestsInFlight) {
-                if (requestState.TabletId == tabletId) {
+            for (auto& [requestId, requestState] : TabletRequests.RequestsInFlight) {
+                if (requestState.TabletId == tabletId && !requestState.Cancelled) {
+                    requestState.Cancelled = true;
                     RequestDone("unsuccessful TEvClientConnected");
                 }
             }
@@ -1497,16 +1540,16 @@ public:
                         }
                     }
                     TString error = "Timeout";
-                    if (StoragePools && StoragePools->Error(error)) {
+                    if (StoragePools && StoragePools->Error(error) && TabletRequests.CancelRequest(TTabletRequestsState::RequestStoragePools)) {
                         RequestDone("TEvGetStoragePoolsRequest");
                     }
-                    if (Groups && Groups->Error(error)) {
+                    if (Groups && Groups->Error(error) && TabletRequests.CancelRequest(TTabletRequestsState::RequestGroups)) {
                         RequestDone("TEvGetGroupsRequest");
                     }
-                    if (VSlots && VSlots->Error(error)) {
+                    if (VSlots && VSlots->Error(error) && TabletRequests.CancelRequest(TTabletRequestsState::RequestVSlots)) {
                         RequestDone("TEvGetVSlotsRequest");
                     }
-                    if (PDisks && PDisks->Error(error)) {
+                    if (PDisks && PDisks->Error(error) && TabletRequests.CancelRequest(TTabletRequestsState::RequestPDisks)) {
                         RequestDone("TEvGetPDisksRequest");
                     }
                 }
@@ -2027,6 +2070,18 @@ public:
 
     static TString GetNodeLocation(const TEvInterconnect::TNodeInfo& nodeInfo) {
         return TStringBuilder() << nodeInfo.NodeId << '/' << nodeInfo.Host << ':' << nodeInfo.Port;
+    }
+
+    TString GetNodeDataCenterId(TNodeId nodeId) const {
+        auto itNodeInfo = MergedNodeInfo.find(nodeId);
+        if (itNodeInfo == MergedNodeInfo.end()) {
+            return {};
+        }
+        const TNodeLocation& location = itNodeInfo->second->Location;
+        if (!location.HasKey(TNodeLocation::TKeys::DataCenter)) {
+            return {};
+        }
+        return location.GetDataCenterId();
     }
 
     static void Check(TSelfCheckContext& context, const NKikimrWhiteboard::TSystemStateInfo::TPoolStats& poolStats) {
@@ -2688,6 +2743,10 @@ public:
             }
             case NKikimrBlobStorage::INIT_PENDING:
             case NKikimrBlobStorage::READY: { // the disk is fully operational and does not affect group fault tolerance
+                // VDisk with only phantom blobs remaining may be reported as ready one
+                if (ReturnStorageHints && IsPhantomOnly(vSlot)) {
+                    ReportPhantomOnlyHint(context);
+                }
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
         }
@@ -2734,6 +2793,7 @@ public:
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->begin()->set_path(pDiskInfo.path());
         storagePDiskStatus.set_id(pDiskId);
 
+        const auto replyState = GetWhiteboardReplyState(NodePDiskState, pDiskInfo.nodeid());
         if (pDiskInfo.HasState()) {
             ReportPDiskState(pDiskInfo.GetState(), context);
 
@@ -2748,8 +2808,11 @@ public:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Available size is less than 12%", ETags::PDiskSpace);
                 }
             }
+        } else if (replyState == EWhiteboardReplyState::Missing) {
+            // the node did not answer in time, so nothing is known about its disk
+            context.ReportNoData("PDisk has no data", ETags::PDiskState);
         } else {
-            if (UnavailableStorageNodes.count(pDiskInfo.nodeid()) != 0) {
+            if (replyState == EWhiteboardReplyState::Unreachable) {
                 TSelfCheckContext nodeContext(&context, "STORAGE_NODE");
                 nodeContext.Location.mutable_storage()->clear_pool();
                 nodeContext.Location.mutable_storage()->mutable_node()->set_id(pDiskInfo.nodeid());
@@ -2775,7 +2838,8 @@ public:
         storagePDiskStatus.set_overall(context.GetOverallStatus());
     }
 
-    void FillVDiskStatusWithWhiteboard(const TString& vDiskId, const NKikimrWhiteboard::TVDiskStateInfo& vDiskInfo, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext context) {
+    // returns true if nothing is known about the disk, because its node did not answer in time
+    bool FillVDiskStatusWithWhiteboard(const TString& vDiskId, const NKikimrWhiteboard::TVDiskStateInfo& vDiskInfo, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext context) {
         if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id()->empty()) {
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_id();
         }
@@ -2789,12 +2853,24 @@ public:
         }
 
         if (!vDiskInfo.HasVDiskState()) {
+            // a known PDisk state failure is evidence, it stays a failure of the VDisk
+            const bool pDiskFailed = context.FindMaxStatus({ETags::PDiskState}) == Ydb::Monitoring::StatusFlag::RED;
+            if (vDiskInfo.HasNodeId() && !pDiskFailed
+                    && GetWhiteboardReplyState(NodeVDiskState, vDiskInfo.GetNodeId()) == EWhiteboardReplyState::Missing)
+            {
+                // a healthy PDisk tells nothing about the VDisk itself
+                context.ReportNoData("VDisk has no data",
+                                     ETags::VDiskNoData,
+                                     {ETags::PDiskState});
+                storageVDiskStatus.set_overall(context.GetOverallStatus());
+                return true;
+            }
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                  TStringBuilder() << "VDisk is not available",
                                  ETags::VDiskState,
                                  {ETags::PDiskState});
             storageVDiskStatus.set_overall(context.GetOverallStatus());
-            return;
+            return false;
         }
 
         switch (vDiskInfo.GetVDiskState()) {
@@ -2808,7 +2884,7 @@ public:
                                      TStringBuilder() << "VDisk state is " << NKikimrWhiteboard::EVDiskState_Name(vDiskInfo.GetVDiskState()),
                                      ETags::VDiskState);
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
-                return;
+                return false;
             case NKikimrWhiteboard::EVDiskState::LocalRecoveryError:
             case NKikimrWhiteboard::EVDiskState::SyncGuidRecoveryError:
             case NKikimrWhiteboard::EVDiskState::PDiskError:
@@ -2817,7 +2893,7 @@ public:
                                      ETags::VDiskState,
                                      {ETags::PDiskState});
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
-                return;
+                return false;
         }
 
         if (!vDiskInfo.GetReplicated()) {
@@ -2827,13 +2903,17 @@ public:
             }
             context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Replication in progress", ETags::VDiskState);
             storageVDiskStatus.set_overall(context.GetOverallStatus());
-            return;
+            return false;
         }
 
         if (vDiskInfo.HasDiskSpace()) {
             switch(vDiskInfo.GetDiskSpace()) {
-                case NKikimrWhiteboard::EFlag::Green:
-                    if (context.IssueRecords.size() == 0) {
+                case NKikimrWhiteboard::EFlag::Green: {
+                    // a PDisk without data is not a reason to call a received VDisk degraded
+                    const bool onlyUnknownPDisk = std::ranges::all_of(context.IssueRecords, [](const auto& record) {
+                        return record.IssueLog.status() == Ydb::Monitoring::StatusFlag::GREY;
+                    });
+                    if (onlyUnknownPDisk) {
                         context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                     } else {
                         context.ReportStatus(context.IssueRecords.begin()->IssueLog.status(),
@@ -2842,6 +2922,7 @@ public:
                                             {ETags::PDiskSpace});
                     }
                     break;
+                }
                 case NKikimrWhiteboard::EFlag::Red:
                     context.ReportStatus(GetFlagFromWhiteboardFlag(vDiskInfo.GetDiskSpace()),
                                          TStringBuilder() << "DiskSpace is " << NKikimrWhiteboard::EFlag_Name(vDiskInfo.GetDiskSpace()),
@@ -2857,26 +2938,73 @@ public:
             }
         }
 
+        // VDisk with only phantom blobs remaining may be reported as replicated one; the hint is reported after the
+        // status is evaluated as it must not affect it
+        if (ReturnStorageHints && IsPhantomOnly(vDiskInfo)) {
+            ReportPhantomOnlyHint(context);
+        }
+
         storageVDiskStatus.set_overall(context.GetOverallStatus());
+        return false;
     }
 
     class TGroupChecker {
+        using TRealms = TStackVec<std::pair<ui32, int>>;
+
         TString ErasureSpecies;
         bool LayoutCorrect;
         int FailedDisks = 0;
         std::array<int, Ydb::Monitoring::StatusFlag::Status_ARRAYSIZE> DisksColors = {};
-        TStackVec<std::pair<ui32, int>> FailedRealms;
+        TRealms FailedRealms;
+        // disks that did not answer in time: they are not known to be failed
+        int UnknownDisks = 0;
+        TRealms UnknownRealms;
         ETags Tag;
 
-        void IncrementFor(ui32 realm) {
-            auto itRealm = FindIf(FailedRealms, [realm](const std::pair<ui32, int>& p) -> bool {
+        struct TVerdict {
+            Ydb::Monitoring::StatusFlag::Status Status = Ydb::Monitoring::StatusFlag::GREEN;
+            const char* Message = nullptr;
+        };
+
+        static void IncrementFor(TRealms& realms, ui32 realm, int count = 1) {
+            auto itRealm = FindIf(realms, [realm](const std::pair<ui32, int>& p) -> bool {
                 return p.first == realm;
             });
-            if (itRealm == FailedRealms.end()) {
-                itRealm = FailedRealms.insert(FailedRealms.end(), { realm, 1 });
+            if (itRealm == realms.end()) {
+                realms.insert(realms.end(), { realm, count });
             } else {
-                itRealm->second++;
+                itRealm->second += count;
             }
+        }
+
+        TVerdict GetVerdict(int failedDisks, const TRealms& failedRealms) const {
+            const auto degraded = [&]() -> TVerdict {
+                return {DisksColors[Ydb::Monitoring::StatusFlag::BLUE] == failedDisks
+                    ? Ydb::Monitoring::StatusFlag::BLUE
+                    : Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded"};
+            };
+            if (ErasureSpecies == NONE) {
+                if (failedDisks > 0) {
+                    return {Ydb::Monitoring::StatusFlag::RED, "Group failed"};
+                }
+            } else if (ErasureSpecies == BLOCK_4_2) {
+                if (failedDisks > 2) {
+                    return {Ydb::Monitoring::StatusFlag::RED, "Group failed"};
+                } else if (failedDisks > 1) {
+                    return {Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy"};
+                } else if (failedDisks > 0) {
+                    return degraded();
+                }
+            } else if (ErasureSpecies == MIRROR_3_DC) {
+                if (failedRealms.size() > 2 || (failedRealms.size() == 2 && failedRealms[0].second > 1 && failedRealms[1].second > 1)) {
+                    return {Ydb::Monitoring::StatusFlag::RED, "Group failed"};
+                } else if (failedRealms.size() == 2) {
+                    return {Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy"};
+                } else if (failedDisks > 0) {
+                    return degraded();
+                }
+            }
+            return {};
         }
 
     public:
@@ -2893,7 +3021,7 @@ public:
                 // No yellow or orange status here - this is intentional - they are used when a disk is running out of space, but is currently available
                 case Ydb::Monitoring::StatusFlag::RED: // disk is bad, probably not available
                 case Ydb::Monitoring::StatusFlag::GREY: // the status is absent, the disk is not available
-                    IncrementFor(realm);
+                    IncrementFor(FailedRealms, realm);
                     ++FailedDisks;
                     break;
                 default:
@@ -2901,52 +3029,60 @@ public:
             }
         }
 
+        // the disk did not answer in time, so it is neither healthy nor known to be failed
+        void AddUnknownVDisk(ui32 realm) {
+            IncrementFor(UnknownRealms, realm);
+            ++UnknownDisks;
+        }
+
+        // the verdict if every disk with no data had failed
+        TVerdict GetPessimisticVerdict() const {
+            TRealms realms = FailedRealms;
+            for (const auto& [realm, count] : UnknownRealms) {
+                IncrementFor(realms, realm, count);
+            }
+            return GetVerdict(FailedDisks + UnknownDisks, realms);
+        }
+
         void ReportStatus(TSelfCheckContext& context) const {
             context.OverallStatus = Ydb::Monitoring::StatusFlag::GREEN;
             if (!LayoutCorrect) {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group layout is incorrect", Tag);
             }
-            if (ErasureSpecies == NONE) {
-                if (FailedDisks > 0) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, {ETags::VDiskState});
-                }
-            } else if (ErasureSpecies == BLOCK_4_2) {
-                if (FailedDisks > 2) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, {ETags::VDiskState});
-                } else if (FailedDisks > 1) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", Tag, {ETags::VDiskState});
-                } else if (FailedDisks > 0) {
-                    if (DisksColors[Ydb::Monitoring::StatusFlag::BLUE] == FailedDisks) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", Tag, {ETags::VDiskState});
-                    } else {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", Tag, {ETags::VDiskState});
-                    }
-                }
-            } else if (ErasureSpecies == MIRROR_3_DC) {
-                if (FailedRealms.size() > 2 || (FailedRealms.size() == 2 && FailedRealms[0].second > 1 && FailedRealms[1].second > 1)) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, {ETags::VDiskState});
-                } else if (FailedRealms.size() == 2) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", Tag, {ETags::VDiskState});
-                } else if (FailedDisks > 0) {
-                    if (DisksColors[Ydb::Monitoring::StatusFlag::BLUE] == FailedDisks) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", Tag, {ETags::VDiskState});
-                    } else {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", Tag, {ETags::VDiskState});
-                    }
+            const TVerdict known = GetVerdict(FailedDisks, FailedRealms);
+            if (known.Message) {
+                context.ReportStatus(known.Status, known.Message, Tag, {ETags::VDiskState});
+            }
+            if (UnknownDisks > 0) {
+                // unknown disks never make the group worse, they only show what it could be
+                if (GetPessimisticVerdict().Status > known.Status) {
+                    context.ReportNoData("Group has disks with no data", Tag, {ETags::VDiskNoData});
                 }
             }
         }
     };
+
+    const TBridgeInfo* GetBridgeInfo() const {
+        return NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk()
+            ? NodeWardenStorageConfig->Get()->BridgeInfo.get() : nullptr;
+    }
+
+    const TBridgeInfo::TPile* FindCurrentPile(TBridgePileId pileId) const {
+        const auto* bridgeInfo = GetBridgeInfo();
+        const auto* pile = bridgeInfo ? bridgeInfo->FindPile(pileId) : nullptr;
+        return pile && !pile->IsFreeSlot ? pile : nullptr;
+    }
 
     void FillGroupStatusWithWhiteboard(TGroupId groupId, const NKikimrWhiteboard::TBSGroupStateInfo& groupInfo, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext context) {
         if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->empty()) {
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id();
         }
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(groupId));
-        if (groupInfo.HasBridgePileId() && NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk() && NodeWardenStorageConfig->Get()->BridgeInfo) {
+        if (groupInfo.HasBridgePileId()) {
             const auto& pileId = TBridgePileId::FromProto(&groupInfo, &NKikimrWhiteboard::TBSGroupStateInfo::GetBridgePileId);
-            const auto& pile = NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(pileId)->Name;
-            context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pile);
+            if (const auto* pile = FindCurrentPile(pileId)) {
+                context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pile->Name);
+            }
         }
         storageGroupStatus.set_id(ToString(groupId));
         TGroupChecker checker(groupInfo.erasurespecies());
@@ -2972,8 +3108,11 @@ public:
                 context.Location.mutable_storage()->mutable_node()->clear_port();
             }
             Ydb::Monitoring::StorageVDiskStatus& vDiskStatus = *storageGroupStatus.add_vdisks();
-            FillVDiskStatusWithWhiteboard(vDiskId, itVDisk != MergedVDiskState.end() ? *itVDisk->second : NKikimrWhiteboard::TVDiskStateInfo(), vDiskStatus, {&context, "VDISK"});
-            checker.AddVDiskStatus(vDiskStatus.overall(), protoVDiskId.ring());
+            if (FillVDiskStatusWithWhiteboard(vDiskId, itVDisk != MergedVDiskState.end() ? *itVDisk->second : NKikimrWhiteboard::TVDiskStateInfo(), vDiskStatus, {&context, "VDISK"})) {
+                checker.AddUnknownVDisk(protoVDiskId.ring());
+            } else {
+                checker.AddVDiskStatus(vDiskStatus.overall(), protoVDiskId.ring());
+            }
         }
 
         context.Location.mutable_storage()->clear_node(); // group doesn't have node
@@ -2984,6 +3123,8 @@ public:
             {"groupId", groupId},
             {"status", context.GetOverallStatus()});
         storageGroupStatus.set_overall(context.GetOverallStatus());
+        // the pool counts disks with no data as failed, as it did before they were told apart from failed disks
+        context.SetOverallStatus(MaxStatus(context.GetOverallStatus(), checker.GetPessimisticVerdict().Status));
     }
 
     static const int MERGING_IGNORE_SIZE = 4;
@@ -2992,12 +3133,42 @@ public:
         std::unordered_map<ETags, TList<TSelfCheckContext::TIssueRecord>> recordsMap;
         std::unordered_set<TString> removeIssuesIds;
         std::unordered_map<TString, TSelfCheckContext::TIssueRecord*> issueById;
+        // the issues merged into other ones, mapped to the issue they were merged into
+        std::unordered_map<TString, TString> mergedIssueIds;
 
         TMergeIssuesContext(TList<TSelfCheckContext::TIssueRecord>& records) {
             for (auto it = records.begin(); it != records.end(); ) {
                 auto move = it++;
                 issueById.emplace(move->IssueLog.id(), &(*move));
                 recordsMap[move->Tag].splice(recordsMap[move->Tag].end(), records, move);
+            }
+        }
+
+        TString GetMergedIssueId(TString id) const {
+            std::unordered_set<TString> visited; // the same issue may take part in several merges, don't loop
+            for (auto it = mergedIssueIds.find(id); it != mergedIssueIds.end() && visited.insert(id).second; it = mergedIssueIds.find(id)) {
+                id = it->second;
+            }
+            return id;
+        }
+
+        // an issue may be the reason of several upper issues, and only one of them owns it during the merge,
+        // so the others have to follow it to the issue it was merged into
+        void RedirectMergedReasons(TList<TSelfCheckContext::TIssueRecord>& records) {
+            if (mergedIssueIds.empty()) {
+                return;
+            }
+            for (auto& record : records) {
+                auto reasons = record.IssueLog.mutable_reason();
+                std::unordered_set<TString> reasonIds;
+                for (auto reasonIt = reasons->begin(); reasonIt != reasons->end(); ) {
+                    *reasonIt = GetMergedIssueId(*reasonIt);
+                    if (reasonIds.insert(*reasonIt).second) {
+                        reasonIt++;
+                    } else {
+                        reasonIt = reasons->erase(reasonIt);
+                    }
+                }
             }
         }
 
@@ -3059,7 +3230,8 @@ public:
                             message = std::regex_replace(message.c_str(), std::regex("^Group "), "Groups ");
                             break;
                         }
-                        case ETags::VDiskState: {
+                        case ETags::VDiskState:
+                        case ETags::VDiskNoData: {
                             message = std::regex_replace(message.c_str(), std::regex("^VDisk has "), "VDisks have ");
                             message = std::regex_replace(message.c_str(), std::regex("^VDisk is "), "VDisks are ");
                             message = std::regex_replace(message.c_str(), std::regex("^VDisk "), "VDisks ");
@@ -3090,10 +3262,13 @@ public:
                 if (IsBridgeMode(TActivationContext::AsActorContext()) && it->Tag == ETags::GroupState) {
                     if (it->IssueLog.reason_size() == 1) {
                         const auto& reason = issueById[it->IssueLog.reason(0)]->IssueLog;
-                        if (message.find("in pile") == std::string::npos) {
+                        const auto& pile = reason.location().storage().pool().group().pile();
+                        if (!pile.name().empty() && message.find("in pile") == std::string::npos) {
                             message = TStringBuilder() << reason.message() <<  " in pile " << reason.location().storage().pool().group().pile().name();
                         }
-                        it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->CopyFrom(reason.location().storage().pool().group().pile());
+                        if (!pile.name().empty()) {
+                            it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->CopyFrom(pile);
+                        }
                     }
                 }
                 if (IsBridgeMode(TActivationContext::AsActorContext()) && (it->Tag == ETags::PoolState || it->Tag == ETags::StorageState)) {
@@ -3115,6 +3290,7 @@ public:
             for(auto it = recordsMap.begin(); it != recordsMap.end(); ++it) {
                 records.splice(records.end(), it->second);
             }
+            RedirectMergedReasons(records);
             RemoveUnlinkIssues(records);
             RenameMergingIssues(records);
         }
@@ -3124,15 +3300,90 @@ public:
         }
     };
 
-    bool FindRecordsForMerge(TList<TSelfCheckContext::TIssueRecord>& records, TList<TSelfCheckContext::TIssueRecord>& similar, TList<TSelfCheckContext::TIssueRecord>& merged) {
+    enum class EDiskMergeScope {
+        Node, // only the disks of the same node are merged together
+        DataCenter, // the disks of the whole data center are merged together
+    };
+
+    bool IsMirror3DcGroup(TStringBuf groupId) const {
+        ui32 id;
+        if (!TryFromString(groupId, id)) {
+            return false;
+        }
+        auto itGroup = GroupState.find(id);
+        return itGroup != GroupState.end() && itGroup->second.ErasureSpecies == MIRROR_3_DC;
+    }
+
+    // a vdisk id is "<group>-<generation>-<failRealm>-<failDomain>-<vdisk>", see GetVDiskId()
+    // fail realms are data centers only in mirror-3-dc groups, so the key is empty for other erasures
+    TString GetFailRealmKey(TStringBuf vDiskId) const {
+        TStringBuf groupId = vDiskId.NextTok('-');
+        vDiskId.NextTok('-'); // group generation is the same for all the vdisks of a group
+        TStringBuf failRealm = vDiskId.NextTok('-');
+        if (groupId.empty() || failRealm.empty() || !IsMirror3DcGroup(groupId)) {
+            return {};
+        }
+        return TStringBuilder() << groupId << '-' << failRealm;
+    }
+
+    TString GetRecordDataCenter(const TSelfCheckContext::TIssueRecord& record) const {
+        return GetNodeDataCenterId(record.IssueLog.location().storage().node().id());
+    }
+
+    bool AreDisksInSameMergeScope(EDiskMergeScope scope, const TSelfCheckContext::TIssueRecord& first, const TSelfCheckContext::TIssueRecord& second) const {
+        switch (scope) {
+            case EDiskMergeScope::DataCenter: {
+                TString dataCenter = GetRecordDataCenter(first);
+                return dataCenter && dataCenter == GetRecordDataCenter(second);
+            }
+            case EDiskMergeScope::Node: {
+                return first.IssueLog.location().storage().node().id() == second.IssueLog.location().storage().node().id();
+            }
+        }
+    }
+
+    static bool IsVDiskTag(ETags tag) {
+        return tag == ETags::VDiskState || tag == ETags::VDiskNoData;
+    }
+
+    void ExtractLostFailRealmRecords(TList<TSelfCheckContext::TIssueRecord>& records, TList<TSelfCheckContext::TIssueRecord>& lostRealmRecords) {
+        if (records.empty() || !IsVDiskTag(records.front().Tag)) {
+            return;
+        }
+        std::unordered_map<TString, int> failedDisksInRealm;
+        for (const auto& record : records) {
+            for (const auto& vDiskId : record.IssueLog.location().storage().pool().group().vdisk().id()) {
+                if (TString key = GetFailRealmKey(vDiskId)) {
+                    ++failedDisksInRealm[key];
+                }
+            }
+        }
+        auto hasLostFailRealm = [&](const TSelfCheckContext::TIssueRecord& record) {
+            const auto& vDiskIds = record.IssueLog.location().storage().pool().group().vdisk().id();
+            return AnyOf(vDiskIds, [&](const TString& vDiskId) {
+                TString key = GetFailRealmKey(vDiskId);
+                return key && failedDisksInRealm[key] > 1;
+            });
+        };
+        for (auto it = records.begin(); it != records.end(); ) {
+            if (hasLostFailRealm(*it) && GetRecordDataCenter(*it)) {
+                auto move = it++;
+                lostRealmRecords.splice(lostRealmRecords.end(), records, move);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    bool FindRecordsForMerge(TList<TSelfCheckContext::TIssueRecord>& records, TList<TSelfCheckContext::TIssueRecord>& similar, TList<TSelfCheckContext::TIssueRecord>& merged, EDiskMergeScope scope) {
         while (!records.empty() && similar.empty()) {
             similar.splice(similar.end(), records, records.begin());
             for (auto it = records.begin(); it != records.end(); ) {
                 bool isSimilar = it->IssueLog.status() == similar.begin()->IssueLog.status()
                     && it->IssueLog.message() == similar.begin()->IssueLog.message()
                     && it->IssueLog.level() == similar.begin()->IssueLog.level();
-                if (isSimilar && similar.begin()->Tag == ETags::VDiskState) {
-                    isSimilar = it->IssueLog.location().storage().node().id() == similar.begin()->IssueLog.location().storage().node().id();
+                if (isSimilar && IsVDiskTag(similar.begin()->Tag)) {
+                    isSimilar = AreDisksInSameMergeScope(scope, *similar.begin(), *it);
                 }
                 if (isSimilar && similar.begin()->IssueLog.location().storage().pool().group().has_pile()) {
                     isSimilar = it->IssueLog.location().storage().pool().group().pile().name()
@@ -3177,6 +3428,13 @@ public:
         return children;
     }
 
+    // a merged issue cannot point to a single node anymore if it covers disks from several of them
+    static void ClearNodeIfMerged(Ydb::Monitoring::LocationStorage& main, const Ydb::Monitoring::LocationStorage& donor) {
+        if (main.node().id() != donor.node().id()) {
+            main.clear_node();
+        }
+    }
+
     void MoveDataInFirstRecord(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& similar) {
         auto mainReasons = similar.begin()->IssueLog.mutable_reason();
         std::unordered_set<TString> ids;
@@ -3201,16 +3459,21 @@ public:
                     mainGroupIds->Add(donorGroupIds->begin(), donorGroupIds->end());
                     break;
                 }
-                case ETags::VDiskState: {
-                    auto mainVdiskIds = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id();
+                case ETags::VDiskState:
+                case ETags::VDiskNoData: {
+                    auto mainStorage = similar.begin()->IssueLog.mutable_location()->mutable_storage();
+                    auto mainVdiskIds = mainStorage->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id();
                     auto donorVdiskIds = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id();
                     mainVdiskIds->Add(donorVdiskIds->begin(), donorVdiskIds->end());
+                    ClearNodeIfMerged(*mainStorage, it->IssueLog.location().storage());
                     break;
                 }
                 case ETags::PDiskState: {
-                    auto mainPdisk = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk();
+                    auto mainStorage = similar.begin()->IssueLog.mutable_location()->mutable_storage();
+                    auto mainPdisk = mainStorage->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk();
                     auto donorPdisk = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk();
                     mainPdisk->Add(donorPdisk->begin(), donorPdisk->end());
+                    ClearNodeIfMerged(*mainStorage, it->IssueLog.location().storage());
                     break;
                 }
                 default:
@@ -3226,6 +3489,7 @@ public:
             }
 
             context.removeIssuesIds.insert(it->IssueLog.id());
+            context.mergedIssueIds.emplace(it->IssueLog.id(), similar.begin()->IssueLog.id());
             it = similar.erase(it);
         }
 
@@ -3233,16 +3497,24 @@ public:
         similar.begin()->IssueLog.set_listed(ids.size());
     }
 
-    void MergeLevelRecords(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& records) {
+    void MergeSimilarRecords(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& records, EDiskMergeScope scope) {
         TList<TSelfCheckContext::TIssueRecord> handled;
         while (!records.empty()) {
             TList<TSelfCheckContext::TIssueRecord> similar;
-            if (FindRecordsForMerge(records, similar, handled)) {
+            if (FindRecordsForMerge(records, similar, handled, scope)) {
                 MoveDataInFirstRecord(context, similar);
                 handled.splice(handled.end(), similar, similar.begin());
             }
         }
         records.splice(records.end(), handled);
+    }
+
+    void MergeLevelRecords(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& records) {
+        TList<TSelfCheckContext::TIssueRecord> lostRealmRecords;
+        ExtractLostFailRealmRecords(records, lostRealmRecords);
+        MergeSimilarRecords(context, lostRealmRecords, EDiskMergeScope::DataCenter);
+        MergeSimilarRecords(context, records, EDiskMergeScope::Node);
+        records.splice(records.end(), lostRealmRecords);
     }
 
     void MergeLevelRecords(TMergeIssuesContext& context, ETags levelTag) {
@@ -3318,11 +3590,23 @@ public:
             CheckGroupVSlots(checker, slots, storageGroupStatus, context);
             checker.ReportStatus(context);
         } else {
+            // Sysview and storage configuration are independent snapshots. A
+            // removed pile can remain in BSC statistics after its registry slot
+            // has disappeared (or become free).
+            if (!GetBridgeInfo()) {
+                context.ReportNoData("Bridge configuration is not available", ETags::GroupState);
+                storageGroupStatus.set_overall(context.GetOverallStatus());
+                return;
+            }
+            auto parts = itGroup->second.BridgeGroups;
+            if (itGroup->second.BridgePileId) { // inline pile: group converted from non-bridged one is also its own part
+                parts.insert(parts.begin(), &itGroup->second);
+            }
             auto getStatus = [&](const TGroupState* group) {
                 TGroupChecker checker(group->ErasureSpecies, group->LayoutCorrect, ETags::BridgeGroupState);
                 TSelfCheckContext pileContext(&context, "BRIDGE_GROUP");
-                if (group->BridgePileId.GetPileIndex() < AppData()->BridgeConfig.PilesSize()) {
-                    const auto& pileName = AppData()->BridgeConfig.GetPiles(group->BridgePileId.GetPileIndex()).GetName();
+                if (const auto* pile = FindCurrentPile(group->BridgePileId)) {
+                    const auto& pileName = pile->Name;
                     pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pileName);
                 } else { // this fallback should not ever happen - but is used in tests
                     pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(group->BridgePileId.ToString());
@@ -3336,13 +3620,40 @@ public:
                 if (!group->BridgePileId) {
                     return true;
                 }
-                return NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(group->BridgePileId)->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
+                const auto* pile = FindCurrentPile(group->BridgePileId);
+                return pile && pile->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
             };
-            auto [minStatus, maxStatus] = std::ranges::minmax(itGroup->second.BridgeGroups | std::views::filter(isSyncPile) | std::views::transform(getStatus));
-            Ydb::Monitoring::StatusFlag::Status status = maxStatus;
-            if (maxStatus == Ydb::Monitoring::StatusFlag::RED) { // only report group as dead if it is dead in all piles
-                status = MaxStatus(minStatus, Ydb::Monitoring::StatusFlag::ORANGE);
+            auto isDataQuorumPile = [&](const TGroupState* group) {
+                if (!group->BridgePileId) {
+                    return true;
+                }
+                const auto* pile = FindCurrentPile(group->BridgePileId);
+                return pile && NBridge::PileStateTraits(pile->State).RequiresDataQuorum;
+            };
+            if (std::ranges::none_of(parts, isSyncPile)) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group has no parts in synchronized piles", ETags::GroupState);
+                storageGroupStatus.set_overall(context.GetOverallStatus());
+                return;
             }
+            std::vector<std::pair<const TGroupState*, Ydb::Monitoring::StatusFlag::Status>> evaluated;
+            for (const TGroupState* part : parts | std::views::filter(isDataQuorumPile)) {
+                evaluated.emplace_back(part, getStatus(part));
+            }
+            auto isAvailabilityPart = [&](const auto& item) {
+                return isSyncPile(item.first);
+            };
+            auto [syncMin, syncMax] = std::ranges::minmax(evaluated | std::views::filter(isAvailabilityPart) | std::views::values);
+            Ydb::Monitoring::StatusFlag::Status status = syncMax;
+            if (syncMax == Ydb::Monitoring::StatusFlag::RED) { // only report group as dead if it is dead in all piles
+                status = MaxStatus(syncMin, Ydb::Monitoring::StatusFlag::ORANGE);
+            }
+            for (const auto& [part, partStatus] : evaluated) {
+                if (!isSyncPile(part)) {
+                    // An unsynchronized part holds no usable copy, but requests routed to it wait for it.
+                    status = MaxStatus(status, MinStatus(partStatus, Ydb::Monitoring::StatusFlag::ORANGE));
+                }
+            }
+            auto [minStatus, maxStatus] = std::ranges::minmax(evaluated | std::views::values);
             context.OverallStatus = status;
             if (status != Ydb::Monitoring::StatusFlag::GREEN) {
                 TStringBuilder issue;
@@ -3382,7 +3693,9 @@ public:
             MergeLevelRecords(mergeContext, ETags::BridgeGroupState, ETags::GroupState);
             MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::BridgeGroupState);
             MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::GroupState);
+            MergeLevelRecords(mergeContext, ETags::VDiskNoData, ETags::GroupState);
             MergeLevelRecords(mergeContext, ETags::PDiskState, ETags::VDiskState);
+            MergeLevelRecords(mergeContext, ETags::PDiskState, ETags::VDiskNoData);
             MergeLevelRecords(mergeContext, ETags::StateStorageRing);
             MergeLevelRecords(mergeContext, ETags::StateStorageNode, ETags::StateStorageRing);
         }
@@ -3416,7 +3729,11 @@ public:
                 context.ReportStatus(context.GetOverallStatus(), "Pool failed", ETags::PoolState, {ETags::GroupState});
                 break;
             default:
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                if (context.HasTags({ETags::GroupState})) {
+                    context.ReportNoData("Pool has groups with no data", ETags::PoolState, {ETags::GroupState});
+                } else {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                }
                 break;
         }
         storagePoolStatus.set_overall(context.GetOverallStatus());
@@ -3459,7 +3776,11 @@ public:
                     context.ReportStatus(context.GetOverallStatus(), "Storage failed", ETags::StorageState, {ETags::PoolState});
                     break;
                 default:
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                    if (context.HasTags({ETags::PoolState})) {
+                        context.ReportNoData("Storage has pools with no data", ETags::StorageState, {ETags::PoolState});
+                    } else {
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                    }
                     break;
             }
             if (!HaveAllBSControllerInfo()) {
@@ -3566,10 +3887,19 @@ public:
             }
             TSelfCheckResult* currentContext = &ssContext;
             TSelfCheckContext pileContext(&ssContext, TStringBuilder() << "PILE_" << type);
-            if ((bool)ringGroup.BridgePileId && NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk()) {
-                const auto& pileName = NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(ringGroup.BridgePileId)->Name;
-                pileContext.Location.mutable_compute()->mutable_state_storage()->mutable_pile()->set_name(pileName);
-                currentContext = &pileContext;
+            if (ringGroup.BridgePileId && GetBridgeInfo()) {
+                // Only a registry at least as new as this proxy reply can prove
+                // removal. A newer proxy reply still needs its replicas checked.
+                const bool registryCurrent = info->ClusterStateGeneration
+                    <= NodeWardenStorageConfig->Get()->Config->GetClusterState().GetGeneration();
+                const auto* pile = registryCurrent ? FindCurrentPile(ringGroup.BridgePileId) : nullptr;
+                if (registryCurrent && !pile) {
+                    continue;
+                }
+                if (pile) {
+                    pileContext.Location.mutable_compute()->mutable_state_storage()->mutable_pile()->set_name(pile->Name);
+                    currentContext = &pileContext;
+                }
             }
             ui32 disabledRings = 0;
             ui32 badRings = 0;

@@ -3639,6 +3639,82 @@ TEST(TYsonStructTest, PolymorphicYsonStructSaveLoad)
     EXPECT_EQ(drv->Field2, 5);
 }
 
+TEST(TYsonStructTest, PolymorphicYsonStructCompareEqual)
+{
+    TMyPoly empty1;
+    TMyPoly empty2;
+
+    EXPECT_TRUE(empty1 == empty2);
+    EXPECT_TRUE(empty1 == empty1);
+
+    auto lhsDrv = New<TPolyDerived1>();
+    lhsDrv->BaseField = 11;
+    lhsDrv->Field1 = 123;
+
+    auto rhsDrv = New<TPolyDerived1>();
+    rhsDrv->BaseField = 11;
+    rhsDrv->Field1 = 123;
+
+    TMyPoly lhs(EMyPolyType::Drv1, lhsDrv);
+    TMyPoly rhs(EMyPolyType::Drv1, rhsDrv);
+
+    EXPECT_TRUE(lhs == rhs);
+}
+
+TEST(TYsonStructTest, PolymorphicYsonStructCompareDifferentFields)
+{
+    auto lhsDrv = New<TPolyDerived1>();
+    lhsDrv->BaseField = 11;
+    lhsDrv->Field1 = 123;
+
+    auto rhsDrv = New<TPolyDerived1>();
+    rhsDrv->BaseField = 11;
+    rhsDrv->Field1 = 124;
+
+    TMyPoly lhs(EMyPolyType::Drv1, lhsDrv);
+    TMyPoly rhs(EMyPolyType::Drv1, rhsDrv);
+
+    EXPECT_FALSE(lhs == rhs);
+}
+
+TEST(TYsonStructTest, PolymorphicYsonStructCompareEmptyWithNonEmpty)
+{
+    TMyPoly empty;
+    TMyPoly base(EMyPolyType::Base);
+
+    EXPECT_FALSE(empty == base);
+    EXPECT_FALSE(base == empty);
+}
+
+TEST(TYsonStructTest, PolymorphicYsonStructCompareDifferentTypes)
+{
+    // Same base field value, but different concrete types must still compare unequal.
+    auto lhsDrv = New<TPolyDerived1>();
+    lhsDrv->BaseField = 11;
+
+    auto rhsDrv = New<TPolyDerived2>();
+    rhsDrv->BaseField = 11;
+
+    TMyPoly lhs(EMyPolyType::Drv1, lhsDrv);
+    TMyPoly rhs(EMyPolyType::Drv2, rhsDrv);
+
+    EXPECT_FALSE(lhs == rhs);
+}
+
+TEST(TYsonStructTest, PolymorphicYsonStructCompareAfterSaveLoad)
+{
+    auto drv = New<TPolyDerived2>();
+    drv->Field2 = 5;
+    drv->BaseField = 0;
+
+    auto poly = TMyPoly{EMyPolyType::Drv2, std::move(drv)};
+
+    auto serialized = ConvertToYsonString(poly);
+    auto deserialized = ConvertTo<TMyPoly>(serialized);
+
+    EXPECT_TRUE(deserialized == poly);
+}
+
 TEST(TYsonStructTest, PolymorphicYsonStructMergeIfPossible)
 {
     TMyPoly poly;

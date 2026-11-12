@@ -125,6 +125,43 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         UNIT_ASSERT(holders.CouldUsePortion(portion));
     }
 
+    Y_UNIT_TEST(RegistrySnapshotHoldersCouldUsePortionByLocalActiveSnapshot) {
+        // The registry has no snapshot for the table, but a scan on this tablet runs at step 5 and sees the portion.
+        const ui64 schemeShardId = 777;
+        const auto internalPathId = NColumnShard::TInternalPathId::FromRawValue(2);
+        const auto ssPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(20);
+        auto portion = MakePortion(1, 10, internalPathId, 1);
+
+        NTest::TTestPathIdTranslator translator;
+        translator.Add(internalPathId, { ssPathId });
+        auto registry = CreateSnapshotRegistry();
+
+        {
+            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator);
+            UNIT_ASSERT(!holders.CouldUsePortion(portion));
+        }
+        {
+            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator, { .ForAllTables = { Step(5) } });
+            UNIT_ASSERT(holders.CouldUsePortion(portion));
+        }
+        {
+            const TRegistrySnapshotHolders holders(
+                Step(20), registry, schemeShardId, translator, { .ByPathId = { { internalPathId, { Step(5) } } } });
+            UNIT_ASSERT(holders.CouldUsePortion(portion));
+        }
+        {
+            // A local scan on another table does not keep it.
+            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator,
+                { .ByPathId = { { NColumnShard::TInternalPathId::FromRawValue(3), { Step(5) } } } });
+            UNIT_ASSERT(!holders.CouldUsePortion(portion));
+        }
+        {
+            // A local scan that cannot see the portion does not keep it either.
+            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator, { .ForAllTables = { Step(15) } });
+            UNIT_ASSERT(!holders.CouldUsePortion(portion));
+        }
+    }
+
     Y_UNIT_TEST(RegistrySnapshotHoldersUsesAllSchemeShardLocalPathIdsForPortions) {
         const ui64 schemeShardId = 888;
         const auto internalPathId = NColumnShard::TInternalPathId::FromRawValue(3);

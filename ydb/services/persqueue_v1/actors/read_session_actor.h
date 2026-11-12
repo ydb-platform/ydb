@@ -266,6 +266,7 @@ private:
             HFunc(TEvPQProxy::TEvUpdateSession, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvReadingStarted, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvReadingFinished, Handle); // from partitionActor
+            HFunc(TEvPersQueue::TEvReplicationData, Handle);
 
 
             // Balancer events
@@ -319,6 +320,7 @@ private:
     void Handle(TEvPQProxy::TEvUpdateSession::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx);
 
     // Balancer events
     void Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx); // can be sent to itself when reading without a consumer
@@ -414,11 +416,13 @@ private:
     THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashSet<TString> TopicsToResolve;
     THashMap<TString, TVector<ui32>> TopicGroups;
+    THashMap<TString, TString> AliasedTopicPaths;
     THashMap<TString, i64> ReadFromTimestamp;
     THashMap<TString, i64> MaxLagByTopic;
 
     bool ReadOnlyLocal;
     bool BatchingSupported = false;
+    bool SupportsReplicationMessages = false;
     TDuration CommitInterval;
 
     TSet<TPartitionInfo> AvailablePartitions;

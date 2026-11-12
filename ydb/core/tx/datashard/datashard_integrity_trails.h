@@ -133,6 +133,22 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
     }
 }
 
+// Unsafe truncate drops every row without moving the snapshot low watermark, so a concurrent reader
+// on an older snapshot can silently see an empty table. This trail is what makes that observable.
+inline void LogIntegrityTrailsUnsafeTruncate(const TActorContext& ctx, const ui64 tabletId, const ui64 txId,
+    const ui64 localPathId, const TString& version, const ui64 brokenLocks, const ui64 preservedLocks)
+{
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"component", "DataShard"},
+        {"type", "UnsafeTruncate"},
+        {"tabletId", ToString(tabletId)},
+        {"phyTxId", ToString(txId)},
+        {"pathId", ToString(localPathId)},
+        {"version", version},
+        {"brokenLocks", ToString(brokenLocks)},
+        {"preservedLocks", ToString(preservedLocks)});
+}
+
 template <typename TxResult>
 inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const typename TxResult::EStatus status) {
     TString statusString = TxResult::EStatus_descriptor()->FindValueByNumber(status)->name();

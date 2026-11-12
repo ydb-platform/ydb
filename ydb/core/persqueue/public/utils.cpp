@@ -40,6 +40,10 @@ bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.GetPartitionConfig().HasMirrorFrom();
 }
 
+bool ReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config) {
+    return MirroringEnabled(config) && config.GetPartitionConfig().GetMirrorFrom().GetMirrorConsumerOffsets();
+}
+
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
 }
@@ -325,21 +329,33 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
 
     std::deque<TPartitionGraph::Node*> queue;
 
-    for (const auto& p : partitions) {
-        auto& node = result[GetPartitionId(p)];
+    auto findNode = [&](auto id) -> TPartitionGraph::Node* {
+        auto it = result.find(static_cast<ui32>(id));
+        return it == result.end() ? nullptr : &it->second;
+    };
 
-        node.DirectChildren.reserve(p.ChildPartitionIdsSize());
-        for (auto id : p.GetChildPartitionIds()) {
-            node.DirectChildren.push_back(&result[id]);
+    for (const auto& p : partitions) {
+        auto* node = findNode(GetPartitionId(p));
+        if (!node) {
+            continue;
         }
 
-        node.DirectParents.reserve(p.ParentPartitionIdsSize());
+        node->DirectChildren.reserve(p.ChildPartitionIdsSize());
+        for (auto id : p.GetChildPartitionIds()) {
+            if (auto* child = findNode(id)) {
+                node->DirectChildren.push_back(child);
+            }
+        }
+
+        node->DirectParents.reserve(p.ParentPartitionIdsSize());
         for (auto id : p.GetParentPartitionIds()) {
-            node.DirectParents.push_back(&result[id]);
+            if (auto* parent = findNode(id)) {
+                node->DirectParents.push_back(parent);
+            }
         }
 
         if (p.GetParentPartitionIds().empty()) {
-            queue.push_back(&node);
+            queue.push_back(node);
         }
     }
 

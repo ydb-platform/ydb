@@ -27,7 +27,7 @@ public:
     void SetProducer(std::shared_ptr<NYdb::NTopic::IProducer> producer);
 
     void Send(const TInstant& createTimestamp,
-              std::optional<NYdb::NTable::TTransaction> transaction) override;
+              NYdb::NTable::TTransaction* transaction) override;
 
     ui64 GetCurrentMessageId() const override;
 

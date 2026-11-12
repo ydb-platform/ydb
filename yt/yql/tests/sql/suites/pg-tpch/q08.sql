@@ -1,4 +1,5 @@
 --!syntax_pg
+/* ignore runonopt plan diff */
 --TPC-H Q8
 
 

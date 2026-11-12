@@ -118,6 +118,7 @@ public:
         OPTION_FIELD_DEFAULT(TQContext, QContext, {})
         OPTION_FIELD_DEFAULT(IYtFullCapture::TPtr, FullCapture, nullptr)
         OPTION_FIELD(TSecureTmpStatePtr, UseSecureTmp)
+        OPTION_FIELD(TString, MrJobLabel)
     };
 
     //////////////////////////////////////////////////////////////
@@ -229,6 +230,8 @@ public:
             TYtTableMetaInfo::TPtr Meta;
             TYtTableStatInfo::TPtr Stat;
             bool WriteLock = false;
+            bool SymlinkLock = false;
+            bool ReferenceLock = false;
         };
         TVector<TTableData> Data;
     };
@@ -527,10 +530,35 @@ public:
         }
 
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
-        OPTION_FIELD(TVector<TClusterAndPath>, Pathes)
+        OPTION_FIELD(TVector<TClusterAndPath>, Paths)
     };
 
     struct TDropTrackablesResult : public NCommon::TOperationResult {
+    };
+
+    //////////////////////////////////////////////////////////////
+
+    struct TUnlockTablesOptions : public TCommonOptions {
+        using TSelf = TUnlockTablesOptions;
+
+        struct TUnlockTable
+        {
+            TString Cluster;
+            TString Path;
+            ui32 Epoch;
+            bool Anonymous;
+        };
+
+        TUnlockTablesOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+        OPTION_FIELD(TVector<TUnlockTable>, Tables)
+    };
+
+    struct TUnlockTablesResult : public NCommon::TOperationResult {
     };
 
     //////////////////////////////////////////////////////////////
@@ -828,6 +856,8 @@ public:
     virtual NThreading::TFuture<TPublishResult> Publish(const TExprNode::TPtr& node, TExprContext& ctx, TPublishOptions&& options) = 0;
 
     virtual NThreading::TFuture<TCommitResult> Commit(TCommitOptions&& options) = 0;
+
+    virtual NThreading::TFuture<TUnlockTablesResult> UnlockTables(TUnlockTablesOptions&& options) = 0;
 
     virtual NThreading::TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) = 0;
 

@@ -103,11 +103,14 @@ LIMIT 10;
 
 For the full list of parameters and their semantics, see [{#T}](../yql/reference/syntax/select/hybrid_search.md).
 
+Each branch retrieves up to `LIMIT * 10` candidates by default. Use `PRAGMA ydb.HybridSearchFactor` or explicit `AS Limits` to tune the pools. Candidates found by only one branch can still appear in the result. Non-prefix filters apply after fusion and can reduce the result below `LIMIT`; see [candidate pools and filtering](../yql/reference/syntax/select/hybrid_search.md#indexes-and-filters).
+
 ## Limitations {#limitations}
 
-* The table must have both a ready `fulltext_relevance` index and a non-prefixed `vector_kmeans_tree` index over the respective columns; otherwise the query fails with a clear message.
-* [Prefixed vector indexes](vector-indexes.md) are not supported yet.
-* If more than one fulltext (or vector) index matches a branch's column, the branch is ambiguous and must be disambiguated with an explicit `AS Indexes` override.
+* The table must have ready `fulltext_relevance` indexes and `vector_kmeans_tree` indexes over the respective scored columns, with compatible vector metrics; otherwise the query fails.
+* The current implementation supports only tables with a single-column primary key.
+* Prefixed fulltext and vector indexes require equality predicates on every prefix column in `WHERE`; see [index selection and filters](../yql/reference/syntax/select/hybrid_search.md#indexes-and-filters).
+* If more than one eligible fulltext index matches, use an explicit `AS Indexes` override. Vector branches prefer the compatible index with the longest fully bound prefix; equally specific indexes also require `AS Indexes`.
 * `LIMIT` must be a literal, because it sizes the per-branch candidate pools. To use a parameterized `LIMIT`, pass explicit `AS Limits`.
 * `HybridRank(...)` must be the entire `ORDER BY` key — it cannot be negated, wrapped, or combined with other sort keys.
 * A custom fusion lambda (`RankLambda` or `ScoreLambda`) replaces the built-in fusion and cannot be combined with `Mode`, `Weights`, `K`, or `Normalize`. At most one of `RankLambda` or `ScoreLambda` may be specified.

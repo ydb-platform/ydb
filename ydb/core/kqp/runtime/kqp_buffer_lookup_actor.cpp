@@ -1,5 +1,7 @@
 #include "kqp_buffer_lookup_actor.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_shard_rendering.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -76,10 +78,9 @@ private:
 public:
     TKqpBufferLookupActor(TKqpBufferTableLookupSettings&& settings)
         : Settings(std::move(settings))
-        , Partitioning(Settings.TxManager->GetPartitioning(Settings.TableId))
+        , Partitioning(Settings.TxManager->GetTableMeta(Settings.TableId).InitialPartitioning)
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
-            << "SessionActorId: " << Settings.SessionActorId)
-        , LookupActorSpan(TWilsonKqp::LookupActor, std::move(Settings.ParentTraceId), "LookupActor") {
+            << "SessionActorId: " << Settings.SessionActorId) {
     }
 
     ~TKqpBufferLookupActor() {
@@ -97,6 +98,7 @@ public:
     static constexpr char ActorName[] = "KQP_BUFFER_LOOKUP_ACTOR";
 
     void PassAway() final {
+        FinishLookupTrace(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Settings.Counters->StreamLookupActorsCount->Dec();
 
         ClearAllWorkerResults();
@@ -112,8 +114,6 @@ public:
         Unlink();
 
         TActorBootstrapped<TKqpBufferLookupActor>::PassAway();
-
-        LookupActorSpan.End();
     }
 
     void Terminate() override {
@@ -160,7 +160,18 @@ public:
             size_t lookupKeyPrefix,
             TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
             TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns,
-            const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot) override {
+            const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
+            const NWilson::TTraceId& traceId) override {
+        if (!LookupActorSpan) {
+            LookupActorSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::LookupActor,
+                NWilson::TTraceId(traceId), {
+                    .Name = "Check rows",
+                    .Phase = "BufferLookup",
+                    .ActorType = "TKqpBufferLookupActor",
+                    .Component = "KqpBufferLookup",
+                    .PeerActorType = "DataShard",
+                });
+        }
         TLookupSettings settings {
             .TablePath = Settings.TablePath,
             .TableId = Settings.TableId,
@@ -351,9 +362,6 @@ public:
             {"readId", record.GetReadId()},
             {"shardId", shardId});
 
-        Settings.TxManager->AddShard(shardId, false, worker->GetTablePath());
-        Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
-
         const auto& lookupState = CookieToLookupState.at(cookie);
         if (lookupState.MvccSnapshot) {
             record.MutableSnapshot()->SetStep(lookupState.MvccSnapshot->GetStep());
@@ -408,7 +416,7 @@ public:
                 }),
             IEventHandle::FlagTrackDelivery,
             0,
-            LookupActorSpan.GetTraceId());
+            ShardReadTrace.Start(LookupActorSpan, shardId, readId));
 
         shardState.HasPipe = true;
 
@@ -435,11 +443,12 @@ public:
             return;
         }
 
-        Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
-
         auto& read = readIt->second;
         const auto shardId = read.ShardId;
         const auto cookie = read.LookupCookie;
+
+        ShardReadTrace.ReadResult(LookupActorSpan, shardId, ev->Sender.NodeId(),
+            record.GetReadId(), record.GetRowCount(), record.GetStatus().GetCode(), record.GetFinished());
 
         auto& shardState = ShardToState.at(shardId);
 
@@ -447,14 +456,19 @@ public:
         AFL_ENSURE(lookupState.Worker);
         AFL_ENSURE(lookupState.ReadsInflight > 0);
 
+        // At current time don't add shard partitioning metadata for reads. (Read Committed doesn't collect locks for reads.)
+        Settings.TxManager->AddShard(shardId, false, lookupState.Worker->GetTablePath());
+        Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
+        Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
+
         TStringBuilder txLocks;
         for (const auto& lock : record.GetTxLocks()) {
             txLocks << lock.ShortDebugString();
         }
 
-        TStringBuilder borkenTxLocks;
+        TStringBuilder brokenTxLocks;
         for (const auto& lock : record.GetBrokenTxLocks()) {
-            borkenTxLocks << lock.ShortDebugString();
+            brokenTxLocks << lock.ShortDebugString();
         }
 
         YDB_LOG_DEBUG("Received TEvReadResult for buffer lookup",
@@ -468,7 +482,7 @@ public:
             {"finished", record.GetFinished()},
             {"rowCount", record.GetRowCount()},
             {"txLocks", txLocks},
-            {"brokenTxLocks", borkenTxLocks});
+            {"brokenTxLocks", brokenTxLocks});
 
         if (!record.GetBrokenTxLocks().empty()) {
             BrokenLocksCount += record.GetBrokenTxLocks().size();
@@ -707,6 +721,7 @@ public:
 
     void DoRetryTableRead(const ui64 failedReadId, TLookupState& lookupState, TReadState& failedRead) {
         AFL_ENSURE(failedRead.Blocked);
+        ShardReadTrace.Retry(LookupActorSpan, failedRead.ShardId, failedReadId);
         --lookupState.ReadsInflight;
         const auto guard = Settings.TypeEnv.BindAllocator();
         lookupState.Worker->RebuildRequest(failedRead.ShardId, failedReadId, ReadId);
@@ -725,6 +740,7 @@ public:
     }
 
     bool HandleReadRetryExceeded(ui64 failedReadId, TLookupState& lookupState) {
+        ShardReadTrace.Retry(LookupActorSpan, ReadIdToState.at(failedReadId).ShardId, failedReadId);
         --lookupState.ReadsInflight;
         const auto guard = Settings.TypeEnv.BindAllocator();
         lookupState.Worker->ResetRowsProcessing(failedReadId);
@@ -761,7 +777,7 @@ public:
 
         Settings.Counters->IteratorsShardResolve->Inc();
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request), 0, 0, LookupActorSpan.GetTraceId());
         return true;
     }
 
@@ -812,10 +828,20 @@ public:
             NYql::EYqlIssueCode id,
             const TString& message,
             const NYql::TIssues& subIssues = {}) {
-        if (LookupActorSpan) {
-            LookupActorSpan.EndError(message);
-        }
+        FinishLookupTrace(Ydb::StatusIds::GENERIC_ERROR, &message);
         Settings.Callbacks->OnLookupError(statusCode, id, message, subIssues);
+    }
+
+    void FinishLookupTrace(Ydb::StatusIds::StatusCode status, const TString* errorMessage = nullptr) {
+        if (!LookupActorSpan) {
+            return;
+        }
+        ShardReadTrace.Finish(LookupActorSpan);
+        if (errorMessage) {
+            LookupActorSpan.EndError(*errorMessage);
+        } else {
+            EndQueryTraceSpan(LookupActorSpan, status);
+        }
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats) override {
@@ -883,6 +909,7 @@ private:
     ui64 ReadBytesCount = 0;
     ui64 BrokenLocksCount = 0;
 
+    TShardReadTrace ShardReadTrace;
     NWilson::TSpan LookupActorSpan;
 };
 

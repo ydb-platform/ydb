@@ -27,6 +27,7 @@ message TPartitionCounterData {
 message TPartitionMeta {
     optional uint64 StartOffset = 1;
     optional uint64 EndOffset = 2;
+    optional uint64 MirroredOffset = 8 [default = 0];
     optional bool SubDomainOutOfSpace = 3 [default = false];
     optional TPartitionCounterData CounterData = 4;
     optional uint64 EndWriteTimestamp = 5;
@@ -79,14 +80,9 @@ message TPQConfig {
     message TQuotingConfig {
         optional bool EnableQuoting = 1 [default = true];
         optional string QuotersDirectoryPath = 2 [default = ""];
-        optional ELimitedEntity TopicWriteQuotaEntityToLimit = 3 [default = USER_PAYLOAD_SIZE];
+        reserved 3;
+        reserved "TopicWriteQuotaEntityToLimit";
 
-        // Enum for describing entities that quoter can limit.
-        enum ELimitedEntity {
-            UNSPECIFIED = 0;
-            WRITTEN_BLOB_SIZE = 1; // Written blob size, including additional data for compaction.
-            USER_PAYLOAD_SIZE = 2; // Message + source id size.
-        }
         optional bool EnableReadQuoting = 4 [default = false];
         optional uint64 ReadCreditBytes = 5 [default = 100000];
 
@@ -235,6 +231,8 @@ message TPQConfig {
     }
 
     optional TCloudEventsConfig CloudEventsConfig = 61;
+    optional uint64 MinOffset = 63;
+    optional uint64 WriteSessionsInitRps = 66 [default = 1000];
 }
 
 message TChannelProfile {
@@ -268,6 +266,7 @@ message TMirrorPartitionConfig {
     optional string Database = 8;
     optional bool UseSecureConnection = 9 [default = false];
     reserved 10; // was SyncWriteTime; mirrored topics always sync source write time (PQv1 API)
+    optional bool MirrorConsumerOffsets = 11 [default = false];
 }
 
 message TPartitionConfig {
@@ -413,6 +412,7 @@ message TPQTabletConfig {
     enum EConsumerType {
         CONSUMER_TYPE_STREAMING = 0;
         CONSUMER_TYPE_MLP = 1;
+        CONSUMER_TYPE_REPLICATION = 2;
     }
 
     enum EDeadLetterPolicy {

@@ -1,5 +1,6 @@
-#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/core/external_sources/hive_metastore/hive_metastore_native/gen-cpp/ThriftHiveMetastore.h>
+
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <util/generic/maybe.h>
@@ -23,4 +24,4 @@ struct THiveMetastoreConverters {
     static TStatistics GetStatistics(const std::vector<Apache::Hadoop::Hive::Partition>& partitions);
 };
 
-}
+}   // namespace NKikimr::NExternalSource

@@ -11,9 +11,9 @@ using namespace NYql;
 using namespace NYql::NNodes;
 
 // Makes a null column.
-TMapElement BuildNullColumn(const TInfoUnit& column, const TTypeAnnotationNode* columnType, TPositionHandle pos,
+TExpression BuildNullColumn(const TTypeAnnotationNode* columnType, TPositionHandle pos,
                             TExprContext& ctx, TPlanProps& props) {
-    Y_ENSURE(columnType, "No type for grouping column " << column.GetFullName());
+    Y_ENSURE(columnType, "No type for grouping column");
 
     if (columnType->IsOptionalOrNull()) {
         columnType = columnType->Cast<TOptionalExprType>()->GetItemType();
@@ -30,11 +30,11 @@ TMapElement BuildNullColumn(const TInfoUnit& column, const TTypeAnnotationNode* 
     .Done().Ptr();
     // clang-format on
 
-    return TMapElement(column, TExpression(nullColumn, &ctx, &props));
+    return TExpression(nullColumn, &ctx, &props);
 }
 
 // Makes an optional column.
-TMapElement BuildOptionalColumn(const TInfoUnit& column, const TInfoUnit& sourceIU, TPositionHandle pos,
+TExpression BuildOptionalColumn(TInfoUnitId sourceIU, TPositionHandle pos,
                                 TExprContext& ctx, TPlanProps& props) {
     auto argument = ctx.NewArgument(pos, "optional_arg");
 
@@ -45,18 +45,17 @@ TMapElement BuildOptionalColumn(const TInfoUnit& column, const TInfoUnit& source
             .Input<TCoMember>()
                 .Struct(argument)
                 .Name<TCoAtom>()
-                    .Value(sourceIU.GetFullName())
+                    .Value(ctx.GetIndexAsString(sourceIU))
                 .Build()
             .Build()
         .Build()
     .Done().Ptr();
     // clang-format on
 
-    return TMapElement(column, TExpression(optionalColumn, &ctx, &props));
+    return TExpression(optionalColumn, &ctx, &props);
 }
 
-TMapElement BuildGroupingIndicatorColumn(const TInfoUnit& column, bool aggregatedAway, TPositionHandle pos, TExprContext& ctx,
-                                         TPlanProps& props) {
+TExpression BuildGroupingIndicatorColumn(bool aggregatedAway, TPositionHandle pos, TExprContext& ctx, TPlanProps& props) {
     // clang-format off
     auto indicatorColumn = Build<TCoLambda>(ctx, pos)
         .Args({"grouping_indicator_arg"})
@@ -66,7 +65,7 @@ TMapElement BuildGroupingIndicatorColumn(const TInfoUnit& column, bool aggregate
     .Done().Ptr();
     // clang-format on
 
-    return TMapElement(column, TExpression(indicatorColumn, &ctx, &props));
+    return TExpression(indicatorColumn, &ctx, &props);
 }
 
 } // anonymous namespace
@@ -80,97 +79,125 @@ TIntrusivePtr<IOperator> TExpandGroupingSetsRule::SimpleMatchAndApply(const TInt
     const auto groupingSetsOp = CastOperator<TOpGroupingSets>(input);
     const auto aggregate = CastOperator<TOpAggregate>(groupingSetsOp->GetInput());
     const auto& groupByKeys = aggregate->GetKeyColumns();
-    const auto* aggregateInputStructType = aggregate->GetInput()->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    const auto* aggregateStructType = aggregate->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    const auto* groupingSetsStructType = groupingSetsOp->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto& groupingSets = groupingSetsOp->GetGroupingSets();
+    auto& ctx = rboCtx.ExprCtx;
+    auto& registry = props.InfoUnitRegistry;
+    Y_ENSURE(!groupingSets.empty(), "Grouping sets list must not be empty");
 
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> groupByKeySet(groupByKeys.begin(), groupByKeys.end());
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> commonKeys = groupByKeySet;
     // Find keys which are present in each grouping sets, other keys may become null.
-    for (const auto& groupKeys : groupingSetsOp->GetGroupingSets()) {
-        THashSet<TInfoUnit, TInfoUnit::THashFunction> keySet(groupKeys.begin(), groupKeys.end());
-        THashSet<TInfoUnit, TInfoUnit::THashFunction> intersectionKeys;
-        for (const auto& key : commonKeys) {
-            if (keySet.contains(key)) {
-                intersectionKeys.insert(key);
-            }
-        }
-        commonKeys = std::move(intersectionKeys);
+    auto commonKeys = groupByKeys.Unordered();
+    for (const auto& keys : groupingSets) {
+        Y_ENSURE(keys.IsSubsetOf(groupByKeys.Unordered()), "Unknown grouping key");
+        commonKeys &= keys;
     }
 
-    TVector<TIntrusivePtr<IOperator>> logicalBranches;
-    logicalBranches.reserve(groupingSetsOp->GetGroupingSets().size());
+    TVector<TIntrusivePtr<IOperator>> branches;
+    TMappedIUs<TUnionInputRow> inputsByOutput;
+    for (const auto output : groupingSetsOp->GetOutputIUs()) {
+        inputsByOutput.Add(output).Inputs.reserve(groupingSets.size());
+    }
 
-    for (const auto& groupKeys : groupingSetsOp->GetGroupingSets()) {
-        THashSet<TInfoUnit, TInfoUnit::THashFunction> keySet;
-        for (const auto& key : groupKeys) {
-            Y_ENSURE(keySet.insert(key).second, "Duplicate grouping key: " << key.GetFullName());
+    const auto sourceInput = aggregate->GetInput();
+    auto hub = groupingSets.size() > 1
+        ? TReplicate::Create(sourceInput, aggregate->Pos, registry)
+        : TIntrusivePtr<TReplicate>{};
+    for (const auto& groupKeys : groupingSets) {
+        auto port = hub ? hub->AddOutput() : nullptr;
+        const auto* rebindings = port && !port->IsPrimary() ? &port->GetRebindings() : nullptr;
+        const auto rebind = [&](TInfoUnitId id) {
+            return rebindings ? *rebindings->Find(id) : id;
+        };
+        // Each branch defines its own aggregate results. Labels can coincide;
+        // the UnionAll rows connect their values. `values` is the branch's
+        // current binding for each original ID.
+        TMappedIUs<TInfoUnitId> values;
+        TAggregationIUs aggregations;
+        for (const auto& [output, traits] : aggregate->GetAggregationTraits().Items()) {
+            const auto value = registry.AddCopy(output);
+            auto reboundTraits = traits;
+            reboundTraits.Input = rebind(traits.Input);
+            aggregations.Add(value, std::move(reboundTraits));
+            values.Add(output, value);
         }
-
-        // Aggregate for group by keys specified in grouping sets.
-        TIntrusivePtr<IOperator> logicalBranch = MakeIntrusive<TOpAggregate>(
-            aggregate->GetInput(), aggregate->GetAggregationTraits(), groupKeys, aggregate->GetAggregationPhase(), aggregate->IsDistinctAll(), aggregate->Pos);
-
-        TVector<TMapElement> renames;
-        TVector<std::pair<TInfoUnit, TInfoUnit>> optionalColumns;
-        for (const auto& key : groupKeys) {
-            const auto* keyType = aggregateInputStructType->FindItemType(key.GetFullName());
-            Y_ENSURE(keyType, "No type for grouping key " << key.GetFullName());
-            // If column is not present in each grouping set and its non optional by default make it optional.
-            if (!commonKeys.contains(key) && !keyType->IsOptionalOrNull()) {
-                const auto source = MakeGeneratedIgnoreIU(props);
-                renames.emplace_back(source, key, aggregate->Pos, &rboCtx.ExprCtx, &props, true);
-                optionalColumns.emplace_back(key, source);
-            }
-        }
-
-        if (!groupKeys.empty()) {
-            for (const auto& traits : aggregate->GetAggregationTraits()) {
-                const auto& resultColumn = traits.ResultColName;
-                const auto* sourceColumnType = aggregateStructType->FindItemType(resultColumn.GetFullName());
-                const auto* targetColumnType = groupingSetsStructType->FindItemType(resultColumn.GetFullName());
-                Y_ENSURE(sourceColumnType && targetColumnType, "No type for aggregation result column" << resultColumn.GetFullName());
-                if (!sourceColumnType->IsOptionalOrNull() && targetColumnType->IsOptionalOrNull()) {
-                    const auto sourceColumn = MakeGeneratedIgnoreIU(props);
-                    renames.emplace_back(sourceColumn, resultColumn, aggregate->Pos, &rboCtx.ExprCtx, &props, true);
-                    optionalColumns.emplace_back(resultColumn, sourceColumn);
+        TOrderedIUs<> keys;
+        for (const auto key : groupByKeys.Items()) {
+            if (groupKeys.Contains(key)) {
+                keys.Append(rebind(key));
+                if (!values.Keys().Contains(key)) {
+                    values.Add(key, rebind(key));
                 }
             }
         }
+        TIntrusivePtr<IOperator> branchInput = port ? port : sourceInput;
+        TIntrusivePtr<IOperator> branch = MakeIntrusive<TOpAggregate>(std::move(branchInput),
+            std::move(aggregations), std::move(keys), aggregate->GetAggregationPhase(), aggregate->IsDistinctAll(), aggregate->Pos);
 
-        if (!renames.empty()) {
-            logicalBranch = MakeIntrusive<TOpMap>(logicalBranch, aggregate->Pos, renames);
-        }
-
-        TVector<TMapElement> originalNames;
-        for (const auto& [column, source] : optionalColumns) {
-            originalNames.emplace_back(BuildOptionalColumn(column, source, aggregate->Pos, rboCtx.ExprCtx, props));
-        }
-
-        for (const auto& key : groupByKeys) {
-            if (!keySet.contains(key)) {
-                originalNames.emplace_back(BuildNullColumn(key, aggregateInputStructType->FindItemType(key.GetFullName()), aggregate->Pos,
-                                                           rboCtx.ExprCtx, props));
+        TMapIUs computed;
+        // A computed value replaces the branch's binding for its original ID.
+        auto addValue = [&](TInfoUnitId output, TExpression expression) {
+            const auto value = registry.AddCopy(output);
+            computed.Add(value, std::move(expression));
+            if (values.Keys().Contains(output)) {
+                values.Replace(output, value);
+            } else {
+                values.Add(output, value);
+            }
+        };
+        for (const auto key : groupByKeys.Items()) {
+            const auto* type = sourceInput->GetIUType(key, ctx);
+            Y_ENSURE(type, "No type for grouping key " << key);
+            if (!groupKeys.Contains(key)) {
+                addValue(key, BuildNullColumn(type, aggregate->Pos, ctx, props));
+            } else if (!commonKeys.Contains(key) && !type->IsOptionalOrNull()) {
+                addValue(key, BuildOptionalColumn(values.At(key), aggregate->Pos, ctx, props));
             }
         }
-
-        for (const auto& [key, indicator] : groupingSetsOp->GetGroupingIndicators()) {
-            originalNames.emplace_back(
-                BuildGroupingIndicatorColumn(indicator, /*aggregatedAway=*/!keySet.contains(key), aggregate->Pos, rboCtx.ExprCtx, props));
+        if (!groupKeys.Empty()) {
+            for (const auto& [output, source] : groupingSetsOp->GetColumns().Items()) {
+                if (!aggregate->GetAggregationTraits().Keys().Contains(source)) {
+                    continue;
+                }
+                const auto* sourceType = aggregate->GetIUType(source, ctx);
+                const auto* targetType = groupingSetsOp->GetIUType(output, ctx);
+                Y_ENSURE(sourceType && targetType, "No type for aggregation result " << output);
+                if (!sourceType->IsOptionalOrNull() && targetType->IsOptionalOrNull()) {
+                    addValue(source, BuildOptionalColumn(values.At(source), aggregate->Pos, ctx, props));
+                }
+            }
         }
-
-        if (!originalNames.empty()) {
-            logicalBranch = MakeIntrusive<TOpMap>(logicalBranch, aggregate->Pos, originalNames);
+        for (const auto& [output, key] : groupingSetsOp->GetGroupingIndicators().Items()) {
+            const auto value = registry.AddCopy(output);
+            computed.Add(value, BuildGroupingIndicatorColumn(!groupKeys.Contains(key), aggregate->Pos, ctx, props));
+            inputsByOutput.At(output).Inputs.push_back(value);
         }
-        logicalBranches.emplace_back(std::move(logicalBranch));
+        if (!computed.Keys().Empty()) {
+            branch = MakeIntrusive<TOpMap>(std::move(branch), aggregate->Pos, std::move(computed));
+        }
+        for (const auto& [output, source] : groupingSetsOp->GetColumns().Items()) {
+            inputsByOutput.At(output).Inputs.push_back(values.At(source));
+        }
+        branches.push_back(std::move(branch));
     }
 
-    Y_ENSURE(!logicalBranches.empty(), "Grouping sets list must not be empty");
-    if (logicalBranches.size() == 1) {
-        return logicalBranches.front();
+    if (branches.size() == 1) {
+        // Preserve the external binding IDs without introducing a one-way Union.
+        TMapIUs bindings;
+        for (const auto& [output, row] : inputsByOutput.Items()) {
+            if (output != row.Inputs.front()) {
+                bindings.Add(output, MakeColumnAccess(row.Inputs.front(), aggregate->Pos, &ctx, &props));
+            }
+        }
+        if (bindings.Keys().Empty()) {
+            return std::move(branches.front());
+        }
+        return MakeIntrusive<TOpMap>(std::move(branches.front()), aggregate->Pos, std::move(bindings));
     }
 
-    return MakeIntrusive<TOpUnionAll>(std::move(logicalBranches), groupingSetsOp->Pos, groupingSetsOp->GetOutputIUs());
+    TUnionAllIUs columns(TUnionInputPolicy{branches.size()});
+    for (const auto output : inputsByOutput.Keys()) {
+        columns.Add(output, std::move(inputsByOutput.At(output)));
+    }
+    return MakeIntrusive<TOpUnionAll>(std::move(branches), groupingSetsOp->Pos, std::move(columns));
 }
 
 } // namespace NKikimr::NKqp

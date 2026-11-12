@@ -27,6 +27,8 @@ namespace NKikimr::NKqp::NScheduler {
         struct TStaticAttributes;
 
         namespace NDynamic {
+            struct TTreeElement;
+
             class TQuery;
             class TPool;
             class TDatabase;
@@ -39,12 +41,6 @@ namespace NKikimr::NKqp::NScheduler {
         } // namespace NDynamic
 
         namespace NSnapshot {
-            enum class ELeafFairShare : ui8 {
-                DEFAULT_FIFO = 0,
-                ALLOW_OVERLIMIT = 1,
-                EQUAL_TO_PARENT = 2,
-            };
-
             struct TTreeElement;
 
             class TQuery;
@@ -79,7 +75,7 @@ namespace NKikimr::NKqp::NScheduler {
     struct TOptions {
         bool Enabled = true;
         TDelayParams DelayParams;
-        NHdrf::NSnapshot::ELeafFairShare FairShareMode = NHdrf::NSnapshot::ELeafFairShare::EQUAL_TO_PARENT;
+        bool MemoryEnabled = true; // TODO: remove later when FeatureFlags.EnableComputeSchedulerMemory=true always.
     };
 
 } // namespace NKikimr::NKqp::NScheduler

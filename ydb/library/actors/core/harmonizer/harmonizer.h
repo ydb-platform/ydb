@@ -6,6 +6,7 @@
 namespace NActors {
     class IExecutorPool;
     class ISharedPool;
+    class TActorSystem;
     struct TSelfPingInfo;
     struct THarmonizerIterationState;
 
@@ -23,6 +24,7 @@ namespace NActors {
         virtual TPoolHarmonizerStats GetPoolStats(i16 poolId) const = 0;
         virtual void GetStats(THarmonizerStats &stats) const = 0;
         virtual void SetSharedPool(ISharedPool* pool) = 0;
+        virtual void SetActorSystem(TActorSystem* actorSystem) = 0;
     };
 
     std::unique_ptr<IHarmonizer> MakeHarmonizer(ui64 ts);

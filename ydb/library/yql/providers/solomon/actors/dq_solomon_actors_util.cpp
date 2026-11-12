@@ -8,9 +8,7 @@ using namespace NYql;
 
 namespace {
 
-void BeginMetric(
-    const NMonitoring::IMetricEncoderPtr& encoder,
-    const NYql::NSo::NProto::TDqSolomonSchemeItem& scheme)
+void BeginMetric(const NMonitoring::IMetricEncoderPtr& encoder, const NYql::NSo::NProto::TDqSolomonSchemeItem& scheme)
 {
     switch (scheme.GetDataTypeId()) {
         case NUdf::TDataType<i8>::Id:
@@ -32,9 +30,7 @@ void BeginMetric(
     }
 }
 
-TMaybe<TInstant> ParseTimestamp(
-    const NUdf::TUnboxedValue& unboxedValue,
-    const NYql::NSo::NProto::TDqSolomonSchemeItem& scheme)
+TMaybe<TInstant> ParseTimestamp(const NUdf::TUnboxedValue& unboxedValue, const NYql::NSo::NProto::TDqSolomonSchemeItem& scheme)
 {
     const NUdf::TUnboxedValue timestampValue = unboxedValue.GetElement(scheme.GetIndex());
     if (!timestampValue) {
@@ -44,6 +40,7 @@ TMaybe<TInstant> ParseTimestamp(
     switch (scheme.GetDataTypeId()) {
         case NUdf::TDataType<NUdf::TDate>::Id:
         case NUdf::TDataType<NUdf::TTzDate>::Id:
+            return TInstant::Days(timestampValue.Get<ui16>());
         case NUdf::TDataType<NUdf::TDatetime>::Id:
         case NUdf::TDataType<NUdf::TTzDatetime>::Id:
             return TInstant::Seconds(timestampValue.Get<ui32>());
@@ -55,10 +52,7 @@ TMaybe<TInstant> ParseTimestamp(
     }
 }
 
-void EncodeSensorValue(
-    const NMonitoring::IMetricEncoderPtr& encoder,
-    const TInstant& timestamp,
-    const NUdf::TUnboxedValue& unboxedValue,
+void EncodeSensorValue(const NMonitoring::IMetricEncoderPtr& encoder, const TInstant& timestamp, const NUdf::TUnboxedValue& unboxedValue,
     const NYql::NSo::NProto::TDqSolomonSchemeItem& scheme)
 {
     switch (scheme.GetDataTypeId()) {
@@ -97,11 +91,11 @@ void EncodeSensorValue(
     }
 }
 
-} // namespace
+}   // namespace
 
 namespace NYql::NDq {
 
-    TMetricsEncoder::TMetricsEncoder(const NSo::NProto::TDqSolomonShardScheme& scheme, bool useCloudFormat)
+TMetricsEncoder::TMetricsEncoder(const NSo::NProto::TDqSolomonShardScheme& scheme, bool useCloudFormat)
     : Scheme(scheme)
     , UseCloudFormat(useCloudFormat)
 {
@@ -111,9 +105,8 @@ namespace NYql::NDq {
 void TMetricsEncoder::BeginNew() {
     Data.clear();
     DataOut.emplace(Data);
-    SolomonEncoder = UseCloudFormat
-        ? NMonitoring::BufferedEncoderCloudJson(&DataOut.value(), 0, "name")
-        : NMonitoring::BufferedEncoderJson(&DataOut.value(), 0);
+    SolomonEncoder = UseCloudFormat ? NMonitoring::BufferedEncoderCloudJson(&DataOut.value(), 0, "name")
+                                    : NMonitoring::BufferedEncoderJson(&DataOut.value(), 0);
 
     SolomonEncoder->OnStreamBegin();
 }
@@ -155,4 +148,4 @@ TString TMetricsEncoder::Encode() {
     return res;
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

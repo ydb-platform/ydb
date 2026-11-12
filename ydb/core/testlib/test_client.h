@@ -154,6 +154,7 @@ namespace Tests {
         bool EnableConfigsDispatcher = true;
         bool EnableFeatureFlagsConfigurator = false;
         bool UseRealThreads = true;
+        bool UseRealInterconnect = false;
         bool EnableKqpSpilling = false;
         bool EnableYq = false;
         bool EnableYqGrpc = false;
@@ -226,6 +227,7 @@ namespace Tests {
         TServerSettings& SetEnableConfigsDispatcher(bool value) { EnableConfigsDispatcher = value; return *this; }
         TServerSettings& SetEnableFeatureFlagsConfigurator(bool value) { EnableFeatureFlagsConfigurator = value; return *this; }
         TServerSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; }
+        TServerSettings& SetUseRealInterconnect(bool value) { UseRealInterconnect = value; return *this; }
         TServerSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = std::make_shared<NKikimrConfig::TAppConfig>(value); return *this; }
         TServerSettings& InitKikimrRunConfig() { KikimrRunConfig = std::make_shared<TKikimrRunConfig>(*AppConfig); return *this; }
         TServerSettings& SetKeyFor(ui32 nodeId, TString keyValue) { NodeKeys[nodeId] = keyValue; return *this; }
@@ -394,7 +396,7 @@ namespace Tests {
         void ShutdownGRpc() {
             for (auto& [_, tenantGRpc] : TenantsGRpc) {
                 for (auto& [_, nodeGRpc] : tenantGRpc) {
-                    nodeGRpc.Shutdown();
+                    nodeGRpc.Shutdown(StoppedGRpcServers);
                 }
             }
         }
@@ -431,7 +433,10 @@ namespace Tests {
         // actors are gone; otherwise, lingering gRPC contexts or
         // background operations can cause the gRPC client to hang
         // or trigger use-after-free during its destruction.
+        // Slots below are cleared before Runtime is destroyed, so those
+        // callbacks log to stderr instead of a freed TActorSystem.
         std::shared_ptr<NYdb::TDriver> FederatedQuerySetupDriver_;
+        TVector<NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr> FederatedQuerySetupActorSystems_;
         THolder<TTestActorRuntime> Runtime;
         THolder<NYdb::TDriver> Driver;
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;
@@ -447,14 +452,16 @@ namespace Tests {
             std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
             TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
 
-            void Shutdown() {
+            void Shutdown(TVector<std::unique_ptr<NYdbGrpc::TGRpcServer>>& stoppedServers) {
                 if (GRpcServer) {
                     GRpcServer->Stop();
-                    GRpcServer = nullptr;
+                    stoppedServers.push_back(std::move(GRpcServer));
                 }
             }
         };
 
+        // Actors may reference stopped services until Runtime is destroyed.
+        TVector<std::unique_ptr<NYdbGrpc::TGRpcServer>> StoppedGRpcServers;
         std::unordered_map<TString, std::unordered_map<ui32, TGRpcInfo>> TenantsGRpc;  // tenant -> nodeIdx -> GRpcInfo
     };
 
@@ -631,6 +638,8 @@ namespace Tests {
 
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000), const TString& userToken = "");
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000), const TString& userToken = "");
+        NMsgBusProxy::EResponseStatus CreateIndexedTable(const TString& parent,
+            const NKikimrSchemeOp::TIndexedTableCreationConfig& table, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTableWithUniformShardedIndex(const TString& parent,
             const NKikimrSchemeOp::TTableDescription &table, const TString& indexName,
             const TVector<TString> indexColumns, NKikimrSchemeOp::EIndexType type,

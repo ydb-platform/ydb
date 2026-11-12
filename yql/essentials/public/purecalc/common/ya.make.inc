@@ -54,9 +54,8 @@ PEERDIR(
     yql/essentials/providers/common/schema/expr
     yql/essentials/providers/common/udf_resolve
     yql/essentials/providers/common/arrow_resolve
+    yql/essentials/providers/config
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(interface.h)
 

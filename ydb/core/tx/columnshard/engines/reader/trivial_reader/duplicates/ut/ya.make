@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -40,6 +38,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_filters.cpp
+    ut_index_memory.cpp
     ut_manager.cpp
 )
 

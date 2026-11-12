@@ -88,12 +88,16 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
 
         bool enableColumnStatisticsOld = EnableColumnStatistics;
         EnableColumnStatistics = featureFlags.GetEnableColumnStatistics();
+        EnableBackgroundAnalyzeChangeRatio = featureFlags.GetEnableBackgroundAnalyzeChangeRatio();
+        EnableAnalyzeSampling = featureFlags.GetEnableAnalyzeSampling();
         if (!enableColumnStatisticsOld && EnableColumnStatistics) {
             InitializeStatisticsTable();
+            StartTraversalScheduler();
         }
     }
 
     StatisticsConfig = config.GetStatisticsConfig();
+    AnalyzeCountersDirty = true;
 
     auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
     Send(ev->Sender, response.release(), 0, ev->Cookie);
@@ -776,14 +780,6 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
                 TraversalDatabase = operation.DatabaseName;
                 TraversalPathId = operationTable.PathId;
 
-                if (!*isKnown) {
-                    YDB_LOG_DEBUG("ScheduleNextAnalyze. table was deleted, deleting its statistics",
-                        {"tabletId", TabletID()},
-                        {"pathId", operationTable.PathId});
-                    DeleteStatisticsFromTable();
-                    return;
-                }
-
                 TraversalStartTime = TInstant::Now();
                 LastTraversalWasForce = true;
 
@@ -885,7 +881,10 @@ void TStatisticsAggregator::FinishTraversal(
     bool traversalSucceeded = (status == NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 
     auto pathIt = ScheduleTraversals.find(pathId);
-    if (pathIt != ScheduleTraversals.end()) {
+    const auto* table = CurrentForceTraversalTable();
+    // A sample does not refresh the full statistics used by background ANALYZE.
+    if (pathIt != ScheduleTraversals.end()
+            && (!table || table->SampleRate == 1.0)) {
         auto& traversalTable = pathIt->second;
         traversalTable.LastUpdateTime = TraversalStartTime;
 
@@ -927,7 +926,6 @@ void TStatisticsAggregator::FinishTraversal(
         }
     }
     InvalidateCachedChangeCounters();
-    ReportAnalyzeCounters();
 
     // When a background traversal completes successfully, check whether there
     // are pending force (user-initiated) full ANALYZE requests for the same table
@@ -1396,23 +1394,37 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
     return true;
 }
 
- void TStatisticsAggregator::ReportBaseStatisticsCounters() {
-    ui64 totalRowCount = 0;
-    ui64 totalBytesSize = 0;
-    for (const auto& [_, serializedStats] : BaseStatistics) {
+TStatisticsAggregator::TBaseStatisticsTotals TStatisticsAggregator::CalculateBaseStatisticsTotals(
+    const NKikimrStat::TSchemeShardStats& stats)
+{
+    TBaseStatisticsTotals totals;
+    for (const auto& entry : stats.GetEntries()) {
+        totals.RowCount += entry.GetRowCount();
+        totals.BytesSize += entry.GetBytesSize();
+    }
+    return totals;
+}
+
+void TStatisticsAggregator::RebuildBaseStatisticsCounters() {
+    BaseStatisticsTotals = {};
+    for (auto& [_, serializedStats] : BaseStatistics) {
+        serializedStats.CommittedTotals = {};
         if (!serializedStats.Committed) {
             continue;
         }
         NKikimrStat::TSchemeShardStats stats;
         Y_PROTOBUF_SUPPRESS_NODISCARD stats.ParseFromString(*serializedStats.Committed);
-        for (const auto& entry: stats.GetEntries()) {
-            totalRowCount += entry.GetRowCount();
-            totalBytesSize += entry.GetBytesSize();
-        }
+        serializedStats.CommittedTotals = CalculateBaseStatisticsTotals(stats);
+        BaseStatisticsTotals.RowCount += serializedStats.CommittedTotals.RowCount;
+        BaseStatisticsTotals.BytesSize += serializedStats.CommittedTotals.BytesSize;
     }
-    TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_ROW_COUNT].Set(totalRowCount);
-    TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_BYTES_SIZE].Set(totalBytesSize);
- }
+    ReportBaseStatisticsCounters();
+}
+
+void TStatisticsAggregator::ReportBaseStatisticsCounters() {
+    TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_ROW_COUNT].Set(BaseStatisticsTotals.RowCount);
+    TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_BYTES_SIZE].Set(BaseStatisticsTotals.BytesSize);
+}
 
 TStatisticsAggregator::TChangeCounters TStatisticsAggregator::GetCurrentChangeCounters(const TPathId& pathId) const {
     NKikimrStat::TSchemeShardStats stats;
@@ -1455,6 +1467,9 @@ const NKikimrStat::TPathEntry* TStatisticsAggregator::FindBaseStatisticsEntry(
 bool TStatisticsAggregator::IsChangeRatioAboveThreshold(
     const TChangeCounters& lastAnalyze, const TChangeCounters& current) const
 {
+    if (!EnableBackgroundAnalyzeChangeRatio) {
+        return false;
+    }
     if (lastAnalyze.RowUpdates == Max<ui64>() || lastAnalyze.RowDeletes == Max<ui64>()) {
         // Never analyzed — but only treat as stale once SchemeShard has sent
         // real counters. Otherwise FinishTraversal would keep baselining at
@@ -1512,6 +1527,7 @@ const THashMap<TPathId, TStatisticsAggregator::TChangeCounters>& TStatisticsAggr
 
 void TStatisticsAggregator::InvalidateCachedChangeCounters() {
     CachedChangeCountersValid = false;
+    AnalyzeCountersDirty = true;
 }
 
 TStatisticsAggregator::TScheduleTraversal* TStatisticsAggregator::FindStaleTable() {
@@ -1555,7 +1571,20 @@ void TStatisticsAggregator::InitAnalyzeCounters() {
         ->GetSubgroup("status", "failed")->GetCounter("BackgroundAnalyze", true);
 }
 
+void TStatisticsAggregator::Handle(TEvPrivate::TEvReportAnalyzeCounters::TPtr&) {
+    if (AnalyzeCountersDirty) {
+        ReportAnalyzeCounters();
+        AnalyzeCountersDirty = false;
+    }
+    Schedule(AnalyzeCountersReportPeriod, new TEvPrivate::TEvReportAnalyzeCounters());
+}
+
 void TStatisticsAggregator::ReportAnalyzeCounters() {
+    if (!EnableBackgroundAnalyzeChangeRatio) {
+        *BackgroundAnalyzePendingCounter = 0;
+        return;
+    }
+
     const auto& currentCounters = GetCachedChangeCounters();
 
     ui64 pendingTables = 0;

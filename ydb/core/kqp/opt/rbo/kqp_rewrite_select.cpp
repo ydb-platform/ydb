@@ -1,5 +1,8 @@
 #include "kqp_rbo_transformer.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/logical/kqp_opt_log_rules.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -17,9 +20,14 @@ namespace {
 struct TAggregationTraits {
     TVector<TExprNode::TPtr> AggTraitsList;
     TVector<TInfoUnit> KeyColumns;
+
+    // GROUP BY keys alone still need an Aggregate: it emits one row per distinct key, like DISTINCT.
+    bool NeedsAggregate() const {
+        return !AggTraitsList.empty() || !KeyColumns.empty();
+    }
 };
 
-const THashSet<TString> SupportedAggregationFunctions{"sum", "min", "max", "count", "avg", "variance_1_1"};
+const THashSet<TString> SupportedAggregationFunctions{"sum", "min", "max", "count", "avg", "variance_1_1", "some"};
 
 TString GetColumnNameFromGroupRef(TExprNode::TPtr groupRef,
                                   const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap) {
@@ -933,7 +941,7 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
                                          TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>&& expressionsMapPostAgg,
                                          const TVector<TVector<TInfoUnit>>& groupingSets, const TGroupingIndicators& groupingIndicators,
                                          TExprContext& ctx, TPositionHandle pos, bool additivePostAggMap = false) {
-    Y_ENSURE(groupingIndicators.empty() || (!groupingSets.empty() && !aggTraits.AggTraitsList.empty()),
+    Y_ENSURE(groupingIndicators.empty() || (!groupingSets.empty() && aggTraits.NeedsAggregate()),
              "GROUPING() is supported only for grouping sets over an aggregation");
 
     // While processing aggregations and having we could have the same aggregations functions on the same column, here we want to eliminate them.
@@ -947,7 +955,7 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
         resultExpr = BuildAggregateExpressionMap(resultExpr, expressionsMapPreAgg, groupByKeysExpressionsMap, ctx, pos);
     }
     // Build Aggreegate.
-    if (!aggTraits.AggTraitsList.empty()) {
+    if (aggTraits.NeedsAggregate()) {
         resultExpr = BuildAggregate(resultExpr, aggTraits.AggTraitsList, aggTraits.KeyColumns, /*distinct=*/false, ctx, pos);
         if (!groupingSets.empty()) {
             // Emit grouping sets.
@@ -1550,8 +1558,13 @@ TExprNode::TListType FindSublinks(const TExprNode::TPtr& node) {
     });
 }
 
+bool IsAsTable(const TExprNode::TPtr input) {
+    return TCoParameter::Match(input.Get()) ||
+           (input->IsCallable("ToList") && TCoParameter::Match(input->HeadPtr().Get()));
+}
+
 TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated) {
+                              ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated) {
 
     auto sublinks = FindSublinks(node);
     YQL_CLOG(TRACE, ProviderKikimr) << "Sublinks size: " << sublinks.size();
@@ -1566,7 +1579,7 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
         TNodeOnNodeOwnedMap nodeReplacementMap;
         TExprNode::TPtr newNode;
 
-        auto newSubquery = RewriteSelect(sublink->ChildPtr(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated, false);
+        auto newSubquery = RewriteSelect(sublink->ChildPtr(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated, false);
         auto sublinkType = sublink->Child(0)->Content();
 
         if (sublinkType == "expr") {
@@ -1576,13 +1589,12 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
                 .Done().Ptr();
             // clang-format on
         } else if (sublinkType == "any") {
-            // clang-format off
-            newNode = Build<TKqpInSublink>(ctx, node->Pos())
-                .Subquery(newSubquery)
-                .OuterType(sublink->Child(2))
-                .InLambda(sublink->Child(3))
-                .Done().Ptr();
-            // clang-format on
+            TExprNode::TListType children{newSubquery, sublink->ChildPtr(2), sublink->ChildPtr(3)};
+            // The YqlSubLink settings say whether IN is ANSI, which decides the type of its result.
+            if (sublink->ChildrenSize() > 5) {
+                children.push_back(sublink->ChildPtr(5));
+            }
+            newNode = ctx.NewCallable(node->Pos(), TKqpInSublink::CallableName(), std::move(children));
         } else if (sublinkType == "exists") {
             // clang-format off
             newNode = Build<TKqpExistsSublink>(ctx, node->Pos())
@@ -1600,23 +1612,128 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
     }
     return node;
 }
+} // anonymous namespace
+
+namespace {
+
+TExprNode::TPtr RewriteReadOrEffectInput(const TExprNode::TPtr& node, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx, ui64& uniqueSourceIdCounter) {
+    if (TKqpOpRoot::Match(node.Get())) {
+        return TKqpOpRoot(node).Input().Ptr();
+    }
+    if (auto sequencer = TMaybeNode<TKqlSequencer>(node)) {
+        // Import sequencing as its own operator. The surrounding row maps are
+        // rewritten normally and can bind the columns this operator defines.
+        return Build<TKqlSequencer>(ctx, node->Pos()).InitFrom(sequencer.Cast())
+            .Input(RewriteReadOrEffectInput(sequencer.Cast().Input().Ptr(), ctx, kqpCtx, uniqueSourceIdCounter))
+            .Done().Ptr();
+    }
+    if (TKqlReadTableIndexRanges::Match(node.Get())) {
+        // Reuse index metadata/covering expansion, then import its read and
+        // optional main-table lookup into the relational plan.
+        auto expanded = NOpt::KqpRewriteIndexRead(TExprBase(node), ctx, kqpCtx).Ptr();
+        Y_ENSURE(expanded != node, "Could not expand an explicit index read");
+        return RewriteReadOrEffectInput(expanded, ctx, kqpCtx, uniqueSourceIdCounter);
+    }
+    if (TKqlStreamLookupTable::Match(node.Get())) {
+        const auto lookup = TKqlStreamLookupTable(node);
+        return Build<TKqlStreamLookupTable>(ctx, node->Pos()).InitFrom(lookup)
+            .LookupKeys(RewriteReadOrEffectInput(lookup.LookupKeys().Ptr(), ctx, kqpCtx, uniqueSourceIdCounter))
+            .Done().Ptr();
+    }
+    if (TKqlReadTableRanges::Match(node.Get())) {
+        const auto read = TKqlReadTableRanges(node);
+        Y_ENSURE(read.Ranges().Maybe<TCoVoid>(), "Unexpected ranges in a predicate write");
+        Y_ENSURE(!TKqpReadTableSettings::Parse(read).Sampling, "Sampling in a predicate write");
+        const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+        return Build<TKqpOpRead>(ctx, node->Pos())
+            .Table(read.Table())
+            .Alias().Build("")
+            .Columns(read.Columns())
+            .SourceType(GetTableSourceType(table, ctx, node->Pos()))
+            .UniqueId().Value(ToString(uniqueSourceIdCounter++)).Build()
+            .Done().Ptr();
+    }
+    if (TCoFilter::Match(node.Get()) || TCoOrderedFilter::Match(node.Get())) {
+        return Build<TKqpOpFilter>(ctx, node->Pos())
+            .Input(RewriteReadOrEffectInput(node->HeadPtr(), ctx, kqpCtx, uniqueSourceIdCounter))
+            .Lambda(node->ChildPtr(1)).Done().Ptr();
+    }
+    if (TCoExtractMembers::Match(node.Get())) {
+        return Build<TKqpOpProject>(ctx, node->Pos())
+            .Input(RewriteReadOrEffectInput(node->HeadPtr(), ctx, kqpCtx, uniqueSourceIdCounter))
+            .ProjectList(node->ChildPtr(1)).Done().Ptr();
+    }
+    Y_ENSURE(TCoMap::Match(node.Get()) || TCoOrderedMap::Match(node.Get()),
+        "Unsupported input to table effect: " << node->Content());
+    const auto map = TCoMapBase(node);
+    auto newInput = RewriteReadOrEffectInput(map.Input().Ptr(), ctx, kqpCtx, uniqueSourceIdCounter);
+    auto lambda = map.Lambda();
+    auto asStruct = lambda.Body().Maybe<TCoAsStruct>();
+    Y_ENSURE(asStruct, "New RBO cannot import a table-effect Map whose body is not AsStruct");
+
+    TVector<TExprNode::TPtr> mapElements;
+
+    for (auto ch : asStruct.Cast()) {
+        Y_ENSURE(ch.Size()==2);
+        auto name = ch.Item(0);
+        auto expr = ch.Item(1);
+
+        // clang-format off
+        mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, node->Pos())
+            .Input(newInput)
+            .Variable(name.Cast<TCoAtom>())
+            .Lambda<TCoLambda>()
+                .Args({"_map_arg_"})
+                .Body<TExprApplier>()
+                    .Apply(expr)
+                    .With(TCoLambda(lambda).Args().Arg(0), "_map_arg_")
+                .Build()
+            .Build()
+            .ForceOptional().Value("False").Build()
+        .Done().Ptr());
+        // clang-format on
+    }
+
+    // clang-format off
+    newInput = Build<TKqpOpMap>(ctx, node->Pos())
+        .Input(newInput)
+        .MapElements()
+            .Add(mapElements)
+        .Build()
+        .Project()
+            .Value("true")
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+    return newInput;
+}
 
 } // anonymous namespace
 
-TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    Y_UNUSED(kqpCtx);
-
-    TExprNode::TPtr tableEffectInput = node->ChildPtr(1);
-    if (TKqpWriteConstraint::Match(tableEffectInput.Get())){
-        tableEffectInput = tableEffectInput->ChildPtr(0);
+TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx, ui64& uniqueSourceIdCounter) {
+    Y_ENSURE(!kqpCtx.Config->GetEnableFallbackOnDML(), "Fallback due to DML fallback flag");
+    auto effectInput = node->ChildPtr(1);
+    while (auto constraint = TMaybeNode<TKqpWriteConstraint>(effectInput)) {
+        // The frontend also wraps ordinary writes in an empty constraint node.
+        // Nonempty columns require PG runtime NOT NULL checks, which New RBO
+        // does not support. Reject them before stripping the wrapper.
+        Y_ENSURE(constraint.Cast().Columns().Size() == 0,
+            "PG write constraints are not supported in New RBO");
+        effectInput = constraint.Cast().Input().Ptr();
     }
-
-    Y_ENSURE(TKqpOpRoot::Match(tableEffectInput.Get()), "Only support subqueries as input to table effects operation");
-    TKqpOpRoot root(tableEffectInput);
+    auto newInput = RewriteReadOrEffectInput(effectInput, ctx, kqpCtx, uniqueSourceIdCounter);
 
     TString effectType = TString(node->Content());
 
     TKqlTableEffect tableEffect(node);
+    const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, tableEffect.Table().Path());
+    for (const auto& index : table.Metadata->Indexes) {
+        Y_ENSURE(!index.ItUsedForWrite() || index.IsWrittenBySink(kqpCtx.Config->GetEnableIndexStreamWrite()),
+            "New RBO requires sink-maintained indexes (EnableIndexStreamWrite for global secondary indexes)");
+    }
+    TVector<TExprNode::TPtr> emptyList;
 
     if (TKqlInsertRows::Match(node.Get()) || TKqlInsertRowsIndex::Match(node.Get())) {
         TKqlInsertRowsBase insert(node);
@@ -1625,7 +1742,8 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
+                .GenerateColumnsIfInsert().Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(insert.Columns())
@@ -1642,7 +1760,8 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
+                .GenerateColumnsIfInsert().Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(update.Columns())
@@ -1659,7 +1778,8 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
+                .GenerateColumnsIfInsert().Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(update.Columns())
@@ -1676,13 +1796,31 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
+                .GenerateColumnsIfInsert().Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(upsert.Columns())
                 .ReturningColumns(upsert.ReturningColumns())
                 .IsBatch(upsert.IsBatch())
-                .DefaultColumns().Build()
+                .DefaultColumns(upsert.DefaultColumns())
+                .Settings(upsert.Settings())
+                .OnConflict().Build()
+            .Build()
+            .ColumnOrder(upsert.ReturningColumns())
+            .Done().Ptr();
+    } else if (TKqlUpsertRowsIndex::Match(node.Get())) {
+        const auto upsert = TKqlUpsertRowsIndex(node);
+        return Build<TKqpOpRoot>(ctx, node->Pos())
+            .Input<TKqpOpTableEffect>()
+                .Input(newInput)
+                .GenerateColumnsIfInsert().Build()
+                .Table(tableEffect.Table())
+                .EffectType().Value(effectType).Build()
+                .Columns(upsert.Columns())
+                .ReturningColumns(upsert.ReturningColumns())
+                .IsBatch(upsert.IsBatch())
+                .DefaultColumns(upsert.GenerateColumnsIfInsert())
                 .Settings(upsert.Settings())
                 .OnConflict().Build()
             .Build()
@@ -1693,14 +1831,15 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
+                .GenerateColumnsIfInsert().Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
-                .Columns().Build()
+                .Columns().Add(emptyList).Build()
                 .ReturningColumns(deleteRows.ReturningColumns())
                 .IsBatch(deleteRows.IsBatch())
-                .DefaultColumns().Build()
-                .Settings(deleteRows.Settings())
+                .DefaultColumns().Add(emptyList).Build()
+                .Settings().Build()
                 .OnConflict().Build()
             .Build()
             .ColumnOrder(deleteRows.ReturningColumns())
@@ -1710,14 +1849,15 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
+                .GenerateColumnsIfInsert().Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
-                .Columns().Build()
+                .Columns().Add(emptyList).Build()
                 .ReturningColumns(deleteRows.ReturningColumns())
                 .IsBatch(deleteRows.IsBatch())
-                .DefaultColumns().Build()
-                .Settings(deleteRows.Settings())
+                .DefaultColumns().Add(emptyList).Build()
+                .Settings().Build()
                 .OnConflict().Build()
             .Build()
             .ColumnOrder(deleteRows.ReturningColumns())
@@ -1728,27 +1868,67 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
     }
 }
 
-
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated, bool generateRoot) {
+                              ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated,
+                              bool generateRoot) {
 
     if(translated.contains(input.Get())) {
         return translated.at(input.Get());
     }
     TVector<TString> finalColumnOrder;
-    // Start from beggining for each proccesed select;
-    ui64 uniqueAggColumnId = 0;
+    bool starResult = false;
+    // Generated column names must be unique across the whole query.
+    ui64& uniqueAggColumnId = uniqueColumnIdCounter;
 
     TExprNode::TPtr node = input;
 
     if (generateRoot) {
-        node = RewriteSublinks(node, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated);
+        node = RewriteSublinks(node, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated);
     }
 
     auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
     TVector<TExprNode::TPtr> setItemsResults;
     for (ui32 i = 0; i < setItems->ChildrenSize(); ++i) {
         auto setItem = setItems->ChildPtr(i);
+
+        if (auto values = GetSetting(setItem->Tail(), "values")) {
+            starResult = false;
+            Y_ENSURE(!GetSetting(setItem->Tail(), "result"), "VALUES cannot have a result projection");
+            // VALUES supplies rows directly. Do not silently discard SELECT clauses
+            // that would need their own relational operators.
+            for (const auto setting : {"from", "where", "group_exprs", "group_sets", "having", "window", "distinct_all", "distinct_on"}) {
+                Y_ENSURE(!GetSetting(setItem->Tail(), setting), "Unsupported VALUES setting: " << setting);
+            }
+
+            const auto pos = setItem->Pos();
+            auto row = ctx.NewArgument(pos, "row");
+            TExprNode::TListType members;
+            TColumnOrder order;
+            finalColumnOrder.clear();
+            for (ui32 column = 0; column < values->Child(1)->ChildrenSize(); ++column) {
+                auto name = values->Child(1)->ChildPtr(column);
+                members.push_back(ctx.NewList(pos, {name,
+                    ctx.NewCallable(pos, "Nth", {row, ctx.NewAtom(pos, ToString(column))})}));
+                order.AddColumn(TString(name->Content()));
+                finalColumnOrder.emplace_back(name->Content());
+            }
+
+            // Match the ordinary SQL VALUES lowering: its input is a list of
+            // tuples, whereas EmptySource consumes a list of named structs.
+            auto rows = ctx.NewCallable(pos, "OrderedMap", {values->ChildPtr(2),
+                ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), ctx.NewCallable(pos, "AsStruct", std::move(members)))});
+            if (!GetSetting(setItem->Tail(), "unknowns_allowed")) {
+                rows = ctx.NewCallable(pos, "YqlReplaceUnknown", {rows});
+            }
+            rows = KeepColumnOrder(order, rows, ctx);
+
+            auto source = Build<TKqpOpEmptySource>(ctx, pos).Input(rows).Done().Ptr();
+            if (auto sort = GetSetting(setItem->Tail(), "sort")) {
+                source = BuildSort(source, sort, {}, ctx);
+            }
+            setItemsResults.push_back(source);
+            continue;
+        }
 
         TVector<TExprNode::TPtr> resultElements;
         // In pg syntax duplicate attributes are allowed in the results, but we need to rename them
@@ -1780,6 +1960,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
                 if (TKqlReadTableRanges::Match(childExpr.Get())) {
                     auto readExpr = TKqlReadTableRanges(childExpr);
+                    YQL_ENSURE(!TKqpReadTableSettings::Parse(readExpr).Sampling,
+                        "Sampling is not supported by the relational optimizer");
                     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readExpr.Table().Path());
 
                     // clang-format off
@@ -1792,13 +1974,18 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     .Done().Ptr();
                     // clang-format on
                 }
+                else if (TKqlReadTableIndexRanges::Match(childExpr.Get())) {
+                    fromExpr = Build<TKqpOpReplaceAlias>(ctx, node->Pos())
+                        .Input(RewriteReadOrEffectInput(childExpr, ctx, kqpCtx, uniqueSourceIdCounter))
+                        .Alias(alias).Done().Ptr();
+                }
                 else if (childExpr->IsCallable("YqlSelect")){
                     TExprNode::TPtr subquery;
 
                     if (translated.contains(childExpr.Get())) {
                         subquery = translated.at(childExpr.Get());
                     } else {
-                        subquery = RewriteSelect(childExpr, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated, false);
+                        subquery = RewriteSelect(childExpr, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated, false);
                     }
 
                     // We need to rename all the IUs in the subquery to reflect the new alias
@@ -1806,6 +1993,20 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                         .Input(subquery)
                         .Alias(alias)
                         .Done().Ptr();
+                }
+                else if (IsAsTable(childExpr)) {
+                    auto param = childExpr->IsCallable("ToList") ? childExpr->HeadPtr() : childExpr;
+
+                    // clang-format off
+                    auto source = Build<TKqpOpEmptySource>(ctx, node->Pos())
+                        .Input(param)
+                    .Done();
+
+                    fromExpr = Build<TKqpOpReplaceAlias>(ctx, node->Pos())
+                        .Input(source)
+                        .Alias(alias)
+                    .Done().Ptr();
+                    // clang-format on
                 }
                 else {
                     Y_ENSURE(false, TStringBuilder() << "Unsupported callable: " << childExpr->Content());
@@ -2126,11 +2327,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                                             distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, uniqueAggColumnId, ctx, node->Pos());
         }
 
-        auto values = GetSetting(setItem->Tail(), "values");
-        Y_ENSURE(!values, "New RBO does not support 'values' set items");
-
         auto result = GetSetting(setItem->Tail(), "result");
-        Y_ENSURE(result || values, "New RBO expects either 'values' or 'result' at a set item");
+        Y_ENSURE(result, "New RBO expects either 'values' or 'result' at a set item");
+        starResult = result->Child(1)->ChildrenSize() == 1 && result->Child(1)->Head().Head().IsList();
 
         // Process all aggregations in result item.
         ProcessAggregationsInResultItems(result, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap, aggregationTraits,
@@ -2141,7 +2340,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         bool additivePostAggMap = false;
         if (!windows.empty()) {
             ProcessWindowCalls(windows, expressionsMapPostAgg, expressionsMapPostWindow, usedWindowsInOrder, uniqueAggColumnId, ctx, node->Pos());
-            additivePostAggMap = !usedWindowsInOrder.empty() && !hasRollup && aggregationTraits.AggTraitsList.empty() &&
+            additivePostAggMap = !usedWindowsInOrder.empty() && !hasRollup && !aggregationTraits.NeedsAggregate() &&
                                  distinctAggregationTraitsPostAggregate.AggTraitsList.empty();
             if (!additivePostAggMap) {
                 TVector<TInfoUnit> alreadyProducedColumns = aggregationTraits.KeyColumns;
@@ -2403,6 +2602,18 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
     auto sort = GetSetting(node->Head(), "sort");
     if (sort) {
         opResult = BuildSort(opResult, sort, {}, ctx);
+    }
+
+    // A plain SELECT * has no explicit result-column hints. Without
+    // OrderedColumns, the old pipeline exports it in canonical struct-field
+    // order (alphabetically), even though type annotation knows the source's
+    // declaration order. Resolve that presentation order here, before building
+    // the root, so physical export can always use the resolved root columns.
+    // Keep intermediate projections intact: their order is needed by outer
+    // queries and positional operations. Explicit SELECT lists and
+    // OrderedColumns retain their projection order, including for UNION ALL.
+    if (generateRoot && starResult && !typeCtx.OrderedColumns) {
+        ::Sort(finalColumnOrder);
     }
 
     TVector<TCoAtom> columnAtomList;

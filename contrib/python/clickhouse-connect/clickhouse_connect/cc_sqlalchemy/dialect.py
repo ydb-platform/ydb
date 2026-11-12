@@ -8,6 +8,8 @@ from sqlalchemy.exc import NoResultFound, NoSuchTableError
 from clickhouse_connect import dbapi
 from clickhouse_connect.cc_sqlalchemy import dialect_name, ischema_names
 from clickhouse_connect.cc_sqlalchemy.inspector import (
+    _INTERNAL_QUERY_OPTION,
+    _INTERNAL_QUERY_SENTINEL,
     ChInspector,
     get_columns,
     get_table_metadata,
@@ -102,6 +104,16 @@ class ClickHouseDialect(DefaultDialect):
             return dict(stmt_formats)
         return {**stmt_formats, **{k: v for k, v in merged.items() if k not in stmt_formats}}
 
+    @staticmethod
+    def _ch_internal_query(context: Any) -> bool:
+        # Set by inspector.with_internal_query_formats on dialect metadata statements.
+        if context is None:
+            return False
+        if context.execution_options.get(_INTERNAL_QUERY_OPTION) is _INTERNAL_QUERY_SENTINEL:
+            return True
+        stmt = getattr(context, "invoked_statement", None)
+        return bool(stmt is not None and stmt.get_execution_options().get(_INTERNAL_QUERY_OPTION) is _INTERNAL_QUERY_SENTINEL)
+
     def _ch_pyformat_encoded(self, context: Any) -> bool:
         compiled = getattr(context, "compiled", None)
         if compiled is None:
@@ -109,13 +121,25 @@ class ClickHouseDialect(DefaultDialect):
         return bool(getattr(compiled.preparer, "_double_percents", True))
 
     def do_execute(self, cursor, statement, parameters, context=None):
-        cast(Cursor, cursor).execute(
-            statement,
-            parameters,
-            settings=self._ch_query_settings(context),
-            query_formats=self._ch_query_formats(context),
-            pyformat_encoded=self._ch_pyformat_encoded(context),
-        )
+        ch_cursor = cast(Cursor, cursor)
+        if self._ch_internal_query(context):
+            Cursor._execute(
+                ch_cursor,
+                statement,
+                parameters,
+                settings=self._ch_query_settings(context),
+                query_formats=self._ch_query_formats(context),
+                pyformat_encoded=self._ch_pyformat_encoded(context),
+                internal=True,
+            )
+        else:
+            ch_cursor.execute(
+                statement,
+                parameters,
+                settings=self._ch_query_settings(context),
+                query_formats=self._ch_query_formats(context),
+                pyformat_encoded=self._ch_pyformat_encoded(context),
+            )
 
     def do_executemany(self, cursor, statement, parameters, context=None):
         cast(Cursor, cursor).executemany(
@@ -126,12 +150,23 @@ class ClickHouseDialect(DefaultDialect):
         )
 
     def do_execute_no_params(self, cursor, statement, context=None):
-        cast(Cursor, cursor).execute(
-            statement,
-            settings=self._ch_query_settings(context),
-            query_formats=self._ch_query_formats(context),
-            pyformat_encoded=self._ch_pyformat_encoded(context),
-        )
+        ch_cursor = cast(Cursor, cursor)
+        if self._ch_internal_query(context):
+            Cursor._execute(
+                ch_cursor,
+                statement,
+                settings=self._ch_query_settings(context),
+                query_formats=self._ch_query_formats(context),
+                pyformat_encoded=self._ch_pyformat_encoded(context),
+                internal=True,
+            )
+        else:
+            ch_cursor.execute(
+                statement,
+                settings=self._ch_query_settings(context),
+                query_formats=self._ch_query_formats(context),
+                pyformat_encoded=self._ch_pyformat_encoded(context),
+            )
 
     # SQA 1 compatibility
 

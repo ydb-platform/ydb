@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_opt.cpp
@@ -23,12 +23,18 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/common
+    ydb/core/kqp/common/compile_cache
     ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
     ydb/core/kqp/opt/rbo
+    ydb/core/kqp/provider
+    ydb/core/kqp/query_plan
+    ydb/core/kqp/tracing
+    ydb/library/formats/arrow/protos
+    ydb/library/json_index
     ydb/library/mkql_proto
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
@@ -36,13 +42,8 @@ PEERDIR(
     ydb/library/yql/providers/s3/expr_nodes
     ydb/library/yql/providers/s3/statistics
     ydb/library/yql/utils/plan
-    ydb/core/kqp/provider
-    ydb/library/formats/arrow/protos
-    ydb/library/json_index
     yql/essentials/providers/common/mkql
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(kqp_query_plan.h)
 
@@ -50,4 +51,5 @@ END()
 
 RECURSE(
     cbo
+    rbo
 )

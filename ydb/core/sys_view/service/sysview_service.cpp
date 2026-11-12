@@ -10,6 +10,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -86,6 +87,33 @@ static void CalculateCountersDiff(NKikimrSysView::TDbServiceCounters* diff,
     }
 }
 
+// Whether the elements Clear() kept (protobuf 22.x, recheck on upgrade) outgrew the last Pack.
+// ClearedCount() sees one level only, so any unused role or table slot counts as spare
+static bool HasSpareDetailedElements(
+    const NProtoBuf::RepeatedPtrField<NKikimrSysView::TEvSendDbCountersRequest::TDetailedCounters>& payload)
+{
+    // Kept leaves over about 1.25x the used ones, with a floor so small payloads do not churn
+    constexpr int MinSpareLeaves = 64;
+
+    if (payload.ClearedCount() > 0) {
+        return true;
+    }
+
+    int usedLeaves = 0;
+    int spareLeaves = 0;
+    for (const auto& entry : payload) {
+        const auto& tables = entry.GetTables();
+        if (tables.ClearedCount() > 0) {
+            return true;
+        }
+        for (const auto& table : tables) {
+            usedLeaves += table.LeavesSize();
+            spareLeaves += table.GetLeaves().ClearedCount();
+        }
+    }
+    return spareLeaves > std::max(MinSpareLeaves, usedLeaves / 4);
+}
+
 class TSysViewService : public TActorBootstrapped<TSysViewService> {
 public:
     using TBase = TActorBootstrapped<TSysViewService>;
@@ -140,7 +168,7 @@ public:
             AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
             {
                 auto intervalSize = ProcessCountersInterval.MicroSeconds();
-                auto deadline = (TInstant::Now().MicroSeconds() / intervalSize + 1) * intervalSize;
+                auto deadline = (AppData()->TimeProvider->Now().MicroSeconds() / intervalSize + 1) * intervalSize;
                 deadline += RandomNumber<ui64>(intervalSize / 5);
                 Schedule(TInstant::MicroSeconds(deadline), new TEvPrivate::TEvProcessCounters());
             }
@@ -152,7 +180,7 @@ public:
         if (AppData()->FeatureFlags.GetEnableDbCounters()) {
             {
                 auto intervalSize = ProcessLabeledCountersInterval.MicroSeconds();
-                auto deadline = (TInstant::Now().MicroSeconds() / intervalSize + 1) * intervalSize;
+                auto deadline = (AppData()->TimeProvider->Now().MicroSeconds() / intervalSize + 1) * intervalSize;
                 deadline += RandomNumber<ui64>(intervalSize / 5);
                 Schedule(TInstant::MicroSeconds(deadline), new TEvPrivate::TEvProcessLabeledCounters());
             }
@@ -253,7 +281,7 @@ private:
 
     TInstant GetNextIntervalEnd() {
         auto intervalSize = TotalInterval.MicroSeconds();
-        auto rounded = (Now().MicroSeconds() / intervalSize + 1) * intervalSize;
+        auto rounded = (AppData()->TimeProvider->Now().MicroSeconds() / intervalSize + 1) * intervalSize;
         return TInstant::MicroSeconds(rounded);
     }
 
@@ -271,6 +299,8 @@ private:
 
         auto& log = QueryLogs[database];
         log.Metrics.Report.FillSummary(*record.MutableMetrics());
+        record.SetQueryMetricsTotalCpuTimeUs(log.Metrics.Report.GetTotalCpuTimeUs());
+        record.SetQueryMetricsRetainedCpuTimeUs(log.Metrics.Report.GetRetainedCpuTimeUs());
         log.TopByDuration.Report.FillSummary(*record.MutableTopByDuration());
         log.TopByReadBytes.Report.FillSummary(*record.MutableTopByReadBytes());
         log.TopByCpuTime.Report.FillSummary(*record.MutableTopByCpuTime());
@@ -290,7 +320,7 @@ private:
 
     void Rotate() {
         auto summaryEnd = IntervalEnd;
-        auto delta = Now() - summaryEnd;
+        auto delta = AppData()->TimeProvider->Now() - summaryEnd;
 
         IntervalEnd = GetNextIntervalEnd();
         Schedule(IntervalEnd, new TEvPrivate::TEvProcessInterval(IntervalEnd));
@@ -332,7 +362,7 @@ private:
 
         // randomize send time
         auto windowUs = (SendInterval - delta).MicroSeconds() / 2;
-        auto now = Now();
+        auto now = AppData()->TimeProvider->Now();
         for (const auto& [database, _] : QueryLogs) {
             TInstant deadline = now + TDuration::MicroSeconds(windowUs + RandomNumber<ui64>(windowUs));
             Schedule(deadline, new TEvPrivate::TEvSendSummary(summaryEnd, database));
@@ -384,13 +414,15 @@ private:
         auto& record = sendEv->Record;
 
         TDuration packingTime;
+        TStringBuf detailedRelease;
         if (dbCounters.IsConfirmed) {
             for (auto& [service, state] : dbCounters.States) {
                 state.Counters->ToProto(state.Current);
             }
             if constexpr (!isLabeled) {
-                dbCounters.DetailedCurrent.Clear();
+                detailedRelease = dbCounters.ResetDetailedCurrent();
                 if (!dbCounters.DetailedStates.empty()) {
+                    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::PayloadMemoryTag());
                     auto packStart = Now();
                     for (auto& [service, state] : dbCounters.DetailedStates) {
                         auto* entry = dbCounters.DetailedCurrent.Add();
@@ -411,7 +443,13 @@ private:
         record.SetNodeId(SelfId().NodeId());
 
         for (auto& [service, state] : dbCounters.States) {
-            auto* serviceCounters = record.AddServiceCounters();
+            auto* list = record.MutableServiceCounters();
+            if constexpr (!isLabeled) {
+                if (service == NKikimrSysView::TABLETS_FOLLOWERS) {
+                    list = record.MutableFollowerServiceCounters(); // see sys_view.proto
+                }
+            }
+            auto* serviceCounters = list->Add();
             serviceCounters->SetService(service);
             auto* diff = serviceCounters->MutableCounters();
 
@@ -426,6 +464,7 @@ private:
         size_t detailedTableCount = 0;
         if constexpr (!isLabeled) {
             if (!dbCounters.DetailedStates.empty()) {
+                NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::PayloadMemoryTag());
                 record.MutableDetailedCounters()->CopyFrom(dbCounters.DetailedCurrent);
             }
             detailedRoleCount = record.DetailedCountersSize();
@@ -444,6 +483,7 @@ private:
             {"labeled", isLabeled},
             {"detailedRoles", detailedRoleCount},
             {"detailedTables", detailedTableCount},
+            {"detailedRelease", detailedRelease},
             {"packingTimeMs", packingTime.MilliSeconds()});
 
         Send(MakePipePerNodeCacheID(false),
@@ -506,7 +546,7 @@ private:
         if (intervalEnd != prevIntervalEnd) {
             return;
         }
-        if (Now() > intervalEnd + CollectInterval) {
+        if (AppData()->TimeProvider->Now() > intervalEnd + CollectInterval) {
             return;
         }
         SendSummary(intervalEnd, ev->Get()->Database);
@@ -693,9 +733,9 @@ private:
     void Handle(TEvSysView::TEvRegisterDbCounters::TPtr& ev) {
         const auto service = ev->Get()->Service;
 
-        if (service == NKikimrSysView::TABLETS) { // register by path id
+        if (service == NKikimrSysView::TABLETS || service == NKikimrSysView::TABLETS_FOLLOWERS) { // register by path id
             auto pathId = ev->Get()->PathId;
-            UnresolvedTabletCounters[pathId] = ev->Get()->Counters;
+            UnresolvedTabletCounters[pathId][service] = ev->Get()->Counters;
             RequestDatabaseName(pathId);
 
             YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbCounters: registering counters by path id",
@@ -724,6 +764,7 @@ private:
     }
 
     void Handle(TEvSysView::TEvRegisterDbDetailedCounters::TPtr& ev) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
         const auto& database = ev->Get()->Database;
         const auto service = ev->Get()->Service;
 
@@ -747,6 +788,7 @@ private:
     }
 
     void Handle(TEvSysView::TEvUnregisterDbDetailedCounters::TPtr& ev) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
         const auto& database = ev->Get()->Database;
         const auto service = ev->Get()->Service;
 
@@ -790,7 +832,7 @@ private:
         }
 
         auto summaryEnd = attempt.first;
-        auto deadline = Now() + SummaryRetryInterval;
+        auto deadline = AppData()->TimeProvider->Now() + SummaryRetryInterval;
         Schedule(deadline, new TEvPrivate::TEvSendSummary(summaryEnd, database));
     }
 
@@ -818,7 +860,9 @@ private:
                 return;
             }
 
-            RegisterDbCounters(database, NKikimrSysView::TABLETS, it->second);
+            for (const auto& [service, counters] : it->second) {
+                RegisterDbCounters(database, service, counters);
+            }
             UnresolvedTabletCounters.erase(it);
 
             YDB_LOG_INFO("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: navigate by path id succeeded",
@@ -1055,7 +1099,12 @@ private:
         // until it is confirmed and reuse it unchanged on every retry. A deeper fix
         // would use a pre-serialized payload (avoiding the copy), but that requires a
         // proto change to support it in the TEventPB send path.
+        // Rebuilt in place at the next confirmed send, see ResetDetailedCurrent
         NProtoBuf::RepeatedPtrField<NKikimrSysView::TEvSendDbCountersRequest::TDetailedCounters> DetailedCurrent;
+        // Confirmed sends in a row that found spare elements in DetailedCurrent
+        ui32 DetailedShrunkSends = 0;
+        // Confirmed sends since the elements of DetailedCurrent were last freed
+        ui32 DetailedSendsSinceRelease = 0;
         ui64 Generation;
         bool IsConfirmed = true;
         bool IsRetrying = false;
@@ -1063,11 +1112,49 @@ private:
         TDbCounters()
             : Generation(RandomNumber<ui64>())
         {}
+
+        // Once per confirmed send, before the rebuild: a retry resends DetailedCurrent unchanged.
+        // Clear() keeps the elements for the next Pack to reuse, = {} frees them. Returns why
+        // they were freed, empty when kept
+        TStringBuf ResetDetailedCurrent() {
+            const TStringBuf reason = CountConfirmedDetailedSend();
+            if (reason) {
+                DetailedCurrent = {};
+                DetailedShrunkSends = 0;
+                DetailedSendsSinceRelease = 0;
+            } else {
+                DetailedCurrent.Clear();
+            }
+            return reason;
+        }
+
+        // Advances the release counters. Returns why DetailedCurrent is to be freed, empty to keep it
+        TStringBuf CountConfirmedDetailedSend() {
+            if (DetailedStates.empty()) {
+                // No role left to Pack: free the elements rather than hold them until a role
+                // registers again. Quiet once nothing is held
+                if (DetailedCurrent.empty() && DetailedCurrent.ClearedCount() == 0) {
+                    return {};
+                }
+                return "unregistered";
+            }
+            if (++DetailedSendsSinceRelease >= DetailedReleasePeriodSends) {
+                return "period";
+            }
+            if (!HasSpareDetailedElements(DetailedCurrent)) {
+                DetailedShrunkSends = 0;
+                return {};
+            }
+            if (++DetailedShrunkSends >= DetailedReleaseAfterShrunkSends) {
+                return "shrunk";
+            }
+            return {};
+        }
     };
 
     std::unordered_map<TString, TDbCounters> DatabaseCounters;
     std::unordered_map<TString, TDbCounters> DatabaseLabeledCounters;
-    THashMap<TPathId, TIntrusivePtr<IDbCounters>> UnresolvedTabletCounters;
+    THashMap<TPathId, THashMap<NKikimrSysView::EDbCountersService, TIntrusivePtr<IDbCounters>>> UnresolvedTabletCounters;
     TActorId DbWatcherActorId;
 
     static constexpr i64 ConcurrentScansLimit = 5;
@@ -1077,6 +1164,11 @@ private:
     static constexpr size_t SummaryRetryAttempts = 5;
 
     static constexpr TDuration ProcessCountersInterval = TDuration::Seconds(5);
+    // Confirmed sends before a shrunk detailed payload is freed, and before any detailed payload
+    // is freed for what ClearedCount() cannot see. At most one confirmed send per interval and
+    // none while a payload is retried, so at least a minute and ten minutes
+    static constexpr ui32 DetailedReleaseAfterShrunkSends = static_cast<ui32>(TDuration::Minutes(1) / ProcessCountersInterval);
+    static constexpr ui32 DetailedReleasePeriodSends = static_cast<ui32>(TDuration::Minutes(10) / ProcessCountersInterval);
 };
 
 THolder<NActors::IActor> CreateSysViewService(

@@ -4,36 +4,33 @@
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/ut/common/ut_common.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 
-#include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 namespace NFq::NRowDispatcher::NTests {
 
 namespace {
 
-class TFilterFixture : public TBaseFixture {
+class TFilterFixture: public TBaseFixture {
 public:
     using TBase = TBaseFixture;
     using TCallback = std::function<void(ui64 rowId, bool filter, TMaybe<ui64> watermark)>;
 
-    class TConsumer : public IProcessedDataConsumer {
+    class TConsumer: public IProcessedDataConsumer {
     public:
         using TPtr = TIntrusivePtr<TConsumer>;
 
     public:
-        TConsumer(
-            TVector<TSchemaColumn> columns,
-            TString watermarkExpr,
-            TString filterExpr,
-            TCallback callback,
-            std::optional<std::pair<TStatusCode, TString>> compileError
-        )
+        TConsumer(TVector<TSchemaColumn> columns, TString watermarkExpr, TString filterExpr, TCallback callback,
+            std::optional<std::pair<TStatusCode, TString>> compileError)
             : Columns_(std::move(columns))
             , WatermarkExpr_(std::move(watermarkExpr))
             , FilterExpr_(std::move(filterExpr))
             , Callback_(std::move(callback))
             , CompileError_(std::move(compileError))
-        {}
+        {
+        }
 
     public:
         bool IsStarted() const override {
@@ -53,7 +50,7 @@ public:
         }
 
         TPurecalcCompileSettings GetPurecalcSettings() const override {
-            return {.EnabledLLVM = false};
+            return { .EnabledLLVM = false };
         }
 
         NActors::TActorId GetClientId() const override {
@@ -91,7 +88,8 @@ public:
             if (value->IsEmbedded()) {
                 rowId = value->Get<ui64>();
             } else if (value->IsBoxed()) {
-                Y_ENSURE(value->GetListLength() == 2 || value->GetListLength() == 3, "Unexpected output schema size (" << value->GetListLength() << " elements)");
+                Y_ENSURE(value->GetListLength() == 2 || value->GetListLength() == 3,
+                    "Unexpected output schema size (" << value->GetListLength() << " elements)");
                 filter = value->GetElement(0).Get<bool>();
                 rowId = value->GetElement(1).Get<ui64>();
                 if (value->GetListLength() == 3 && value->GetElement(2)) {
@@ -125,7 +123,7 @@ public:
     }
 
     void TearDown(NUnitTest::TTestContext& ctx) override {
-        with_lock (Alloc) {
+        with_lock(Alloc) {
             for (auto& holder : Holders) {
                 for (auto& value : holder) {
                     ClearObject(value);
@@ -146,7 +144,8 @@ public:
     }
 
 public:
-    [[nodiscard]] virtual IProcessedDataConsumer::TPtr MakeConsumer(TVector<TSchemaColumn> columns, TString watermarkExpr, TString filterExpr, TCallback callback) {
+    [[nodiscard]] virtual IProcessedDataConsumer::TPtr MakeConsumer(
+        TVector<TSchemaColumn> columns, TString watermarkExpr, TString filterExpr, TCallback callback) {
         return MakeIntrusive<TConsumer>(std::move(columns), std::move(watermarkExpr), std::move(filterExpr), std::move(callback), CompileError);
     }
 
@@ -179,7 +178,7 @@ public:
     }
 
     std::span<NYql::NUdf::TUnboxedValue> MakeVector(size_t size, std::function<NYql::NUdf::TUnboxedValuePod(size_t)> valueCreator) {
-        with_lock (Alloc) {
+        with_lock(Alloc) {
             auto& holder = Holders.emplace_front();
             for (size_t i = 0; i < size; ++i) {
                 holder.emplace_back(LockObject(valueCreator(i)));
@@ -213,7 +212,8 @@ private:
     IProgramCompileHandler::TPtr CompileProgram(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) {
         const auto edgeActor = Runtime.AllocateEdgeActor();
 
-        auto compileHandler = CreateProgramCompileHandler(consumer, programHolder, 0, CompileServiceActorId, edgeActor, MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto compileHandler = CreateProgramCompileHandler(
+            consumer, programHolder, 0, CompileServiceActorId, edgeActor, MakeIntrusive<NMonitoring::TDynamicCounters>());
         compileHandler->Compile();
 
         auto ev = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvPurecalcCompileResponse>(edgeActor, TDuration::Seconds(5));
@@ -237,17 +237,18 @@ public:
     std::optional<std::pair<TStatusCode, TString>> CompileError;
 };
 
-class TFilterSetFixture : public TFilterFixture {
+class TFilterSetFixture: public TFilterFixture {
 public:
     using TBase = TFilterFixture;
 
-    class TFilterSetConsumer : public TConsumer {
+    class TFilterSetConsumer: public TConsumer {
     public:
         using TBase = TConsumer;
         using TPtr = TIntrusivePtr<TFilterSetConsumer>;
 
     public:
-        TFilterSetConsumer(NActors::TActorId clientId, const TVector<ui64>& columnIds, TVector<TSchemaColumn> columns, TString watermarkExpr, TString filterExpr, TCallback callback, std::optional<std::pair<TStatusCode, TString>> compileError)
+        TFilterSetConsumer(NActors::TActorId clientId, const TVector<ui64>& columnIds, TVector<TSchemaColumn> columns, TString watermarkExpr,
+            TString filterExpr, TCallback callback, std::optional<std::pair<TStatusCode, TString>> compileError)
             : TBase(std::move(columns), std::move(watermarkExpr), std::move(filterExpr), std::move(callback), std::move(compileError))
         {
             ClientId_ = clientId;
@@ -260,7 +261,8 @@ public:
         TBase::SetUp(ctx);
 
         CompileNotifier = Runtime.AllocateEdgeActor();
-        FiltersSet = CreateTopicFilters(CompileNotifier, {.CompileServiceId = CompileServiceActorId}, MakeIntrusive<NMonitoring::TDynamicCounters>());
+        FiltersSet =
+            CreateTopicFilters(CompileNotifier, { .CompileServiceId = CompileServiceActorId }, MakeIntrusive<NMonitoring::TDynamicCounters>());
     }
 
     void TearDown(NUnitTest::TTestContext& ctx) override {
@@ -271,7 +273,8 @@ public:
     }
 
 public:
-    [[nodiscard]] IProcessedDataConsumer::TPtr MakeConsumer(TVector<TSchemaColumn> columns, TString watermarkExpr, TString filterExpr, TCallback callback) override {
+    [[nodiscard]] IProcessedDataConsumer::TPtr MakeConsumer(
+        TVector<TSchemaColumn> columns, TString watermarkExpr, TString filterExpr, TCallback callback) override {
         TVector<ui64> columnIds;
         columnIds.reserve(columns.size());
         for (const auto& column : columns) {
@@ -279,12 +282,13 @@ public:
                 columnIds.emplace_back(it->second);
             } else {
                 columnIds.emplace_back(ColumnIndex.size());
-                ColumnIndex.insert({column.Name, ColumnIndex.size()});
+                ColumnIndex.insert({ column.Name, ColumnIndex.size() });
             }
         }
         ClientIds.emplace_back(ClientIds.size(), 0, 0, 0);
 
-        return MakeIntrusive<TFilterSetConsumer>(ClientIds.back(), columnIds, std::move(columns), std::move(watermarkExpr), std::move(filterExpr), callback, CompileError);
+        return MakeIntrusive<TFilterSetConsumer>(
+            ClientIds.back(), columnIds, std::move(columns), std::move(watermarkExpr), std::move(filterExpr), callback, CompileError);
     }
 
     [[nodiscard]] TStatus MakeProgram(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) override {
@@ -320,16 +324,16 @@ public:
     ITopicFilters::TPtr FiltersSet;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
     Y_UNIT_TEST_F(MemoryQuotaLimitsFilterExecution, TFilterFixture) {
         auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(8_MB, 8_MB);
-        auto consumer = MakeConsumer({{"a1", "[DataType; String]"}}, "", "(a1 || a1) = a1", EmptyCheck());
+        auto consumer = MakeConsumer({ { "a1", "[DataType; String]" } }, "", "(a1 || a1) = a1", EmptyCheck());
         auto program = CreateProgramHolder(consumer, manager);
         CheckSuccess(MakeProgram(consumer, program));
         UNIT_ASSERT_GT(manager->GetCurrentQuota(), 0);
-        UNIT_ASSERT_EXCEPTION(Push({MakeStringVector({TString(8_MB, 'a')})}), NKikimr::TMemoryLimitExceededException);
+        UNIT_ASSERT_EXCEPTION(Push({ MakeStringVector({ TString(8_MB, 'a') }) }), NKikimr::TMemoryLimitExceededException);
         RemoveProgram();
         program.Reset();
         UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
@@ -339,33 +343,31 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<ui64> offsets, expectedOffsets;
         TVector<bool> filters, expectedFilters;
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
-        auto consumer = MakeConsumer(
-            {{"a1", "[DataType; String]"}, {"a2", "[DataType; Uint64]"}, {"a@3", "[OptionalType; [DataType; String]]"}},
-            "",
-            "WHERE a2 > 100", // combined test for backward compatibility YQ-4827
-            [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
-                offsets.push_back(offset);
-                filters.push_back(filter);
-                watermarks.push_back(watermark);
-            }
-        );
+        auto consumer =
+            MakeConsumer({ { "a1", "[DataType; String]" }, { "a2", "[DataType; Uint64]" }, { "a@3", "[OptionalType; [DataType; String]]" } }, "",
+                "WHERE a2 > 100",   // combined test for backward compatibility YQ-4827
+                [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
+                    offsets.push_back(offset);
+                    filters.push_back(filter);
+                    watermarks.push_back(watermark);
+                });
         const auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
 
-        Push({MakeStringVector({"hello1"}), MakeVector<ui64>({99}), MakeStringVector({"zapuskaem"}, true)});
-        expectedOffsets = {0};
+        Push({ MakeStringVector({ "hello1" }), MakeVector<ui64>({ 99 }), MakeStringVector({ "zapuskaem" }, true) });
+        expectedOffsets = { 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {0};
+        expectedFilters = { 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {Nothing()};
+        expectedWatermarks = { Nothing() };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
-        Push({MakeStringVector({"hello2"}), MakeVector<ui64>({101}), MakeStringVector({"gusya"}, true)});
-        expectedOffsets = {0, 0};
+        Push({ MakeStringVector({ "hello2" }), MakeVector<ui64>({ 101 }), MakeStringVector({ "gusya" }, true) });
+        expectedOffsets = { 0, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {0, 1};
+        expectedFilters = { 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {Nothing(), Nothing()};
+        expectedWatermarks = { Nothing(), Nothing() };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
     }
 
@@ -373,33 +375,29 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<ui64> offsets, expectedOffsets;
         TVector<bool> filters, expectedFilters;
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
-        auto consumer = MakeConsumer(
-            {{"a2", "[DataType; Uint64]"}, {"a1", "[DataType; String]"}},
-            "",
-            "a2 > 100",
+        auto consumer = MakeConsumer({ { "a2", "[DataType; Uint64]" }, { "a1", "[DataType; String]" } }, "", "a2 > 100",
             [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
                 filters.push_back(filter);
                 watermarks.push_back(watermark);
-            }
-        );
+            });
         const auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
 
-        Push({MakeVector<ui64>({99}), MakeStringVector({"hello1"})});
-        expectedOffsets = {0};
+        Push({ MakeVector<ui64>({ 99 }), MakeStringVector({ "hello1" }) });
+        expectedOffsets = { 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {0};
+        expectedFilters = { 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {Nothing()};
+        expectedWatermarks = { Nothing() };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
-        Push({MakeVector<ui64>({101}), MakeStringVector({"hello2"})});
-        expectedOffsets = {0, 0};
+        Push({ MakeVector<ui64>({ 101 }), MakeStringVector({ "hello2" }) });
+        expectedOffsets = { 0, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {0, 1};
+        expectedFilters = { 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {Nothing(), Nothing()};
+        expectedWatermarks = { Nothing(), Nothing() };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
     }
 
@@ -407,16 +405,12 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<ui64> offsets, expectedOffsets;
         TVector<bool> filters, expectedFilters;
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
-        auto consumer = MakeConsumer(
-            {{"a1", "[DataType; String]"}, {"a2", "[DataType; Uint64]"}, {"a3", "[DataType; String]"}},
-            "",
-            "a2 > 100",
-            [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
+        auto consumer = MakeConsumer({ { "a1", "[DataType; String]" }, { "a2", "[DataType; Uint64]" }, { "a3", "[DataType; String]" } }, "",
+            "a2 > 100", [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
                 filters.push_back(filter);
                 watermarks.push_back(watermark);
-            }
-        );
+            });
         const auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
 
@@ -426,15 +420,13 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
             filters.clear();
             watermarks.clear();
             Push({
-                MakeStringVector({"hello1", "hello2"}),
-                MakeVector<ui64>({99, 101}),
-                MakeStringVector({largeString, largeString}),
+                MakeStringVector({ "hello1", "hello2" }), MakeVector<ui64>({ 99, 101 }), MakeStringVector({ largeString, largeString }),
             });
-            expectedOffsets = {0, 1};
+            expectedOffsets = { 0, 1 };
             UNIT_ASSERT_VALUES_EQUAL_C(expectedOffsets, offsets, i);
-            expectedFilters = {0, 1};
+            expectedFilters = { 0, 1 };
             UNIT_ASSERT_VALUES_EQUAL_C(expectedFilters, filters, i);
-            expectedWatermarks = {Nothing(), Nothing()};
+            expectedWatermarks = { Nothing(), Nothing() };
             UNIT_ASSERT_VALUES_EQUAL_C(expectedWatermarks, watermarks, i);
         }
     }
@@ -443,25 +435,21 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<ui64> offsets, expectedOffsets;
         TVector<bool> filters, expectedFilters;
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
-        auto consumer = MakeConsumer(
-            {{"a1", "[OptionalType; [DataType; Uint64]]"}, {"a2", "[DataType; String]"}},
-            "",
-            "a1 is null",
+        auto consumer = MakeConsumer({ { "a1", "[OptionalType; [DataType; Uint64]]" }, { "a2", "[DataType; String]" } }, "", "a1 is null",
             [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
                 filters.push_back(filter);
                 watermarks.push_back(watermark);
-            }
-        );
+            });
         const auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
 
-        Push({MakeEmptyVector(1), MakeStringVector({"str"})});
-        expectedOffsets = {0};
+        Push({ MakeEmptyVector(1), MakeStringVector({ "str" }) });
+        expectedOffsets = { 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1};
+        expectedFilters = { 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {Nothing()};
+        expectedWatermarks = { Nothing() };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
     }
 
@@ -469,42 +457,30 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<ui64> offsets, expectedOffsets;
         TVector<bool> filters, expectedFilters;
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
-        auto consumer = MakeConsumer(
-            {{"a1", "[DataType; String]"}, {"a2", "[DataType; Uint64]"}, {"a@3", "[OptionalType; [DataType; String]]"}},
-            "",
-            "a2 > 50",
-            [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
-                offsets.push_back(offset);
-                filters.push_back(filter);
-                watermarks.push_back(watermark);
-            }
-        );
+        auto consumer =
+            MakeConsumer({ { "a1", "[DataType; String]" }, { "a2", "[DataType; Uint64]" }, { "a@3", "[OptionalType; [DataType; String]]" } }, "",
+                "a2 > 50", [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
+                    offsets.push_back(offset);
+                    filters.push_back(filter);
+                    watermarks.push_back(watermark);
+                });
         const auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
 
-        Push({MakeStringVector({"hello1", "hello2"}), MakeVector<ui64>({99, 101}), MakeStringVector({"zapuskaem", "gusya"}, true)}, 1);
-        expectedOffsets = {0};
+        Push({ MakeStringVector({ "hello1", "hello2" }), MakeVector<ui64>({ 99, 101 }), MakeStringVector({ "zapuskaem", "gusya" }, true) }, 1);
+        expectedOffsets = { 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1};
+        expectedFilters = { 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {Nothing()};
+        expectedWatermarks = { Nothing() };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
     }
 
     Y_UNIT_TEST_F(CompilationValidation, TFilterFixture) {
-        CompileError = {EStatusId::INTERNAL_ERROR, "Error: extraneous input '(' expecting {<EOF>, ';'}"};
-        auto consumer = MakeConsumer(
-            {{"a1", "[DataType; String]"}},
-            "",
-            "a2 ... 50",
-            EmptyCheck()
-        );
+        CompileError = { EStatusId::INTERNAL_ERROR, "Error: extraneous input '(' expecting {<EOF>, ';'}" };
+        auto consumer = MakeConsumer({ { "a1", "[DataType; String]" } }, "", "a2 ... 50", EmptyCheck());
         const auto programHolder = CreateProgramHolder(consumer);
-        CheckError(
-            MakeProgram(consumer, programHolder),
-            EStatusId::INTERNAL_ERROR,
-            "Failed to compile new program"
-        );
+        CheckError(MakeProgram(consumer, programHolder), EStatusId::INTERNAL_ERROR, "Failed to compile new program");
     }
 
     Y_UNIT_TEST_F(Emtpy, TFilterFixture) {
@@ -512,32 +488,29 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<bool> filters, expectedFilters;
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
-            {{"col_str", "[DataType; String]"}, {"col_int", "[DataType; Uint64]"}, {"col_opt_str", "[OptionalType; [DataType; String]]"}},
-            "",
-            "",
-            [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
+            { { "col_str", "[DataType; String]" }, { "col_int", "[DataType; Uint64]" },
+                { "col_opt_str", "[OptionalType; [DataType; String]]" } }, "", "", [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
                 filters.push_back(filter);
                 watermarks.push_back(watermark);
-            }
-        );
+            });
         const auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
 
-        Push({MakeStringVector({"str_0"}), MakeVector<ui64>({42}), MakeStringVector({"opt_str_0"}, true)});
-        expectedOffsets = {0};
+        Push({ MakeStringVector({ "str_0" }), MakeVector<ui64>({ 42 }), MakeStringVector({ "opt_str_0" }, true) });
+        expectedOffsets = { 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1};
+        expectedFilters = { 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {Nothing()};
+        expectedWatermarks = { Nothing() };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
-        Push({MakeStringVector({"str_1"}), MakeVector<ui64>({43}), MakeStringVector({"opt_str_1"}, true)});
-        expectedOffsets = {0, 0};
+        Push({ MakeStringVector({ "str_1" }), MakeVector<ui64>({ 43 }), MakeStringVector({ "opt_str_1" }, true) });
+        expectedOffsets = { 0, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 1};
+        expectedFilters = { 1, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {Nothing(), Nothing()};
+        expectedWatermarks = { Nothing(), Nothing() };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
     }
 
@@ -545,49 +518,45 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<ui64> offsets, expectedOffsets;
         TVector<bool> filters, expectedFilters;
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
-        auto consumer = MakeConsumer(
-            {{"ts", "[DataType; String]"}},
-            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "",
+        auto consumer = MakeConsumer({ { "ts", "[DataType; String]" } }, R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))", "",
             [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
                 filters.push_back(filter);
                 watermarks.push_back(watermark);
-            }
-        );
+            });
         const auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
 
         Push({
-            MakeStringVector({"1970-01-01T00:00:42Z", "1970-01-01T00:00:43Z"}),
+            MakeStringVector({ "1970-01-01T00:00:42Z", "1970-01-01T00:00:43Z" }),
         });
-        expectedOffsets = {0, 1};
+        expectedOffsets = { 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 1};
+        expectedFilters = { 1, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
         Push({
-            MakeStringVector({"1970-01-01T00:00:44Z", "1970-01-01T00:00:45Z"}),
+            MakeStringVector({ "1970-01-01T00:00:44Z", "1970-01-01T00:00:45Z" }),
         });
-        expectedOffsets = {0, 1, 0, 1};
+        expectedOffsets = { 0, 1, 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 1, 1, 1};
+        expectedFilters = { 1, 1, 1, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
         RemoveProgram();
 
         Push({
-            MakeStringVector({"1970-01-01T00:00:46Z", "1970-01-01T00:00:47Z"}),
+            MakeStringVector({ "1970-01-01T00:00:46Z", "1970-01-01T00:00:47Z" }),
         });
-        expectedOffsets = {0, 1, 0, 1};
+        expectedOffsets = { 0, 1, 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 1, 1, 1};
+        expectedFilters = { 1, 1, 1, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
     }
 
@@ -595,52 +564,45 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<ui64> offsets, expectedOffsets;
         TVector<bool> filters, expectedFilters;
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
-        auto consumer = MakeConsumer(
-            {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
-            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "pass > 0",
-            [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
+        auto consumer = MakeConsumer({ { "ts", "[DataType; String]" }, { "pass", "[DataType; Uint64]" } },
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))", "pass > 0", [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
                 filters.push_back(filter);
                 watermarks.push_back(watermark);
-            }
-        );
+            });
         const auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
 
         Push({
-            MakeStringVector({"1970-01-01T00:00:42Z", "1970-01-01T00:00:43Z"}),
-            MakeVector<ui64>({1, 0}),
+            MakeStringVector({ "1970-01-01T00:00:42Z", "1970-01-01T00:00:43Z" }), MakeVector<ui64>({ 1, 0 }),
         });
-        expectedOffsets = {0, 1};
+        expectedOffsets = { 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 0};
+        expectedFilters = { 1, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
         Push({
-            MakeStringVector({"1970-01-01T00:00:44Z", "1970-01-01T00:00:45Z"}),
-            MakeVector<ui64>({1, 0}),
+            MakeStringVector({ "1970-01-01T00:00:44Z", "1970-01-01T00:00:45Z" }), MakeVector<ui64>({ 1, 0 }),
         });
-        expectedOffsets = {0, 1, 0, 1};
+        expectedOffsets = { 0, 1, 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 0, 1, 0};
+        expectedFilters = { 1, 0, 1, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
         RemoveProgram();
 
         Push({
-            MakeStringVector({"1970-01-01T00:00:46Z", "1970-01-01T00:00:47Z"}),
-            MakeVector<ui64>({1, 0}),
+            MakeStringVector({ "1970-01-01T00:00:46Z", "1970-01-01T00:00:47Z" }), MakeVector<ui64>({ 1, 0 }),
         });
-        expectedOffsets = {0, 1, 0, 1};
+        expectedOffsets = { 0, 1, 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 0, 1, 0};
+        expectedFilters = { 1, 0, 1, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
     }
 
@@ -648,110 +610,97 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<ui64> offsets, expectedOffsets;
         TVector<bool> filters, expectedFilters;
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
-        auto consumer = MakeConsumer(
-            {{"ts", "[DataType; String]"}},
-            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "FALSE",
+        auto consumer = MakeConsumer({ { "ts", "[DataType; String]" } }, R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))", "FALSE",
             [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
                 filters.push_back(filter);
                 watermarks.push_back(watermark);
-            }
-        );
+            });
         const auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
 
         Push({
-            MakeStringVector({"1970-01-01T00:00:42Z", "1970-01-01T00:00:43Z"}),
+            MakeStringVector({ "1970-01-01T00:00:42Z", "1970-01-01T00:00:43Z" }),
         });
-        expectedOffsets = {0, 1};
+        expectedOffsets = { 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {0, 0};
+        expectedFilters = { 0, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
         Push({
-            MakeStringVector({"1970-01-01T00:00:44Z", "1970-01-01T00:00:45Z"}),
+            MakeStringVector({ "1970-01-01T00:00:44Z", "1970-01-01T00:00:45Z" }),
         });
-        expectedOffsets = {0, 1, 0, 1};
+        expectedOffsets = { 0, 1, 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {0, 0, 0, 0};
+        expectedFilters = { 0, 0, 0, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
         RemoveProgram();
 
         Push({
-            MakeStringVector({"1970-01-01T00:00:46Z", "1970-01-01T00:00:47Z"}),
+            MakeStringVector({ "1970-01-01T00:00:46Z", "1970-01-01T00:00:47Z" }),
         });
-        expectedOffsets = {0, 1, 0, 1};
+        expectedOffsets = { 0, 1, 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {0, 0, 0, 0};
+        expectedFilters = { 0, 0, 0, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
     }
 }
 
 Y_UNIT_TEST_SUITE(TestFilterSet) {
     Y_UNIT_TEST_F(FilterGroup, TFilterSetFixture) {
-        const TSchemaColumn commonColumn = {"common_col", "[DataType; String]"};
+        const TSchemaColumn commonColumn = { "common_col", "[DataType; String]" };
         const TVector<TString> filterExprs = {
-            R"(col_0 == "str1")",
-            R"(col_1 == "str2")",
-            "", // Empty filter <=> true
+            R"(col_0 == "str1")", R"(col_1 == "str2")",
+            "",   // Empty filter <=> true
         };
 
         TVector<TVector<ui64>> offsets(filterExprs.size());
         TVector<TVector<bool>> filters(filterExprs.size());
         TVector<TVector<TMaybe<ui64>>> watermarks(filterExprs.size());
         for (size_t i = 0; i < filterExprs.size(); ++i) {
-            auto consumer = MakeConsumer(
-                {commonColumn, {TStringBuilder() << "col_" << i, "[DataType; String]"}},
-                "",
-                filterExprs[i],
+            auto consumer = MakeConsumer({ commonColumn, { TStringBuilder() << "col_" << i, "[DataType; String]" } }, "", filterExprs[i],
                 [&, index = i](ui64 offset, bool filter, TMaybe<ui64> watermark) {
                     offsets[index].push_back(offset);
                     filters[index].push_back(filter);
                     watermarks[index].push_back(watermark);
-                }
-            );
+                });
             const auto programHolder = CreateProgramHolder(consumer);
             CheckSuccess(MakeProgram(consumer, programHolder));
         }
 
-        ProcessData({0, 1, 2, 3}, {
-            MakeStringVector({"common_1", "common_2", "common_3"}),
-            MakeStringVector({"str1", "str2", "str3"}),
-            MakeStringVector({"str1", "str3", "str2"}),
-            MakeStringVector({"str2", "str3", "str1"}),
-        });
+        ProcessData({ 0, 1, 2, 3 }, {
+                                        MakeStringVector({ "common_1", "common_2", "common_3" }), MakeStringVector({ "str1", "str2", "str3" }),
+                                        MakeStringVector({ "str1", "str3", "str2" }), MakeStringVector({ "str2", "str3", "str1" }),
+                                    });
 
         FiltersSet->RemoveProgram(ClientIds.back());
 
-        ProcessData({0, 3, 1, 2}, {
-            MakeStringVector({"common_3"}),
-            MakeStringVector({"str2"}),
-            MakeStringVector({"str3"}),
-            MakeStringVector({"str1"}),
-        });
+        ProcessData({ 0, 3, 1, 2 },
+            {
+                MakeStringVector({ "common_3" }), MakeStringVector({ "str2" }), MakeStringVector({ "str3" }), MakeStringVector({ "str1" }),
+            });
 
         TVector<TVector<ui64>> expectedOffsets = {
-            {0, 1, 2, 0},
-            {0, 1, 2, 0},
-            {0, 1, 2},
+            { 0, 1, 2, 0 },
+            { 0, 1, 2, 0 },
+            { 0, 1, 2 },
         };
         TVector<TVector<bool>> expectedFilters = {
-            {1, 0, 0, 1},
-            {0, 0, 1, 1},
-            {1, 1, 1},
+            { 1, 0, 0, 1 },
+            { 0, 0, 1, 1 },
+            { 1, 1, 1 },
         };
         TVector<TVector<TMaybe<ui64>>> expectedWatermarks = {
-            {Nothing(), Nothing(), Nothing(), Nothing()},
-            {Nothing(), Nothing(), Nothing(), Nothing()},
-            {Nothing(), Nothing(), Nothing()},
+            { Nothing(), Nothing(), Nothing(), Nothing() },
+            { Nothing(), Nothing(), Nothing(), Nothing() },
+            { Nothing(), Nothing(), Nothing() },
         };
         for (size_t i = 0; i < filterExprs.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(expectedOffsets[i], offsets[i], i);
@@ -761,33 +710,21 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
     }
 
     Y_UNIT_TEST_F(DuplicationValidation, TFilterSetFixture) {
-        auto consumer = MakeConsumer(
-            {{"a1", "[DataType; String]"}},
-            "",
-            R"(a1 = "str1")",
-            EmptyCheck()
-        );
+        auto consumer = MakeConsumer({ { "a1", "[DataType; String]" } }, "", R"(a1 = "str1")", EmptyCheck());
         auto programHolders = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolders));
 
-        consumer = MakeIntrusive<TFilterSetConsumer>(ClientIds.back(), TVector<ui64>(), TVector<TSchemaColumn>(), TString(), TString(), EmptyCheck(), CompileError);
+        consumer = MakeIntrusive<TFilterSetConsumer>(
+            ClientIds.back(), TVector<ui64>(), TVector<TSchemaColumn>(), TString(), TString(), EmptyCheck(), CompileError);
         programHolders = nullptr;
-        CheckError(
-            FiltersSet->AddPrograms(consumer, programHolders),
-            EStatusId::INTERNAL_ERROR,
-            R"(Failed to run new program, program with client id [0:0:0] already exists)"
-        );
+        CheckError(FiltersSet->AddPrograms(consumer, programHolders), EStatusId::INTERNAL_ERROR,
+            R"(Failed to run new program, program with client id [0:0:0] already exists)");
     }
 
     Y_UNIT_TEST_F(CompilationValidation, TFilterSetFixture) {
-        CompileError = {EStatusId::INTERNAL_ERROR, "Error: extraneous input '(' expecting {<EOF>, ';'}"};
+        CompileError = { EStatusId::INTERNAL_ERROR, "Error: extraneous input '(' expecting {<EOF>, ';'}" };
 
-        auto consumer = MakeConsumer(
-            {{"a1", "[DataType; String]"}},
-            "",
-            "a2 ... 50",
-            EmptyCheck()
-        );
+        auto consumer = MakeConsumer({ { "a1", "[DataType; String]" } }, "", "a2 ... 50", EmptyCheck());
         const auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
     }
@@ -796,49 +733,45 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         TVector<ui64> offsets, expectedOffsets;
         TVector<bool> filters, expectedFilters;
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
-        auto consumer = MakeConsumer(
-            {{"ts", "[DataType; String]"}},
-            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "",
+        auto consumer = MakeConsumer({ { "ts", "[DataType; String]" } }, R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))", "",
             [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
                 filters.push_back(filter);
                 watermarks.push_back(watermark);
-            }
-        );
+            });
         const auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
 
-        ProcessData({0}, {
-            MakeStringVector({"1970-01-01T00:00:42Z", "1970-01-01T00:00:43Z"}),
-        });
-        expectedOffsets = {0, 1};
+        ProcessData({ 0 }, {
+                               MakeStringVector({ "1970-01-01T00:00:42Z", "1970-01-01T00:00:43Z" }),
+                           });
+        expectedOffsets = { 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 1};
+        expectedFilters = { 1, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
-        ProcessData({0}, {
-            MakeStringVector({"1970-01-01T00:00:44Z", "1970-01-01T00:00:45Z"}),
-        });
-        expectedOffsets = {0, 1, 0, 1};
+        ProcessData({ 0 }, {
+                               MakeStringVector({ "1970-01-01T00:00:44Z", "1970-01-01T00:00:45Z" }),
+                           });
+        expectedOffsets = { 0, 1, 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 1, 1, 1};
+        expectedFilters = { 1, 1, 1, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
         RemoveProgram();
 
-        ProcessData({0}, {
-            MakeStringVector({"1970-01-01T00:00:46Z", "1970-01-01T00:00:47Z"}),
-        });
-        expectedOffsets = {0, 1, 0, 1};
+        ProcessData({ 0 }, {
+                               MakeStringVector({ "1970-01-01T00:00:46Z", "1970-01-01T00:00:47Z" }),
+                           });
+        expectedOffsets = { 0, 1, 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 1, 1, 1};
+        expectedFilters = { 1, 1, 1, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
     }
 
@@ -846,52 +779,45 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         TVector<ui64> offsets, expectedOffsets;
         TVector<bool> filters, expectedFilters;
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
-        auto consumer = MakeConsumer(
-            {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
-            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "pass > 0",
-            [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
+        auto consumer = MakeConsumer({ { "ts", "[DataType; String]" }, { "pass", "[DataType; Uint64]" } },
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))", "pass > 0", [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
                 filters.push_back(filter);
                 watermarks.push_back(watermark);
-            }
-        );
+            });
         const auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
 
-        ProcessData({0, 1}, {
-            MakeStringVector({"1970-01-01T00:00:42Z", "1970-01-01T00:00:43Z"}),
-            MakeVector<ui64>({1, 0}),
-        });
-        expectedOffsets = {0, 1};
+        ProcessData({ 0, 1 }, {
+                                  MakeStringVector({ "1970-01-01T00:00:42Z", "1970-01-01T00:00:43Z" }), MakeVector<ui64>({ 1, 0 }),
+                              });
+        expectedOffsets = { 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 0};
+        expectedFilters = { 1, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
-        ProcessData({0, 1}, {
-            MakeStringVector({"1970-01-01T00:00:44Z", "1970-01-01T00:00:45Z"}),
-            MakeVector<ui64>({1, 0}),
-        });
-        expectedOffsets = {0, 1, 0, 1};
+        ProcessData({ 0, 1 }, {
+                                  MakeStringVector({ "1970-01-01T00:00:44Z", "1970-01-01T00:00:45Z" }), MakeVector<ui64>({ 1, 0 }),
+                              });
+        expectedOffsets = { 0, 1, 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 0, 1, 0};
+        expectedFilters = { 1, 0, 1, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
         RemoveProgram();
 
-        ProcessData({0, 1}, {
-            MakeStringVector({"1970-01-01T00:00:46Z", "1970-01-01T00:00:47Z"}),
-            MakeVector<ui64>({1, 0}),
-        });
-        expectedOffsets = {0, 1, 0, 1};
+        ProcessData({ 0, 1 }, {
+                                  MakeStringVector({ "1970-01-01T00:00:46Z", "1970-01-01T00:00:47Z" }), MakeVector<ui64>({ 1, 0 }),
+                              });
+        expectedOffsets = { 0, 1, 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {1, 0, 1, 0};
+        expectedFilters = { 1, 0, 1, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
     }
 
@@ -899,51 +825,47 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         TVector<ui64> offsets, expectedOffsets;
         TVector<bool> filters, expectedFilters;
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
-        auto consumer = MakeConsumer(
-            {{"ts", "[DataType; String]"}},
-            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "FALSE",
+        auto consumer = MakeConsumer({ { "ts", "[DataType; String]" } }, R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))", "FALSE",
             [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
                 filters.push_back(filter);
                 watermarks.push_back(watermark);
-            }
-        );
+            });
         auto programHolder = CreateProgramHolder(consumer);
         CheckSuccess(MakeProgram(consumer, programHolder));
 
-        ProcessData({0}, {
-            MakeStringVector({"1970-01-01T00:00:42Z", "1970-01-01T00:00:43Z"}),
-        });
-        expectedOffsets = {0, 1};
+        ProcessData({ 0 }, {
+                               MakeStringVector({ "1970-01-01T00:00:42Z", "1970-01-01T00:00:43Z" }),
+                           });
+        expectedOffsets = { 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {0, 0};
+        expectedFilters = { 0, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
-        ProcessData({0}, {
-            MakeStringVector({"1970-01-01T00:00:44Z", "1970-01-01T00:00:45Z"}),
-        });
-        expectedOffsets = {0, 1, 0, 1};
+        ProcessData({ 0 }, {
+                               MakeStringVector({ "1970-01-01T00:00:44Z", "1970-01-01T00:00:45Z" }),
+                           });
+        expectedOffsets = { 0, 1, 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {0, 0, 0, 0};
+        expectedFilters = { 0, 0, 0, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
 
         RemoveProgram();
 
-        ProcessData({0}, {
-            MakeStringVector({"1970-01-01T00:00:46Z", "1970-01-01T00:00:47Z"}),
-        });
-        expectedOffsets = {0, 1, 0, 1};
+        ProcessData({ 0 }, {
+                               MakeStringVector({ "1970-01-01T00:00:46Z", "1970-01-01T00:00:47Z" }),
+                           });
+        expectedOffsets = { 0, 1, 0, 1 };
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
-        expectedFilters = {0, 0, 0, 0};
+        expectedFilters = { 0, 0, 0, 0 };
         UNIT_ASSERT_VALUES_EQUAL(expectedFilters, filters);
-        expectedWatermarks = {37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull};
+        expectedWatermarks = { 37'000'000ull, 38'000'000ull, 39'000'000ull, 40'000'000ull };
         UNIT_ASSERT_VALUES_EQUAL(expectedWatermarks, watermarks);
     }
 }
 
-}  // namespace NFq::NRowDispatcher::NTests
+}   // namespace NFq::NRowDispatcher::NTests

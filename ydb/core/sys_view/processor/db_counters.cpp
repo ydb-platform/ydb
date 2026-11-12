@@ -7,6 +7,7 @@
 #include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
 #include <ydb/core/tablet/labeled_db_counters.h>
 #include <ydb/core/tablet/labeled_counters_merger.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
@@ -222,7 +223,12 @@ TIntrusivePtr<IDbCounters> TSysViewProcessor::CreateCountersForService(
         auto group = InternalGroups["tablets_serverless"];
         Y_ABORT_UNLESS(group);
         THolder<TTabletCountersBase> executorCounters(new NTabletFlatExecutor::TExecutorCounters);
-        result = CreateTabletDbCounters(ExternalGroup, group, std::move(executorCounters));
+        result = CreateTabletDbCounters(ExternalGroup, group, std::move(executorCounters), FollowerTabletsGroup);
+        break;
+    }
+    case NKikimrSysView::TABLETS_FOLLOWERS: {
+        THolder<TTabletCountersBase> executorCounters(new NTabletFlatExecutor::TExecutorCounters);
+        result = CreateTabletDbCounters(nullptr, FollowerTabletsGroup, std::move(executorCounters));
         break;
     }
     case NKikimrSysView::GRPC: {
@@ -313,6 +319,7 @@ void TSysViewProcessor::AttachDetailedCounters() {
         return;
     }
 
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
     auto group = GetServiceCounters(AppData()->Counters, "ydb_detailed", false)
         ->GetSubgroup("host", "");
     if (MonitoringProjectId) {
@@ -326,6 +333,7 @@ void TSysViewProcessor::DetachDetailedCounters() {
         return;
     }
 
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
     std::vector<std::pair<TString, TString>> chain{{"host", ""}};
     if (MonitoringProjectId) {
         chain.emplace_back("monitoring_project_id", MonitoringProjectId);
@@ -343,11 +351,8 @@ TProcessorDatabaseMetricsAggregator* TSysViewProcessor::GetDetailedAggregator() 
     // request handler runs whenever EITHER flag is on, so an ungated aggregator would
     // be built and fed on a plain db counters deployment.
     if (!DetailedAggregator && Database && AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
-        DetailedAggregator = CreateProcessorDatabaseMetricsAggregator(
-            DetailedRawGroup,
-            DetailedGroup,
-            Database,
-            THolder<TTabletCountersBase>(new NTabletFlatExecutor::TExecutorCounters));
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
+        DetailedAggregator = CreateProcessorDatabaseMetricsAggregator(DetailedGroup, Database);
     }
     return DetailedAggregator.Get();
 }
@@ -379,6 +384,13 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
     state.Generation = record.GetGeneration();
 
     std::unordered_set<NKikimrSysView::EDbCountersService> incomingServicesSet;
+
+    // Followers ride their own field, see sys_view.proto
+    for (auto& serviceCounters : *record.MutableFollowerServiceCounters()) {
+        if (serviceCounters.HasService()) { // an enum value this processor lacks would read as KQP
+            record.MutableServiceCounters()->Add(std::move(serviceCounters));
+        }
+    }
 
     for (auto& serviceCounters : *record.MutableServiceCounters()) {
         auto service = serviceCounters.GetService();
@@ -523,17 +535,25 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvApplyCounters::TPtr&) {
         }
         ++it;
     }
-    for (auto& [service, aggrCounters] : AggregatedCountersState) {
+    auto apply = [this](auto service, auto& aggrCounters) {
         TIntrusivePtr<IDbCounters> counters;
         if (auto it = Counters.find(service); it != Counters.end()) {
             counters = it->second;
         } else {
             counters = CreateCountersForService(service);
         }
-        if (!counters) {
-            continue;
+        if (counters) {
+            counters->FromProto(aggrCounters);
         }
-        counters->FromProto(aggrCounters);
+    };
+    // TABLETS maps the follower group into ydb_serverless, so the followers go first
+    if (auto it = AggregatedCountersState.find(NKikimrSysView::TABLETS_FOLLOWERS); it != AggregatedCountersState.end()) {
+        apply(it->first, it->second);
+    }
+    for (auto& [service, aggrCounters] : AggregatedCountersState) {
+        if (service != NKikimrSysView::TABLETS_FOLLOWERS) {
+            apply(service, aggrCounters);
+        }
     }
 
     if (auto* aggregator = DetailedAggregator.Get()) {

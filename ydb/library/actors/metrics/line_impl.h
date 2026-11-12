@@ -1,22 +1,19 @@
 #pragma once
 
-#include "inmemory_backend.h"
+#include "line.h"
 
 namespace NActors {
 
     template<class TFrontend>
-    TLine<TFrontend>::TLine(TInMemoryMetricsBackend* backend, std::shared_ptr<TLineWriterState> state) noexcept
-        : Backend(backend)
-        , State(std::move(state))
+    TLine<TFrontend>::TLine(std::shared_ptr<IMetricLine> state) noexcept
+        : State(std::move(state))
     {
     }
 
     template<class TFrontend>
     TLine<TFrontend>::TLine(TLine&& rhs) noexcept
-        : Backend(rhs.Backend)
-        , State(std::move(rhs.State))
+        : State(std::move(rhs.State))
     {
-        rhs.Backend = nullptr;
         rhs.State = nullptr;
     }
 
@@ -24,9 +21,7 @@ namespace NActors {
     TLine<TFrontend>& TLine<TFrontend>::operator=(TLine&& rhs) noexcept {
         if (this != &rhs) {
             Close();
-            Backend = rhs.Backend;
             State = std::move(rhs.State);
-            rhs.Backend = nullptr;
             rhs.State = nullptr;
         }
         return *this;
@@ -39,29 +34,23 @@ namespace NActors {
 
     template<class TFrontend>
     bool TLine<TFrontend>::Append(const typename TFrontend::TValueType& value) noexcept {
-        if (!Backend || !State) {
+        if (!State) {
             return false;
         }
-        return TFrontend::Append(*Backend, State.get(), value);
+        return TFrontend::Append(*State, value);
     }
 
     template<class TFrontend>
     void TLine<TFrontend>::Close() noexcept {
-        if (Backend && State) {
-            Backend->CloseLine(State.get());
-            Backend = nullptr;
+        if (State) {
+            State->Close();
             State = nullptr;
         }
     }
 
     template<class TFrontend>
     ui32 TLine<TFrontend>::GetLineId() const noexcept {
-        return Backend && State ? Backend->GetLineId(State.get()) : 0;
-    }
-
-    template<class TFrontend>
-    TLine<TFrontend> TInMemoryMetricsBackend::CreateLine(TStringBuf name, std::span<const TLabel> labels, const typename TFrontend::TConfig& config) {
-        return TLine<TFrontend>(this, CreateLineWithMeta(name, labels, TFrontend::MakeMeta(config)));
+        return State ? State->GetLineId() : 0;
     }
 
 } // namespace NActors

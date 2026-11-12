@@ -1,10 +1,11 @@
 #include "network.h"
 
 #include <util/generic/maybe.h>
-#include <util/generic/ptr.h>
 #include <util/network/init.h>
 #include <util/network/socket.h>
 #include <util/system/platform.h>
+
+#include <memory>
 
 using namespace NBus;
 using namespace NBus::NPrivate;
@@ -35,7 +36,7 @@ namespace {
         Y_UNUSED(reusePort);
 #endif
 
-        THolder<TOpaqueAddr> addr(new TOpaqueAddr);
+        std::unique_ptr<TOpaqueAddr> addr(new TOpaqueAddr);
         sockaddr* sa = addr->MutableAddr();
         sa->sa_family = af;
         socklen_t len;
@@ -70,7 +71,7 @@ namespace {
 
         TBindResult r;
         r.Socket.Reset(new TSocketHolder(fd));
-        r.Addr = TNetAddr(addr.Release());
+        r.Addr = TNetAddr(addr.release());
         return r;
     }
 

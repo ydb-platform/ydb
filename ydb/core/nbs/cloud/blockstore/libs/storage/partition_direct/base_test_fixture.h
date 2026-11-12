@@ -88,6 +88,12 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
 
     virtual void Init();
 
+    // Joins the direct block group's executor before Runtime is destroyed.
+    // TVChunk::Stop() keeps the chunk alive until the executor drops the stop
+    // task, which is after the stop future is ready. Without this join,
+    // ~TVChunk can log through an already freed TActorSystem.
+    void TearDown(NUnitTest::TTestContext& context) override;
+
     TGuardedSgList MakeSgList() const;
 
     bool WaitScheduledTasks(size_t count, TDuration timeout);
@@ -129,9 +135,9 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     }
 
     // Must be invoked on the vchunk's executor thread.
-    static void InvokeStartPersist(TVChunk& vchunk)
+    static void InvokeMaybeStartPersist(TVChunk& vchunk)
     {
-        vchunk.StartPersist();
+        vchunk.MaybeStartPersist();
     }
 
     // Must be invoked on the vchunk's executor thread.

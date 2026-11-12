@@ -100,7 +100,7 @@ public:
 
     const char* Name() const override { return "TAlterTableIndex"; }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& tableIndexAlter = Transaction.GetAlterTableIndex();
@@ -197,6 +197,9 @@ public:
         if (tableIndexAlter.HasVectorIndexKmeansTreeDescription()) {
             newIndexData->SpecializedIndexDescription = tableIndexAlter.GetVectorIndexKmeansTreeDescription();
         }
+        if (tableIndexAlter.HasHnswIndexDescription()) {
+            newIndexData->SpecializedIndexDescription = tableIndexAlter.GetHnswIndexDescription();
+        }
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterTableIndex, indexPath->PathId);
@@ -211,7 +214,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 

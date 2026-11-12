@@ -261,7 +261,7 @@ class TInitializeBuildIndex: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         auto schema = Transaction.GetInitiateBuildIndexMainTable();
@@ -325,7 +325,7 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        if (!context.SS->CanCreateSnapshot(tablePathId, OperationId.GetTxId(), status, errStr)) {
+        if (!context.SS->CanCreateSingleSnapshot(tablePathId, OperationId.GetTxId(), status, errStr)) {
             result->SetError(status, errStr);
             return result;
         }
@@ -349,8 +349,7 @@ public:
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
-        context.SS->TablesWithSnapshots.emplace(tablePathId, OperationId.GetTxId());
-        context.SS->SnapshotTables[OperationId.GetTxId()].insert(tablePathId);
+        context.SS->AddTableSnapshot(tablePathId, OperationId.GetTxId());
         context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Add(1);
 
         context.OnComplete.ActivateTx(OperationId);
@@ -359,7 +358,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
         context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
     }

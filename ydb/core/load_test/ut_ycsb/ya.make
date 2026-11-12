@@ -1,9 +1,5 @@
 UNITTEST_FOR(ydb/core/load_test/ycsb)
 
-FORK_SUBTESTS()
-
-SPLIT_FACTOR(10)
-
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

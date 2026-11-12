@@ -13,7 +13,7 @@ from ydb_wrapper import YDBWrapper
 
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
-PROJECT_ID = None #'45'  # Optional: set to None to skip project data
+PROJECT_ID = '45'
 ISSUES_PAGE_SIZE = 50  # smaller pages → smaller GraphQL payloads (avoids truncated JSON)
 
 
@@ -353,146 +353,104 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
     return issues
 
 def get_project_fields_for_issues(org_name: str, project_id: str, issue_numbers: List[int]) -> Dict[int, Dict[str, Any]]:
-    """Get project fields for specific issues from GitHub project"""
+    """Fetch Status/Owner/… from org project cards for the given issues."""
     if not project_id:
         return {}
-    
-    print(f"Fetching project fields for {len(issue_numbers)} issues from project {project_id}...")
+
+    numbers = sorted({int(n) for n in issue_numbers if n is not None})
+    if not numbers:
+        return {}
+
+    print(f"Fetching project fields for {len(numbers)} issues from project {project_id}...")
     start_time = time.time()
-    
-    project_fields = {}
-    has_next_page = True
-    end_cursor = "null"
-    
-    project_issues_query = """
-    {
-      organization(login: "%s") {
-        projectV2(number: %s) {
-          id
-          title
-          url
-          items(first: 1000, after: %s) {
-            nodes {
-              id
-              content {
-                ... on Issue {
-                  number
-                }
-              }
-              fieldValues(first: 20) {
-                nodes {
-                  ... on ProjectV2ItemFieldSingleSelectValue {
-                    field {
-                      ... on ProjectV2SingleSelectField {
-                        id
-                        name
-                      }
-                    }
-                    name
-                    id
-                    updatedAt
-                  }
-                  ... on ProjectV2ItemFieldTextValue {
-                    field {
-                      ... on ProjectV2Field {
-                        id
-                        name
-                      }
-                    }
-                    text
-                    id
-                    updatedAt
-                    creator {
-                      login
-                    }
-                  }
-                  ... on ProjectV2ItemFieldMilestoneValue {
-                    field {
-                      ... on ProjectV2Field {
-                        id
-                        name
-                      }
-                    }
-                    milestone {
-                      id
-                      title
-                    }
-                  }
-                  ... on ProjectV2ItemFieldDateValue {
-                    field {
-                      ... on ProjectV2Field {
-                        id
-                        name
-                      }
-                    }
-                    date
-                    updatedAt
-                  }
-                  ... on ProjectV2ItemFieldNumberValue {
-                    field {
-                      ... on ProjectV2Field {
-                        id
-                        name
-                      }
-                    }
-                    number
-                    updatedAt
-                  }
-                }
-              }
-            }
-            pageInfo {
-              hasNextPage
-              endCursor
-            }
-          }
-        }
-      }
-    }
-    """
-    
-    issue_numbers_set = set(issue_numbers)
-    
-    while has_next_page:
-        query = project_issues_query % (org_name, project_id, end_cursor)
+    project_fields: Dict[int, Dict[str, Any]] = {}
+    target_project_number = int(project_id)
+    chunk_size = 50
+
+    for i in range(0, len(numbers), chunk_size):
+        chunk = numbers[i : i + chunk_size]
+        subqueries = []
+        for n in chunk:
+            subqueries.append(
+                f"""
+                n{n}: issue(number: {n}) {{
+                  projectItems(first: 40) {{
+                    nodes {{
+                      project {{ number }}
+                      fieldValues(first: 20) {{
+                        nodes {{
+                          ... on ProjectV2ItemFieldSingleSelectValue {{
+                            field {{
+                              ... on ProjectV2SingleSelectField {{
+                                name
+                              }}
+                            }}
+                            name
+                          }}
+                          ... on ProjectV2ItemFieldTextValue {{
+                            field {{
+                              ... on ProjectV2Field {{
+                                name
+                              }}
+                            }}
+                            text
+                          }}
+                          ... on ProjectV2ItemFieldNumberValue {{
+                            field {{
+                              ... on ProjectV2Field {{
+                                name
+                              }}
+                            }}
+                            number
+                          }}
+                          ... on ProjectV2ItemFieldDateValue {{
+                            field {{
+                              ... on ProjectV2Field {{
+                                name
+                              }}
+                            }}
+                            date
+                          }}
+                        }}
+                      }}
+                    }}
+                  }}
+                }}
+                """
+            )
+        query = f"""
+        query {{
+          repository(owner: "{org_name}", name: "{REPO_NAME}") {{
+            {' '.join(subqueries)}
+          }}
+        }}
+        """
         result = run_query(query)
-        
-        if result and 'data' in result:
-            project_items = result['data']['organization']['projectV2']['items']
-            current_batch = project_items['nodes']
-            
-            for item in current_batch:
-                content = item.get('content')
-                if content and content.get('number') in issue_numbers_set:
-                    issue_number = content['number']
-                    
-                    # Extract project field values
-                    fields = {}
-                    field_values = item.get('fieldValues', {}).get('nodes', [])
-                    
-                    for field_value in field_values:
-                        field_name = field_value.get('field', {}).get('name', '')
-                        if field_name:
-                            if 'name' in field_value:  # SingleSelect
-                                fields[field_name.lower()] = field_value.get('name')
-                            elif 'text' in field_value:  # Text
-                                fields[field_name.lower()] = field_value.get('text')
-                            elif 'number' in field_value:  # Number
-                                fields[field_name.lower()] = field_value.get('number')
-                            elif 'date' in field_value:  # Date
-                                fields[field_name.lower()] = field_value.get('date')
-                            elif 'milestone' in field_value:  # Milestone
-                                milestone = field_value.get('milestone', {})
-                                fields[field_name.lower()] = milestone.get('title') if milestone else None
-                    
-                    project_fields[issue_number] = fields
-            
-            page_info = project_items['pageInfo']
-            has_next_page = page_info['hasNextPage']
-            end_cursor = f'"{page_info["endCursor"]}"' if page_info['endCursor'] else "null"
-        else:
-            has_next_page = False
-    
+        repo_data = ((result or {}).get("data") or {}).get("repository") or {}
+        for n in chunk:
+            node = repo_data.get(f"n{n}") or {}
+            items = (node.get("projectItems") or {}).get("nodes") or []
+            for item in items:
+                project_num = int((item.get("project") or {}).get("number") or -1)
+                if project_num != target_project_number:
+                    continue
+                fields: Dict[str, Any] = {}
+                for fv in (item.get("fieldValues") or {}).get("nodes") or []:
+                    field_name = ((fv.get("field") or {}).get("name") or "").strip()
+                    if not field_name:
+                        continue
+                    key = field_name.lower()
+                    if "name" in fv and fv.get("name") is not None and "text" not in fv:
+                        fields[key] = fv.get("name")
+                    elif "text" in fv:
+                        fields[key] = fv.get("text")
+                    elif "number" in fv:
+                        fields[key] = fv.get("number")
+                    elif "date" in fv:
+                        fields[key] = fv.get("date")
+                project_fields[n] = fields
+                break
+
     elapsed = time.time() - start_time
     print(f"Fetched project fields for {len(project_fields)} issues (took {elapsed:.2f}s)")
     return project_fields

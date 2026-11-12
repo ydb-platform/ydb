@@ -224,7 +224,7 @@ public:
 
     virtual const char* Name() const override final { return "TDropIndexAtMainTable"; }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         auto dropOperation = Transaction.GetDropIndex();
@@ -260,9 +260,12 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
-                .NotAsyncReplicaTable()
                 .NotUnderOperation()
                 .IsCommonSensePath();
+
+            if (!Transaction.GetInternal()) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -338,7 +341,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
@@ -391,10 +394,13 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
             .IsResolved()
             .NotDeleted()
             .IsTable()
-            .NotAsyncReplicaTable()
             .NotUnderDeleting()
             .NotUnderOperation()
             .IsCommonSensePath();
+
+        if (!tx.GetInternal()) {
+            checks.NotAsyncReplicaTable();
+        }
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
@@ -500,12 +506,15 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
         // Row-table prefix bloom filter has no impl table. Removing the matching ByKeyFilterPrefix
         // from the main table's partition config is modeled as a normal table alter.
         auto mainTableAltering = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+        mainTableAltering.SetInternal(tx.GetInternal());
         auto* alter = mainTableAltering.MutableAlterTable();
         alter->SetName(mainTablePath.LeafName());
         alter->MutablePartitionConfig()->AddDropByKeyFilterPrefixLengths(droppedPrefixLen);
         result.push_back(CreateAlterTable(NextPartId(nextId, result), mainTableAltering));
     } else {
         auto mainTableIndexDropping = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndexAtMainTable);
+        mainTableIndexDropping.SetInternal(tx.GetInternal());
+        *mainTableIndexDropping.MutableLockGuard() = tx.GetLockGuard();
         auto operation = mainTableIndexDropping.MutableDropIndex();
         operation->SetTableName(mainTablePath.LeafName());
         operation->SetIndexName(indexPath.LeafName());

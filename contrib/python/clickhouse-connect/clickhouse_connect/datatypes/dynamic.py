@@ -4,10 +4,11 @@ from collections.abc import Collection, Sequence
 from typing import Any
 from urllib.parse import unquote
 
-from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
+from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef, _TypeArgs
 from clickhouse_connect.datatypes.binary_value import _decode_binary_value
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.datatypes.string import String
+from clickhouse_connect.driver.binding import _decode_ch_string_literal, _format_identifier, format_str
 from clickhouse_connect.driver.bytesource import ByteArraySource
 from clickhouse_connect.driver.common import first_value, unescape_identifier, write_uint64
 from clickhouse_connect.driver.ctypes import data_conv
@@ -94,12 +95,15 @@ def typed_variant(value: Any, type_name: str) -> TypedVariant:
 
 class Variant(ClickHouseType):
     __slots__ = ("element_types", "_python_map", "_name_index")
-    python_type = object
-    valid_formats = "typed", "native"
+    python_type: type | None = object
+    valid_formats: str | tuple[str, ...] = "typed", "native"
+    _type_args = _TypeArgs(1, None, variadic_nested=0)
 
     def __init__(self, type_def: TypeDef):
-        super().__init__(type_def)
-        self.element_types: list[ClickHouseType] = [get_from_name(name) for name in type_def.values]
+        elements_by_name = {ch_type.name: ch_type for ch_type in (get_from_name(name) for name in type_def.values)}
+        self.element_types: list[ClickHouseType] = sorted(elements_by_name.values(), key=lambda ch_type: ch_type.name)
+        canonical_type_def = TypeDef(type_def.wrappers, type_def.keys, tuple(ch_type.name for ch_type in self.element_types))
+        super().__init__(canonical_type_def)
         self._name_suffix = f"({', '.join(ch_type.name for ch_type in self.element_types)})"
         self._build_dispatch()
 
@@ -196,8 +200,13 @@ def read_variant_column(
     # We have to count up how many of each discriminator there are in the block to read the sub columns correctly
     disc_rows = [0] * v_count
     for disc in discriminators:
-        if disc != 255:
+        if disc < v_count:
             disc_rows[disc] += 1
+        elif disc != 255:
+            raise DataError(
+                f"Column '{ctx.column_name or '<unknown>'}' has Variant discriminator {disc}, but the type definition has "
+                f"{v_count} alternatives. The server sent an unknown type member or the Native stream is corrupt."
+            )
     sub_columns: list[Sequence] = [[]] * v_count
     # Read all the sub-columns
     for ix in range(v_count):
@@ -248,6 +257,7 @@ def read_dynamic_prefix(_, source: ByteSource, ctx: QueryContext) -> DynamicStat
 
 class Dynamic(ClickHouseType):
     python_type = object
+    _type_args = _TypeArgs(0, 1, integer_bounds=(("max_types", 0, 254),))
 
     def read_column_prefix(self, source: ByteSource, ctx: QueryContext) -> DynamicState:
         return read_dynamic_prefix(self, source, ctx)
@@ -523,7 +533,7 @@ class SharedVariant(String):
 
 
 class JSON(ClickHouseType):
-    __slots__ = "typed_paths", "typed_types", "skips"
+    __slots__ = "typed_paths", "typed_types", "skips", "skip_paths", "skip_regexps"
     python_type = dict
     valid_formats = "string", "native"
     _data_size = json_sample_size
@@ -531,49 +541,85 @@ class JSON(ClickHouseType):
     shared_data_type: ClickHouseType
     max_dynamic_paths = 0
     max_dynamic_types = 0
+    typed_paths: list[str]
+    typed_types: list[ClickHouseType]
+    skips: list[str]
+    skip_paths: list[str]
+    skip_regexps: list[str]
+    _type_args = _TypeArgs(
+        0,
+        None,
+        integer_bounds=(("max_dynamic_paths", 0, 10000), ("max_dynamic_types", 0, 254)),
+    )
 
     def __init__(self, type_def: TypeDef):
-        super().__init__(type_def)
-        self.typed_paths = []
-        self.typed_types = []
-        self.skips = []
-        typed_paths = []
-        typed_types = []
-        skips = []
-        parts = []
-        for key, value in zip(type_def.keys, type_def.values):
+        limits: dict[str, int] = {}
+        typed: list[tuple[str, ClickHouseType]] = []
+        skip_paths: set[str] = set()
+        skip_regexps: list[str] = []
+        for raw_key, raw_value in zip(type_def.keys, type_def.values):
+            key = str(raw_key)
+            value = str(raw_value)
             if key == "max_dynamic_paths":
                 try:
-                    self.max_dynamic_paths = int(value)
-                    parts.append(f"{key} = {value}")
+                    limits[key] = int(value)
                     continue
                 except ValueError:
                     pass
             if key == "max_dynamic_types":
                 try:
-                    self.max_dynamic_types = int(value)
-                    parts.append(f"{key} = {value}")
+                    limits[key] = int(value)
                     continue
                 except ValueError:
                     pass
-            if key == "SKIP":
-                if value.startswith("REGEXP"):
-                    value = "REGEXP " + value[6:]
+            if key.upper() == "SKIP":
+                literal = value[6:].lstrip() if value[:6].upper() == "REGEXP" else ""
+                if len(literal) >= 2 and literal[0] == "'" and literal[-1] == "'":
+                    skip_regexps.append(_decode_ch_string_literal(literal))
                 else:
-                    if not value.startswith("`"):
-                        value = f"`{value}`"
-                skips.append(value)
+                    skip_paths.add(unescape_identifier(value))
             else:
-                key = unescape_identifier(key)
-                typed_paths.append(key)
-                typed_types.append(get_from_name(value))
-                key = f"`{key}`"
-            parts.append(f"{key} {value}")
-        if typed_paths:
-            self.typed_paths = typed_paths
-            self.typed_types = typed_types
-        if skips:
-            self.skips = skips
+                typed.append((unescape_identifier(key), get_from_name(value)))
+
+        typed.sort(key=lambda item: item[0])
+        sorted_skip_paths = sorted(skip_paths)
+        skip_regexps.sort()
+        self.typed_paths = [path for path, _ in typed]
+        self.typed_types = [ch_type for _, ch_type in typed]
+        self.skip_paths = sorted_skip_paths
+        self.skip_regexps = skip_regexps
+        self.skips = [_format_identifier(path) for path in sorted_skip_paths]
+        self.skips.extend(f"REGEXP {format_str(regexp)}" for regexp in skip_regexps)
+        self.max_dynamic_paths = limits.get("max_dynamic_paths", 0)
+        self.max_dynamic_types = limits.get("max_dynamic_types", 0)
+
+        keys: list[str] = []
+        values: list[str | int] = []
+        parts: list[str] = []
+        for key, default in (("max_dynamic_types", 32), ("max_dynamic_paths", 1024)):
+            limit_value = limits.get(key)
+            if limit_value is not None and limit_value != default:
+                keys.append(key)
+                values.append(limit_value)
+                parts.append(f"{key} = {limit_value}")
+        for path, ch_type in typed:
+            quoted_path = _format_identifier(path)
+            keys.append(quoted_path)
+            values.append(ch_type.name)
+            parts.append(f"{quoted_path} {ch_type.name}")
+        for path in sorted_skip_paths:
+            quoted_path = _format_identifier(path)
+            keys.append("SKIP")
+            values.append(quoted_path)
+            parts.append(f"SKIP {quoted_path}")
+        for regexp in skip_regexps:
+            value = f"REGEXP {format_str(regexp)}"
+            keys.append("SKIP")
+            values.append(value)
+            parts.append(f"SKIP {value}")
+
+        canonical_type_def = TypeDef(type_def.wrappers, tuple(keys), tuple(values))
+        super().__init__(canonical_type_def)
         if parts:
             self._name_suffix = f"({', '.join(parts)})"
 

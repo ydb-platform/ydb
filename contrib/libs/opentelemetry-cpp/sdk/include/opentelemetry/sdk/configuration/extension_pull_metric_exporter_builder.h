@@ -6,12 +6,16 @@
 #include <memory>
 
 #include "opentelemetry/sdk/configuration/extension_pull_metric_exporter_configuration.h"
-#include "opentelemetry/sdk/metrics/metric_reader.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace sdk
 {
+namespace metrics
+{
+class MetricReader;
+}  // namespace metrics
+
 namespace configuration
 {
 

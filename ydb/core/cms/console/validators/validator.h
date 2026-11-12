@@ -10,6 +10,8 @@
 #include <util/generic/vector.h>
 #include <util/string/printf.h>
 
+#include <atomic>
+
 namespace NKikimr::NConsole {
 
 // Base class for config validators. Validators are used
@@ -33,7 +35,7 @@ public:
                      THashSet<ui32> itemKinds)
         : Name(name)
         , CheckedConfigItemKinds(std::move(itemKinds))
-        , Enabled(true)
+        , State(1)
     {
     }
 
@@ -55,17 +57,24 @@ public:
 
     void Enable()
     {
-        Enabled = true;
+        SetEnabled(true);
     }
 
     void Disable()
     {
-        Enabled = false;
+        SetEnabled(false);
     }
 
     bool IsEnabled() const
     {
-        return Enabled;
+        return GetState() & 1;
+    }
+
+    // Includes the enabled bit and a revision, so an enabled->disabled->enabled
+    // transition can invalidate results computed while validation was changing.
+    ui64 GetState() const
+    {
+        return State.load();
     }
 
     virtual TString GetDescription() const
@@ -111,9 +120,16 @@ protected:
     }
 
 private:
+    void SetEnabled(bool enabled)
+    {
+        auto state = State.load();
+        while (bool(state & 1) != enabled && !State.compare_exchange_weak(state, state + 1)) {
+        }
+    }
+
     TString Name;
     THashSet<ui32> CheckedConfigItemKinds;
-    bool Enabled;
+    std::atomic<ui64> State;
 };
 
 // All validators should be registered before Console activation.

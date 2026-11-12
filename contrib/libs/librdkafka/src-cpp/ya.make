@@ -6,7 +6,7 @@ LICENSE(BSD-2-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.15.0)
+VERSION(2.15.1)
 
 PEERDIR(
     contrib/libs/librdkafka

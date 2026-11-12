@@ -6,6 +6,8 @@
     Feature flags:
     auto_resource_sets = true - auto create additional resources.srcDir(...).include('**/*') for each java.srcDir with 'resources' in it
     named_tests = true - make different named sourceSets for each test with depends between tests
+    named_test_artifacts = true - publish own jar and configuration for each named test sourceSet, instead of one jar with all test sourceSets of module (requires named_tests)
+    zip64 = true - allow archives with more than 65535 entries, hard limit of ZIP format, for all jars of project
 -#}
 
 {%- macro PatchRootCommon(path, out_root) -%}
@@ -91,6 +93,28 @@
 
 {%- set NS_TEST = "test" -%}
 {%- set NS_SRC_TEST = "src/test" -%}
+{%- set ARTIFACTS_SUFFIX = "Artifacts" -%}
+{%- set FRIEND_PATHS_FLAG = "-Xfriend-paths=" -%}
+
+{#- Friend paths go to friendPaths, not to freeCompilerArgs: -Xfriend-paths is single-valued in kotlinc -#}
+{%- macro FriendPaths(kotlinc_flags) -%}
+{%-     set friend_libraries = all_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('jar')|selectattr('classpath') -%}
+{%-     for friend_flag in kotlinc_flags|unique|select('startsWith', FRIEND_PATHS_FLAG) -%}
+{#-         One -Xfriend-paths may hold comma separated list of paths -#}
+{%-         for friend_path in split(friend_flag|replace(FRIEND_PATHS_FLAG, ''), ',') %}
+    friendPaths.from({{ PatchRoots(friend_path, true) }})
+{#-         Path is absolute, its root depends on place of export, so search by tail of path -#}
+{%-         for library in friend_libraries if friend_path|replace('/' + library.jar, '') != friend_path -%}
+{%-             if loop.first and (library.classpath|replace('project(":', '') != library.classpath) -%}
+{#-                 Output of sourceSet, not jar: compile classpath of Gradle has classes dir -#}
+{%-                 set classpath = library.classpath -%}
+{%-                 include "[generator]/patch_classpath.jinja" %}
+    friendPaths.from({{ classpath }}.the<SourceSetContainer>()["main"].output)
+{%-             endif -%}
+{%-         endfor -%}
+{%-         endfor -%}
+{%-     endfor -%}
+{%- endmacro -%}
 
 {%- macro TestRelDir2SourceSetName(test_reldir) -%}
 {%-     if (test_reldir == NS_TEST) or (test_reldir == NS_SRC_TEST) -%}
@@ -115,6 +139,20 @@
 {{ TestRelDir2SourceSetName(test_reldir) }}
 {%-     else -%}
 {{ NS_TEST }}
+{%-     endif -%}
+{%- endmacro -%}
+
+{#- Configuration name of test artifacts, by dir of test jar relative to dir of module with tests -#}
+{%- macro TestArtifactsName(testdep, test_jar) -%}
+{%-     if not test_jar -%}
+{{ NS_TEST }}{{ ARTIFACTS_SUFFIX }}
+{%-     else -%}
+{%-         set test_dir = dirname(test_jar) -%}
+{%-         if test_dir == testdep -%}
+{{ NS_TEST }}{{ ARTIFACTS_SUFFIX }}
+{%-         else -%}
+{{ TestRelDir2SourceSetName(test_dir|replace(testdep + "/", "")) }}{{ ARTIFACTS_SUFFIX }}
+{%-         endif -%}
 {%-     endif -%}
 {%- endmacro -%}
 

@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/services/ydb)
 FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -25,10 +25,14 @@ SRCS(
     ydb_unary_retry_ut.cpp
     ydb_stats_ut.cpp
     ydb_logstore_ut.cpp
+    ydb_path_aliasing_ingress_ut.cpp
     ydb_olapstore_ut.cpp
     ydb_monitoring_ut.cpp
     ydb_query_ut.cpp
     ydb_read_rows_ut.cpp
+    ydb_relative_database_ut.cpp
+    ydb_relative_resource_ut.cpp
+    ydb_relative_database_isolation_ut.cpp
     ydb_ldap_login_ut.cpp
     ydb_login_ut.cpp
     ydb_object_storage_ut.cpp
@@ -65,9 +69,12 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/export
     ydb/public/sdk/cpp/src/client/extension_common
     ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/rate_limiter
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/monitoring
     ydb/services/ydb
+    ydb/services/keyvalue
 )
 
 YQL_LAST_ABI_VERSION()

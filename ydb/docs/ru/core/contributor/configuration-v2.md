@@ -66,7 +66,7 @@
 
 ### Управление конфигурацией через InvokeOnRoot
 
-Запросы [`TEvNodeConfigInvokeOnRoot`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/blobstorage_distributed_config.proto#L177) представляют собой унифицированный механизм для любых изменений конфигурации кластера. Эти команды могут быть инициированы как **администратором системы** (например, через CLI), так и **другими компонентами YDB** в автоматическом режиме (например, таблеткой `BlobStorageController` в процессе `Self-Heal`).
+Запросы [`TEvNodeConfigInvokeOnRoot`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/blobstorage_distributed_config.proto#L177) представляют собой унифицированный механизм для любых изменений конфигурации кластера. Эти команды могут быть инициированы как **администратором системы** (например, через CLI), так и **другими компонентами YDB** в автоматическом режиме (например, таблеткой `BlobStorageController` в процессе `SelfHeal`).
 
 Независимо от источника, любой такой запрос обрабатывается по единому сценарию:
 
@@ -96,9 +96,10 @@
 - **Узлы баз данных**
 
   Узлы баз данных (database nodes) подписываются на события [`TEvNodeWardenDynamicConfigPush`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/node_warden_events.h#L75), чтобы получать обновления конфигурации в реальном времени.
-- **Self-Heal**
 
-  При использовании Distconf для [статической группы](../concepts/glossary.md#static-group) работает [Self-Heal](../maintenance/manual/selfheal.md) по аналогии с [динамическими группами](../concepts/glossary.md#dynamic-group).
+- **SelfHeal**
+
+  При использовании Distconf для [статической группы](../concepts/glossary.md#static-group) работает [SelfHeal](../devops/concepts/selfheal-storage.md) по аналогии с [динамическими группами](../concepts/glossary.md#dynamic-group).
 
 - **Локальные YAML-файлы на узлах**
 

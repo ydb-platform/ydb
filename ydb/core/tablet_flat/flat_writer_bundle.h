@@ -25,22 +25,45 @@ namespace NWriter {
             , BlobsChannels(conf.BlobsChannels)
             , ExtraChannel(conf.ExtraChannel)
             , ChannelsShares(conf.ChannelsShares)
-            , Banks(base, conf.Slots)
+        {
+            OwnedBanks.ConstructInPlace(base, conf.Slots);
+            BanksPtr = OwnedBanks.Get();
+            InitBlocks(conf);
+        }
+
+        // Constructor for shared TBanks (multi-output compaction)
+        TBundle(TBanks* sharedBanks, const TConf &conf)
+            : Groups(conf.Groups)
+            , BlobsChannels(conf.BlobsChannels)
+            , ExtraChannel(conf.ExtraChannel)
+            , ChannelsShares(conf.ChannelsShares)
+            , BanksPtr(sharedBanks)
+        {
+            InitBlocks(conf);
+        }
+
+    private:
+        void InitBlocks(const TConf &conf)
         {
             Y_ENSURE(Groups.size() >= 1, "There must be at least one page collection group");
 
             const auto none = NTable::NPage::ECache::None;
             const auto regular = NTable::NPage::ECacheMode::Regular;
 
+            bool V2OnlyMode = conf.WriteBTreeIndexV2 && !conf.WriteBTreeIndexV1;
             Blocks.resize(Groups.size() + 1);
             for (size_t group : xrange(Groups.size())) {
-                Blocks[group].Reset(
-                    new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].CacheMode, Groups[group].MaxBlobSize, conf.StickyFlatIndex));
+                Blocks[group].Reset(new TBlocks(this, Groups[group].Channel, Groups[group].Cache,
+                                                Groups[group].CacheMode, Groups[group].MaxBlobSize,
+                                                conf.StickyFlatIndex, false, V2OnlyMode));
             }
-            Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, regular, Groups[0].MaxBlobSize, conf.StickyFlatIndex));
+            // Outer Blob Collection is still page-index addressing in V2
+            Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, regular, Groups[0].MaxBlobSize, conf.StickyFlatIndex, true));
 
             Growth = new NTable::TScreen::TCook;
         }
+
+    public:
 
         TVector<NPageCollection::TGlob> GetBlobsToSave() noexcept
         {
@@ -62,15 +85,15 @@ namespace NWriter {
         }
 
     private:
-        TPageId Write(TSharedData page, EPage type, ui32 group) override
+        TPageLocation Write(TSharedData page, EPage type, ui32 group) override
         {
             return Blocks.at(group)->Write(std::move(page), type);
         }
 
         TPageId WriteOuter(TSharedData page) override
         {
-            return
-                Blocks.back()->Write(std::move(page), EPage::Opaque);
+            Blocks.back()->Write(std::move(page), EPage::Opaque);
+            return Blocks.back()->GetLastWrittenPageId(Groups.size());
         }
 
         void WriteInplace(TPageId page, TArrayRef<const char> body) override
@@ -78,11 +101,16 @@ namespace NWriter {
             Blocks[0]->WriteInplace(page, body);
         }
 
+        ui32 GetLastWrittenPageId(ui32 group) const noexcept override
+        {
+            return Blocks[group]->GetLastWrittenPageId(group);
+        }
+
         NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) override
         {
             ui8 bestChannel = ChannelsShares.Select(BlobsChannels);
             
-            auto glob = Banks.Data.Do(bestChannel, blob.size());
+            auto glob = BanksPtr->Data.Do(bestChannel, blob.size());
 
             Blobs.emplace_back(glob, std::move(blob));
             Growth->Pass(ref);
@@ -114,7 +142,7 @@ namespace NWriter {
         {
             Y_ENSURE(cookieRange == 0 || cookieRange == 1, "Invalid cookieRange requested");
 
-            return cookieRange == 0 ? Banks.Meta : Banks.Data;
+            return cookieRange == 0 ? BanksPtr->Meta : BanksPtr->Data;
         }
 
         void Put(NPageCollection::TGlob&& glob) override
@@ -151,7 +179,8 @@ namespace NWriter {
         const TVector<ui8> BlobsChannels;
         const ui8 ExtraChannel;
         const NUtil::TChannelsShares& ChannelsShares;
-        TBanks Banks;
+        TMaybe<TBanks> OwnedBanks;  // Owned TBanks for single-output mode
+        TBanks* BanksPtr = nullptr;  // Pointer to TBanks (owned or shared)
         TVector<NPageCollection::TGlob> Blobs;
         TVector<THolder<TBlocks>> Blocks;
         TAutoPtr<NTable::TScreen::TCook> Growth;

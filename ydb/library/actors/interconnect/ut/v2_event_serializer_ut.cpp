@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/interconnect/event_destructor.h>
 #include <ydb/library/actors/interconnect/v2_event_serializer.h>
 #include <ydb/library/actors/protos/unittests.pb.h>
 
@@ -13,6 +14,33 @@
 #include <initializer_list>
 
 using namespace NActors;
+
+namespace {
+
+    // Keeps completed objects alive so tests can verify when ownership is transferred.
+    class TCollectingEventDestructor final : public IEventDestructor {
+    public:
+        ui64 GetAndResetDestroyEventsCycles() override {
+            return 0;
+        }
+
+        void DestroyEvent(
+                std::unique_ptr<IEventBase> event,
+                TIntrusivePtr<TEventSerializedData> buffer) override {
+            UNIT_ASSERT(event || buffer);
+            if (event) {
+                Events.push_back(std::move(event));
+            }
+            if (buffer) {
+                Buffers.push_back(std::move(buffer));
+            }
+        }
+
+        std::vector<std::unique_ptr<IEventBase>> Events;
+        std::vector<TIntrusivePtr<TEventSerializedData>> Buffers;
+    };
+
+}
 
 struct TEvPrivate {
     enum {
@@ -134,6 +162,38 @@ void CheckSerializeThenDeserialize(bool withPayload, bool buffer, ui32 metaLengt
 }
 
 Y_UNIT_TEST_SUITE(EventSerializerV2) {
+
+    Y_UNIT_TEST(CommitReportsCompletedObjectBytes) {
+        for (bool preserialize : {false, true}) {
+            TEventSerializer serializer(false);
+            auto event = MakeIndexedEvent(1, 0, 128, false);
+            if (preserialize) {
+                event->Preserialize(false);
+            }
+            const size_t expectedBytes = event->HasBuffer()
+                ? event->GetChainBuffer()->GetSize()
+                : event->GetBase()->CalculateSerializedSizeCached();
+            serializer.Push(std::move(event));
+
+            TRcBuf buffer = TRcBuf::Uninitialized(65536);
+            std::vector<TContiguousSpan> spans;
+            const size_t produced = serializer.ProduceOutputStream(buffer, &spans);
+            UNIT_ASSERT_GT(produced, 1u);
+            UNIT_ASSERT(!serializer.IsTrafficPending());
+
+            TCollectingEventDestructor eventDestructor;
+            UNIT_ASSERT_VALUES_EQUAL(
+                serializer.CommitProducedBytes(produced - 1, 0, nullptr, &eventDestructor), 0u);
+            UNIT_ASSERT(eventDestructor.Events.empty());
+            UNIT_ASSERT(eventDestructor.Buffers.empty());
+            UNIT_ASSERT_VALUES_EQUAL(
+                serializer.CommitProducedBytes(1, 0, nullptr, &eventDestructor), expectedBytes);
+            UNIT_ASSERT_VALUES_EQUAL(eventDestructor.Events.size() + eventDestructor.Buffers.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(
+                serializer.CommitProducedBytes(0, 0, nullptr, &eventDestructor), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(eventDestructor.Events.size() + eventDestructor.Buffers.size(), 1u);
+        }
+    }
 
     Y_UNIT_TEST(UnusedNonAlignedScratchIsNotTrimmed) {
         TEventSerializer ser(false);
@@ -1200,14 +1260,15 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         UNIT_ASSERT_GT(producedXdc, 0u);
 
         // Main drained, XDC still entirely in flight.
-        std::vector<std::unique_ptr<IEventBase>> events;
-        std::vector<TIntrusivePtr<TEventSerializedData>> buffers;
-        ser.CommitProducedBytes(producedMain, 0, nullptr, &events, &buffers);
-        UNIT_ASSERT_VALUES_EQUAL_C(events.size(), 1u,
+        TCollectingEventDestructor eventDestructor;
+        ser.CommitProducedBytes(producedMain, 0, nullptr, &eventDestructor);
+        UNIT_ASSERT_VALUES_EQUAL_C(eventDestructor.Events.size(), 1u,
             "the main-only event should be released as soon as the main stream is committed");
 
-        ser.CommitProducedBytes(0, producedXdc, nullptr, &events, &buffers);
-        UNIT_ASSERT_VALUES_EQUAL(events.size(), 2u);
+        ser.CommitProducedBytes(0, producedXdc, nullptr, &eventDestructor);
+        UNIT_ASSERT_VALUES_EQUAL(eventDestructor.Events.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(ser.CommitProducedBytes(0, 0, nullptr, &eventDestructor), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(eventDestructor.Events.size(), 2u);
     }
 
     Y_UNIT_TEST(XdcSectionGeometryHelper) {

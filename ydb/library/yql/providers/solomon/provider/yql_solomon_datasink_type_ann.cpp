@@ -1,9 +1,10 @@
 #include "yql_solomon_provider_impl.h"
 
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
+
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 namespace NYql {
 
@@ -11,17 +12,17 @@ using namespace NNodes;
 
 namespace {
 
-class TSolomonDataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
+class TSolomonDataSinkTypeAnnotationTransformer: public TVisitorTransformerBase {
 public:
     explicit TSolomonDataSinkTypeAnnotationTransformer(TSolomonState::TPtr state)
         : TVisitorTransformerBase(true)
         , State_(state)
     {
         using TSelf = TSolomonDataSinkTypeAnnotationTransformer;
-        AddHandler({TSoWriteToShard::CallableName()}, Hndl(&TSelf::HandleWriteToShard));
-        AddHandler({TSoShard::CallableName()}, Hndl(&TSelf::HandleSoShard));
-        AddHandler({TCoCommit::CallableName()}, Hndl(&TSelf::HandleCommit));
-        AddHandler({TSoInsert::CallableName()}, Hndl(&TSelf::HandleInsert));
+        AddHandler({ TSoWriteToShard::CallableName() }, Hndl(&TSelf::HandleWriteToShard));
+        AddHandler({ TSoShard::CallableName() }, Hndl(&TSelf::HandleSoShard));
+        AddHandler({ TCoCommit::CallableName() }, Hndl(&TSelf::HandleCommit));
+        AddHandler({ TSoInsert::CallableName() }, Hndl(&TSelf::HandleInsert));
     }
 
 private:
@@ -43,38 +44,34 @@ private:
             return TStatus::Error;
         }
 
-        if (!State_->IsRtmrMode()) {
-            const auto writeInput = write.Input().Ptr();
-            const auto inputPos = writeInput->Pos();
-            if (const auto maybeTuple = TMaybeNode<TExprList>(writeInput)) {
-                const auto tuple = maybeTuple.Cast();
+        const auto writeInput = write.Input().Ptr();
+        const auto inputPos = writeInput->Pos();
+        if (const auto maybeTuple = TMaybeNode<TExprList>(writeInput)) {
+            const auto tuple = maybeTuple.Cast();
 
-                TVector<TExprBase> values;
-                values.reserve(tuple.Size());
-                for (const auto& value : tuple) {
-                    if (!EnsureStructType(value.Ref(), ctx)) {
-                        return TStatus::Error;
-                    }
-
-                    values.emplace_back(value);
+            TVector<TExprBase> values;
+            values.reserve(tuple.Size());
+            for (const auto& value : tuple) {
+                if (!EnsureStructType(value.Ref(), ctx)) {
+                    return TStatus::Error;
                 }
 
-                const auto list = Build<TCoAsList>(ctx, writeInput->Pos())
-                    .Add(std::move(values))
-                    .Done();
-
-                input.Ptr()->ChildRef(TSoWriteToShard::idx_Input) = list.Ptr();
-                return TStatus::Repeat;
+                values.emplace_back(value);
             }
 
-            const TTypeAnnotationNode* inputItemType = nullptr;
-            if (!EnsureNewSeqType<true, true, true>(inputPos, *writeInput->GetTypeAnn(), ctx, &inputItemType)) {
-                return TStatus::Error;
-            }
+            const auto list = Build<TCoAsList>(ctx, writeInput->Pos()).Add(std::move(values)).Done();
 
-            if (!ValidateWriteTypeAnnotation(inputPos, inputItemType, ctx)) {
-                return TStatus::Error;
-            }
+            input.Ptr()->ChildRef(TSoWriteToShard::idx_Input) = list.Ptr();
+            return TStatus::Repeat;
+        }
+
+        const TTypeAnnotationNode* inputItemType = nullptr;
+        if (!EnsureNewSeqType<true, true, true>(inputPos, *writeInput->GetTypeAnn(), ctx, &inputItemType)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateWriteTypeAnnotation(inputPos, inputItemType, ctx)) {
+            return TStatus::Error;
         }
 
         input.Ptr()->SetTypeAnn(write.World().Ref().GetTypeAnn());
@@ -82,8 +79,6 @@ private:
     }
 
     TStatus HandleSoShard(TExprBase input, TExprContext& ctx) {
-        YQL_ENSURE(!State_->IsRtmrMode(), "SoShard can't be used in rtmr mode");
-
         if (!EnsureMinMaxArgsCount(input.Ref(), 5, 6, ctx)) {
             return TStatus::Error;
         }
@@ -121,7 +116,9 @@ private:
         // project accepts writes into any of its services.
         if (clusterConfig.GetClusterType() == TSolomonClusterConfig::SCT_MONITORING && !NSo::IsMoniumProject(clusterConfig)) {
             if (shard.Service().StringValue() != "custom") {
-                ctx.AddError(TIssue(ctx.GetPosition(shard.SolomonCluster().Pos()), TStringBuilder() << "It is not allowed to write into Monitoring service '" << shard.Service().StringValue() << "'. Use service 'custom' instead"));
+                ctx.AddError(TIssue(ctx.GetPosition(shard.SolomonCluster().Pos()),
+                    TStringBuilder() << "It is not allowed to write into Monitoring service '" << shard.Service().StringValue()
+                                     << "'. Use service 'custom' instead"));
                 return TStatus::Error;
             }
         }
@@ -166,9 +163,7 @@ private:
             return TStatus::Error;
         }
 
-        input.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-            ctx.MakeType<TListExprType>(inputItemType)
-        }));
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{ ctx.MakeType<TListExprType>(inputItemType) }));
         return TStatus::Ok;
     }
 
@@ -189,8 +184,8 @@ private:
 
             bool isOptional = false;
             if (!EnsureDataOrOptionalOfData(position, structItem->GetItemType(), isOptional, itemType, ctx)) {
-		ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected data or optional of data, but got: "
-                    << FormatType(structItem)));
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(position), TStringBuilder() << "Expected data or optional of data, but got: " << FormatType(structItem)));
                 return false;
             }
 
@@ -206,16 +201,19 @@ private:
             }
 
             if (isOptional) {
-                ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Optional types for labels and metric values are not supported in writing into Monitoring. FieldName: " << itemName));
+                ctx.AddError(TIssue(ctx.GetPosition(position),
+                    TStringBuilder() << "Optional types for labels and metric values are not supported in writing into Monitoring. FieldName: "
+                                     << itemName));
                 return false;
             }
-            
+
             if (dataType.Features & NUdf::StringType) {
                 labelMembers++;
             } else if (dataType.Features & NUdf::NumericType) {
                 sensorMembers++;
             } else {
-                ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Field " << itemName << " of type " << dataType.Name << " could not be written into Monitoring"));
+                ctx.AddError(TIssue(ctx.GetPosition(position),
+                    TStringBuilder() << "Field " << itemName << " of type " << dataType.Name << " could not be written into Monitoring"));
                 return false;
             }
         }
@@ -231,12 +229,14 @@ private:
         }
 
         if (labelMembers > SolomonMaxLabelsCount) {
-            ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Max labels count is " << SolomonMaxLabelsCount << " but " << labelMembers << " were provided"));
+            ctx.AddError(TIssue(ctx.GetPosition(position),
+                TStringBuilder() << "Max labels count is " << SolomonMaxLabelsCount << " but " << labelMembers << " were provided"));
             return false;
         }
 
         if (sensorMembers > SolomonMaxSensorsCount) {
-            ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Max sensors count is " << SolomonMaxSensorsCount << " but " << sensorMembers << " were provided"));
+            ctx.AddError(TIssue(ctx.GetPosition(position),
+                TStringBuilder() << "Max sensors count is " << SolomonMaxSensorsCount << " but " << sensorMembers << " were provided"));
             return false;
         }
 
@@ -246,10 +246,10 @@ private:
     TSolomonState::TPtr State_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<TVisitorTransformerBase> CreateSolomonDataSinkTypeAnnotationTransformer(TSolomonState::TPtr state) {
     return THolder(new TSolomonDataSinkTypeAnnotationTransformer(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

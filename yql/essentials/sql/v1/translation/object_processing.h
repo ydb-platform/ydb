@@ -2,6 +2,7 @@
 
 #include "node.h"
 #include "context.h"
+#include "source.h"
 
 namespace NSQLTranslationV1 {
 
@@ -66,6 +67,7 @@ class TObjectProcessorWithFeatures: public TObjectProcessorImpl {
 
 protected:
     const TNodePtr Features_;
+    const TSourcePtr FakeSource_;
 
     INode::TPtr FillFeatures(INode::TPtr options) const override;
 

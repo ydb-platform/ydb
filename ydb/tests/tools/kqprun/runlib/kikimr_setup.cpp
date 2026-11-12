@@ -1,25 +1,26 @@
 #include "kikimr_setup.h"
 #include "utils.h"
 
-#include <util/system/hostname.h>
-
 #include <ydb/core/fq/libs/credentials/structured_token_credentials.h>
+
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/grpc/server/actors/logger.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
+#include <util/system/hostname.h>
 #include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 
 namespace NKikimrRun {
 
 namespace {
 
-class TStaticCredentialsProvider : public NYdb::ICredentialsProvider {
+class TStaticCredentialsProvider: public NYdb::ICredentialsProvider {
 public:
     TStaticCredentialsProvider(const TString& yqlToken)
         : YqlToken_(yqlToken)
-    {}
+    {
+    }
 
     std::string GetAuthInfo() const override {
         return YqlToken_;
@@ -33,11 +34,12 @@ private:
     std::string YqlToken_;
 };
 
-class TStaticCredentialsProviderFactory : public NYdb::ICredentialsProviderFactory {
+class TStaticCredentialsProviderFactory: public NYdb::ICredentialsProviderFactory {
 public:
     TStaticCredentialsProviderFactory(const TString& yqlToken)
         : YqlToken_(yqlToken)
-    {}
+    {
+    }
 
     std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
         return std::make_shared<TStaticCredentialsProvider>(YqlToken_);
@@ -47,11 +49,12 @@ private:
     TString YqlToken_;
 };
 
-class TStaticSecuredCredentialsFactory final : public NYql::ISecuredServiceAccountCredentialsFactory {
+class TStaticSecuredCredentialsFactory final: public NYql::ISecuredServiceAccountCredentialsFactory {
 public:
     explicit TStaticSecuredCredentialsFactory(const TString& yqlToken)
         : YqlToken_(yqlToken)
-    {}
+    {
+    }
 
     std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) final {
         return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
@@ -61,7 +64,7 @@ private:
     TString YqlToken_;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 TAutoPtr<TLogBackend> TKikimrSetupBase::CreateLogBackend(const TServerSettings& settings) const {
     if (settings.LogOutputFile) {
@@ -85,15 +88,15 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     serverSettings.NetClassifierConfig = settings.AppConfig.GetNetClassifierConfig();
 
     const auto& kqpSettings = settings.AppConfig.GetKQPConfig().GetSettings();
-    serverSettings.SetKqpSettings({kqpSettings.begin(), kqpSettings.end()});
+    serverSettings.SetKqpSettings({ kqpSettings.begin(), kqpSettings.end() });
 
-    serverSettings.SetCredentialsFactory(NFq::CreateKikimrStructuredTokenCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(settings.YqlToken)));
+    serverSettings.SetCredentialsFactory(
+        NFq::CreateKikimrStructuredTokenCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(settings.YqlToken)));
     serverSettings.SetComputationFactory(settings.ComputationFactory);
     serverSettings.SetYtGateway(settings.YtGateway);
     serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
     serverSettings.SetDqTaskTransformFactory(NYql::CreateCompositeTaskTransformFactory({
-        NYql::NDq::CreatePqDqTaskTransformFactory(),
-        NYql::CreateYtDqTaskTransformFactory(true),
+        NYql::NDq::CreatePqDqTaskTransformFactory(), NYql::CreateYtDqTaskTransformFactory(true),
     }));
     serverSettings.SetInitializeFederatedQuerySetupFactory(true);
     serverSettings.SetVerbose(verbosity);
@@ -123,7 +126,8 @@ NYdbGrpc::TServerOptions TKikimrSetupBase::GetGrpcSettings(ui32 grpcPort, ui32 n
         .SetLogger(NYdbGrpc::CreateActorSystemLogger(*GetRuntime()->GetActorSystem(nodeIdx), NKikimrServices::GRPC_SERVER));
 }
 
-std::optional<NKikimrWhiteboard::TSystemStateInfo> TKikimrSetupBase::GetSystemStateInfo(TIntrusivePtr<NKikimr::NMemory::IProcessMemoryInfoProvider> memoryInfoProvider) {
+std::optional<NKikimrWhiteboard::TSystemStateInfo> TKikimrSetupBase::GetSystemStateInfo(
+    TIntrusivePtr<NKikimr::NMemory::IProcessMemoryInfoProvider> memoryInfoProvider) {
     if (!memoryInfoProvider) {
         return std::nullopt;
     }
@@ -151,7 +155,9 @@ TString TKikimrSetupBase::FormatGrpcLink(ui16 port) {
 void TKikimrSetupBase::SetLoggerSettings(const TServerSettings& settings, NKikimr::Tests::TServerSettings& serverSettings) const {
     auto loggerInitializer = [this, settings](NActors::TTestActorRuntime& runtime) {
         InitLogSettings(settings.AppConfig.GetLogConfig(), runtime);
-        runtime.SetLogBackendFactory([this, settings]() { return CreateLogBackend(settings); });
+        runtime.SetLogBackendFactory([this, settings]() {
+            return CreateLogBackend(settings);
+        });
     };
 
     serverSettings.SetLoggerInitializer(loggerInitializer);
@@ -169,4 +175,4 @@ void TKikimrSetupBase::SetFunctionRegistry(const TServerSettings& settings, NKik
     serverSettings.SetFrFactory(functionRegistryFactory);
 }
 
-}  // namespace NKikimrRun
+}   // namespace NKikimrRun

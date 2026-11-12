@@ -1,12 +1,6 @@
 #include <util/system/yassert.h>
 #include <yql/essentials/public/udf/udf_value.h>
 
-extern "C" void* UdfAllocate(ui64) {
-    Y_ABORT("Called UdfAllocate");
-}
-extern "C" void UdfFree(const void*) {
-    Y_ABORT("Called UdfFree");
-}
 extern "C" void UdfTerminate(const char*) {
     Y_ABORT("Called UdfTerminate.");
 }

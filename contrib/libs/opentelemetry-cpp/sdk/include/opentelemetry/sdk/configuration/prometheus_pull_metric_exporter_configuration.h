@@ -26,8 +26,8 @@ class PrometheusPullMetricExporterConfiguration : public PullMetricExporterConfi
 public:
   static constexpr const char *kDefaultHost       = "localhost";
   static constexpr std::size_t kDefaultPort       = 9464;
-  static constexpr bool kDefaultWithoutScopeInfo  = false;  // schema: scope_info_enabled=true
-  static constexpr bool kDefaultWithoutTargetInfo = false;  // schema: target_info_enabled=true
+  static constexpr bool kDefaultScopeInfoEnabled  = true;
+  static constexpr bool kDefaultTargetInfoEnabled = true;
   static constexpr TranslationStrategy kDefaultTranslationStrategy =
       TranslationStrategy::UnderscoreEscapingWithSuffixes;
 
@@ -38,9 +38,9 @@ public:
 
   std::string host{kDefaultHost};
   std::size_t port{kDefaultPort};
-  bool without_scope_info{kDefaultWithoutScopeInfo};
-  bool without_target_info{kDefaultWithoutTargetInfo};
-  std::unique_ptr<IncludeExcludeConfiguration> with_resource_constant_labels;
+  bool scope_info_enabled{kDefaultScopeInfoEnabled};
+  bool target_info_enabled{kDefaultTargetInfoEnabled};
+  std::unique_ptr<IncludeExcludeConfiguration> resource_constant_labels;
   TranslationStrategy translation_strategy{kDefaultTranslationStrategy};
 };
 

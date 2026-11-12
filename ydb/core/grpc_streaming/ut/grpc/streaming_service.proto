@@ -12,4 +12,5 @@ message TSessionResponse {
 
 service TStreamingService {
     rpc Session(stream TSessionRequest) returns (stream TSessionResponse);
+    rpc Unary(TSessionRequest) returns (TSessionResponse);
 }

@@ -6,15 +6,17 @@
 
 namespace NSQLPureAST {
 
-class IParser {
+class IParser: public TThrRefBase {
 public:
-    using TPtr = THolder<IParser>;
+    using TPtr = TIntrusivePtr<IParser>;
 
-    virtual ~IParser() = default;
+    ~IParser() override = default;
     virtual IParseTree::TPtr Parse(TStringBuf text Y_LIFETIME_BOUND) const = 0;
 };
 
 IParser::TPtr MakeParser(bool isAnsiLexer);
+
+IParser::TPtr MakeParser();
 
 void ClearParserCache();
 

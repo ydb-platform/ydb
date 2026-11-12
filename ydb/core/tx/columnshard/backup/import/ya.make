@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/retry
     ydb/core/kqp/compute_actor
     ydb/core/scheme
     ydb/core/tablet_flat
@@ -16,6 +17,7 @@ PEERDIR(
     ydb/library/signals
 )
 
+GENERATE_ENUM_SERIALIZATION(import_actor.h)
 GENERATE_ENUM_SERIALIZATION(session.h)
 
 END()

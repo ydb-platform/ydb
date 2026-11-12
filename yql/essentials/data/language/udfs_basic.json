@@ -406,6 +406,22 @@
       "resolvedCallableTypes": "[[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]]]"
     },
     {
+      "argCount": 8,
+      "callableType": "[\"CallableType\";[8u];[[\"OptionalType\";[\"ResourceType\";\"DateTime2.TM\"]]];[[[\"OptionalType\";[\"DataType\";\"Uint16\"]];\"Year\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Month\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Day\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Hour\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Minute\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Second\"];[[\"OptionalType\";[\"DataType\";\"Uint32\"]];\"Microsecond\"];[[\"OptionalType\";[\"DataType\";\"Uint16\"]];\"TimezoneId\"]]]",
+      "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Init",
+      "optionalArgCount": 8
+    },
+    {
+      "argCount": 8,
+      "callableType": "[\"CallableType\";[8u];[[\"OptionalType\";[\"ResourceType\";\"DateTime2.TM64\"]]];[[[\"OptionalType\";[\"DataType\";\"Int32\"]];\"Year\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Month\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Day\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Hour\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Minute\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Second\"];[[\"OptionalType\";[\"DataType\";\"Uint32\"]];\"Microsecond\"];[[\"OptionalType\";[\"DataType\";\"Uint16\"]];\"TimezoneId\"]]]",
+      "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Init64",
+      "optionalArgCount": 8
+    },
+    {
       "argCount": 1,
       "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval64\"]]];[[[\"DataType\";\"Int32\"];1u]]]",
       "isStrict": true,
@@ -742,6 +758,13 @@
       "argCount": 1,
       "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint32\"]];[[[\"DataType\";\"String\"];1u]]]",
       "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Crc32"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint32\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
       "name": "Crc32c"
     },
     {
@@ -869,7 +892,21 @@
       "argCount": 1,
       "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Sha224"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
       "name": "Sha256"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Sha384"
     },
     {
       "argCount": 1,
@@ -1034,12 +1071,6 @@
       "name": "ToString"
     }
   ],
-  "Json": [
-    {
-      "isTypeAwareness": true,
-      "name": "GetField"
-    }
-  ],
   "Math": [
     {
       "argCount": 1,
@@ -1147,6 +1178,13 @@
       "argCount": 1,
       "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
       "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Expm1"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
       "name": "Fabs"
     },
     {
@@ -1215,6 +1253,13 @@
       "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
       "isStrict": true,
       "name": "Log10"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Log1p"
     },
     {
       "argCount": 1,
@@ -1447,6 +1492,12 @@
     },
     {
       "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"]];[[\"DataType\";\"String\"]]]]",
+      "minLangVer": "2026.03",
+      "name": "PatternFromLikeSpark"
+    },
+    {
+      "argCount": 2,
       "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"String\"]]];[[[\"OptionalType\";[\"DataType\";\"String\"]]];[[\"DataType\";\"String\"]]]]",
       "name": "Replace",
       "runConfigType": "[\"TupleType\";[[\"DataType\";\"String\"];[\"OptionalType\";[\"StructType\";[[\"CaseSensitive\";[\"DataType\";\"Bool\"]];[\"DotNl\";[\"DataType\";\"Bool\"]];[\"Literal\";[\"DataType\";\"Bool\"]];[\"LogErrors\";[\"DataType\";\"Bool\"]];[\"LongestMatch\";[\"DataType\";\"Bool\"]];[\"MaxMem\";[\"DataType\";\"Uint64\"]];[\"NeverCapture\";[\"DataType\";\"Bool\"]];[\"NeverNl\";[\"DataType\";\"Bool\"]];[\"OneLine\";[\"DataType\";\"Bool\"]];[\"PerlClasses\";[\"DataType\";\"Bool\"]];[\"PosixSyntax\";[\"DataType\";\"Bool\"]];[\"Utf8\";[\"DataType\";\"Bool\"]];[\"WordBoundary\";[\"DataType\";\"Bool\"]]]]]]]"
@@ -1508,6 +1559,12 @@
       "callableType": "[\"CallableType\";[1u];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"]];[[\"OptionalType\";[\"DataType\";\"String\"]]]]]",
       "name": "PatternFromLike",
       "optionalArgCount": 1
+    },
+    {
+      "argCount": 2,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"]];[[\"DataType\";\"String\"]]]]",
+      "minLangVer": "2026.03",
+      "name": "PatternFromLikeSpark"
     },
     {
       "argCount": 2,
@@ -1943,6 +2000,14 @@
       "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"Int64\"];1u]]]",
       "isStrict": true,
       "name": "SHex",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Soundex",
       "supportsBlocks": true
     },
     {

@@ -54,7 +54,7 @@ bool TPeriodicExecutorBase<TInvocationTimePolicy>::IsStarted() const
 }
 
 template <CInvocationTimePolicy TInvocationTimePolicy>
-void TPeriodicExecutorBase<TInvocationTimePolicy>::DoStop(TGuard<NThreading::TSpinLock>& guard)
+void TPeriodicExecutorBase<TInvocationTimePolicy>::DoStop(TGuard<TSpinLock>& guard)
 {
     if (!Started_) {
         return;

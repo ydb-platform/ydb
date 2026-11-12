@@ -165,17 +165,8 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
                 // Best-effort field collection; never blocks config acceptance.
             }
 
-            // Validate the fully resolved configuration. This decides accept/reject.
-            std::vector<TString> errors;
-            NYamlConfig::ResolveUniqueDocs(
-                tree,
-                [&](NYamlConfig::TDocumentConfig&& config) {
-                    auto cfg = NYamlConfig::YamlToProto(config.second, true, true);
-                    NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
-                    if (result == NKikimr::NConfig::EValidationResult::Error) {
-                        ythrow yexception() << errors.front();
-                    }
-                });
+            const auto validator = NYamlConfig::CreateDefaultConfigSwissKnife();
+            NYamlConfig::ValidateConfig(tree, validator.get());
         }
     } catch (const yexception &e) {
         opCtx.Error = e.what();
@@ -244,10 +235,24 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
                 false,
                 unknownFieldsCollector);
 
-            std::vector<TString> errors;
-            NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateDatabaseConfig(databaseCfg, errors);
-            if (result == NKikimr::NConfig::EValidationResult::Error) {
-                ythrow yexception() << errors.front();
+            if (!IsAllTypesInDatabaseConfigAllowed(opCtx.TargetDatabase)) {
+                std::vector<TString> errors;
+                NKikimr::NConfig::EValidationResult result =
+                    NKikimr::NConfig::ValidateDatabaseConfig(databaseCfg, errors);
+                if (result == NKikimr::NConfig::EValidationResult::Error) {
+                    ythrow yexception() << errors.front();
+                }
+
+                // Check all declared selectors, including those that do not match current node labels.
+                for (const auto& selector : databaseConfig.Selectors) {
+                    const auto selectorCfg = NYamlConfig::YamlToProto(selector.Config, true, false);
+                    errors.clear();
+                    result = NKikimr::NConfig::ValidateDatabaseConfig(selectorCfg, errors);
+                    if (result == NKikimr::NConfig::EValidationResult::Error) {
+                        ythrow yexception() << errors.front()
+                            << " (for selector with description '" << selector.Description << "')";
+                    }
+                }
             }
 
             if (!databaseConfig.Selectors.empty() || !databaseConfig.AllowedLabels.empty()) {
@@ -274,25 +279,7 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
 
             auto tree = NFyaml::TDocument::Parse(MainYamlConfig);
             NYamlConfig::AppendDatabaseConfig(tree, databaseTree);
-            errors.clear();
-
-            auto* csk = AppData()->ConfigSwissKnife;
-
-            NYamlConfig::ResolveUniqueDocs(
-                tree,
-                [&](NYamlConfig::TDocumentConfig&& config) {
-                    auto cfg = NYamlConfig::YamlToProto(
-                        config.second,
-                        true,
-                        true,
-                        unknownFieldsCollector);
-                    if (csk) {
-                        auto result = csk->ValidateConfig(cfg, errors);
-                        if (result == NYamlConfig::EValidationResult::Error) {
-                            ythrow yexception() << errors.front();
-                        }
-                    }
-                });
+            NYamlConfig::ValidateConfig(tree, AppData()->ConfigSwissKnife, unknownFieldsCollector);
 
             const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
 
@@ -309,28 +296,33 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
     }
 }
 
-
 bool TConfigsManager::IsDatabaseConfigSelectorsAllowed(const TString& database) const
+{
+    return IsTenantBoolAttributeEnabled(database, TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS);
+}
+
+bool TConfigsManager::IsAllTypesInDatabaseConfigAllowed(const TString& database) const
+{
+    return IsTenantBoolAttributeEnabled(database, TENANT_ATTR_ALLOW_ALL_TYPES_IN_DATABASE_CONFIG);
+}
+
+// Read the matching tenant attribute and return false if lookup or parsing fails.
+bool TConfigsManager::IsTenantBoolAttributeEnabled(const TString& database, TStringBuf key) const
 {
     auto* tm = Self.TenantsManager;
     auto tenant = tm ? tm->GetTenant(database) : nullptr;
-
     if (!tenant) {
         return false;
     }
 
     for (const auto& attr : tenant->Attributes.GetUserAttributes()) {
-        if (attr.GetKey() == TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS) {
+        if (attr.GetKey() == key) {
             bool value = false;
-            if (TryFromString<bool>(attr.GetValue(), value) && value) {
-                return true;
-            }
+            return TryFromString<bool>(attr.GetValue(), value) && value;
         }
     }
-
     return false;
 }
-
 
 void TConfigsManager::Bootstrap(const TActorContext &ctx)
 {
@@ -969,6 +961,9 @@ void TConfigsManager::Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, cons
                 TxProcessor->ProcessTx(CreateTxSetMainYamlConfig(ev), ctx);
             },
             [&](const NYamlConfig::TDatabaseMetadata& value) {
+                if (ev->Get()->ConsoleCommitContext) {
+                    return FailReplaceConfig(ev->Sender, "Controller Console commits require a main config", ctx);
+                }
                 if (!value.Database || (!request.allow_absent_database() && !Self.HasTenant(*value.Database))) {
                     return FailReplaceConfig(ev->Sender, "Unknown database", ctx);
                 }

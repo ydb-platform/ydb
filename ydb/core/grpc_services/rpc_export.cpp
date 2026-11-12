@@ -8,12 +8,14 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/feature_flags.h>
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/ydb_convert/compression.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/naming_conventions/scheme_object_names.h>
 
 #include <util/folder/path.h>
 #include <util/generic/ptr.h>
@@ -172,6 +174,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     }
 
     static bool IsItemSupportedInExport(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        if (NBackup::IsOmittedFromBackup(entry.Attributes)) {
+            return false;
+        }
+
         switch (entry.Kind) {
             case NSchemeCache::TSchemeCacheNavigate::KindTable: {
                 auto it = entry.Attributes.find("__async_replica");
@@ -180,6 +186,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             }
             case NSchemeCache::TSchemeCacheNavigate::KindTopic:
                 return true;
+            case NSchemeCache::TSchemeCacheNavigate::KindKesus:
+                return AppData()->Icb->BackupControls.S3Controls.EnableKesusExport.AtomicLoad()->Get();
             case NSchemeCache::TSchemeCacheNavigate::KindReplication:
                 return AppData()->Icb->BackupControls.S3Controls.EnableAsyncReplicationExport.AtomicLoad()->Get();
             case NSchemeCache::TSchemeCacheNavigate::KindTransfer:
@@ -247,13 +255,15 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         paths.reserve(settings.items_size() + 3);
         paths.emplace_back(this->GetDatabaseName()); // first entry is database
         paths.emplace_back(CommonSourcePath); // second entry is common source path
+        TStringBuf sourceBase;
+        if constexpr (TTraits::HasSourcePath) {
+            sourceBase = TTraits::GetSourcePath(settings);
+        }
         for (const auto& item : TTraits::GetItems(settings)) {
-            TString userSpecifiedPath = CanonizePath(item.source_path());
-            TString fullPath;
-            if (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath) {
-                fullPath = userSpecifiedPath; // Full path
-            } else {
-                fullPath = CommonSourcePath + userSpecifiedPath; // Relative path
+            TString fullPath = CanonizePath(this->Request->NormalizePath(item.source_path(), sourceBase));
+            if (!AppData()->FeatureFlags.GetEnableRelativePaths()
+                && !HasCommonSourcePathPrefix(fullPath) && fullPath != CommonSourcePath) {
+                fullPath = CommonSourcePath + fullPath;
             }
             if (IsExcludedFromExport(fullPath)) {
                 continue;
@@ -404,6 +414,17 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 }
                 it->second.Resolved = true;
                 const NSchemeCache::TSchemeCacheNavigate::EKind kind = entry.Kind;
+                if (NBackup::IsOmittedFromBackup(entry.Attributes)) {
+                    // Older clients can expand directories without checking
+                    // attributes, so an omitted item is dropped, not refused.
+                    YDB_LOG_INFO("Skip item omitted from export",
+                        {"logPrefix", GetLogPrefix()},
+                        {"selfId", this->SelfId()},
+                        {"txId", this->TxId},
+                        {"path", path});
+                    ExportItems.erase(it);
+                    continue;
+                }
                 if (IsLikeDirectory(kind)) {
                     DirectoryItems[path] = it->second;
                 }
@@ -435,12 +456,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                     const NSchemeCache::TSchemeCacheNavigate::EKind kind = child.Kind;
                     if (isRoot && kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
                         // Skip children that we don't want to export
-                        if (child.Name.StartsWith("~")
-                            || child.Name.StartsWith(".sys")
-                            || child.Name.StartsWith(".tmp")
-                            || child.Name.StartsWith(".metadata")
-                            || child.Name.StartsWith("export-"))
-                        {
+                        if (NNaming::IsInternalName(child.Name)) {
                             continue;
                         }
                     }
@@ -531,7 +547,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void InitCommonSourcePath() {
         const auto& settings = this->GetProtoRequest()->settings();
         if constexpr (TTraits::HasSourcePath) {
-            CommonSourcePath = CanonizePath(settings.source_path()); // /Foo/Bar, but empty result for empty source_path
+            CommonSourcePath = CanonizePath(
+                this->Request->NormalizePath(settings.source_path(), {}));
         }
         if (CommonSourcePath.empty()) {
             CommonSourcePath = CanonizePath(this->GetDatabaseName());

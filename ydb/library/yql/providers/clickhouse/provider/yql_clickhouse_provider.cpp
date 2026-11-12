@@ -33,6 +33,7 @@ TDataProviderInitializer GetClickHouseDataProviderInitializer(
         auto state = MakeIntrusive<TClickHouseState>();
 
         state->Types = typeCtx.Get();
+        state->Configuration = MakeIntrusive<TClickHouseConfiguration>(typeCtx->StrictConfigValidation);
         state->FunctionRegistry = functionRegistry;
         state->DbResolver = dbResolver;
         if (gatewaysConfig) {

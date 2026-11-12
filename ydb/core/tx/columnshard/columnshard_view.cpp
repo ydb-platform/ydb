@@ -1,13 +1,18 @@
 #include "columnshard_impl.h"
 #include "columnshard_view.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <util/datetime/base.h>
+#include <util/generic/algorithm.h>
 
 #include <limits>
 
@@ -519,9 +524,11 @@ public:
 private:
     NMon::TEvRemoteHttpInfo::TPtr HttpInfoEvent;
     NJson::TJsonValue JsonReport = NJson::JSON_MAP;
+    TString CutHistoryReport;
     TString RenderCompactionPage();
     TString RenderMainPage();
     TString RenderPortionsPage();
+    TString RenderCutHistoryPage();
 };
 
 inline TString TEscapeHtml(const TString& in) {
@@ -657,7 +664,40 @@ TString RenderScanTracesPage(ui64 tabletId, ui32 nodeId) {
     return html.Str();
 }
 
+bool FillCutHistoryMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, TString& report) {
+    report.clear();
+    using T = Schema::CutHistoryRequests;
+    NIceDb::TNiceDb db(txc.DB);
+    auto row = db.Table<T>().Range().Select<T::RequestsProto>();
+    if (!row.IsReady()) {
+        return false;
+    }
+    while (!row.EndOfSet()) {
+        NKikimrTxColumnShard::TCutHistoryRequests requests;
+        Y_ABORT_UNLESS(requests.ParseFromString(row.GetValue<T::RequestsProto>()));
+        for (const auto& request : requests.GetRequests()) {
+            report += TStringBuilder() << "<tr>"
+                                       << "<td>" << request.GetTabletID() << "</td>"
+                                       << "<td>" << request.GetChannel() << "</td>"
+                                       << "<td>" << request.GetGroupID() << "</td>"
+                                       << "<td>" << request.GetFromGeneration() << "</td>"
+                                       << "<td>" << request.GetToGeneration() << "</td>"
+                                       << "<td>" << TInstant::MicroSeconds(request.GetTimestampUs()).ToString() << "</td>"
+                                       << "<td>" << TEscapeHtml(NActors::ActorIdFromProto(request.GetRecipient()).ToString()) << "</td>"
+                                       << "<td>" << request.GetSendingGeneration() << "</td>"
+                                       << "</tr>";
+        }
+        if (!row.Next()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
+    if (HttpInfoEvent->Get()->Cgi().Get("page") == "cuthistory") {
+        return FillCutHistoryMonitoringReport(txc, CutHistoryReport);
+    }
     return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
 }
 
@@ -771,6 +811,8 @@ TString TTxMonitoring::RenderMainPage() {
     html << "<h3><a href=\"app?page=compaction&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
     html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
     html << "<h3><a href=\"app?page=portions&TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> Portions </a></h3>";
+    html << "<h3><a href=\"app?page=cuthistory&amp;TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> CutHistory </a></h3>";
+    html << "<h3><a href=\"app?page=localdb_backup&amp;TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> Local DB backup (S3) </a></h3>";
     html << RenderLwTraceStartScript();
     html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), Self->SelfId().NodeId(),
                           "Traces for all scans on shard")
@@ -796,6 +838,30 @@ TString TTxMonitoring::RenderMainPage() {
 
     TPrintErrorTable(html, readErrors, "read");
     TPrintErrorTable(html, writeErrors, "write");
+
+    return html.Str();
+}
+
+TString TTxMonitoring::RenderCutHistoryPage() {
+    TStringStream html;
+    const auto& cgi = HttpInfoEvent->Get()->Cgi();
+    html << "<a href=\"app?TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\">ColumnShard</a>";
+    HTML(html) {
+        H3_CLASS("") {
+            html << "Persisted CutHistory request intents (latest " << CutHistoryJournalLimit
+                 << " request sets; Hive confirmation is not tracked)";
+        }
+        TABLE_CLASS("table table-bordered table-striped") {
+            TABLEHEAD() {
+                html << "<tr><th>Tablet ID</th><th>Channel</th><th>Group ID</th>"
+                        "<th>From generation (inclusive)</th><th>To generation (exclusive)</th>"
+                        "<th>Recorded at (UTC)</th><th>Recipient</th><th>Sending generation</th></tr>";
+            }
+            TABLEBODY() {
+                html << CutHistoryReport;
+            }
+        }
+    }
 
     return html.Str();
 }
@@ -1333,6 +1399,8 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
         htmlResult = RenderCompactionPage();
     } else if (cgi.Has("page") && cgi.Get("page") == "portions") {
         htmlResult = RenderPortionsPage();
+    } else if (cgi.Has("page") && cgi.Get("page") == "cuthistory") {
+        htmlResult = RenderCutHistoryPage();
     } else {
         htmlResult = RenderMainPage();
     }
@@ -1357,6 +1425,15 @@ bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     if (cgi.Has("page") && cgi.Get("page") == "scan_traces") {
         ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(RenderScanTracesPage(TabletID(), ctx.SelfID.NodeId())));
         return true;
+    }
+
+    if (cgi.Has("page") && cgi.Get("page") == "localdb_backup") {
+        const auto* appData = AppData(ctx);
+        if (appData->FeatureFlags.GetEnableTabletDevUiSecurePath() && !IsAdministrator(appData, ev->Get()->GetUserToken())) {
+            ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+            return true;
+        }
+        return HandleLocalDbBackupPage(ev, ctx);
     }
 
     Execute(new TTxMonitoring(this, ev), ctx);

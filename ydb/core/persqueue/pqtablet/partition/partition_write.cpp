@@ -161,6 +161,8 @@ THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THas
 void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ctx) {
     LOG_T("TPartition::HandleOnWrite TEvChangeOwner");
 
+    WriteInitThrottledMs.Update(ev->Get()->WriteSessionQuotaWaitTime.MilliSeconds(), ctx.Now());
+
     bool res = OwnerPipes.insert(ev->Get()->PipeClient).second;
     PQ_ENSURE(res);
     WaitToChangeOwner.push_back(ev->Release());
@@ -579,7 +581,9 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     CurrentPersistRequestSpan.End();
     CurrentPersistRequestSpan = NWilson::TSpan();
     OnProcessTxsAndUserActsWriteComplete(ctx);
+    CompleteReplicationDataWrite(ctx);
     HandleWriteResponse(ctx);
+    NotifyMirrorerPersistDone();
     ProcessTxsAndUserActs(ctx);
     TryRunCompaction();
 
@@ -692,8 +696,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
-    BlobQuotaSize = 0;
-    MessagesQuotaSize = 0;
     WriteNewSizeFromSupportivePartitions = 0;
     WriteNewMessagesFromSupportivePartitions = 0;
     UpdateWriteBufferIsFullState(now);
@@ -745,7 +747,9 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
 }
 
 bool TPartition::ShouldUseDeduplicationQueue() const {
-    return DeduplicationQueueActor && !MirroringEnabled(Config);
+    const bool replicatedPartition = ReplicationEnabled(Config);
+    return DeduplicationQueueActor && (!MirroringEnabled(Config)
+        || (replicatedPartition && AppData()->FeatureFlags.GetEnableDstTopicReplicationDisabled()));
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -757,7 +761,19 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return;
     }
 
-    const bool mirroredPartition = MirroringEnabled(Config);
+    const bool replicatedPartition = ReplicationEnabled(Config);
+    const bool replicationDisabled = replicatedPartition
+        && AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled();
+
+    if (ev->Get()->FromMirrorer && replicationDisabled) {
+        DestroyMirrorer();
+
+        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
+                   "Topic replication is temporarily disabled");
+        return;
+    }
+
+    const bool mirroredPartition = MirroringEnabled(Config) && !replicationDisabled;
 
     if (ShouldUseDeduplicationQueue() && ev->Get()->ExternalDeduplicationStatus == TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked) {
         LOG_D("Forwarding TPartition::TEvWrite to DeduplicationQueueActor");
@@ -852,7 +868,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
             return;
         }
 
-        ui32 sz = msg.Data.size() + msg.SourceId.size() + TClientBlob::OVERHEAD;
+        ui32 sz = msg.GetPayloadSize() + TClientBlob::OVERHEAD;
 
         if (sz > MAX_BLOB_PART_SIZE) {
             ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -1340,7 +1356,11 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
 
-    ui64 poffset = p.Offset.GetOrElse(curOffset);
+    ui64 defaultOffset = Max(curOffset, BlobEncoder.MirroredOffset);
+    if (AppData(ctx)->PQConfig.HasMinOffset()) {
+        defaultOffset = Max(defaultOffset, AppData(ctx)->PQConfig.GetMinOffset());
+    }
+    const ui64 poffset = p.Offset.GetOrElse(defaultOffset);
 
     LOG_T(
         "Topic partition process write",
@@ -1519,6 +1539,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             return false;
         }
         curOffset = poffset;
+        p.Offset = poffset;
     }
 
     std::optional<ui64> deduplicationResult;
@@ -1593,12 +1614,14 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
         return false;
     }
-    WriteNewSizeFull += p.Msg.SourceId.size() + p.Msg.Data.size();
-    WriteNewSizeUncompressedFull += p.Msg.UncompressedSize + p.Msg.SourceId.size();
+    const size_t writeSize = p.Msg.GetPayloadSize();
+    const size_t uncompressedWriteSize = p.Msg.GetUncompressedPayloadSize();
+    WriteNewSizeFull += writeSize;
+    WriteNewSizeUncompressedFull += uncompressedWriteSize;
     if (!p.Internal) {
-        WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
-        WriteNewSizeUncompressed += p.Msg.UncompressedSize + p.Msg.SourceId.size();
-        WriteNewSizeInternal += p.Msg.External ? 0 : (p.Msg.SourceId.size() + p.Msg.Data.size());
+        WriteNewSize += writeSize;
+        WriteNewSizeUncompressed += uncompressedWriteSize;
+        WriteNewSizeInternal += p.Msg.External ? 0 : writeSize;
     }
     if (p.Msg.PartNo == 0 && !p.Internal) {
         ++WriteNewMessages;
@@ -1807,7 +1830,7 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& 
             const auto& msg = w.GetWrite().Msg;
 
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(1);
-            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.Data.size() + msg.SourceId.size());
+            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(msg.GetPayloadSize());
             Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= msg.Data.size(),
                                  "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", msg.Data.size=%" PRISZT,
                                  TabletId, Partition.OriginalPartitionId, Partition.InternalPartitionId,

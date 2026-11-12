@@ -1,24 +1,23 @@
+#include "common.h"
+#include "events.h"
 #include "query_actor.h"
+#include "table_query.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/services/udf_store/compile_controller/events.h>
-#include <util/generic/algorithm.h>
-#include <util/generic/hash.h>
-#include <util/generic/hash_set.h>
-
-#include "common.h"
-#include "events.h"
-#include "table_query.h"
-
-#include <ydb/services/udf_store/metadata_subscription/storage_paths.h>
-#include <ydb/services/metadata/request/common.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/services/metadata/request/common.h>
+#include <ydb/services/udf_store/compile_controller/events.h>
+#include <ydb/services/udf_store/metadata_subscription/storage_paths.h>
 
+#include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/strip.h>
@@ -27,7 +26,6 @@ namespace NKikimr::NUdfApi {
 
 using namespace NActors;
 
-using NUdfStore::ECompileStatus;
 using NUdfStore::EUdfType;
 
 namespace {
@@ -56,14 +54,13 @@ public:
         }
 
         if (!IsWasmUdfEnabled()) {
-            ReplyError(Ydb::StatusIds::PRECONDITION_FAILED,
-                "UDF store with WASM support is not enabled on this cluster");
+            ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, "UDF store with WASM support is not enabled on this cluster");
             return;
         }
 
         if (!Request_.page_token().empty() && !TryFromString(Request_.page_token(), Offset_)) {
-            ReplyError(Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << "page_token '" << Request_.page_token() << "' is not a valid page token");
+            ReplyError(
+                Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "page_token '" << Request_.page_token() << "' is not a valid page token");
             return;
         }
         Limit_ = Request_.page_size() ? Min<ui64>(Request_.page_size(), MaxPageSize) : DefaultPageSize;
@@ -76,19 +73,7 @@ public:
             }
             Filter_.Type = type;
         }
-        if (Request_.status_filter() != Ydb::Udf::COMPILE_STATUS_UNSPECIFIED) {
-            ECompileStatus status = ECompileStatus::Pending;
-            if (!FromProtoCompileStatus(Request_.status_filter(), status)) {
-                ReplyError(Ydb::StatusIds::BAD_REQUEST, "status_filter is not a known compile status");
-                return;
-            }
-            Filter_.CompileStatus = status;
-        }
-
-        ExecuteYqlAsSystem(
-            SelfId(),
-            NQuery::BuildListModulesQuery(NUdfStore::GetModulesTablePath(), Filter_),
-            true,
+        ExecuteYqlAsSystem(SelfId(), NQuery::BuildListModulesQuery(NUdfStore::GetModulesTablePath(), Filter_), true,
             [this](Ydb::Table::ExecuteDataQueryRequest& request) {
                 NQuery::SetListModulesParams(request, Filter_, Offset_, Limit_);
             });
@@ -126,8 +111,7 @@ private:
     }
 
     void Handle(NMetadata::NRequest::TEvRequestFailed::TPtr& ev) {
-        ReplyError(Ydb::StatusIds::INTERNAL_ERROR,
-            TStringBuilder() << "UDF store read failed: " << ev->Get()->GetErrorMessage());
+        ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "UDF store read failed: " << ev->Get()->GetErrorMessage());
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& error) {
@@ -154,10 +138,7 @@ class TDescribeModuleActor: public TActorBootstrapped<TDescribeModuleActor> {
     };
 
 public:
-    TDescribeModuleActor(
-        const TActorId& replyTo,
-        const Ydb::Udf::DescribeModuleRequest& request,
-        const TString& databaseName)
+    TDescribeModuleActor(const TActorId& replyTo, const Ydb::Udf::DescribeModuleRequest& request, const TString& databaseName)
         : ReplyTo_(replyTo)
         , Request_(request)
         , DatabaseName_(databaseName)
@@ -169,8 +150,7 @@ public:
         Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup());
 
         if (!IsWasmUdfEnabled()) {
-            ReplyError(Ydb::StatusIds::PRECONDITION_FAILED,
-                "UDF store with WASM support is not enabled on this cluster");
+            ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, "UDF store with WASM support is not enabled on this cluster");
             return;
         }
 
@@ -181,10 +161,7 @@ public:
         }
 
         Step_ = EStep::SelectModule;
-        ExecuteYqlAsSystem(
-            SelfId(),
-            NQuery::BuildSelectModuleByNameQuery(NUdfStore::GetModulesTablePath()),
-            true,
+        ExecuteYqlAsSystem(SelfId(), NQuery::BuildSelectModuleByNameQuery(NUdfStore::GetModulesTablePath()), true,
             [this](Ydb::Table::ExecuteDataQueryRequest& request) {
                 NQuery::SetSelectModuleByNameParams(request, Name_);
             });
@@ -210,15 +187,14 @@ private:
             case EStep::SelectModule: {
                 NQuery::TModuleRow row;
                 if (!NQuery::ParseModuleRowResponse(ev->Get()->GetResult(), row)) {
-                    ReplyError(Ydb::StatusIds::NOT_FOUND,
-                        TStringBuilder() << "module '" << Name_ << "' does not exist");
+                    ReplyError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "module '" << Name_ << "' does not exist");
                     return;
                 }
                 if (row.Type == EUdfType::NATIVE_UNSAFE) {
                     ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, TString(NativeUnsupported));
                     return;
                 }
-                FillModuleInfo(row, *Result_.mutable_module());
+                FillModuleInfo(row, *Result_.mutable_module_info());
                 Result_.set_manifest_json(row.Manifest);
                 Uid_ = row.Uid;
                 ArtifactKind_ = NQuery::ArtifactKindFor(row.Type);
@@ -228,15 +204,15 @@ private:
                 return;
             }
             case EStep::SelectArtifact: {
-                bool ready = false;
-                if (!NQuery::ParseArtifactReadyResponse(ev->Get()->GetResult(), ready)) {
-                    ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder()
-                        << "failed to read the artifact table of cpu_spec '" << CpuSpecs_[NextCpuSpecIndex_] << "'");
+                TMaybe<NQuery::TArtifactCompileState> state;
+                if (!NQuery::ParseArtifactStateResponse(ev->Get()->GetResult(), state)) {
+                    ReplyError(Ydb::StatusIds::INTERNAL_ERROR,
+                        TStringBuilder() << "failed to read the artifact table of cpu_spec '" << CpuSpecs_[NextCpuSpecIndex_] << "'");
                     return;
                 }
                 auto& platform = *Result_.add_platforms();
                 platform.set_cpu_spec(CpuSpecs_[NextCpuSpecIndex_]);
-                FillPlatform(platform, CpuSpecs_[NextCpuSpecIndex_], ready);
+                FillPlatform(platform, CpuSpecs_[NextCpuSpecIndex_], state);
                 ++NextCpuSpecIndex_;
                 SelectNextArtifact();
                 return;
@@ -249,8 +225,8 @@ private:
     }
 
     void Handle(NMetadata::NRequest::TEvRequestFailed::TPtr& ev) {
-        ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder()
-            << "UDF store read failed at step " << static_cast<int>(Step_) << ": " << ev->Get()->GetErrorMessage());
+        ReplyError(Ydb::StatusIds::INTERNAL_ERROR,
+            TStringBuilder() << "UDF store read failed at step " << static_cast<int>(Step_) << ": " << ev->Get()->GetErrorMessage());
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -263,8 +239,7 @@ private:
                 ArtifactTables_.insert(cpuSpec);
             }
             Step_ = EStep::ResolveController;
-            Send(MakeSchemeCacheID(), MakeDatabaseOwnerRequest(
-                                          DatabaseName_.empty() ? AppData()->TenantName : DatabaseName_));
+            Send(MakeSchemeCacheID(), MakeDatabaseOwnerRequest(DatabaseName_.empty() ? AppData()->TenantName : DatabaseName_));
             return;
         }
         if (Step_ != EStep::ResolveController) {
@@ -272,8 +247,7 @@ private:
         }
         const auto& response = *ev->Get()->Request;
         if (response.ResultSet.size() != 1 || response.ErrorCount ||
-            response.ResultSet.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok ||
-            !response.ResultSet.front().DomainInfo) {
+            response.ResultSet.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok || !response.ResultSet.front().DomainInfo) {
             ReplyError(Ydb::StatusIds::UNAVAILABLE, "Cannot resolve UDF compile controller");
             return;
         }
@@ -302,9 +276,7 @@ private:
         auto request = MakeHolder<NUdfStore::TEvCompileController::TEvDescribeModule>();
         request->Record.SetName(Name_);
         request->Record.SetUid(Uid_);
-        request->Record.SetKind(ArtifactKind_ == "library"
-                                    ? NKikimrUdfStore::ARTIFACT_KIND_LIBRARY
-                                    : NKikimrUdfStore::ARTIFACT_KIND_MODULE);
+        request->Record.SetKind(ArtifactKind_ == "library" ? NKikimrUdfStore::ARTIFACT_KIND_LIBRARY : NKikimrUdfStore::ARTIFACT_KIND_MODULE);
         NTabletPipe::SendData(SelfId(), ControllerPipe_, request.Release());
     }
 
@@ -313,7 +285,6 @@ private:
             return;
         }
         for (const auto& platform : ev->Get()->Record.GetPlatforms()) {
-            ControllerPlatforms_[platform.GetCpuSpec()] = platform;
             CpuSpecs_.push_back(platform.GetCpuSpec());
         }
         SortUnique(CpuSpecs_);
@@ -343,36 +314,34 @@ private:
         TActorBootstrapped::PassAway();
     }
 
-    void FillPlatform(Ydb::Udf::PlatformCompileStatus& result, const TString& cpuSpec, bool ready) {
+    void FillPlatform(Ydb::Udf::PlatformCompileStatus& result, const TString& cpuSpec, const TMaybe<NQuery::TArtifactCompileState>& state)
+    {
         result.set_cpu_spec(cpuSpec);
-        result.set_status(ready ? Ydb::Udf::READY : Ydb::Udf::PENDING);
-        if (!ready) {
-            if (const auto it = ControllerPlatforms_.find(cpuSpec); it != ControllerPlatforms_.end()) {
-                if (it->second.GetFailed()) {
-                    result.set_status(Ydb::Udf::FAILED);
-                    result.set_compile_error(it->second.GetError());
-                } else if (it->second.GetCompiling()) {
-                    result.set_status(Ydb::Udf::COMPILING);
-                }
-            }
+        result.set_status(state ? ToProtoCompileStatus(state->Status) : Ydb::Udf::PENDING);
+        if (!state) {
+            return;
+        }
+        result.set_compile_error(state->Error);
+        if (state->StartedAt) {
+            FillTimestamp(*state->StartedAt, *result.mutable_compile_started_at());
+        }
+        if (state->FinishedAt) {
+            FillTimestamp(*state->FinishedAt, *result.mutable_compile_finished_at());
         }
     }
 
     void SelectNextArtifact() {
         while (NextCpuSpecIndex_ < CpuSpecs_.size() && !ArtifactTables_.contains(CpuSpecs_[NextCpuSpecIndex_])) {
-            FillPlatform(*Result_.add_platforms(), CpuSpecs_[NextCpuSpecIndex_++], false);
+            FillPlatform(*Result_.add_platforms(), CpuSpecs_[NextCpuSpecIndex_++], {});
         }
         if (NextCpuSpecIndex_ >= CpuSpecs_.size()) {
             ReplySuccess();
             return;
         }
         Step_ = EStep::SelectArtifact;
-        ExecuteYqlAsSystem(
-            SelfId(),
-            NQuery::BuildSelectArtifactReadyQuery(NUdfStore::GetArtifactTablePath(CpuSpecs_[NextCpuSpecIndex_])),
-            true,
+        ExecuteYqlAsSystem(SelfId(), NQuery::BuildSelectArtifactStateQuery(NUdfStore::GetArtifactTablePath(CpuSpecs_[NextCpuSpecIndex_])), true,
             [this](Ydb::Table::ExecuteDataQueryRequest& request) {
-                NQuery::SetSelectArtifactReadyParams(request, Name_, ArtifactKind_, Uid_);
+                NQuery::SetSelectArtifactStateParams(request, Name_, ArtifactKind_, Uid_);
             });
     }
 
@@ -397,24 +366,20 @@ private:
     TString ArtifactKind_;
     TVector<TString> CpuSpecs_;
     THashSet<TString> ArtifactTables_;
-    THashMap<TString, NKikimrUdfStore::TEvDescribeModuleResult::TPlatform> ControllerPlatforms_;
     TActorId ControllerPipe_;
     size_t NextCpuSpecIndex_ = 0;
     Ydb::Udf::DescribeModuleResult Result_;
 };
 
-} // namespace
+}   // namespace
 
 IActor* CreateListModulesActor(const TActorId& replyTo, const Ydb::Udf::ListModulesRequest& request) {
     return new TListModulesActor(replyTo, request);
 }
 
-IActor* CreateDescribeModuleActor(
-    const TActorId& replyTo,
-    const Ydb::Udf::DescribeModuleRequest& request,
-    const TString& databaseName)
+IActor* CreateDescribeModuleActor(const TActorId& replyTo, const Ydb::Udf::DescribeModuleRequest& request, const TString& databaseName)
 {
     return new TDescribeModuleActor(replyTo, request, databaseName);
 }
 
-} // namespace NKikimr::NUdfApi
+}   // namespace NKikimr::NUdfApi

@@ -5,6 +5,10 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+namespace NKikimrSchemeOp {
+class TColumnDescription;
+}
+
 namespace NKikimr::NUdfStore {
 
 enum class EWasmArtifactKind {
@@ -12,7 +16,8 @@ enum class EWasmArtifactKind {
     Library,
 };
 
-//! One row per compiled upload. `id` is the module name and `uid` is the
+//! One row per upload and platform, including pending and failed compiles.
+//! `id` is the module name and `uid` is the
 //! upload it was built from, and both are part of the key: a compile that
 //! outlives a re-upload writes its own row instead of overwriting the artifact
 //! the current upload is about to be loaded from.
@@ -28,6 +33,10 @@ public:
     static inline const TString ObjectCodeSizeColName = "object_code_size";
     static inline const TString ObjectCodeChunkCountColName = "object_code_chunk_count";
     static inline const TString CompiledAtColName = "compiled_at";
+    static inline const TString CompileStatusColName = "compile_status";
+    static inline const TString CompileErrorColName = "compile_error";
+    static inline const TString CompileStartedAtColName = "compile_started_at";
+    static inline const TString CompileFinishedAtColName = "compile_finished_at";
 
     YDB_ACCESSOR_DEF(TString, Id);
     YDB_ACCESSOR_DEF(TString, Kind);
@@ -47,4 +56,4 @@ public:
 
 TString WasmArtifactKindToString(EWasmArtifactKind kind);
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

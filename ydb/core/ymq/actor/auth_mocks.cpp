@@ -38,15 +38,16 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NCloud::TEvAccessService::TEvAuthenticateRequest, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthorizeRequest, Handle);
-            hFunc(NCloud::TEvAccessService::TEvAuthenticateRequestV2, Handle);
-            hFunc(NCloud::TEvAccessService::TEvAuthorizeRequestV2, Handle);
-            hFunc(NCloud::TEvAccessService::TEvBulkAuthorizeRequestV2, Handle);
+            hFunc(NCloud::TEvAccessService::TEvBulkAuthorizeRequest, Handle);
             cFunc(TEvPoisonPill::EventType, PassAway);
         }
     }
 
-    template <typename TRequest, typename TResponse>
-    void HandleAuthenticateRequest(const TRequest& request, NYdbGrpc::TGrpcStatus& status, TResponse& response) {
+    void Handle(NCloud::TEvAccessService::TEvAuthenticateRequest::TPtr& ev) {
+        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateResponse>();
+        const auto& request = ev->Get()->Request;
+        auto& status = result->Status;
+        auto& response = result->Response;
         if (++RequestNumber % 3 == 0) {
             status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::UNAVAILABLE, false);
         } else {
@@ -78,10 +79,14 @@ public:
                 }
             }
         }
+        Send(ev->Sender, result.Release());
     }
 
-    template <typename TRequest, typename TResponse>
-    void HandleAuthorizeRequest(const TRequest& request, NYdbGrpc::TGrpcStatus& status, TResponse& response) {
+    void Handle(NCloud::TEvAccessService::TEvAuthorizeRequest::TPtr& ev) {
+        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeResponse>();
+        const auto& request = ev->Get()->Request;
+        auto& status = result->Status;
+        auto& response = result->Response;
         if (++RequestNumber % 3 == 0) {
             status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::DEADLINE_EXCEEDED, false);
         } else {
@@ -111,34 +116,11 @@ public:
                 status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
             }
         }
-    }
-
-    void Handle(NCloud::TEvAccessService::TEvAuthenticateRequest::TPtr& ev) {
-        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateResponse>();
-        HandleAuthenticateRequest(ev->Get()->Request, result->Status, result->Response);
         Send(ev->Sender, result.Release());
     }
 
-    void Handle(NCloud::TEvAccessService::TEvAuthorizeRequest::TPtr& ev) {
-        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeResponse>();
-        HandleAuthorizeRequest(ev->Get()->Request, result->Status, result->Response);
-        Send(ev->Sender, result.Release());
-    }
-
-    void Handle(NCloud::TEvAccessService::TEvAuthenticateRequestV2::TPtr& ev) {
-        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateResponseV2>();
-        HandleAuthenticateRequest(ev->Get()->Request, result->Status, result->Response);
-        Send(ev->Sender, result.Release());
-    }
-
-    void Handle(NCloud::TEvAccessService::TEvAuthorizeRequestV2::TPtr& ev) {
-        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeResponseV2>();
-        HandleAuthorizeRequest(ev->Get()->Request, result->Status, result->Response);
-        Send(ev->Sender, result.Release());
-    }
-
-    void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeRequestV2::TPtr& ev) {
-        auto result = MakeHolder<NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2>();
+    void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeRequest::TPtr& ev) {
+        auto result = MakeHolder<NCloud::TEvAccessService::TEvBulkAuthorizeResponse>();
 
         if (++RequestNumber % 3 == 0) {
             result->Status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::DEADLINE_EXCEEDED, false);
@@ -237,7 +219,7 @@ public:
     }
 };
 
-IActor* CreateSqsAccessService(const TString& address, const TString& pathToRootCA, bool enableV2Interface) {
+IActor* CreateSqsAccessService(const TString& address, const TString& pathToRootCA) {
     if (!address) {
         return new TSqsAccessServiceMock();
     }
@@ -245,7 +227,7 @@ IActor* CreateSqsAccessService(const TString& address, const TString& pathToRoot
     NCloud::TAccessServiceSettings settings(address, "ydb-ymq");
     settings.CertificateRootCA = TUnbufferedFileInput(pathToRootCA).ReadAll();
 
-    return NCloud::CreateAccessServiceWithCache(settings, enableV2Interface);
+    return NCloud::CreateAccessServiceWithCache(settings);
 }
 
 IActor* CreateMockSqsFolderService() {

@@ -150,15 +150,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::WeakFields(TExprBase no
     }
 
     TSet<TStringBuf> weakFields;
-    TExprNode::TPtr newLambda;
-    TOptimizeExprSettings settings(State_->Types);
-    settings.VisitChanges = true;
-    auto status = OptimizeExpr(mapper.Ptr(), newLambda, [&](const TExprNode::TPtr& input, TExprContext& ctx) {
+    TNodeOnNodeOwnedMap weakRemaps;
+    for (const auto& [input, value] : weaks) {
         if (auto maybeTryWeak = TMaybeNode<TCoTryWeakMemberFromDict>(input)) {
-            auto it = weaks.find(input.Get());
-            if (it == weaks.end()) {
-                return input;
-            }
             auto tryWeak = maybeTryWeak.Cast();
             auto weakName = tryWeak.Name().Value();
             if (!filteredFields.contains(weakName)) {
@@ -166,11 +160,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::WeakFields(TExprBase no
             }
 
             TExprBase member = Build<TCoMember>(ctx, input->Pos())
-                .Struct(it->second)
+                .Struct(value)
                 .Name(tryWeak.Name())
                 .Done();
 
-            const TStructExprType* structType = it->second->GetTypeAnn()->Cast<TStructExprType>();
+            const TStructExprType* structType = value->GetTypeAnn()->Cast<TStructExprType>();
             auto structMemberPos = structType->FindItem(weakName);
             bool notYsonMember = false;
             if (structMemberPos) {
@@ -196,20 +190,22 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::WeakFields(TExprBase no
                     .Done();
 
             if (tryWeak.RestDict().Maybe<TCoNothing>()) {
-                return fromYson.Ptr();
-            }
-
-            return Build<TCoCoalesce>(ctx, input->Pos())
-                .Predicate(fromYson)
-                .Value<TCoTryWeakMemberFromDict>()
-                    .InitFrom(tryWeak)
-                    .OtherDict<TCoNull>()
+                weakRemaps.emplace(input, fromYson.Ptr());
+            } else {
+                weakRemaps.emplace(input, Build<TCoCoalesce>(ctx, input->Pos())
+                    .Predicate(fromYson)
+                    .Value<TCoTryWeakMemberFromDict>()
+                        .InitFrom(tryWeak)
+                        .OtherDict<TCoNull>()
+                        .Build()
                     .Build()
-                .Build()
-                .Done().Ptr();
+                    .Done().Ptr());
+            }
         }
+    }
 
-        if (stack.size() > 1) {
+    if (stack.size() > 1) {
+        VisitExpr(mapper.Ptr(), [&](const TExprNode::TPtr& input) {
             if (auto maybeStruct = TMaybeNode<TCoAsStruct>(input)) {
                 auto asStruct = maybeStruct.Cast();
                 for (size_t i: xrange(asStruct.ArgCount())) {
@@ -238,16 +234,17 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::WeakFields(TExprBase no
                                 .Done().Ptr());
                         }
 
-                        return ctx.ChangeChildren(*input, std::move(newChildren));
+                        weakRemaps.emplace(input.Get(), ctx.ChangeChildren(*input, std::move(newChildren)));
                     }
                 }
-
-                return input;
             }
-        }
+            return true;
+        });
+    }
 
-        return input;
-    }, ctx, settings);
+    TExprNode::TPtr newLambda;
+    TOptimizeExprSettings settings(State_->Types);
+    auto status = RemapExpr(mapper.Ptr(), newLambda, weakRemaps, ctx, settings);
 
     if (status.Level == IGraphTransformer::TStatus::Error) {
         return nullptr;

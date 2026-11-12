@@ -71,7 +71,7 @@ static constexpr const char *kContainerId = "container.id";
 /**
   Runtime specific image identifier. Usually a hash algorithm followed by a UUID.
   <p>
-  Docker defines a sha256 of the image id; @code container.image.id @endcode corresponds to the
+  Docker defines a sha256 of the image ID; @code container.image.id @endcode corresponds to the
   @code Image @endcode field from the Docker container inspect <a
   href="https://docs.docker.com/reference/api/engine/version/v1.52/#tag/Container/operation/ContainerInspect">API</a>
   endpoint. K8s defines a link to the container registry repository with digest @code "imageID":
@@ -89,7 +89,7 @@ static constexpr const char *kContainerImageId = "container.image.id";
 static constexpr const char *kContainerImageName = "container.image.name";
 
 /**
-  Repo digests of the container image as provided by the container runtime.
+  Repository digests of the container image as provided by the container runtime.
   <p>
   <a
   href="https://docs.docker.com/reference/api/engine/version/v1.52/#tag/Image/operation/ImageInspect">Docker</a>
@@ -110,7 +110,7 @@ static constexpr const char *kContainerImageTags = "container.image.tags";
 /**
   Container labels, @code <key> @endcode being the label name, the value being the label value.
   <p>
-  For example, a docker container label @code app @endcode with value @code nginx @endcode SHOULD be
+  For example, a Docker container label @code app @endcode with value @code nginx @endcode SHOULD be
   recorded as the @code container.label.app @endcode attribute with value @code "nginx" @endcode.
  */
 static constexpr const char *kContainerLabel = "container.label";

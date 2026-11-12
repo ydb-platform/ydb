@@ -1,0 +1,13 @@
+USE plato;
+
+PRAGMA yt.JoinMergeTablesLimit="10";
+
+$i1 = SELECT key, subkey FROM Input1 ORDER BY key;
+MATERIALIZE $i1 INTO $i1_m;
+
+$i2 = SELECT key, value FROM Input2 ORDER BY key;
+MATERIALIZE $i2 INTO $i2_m;
+
+SELECT i1.key AS key, subkey, value FROM $i1_m AS i1
+JOIN $i2_m AS i2 USING (key)
+ASSUME ORDER BY key;

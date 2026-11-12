@@ -6,7 +6,7 @@
 
 namespace NKikimr::NKqp {
 
-class TStreamingQueryBehaviour : public NMetadata::TClassBehaviour<TStreamingQueryConfig> {
+class TStreamingQueryBehaviour: public NMetadata::TClassBehaviour<TStreamingQueryConfig> {
     static TFactory::TRegistrator<TStreamingQueryBehaviour> Registrator;
 
 protected:
@@ -24,4 +24,4 @@ public:
     static IClassBehaviour::TPtr GetInstance();
 };
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

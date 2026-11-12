@@ -68,7 +68,8 @@ void TSkiffRowTableReader::ReadRow(const ISkiffRowParserPtr& parser)
 
             break;
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR("Read error during parsing: %v", ex.what());
+            YT_TLOG_ERROR("Read error during parsing")
+                .With("Error", ex.what());
 
             if (!Retry(std::make_exception_ptr(ex))) {
                 throw;
@@ -91,7 +92,8 @@ void TSkiffRowTableReader::SkipRow()
 
             break;
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR("Read error during skipping row: %v", ex.what());
+            YT_TLOG_ERROR("Read error during skipping row")
+                .With("Error", ex.what());
 
             if (!Retry(std::make_exception_ptr(ex))) {
                 throw;
@@ -175,7 +177,8 @@ void TSkiffRowTableReader::Next()
 
             break;
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR("Read error: %v", ex.what());
+            YT_TLOG_ERROR("Read error")
+                .With("Error", ex.what());
 
             if (!PrepareRetry(std::make_exception_ptr(ex))) {
                 throw;

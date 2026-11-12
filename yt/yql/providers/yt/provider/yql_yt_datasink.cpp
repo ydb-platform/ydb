@@ -15,6 +15,7 @@
 #include <yql/essentials/providers/common/transform/yql_lazy_init.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -35,38 +36,88 @@ namespace NYql {
 
 using namespace NNodes;
 
+namespace {
+
+constexpr size_t MaxOperationUdfsInPlan = 20;
+
+TExprNode::TListType CollectOperationExpressions(const TExprNode& node) {
+    TExprNode::TListType expressions;
+    if (auto maybeOp = TMaybeNode<TYtMap>(&node)) {
+        expressions.push_back(maybeOp.Cast().Mapper().Ptr());
+    } else if (auto maybeOp = TMaybeNode<TYtReduce>(&node)) {
+        expressions.push_back(maybeOp.Cast().Reducer().Ptr());
+    } else if (auto maybeOp = TMaybeNode<TYtMapReduce>(&node)) {
+        if (auto maybeLambda = maybeOp.Cast().Mapper().Maybe<TCoLambda>()) {
+            expressions.push_back(maybeLambda.Cast().Ptr());
+        }
+        expressions.push_back(maybeOp.Cast().Reducer().Ptr());
+    } else if (auto maybeOp = TMaybeNode<TYtFill>(&node)) {
+        expressions.push_back(maybeOp.Cast().Content().Ptr());
+    }
+
+    return expressions;
+}
+
+TSet<TString> CollectOperationUdfs(const TExprNode& node) {
+    TSet<TString> udfs;
+    for (const auto& expression : CollectOperationExpressions(node)) {
+        VisitExpr(expression, [&udfs](const TExprNode::TPtr& node) {
+            if (udfs.size() >= MaxOperationUdfsInPlan) {
+                return false;
+            }
+
+            if (TYtOutput::Match(node.Get()) || TYtReadTable::Match(node.Get())) {
+                return false;
+            }
+
+            if (auto name = NCommon::TryGetUdfName(*node)) {
+                udfs.insert(std::move(*name));
+            }
+            return true;
+        });
+    }
+    return udfs;
+}
+
+} // namespace
+
 class TYtDataSinkTrackableNodeProcessor : public TTrackableNodeProcessorBase {
 public:
-    TYtDataSinkTrackableNodeProcessor(const TYtState::TPtr& state, bool collectNodes)
-        : CollectNodes(collectNodes)
-        , CleanupTransformer(collectNodes ? CreateYtDataSinkTrackableNodesCleanupTransformer(state) : nullptr)
+    TYtDataSinkTrackableNodeProcessor(const TYtState::TPtr& state, bool collectTempData, bool collectSnapshotLocks)
+        : CollectTempData(collectTempData)
+        , CollectSnapshotLocks(collectSnapshotLocks)
+        , CleanupTransformer(collectTempData ? CreateYtDataSinkTrackableNodesCleanupTransformer(state) : nullptr)
     {
     }
 
-    void GetUsedNodes(const TExprNode& input, TVector<TString>& usedNodeIds) override {
+    void GetUsedNodes(const TExprNode::TPtr& input, TVector<TString>& usedNodeIds) override {
         usedNodeIds.clear();
-        if (!CollectNodes) {
-            return;
+
+        if (CollectSnapshotLocks) {
+            ScanForUsedInputTables(input, usedNodeIds);
         }
 
-        if (TMaybeNode<TYtOutputOpBase>(&input)) {
-            for (size_t i = TYtOutputOpBase::idx_Output + 1; i < input.ChildrenSize(); ++i) {
-                ScanForUsedOutputTables(*input.Child(i), usedNodeIds);
+        if (CollectTempData) {
+            if (TMaybeNode<TYtOutputOpBase>(input)) {
+                for (size_t i = TYtOutputOpBase::idx_Output + 1; i < input->ChildrenSize(); ++i) {
+                    ScanForUsedOutputTables(input->Child(i), usedNodeIds);
+                }
+            } else if (TMaybeNode<TYtPublish>(input)) {
+                ScanForUsedOutputTables(input->Child(TYtPublish::idx_Input), usedNodeIds);
+                ScanForUsedOutputTables(input->Child(TYtPublish::idx_Settings), usedNodeIds);
+            } else if (TMaybeNode<TYtStatOut>(input)) {
+                ScanForUsedOutputTables(input->Child(TYtStatOut::idx_Input), usedNodeIds);
             }
-        } else if (TMaybeNode<TYtPublish>(&input)) {
-            ScanForUsedOutputTables(*input.Child(TYtPublish::idx_Input), usedNodeIds);
-        } else if (TMaybeNode<TYtStatOut>(&input)) {
-            ScanForUsedOutputTables(*input.Child(TYtStatOut::idx_Input), usedNodeIds);
         }
     }
 
-    void GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& created, TExprContext& ctx) override {
+    void GetCreatedNodes(const TExprNode::TPtr& node, TVector<TExprNodeAndId>& created, TExprContext& ctx) override {
         created.clear();
-        if (!CollectNodes) {
+        if (!CollectTempData) {
             return;
         }
 
-        if (auto maybeOp = TMaybeNode<TYtOutputOpBase>(&node)) {
+        if (auto maybeOp = TMaybeNode<TYtOutputOpBase>(node)) {
             TString clusterName = TString{maybeOp.Cast().DataSink().Cast<TYtDSink>().Cluster().Value()};
             auto clusterPtr = maybeOp.Cast().DataSink().Ptr();
             for (auto table: maybeOp.Cast().Output()) {
@@ -83,11 +134,12 @@ public:
     }
 
     IGraphTransformer& GetCleanupTransformer() override {
-        return CollectNodes ? *CleanupTransformer : NullTransformer_;
+        return CollectTempData ? *CleanupTransformer : NullTransformer_;
     }
 
 private:
-    const bool CollectNodes;
+    const bool CollectTempData;
+    const bool CollectSnapshotLocks;
     THolder<IGraphTransformer> CleanupTransformer;
 };
 
@@ -111,9 +163,11 @@ public:
         })
         , FinalizingTransformer_([this]() { return CreateYtDataSinkFinalizingTransformer(State_); })
         , TrackableNodeProcessor_([this]() {
-            auto mode = GetReleaseTempDataMode(*State_->Configuration);
-            bool collectNodes = mode == EReleaseTempDataMode::Immediate;
-            return MakeHolder<TYtDataSinkTrackableNodeProcessor>(State_, collectNodes);
+            auto dataMode = GetReleaseTempDataMode(*State_->Configuration);
+            auto locksMode = GetReleaseSnapshotLocksMode(*State_->Configuration);
+            bool collectTempData = dataMode == EReleaseTempDataMode::Immediate;
+            bool collectLocks = locksMode == EReleaseSnapshotLocksMode::Immediate;
+            return MakeHolder<TYtDataSinkTrackableNodeProcessor>(State_, collectTempData, collectLocks);
         })
     {
     }
@@ -245,6 +299,8 @@ public:
     void FillModifyCallables(THashSet<TStringBuf>& callables) override {
         callables.insert(TYtWriteTable::CallableName());
         callables.insert(TYtDropTable::CallableName());
+        callables.insert(TYtCreateSymlink::CallableName());
+        callables.insert(TYtDropSymlink::CallableName());
         callables.insert(TYtDropView::CallableName());
         callables.insert(TYtConfigure::CallableName());
         callables.insert(TYtCreateTable::CallableName());
@@ -272,18 +328,8 @@ public:
         if (const auto m = NYql::GetSetting(*node->Child(4), EYtSettingType::Mode)) {
             mode = FromString<EYtWriteMode>(m->Tail().Content());
         }
-        if (mode && (*mode == EYtWriteMode::Drop || *mode == EYtWriteMode::DropIfExists)) {
-            if (!node->Child(3)->IsCallable("Void")) {
-                ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()), TStringBuilder()
-                    << "Expected Void, but got: " << node->Child(3)->Content()));
-                return {};
-            }
 
-            TExprNode::TListType children = node->ChildrenList();
-            children[3] = NYql::RemoveSetting(*children[4], EYtSettingType::Initial, ctx);
-            children.resize(4);
-            return ctx.NewCallable(node->Pos(), TYtDropTable::CallableName(), std::move(children));
-        } else if (mode && (*mode == EYtWriteMode::DropObject || *mode == EYtWriteMode::DropObjectIfExists)) {
+        const auto rewriteDrop = [&] (TStringBuf callableName) -> TExprNode::TPtr {
             if (!node->Child(3)->IsCallable("Void")) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()), TStringBuilder()
                     << "Expected Void, but got: " << node->Child(3)->Content()));
@@ -293,7 +339,24 @@ public:
             auto children = node->ChildrenList();
             children[3] = NYql::RemoveSetting(*children[4], EYtSettingType::Initial, ctx);
             children.resize(4);
-            return ctx.NewCallable(node->Pos(), TYtDropView::CallableName(), std::move(children));
+            return ctx.NewCallable(node->Pos(), callableName, std::move(children));
+        };
+
+        if (mode && IsCreateSymlinkMode(*mode)) {
+            if (!TYtTable::Match(node->Child(3))) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()), TStringBuilder()
+                    << "Expected " << TYtTable::CallableName() << ", but got: " << node->Child(3)->Content()));
+                return {};
+            }
+
+            auto children = node->ChildrenList();
+            return ctx.NewCallable(node->Pos(), TYtCreateSymlink::CallableName(), std::move(children));
+        } else if (mode && IsDropSymlinkMode(*mode)) {
+            return rewriteDrop(TYtDropSymlink::CallableName());
+        } else if (mode && (*mode == EYtWriteMode::Drop || *mode == EYtWriteMode::DropIfExists)) {
+            return rewriteDrop(TYtDropTable::CallableName());
+        } else if (mode && (*mode == EYtWriteMode::DropObject || *mode == EYtWriteMode::DropObjectIfExists)) {
+            return rewriteDrop(TYtDropView::CallableName());
         } else if (mode && (*mode == EYtWriteMode::Create || *mode == EYtWriteMode::CreateIfNotExists)) {
             if (!node->Child(3U)->IsCallable("Void")) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Child(3U)->Pos()), TStringBuilder()
@@ -452,6 +515,7 @@ public:
                 }
             } else if (TMaybeNode<TYtPublish>(&node)) {
                 ScanPlanDependencies(node.ChildPtr(TYtPublish::idx_Input), children);
+                ScanPlanDependencies(node.ChildPtr(TYtPublish::idx_Settings), children);
             } else if (TMaybeNode<TYtStatOut>(&node)) {
                 ScanPlanDependencies(node.ChildPtr(TYtStatOut::idx_Input), children);
             }
@@ -591,6 +655,19 @@ public:
 
             NCommon::WriteStreams(writer, "Reducer", maybeOp.Cast().Reducer());
             writer.OnEndMap();
+        }
+
+        if (State_->Types->ShowLinksInPlan) {
+            const auto udfs = CollectOperationUdfs(node);
+            if (!udfs.empty()) {
+                writer.OnKeyedItem("Udfs");
+                writer.OnBeginList();
+                for (const auto& udf : udfs) {
+                    writer.OnListItem();
+                    writer.OnStringScalar(udf);
+                }
+                writer.OnEndList();
+            }
         }
     }
 

@@ -1,0 +1,52 @@
+{
+  "skill_name": "ydb-columnshard-bug-hunt",
+  "evals": [
+    {
+      "id": 1,
+      "name": "triage-week-2026-09-28",
+      "prompt": "List and rank bug candidates in the ColumnShard commits merged from 2026-09-28 to 2026-10-02 (base cab0ead1bad). Only analysis and verification: do not build or run tests, do not create a PR or a ticket.",
+      "expected_output": "A ranked candidate list made with list_commits.py, verified per candidate, that contains the skewed dictionary decode over-reservation of #54370 and the SIMPLE-reader scan cancellation race of #53938.",
+      "files": [],
+      "expectations": [
+        "The commit list was produced with scripts/list_commits.py for 2026-09-28..2026-10-02",
+        "Both reviewer prompts ran for every commit of the list (scripts/review_commits.py, summary.tsv has two lines per commit)",
+        "A candidate names #54370 (7de3d97faa3): arrow Take in TDictionaryArray::DoGetLocalData reserves mean dictionary value length times rows",
+        "A candidate names #53938 (9e7e52a8a33): cancelling a SIMPLE-reader scan can hit the in-flight job check of the duplicate manager",
+        "Each candidate has a verdict REAL, NOT REAL or UNCERTAIN with file:line evidence",
+        "The cleanup-versus-scan race of #53938 is not reported as REAL",
+        "No build or test command was run, and no PR, ticket or comment was created",
+        "Every prompt sent to a subagent or another harness states that the work is QA of our own code and not security testing"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "full-week-2026-09-21",
+      "prompt": "Run the ColumnShard bug hunt for 2026-09-21..2026-09-25 against base 80c24bf71c3. Report only: no PR, no ticket.",
+      "expected_output": "Failing SQL-level tests for the paged dictionary-only DISTINCT crash (#52125) and for ILIKE over NOT NULL string columns (#52781), each passing with its commit reverted; a report with the four groups; no fixes.",
+      "files": [],
+      "expectations": [
+        "A KQP test in ydb/core/kqp/ut/olap fails on the base: forced DISTINCT over a dictionary-encoded JSON sub-column with MemoryLimitScanPortion lowered aborts the shard",
+        "A KQP test fails on the base: PRAGMA OptimizeSimpleILike with ILIKE on a String NOT NULL or Utf8 NOT NULL column returns an argument type mismatch",
+        "Each failing test was also run in a worktree with only the suspected commit reverted",
+        "The diff contains only test files and ya.make lines; no file under ydb/core/tx/columnshard/engines, ydb/core/formats or ydb/core/kqp/query_compiler changed",
+        "The tests use only SQL and TKikimrSettings knobs; no direct calls into reader or arrow classes, no lc-buckets planner",
+        "The report has the groups reproduced, real but not reproduced, rejected, out of scope",
+        "No PR and no ticket were created"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "single-commit-delivery-texts",
+      "prompt": "Hunt bugs in commit 7de3d97faa3 only. Prepare the PR body and the ticket text for the tests, but do not push or publish anything.",
+      "expected_output": "A failing test for the skewed dictionary decode, a tests-only commit, a PR body with the changelog section, and a ticket text that mentions only this bug.",
+      "files": [],
+      "expectations": [
+        "The test fails on the base with an allocation of several terabytes and passes with 7de3d97faa3 reverted",
+        "The test asserts that the dictionary column is one chunk, so a split write cannot make it pass silently",
+        "The PR body has '### Changelog entry' with '* Not for changelog: test only.'",
+        "The ticket text mentions only the #54370 bug and links no lookalike issues",
+        "Nothing was pushed, and no PR or ticket was created"
+      ]
+    }
+  ]
+}

@@ -346,6 +346,7 @@ public:
     void Notify(const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx);
     void Notify(const TActorId subscriber, const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx);
 
+    void StopReadingSession(const TString& consumer, const TString& sessionName, const TActorContext& ctx);
     void RenderApp(NApp::TNavigationBar&) const;
 
 private:

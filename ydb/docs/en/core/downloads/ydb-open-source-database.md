@@ -8,8 +8,8 @@ See also [{#T}](yandex-enterprise-database.md).
 
 #|
 || Version |  Release date | Download | Changelog ||
-|| **v26.3 RC** | > | > | > ||
-|| v.26.3.1.16 | 18.09.26 | [Binary file](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.3.1.16/ydbd-26.3.1.16-linux-amd64.tar.gz) | [See list](../changelog-server.md#26-3-rc) ||
+|| **v26.3** | > | > | > ||
+|| v26.3.1.16-rc | 18.09.26 | [Binary file](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.3.1.16-rc/ydbd-26.3.1.16-rc-linux-amd64.tar.gz) | [See list](../changelog-server.md#26-3-1-16-rc) ||
 || **v26.2** | > | > | > ||
 || v26.2.1.14 | 16.09.26 | [Binary file](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.2.1.14/ydbd-26.2.1.14-linux-amd64.tar.gz) | [See list](../changelog-server.md#26-2-1-14) ||
 || **v26.1** | > | > | > ||
@@ -18,7 +18,7 @@ See also [{#T}](yandex-enterprise-database.md).
 || **v25.4** | > | > | > ||
 || v25.4.1.15 | 24.04.26 | [Binary file](https://storage.yandexcloud.net/binaries.ydb.tech/release/25.4.1.15/ydbd-25.4.1.15-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-4-1-15) ||
 || **v25.3** | > | > | > ||
-|| v25.3.1.27 | 20.05.26 | [Binary file](https://storage.yandexcloud.net/binaries.ydb.tech/release/25.3.1.27/ydbd-25.3.1.27-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-3-1) ||
+|| v25.3.1.27 | 20.05.26 | [Binary file](https://storage.yandexcloud.net/binaries.ydb.tech/release/25.3.1.27/ydbd-25.3.1.27-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-3-1-27) ||
 || **v25.2** | > | > | > ||
 || v25.2.1.26 | 12.05.26 | [Binary file](https://binaries.ydb.tech/release/25.2.1.26/ydbd-25.2.1.26-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-2-1-26) ||
 || v25.2.1.10-rc | 21.09.25 | [Binary file](https://binaries.ydb.tech/release/25.2.1.10-rc/ydbd-25.2.1.10-rc-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-2-1-10-rc) ||
@@ -49,8 +49,8 @@ See also [{#T}](yandex-enterprise-database.md).
 
 #|
 || Version |  Release date | Docker `registry/image:tag` | Changelog ||
-|| **v26.3 RC** | > | > | > ||
-|| v.26.3.1.16 | 18.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.3.1.16` | [See list](../changelog-server.md#26-3-rc) ||
+|| **v26.3** | > | > | > ||
+|| v26.3.1.16-rc | 18.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.3.1.16-rc` | [See list](../changelog-server.md#26-3-1-16-rc) ||
 || **v26.2** | > | > | > ||
 || v26.2.1.14 | 16.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.2.1.14` | [See list](../changelog-server.md#26-2-1-14) ||
 || **v26.1** | > | > | > ||
@@ -90,8 +90,8 @@ See also [{#T}](yandex-enterprise-database.md).
 
 #|
 || Version |  Release date | Link | Changelog ||
-|| **v26.3 RC** | > | > | > ||
-|| v.26.3.1.16 | 18.09.26 | [https://github.com/ydb-platform/ydb/tree/26.3.1.16](https://github.com/ydb-platform/ydb/tree/26.3.1.16) | [See list](../changelog-server.md#26-3-rc) ||
+|| **v26.3** | > | > | > ||
+|| v26.3.1.16-rc | 18.09.26 | [https://github.com/ydb-platform/ydb/tree/26.3.1.16-rc](https://github.com/ydb-platform/ydb/tree/26.3.1.16-rc) | [See list](../changelog-server.md#26-3-1-16-rc) ||
 || **v26.2** | > | > | > ||
 || v26.2.1.14 | 16.09.26 | [https://github.com/ydb-platform/ydb/tree/26.2.1.14](https://github.com/ydb-platform/ydb/tree/26.2.1.14) | [See list](../changelog-server.md#26-2-1-14) ||
 || **v26.1** | > | > | > ||

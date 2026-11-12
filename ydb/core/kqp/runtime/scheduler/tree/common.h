@@ -35,6 +35,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         std::optional<ui64> CpuLimit;
         std::optional<ui64> CpuGuarantee;
+        std::optional<ui64> MemoryLimit;
         std::optional<TDuration> ReadLimit; // per second
 
         auto GetCpuLimit() const {
@@ -43,6 +44,10 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         auto GetCpuGuarantee() const {
             return CpuGuarantee.value_or(0);
+        }
+
+        auto GetMemoryLimit() const {
+            return MemoryLimit.value_or(Infinity());
         }
 
         auto GetWeight() const {
@@ -63,9 +68,21 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             if (other.CpuGuarantee) {
                 CpuGuarantee = other.CpuGuarantee;
             }
+            if (other.MemoryLimit) {
+                MemoryLimit = other.MemoryLimit;
+            }
             if (other.ReadLimit) {
                 ReadLimit = other.ReadLimit;
             }
+        }
+
+        // An update may set only a part of the attributes (e.g. the guarantee without the limit),
+        // so the configuration should be validated against the result of the merge - not against
+        // the incoming attributes alone.
+        TStaticAttributes MergedWith(const TStaticAttributes& other) const {
+            TStaticAttributes merged = *this;
+            merged.Update(other);
+            return merged;
         }
 
         TString ToString() const {
@@ -73,6 +90,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
                 << "Weight: " << GetWeight()
                 << ", CpuLimit: " << GetCpuLimit()
                 << ", CpuGuarantee: " << GetCpuGuarantee()
+                << ", MemoryLimit: " << GetMemoryLimit()
                 << ", ReadLimit: " << GetReadLimit();
         }
     };
@@ -107,6 +125,18 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         size_t ChildrenSize() const {
             return Children.size();
+        }
+
+        // Sum of the guarantees reserved by children. Saturates instead of overflowing, since the
+        // guarantees are configured independently and are not bound by the parent's own limit.
+        ui64 GetChildrenCpuGuarantee() const {
+            ui64 reserved = 0;
+            for (const auto& child : Children) {
+                // TODO: replace with std::add_sat() in C++26
+                const auto guarantee = child->GetCpuGuarantee();
+                reserved = guarantee > Infinity() - reserved ? Infinity() : reserved + guarantee;
+            }
+            return reserved;
         }
 
         template <class T, class Fn>
@@ -187,7 +217,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
     struct TPoolCounters {
         NMonitoring::TDynamicCounters::TCounterPtr Limit;
         NMonitoring::TDynamicCounters::TCounterPtr Guarantee;
+        NMonitoring::TDynamicCounters::TCounterPtr EffectiveGuarantee;
         NMonitoring::TDynamicCounters::TCounterPtr Demand;
+        NMonitoring::TDynamicCounters::TCounterPtr ActualDemand;
         NMonitoring::TDynamicCounters::TCounterPtr Usage;
         NMonitoring::TDynamicCounters::TCounterPtr UsageResume;
         NMonitoring::TDynamicCounters::TCounterPtr Read;
@@ -196,9 +228,12 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr InFlight;
         NMonitoring::TDynamicCounters::TCounterPtr Waiting;
         NMonitoring::TDynamicCounters::TCounterPtr Queries;
-        NMonitoring::TDynamicCounters::TCounterPtr Satisfaction;
         NMonitoring::TDynamicCounters::TCounterPtr AdjustedSatisfaction;
         NMonitoring::THistogramPtr                 Delay;
+        NMonitoring::TDynamicCounters::TCounterPtr MemoryLimit;
+        NMonitoring::TDynamicCounters::TCounterPtr MemoryUsage;
+        NMonitoring::TDynamicCounters::TCounterPtr MemoryDemand;
+        NMonitoring::TDynamicCounters::TCounterPtr MemoryFairShare;
     };
 
     template <ETreeType T>

@@ -11,10 +11,10 @@ index 2af67c8..023263a 100644
    // How many allocations does this sample represent, given the sampling
    // frequency (weight) and its size.
 diff --git a/tcmalloc/internal/logging.cc b/tcmalloc/internal/logging.cc
-index 1cd8d18..13aa0e1 100644
+index 4b26c91..e8100ef 100644
 --- a/tcmalloc/internal/logging.cc
 +++ b/tcmalloc/internal/logging.cc
-@@ -43,6 +43,11 @@ GOOGLE_MALLOC_SECTION_BEGIN
+@@ -48,6 +48,11 @@ GOOGLE_MALLOC_SECTION_BEGIN
  namespace tcmalloc {
  namespace tcmalloc_internal {
  
@@ -150,7 +150,7 @@ index 2a5c761..23b3f2a 100644
    absl::Time allocation_time;
  
 diff --git a/tcmalloc/internal/profile_builder.cc b/tcmalloc/internal/profile_builder.cc
-index a74e3c7..5887249 100644
+index 98f091e..34d8f86 100644
 --- a/tcmalloc/internal/profile_builder.cc
 +++ b/tcmalloc/internal/profile_builder.cc
 @@ -128,10 +128,11 @@ struct SampleEqWithSubFields {
@@ -200,10 +200,10 @@ index 8e1ec85..1b75f0c 100644
      if (s->dead == nullptr) {
        f(*s);
 diff --git a/tcmalloc/internal_malloc_extension.h b/tcmalloc/internal_malloc_extension.h
-index 190d742..0a93995 100644
+index 757d926..0f32056 100644
 --- a/tcmalloc/internal_malloc_extension.h
 +++ b/tcmalloc/internal_malloc_extension.h
-@@ -157,6 +157,13 @@ ABSL_ATTRIBUTE_WEAK void MallocExtension_Internal_SetMaxTotalThreadCacheBytes(
+@@ -162,6 +162,13 @@ ABSL_ATTRIBUTE_WEAK void MallocExtension_Internal_SetMaxTotalThreadCacheBytes(
  
  ABSL_ATTRIBUTE_WEAK void
  MallocExtension_EnableForkSupport();
@@ -218,10 +218,10 @@ index 190d742..0a93995 100644
  
  #endif
 diff --git a/tcmalloc/malloc_extension.cc b/tcmalloc/malloc_extension.cc
-index cee8ba3..47008d0 100644
+index 076be77..3835dde 100644
 --- a/tcmalloc/malloc_extension.cc
 +++ b/tcmalloc/malloc_extension.cc
-@@ -804,6 +804,33 @@ void MallocExtension::EnableForkSupport() {
+@@ -837,6 +837,33 @@ void MallocExtension::EnableForkSupport() {
  #endif
  }
  
@@ -256,10 +256,10 @@ index cee8ba3..47008d0 100644
  
  // Default implementation just returns size. The expectation is that
 diff --git a/tcmalloc/malloc_extension.h b/tcmalloc/malloc_extension.h
-index 36fd433..3534226 100644
+index 0a722b0..95cd108 100644
 --- a/tcmalloc/malloc_extension.h
 +++ b/tcmalloc/malloc_extension.h
-@@ -214,6 +214,8 @@ class Profile final {
+@@ -224,6 +224,8 @@ class Profile final {
      int depth;
      void* stack[kMaxStackDepth];
  
@@ -268,7 +268,7 @@ index 36fd433..3534226 100644
      // The following vars are used by the lifetime (deallocation) profiler.
      uint64_t profile_id;
  
-@@ -664,6 +666,32 @@ class MallocExtension final {
+@@ -688,6 +690,32 @@ class MallocExtension final {
    // Enables fork support.
    // Allocator will continue to function correctly in the child, after calling fork().
    static void EnableForkSupport();
@@ -322,7 +322,7 @@ index cf57148..c6b6867 100644
    static_assert(kMaxStackDepth <= Profile::Sample::kMaxStackDepth,
                  "Profile stack size smaller than internal stack sizes");
 diff --git a/tcmalloc/static_vars.h b/tcmalloc/static_vars.h
-index 58f706c..1a5b0aa 100644
+index eb69220..76d5f5d 100644
 --- a/tcmalloc/static_vars.h
 +++ b/tcmalloc/static_vars.h
 @@ -26,6 +26,7 @@
@@ -350,10 +350,10 @@ index 58f706c..1a5b0aa 100644
      return false;
    }
 diff --git a/tcmalloc/tcmalloc.cc b/tcmalloc/tcmalloc.cc
-index 7332d4f..b930ec9 100644
+index e2f3d2d..d9b372b 100644
 --- a/tcmalloc/tcmalloc.cc
 +++ b/tcmalloc/tcmalloc.cc
-@@ -394,6 +394,13 @@ void TCMallocPostFork() {
+@@ -399,6 +399,13 @@ void TCMallocPostFork() {
    Static::sampled_allocation_recorder().ReleaseInternalLocks();
  }
  

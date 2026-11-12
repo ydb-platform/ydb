@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     column_families.cpp
@@ -33,11 +33,10 @@ PEERDIR(
     yql/essentials/minikql/dom
     yql/essentials/public/udf
     ydb/public/api/protos
+    ydb/public/lib/ydb_cli/dump/util
 )
 
 GENERATE_ENUM_SERIALIZATION(table_description.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     events.cpp
@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/grpc_services/cancelation
     ydb/core/kqp/common/shutdown
     ydb/core/kqp/common/compilation
+    ydb/core/kqp/common/simple
     ydb/core/resource_pools
     ydb/core/scheme
 
@@ -23,7 +24,5 @@ PEERDIR(
 )
 
 GENERATE_ENUM_SERIALIZATION(script_executions.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()

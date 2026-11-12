@@ -448,6 +448,8 @@ bool TYtTableMetaInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         else
             VALIDATE_FIELD(IsDynamic)
         else
+            VALIDATE_FIELD(IsLink)
+        else
             VALIDATE_FIELD(HasRLS)
         else
             VALIDATE_FIELD(SqlView)
@@ -494,6 +496,8 @@ void TYtTableMetaInfo::Parse(TExprBase node) {
         else
             HANDLE_FIELD(IsDynamic)
         else
+            HANDLE_FIELD(IsLink)
+        else
             HANDLE_FIELD(HasRLS)
         else {
             YQL_ENSURE(false, "Unexpected option " << setting.Name().Value());
@@ -522,6 +526,7 @@ TExprBase TYtTableMetaInfo::ToExprNode(TExprContext& ctx, const TPositionHandle&
         ADD_BOOL_FIELD(YqlCompatibleScheme)
         ADD_BOOL_FIELD(InferredScheme)
         ADD_BOOL_FIELD(IsDynamic)
+        ADD_BOOL_FIELD(IsLink)
         ADD_BOOL_FIELD(HasRLS)
         ;
 

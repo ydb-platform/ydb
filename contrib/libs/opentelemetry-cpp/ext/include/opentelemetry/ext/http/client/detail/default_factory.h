@@ -33,7 +33,7 @@ inline std::shared_ptr<HttpClientFactory> GetDefaultHttpClientFactory()
   OTEL_INTERNAL_LOG_ERROR(
       "No default HTTP client backend is compiled in. "
       "Use the HttpClientFactory or HttpClient constructor overloads, "
-      "or enable curl support (WITH_HTTP_CLIENT_CURL=ON).");
+      "or enable curl support (OTELCPP_WITH_HTTP_CLIENT_CURL=ON).");
   std::terminate();
 #endif
 }

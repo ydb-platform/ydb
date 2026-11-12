@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/public/api/protos/ydb_value.pb.h>
+
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NFq {
@@ -13,11 +14,7 @@ struct TSplittedResultSets {
 class TRowsProtoSplitter {
 public:
     TRowsProtoSplitter(
-        const Ydb::ResultSet& resultSet,
-        const ui64 chunkLimit,
-        const ui64 headerProtoByteSize = 0,
-        const ui64 maxRowsCountPerChunk = 100'000
-    );
+        const Ydb::ResultSet& resultSet, const ui64 chunkLimit, const ui64 headerProtoByteSize = 0, const ui64 maxRowsCountPerChunk = 100'000);
 
     void MakeNewChunk(Ydb::ResultSet& resultSet, ui64& chunkRowsCounter, ui64& chunkSize);
 
@@ -26,7 +23,6 @@ public:
     TSplittedResultSets MakeResultWithIssues(const TString& msg);
 
     TSplittedResultSets Split();
-
 
 private:
     Ydb::ResultSet ResultSet;
@@ -39,4 +35,4 @@ private:
     bool Success = true;
 };
 
-} //NFq
+}   // namespace NFq

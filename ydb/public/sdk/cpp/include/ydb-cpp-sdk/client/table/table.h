@@ -13,6 +13,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
+#include <cstdint>
 #include <memory>
 #include <variant>
 
@@ -128,6 +129,16 @@ struct TSequenceDescription {
         bool NextUsed;
     };
     std::optional<TSetVal> SetVal;
+    // Name of the sequence: serial columns use `_serial_column_<column>` by default, while
+    // sequences provisioned for index columns have their own names.
+    std::string Name;
+    std::optional<int64_t> MinValue;
+    std::optional<int64_t> MaxValue;
+    std::optional<int64_t> StartValue;
+    std::optional<uint64_t> Cache;
+    std::optional<int64_t> Increment;
+    std::optional<bool> Cycle;
+    std::optional<TType> DataType;
 };
 
 struct TTableColumn {
@@ -324,6 +335,11 @@ struct TGlobalIndexSettings {
 
 struct TVectorIndexSettings {
 public:
+    static constexpr uint64_t DefaultMinRows = 10000;
+    static constexpr uint32_t DefaultM = 16;
+    static constexpr uint32_t DefaultEfConstruction = 200;
+    static constexpr uint64_t DefaultDeltaRows = 10000;
+
     enum class EMetric {
         Unspecified = 0,
         InnerProduct,
@@ -341,11 +357,20 @@ public:
         Bit,
         Float16,
         BFloat16,
+        Float8E4M3, // E4M3FN
+        Float8E5M2,
+        Uint4 = 9, // Packed unsigned 4-bit coordinates [0, 15].
+        Int4 = 10, // Packed signed 4-bit coordinates [-8, 7].
     };
 
     EMetric Metric = EMetric::Unspecified;
     EVectorType VectorType = EVectorType::Unspecified;
     uint32_t VectorDimension = 0;
+    uint64_t MinRows = DefaultMinRows;
+    uint32_t M = DefaultM;
+    uint32_t EfConstruction = DefaultEfConstruction;
+    // Rebuild after more than this many distinct rows change since the graph snapshot.
+    uint64_t DeltaRows = DefaultDeltaRows;
 
     static TVectorIndexSettings FromProto(const Ydb::Table::VectorIndexSettings& proto);
 
@@ -373,6 +398,10 @@ public:
         Bit,
         Float16,
         BFloat16,
+        Float8E4M3, // E4M3FN
+        Float8E5M2,
+        Uint4 = 9, // Packed unsigned 4-bit coordinates [0, 15].
+        Int4 = 10, // Packed signed 4-bit coordinates [-8, 7].
     };
 
     TVectorIndexSettings Settings;
@@ -381,11 +410,24 @@ public:
     uint32_t OverlapClusters = 0;
     double OverlapRatio = 0;
 
+    // Maintain the index on table writes. Enabled when unset.
+    // When false, rebuild the index to reflect table changes.
+    std::optional<bool> AutoUpdate = std::nullopt;
+
     static TKMeansTreeSettings FromProto(const Ydb::Table::KMeansTreeSettings& proto);
 
     void SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const;
 
     void Out(IOutputStream &o) const;
+};
+
+struct THnswIndexSettings {
+    TKMeansTreeSettings VectorSettings;
+    std::vector<std::string> DataColumns;
+    TGlobalIndexSettings LevelTableSettings;
+    TGlobalIndexSettings PostingTableSettings;
+    // Used only by CreatePrefixedHnswIndex.
+    TGlobalIndexSettings PrefixTableSettings;
 };
 
 struct TFulltextIndexSettings {
@@ -519,6 +561,18 @@ public:
         const TGlobalIndexSettings& levelTableSettings = {},
         const TGlobalIndexSettings& postingTableSettings = {},
         const TGlobalIndexSettings& prefixTableSettings = {}
+    );
+
+    static TIndexDescription CreateHnswIndex(
+        const std::string& name,
+        const std::string& vectorColumn,
+        const THnswIndexSettings& settings
+    );
+
+    static TIndexDescription CreatePrefixedHnswIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const THnswIndexSettings& settings
     );
 
     static TIndexDescription CreateFulltextPlainIndex(
@@ -804,12 +858,15 @@ class TTtlDeleteAction {};
 class TTtlEvictToExternalStorageAction {
 public:
     TTtlEvictToExternalStorageAction(const std::string& storageName);
+    TTtlEvictToExternalStorageAction(const std::string& storageName, const std::optional<std::string>& objectKeyPrefix);
     void SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const;
 
     std::string GetStorage() const;
+    const std::optional<std::string>& GetObjectKeyPrefix() const;
 
 private:
     std::string Storage_;
+    std::optional<std::string> ObjectKeyPrefix_;
 };
 
 class TTtlTierSettings {
@@ -1034,6 +1091,7 @@ public:
     const std::string& GetName() const;
     std::optional<std::string> GetData() const;
     std::optional<EColumnFamilyCompression> GetCompression() const;
+    std::optional<std::int32_t> GetCompressionLevel() const;
     std::optional<EColumnFamilyCacheMode> GetCacheMode() const;
     std::optional<bool> GetKeepInMemory() const;
 
@@ -1185,6 +1243,8 @@ private:
     // vector KMeansTree
     void AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
     void AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
+    void AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
+    void AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
     // fulltext
     void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings);
     void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings);
@@ -1277,6 +1337,7 @@ public:
 
     TColumnFamilyBuilder& SetData(const std::string& media);
     TColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression);
+    TColumnFamilyBuilder& SetCompressionLevel(std::int32_t level);
     TColumnFamilyBuilder& SetCacheMode(EColumnFamilyCacheMode cacheMode);
     TColumnFamilyBuilder& SetKeepInMemory(bool enabled);
 
@@ -1341,6 +1402,11 @@ public:
 
     TTableColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TTableColumnFamilyBuilder& SetCompressionLevel(std::int32_t level) {
+        Builder_.SetCompressionLevel(level);
         return *this;
     }
 
@@ -1442,6 +1508,8 @@ public:
     // vector KMeansTree
     TTableBuilder& AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
     TTableBuilder& AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
+    TTableBuilder& AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
+    TTableBuilder& AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
 
     // fulltext
     TTableBuilder& AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings);
@@ -2015,6 +2083,11 @@ public:
 
     TAlterColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TAlterColumnFamilyBuilder& SetCompressionLevel(std::int32_t level) {
+        Builder_.SetCompressionLevel(level);
         return *this;
     }
 

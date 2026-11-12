@@ -8,13 +8,13 @@ namespace NKikimr {
 namespace NSysView {
 
 struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
-    TNodeId NodeId;
+    ui64 RequestId;
     NKikimrSysView::TEvGetIntervalMetricsResponse Record;
 
-    TTxIntervalMetrics(TSelf* self, TNodeId nodeId,
+    TTxIntervalMetrics(TSelf* self, ui64 requestId,
         NKikimrSysView::TEvGetIntervalMetricsResponse&& record)
         : TTxBase(self)
-        , NodeId(nodeId)
+        , RequestId(requestId)
         , Record(std::move(record))
     {}
 
@@ -23,15 +23,32 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         YDB_LOG_DEBUG("TTxIntervalMetrics::Execute: applying interval metrics from node",
             {"tabletId", Self->TabletID()},
-            {"nodeId", NodeId},
+            {"requestId", RequestId},
             {"metricsCount", Record.MetricsSize()},
             {"queryTextCount", Record.QueryTextsSize()});
 
+        auto node = Self->RequestsInFlight.find(RequestId);
+        if (node == Self->RequestsInFlight.end()) {
+            YDB_LOG_WARN("TTxIntervalMetrics::Execute: unexpected or duplicate response",
+                {"tabletId", Self->TabletID()},
+                {"requestId", RequestId});
+            return true;
+        }
         NIceDb::TNiceDb db(txc.DB);
+
+        if (Record.GetIntervalEndUs() <= Self->LastFinalizedQueryMetricsIntervalEnd.MicroSeconds()) {
+            Self->CompleteIntervalMetricsRequest(
+                db, RequestId, TSelf::EIntervalMetricsResult::Stale);
+            return true;
+        }
 
         for (auto& queryText : *Record.MutableQueryTexts()) {
             auto queryHash = queryText.GetHash();
             auto& text = *queryText.MutableText();
+
+            if (text.empty()) {
+                continue;
+            }
 
             db.Table<Schema::IntervalMetrics>().Key(queryHash).Update(
                 NIceDb::TUpdate<Schema::IntervalMetrics::Text>(text));
@@ -101,12 +118,8 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
             NKikimrSysView::TOP_REQUEST_UNITS_ONE_MINUTE, NKikimrSysView::TOP_REQUEST_UNITS_ONE_HOUR,
             *Record.MutableTopByRequestUnits());
 
-        Self->NodesInFlight.erase(NodeId);
-        db.Table<Schema::NodesToRequest>().Key(NodeId).Delete();
-
-        if (Self->NodesInFlight.empty() && Self->NodesToRequest.empty()) {
-            Self->PersistQueryResults(db);
-        }
+        Self->CompleteIntervalMetricsRequest(
+            db, RequestId, TSelf::EIntervalMetricsResult::Responded);
         return true;
     }
 
@@ -120,14 +133,48 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
     }
 };
 
+struct TSysViewProcessor::TTxIntervalMetricsFailure : public TTxBase {
+    ui64 RequestId;
+
+    TTxIntervalMetricsFailure(TSelf* self, ui64 requestId)
+        : TTxBase(self)
+        , RequestId(requestId)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_INTERVAL_METRICS; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        auto node = Self->RequestsInFlight.find(RequestId);
+        if (node == Self->RequestsInFlight.end()) {
+            return true;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+        Self->CompleteIntervalMetricsRequest(
+            db, RequestId, TSelf::EIntervalMetricsResult::Failed);
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        if (!Self->NodesToRequest.empty()) {
+            Self->SendRequests();
+        }
+
+        YDB_LOG_DEBUG("TTxIntervalMetricsFailure::Complete",
+            {"tabletId", Self->TabletID()},
+            {"requestId", RequestId});
+    }
+};
+
 void TSysViewProcessor::Handle(TEvSysView::TEvGetIntervalMetricsResponse::TPtr& ev) {
     auto& record = ev->Get()->Record;
-    TNodeId nodeId = ev.Get()->Cookie;
+    const ui64 requestId = ev->Cookie;
 
     if (CurrentStage != AGGREGATE) {
         YDB_LOG_WARN("Handle TEvSysView::TEvGetIntervalMetricsResponse: wrong stage",
             {"tabletId", TabletID()},
-            {"nodeId", nodeId},
+            {"requestId", requestId},
             {"currentStage", static_cast<ui64>(CurrentStage)});
         return;
     }
@@ -135,13 +182,18 @@ void TSysViewProcessor::Handle(TEvSysView::TEvGetIntervalMetricsResponse::TPtr& 
     if (record.GetIntervalEndUs() != IntervalEnd.MicroSeconds()) {
         YDB_LOG_WARN("Handle TEvSysView::TEvGetIntervalMetricsResponse: interval end mismatch",
             {"tabletId", TabletID()},
-            {"nodeId", nodeId},
+            {"requestId", requestId},
             {"expectedIntervalEnd", IntervalEnd},
             {"responseIntervalEnd", TInstant::MicroSeconds(record.GetIntervalEndUs())});
         return;
     }
 
-    Execute(new TTxIntervalMetrics(this, nodeId, std::move(record)),
+    Execute(new TTxIntervalMetrics(this, requestId, std::move(record)),
+        TActivationContext::AsActorContext());
+}
+
+void TSysViewProcessor::HandleIntervalMetricsFailure(ui64 requestId) {
+    Execute(new TTxIntervalMetricsFailure(this, requestId),
         TActivationContext::AsActorContext());
 }
 

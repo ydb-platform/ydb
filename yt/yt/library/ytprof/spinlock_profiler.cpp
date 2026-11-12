@@ -136,7 +136,7 @@ std::once_flag TBlockingProfiler::HookInitialized_;
 void TBlockingProfiler::EnableProfiler()
 {
     std::call_once(HookInitialized_, [] {
-        NThreading::RegisterSpinWaitSlowPathHook(&TBlockingProfiler::OnEvent);
+        RegisterSpinWaitSlowPathHook(&TBlockingProfiler::OnEvent);
         return true;
     });
 
@@ -159,7 +159,7 @@ void TBlockingProfiler::DisableProfiler()
 void TBlockingProfiler::RecordEvent(
     TCpuDuration cpuDelay,
     const ::TSourceLocation& /*location*/,
-    NThreading::ESpinLockActivityKind /*activityKind*/)
+    ESpinLockActivityKind /*activityKind*/)
 {
     unw_context_t unwContext;
     YT_VERIFY(unw_getcontext(&unwContext) == 0);
@@ -177,7 +177,7 @@ YT_DEFINE_THREAD_LOCAL(int, YTSpinlockEventCount);
 void TBlockingProfiler::OnEvent(
     TCpuDuration cpuDelay,
     const ::TSourceLocation& location,
-    NThreading::ESpinLockActivityKind activityKind)
+    ESpinLockActivityKind activityKind)
 {
     auto samplingRate = SamplingRate_.load(std::memory_order::relaxed);
     if (samplingRate == 0) {

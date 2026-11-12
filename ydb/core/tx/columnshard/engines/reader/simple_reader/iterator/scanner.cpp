@@ -41,7 +41,9 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
         SyncPoints.emplace_back(std::make_shared<TSyncPointResultsAggregationControl>(
             SourcesCollection, Context->GetSourcesAggregationScript(), Context->GetRestoreResultScript(), SyncPoints.size(), context));
     } else if (readMetadataContext->IsSorted()) {
-        if (readMetadataContext->IsSortedScanWithLimit()) {
+        // Physical-row LimitControl stops after LIMIT source rows. DistinctLimit needs LIMIT distinct keys,
+        // which may sit past that prefix (duplicate runs in PK order). Skip the row-limit collection then.
+        if (readMetadataContext->IsSortedScanWithLimit() && !distinctLimit) {
             auto collection = std::make_shared<TOrderedResultWithLimitCollection>(Context, std::move(sourcesConstructor));
             SourcesCollection = collection;
             SyncPoints.emplace_back(std::make_shared<TSyncPointLimitControl>(
@@ -75,12 +77,12 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
         {"event", "build_next_interval"});
     bool changed = false;
     while (SourcesCollection->HasData() && SourcesCollection->CheckInFlightLimits()) {
-        auto source = SourcesCollection->TryExtractNext();
-        if (!source) {
+        auto lease = SourcesCollection->TryExtractNext();
+        if (!lease) {
             return changed;
         }
-        source->OnStartProcessing();
-        SyncPoints.front()->AddSource(std::move(source));
+        lease->GetSource().OnStartProcessing();
+        SyncPoints.front()->AddSource(std::move(lease));
         changed = true;
     }
     return changed;

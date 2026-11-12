@@ -18,6 +18,8 @@ DEFINE_ENUM(ESortOrder,
     ((Descending)  (1))
 );
 
+class TKeyBoundRef;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Class that encapsulates all necessary information for key comparison
@@ -40,6 +42,7 @@ public:
     //! If lhs and rhs belong to the same point, compare lower limit against upper limit as
     //! defined by #lowerVsUpperResult (i.e. if 0, lower == upper; if < 0, lower < upper; if > 0, lower > upper) .
     int CompareKeyBounds(const TKeyBound& lhs, const TKeyBound& rhs, int lowerVsUpperResult = 0) const;
+    int CompareKeyBounds(const TKeyBoundRef& lhs, const TKeyBoundRef& rhs, int lowerVsUpperResult = 0) const;
 
     //! Compare two values belonging to the index #index of the key.
     int CompareValues(int index, const TUnversionedValue& lhs, const TUnversionedValue& rhs) const;
@@ -92,6 +95,8 @@ private:
 private:
     void ValidateKey(const TKey& key) const;
     void ValidateKeyBound(const TKeyBound& keyBound) const;
+
+    int CompareKeyBoundsUnchecked(const TKeyBoundRef& lhs, const TKeyBoundRef& rhs, int lowerVsUpper) const;
 };
 
 void FormatValue(TStringBuilderBase* builder, const TComparator& comparator, TStringBuf spec);

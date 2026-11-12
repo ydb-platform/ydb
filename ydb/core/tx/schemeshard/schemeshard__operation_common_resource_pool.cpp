@@ -10,6 +10,8 @@ namespace NKikimr::NSchemeShard::NResourcePool {
 namespace {
 
 constexpr uint32_t MAX_PROTOBUF_SIZE = 2 * 1024 * 1024; // 2 MiB
+constexpr double MAX_TOTAL_CPU_GUARANTEE_PERCENT = 100;
+constexpr double CPU_GUARANTEE_PERCENT_EPSILON = 1e-9;
 
 
 bool ValidateProperties(const NKikimrSchemeOp::TResourcePoolProperties& properties, TString& errorStr) {
@@ -97,6 +99,35 @@ bool IsResourcePoolInfoValid(const THolder<TProposeResponse>& result, const TRes
     NKikimr::NResourcePool::TPoolSettings settings(info->Properties.GetProperties());
     if (auto error = settings.Validate()) {
         result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Invalid resource pool settings: " << error);
+        return false;
+    }
+    return true;
+}
+
+bool IsCpuGuaranteeValid(const THolder<TProposeResponse>& result, const TPath& parentPath, const TPathId& resourcePoolPathId, const TResourcePoolInfo::TPtr& info, const TOperationContext& context) {
+    const auto guarantee = NKikimr::NResourcePool::TPoolSettings(info->Properties.GetProperties()).TotalCpuGuaranteePercentPerNode;
+    if (guarantee <= 0) {
+        return true;
+    }
+
+    double totalGuarantee = guarantee;
+    for (const auto& [childName, childPathId] : parentPath.Base()->GetChildren()) {
+        if (childPathId == resourcePoolPathId) {
+            continue;
+        }
+
+        const auto& childPath = context.SS->PathsById.at(childPathId);
+        if (!childPath->IsResourcePool() || childPath->Dropped()) {
+            continue;
+        }
+
+        if (const auto& childInfo = context.SS->ResourcePools.Value(childPathId, nullptr)) {
+            totalGuarantee += std::max(NKikimr::NResourcePool::TPoolSettings(childInfo->Properties.GetProperties()).TotalCpuGuaranteePercentPerNode, 0.0);
+        }
+    }
+
+    if (totalGuarantee > MAX_TOTAL_CPU_GUARANTEE_PERCENT + CPU_GUARANTEE_PERCENT_EPSILON) {
+        result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Invalid resource pool settings: total_cpu_guarantee_percent_per_node of all resource pools is " << totalGuarantee << ", that exceeds " << MAX_TOTAL_CPU_GUARANTEE_PERCENT);
         return false;
     }
     return true;

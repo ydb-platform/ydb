@@ -111,7 +111,7 @@ public:
         TUpdateRestoreContext urContext(originalEntity.get(), &context, (ui64)OperationId.GetTxId());
         std::shared_ptr<ISSEntityUpdate> update = originalEntity->RestoreUpdateVerified(urContext);
 
-        TUpdateFinishContext fContext(&objPath, &context, &db, NKikimr::NOlap::TSnapshot(ev->Get()->StepId, ev->Get()->TxId));
+        TUpdateFinishContext fContext(&objPath, &context, NKikimr::NOlap::TSnapshot(ev->Get()->StepId, ev->Get()->TxId));
         update->Finish(fContext).Validate();
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -244,7 +244,7 @@ private:
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -308,7 +308,9 @@ public:
             return result;
         }
 
-        NIceDb::TNiceDb db(context.GetDB());
+        auto guard = context.DbGuard();
+        context.MemChanges.GrabPath(context.SS, path.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         if (update->GetShardIds().size()) {
             TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterColumnTable, path->PathId);
@@ -319,57 +321,65 @@ public:
                 auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
 
                 Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
+                context.MemChanges.GrabShard(context.SS, shardIdx);
+                context.DbChanges.PersistShard(shardIdx);
                 txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts);
 
                 context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
-                context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
             }
 
             path->LastTxId = OperationId.GetTxId();
             path->PathState = TPathElement::EPathState::EPathStateAlter;
-            context.SS->PersistLastTxId(db, path.Base());
+            context.DbChanges.PersistPath(path.Base()->PathId);
 
             {
-                TUpdateStartContext startContext(&path, &context, &db);
+                TUpdateStartContext startContext(&path, &context);
                 auto status = update->Start(startContext);
                 if (status.IsFail()) {
                     errors.AddError(status.GetErrorMessage());
                     return result;
                 }
             }
-            context.SS->PersistTxState(db, OperationId);
+            context.DbChanges.PersistTxState(OperationId);
 
             context.OnComplete.ActivateTx(OperationId);
 
             SetState(NextState());
         } else {
             {
-                {
-                    TUpdateStartContext startContext(&path, &context, &db);
-                    auto status = update->Start(startContext);
-                    if (status.IsFail()) {
-                        errors.AddError(status.GetErrorMessage());
-                        return result;
-                    }
-                }
-                {
-                    TUpdateFinishContext fContext(&path, &context, &db, {});
-                    auto status = update->Finish(fContext);
-                    if (status.IsFail()) {
-                        errors.AddError(status.GetErrorMessage());
-                        return result;
-                    }
+                TUpdateStartContext startContext(&path, &context);
+                auto status = update->Start(startContext);
+                if (status.IsFail()) {
+                    errors.AddError(status.GetErrorMessage());
+                    return result;
                 }
             }
-            result->SetStatus(NKikimrScheme::StatusSuccess);
+            {
+                TUpdateFinishContext fContext(&path, &context, {});
+                auto status = update->Finish(fContext);
+                if (status.IsFail()) {
+                    errors.AddError(status.GetErrorMessage());
+                    return result;
+                }
+            }
+            const auto& alter = Transaction.GetAlterColumnTable();
+            const bool statisticsChange = Transaction.HasAlterColumnTable()
+                && (alter.UpsertMultiColumnStatisticsSize() || alter.DropMultiColumnStatisticsSize());
+            if (statisticsChange) {
+                // Statistics-only updates must be published before notifying completion.
+                context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
+                context.OnComplete.DoneOperation(OperationId);
+            } else {
+                result->SetStatus(NKikimrScheme::StatusSuccess);
+            }
             SetState(TTxState::Done);
         }
 
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TAlterColumnTable");
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

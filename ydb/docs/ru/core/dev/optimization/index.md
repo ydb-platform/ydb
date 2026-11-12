@@ -1,4 +1,4 @@
-# Обзор
+# Оптимизация запросов
 
 При выполнении запросов к базе данных текст на языке SQL преобразуется в план запроса, пригодный для распределённого выполнения на [кластере](../../concepts/glossary.md#cluster). Один и тот же запрос зачастую можно выполнить множеством различных способов, и [оптимизатор](../../concepts/query_execution/optimizer.md) {{ ydb-short-name }}  выбирает из них наиболее эффективный.
 
@@ -46,10 +46,10 @@
 - Графический план запроса
     - [Расположение информации в плане запроса](layout.md)
         - [Отдельные регионы (колонки)](layout.md#regions)
-        - [Колонка ResultSet, Sink и Precompute](layout.md#resultset-column)
+        - [Колонка ResultSet, Sink и Precompute](layout.md#structure)
         - [Операторная статистика](layout.md#operators)
         - [Число задач стадии и прогресс их выполнения](layout.md#progress)
-        - [Метрики по стадиям](layout.md#stages)
+        - [Метрики по стадиям](layout.md#statistics)
         - [Временные графики](layout.md#timeline)
         - [Интерактивные возможности](layout.md#interactive)
     - [Структура фактического плана запроса](structure.md)
@@ -68,3 +68,4 @@
         - [Потребление CPU](metrics.md#cpu)
         - [Потребление памяти](metrics.md#memory)
 - [Подсказки оптимизатора](hints.md)
+- [Параметризованные запросы и повторная компиляция](parameterized-queries.md)

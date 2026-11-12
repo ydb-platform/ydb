@@ -41,7 +41,7 @@ std::string TTopicWorkloadKeyedWriterProducer::GetKey() const
 }
 
 void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
-                                             std::optional<NYdb::NTable::TTransaction> transaction)
+                                             NYdb::NTable::TTransaction* transaction)
 {
     Y_ASSERT(Producer_);
 
@@ -57,12 +57,16 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
     writeMessage.CreateTimestamp(enqueueTimestamp);
     writeMessage.MessageMeta(NYdb::NConsoleClient::NTopicWorkloadWriterInternal::MakeKeyMeta(key));
 
-    if (transaction.has_value()) {
-        writeMessage.Tx(transaction.value());
+    if (transaction) {
+        writeMessage.Tx(*transaction);
     }
 
     auto result = Producer_->Write(std::move(writeMessage));
     if (!result.IsQueued()) {
+        TInstant ignoredTimestamp;
+        InflightMessagesCreateTs_.TryRemove(MessageId_, ignoredTimestamp);
+        InflightMessagesCount_.fetch_sub(1, std::memory_order_release);
+
         TStringBuilder errorMessage;
         errorMessage << "Failed to write message with id " << MessageId_
                      << " for producer " << ProducerId_
@@ -76,7 +80,6 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
         }
         WRITE_LOG(Params_.Log, ELogPriority::TLOG_ERR, errorMessage);
     }
-    Y_ASSERT(result.IsQueued());
 
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
               TStringBuilder() << "Sent keyed message with id " << MessageId_
@@ -106,7 +109,7 @@ void TTopicWorkloadKeyedWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessi
 
         TInstant createTimestamp = now;
         if (InflightMessagesCreateTs_.TryRemove(ackedMessageId, createTimestamp)) {
-            InflightMessagesCount_.fetch_sub(1, std::memory_order_relaxed);
+            InflightMessagesCount_.fetch_sub(1, std::memory_order_release);
         } else {
             *Params_.ErrorFlag = 1;
             WRITE_LOG(Params_.Log, ELogPriority::TLOG_ERR,
@@ -121,9 +124,15 @@ void TTopicWorkloadKeyedWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessi
 
 void TTopicWorkloadKeyedWriterProducer::HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event)
 {
-    WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
+    WRITE_LOG(Params_.Log, event.IsSuccess() ? ELogPriority::TLOG_DEBUG : ELogPriority::TLOG_ERR, TStringBuilder()
         << "Keyed producer " << ProducerId_
         << ": got close event: " << event.DebugString());
+
+    // A failed close never delivers acks for queued writes. The commit gate waits
+    // for inflight to drain, so stop the writer loop instead of blocking until endTime.
+    if (!event.IsSuccess()) {
+        *Params_.ErrorFlag = 1;
+    }
 }
 
 ui64 TTopicWorkloadKeyedWriterProducer::GetCurrentMessageId() const
@@ -133,7 +142,7 @@ ui64 TTopicWorkloadKeyedWriterProducer::GetCurrentMessageId() const
 
 size_t TTopicWorkloadKeyedWriterProducer::InflightMessagesCnt() const
 {
-    return InflightMessagesCount_.load(std::memory_order_relaxed);
+    return InflightMessagesCount_.load(std::memory_order_acquire);
 }
 
 void TTopicWorkloadKeyedWriterProducer::WaitForContinuationToken(const TDuration&)

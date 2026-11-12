@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "flat_sausage_packet.h"
+#include "flat_sausage_fetch.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -9,10 +10,11 @@ namespace NTable {
     struct TPageCollectionComponents {
         // fully identified by this LargeGlobId
         NPageCollection::TLargeGlobId LargeGlobId;
-        // loaded meta page
-        TIntrusiveConstPtr<NPageCollection::TPageCollection> PageCollection;
-
-        void ParsePageCollection(TSharedData meta);
+        // raw serialized meta blob (parsed by StageParseMeta)
+        TSharedData RawMeta;
+        // Optional pre-populated pages (compaction path only)
+        TVector<NPageCollection::TLoadedPage> RegularPages;
+        TVector<NPageCollection::TLoadedPage> StickyPages;
     };
 
     struct TPartComponents {
@@ -27,6 +29,8 @@ namespace NTable {
         TString Legacy;
         // Opaque app. defined bundle overlay
         TString Opaque;
+        // Optional deltas to apply after loading
+        TVector<TString> Deltas;
         // Optional underlying part epoch
         TEpoch Epoch;
 

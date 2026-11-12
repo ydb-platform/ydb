@@ -714,12 +714,6 @@ private:
     bool AttributesFound_ = false;
 };
 
-void ValidateAnyValue(TStringBuf yson)
-{
-    TYsonAnyValidator validator;
-    ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
-}
-
 bool CheckSortedAnyValue(TStringBuf yson)
 {
     TYsonAnyValidator validator;
@@ -855,6 +849,14 @@ void ValidateClientRow(
 }
 
 } // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ValidateAnyValue(TStringBuf yson)
+{
+    TYsonAnyValidator validator;
+    ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1504,16 +1506,15 @@ static TLegacyOwningKey MakeSentinelKey(EValueType type)
     return builder.FinishRow();
 }
 
-static const TLegacyOwningKey CachedMinKey = MakeSentinelKey(EValueType::Min);
-static const TLegacyOwningKey CachedMaxKey = MakeSentinelKey(EValueType::Max);
-
 const TLegacyOwningKey MinKey()
 {
+    static const TLegacyOwningKey CachedMinKey = MakeSentinelKey(EValueType::Min);
     return CachedMinKey;
 }
 
 const TLegacyOwningKey MaxKey()
 {
+    static const TLegacyOwningKey CachedMaxKey = MakeSentinelKey(EValueType::Max);
     return CachedMaxKey;
 }
 
@@ -1523,10 +1524,9 @@ static TLegacyOwningKey MakeEmptyKey()
     return builder.FinishRow();
 }
 
-static const TLegacyOwningKey CachedEmptyKey = MakeEmptyKey();
-
 const TLegacyOwningKey EmptyKey()
 {
+    static const TLegacyOwningKey CachedEmptyKey = MakeEmptyKey();
     return CachedEmptyKey;
 }
 

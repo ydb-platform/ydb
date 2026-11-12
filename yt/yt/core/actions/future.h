@@ -274,8 +274,12 @@ public:
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case the deadline is reached).
+    //! An expired deadline overrides an already set successful result but preserves an already set error.
     TFuture<T> WithDeadline(
         TInstant deadline,
+        TFutureTimeoutOptions options = {}) const;
+    TFuture<T> WithDeadline(
+        std::optional<TInstant> deadline,
         TFutureTimeoutOptions options = {}) const;
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
@@ -381,6 +385,8 @@ public:
     //! Chains the asynchronous computation with another one.
     template <class R>
     TFuture<R> Apply(TCallback<R()> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TErrorOr<R>()> callback) const;
     template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>()> callback) const;
     template <class R>
@@ -490,6 +496,8 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<R()> callback) const;
     template <class R>
+    TFuture<R> Apply(TCallback<TErrorOr<R>()> callback) const;
+    template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>()> callback) const;
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>()> callback) const;
@@ -582,6 +590,7 @@ public:
     //! Converts promise into future.
     operator TFuture<T>() const;
     TFuture<T> ToFuture() const;
+    explicit operator TUniqueFuture<T>() const;
 
 protected:
     explicit TPromiseBase(TIntrusivePtr<NYT::NDetail::TPromiseState<T>> impl);

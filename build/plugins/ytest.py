@@ -426,6 +426,17 @@ def dump_test(unit, kw):
         ymake.report_configure_error(e)
     if valid_kw is None:
         return None
+    tags = set(deserialize_list(valid_kw.get(df.Tag.KEY, "")))
+    if (
+        unit.get('SANITIZER_TYPE') not in (None, '', 'no')
+        and consts.YaTestTags.PerfTest in tags
+        and consts.YaTestTags.PerfTestWithSanitizers not in tags
+    ):
+        valid_kw[df.SkipTest.KEY] = valid_kw.get(df.SkipTest.KEY) or 'Performance tests are disabled under sanitizers'
+        # Skipped LARGE suites are still discovered by CI.
+        tags.add(consts.YaTestTags.NotAutocheck)
+        valid_kw[df.Tag.KEY] = serialize_list(sorted(tags))
+    valid_kw.setdefault(df.BuildFolderPath.KEY, _common.get_norm_unit_path(unit))
     string_handler = StringIO()
     for k, v in valid_kw.items():
         print(k + ': ' + (v if isinstance(v, str) else str(v, encoding='utf-8')), file=string_handler)
@@ -845,6 +856,9 @@ def ADD_CHECK_PY_IMPORTS(fields: typing.Any, unit: ymake.Unit, *args: str):
 
     unit.onpeerdir(['library/python/testing/import_test'])
 
+    if unit.get('MODULE_LANG') == 'PY2' and unit.get('DISABLE_PY2_CHECKS') == 'yes':
+        return
+
     dart_record = create_dart_record(fields, unit, (), {})
     if not dart_record:
         return
@@ -1008,6 +1022,42 @@ def SETUP_PYTEST_BIN(unit: ymake.Unit, *args: str):
 
 @ymake.macro
 def RUN(unit: ymake.Unit, *args: str):
+    """
+    @usage: RUN(command [args...] [options...])
+
+    Run a command as a separate EXECTEST test. Exit code zero means success.
+    Declare executable dependencies with DEPENDS. Commands run directly, without a shell.
+
+    Options may appear before or after the command and its arguments.
+    Their names are reserved tokens, removed from the command before execution.
+
+    Option | Meaning
+    --- | ---
+    `NAME name` | Test name; defaults to the executable basename, or the script argument for `${PYTHON_BIN}`. Duplicate names receive numeric suffixes.
+    `ENV key=value` | Set a variable in the command's inherited environment. Repeat for multiple variables.
+    `STDIN path` | Read the command's standard input from a file.
+    `STDOUT path`, `STDERR path` | Write the corresponding output stream to a file.
+    `CWD dir` | Working directory of this command. Relative stream and canonical file paths are resolved against it; otherwise the test working directory is used.
+    `CANONIZE path`, `CANONIZE_LOCALLY path` | Compare a file with canonical data, stored in Sandbox or the repository respectively. Repeat to compare several files.
+    `CANONIZE_DIR path`, `CANONIZE_DIR_LOCALLY path` | Same for a directory.
+    `DIFF_TOOL path` | Comparison executable: repository-relative binary path from a DEPENDS dependency. Applies to canonical outputs of this RUN.
+    `DIFF_TOOL_TIMEOUT seconds` | Integer timeout for the comparison executable.
+
+    The following variables are substituted at test runtime:
+
+    Variable | Meaning
+    --- | ---
+    `${ARCADIA_BUILD_ROOT}` | Build root containing the binaries from DEPENDS; append the repository-relative binary path.
+    `${ARCADIA_ROOT}` | Repository source root.
+    `${TEST_SOURCE_ROOT}` | Source directory containing the current test module's ya.make.
+    `${TEST_WORK_ROOT}` | Test suite working directory.
+    `${TEST_OUT_ROOT}` | Test suite output directory.
+    `${TEST_CASE_ROOT}` | Current test case's output directory inside the suite output directory.
+    `${PYTHON_BIN}` | Python interpreter executable provided by the test environment.
+
+    For multiple commands or output comparison, read
+    https://docs.yandex-team.ru/ya-make/manual/tests/exectest.
+    """
     exectest_cmd = unit.get(["EXECTEST_COMMAND_VALUE"]) or ''
     exectest_cmd += "\n" + subprocess.list2cmdline(args)
     unit.set(["EXECTEST_COMMAND_VALUE", exectest_cmd])
@@ -1131,6 +1181,10 @@ def _ADD_PY_LINTER_CHECK(fields: typing.Any, unit: ymake.Unit, *args: str):
     _, spec_args = _common.sort_by_keywords(keywords, args)
 
     name = spec_args['NAME'][0]
+
+    if name == consts.PythonLinterName.Py2Flake8 and unit.get('DISABLE_PY2_CHECKS') == 'yes':
+        return
+
     global_resources = consts.LINTER_TO_GLOBAL_RESOURCES.get(name, ())
     for resource, _ in global_resources:
         unit.onpeerdir(resource)

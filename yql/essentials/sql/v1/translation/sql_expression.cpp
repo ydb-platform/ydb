@@ -337,7 +337,7 @@ TSQLStatus ExprList(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const
         return std::unexpected(status.error());
     }
 
-    for (auto b : node.GetBlock2()) {
+    for (const auto& b : node.GetBlock2()) {
         sqlExpr.Token(b.GetToken1());
         if (auto status = Expr(sqlExpr, exprNodes, b.GetRule_expr2()); !status) {
             return std::unexpected(status.error());
@@ -1151,7 +1151,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
 
         TNodePtr id;
         if (IsYqlSelectProduced_) {
-            id = BuildYqlColumnRef(Ctx_.Pos());
+            id = BuildYqlColumnRef(Ctx_.Pos(), columnOrType);
         } else if (columnOrType) {
             id = BuildColumnOrType(Ctx_.Pos());
         } else {
@@ -1195,13 +1195,13 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
                     call.InitExpr(lastExpr);
                 }
 
-                bool initRet = call.Init(b.GetAlt2().GetRule_invoke_expr1());
+                TSQLStatus initRet = call.Init(b.GetAlt2().GetRule_invoke_expr1());
                 if (initRet) {
                     call.IncCounters();
                 }
 
                 if (!initRet) {
-                    return std::unexpected(ESQLError::Basic);
+                    return std::unexpected(initRet.error());
                 }
 
                 if (auto result = call.BuildCall()) {

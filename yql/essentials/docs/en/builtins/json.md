@@ -153,7 +153,7 @@ Values of some types can be specified in a JsonPath query using literals:
 | Numbers | `42`, `-1.23e-5` |
 | Boolean values | `false`, `true` |
 | Null | `Null` |
-| Stings | `"Belt"` |
+| Strings | `"Belt"` |
 
 ### Accessing JSON object keys
 

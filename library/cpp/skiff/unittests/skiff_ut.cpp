@@ -4,7 +4,11 @@
 #include <library/cpp/skiff/skiff_schema.h>
 
 #include <util/stream/buffer.h>
+#include <util/stream/buffered.h>
+#include <util/stream/mem.h>
 #include <util/string/hex.h>
+
+#include <limits>
 
 using namespace NSkiff;
 
@@ -278,6 +282,127 @@ Y_UNIT_TEST_SUITE(Skiff)
         UNIT_ASSERT_EQUAL(parser.ParseUint256(), val2);
     }
 
+    Y_UNIT_TEST(TestVarInt32)
+    {
+        TBufferStream bufferStream;
+
+        auto schema = CreateSimpleTypeSchema(EWireType::VarInt32);
+
+        const auto values = std::vector<i32>{
+            0, -1, 32, -32, 64, -128,
+            16384, -16384, 2147483647, -2147483648};
+
+        TCheckedSkiffWriter writer(schema, &bufferStream);
+        for (auto value : values) {
+            writer.WriteVarInt32(value);
+        }
+        writer.Finish();
+
+        UNIT_ASSERT_VALUES_EQUAL(HexEncode(bufferStream.Buffer()),
+            "0001403f8001ff01" "808002ffff01feff" "ffff0fffffffff0f");
+
+        TCheckedSkiffParser parser(schema, &bufferStream);
+        for (auto value : values) {
+            UNIT_ASSERT_EQUAL(parser.ParseVarInt32(), value);
+        }
+
+        for (size_t chunkSize : {1, 3, 7}) {
+            TBufferInput bufferInput(bufferStream.Buffer());
+            TBufferedInput chunkedInput(&bufferInput, chunkSize);
+            TUncheckedSkiffParser chunkedParser(&chunkedInput);
+            for (auto value : values) {
+                UNIT_ASSERT_VALUES_EQUAL(chunkedParser.ParseVarInt32(), value);
+            }
+            UNIT_ASSERT(!chunkedParser.HasMoreData());
+        }
+    }
+
+    Y_UNIT_TEST(TestVarInt64)
+    {
+        TBufferStream bufferStream;
+
+        auto schema = CreateSimpleTypeSchema(EWireType::VarInt64);
+
+        const auto values = std::vector<i64>{
+            0, -1, 32, -32, 64, -128, 16384, -16384,
+            2147483647, -2147483648, 4294967295, -4294967296,
+            0x1924cd4aeb9ced82, -0x1924cd4aeb9ced82,
+            std::numeric_limits<i64>::max(), std::numeric_limits<i64>::min(), 0x4000000000000000};
+
+        TCheckedSkiffWriter writer(schema, &bufferStream);
+        for (auto value : values) {
+            writer.WriteVarInt64(value);
+        }
+        writer.Finish();
+
+        UNIT_ASSERT_VALUES_EQUAL(HexEncode(bufferStream.Buffer()),
+            "0001403f8001ff01" "808002ffff01feff" "ffff0fffffffff0f"
+            "feffffff1fffffff" "ff1f84b6e7b9ddd2" "e6a43283b6e7b9dd" "d2e6a432feffffff"
+            "ffffffffff01ffff" "ffffffffffffff01" "8080808080808080" "8001");
+
+        TCheckedSkiffParser parser(schema, &bufferStream);
+        for (auto value : values) {
+            UNIT_ASSERT_EQUAL(parser.ParseVarInt64(), value);
+        }
+
+        for (size_t chunkSize : {1, 3, 7}) {
+            TBufferInput bufferInput(bufferStream.Buffer());
+            TBufferedInput chunkedInput(&bufferInput, chunkSize);
+            TUncheckedSkiffParser chunkedParser(&chunkedInput);
+            for (auto value : values) {
+                UNIT_ASSERT_VALUES_EQUAL(chunkedParser.ParseVarInt64(), value);
+            }
+            UNIT_ASSERT(!chunkedParser.HasMoreData());
+        }
+    }
+
+    Y_UNIT_TEST(TestMalformedVarInt)
+    {
+        // The first value of a fresh parser is always read byte-by-byte; the prefix loads the buffer.
+        auto parseVarInt32 = [] (TStringBuf hex, size_t chunkSize = 0) {
+            auto data = HexDecode(TString::Join("00", hex));
+            TMemoryInput memoryInput(data);
+            TBufferedInput chunkedInput(&memoryInput, chunkSize ? chunkSize : data.size());
+            TUncheckedSkiffParser parser(&chunkedInput);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseVarInt32(), 0);
+            return parser.ParseVarInt32();
+        };
+        auto parseVarInt64 = [] (TStringBuf hex, size_t chunkSize = 0) {
+            auto data = HexDecode(TString::Join("00", hex));
+            TMemoryInput memoryInput(data);
+            TBufferedInput chunkedInput(&memoryInput, chunkSize ? chunkSize : data.size());
+            TUncheckedSkiffParser parser(&chunkedInput);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseVarInt64(), 0);
+            return parser.ParseVarInt64();
+        };
+
+        // More than 10 bytes with the continuation bit set.
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt64("ffffffffffffffffffffff"), TSkiffException, "Value is too big for varuint64");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt32("ffffffffffffffffffffff"), TSkiffException, "Value is too big for varuint64");
+
+        // Same, fed one byte at a time.
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt64("ffffffffffffffffffffff", 1), TSkiffException, "Value is too big for varuint64");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt32("ffffffffffffffffffffff", 1), TSkiffException, "Value is too big for varuint64");
+
+        // Exactly 10 bytes with the continuation bit set.
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt64("ffffffffffffffffffff"), TSkiffException, "Value is too big for varuint64");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt64("ffffffffffffffffffff", 1), TSkiffException, "Premature end of stream");
+
+        // Maximum varint32 length, never terminated.
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt32("ffffffffff"), TSkiffException, "Premature end of data");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt32("ffffffffff", 1), TSkiffException, "Premature end of stream");
+
+        // Well-formed varints whose value does not fit into 32 bits.
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt32("ffffffff7f"), TSkiffException, "Value is too big for varint32");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt32("ffffffffff01"), TSkiffException, "Value is too big for varint32");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt32("ffffffff7f", 1), TSkiffException, "Value is too big for varint32");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt32("ffffffffff01", 1), TSkiffException, "Value is too big for varint32");
+
+        // Stream ends inside the varint.
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt32("ffff"), TSkiffException, "Premature end of stream");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(parseVarInt64("ffff"), TSkiffException, "Premature end of stream");
+    }
+
     Y_UNIT_TEST(TestBoolean)
     {
         auto schema = CreateSimpleTypeSchema(EWireType::Boolean);
@@ -298,6 +423,67 @@ Y_UNIT_TEST_SUITE(Skiff)
 
             TCheckedSkiffParser parser(schema, &bufferStream);
             UNIT_ASSERT_EXCEPTION(parser.ParseBoolean(), std::exception);
+        }
+    }
+
+    Y_UNIT_TEST(TestFloat)
+    {
+        TBufferStream bufferStream;
+
+        auto schema = CreateSimpleTypeSchema(EWireType::Float);
+
+        const auto values = std::vector<float>{
+            0.0f, 0.00000000001f, 1.0f, 1.3f, 0.5f, 3.1415926f, -1.0f,
+            std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()};
+
+        TCheckedSkiffWriter writer(schema, &bufferStream);
+        for (auto value : values) {
+            writer.WriteFloat(value);
+        }
+        writer.Finish();
+
+        UNIT_ASSERT_VALUES_EQUAL(HexEncode(bufferStream.Buffer()),
+            "00000000ffeb2f2d" "0000803f6666a63f" "0000003fda0f4940" "000080bf0000807f" "0000c07f");
+
+        TCheckedSkiffParser parser(schema, &bufferStream);
+        for (auto value : values) {
+            auto parsed = parser.ParseFloat();
+            if (std::isnan(value)) {
+                UNIT_ASSERT(std::isnan(parsed));
+            } else {
+                UNIT_ASSERT_EQUAL(parsed, value);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestDouble)
+    {
+        TBufferStream bufferStream;
+
+        auto schema = CreateSimpleTypeSchema(EWireType::Double);
+
+        const auto values = std::vector<double>{
+            0.0, 0.00000000001, 1.0, 1.3, 0.5, 3.1415926, -1.0,
+            std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()};
+
+        TCheckedSkiffWriter writer(schema, &bufferStream);
+        for (auto value : values) {
+            writer.WriteDouble(value);
+        }
+        writer.Finish();
+
+        UNIT_ASSERT_VALUES_EQUAL(HexEncode(bufferStream.Buffer()),
+            "0000000000000000" "956479e17ffda53d" "000000000000f03f" "cdccccccccccf43f"
+            "000000000000e03f" "4ad8124dfb210940" "000000000000f0bf" "000000000000f07f" "000000000000f87f");
+
+        TCheckedSkiffParser parser(schema, &bufferStream);
+        for (auto value : values) {
+            auto parsed = parser.ParseDouble();
+            if (std::isnan(value)) {
+                UNIT_ASSERT(std::isnan(parsed));
+            } else {
+                UNIT_ASSERT_EQUAL(parsed, value);
+            }
         }
     }
 
@@ -342,6 +528,52 @@ Y_UNIT_TEST_SUITE(Skiff)
         parser.ValidateFinished();
     }
 
+    Y_UNIT_TEST(TestVariantVar)
+    {
+        auto schema = CreateVariantVarSchema({
+            CreateSimpleTypeSchema(EWireType::Nothing),
+            CreateSimpleTypeSchema(EWireType::Uint64),
+        });
+
+        {
+            TBufferStream bufferStream;
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(tokenWriter.WriteUint64(42), TSkiffException, "Unexpected parse/write of \"uint64\" token");
+        }
+        {
+            TBufferStream bufferStream;
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+            tokenWriter.WriteVariantVarTag(0);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(tokenWriter.WriteUint64(42), TSkiffException, "Unexpected parse/write of \"uint64\" token");
+        }
+        {
+            TBufferStream bufferStream;
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+            tokenWriter.WriteVariantVarTag(1);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(tokenWriter.WriteInt64(42), TSkiffException, "Unexpected parse/write of \"int64\" token");
+        }
+        {
+            TBufferStream bufferStream;
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(tokenWriter.WriteVariantVarTag(-1), TSkiffException, "Variant tag \"-1\" is out of range");
+        }
+        {
+            TBufferStream bufferStream;
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+            tokenWriter.WriteVariantVarTag(0);
+            tokenWriter.WriteVariantVarTag(1);
+            tokenWriter.WriteUint64(42);
+            tokenWriter.Finish();
+
+            TCheckedSkiffParser parser(schema, &bufferStream);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseVariantVarTag(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseVariantVarTag(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseUint64(), 42);
+
+            parser.ValidateFinished();
+        }
+    }
+
     Y_UNIT_TEST(TestTuple)
     {
 
@@ -365,9 +597,40 @@ Y_UNIT_TEST_SUITE(Skiff)
         }
     }
 
-    Y_UNIT_TEST(TestString)
+    Y_UNIT_TEST(TestEmptyTuple)
     {
+        {
+            auto schema = CreateTupleSchema({});
 
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(tokenWriter.WriteInt64(42), TSkiffException, "Unexpected parse/write");
+            tokenWriter.Finish();
+
+            TCheckedSkiffParser parser(schema, &bufferStream);
+            parser.ValidateFinished();
+        }
+
+        {
+            auto schema = CreateTupleSchema({
+                CreateTupleSchema({}),
+                CreateSimpleTypeSchema(EWireType::Int64)});
+
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+            tokenWriter.WriteInt64(42);
+            tokenWriter.Finish();
+
+            TCheckedSkiffParser parser(schema, &bufferStream);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseInt64(), 42);
+            parser.ValidateFinished();
+        }
+    }
+
+    Y_UNIT_TEST(TestString32)
+    {
         auto schema = CreateSimpleTypeSchema(EWireType::String32);
 
         {
@@ -393,6 +656,102 @@ Y_UNIT_TEST_SUITE(Skiff)
 
             TCheckedSkiffParser parser(schema, &bufferStream);
             UNIT_ASSERT_EXCEPTION(parser.ParseInt64(), std::exception);
+        }
+    }
+
+    Y_UNIT_TEST(TestStringVar)
+    {
+        auto schema = CreateSimpleTypeSchema(EWireType::StringVar);
+
+        {
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+            tokenWriter.WriteStringVar("foo");
+            tokenWriter.Finish();
+
+            TCheckedSkiffParser parser(schema, &bufferStream);
+
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseStringVar(), "foo");
+
+            parser.ValidateFinished();
+        }
+
+        {
+            TBufferStream bufferStream;
+
+            TUncheckedSkiffWriter tokenWriter(schema, &bufferStream);
+            tokenWriter.WriteVarInt64(-1);
+            tokenWriter.Finish();
+
+            TUncheckedSkiffParser parser(schema, &bufferStream);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(parser.ParseStringVar(), TSkiffException, "is out of range");
+        }
+    }
+
+    Y_UNIT_TEST(TestStringLengthLimit)
+    {
+        {
+            auto schema = CreateSimpleTypeSchema(EWireType::StringVar);
+            TBufferStream bufferStream;
+
+            TUncheckedSkiffWriter tokenWriter(schema, &bufferStream);
+            tokenWriter.WriteVarInt64(MaxStringLength + 1);
+            tokenWriter.Finish();
+
+            TUncheckedSkiffParser parser(schema, &bufferStream);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(parser.ParseStringVar(), TSkiffException, "out of range");
+        }
+
+        UNIT_ASSERT_NO_EXCEPTION(CreateStringFixedSchema(MaxStringLength));
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateStringFixedSchema(-1), TSkiffException, "out of range");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateStringFixedSchema(MaxStringLength + 1), TSkiffException, "out of range");
+    }
+
+    Y_UNIT_TEST(TestStringFixed)
+    {
+        auto schema = CreateStringFixedSchema(3);
+
+        {
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+            tokenWriter.WriteStringFixed("foo");
+            tokenWriter.Finish();
+
+            TCheckedSkiffParser parser(schema, &bufferStream);
+
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseStringFixed(3), "foo");
+
+            parser.ValidateFinished();
+        }
+
+        {
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+            tokenWriter.WriteStringFixed("foo");
+            tokenWriter.Finish();
+
+            TCheckedSkiffParser parser(schema, &bufferStream);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(parser.ParseStringFixed(4), TSkiffException, "\"string_fixed\" size mismatch: expected 3, actual 4");
+        }
+
+        {
+            auto emptySchema = CreateStringFixedSchema(0);
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(emptySchema, &bufferStream);
+            tokenWriter.WriteStringFixed("");
+            tokenWriter.Finish();
+
+            UNIT_ASSERT_VALUES_EQUAL(bufferStream.Buffer().Size(), 0u);
+
+            TCheckedSkiffParser parser(emptySchema, &bufferStream);
+
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseStringFixed(0), "");
+
+            parser.ValidateFinished();
         }
     }
 
@@ -584,6 +943,308 @@ Y_UNIT_TEST_SUITE(Skiff)
 
                 UNIT_ASSERT_EXCEPTION(parser.ValidateFinished(), std::exception);
             }
+        }
+    }
+
+    Y_UNIT_TEST(TestRepeatedBlockVar)
+    {
+        auto schema = CreateRepeatedBlockVarSchema({
+            CreateSimpleTypeSchema(EWireType::Uint64),
+        });
+
+        // All good, one block.
+        {
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+
+            tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 2});
+
+            tokenWriter.WriteUint64(0);
+            tokenWriter.WriteUint64(42);
+
+            tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 0});
+
+            tokenWriter.Finish();
+
+            TCheckedSkiffParser parser(schema, &bufferStream);
+
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseBlockVarHeader().Count, 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseUint64(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseUint64(), 42);
+
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseBlockVarHeader().Count, 0);
+
+            parser.ValidateFinished();
+        }
+
+        // All good, block with byte size.
+        {
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+
+            tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 2, .ByteSize = 16});
+
+            tokenWriter.WriteUint64(0);
+            tokenWriter.WriteUint64(42);
+
+            tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 0});
+
+            tokenWriter.Finish();
+
+            TCheckedSkiffParser parser(schema, &bufferStream);
+
+            auto header = parser.ParseBlockVarHeader();
+            UNIT_ASSERT_VALUES_EQUAL(header.Count, 2);
+            UNIT_ASSERT_VALUES_EQUAL(header.ByteSize, 16);
+
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseUint64(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseUint64(), 42);
+
+            auto lastHeader = parser.ParseBlockVarHeader();
+            UNIT_ASSERT_VALUES_EQUAL(lastHeader.Count, 0);
+            UNIT_ASSERT(!lastHeader.ByteSize);
+
+            parser.ValidateFinished();
+        }
+
+        // Invalid headers.
+        {
+            TBufferStream bufferStream;
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 0, .ByteSize = 16}),
+                TSkiffException,
+                "Block with zero count must not have byte size");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = -1, .ByteSize = 16}),
+                TSkiffException,
+                "Block count must be nonnegative");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 1, .ByteSize = -1}),
+                TSkiffException,
+                "Block byte size must be nonnegative");
+        }
+
+        // INT64_MIN count is rejected by the writer.
+        {
+            TBufferStream bufferStream;
+            TUncheckedSkiffWriter tokenWriter(&bufferStream);
+
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = std::numeric_limits<i64>::min(), .ByteSize = 16}),
+                TSkiffException,
+                "INT64_MIN is not allowed");
+        }
+
+        // INT64_MIN count is rejected by the parser.
+        {
+            TBufferStream bufferStream;
+            TUncheckedSkiffWriter tokenWriter(&bufferStream);
+            tokenWriter.WriteVarInt64(std::numeric_limits<i64>::min());
+            tokenWriter.Finish();
+
+            TUncheckedSkiffParser parser(&bufferStream);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                parser.ParseBlockVarHeader(),
+                TSkiffException,
+                "INT64_MIN is not allowed");
+        }
+
+        // All good, multiple blocks.
+        {
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+
+            tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 2});
+
+            tokenWriter.WriteUint64(0);
+            tokenWriter.WriteUint64(42);
+
+            tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 3});
+
+            tokenWriter.WriteUint64(0);
+            tokenWriter.WriteUint64(42);
+            tokenWriter.WriteUint64(1242);
+
+            tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 0});
+
+            tokenWriter.Finish();
+
+            TCheckedSkiffParser parser(schema, &bufferStream);
+
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseBlockVarHeader().Count, 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseUint64(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseUint64(), 42);
+
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseBlockVarHeader().Count, 3);
+
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseUint64(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseUint64(), 42);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseUint64(), 1242);
+
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseBlockVarHeader().Count, 0);
+
+            parser.ValidateFinished();
+        }
+
+        // Wrong type.
+        {
+            TBufferStream bufferStream;
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+
+            tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 1});
+
+            UNIT_ASSERT_EXCEPTION_CONTAINS(tokenWriter.WriteInt64(42), TSkiffException, "Unexpected parse/write of \"int64\" token");
+        }
+
+        // Didn't write the final BlockVarHeader.
+        {
+            TBufferStream bufferStream;
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+
+            tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 1});
+
+            tokenWriter.WriteUint64(42);
+
+            UNIT_ASSERT_EXCEPTION_CONTAINS(tokenWriter.Finish(), TSkiffException, "Parse/write is not finished");
+        }
+
+        {
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+
+            tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 2});
+
+            tokenWriter.WriteUint64(0);
+            tokenWriter.WriteUint64(42);
+
+            tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 0});
+
+            tokenWriter.Finish();
+
+            // Didn't parse BlockVarHeader.
+            {
+                TBufferInput input(bufferStream.Buffer());
+                TCheckedSkiffParser parser(schema, &input);
+
+                UNIT_ASSERT_EXCEPTION_CONTAINS(parser.ParseUint64(), TSkiffException, "Unexpected parse/write of \"uint64\" token");
+            }
+
+            // Wrong type.
+            {
+                TBufferInput input(bufferStream.Buffer());
+                TCheckedSkiffParser parser(schema, &input);
+
+                parser.ParseBlockVarHeader();
+                UNIT_ASSERT_EXCEPTION_CONTAINS(parser.ParseInt64(), TSkiffException, "Unexpected parse/write of \"int64\" token");
+            }
+
+            // Didn't parse the second value.
+            {
+                TBufferInput input(bufferStream.Buffer());
+                TCheckedSkiffParser parser(schema, &input);
+
+                parser.ParseBlockVarHeader();
+                parser.ParseUint64();
+
+                UNIT_ASSERT_EXCEPTION_CONTAINS(parser.ValidateFinished(), TSkiffException, "Parse/write is not finished");
+            }
+        }
+
+        // Negative Count.
+        {
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = -2}),
+                TSkiffException,
+                "Block count must be nonnegative");
+        }
+
+        // Negative ByteSize.
+        {
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 2, .ByteSize = -1}),
+                TSkiffException,
+                "Block byte size must be nonnegative");
+        }
+
+        // Too many values.
+        {
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+
+            tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 2});
+
+            tokenWriter.WriteUint64(0);
+            tokenWriter.WriteUint64(42);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(tokenWriter.WriteUint64(1242), TSkiffException, "Unexpected parse/write of \"uint64\" token");
+        }
+    }
+
+    Y_UNIT_TEST(TestUnboundedRecursion)
+    {
+        {
+            auto schemas = std::vector{
+                CreateRepeatedBlockVarSchema({
+                    CreateSimpleTypeSchema(EWireType::Nothing)}),
+
+                CreateRepeatedBlockVarSchema({
+                    CreateTupleSchema({
+                        CreateSimpleTypeSchema(EWireType::Nothing),
+                        CreateTupleSchema({
+                            CreateTupleSchema({}),
+                            CreateSimpleTypeSchema(EWireType::Nothing),
+                            CreateTupleSchema({
+                                CreateSimpleTypeSchema(EWireType::Nothing)})}),
+                        CreateSimpleTypeSchema(EWireType::Nothing)})})};
+
+            for (const auto& schema : schemas) {
+                TBufferStream bufferStream;
+
+                TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+
+                // This used to cause a stack overflow due to deep recursion in the validator.
+                tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 100'000'000});
+                tokenWriter.WriteBlockVarHeader(TBlockVarHeader{.Count = 0});
+                tokenWriter.Finish();
+
+                TCheckedSkiffParser parser(schema, &bufferStream);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ParseBlockVarHeader().Count, 100'000'000);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ParseBlockVarHeader().Count, 0);
+                parser.ValidateFinished();
+            }
+        }
+
+        {
+            auto children = TSkiffSchemaList(1'000'000, CreateSimpleTypeSchema(EWireType::Nothing));
+            children.push_back(CreateSimpleTypeSchema(EWireType::Int64));
+            auto schema = CreateTupleSchema(children);
+
+            TBufferStream bufferStream;
+
+            TCheckedSkiffWriter tokenWriter(schema, &bufferStream);
+
+            // This used to cause a stack overflow due to deep recursion in the validator.
+            tokenWriter.WriteInt64(42);
+            tokenWriter.Finish();
+
+            TCheckedSkiffParser parser(schema, &bufferStream);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ParseInt64(), 42);
         }
     }
 

@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/misc/public.h>
 
+#include <util/generic/size_literals.h>
+
 namespace NYT::NQueryClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -13,6 +15,8 @@ class TQueryStatistics;
 } // namespace NProto
 
 struct TQueryStatistics;
+
+struct TTableHint;
 
 constexpr i64 DefaultRowsetProcessingBatchSize = 256;
 constexpr i64 DefaultWriteRowsetSize = 256 * DefaultRowsetProcessingBatchSize;

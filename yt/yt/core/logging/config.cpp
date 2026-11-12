@@ -57,6 +57,8 @@ void TLogWriterConfig::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("enable_host_field", &TThis::EnableHostField)
         .Default(false);
+    registrar.Parameter("enable_span_id_field", &TThis::EnableSpanIdField)
+        .Default(false);
     registrar.Parameter("enable_native_tags", &TThis::EnableNativeTags)
         .Default(false);
     registrar.Parameter("json_format", &TThis::JsonFormat)
@@ -112,6 +114,8 @@ void TFileLogWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("enable_compression", &TThis::EnableCompression)
         .Default(false);
     registrar.Parameter("enable_no_reuse", &TThis::EnableNoReuse)
+        .Default(false);
+    registrar.Parameter("try_evict_page_cache_on_file_close", &TThis::TryEvictPageCacheOnFileClose)
         .Default(false);
     registrar.Parameter("compression_method", &TThis::CompressionMethod)
         .Default(ECompressionMethod::Gzip);

@@ -1,0 +1,16 @@
+'(
+    (lambda '($1)
+      (WideToBlocks
+        (FromFlow
+          (WideMap (ToFlow (WideFromBlocks $1)) (lambda '($2)
+            (Convert $2 (DataType 'Uint64))
+            (Just (Convert $2 (DataType 'Uint64)))
+          ))
+        )
+      ))
+    (lambda '($10 $11) $10)
+    (lambda '($20 $21 $22) $22)
+    (lambda '($30 $31 $32 $33) (AggrAdd $32 $33))
+    (lambda '($40 $41) $40 $41)
+    (Uint64 '1)
+)

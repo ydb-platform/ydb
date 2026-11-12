@@ -2,15 +2,17 @@
 
 #include "http_req.h"
 
-#include <ydb/library/grpc/server/grpc_request_base.h>
 #include <ydb/core/viewer/json/json.h>
+
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/grpc/server/grpc_request_base.h>
 
 namespace NKikimr::NPublicHttp {
 
-typedef std::function<void(const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status)> TReplySender;
+typedef std::function<void(const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status)>
+    TReplySender;
 
-class TGrpcRequestContextWrapper : public NYdbGrpc::IRequestContextBase {
+class TGrpcRequestContextWrapper: public NYdbGrpc::IRequestContextBase {
 private:
     THttpRequestContext RequestContext;
     TString LongProject;
@@ -33,24 +35,50 @@ public:
     virtual TInstant Deadline() const;
     virtual TSet<TStringBuf> GetPeerMetaKeys() const;
     virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const;
-    virtual TVector<TStringBuf> FindClientCert() const {return {};}
-    virtual grpc_compression_level GetCompressionLevel() const { return GRPC_COMPRESS_LEVEL_NONE; }
+
+    virtual TVector<TStringBuf> FindClientCert() const {
+        return {};
+    }
+
+    virtual grpc_compression_level GetCompressionLevel() const {
+        return GRPC_COMPRESS_LEVEL_NONE;
+    }
+
     virtual TString GetEndpointId() const;
 
     virtual google::protobuf::Arena* GetArena();
 
-    virtual void AddTrailingMetadata(const TString&, const TString&) {}
+    virtual void AddTrailingMetadata(const TString&, const TString&) {
+    }
 
-    virtual void UseDatabase(const TString& ) {}
+    virtual void UseDatabase(const TString&) {
+    }
 
-    virtual void SetNextReplyCallback(TOnNextReply&&) {}
-    virtual void FinishStreamingOk() {}
-    virtual TAsyncFinishResult GetFinishFuture() { return {}; }
-    virtual bool IsClientLost() const { return false; }
+    virtual void SetNextReplyCallback(TOnNextReply&&) {
+    }
+
+    virtual void FinishStreamingOk() {
+    }
+
+    virtual TAsyncFinishResult GetFinishFuture() {
+        return {};
+    }
+
+    virtual bool IsClientLost() const {
+        return false;
+    }
+
     virtual TString GetPeer() const;
-    virtual bool SslServer() const { return false; }
-    virtual bool IsStreamCall() const { return false; }
+
+    virtual bool SslServer() const {
+        return false;
+    }
+
+    virtual bool IsStreamCall() const {
+        return false;
+    }
+
     virtual TString GetRpcMethodName() const;
 };
 
-} // namespace NKikimr::NPublicHttp
+}   // namespace NKikimr::NPublicHttp

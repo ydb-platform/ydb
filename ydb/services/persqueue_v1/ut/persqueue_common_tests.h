@@ -290,9 +290,9 @@ public:
                             serverMessage.server_message_case(), serverMessage);
     }
 
-    void TestWriteWithRateLimiter(NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity limitedEntity, const TDuration& minTime) {
+    void TestWriteWithRateLimiter(const TDuration& minTime) {
         TPersQueueV1TestServerWithRateLimiter server = CreateServerWithRateLimiter();
-        server.InitAll(limitedEntity);
+        server.InitAll();
         server.EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_DEBUG);
 
         const std::vector<TString> differentTopicPathsTypes = {
@@ -304,7 +304,7 @@ public:
         for (const TString &topicPath : differentTopicPathsTypes) {
             // Account quota is 10000000 bytes/sec.
             // Partition write quota is 2 MB/sec and burst size is 2 MB.
-            // Message size for USER_PAYLOAD_SIZE is 1200004 bytes (data size + sourceId size).
+            // Message size is 1200004 bytes (data size + sourceId size).
             // 1200004 bytes/msg * 7 msg = 8400028 bytes.
             //
             // iteration written AvailableSize wait time
@@ -336,9 +336,9 @@ public:
         }
     }
 
-    void TestRateLimiterLimitsWrite(NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity limitedEntity) {
+    void TestRateLimiterLimitsWrite() {
         TPersQueueV1TestServerWithRateLimiter server = CreateServerWithRateLimiter();
-        server.InitAll(limitedEntity);
+        server.InitAll();
         server.EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_DEBUG);
 
         const TString topicPath = "account/topic";
@@ -383,21 +383,13 @@ public:
         }
     }
 
-    void WriteWithBlobsRateLimit() {
-        //TestWriteWithRateLimiter(NKikimrPQ::TPQConfig::TQuotingConfig::WRITTEN_BLOB_SIZE, TDuration::MilliSeconds(5200));
-    }
-
     void WriteWithUserPayloadRateLimit() {
-        // UserPayloadSize is data size + sourceId size;
-        TestWriteWithRateLimiter(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE, TDuration::MilliSeconds(2450));
-    }
-
-    void LimitsWithBlobsRateLimit() {
-        TestRateLimiterLimitsWrite(NKikimrPQ::TPQConfig::TQuotingConfig::WRITTEN_BLOB_SIZE);
+        // User payload size is data size + sourceId size.
+        TestWriteWithRateLimiter(TDuration::MilliSeconds(2450));
     }
 
     void LimitsWithUserPayloadRateLimit() {
-        TestRateLimiterLimitsWrite(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE);
+        TestRateLimiterLimitsWrite();
     }
 }; // TCommonTests
 
@@ -439,9 +431,7 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {       \
         Auth_WriteUpdateTokenRequestWithValidTokenButWithoutACL_SessionClosedWithUnauthorizedError,         \
         WriteUpdateTokenRequestWithValidTokenButWithoutACL                                                  \
     )                                                                                                       \
-    COMMON_TEST(tenantMode, TestWriteWithRateLimiterWithBlobsRateLimit,WriteWithBlobsRateLimit)             \
     COMMON_TEST(tenantMode,TestWriteWithRateLimiterWithUserPayloadRateLimit,WriteWithUserPayloadRateLimit)  \
-    COMMON_TEST(tenantMode, TestLimiterLimitsWithBlobsRateLimit,LimitsWithBlobsRateLimit)                   \
     COMMON_TEST(tenantMode, TestLimiterLimitsWithUserPayloadRateLimit, LimitsWithUserPayloadRateLimit)      \
 } // Y_UNIT_TEST_SUITE
 }

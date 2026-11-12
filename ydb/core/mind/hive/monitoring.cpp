@@ -20,21 +20,58 @@ namespace NHive {
 static constexpr ui64 MAX_REASSIGNS_WITHOUT_CONFIRMATION = 1000;
 static constexpr i64 REASSIGN_CONFIRMATION_ERROR_MARGIN = 10;
 
-TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self) {
-    Index = ++self->OperationsLogIndex;
-
-    const auto& query = ev->Get()->ExtendedQuery;
-    if (query) {
-        NACLib::TUserToken token(query->GetUserToken());
-        User = token.GetUserSID();
+TString GetMonUser(const NMon::TEvRemoteHttpInfo* ev) {
+    const auto& query = ev->ExtendedQuery;
+    if (!query) {
+        return {};
     }
+    NACLib::TUserToken token(query->GetUserToken());
+    return token.GetUserSID();
 }
 
-void TLoggedMonTransaction::WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op) {
+TString GetMonUserForLog(const NMon::TEvRemoteHttpInfo* ev) {
+    TString user = GetMonUser(ev);
+    return user.empty() ? TString("anonymous") : user;
+}
+
+TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self)
+    : Index(++self->OperationsLogIndex)
+    , User(GetMonUser(ev->Get()))
+    , LogPrefix(self->GetLogPrefix())
+{}
+
+// JSON object -> structured log fields: a nested object becomes "key.subkey" fields, an array is written as JSON text
+static NActors::NStructuredLog::TStructuredMessage JsonToStructuredMessage(const NJson::TJsonValue& json) {
+    using namespace NActors::NStructuredLog;
+    TStructuredMessage message;
+    for (const auto& [key, value] : json.GetMap()) {
+        switch (value.GetType()) {
+            case NJson::JSON_UNDEFINED:
+            case NJson::JSON_NULL:
+                break;
+            case NJson::JSON_MAP:
+                message.AppendSubMessage(TKeyName(key), JsonToStructuredMessage(value));
+                break;
+            case NJson::JSON_STRING:
+                message.AppendValue({TKeyName(key)}, value.GetString());
+                break;
+            default:
+                message.AppendValue({TKeyName(key)}, NJson::WriteJson(value, false));
+                break;
+        }
+    }
+    return message;
+}
+
+void TLoggedMonTransaction::WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op, TStringBuf description) {
     TStringStream str;
     NJson::WriteJson(&str, &op);
     TInstant timestamp = TActivationContext::Now();
     db.Table<Schema::OperationsLog>().Key(Index).Update<Schema::OperationsLog::User, Schema::OperationsLog::OperationTimestamp, Schema::OperationsLog::Operation>(User, timestamp.MilliSeconds(), str.Str());
+    YDB_LOG_INFO(description,
+        {"logPrefix", LogPrefix},
+        {"user", GetUserForLog()},
+        JsonToStructuredMessage(op));
 }
 
 TCgiParameters GetParams(const NMon::TEvRemoteHttpInfo* ev) {
@@ -63,6 +100,75 @@ NMon::TEvRemoteBinaryInfoRes* MakeRawHttpEvent(const TString& status, const TStr
         << "Content-Type: application/json\r\n\r\n"
         << content
     );
+}
+
+// link to the NodeInfo page (node details and event history) shown instead of a bare node id
+static TString GetNodeInfoLink(ui64 hiveId, TNodeId nodeId) {
+    return TStringBuilder() << "<a href='?TabletID=" << hiveId << "&page=NodeInfo&node=" << nodeId << "'>" << nodeId << "</a>";
+}
+
+static void RenderEventCells(IOutputStream& out, const THiveEvent& event) {
+    out << "<td>" << event.GetTimestamp().ToString() << "</td>"
+        << "<td>" << EHiveEventTypeName(event.Type) << "</td>"
+        << "<td>" << EncodeHtmlPcdata(EHiveEventReasonName(event.Reason)) << "</td>"
+        << "<td>" << EncodeHtmlPcdata(event.Details) << "</td>";
+}
+
+static NJson::TJsonValue EventToJson(const THiveEvent& event) {
+    NJson::TJsonValue json;
+    json["Timestamp"] = event.TimestampMs;
+    json["Event"] = TString(EHiveEventTypeName(event.Type));
+    json["Reason"] = TString(EHiveEventReasonName(event.Reason));
+    json["Details"] = event.Details;
+    return json;
+}
+
+// the TabletInfo page in HTML form (tablet details and event history)
+static TString GetTabletInfoUrl(ui64 hiveId, TTabletId tabletId) {
+    return TStringBuilder() << "?TabletID=" << hiveId << "&page=TabletInfo&tablet=" << tabletId << "&format=html";
+}
+
+static TString GetTabletInfoLink(ui64 hiveId, TFullTabletId tabletId) {
+    TStringBuilder str;
+    str << "<a href='" << GetTabletInfoUrl(hiveId, tabletId.first) << "'>" << tabletId.first;
+    if (tabletId.second != 0) {
+        str << "." << tabletId.second;
+    }
+    str << "</a>";
+    return str;
+}
+
+// standard pages of the Hive tablet itself (as the standard tablet page links them) plus page-specific links,
+// shown at the top of every Hive page; Hive pages live under /tablets/app, hence the ../ prefix
+static TString GetHivePagesLine(ui64 hiveId, const TString& extraLinks = {}) {
+    TStringBuilder str;
+    str << "<p>Hive pages: <a href='../tablets/app?TabletID=" << hiveId << "'>App</a>"
+        << " | <a href='../tablets/counters?TabletID=" << hiveId << "'>Counters</a>"
+        << " | <a href='../tablets/executorInternals?TabletID=" << hiveId << "'>Executor DB internals</a>"
+        << " | <a href='../tablets?SsId=" << hiveId << "'>State Storage</a>";
+    if (extraLinks) {
+        str << " | " << extraLinks;
+    }
+    str << "</p>";
+    return str;
+}
+
+// small icon next to a tablet id that is already linked elsewhere (e.g. to the viewer)
+static TString GetTabletInfoIcon(ui64 hiveId, TTabletId tabletId) {
+    return TStringBuilder() << " <a href='" << GetTabletInfoUrl(hiveId, tabletId) << "' title='Tablet info and event history in Hive'>&#9432;</a>";
+}
+
+static void RenderEventsTable(IOutputStream& out, const NJson::TJsonValue& events) {
+    out << "<table class='table simple-table2'>";
+    out << "<thead><tr><th>Timestamp</th><th>Event</th><th>Reason</th><th>Details</th></tr></thead>";
+    out << "<tbody>";
+    for (const NJson::TJsonValue& event : events.GetArray()) {
+        out << "<tr><td>" << TInstant::MilliSeconds(event["Timestamp"].GetUInteger()).ToString() << "</td>"
+            << "<td>" << EncodeHtmlPcdata(event["Event"].GetString()) << "</td>"
+            << "<td>" << EncodeHtmlPcdata(event["Reason"].GetString()) << "</td>"
+            << "<td>" << EncodeHtmlPcdata(event["Details"].GetString()) << "</td></tr>";
+    }
+    out << "</tbody></table>";
 }
 
 class TTxMonEvent_DbState : public TTransactionBase<THive> {
@@ -145,6 +251,7 @@ public:
     }
 
     void RenderHTMLPage(IOutputStream &out) {
+        out << GetHivePagesLine(Self->TabletID());
         HTML(out) {
              UL_CLASS("nav nav-tabs") {
                  LI_CLASS("active") {
@@ -177,7 +284,7 @@ public:
                                                   << tabletId << "\">"
                                                   << TTabletTypes::TypeToStr((TTabletTypes::EType)x.TabletType)
                                                   << "</a></td>";
-                                      TABLED() {out << tabletId;}
+                                      TABLED() {out << GetTabletInfoLink(Self->TabletID(), {tabletId, 0});}
                                       TABLED() {out << x.KnownGeneration;}
                                       TABLED_CLASS(x.LeaderNode ? "" : "warning")
                                              {out << x.LeaderNode;}
@@ -298,6 +405,7 @@ public:
         std::sort(tabletIdIndex.begin(), tabletIdIndex.end(), [](const auto& tab1, const auto& tab2) -> bool { return tab1.first < tab2.first; });
 
         out << "<script>$('.container').css('width', 'auto');</script>";
+        out << GetHivePagesLine(Self->TabletID());
         out << "<table class='table table-sortable'>";
         out << "<thead>";
         out << "<tr><th>Tablet</th><th>ID</th><th>Generation</th><th>Node</th><th>State</th><th>VolatileState</th><th>LastAlive</th><th>Restarts</th><th>BootState</th><th>Weight</th><th>Resources</th>"
@@ -326,7 +434,7 @@ public:
                 << tabletId.first << "\">"
                 << TTabletTypes::TypeToStr(x.GetLeader().Type)
                 << "</a></td>";
-            out << "<td data-text='" << count << "'>" << tabletId.first << '.' << tabletId.second << "</td>";
+            out << "<td data-text='" << count << "'><a href='" << GetTabletInfoUrl(Self->TabletID(), tabletId.first) << "'>" << tabletId.first << '.' << tabletId.second << "</a></td>";
             out << "<td style='text-align:right'>" << x.GetLeader().KnownGeneration << "</td>";
             out << "<td";
             if (x.NodeId == 0) {
@@ -388,6 +496,7 @@ public:
 
     void RenderHTMLPage(IOutputStream &out) {
         out << "<script>$('.container').css('width', 'auto');</script>";
+        out << GetHivePagesLine(Self->TabletID());
         out << "<table class='table table-sortable'>";
         out << "<thead>";
         out << "<tr><th>NodeId</th><th>Local</th><th>Domains</th><th>TabletsScheduled</th><th>TabletsRunning</th>"
@@ -403,7 +512,7 @@ public:
         for (const auto& [nodeId, nodeInfoPtr] : nodeIdIndex) {
             const TNodeInfo& x = *nodeInfoPtr;
             out << "<tr>";
-            out << "<td>" << nodeId << "</td>";
+            out << "<td>" << GetNodeInfoLink(Self->TabletID(), nodeId) << "</td>";
             out << "<td>" << x.Local << "</td>";
             out << "<td>" << x.ServicedDomains << "</td>";
             out << "<td>" << x.GetTabletsScheduled() << "</td>";
@@ -510,6 +619,7 @@ public:
 
     void RenderHTMLPage(IOutputStream &out) {
         out << "<script>$('.container').css('width', 'auto');</script>";
+        out << GetHivePagesLine(Self->TabletID());
         out << "<table class='table table-sortable'>";
         out << "<thead>";
         out << "<tr>";
@@ -627,6 +737,7 @@ public:
         Sort(tabletIdIndex);
 
         out << "<head></head><body>";
+        out << GetHivePagesLine(Self->TabletID());
 
         out << "<table class='table table-sortable'>";
         out << "<thead>";
@@ -651,7 +762,7 @@ public:
             ui64 index = EqualRange(tabletIdIndex.begin(), tabletIdIndex.end(), id).first - tabletIdIndex.begin();
 
             out << "<tr>";
-            out << "<td data-text='" << index << "'><a href='../tablets?TabletID=" << id << "'>" << id << "</a></td>";
+            out << "<td data-text='" << index << "'><a href='../tablets?TabletID=" << id << "'>" << id << "</a>" << GetTabletInfoIcon(Self->TabletID(), id) << "</td>";
             out << GetResourceValuesHtml(tablet.GetResourceValues());
             out << "<td>" << tablet.GetUsageImpact() << "</td>";
             out << "<td>" << (tablet.IsPinnedToNode() ? "pinned" : (tablet.IsHighImpact() ? "high-impact" : "")) << "</td>";
@@ -754,6 +865,7 @@ public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     bool ChangeRequest = false;
     std::optional<TString> Status;
+    TStringBuilder Changes; // applied changes in "Name: from -> to" form, for the operations log
 
     TTxMonEvent_Settings(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
         : TBase(hive)
@@ -838,12 +950,33 @@ public:
         }
     }
 
+    void AddChange(const TString& change) {
+        Changes << (Changes.empty() ? "" : "; ") << change;
+    }
+
+    static TString GetAllowedMetricsText(const TVector<i64>& metrics) {
+        const auto* descriptor = NKikimrTabletBase::TMetrics::descriptor();
+        TStringBuilder result;
+        for (auto metricNum : metrics) {
+            const auto* field = descriptor->FindFieldByNumber(metricNum);
+            result << (result.empty() ? "" : ",");
+            if (field) {
+                result << field->name();
+            } else {
+                result << metricNum;
+            }
+        }
+        return result.empty() ? TString("none") : TString(result);
+    }
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto params(GetParams(Event.Get()));
         NIceDb::TNiceDb db(txc.DB);
 
         NJson::TJsonValue jsonOperation;
         auto& configUpdates = jsonOperation["ConfigUpdates"];
+        const NKikimrConfig::THiveConfig previousConfig = Self->CurrentConfig;
+        const NKikimrConfig::THiveConfig previousDatabaseConfig = Self->DatabaseConfig;
 
         UpdateConfig(db, "MaxTabletsScheduled", configUpdates, TSchemeIds::State::MaxTabletsScheduled);
         UpdateConfig(db, "MaxBootBatchSize", configUpdates, TSchemeIds::State::MaxBootBatchSize);
@@ -909,6 +1042,8 @@ public:
         UpdateConfig(db, "NodeRestartsForPenalty", configUpdates);
         UpdateConfig(db, "BalanceCountersRefreshFrequency", configUpdates);
         UpdateConfig(db, "DataCenterChangeReactionPeriod", configUpdates);
+        UpdateConfig(db, "TabletEventHistorySize", configUpdates);
+        UpdateConfig(db, "NodeEventHistorySize", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -982,6 +1117,24 @@ public:
             Self->BuildCurrentConfig();
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
             Self->ProcessWaitQueue();
+            const google::protobuf::Descriptor* descriptor = NKikimrConfig::THiveConfig::GetDescriptor();
+            const google::protobuf::Reflection* reflection = NKikimrConfig::THiveConfig::GetReflection();
+            for (int i = 0; i < descriptor->field_count(); ++i) {
+                const google::protobuf::FieldDescriptor* field = descriptor->field(i);
+                // a database override that appeared or disappeared is logged even when the effective value is the same:
+                // an added override pins the value against later CMS changes, a reset one lets them through again
+                const bool hadOverride = !field->is_repeated() && reflection->HasField(previousDatabaseConfig, field);
+                const bool hasOverride = !field->is_repeated() && reflection->HasField(Self->DatabaseConfig, field);
+                const bool added = !hadOverride && hasOverride;
+                const bool reset = hadOverride && !hasOverride;
+                TString from = GetHiveConfigFieldText(previousConfig, field);
+                TString to = GetHiveConfigFieldText(Self->CurrentConfig, field);
+                if (from != to || added || reset) {
+                    AddChange(TStringBuilder() << field->name() << ": " << from << " -> " << to
+                        << (added ? " (override added)" : "")
+                        << (reset ? " (reset to default)" : ""));
+                }
+            }
         }
         if (params.contains("resetAllowedMetrics")) {
             ChangeRequest = true;
@@ -990,9 +1143,10 @@ public:
                 return true;
             }
             auto& jsonReset = jsonOperation["AllowedMetricsReset"];
-            for (const auto& [type, _] : Self->TabletTypeAllowedMetrics) {
+            for (const auto& [type, metrics] : Self->TabletTypeAllowedMetrics) {
                 jsonReset.AppendValue(GetTabletTypeShortName(type));
                 db.Table<Schema::TabletTypeMetrics>().Key(type).Delete();
+                AddChange(TStringBuilder() << "AllowedMetrics[" << GetTabletTypeShortName(type) << "]: " << GetAllowedMetricsText(metrics) << " -> default");
             }
             Self->TabletTypeAllowedMetrics.clear();
         }
@@ -1010,6 +1164,7 @@ public:
                     };
                     if (tabletAllowedMetrics.size() == metricsPos.size()) {
                         TVector<i64> metrics = Self->GetTabletTypeAllowedMetricIds(type);
+                        const TString previousMetrics = GetAllowedMetricsText(metrics);
                         bool changed = false;
                         for (ui32 pos = 0; pos < metricsPos.size(); ++pos) {
                             auto id = metricsPos[pos];
@@ -1044,6 +1199,7 @@ public:
                             jsonAllowedMetrics.AppendValue(std::move(jsonUpdate));
                             db.Table<Schema::TabletTypeMetrics>().Key(type).Update<Schema::TabletTypeMetrics::AllowedMetricIDs>(metrics);
                             Self->TabletTypeAllowedMetrics[type] = metrics;
+                            AddChange(TStringBuilder() << "AllowedMetrics[" << tabletType << "]: " << previousMetrics << " -> " << GetAllowedMetricsText(metrics));
                         }
                     }
                 }
@@ -1051,7 +1207,10 @@ public:
         }
 
         if (ChangeRequest) {
-            WriteOperation(db, jsonOperation);
+            if (!Changes.empty()) {
+                jsonOperation["Changes"] = TString(Changes);
+            }
+            WriteOperation(db, jsonOperation, "Hive UI: settings changed");
         }
         return true;
     }
@@ -1268,6 +1427,7 @@ public:
 
     void RenderHTMLPage(IOutputStream& out, const TActorContext&/* ctx*/) {
         out << "<head></head><body>";
+        out << GetHivePagesLine(Self->TabletID());
         out << "<style>.tooltip-inner { max-width: 60vw; text-align: left; }</style>";
         out << "<script>$('.container > h2').html('Settings');</script>";
         out << "<div class='form-group'>";
@@ -1334,6 +1494,8 @@ public:
         ShowConfig(out, "NodeRestartsForPenalty");
         ShowConfig(out, "BalanceCountersRefreshFrequency");
         ShowConfig(out, "DataCenterChangeReactionPeriod");
+        ShowConfig(out, "TabletEventHistorySize");
+        ShowConfig(out, "NodeEventHistorySize");
 
         out << "<div class='row' style='margin-top:40px'>";
         bool allowedMetricsLocalOverridden = !Self->TabletTypeAllowedMetrics.empty();
@@ -1359,6 +1521,7 @@ public:
              TTabletTypes::BlobDepot,
              TTabletTypes::ColumnShard,
              TTabletTypes::FileStore,
+             TTabletTypes::BlockStoreVolume,
         }) {
             const TVector<i64>& allowedMetrics = Self->GetTabletTypeAllowedMetricIds(tabletType);
             out << "<tr>"
@@ -1523,8 +1686,10 @@ public:
         auto changeType = ParseTabletType(cgi.Get("changetype"));
         auto maxCount = TryFromString<ui64>(cgi.Get("maxcount"));
         auto resetType = ParseTabletType(cgi.Get("resettype"));
+        TStringBuilder eventDetails;
         if (changeType != TTabletTypes::TypeInvalid && maxCount) {
             ChangeRequest = true;
+            eventDetails << "type=" << GetTabletTypeShortName(changeType) << " maxCount=" << *maxCount << " ";
             NJson::TJsonValue jsonUpdate;
             jsonUpdate["Type"] = GetTabletTypeShortName(changeType);
             jsonUpdate["MaxCount"] = *maxCount;
@@ -1538,6 +1703,7 @@ public:
         }
         if (resetType != TTabletTypes::TypeInvalid) {
             ChangeRequest = true;
+            eventDetails << "type=" << GetTabletTypeShortName(resetType) << " maxCount=default ";
             NJson::TJsonValue jsonUpdate;
             jsonUpdate["Type"] = GetTabletTypeShortName(resetType);
             jsonUpdate["MaxCount"] = "[default]";
@@ -1561,7 +1727,8 @@ public:
             Self->ObjectDistributions.RemoveNode(*Node);
             Self->ObjectDistributions.AddNode(*Node);
             Self->ProcessWaitQueue();
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: tablet availability restrictions changed");
+            Self->RecordNodeEvent(*Node, EHiveEventType::AvailabilityChanged, EHiveEventReason::MonitoringRequest, eventDetails << "user=" << GetUserForLog());
         }
         return true;
     }
@@ -1677,6 +1844,7 @@ public:
         out << "<tr><td>" << "Tablets:" << "</td><td id='runningTablets'>" << runningTablets << "</td></tr>";
         out << "<tr><td>" << "Boot Queue:" << "</td><td id='bootQueue'>" << Self->BootQueue.BootQueue.size() << "</td></tr>";
         out << "<tr><td>" << "Wait Queue:" << "</td><td id='waitQueue'>" << Self->BootQueue.WaitQueue.size() << "</td></tr>";
+        out << "<tr><td>" << "Hive Uptime:" << "</td><td id='hiveUptime'>" << GetDurationString(TActivationContext::Now() - Self->StartTime()) << "</td></tr>";
         out << "</table></div>";
         out << "<div style='width:180px'><table class='simple-table1'>";
         out << "<tr><th colspan='2'>Totals</th></tr>";
@@ -1772,6 +1940,9 @@ public:
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=OperationsLog&max=100\";' style='width:138px'>Operations Log</button>";
         out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=Events\";' style='width:138px'>Events</button>";
+        out << "</div>";
         out << "</div>";
 
         out << "<div class='row' style='margin-top:10px'>";
@@ -1791,10 +1962,16 @@ public:
         out << "<button type='button' class='btn btn-info' data-toggle='modal' data-target='#reassign-groups' style='width:138px'>Reassign Groups</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' data-toggle='modal' data-target='#move-data' style='width:138px'>Move Data</button>";
+        out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=Subactors\";' style='width:138px'>SubActors</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=ManualOperations\";' style='width:138px'>Manual Ops</button>";
+        out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=ShrinkPool\";' style='width:138px'>Shrink Pool</button>";
         out << "</div>";
         out << "</div>";
 
@@ -1934,6 +2111,70 @@ public:
                                <button id='button_query' type='submit' class='btn btn-default' onclick='queryTablets();'>Query</button>
                                <button id='button_reassign' type='submit' class='btn btn-default disabled' onclick='reassignGroups();'>Reassign</button>
                                <button type='button' class='btn btn-default' data-dismiss='modal' onclick='cancel();'>Cancel</button>
+                           </div>
+                       </div>
+                   </div>
+               </div>
+               )___";
+
+        out << R"___(
+               <div class='modal fade' id='move-data' role='dialog'>
+                   <div class='modal-dialog' style='width:60%'>
+                       <div class='modal-content'>
+                           <div class='modal-header'>
+                               <button type='button' class='close' data-dismiss='modal'>&times;</button>
+                               <h4 class='modal-title'>Move Tablets Data</h4>
+                           </div>
+                           <div class='modal-body'>
+                               <div class='row'>
+                                   <div class='col-md-12'>
+                                       <p>Makes tablets that still reference the given groups in their channels history rewrite all their data into the current groups of their channels,
+                                          then restarts them so the old history entries could be cut.
+                                          Tablets whose current group is one of the given groups are not affected: reassign them first.</p>
+                                   </div>
+                               </div>
+                               <div class='row'>
+                                   <div class='col-md-5'>
+                                       <label for='move_data_groups'>Storage groups</label>
+                                       <div class='input-group' style='width:100%'>
+                                           <input id='move_data_groups' type='text' class='form-control' placeholder='group id[,group id...]'>
+                                       </div>
+                                   </div>
+                                   <div class='col-md-4'>
+                                       <label for='move_data_storage_pool'>Storage pool (optional)</label>
+                                       <div class='input-group' style='width:100%'>
+                                           <input id='move_data_storage_pool' type='text' class='form-control'>
+                                       </div>
+                                   </div>
+                                   <div class='col-md-3'>
+                                       <label for='move_data_inflight'>Inflight</label>
+                                       <div class='input-group'>
+                                           <input id='move_data_inflight' type='number' value='1' min='1' max='10' class='form-control'>
+                                           <span class='input-group-addon'>1-10</span>
+                                       </div>
+                                   </div>
+                               </div>
+                               <div class='row' style='margin-top:20px'>
+                                   <div class='col-md-3'>
+                                       <label>Tablets found</label>
+                                       <div><span id='move_data_tablets_found'>-</span></div>
+                                   </div>
+                                   <div class='col-md-3'>
+                                       <div id='move_data_confirm_group' style='visibility:hidden'>
+                                           <label for='move_data_confirm'>Confirm number of tablets</label>
+                                           <input id='move_data_confirm' type='number' class='form-control'>
+                                       </div>
+                                   </div>
+                                   <div class='col-md-6'>
+                                       <h4>Running: <a id='move_data_subactors' href='#'>SubActors</a></h4>
+                                   </div>
+                               </div>
+                           </div>
+                           <div class='modal-footer'>
+                               <span id='move_data_status' style='float:left'></span>
+                               <button id='move_data_button_query' type='submit' class='btn btn-default' onclick='queryMoveData();'>Query</button>
+                               <button id='move_data_button_start' type='submit' class='btn btn-default disabled' onclick='startMoveData();'>Move Data</button>
+                               <button type='button' class='btn btn-default' data-dismiss='modal'>Cancel</button>
                            </div>
                        </div>
                    </div>
@@ -2225,6 +2466,71 @@ function reassignGroups() {
     }
 }
 
+function getMoveDataUrl() {
+    var url = ('?TabletID=' + hiveId + '&page=MoveData&group=' + encodeURIComponent($('#move_data_groups').val()));
+    var storage_pool = $('#move_data_storage_pool').val();
+    if (storage_pool) {
+        url = url + '&storagePool=' + encodeURIComponent(storage_pool);
+    }
+    return url;
+}
+
+function getMoveDataError(jqXHR, status) {
+    if (jqXHR.responseJSON && jqXHR.responseJSON.error) {
+        return jqXHR.responseJSON.error;
+    }
+    return status;
+}
+
+$('#move_data_subactors').attr('href', '?TabletID=' + hiveId + '&page=Subactors');
+$('#move_data_groups, #move_data_storage_pool').on('input', function() {
+    $('#move_data_button_start').addClass('disabled');
+    $('#move_data_tablets_found').text('-');
+    $('#move_data_confirm_group').css({visibility: 'hidden'});
+});
+
+function queryMoveData() {
+    $('#move_data_status').text('');
+    $.ajax({
+        url: getMoveDataUrl() + '&dryRun=1',
+        dataType: 'json',
+        success: function(result) {
+            $('#move_data_tablets_found').text(result.tablets);
+            if (result.tablets > 0) {
+                $('#move_data_button_start').removeClass('disabled');
+            }
+            $('#move_data_confirm_group').css({visibility: result.tablets > maxReassigns ? 'visible' : 'hidden'});
+        },
+        error: function(jqXHR, status) {
+            $('#move_data_status').text(getMoveDataError(jqXHR, status));
+        }
+    });
+}
+
+function startMoveData() {
+    if ($('#move_data_button_start').hasClass('disabled')) {
+        return;
+    }
+    var url = getMoveDataUrl() + '&inflight=' + $('#move_data_inflight').val();
+    var num_tablets = $('#move_data_confirm').val();
+    if (num_tablets) {
+        url = url + '&numTablets=' + num_tablets;
+    }
+    $('#move_data_button_start').addClass('disabled');
+    $.ajax({
+        type: 'POST',
+        url: url,
+        dataType: 'json',
+        success: function(result) {
+            $('#move_data_status').text('Started move data for ' + result.tablets + ' tablets');
+        },
+        error: function(jqXHR, status) {
+            $('#move_data_status').text(getMoveDataError(jqXHR, status));
+            $('#move_data_button_start').removeClass('disabled');
+        },
+    });
+}
+
 function setDown(element, nodeId, down) {
     if (down && $(element).hasClass('glyphicon-ok')) {
         $(element).removeClass('glyphicon-ok');
@@ -2256,6 +2562,11 @@ function toggleFreeze(element, nodeId) {
 function kickNode(element, nodeId) {
     $(element).removeClass('glyphicon-transfer');
     $.ajax({type: 'POST', url: ('?TabletID=' + hiveId + '&node=' + nodeId + '&page=KickNode'), success: function(){ $(element).addClass('glyphicon-transfer'); }});
+}
+
+// node monitoring through the mon proxy, it needs neither the node's host nor its port
+function nodeMonitoringLink(node) {
+    return '<a href="/node/' + node.Id + '/">' + node.Name + '</a>';
 }
 
 function drainNode(element, nodeId) {
@@ -2372,6 +2683,7 @@ function fillDataShort(result) {
             $('#aliveNodes').html(result.AliveNodes);
             $('#bootQueue').html(result.BootQueueSize);
             $('#waitQueue').html(result.WaitQueueSize);
+            $('#hiveUptime').html(result.HiveUptime);
             $('#maxUsage').html(result.MaxUsage);
             $('#objectImbalance').html(result.ObjectImbalance);
             $('#storageScatter').html(result.StorageScatter);
@@ -2459,7 +2771,7 @@ function onFreshDataLong(result) {
                 if (old_node) {
                     nodeElement = old_node.NodeElement;
                 } else {
-                    nodeElement = $('<tr id="node' + node.Id + '"><td>' + node.Id + '</td>'
+                    nodeElement = $('<tr id="node' + node.Id + '"><td><a href="?TabletID=' + hiveId + '&page=NodeInfo&node=' + node.Id + '" title="Node info">' + node.Id + '</a></td>'
                         + '<td></td>'
                         + '<td></td>'
                         + '<td></td>'
@@ -2469,7 +2781,7 @@ function onFreshDataLong(result) {
                         + '<td style="text-align:center"><span title="Kick tablets on this node" onclick="kickNode(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-transfer"></span></td>'
                         + '<td style="text-align:center"><span title="Drain this node" onclick="drainNode(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-log-out"></span></td>'
                         + '</tr>').appendTo('#node_table > tbody').get(0);
-                    nodeElement.cells[1].innerHTML = '<a href="' + node.Host + ':8765">' + node.Name + '</a>';
+                    nodeElement.cells[1].innerHTML = nodeMonitoringLink(node);
                     nodeElement.cells[2].innerHTML = node.DataCenter;
                     was_append = true;
                 }
@@ -2516,7 +2828,7 @@ function onFreshDataLong(result) {
                     }
                 }
                 if (!old_node || old_node.Name != node.Name) {
-                    nodeElement.cells[1].innerHTML = '<a href="' + node.Host + ':8765">' + node.Name + '</a>';
+                    nodeElement.cells[1].innerHTML = nodeMonitoringLink(node);
                 }
                 if (!old_node || old_node.DataCenter != node.DataCenter) {
                     nodeElement.cells[2].innerHTML = node.DataCenter;
@@ -2738,6 +3050,7 @@ public:
         jsonData["ResourceVariance"] = GetResourceValuesJson(Self->GetStDevResourceValues());
         jsonData["BootQueueSize"] = Self->BootQueue.BootQueue.size();
         jsonData["WaitQueueSize"] = Self->BootQueue.WaitQueue.size();
+        jsonData["HiveUptime"] = GetDurationString(TActivationContext::Now() - Self->StartTime());
         jsonData["Balancers"] = Self->GetBalancerProgressJson();
         jsonData["MaxUsage"] =  GetValueWithColoredGlyph(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) ;
         auto scatterHtml = convert(stats.ScatterByResource, Self->GetMinScatterToBalance(), GetValueWithColoredGlyph);
@@ -2861,7 +3174,10 @@ public:
         : TTxSetDown(nodeId, down, hive, source)
         , TLoggedMonTransaction(ev, hive)
         , Event(ev->Release())
-    {}
+    {
+        Reason = EHiveEventReason::MonitoringRequest;
+        ReasonDetails = TStringBuilder() << "user=" << GetUserForLog();
+    }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOWN; }
 
@@ -2876,7 +3192,7 @@ public:
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
             jsonOperation["Down"] = Down;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: node down state changed");
             Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Down\":" + (Down ? "true" : "false") + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
@@ -2886,11 +3202,13 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxMonEvent_SetDown::Complete",
-            {"logPrefix", GetLogPrefix()},
-            {"nodeId", NodeId},
-            {"down", Down},
-            {"response", Response});
+        if (Status != THttpStatus::OK) {
+            YDB_LOG_DEBUG("THive::TTxMonEvent_SetDown::Complete",
+                {"logPrefix", GetLogPrefix()},
+                {"nodeId", NodeId},
+                {"down", Down},
+                {"response", Response});
+        }
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2924,12 +3242,12 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
-            node->SetFreeze(Freeze);
+            node->SetFreeze(Freeze, EHiveEventReason::MonitoringRequest, TStringBuilder() << "user=" << GetUserForLog());
             db.Table<Schema::Node>().Key(NodeId).Update(NIceDb::TUpdate<Schema::Node::Freeze>(Freeze));
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
             jsonOperation["Freeze"] = Freeze;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: node freeze state changed");
             Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Freeze\":" + (Freeze ? "true" : "false") + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
@@ -2939,11 +3257,13 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxMonEvent_SetFreeze::Complete",
-            {"logPrefix", GetLogPrefix()},
-            {"nodeId", NodeId},
-            {"freeze", Freeze},
-            {"response", Response});
+        if (Status != THttpStatus::OK) {
+            YDB_LOG_DEBUG("THive::TTxMonEvent_SetFreeze::Complete",
+                {"logPrefix", GetLogPrefix()},
+                {"nodeId", NodeId},
+                {"freeze", Freeze},
+                {"response", Response});
+        }
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2952,6 +3272,7 @@ class TTxMonEvent_KickNode : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     const TNodeId NodeId;
+    ui64 Kicked = 0;
     TString Response;
     TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
@@ -2978,6 +3299,7 @@ public:
                 tablet->Kick();
                 ++kicked;
             }
+            Kicked = kicked;
             Response = "{\"TabletsKicked\":" + ToString(kicked) + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
@@ -2987,10 +3309,18 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxMonEvent_KickNode::Complete",
-            {"logPrefix", GetLogPrefix()},
-            {"nodeId", NodeId},
-            {"response", Response});
+        if (Status == THttpStatus::OK) {
+            YDB_LOG_INFO("Hive UI: node tablets kicked",
+                {"logPrefix", GetLogPrefix()},
+                {"user", GetMonUserForLog(Event.Get())},
+                {"nodeId", NodeId},
+                {"tabletsKicked", Kicked});
+        } else {
+            YDB_LOG_DEBUG("THive::TTxMonEvent_KickNode::Complete",
+                {"logPrefix", GetLogPrefix()},
+                {"nodeId", NodeId},
+                {"response", Response});
+        }
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -3076,6 +3406,11 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Ok) {
+            YDB_LOG_INFO("Hive UI: node drain requested",
+                {"logPrefix", GetLogPrefix()},
+                {"user", GetMonUserForLog(Event.Get())},
+                {"nodeId", NodeId},
+                {"wait", Wait});
             if (Wait) {
                 Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, WaitActorId));
             } else {
@@ -3115,11 +3450,17 @@ public:
             Status = THttpStatus::BAD_REQUEST;
             return true;
         }
-        Self->StartHiveBalancer({
+        bool started = Self->StartHiveBalancer({
             .Type = EBalancerType::Manual,
             .MaxMovements = MaxMovements,
             .MaxInFlight = MaxInFlight,
         });
+        YDB_LOG_INFO("Hive UI: manual rebalance requested",
+            {"logPrefix", GetLogPrefix()},
+            {"user", GetMonUserForLog(Event.Get())},
+            {"maxMovements", MaxMovements},
+            {"maxInFlight", MaxInFlight},
+            {"started", started});
         return true;
     }
 
@@ -3155,7 +3496,14 @@ public:
             Status = THttpStatus::BAD_REQUEST;
             return true;
         }
-        Self->StartHiveStorageBalancer(Settings);
+        bool started = Self->StartHiveStorageBalancer(Settings);
+        YDB_LOG_INFO("Hive UI: storage rebalance requested",
+            {"logPrefix", GetLogPrefix()},
+            {"user", GetMonUserForLog(Event.Get())},
+            {"storagePool", Settings.StoragePool},
+            {"numReassigns", Settings.NumReassigns},
+            {"maxInFlight", Settings.MaxInFlight},
+            {"started", started});
         return true;
     }
 
@@ -3197,6 +3545,11 @@ public:
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             return true;
         }
+        YDB_LOG_INFO("Hive UI: rebalance from scratch requested, restarting all tablets",
+            {"logPrefix", GetLogPrefix()},
+            {"user", GetMonUserForLog(Event.Get())},
+            {"tenantName", TenantName},
+            {"tabletsCount", Self->Tablets.size()});
         for (const auto& tablet : Self->Tablets) {
             Self->Execute(Self->CreateForceRestartTablet(tablet.second.GetFullTabletId()));
         }
@@ -3408,7 +3761,10 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         NJson::TJsonValue jsonOperation;
         jsonOperation["Reassign"] = description;
-        WriteOperation(db, jsonOperation);
+        jsonOperation["TabletsCount"] = operations.size();
+        jsonOperation["MaxInFlight"] = MaxInFlight;
+        jsonOperation["Async"] = Async;
+        WriteOperation(db, jsonOperation, "Hive UI: reassign requested");
 
         Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringReassignCallback>());
         return true;
@@ -3421,6 +3777,142 @@ public:
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
+        }
+    }
+};
+
+class TTxMonEvent_MoveData : public TTransactionBase<THive>, public TLoggedMonTransaction {
+public:
+    struct TMonitoringMoveDataCallback : IMoveDataCallback {
+        virtual IEventBase* MakeEvent(bool success, ui64 tabletsDone) override {
+            NJson::TJsonValue response;
+            response["success"] = success;
+            response["total"] = tabletsDone;
+            return new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(response, false));
+        }
+    };
+
+    TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
+    const TActorId Source;
+    std::vector<TStorageGroupId> GroupIds;
+    TString StoragePool;
+    TString Error;
+    bool DryRun = false;
+    bool Wait = false;
+    ui32 MaxInFlight = 1;
+    i64 NumTablets = MAX_REASSIGNS_WITHOUT_CONFIRMATION;
+    ui64 TabletsFound = 0;
+
+    TTxMonEvent_MoveData(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , TLoggedMonTransaction(ev, hive)
+        , Event(ev->Release())
+        , Source(source)
+    {
+        const auto params = GetParams(Event.Get());
+        for (const auto& group : SplitString(params.Get("group"), ",")) {
+            TStorageGroupId groupId;
+            if (TryFromString(StripString(group), groupId) && groupId != 0) {
+                GroupIds.push_back(groupId);
+            } else {
+                Error = TStringBuilder() << "invalid group id: " << group;
+            }
+        }
+        StoragePool = params.Get("storagePool");
+        DryRun = FromStringWithDefault(params.Get("dryRun"), DryRun);
+        Wait = FromStringWithDefault(params.Get("wait"), Wait);
+        MaxInFlight = std::clamp<ui32>(FromStringWithDefault(params.Get("inflight"), MaxInFlight), 1, 10);
+        NumTablets = FromStringWithDefault(params.Get("numTablets"), NumTablets);
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_MOVE_DATA; }
+
+    // MoveData rewrites all the tablet's data into the current groups of its channels,
+    // so only tablets that still have the requested groups in their channels' past history are affected
+    std::vector<TTabletId> FindTablets() const {
+        std::unordered_set<TStorageGroupId> groups(GroupIds.begin(), GroupIds.end());
+        std::vector<TTabletId> tablets;
+        for (const auto& [tabletId, tablet] : Self->Tablets) {
+            if (tablet.IsDeleting()) {
+                continue;
+            }
+            bool ok = false;
+            for (const auto& channel : tablet.TabletStorageInfo->Channels) {
+                if (StoragePool && channel.StoragePool != StoragePool) {
+                    continue;
+                }
+                const auto* latest = channel.LatestEntry();
+                if (!latest || groups.contains(latest->GroupID)) {
+                    ok = false;
+                    break;
+                }
+                if (std::ranges::any_of(channel.History, [&](auto&& entry) { return groups.contains(entry.GroupID); })) {
+                    ok = true;
+                }
+            }
+            if (ok) {
+                tablets.push_back(tabletId);
+            }
+        }
+        return tablets;
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        if (Error) {
+            return true;
+        }
+        if (GroupIds.empty()) {
+            Error = "must specify group";
+            return true;
+        }
+        if (!DryRun && Event->GetMethod() != HTTP_METHOD_POST) {
+            Error = "Must use POST request";
+            return true;
+        }
+        auto tablets = FindTablets();
+        TabletsFound = tablets.size();
+        if (DryRun) {
+            Wait = false;
+            return true;
+        }
+        if (tablets.empty()) {
+            Wait = false;
+            return true;
+        }
+        if (TabletsFound > MAX_REASSIGNS_WITHOUT_CONFIRMATION && std::abs(static_cast<i64>(TabletsFound) - NumTablets) > REASSIGN_CONFIRMATION_ERROR_MARGIN) {
+            Error = "must confirm number of tablets";
+            return true;
+        }
+
+        TStringBuilder description;
+        if (StoragePool) {
+            description << StoragePool << ", ";
+        }
+        description << "groups " << JoinSeq(",", GroupIds);
+
+        NIceDb::TNiceDb db(txc.DB);
+        NJson::TJsonValue jsonOperation;
+        jsonOperation["MoveData"] = description;
+        jsonOperation["TabletsCount"] = TabletsFound;
+        jsonOperation["MaxInFlight"] = MaxInFlight;
+        WriteOperation(db, jsonOperation, "Hive UI: move data requested");
+
+        Self->StartMoveDataActor(std::move(tablets), GroupIds, Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringMoveDataCallback>(), false);
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        if (Error) {
+            NJson::TJsonValue response;
+            response["error"] = Error;
+            if (TabletsFound) {
+                response["tablets"] = TabletsFound;
+            }
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, NJson::WriteJson(response, false)));
+        } else if (!Wait) {
+            NJson::TJsonValue response;
+            response["tablets"] = TabletsFound;
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::OK, NJson::WriteJson(response, false)));
         }
     }
 };
@@ -3517,6 +4009,10 @@ public:
                 return true;
             }
         }
+        YDB_LOG_INFO("Hive UI: migration requested",
+            {"logPrefix", GetLogPrefix()},
+            {"user", GetMonUserForLog(Event.Get())},
+            {"request", ev->Record.ShortDebugString()});
         ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, ev.release()));
         return true;
     }
@@ -3692,6 +4188,14 @@ public:
         }
         TInstant now = TActivationContext::Now();
         tablet->MakeBalancerDecision(now);
+        YDB_LOG_INFO("Hive UI: tablet move requested",
+            {"logPrefix", GetLogPrefix()},
+            {"user", GetMonUserForLog(Event.Get())},
+            {"tabletId", TabletId},
+            {"fromNodeId", tablet->NodeId},
+            {"toNodeId", NodeId});
+        Self->RecordTabletEvent(*tablet, EHiveEventType::Moved, EHiveEventReason::ManualMove,
+            TStringBuilder() << "from=" << tablet->NodeId << " to=" << NodeId);
         Self->Execute(Self->CreateRestartTablet(tablet->GetFullTabletId(), NodeId));
         if (!Wait) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
@@ -3782,7 +4286,7 @@ public:
             NJson::TJsonValue jsonOperation;
             jsonOperation["Tablet"] = TabletId;
             jsonOperation["Stop"] = true;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: tablet stop requested");
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
@@ -3839,7 +4343,7 @@ public:
             NJson::TJsonValue jsonOperation;
             jsonOperation["SubDomain"] = TStringBuilder() << DomainId;
             jsonOperation["Stop"] = Stop;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: domain stop state changed");
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"OK\"}"));
         } else {
             ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Domain not found"})"));
@@ -3916,7 +4420,7 @@ public:
         Wait = FromStringWithDefault(cgi.Get("wait"), Wait);
     }
 
-    TTxType GetTxType() const override { return NHive::TXTYPE_MON_STOP_TABLET; }
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_RESUME_TABLET; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
@@ -3937,7 +4441,7 @@ public:
             NJson::TJsonValue jsonOperation;
             jsonOperation["Tablet"] = TabletId;
             jsonOperation["Stop"] = false;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: tablet resume requested");
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
@@ -4065,12 +4569,16 @@ public:
     TTabletId TabletId = 0;
     NJson::TJsonValue Result;
 
+    bool Html = false;
+
     TTxMonEvent_TabletInfo(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
         , Event(ev->Release())
         , Source(source)
     {
-        TabletId = FromStringWithDefault<TTabletId>(GetParams(Event.Get()).Get("tablet"), TabletId);
+        auto params = GetParams(Event.Get());
+        TabletId = FromStringWithDefault<TTabletId>(params.Get("tablet"), TabletId);
+        Html = params.Get("format") == "html";
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_TABLET_INFO; }
@@ -4233,6 +4741,11 @@ public:
         result["UsageImpact"] = tablet.GetUsageImpact();
         result["HighImpact"] = tablet.IsHighImpact();
         result["PinnedToNode"] = tablet.IsPinnedToNode();
+        NJson::TJsonValue& events = result["Events"];
+        events.SetType(NJson::JSON_ARRAY);
+        tablet.EventHistory.ForEachNewestFirst([&events](const THiveEvent& event) {
+            events.AppendValue(EventToJson(event));
+        });
         return result;
     }
 
@@ -4303,8 +4816,108 @@ public:
         return true;
     }
 
+    // keys of MakeFrom(TTabletInfo) that hold a node id and get a link to the NodeInfo page
+    static bool IsNodeIdKey(const TString& key) {
+        return key == "NodeId" || key == "LastNodeId" || key == "PreferredNodeId" || key == "Node";
+    }
+
+    void RenderValue(IOutputStream& out, const TString& key, const NJson::TJsonValue& value) const {
+        if (IsNodeIdKey(key) && value.IsUInteger() && value.GetUInteger() != 0) {
+            out << GetNodeInfoLink(Self->TabletID(), value.GetUInteger());
+        } else if (value.IsMap() || value.IsArray()) {
+            out << "<pre style='margin:0'>" << EncodeHtmlPcdata(NJson::WriteJson(value, true, true)) << "</pre>";
+        } else if (value.IsNull()) {
+            out << "<i>null</i>";
+        } else {
+            out << EncodeHtmlPcdata(value.GetStringRobust());
+        }
+    }
+
+    // HTML order of the fields of MakeFrom(TLeaderTabletInfo), most important first; fields not listed here
+    // follow in alphabetical order, fields listed in HIDDEN_FIELDS are shown elsewhere or duplicate another field
+    static constexpr TStringBuf FIELD_ORDER[] = {
+        // common info
+        "TabletRole", "FollowerGroupId", "KnownGeneration", "ObjectId", "ObjectDomain", "Owner", "Category", "BootMode",
+        // state
+        "State", "BootState", "VolatileState", "VolatileStateChangeTime", "NodeId", "LastNodeId", "PreferredNodeId",
+        "PostponedStart", "LockedToActor", "LockedReconnectTimeout", "PendingUnlockSeqNo",
+        // placement conditions
+        "AllowedDomains", "AllowedDataCenters", "EffectiveAllowedDomains", "AllowedNodes", "DataCenterPreference",
+        "PinnedToNode", "IsBackup", "BalancerPolicy",
+        // what the balancer uses
+        "UsageImpact", "HighImpact", "Weight", "LastBalancerDecisionTime", "ResourceValues", "ResourceMetricsAggregates",
+        // storage
+        "TabletStorageInfo", "BoundChannels", "ChannelProfileNewGroup", "ChannelProfileReassignReason", "StorageInfoSubscribers",
+        "Statistics", "FollowerGroups", "ActorsToNotify", "ActorsToNotifyOnRestart",
+    };
+    // Id and Type are in the header, Node duplicates NodeId for a running tablet, Events and Followers are rendered as sections
+    static constexpr TStringBuf HIDDEN_FIELDS[] = {"Id", "Type", "Node", "Events", "Followers"};
+
+    // scalar fields as a two-column table, Events as an event table, Followers as nested sections
+    void RenderFields(IOutputStream& out, const NJson::TJsonValue& fields, const TString& title) const {
+        out << "<h4>" << EncodeHtmlPcdata(title) << "</h4>";
+        out << "<table class='table simple-table2'><tbody>";
+        auto renderField = [&](TStringBuf key) {
+            out << "<tr><th>" << EncodeHtmlPcdata(TString(key)) << "</th><td>";
+            RenderValue(out, TString(key), fields[key]);
+            out << "</td></tr>";
+        };
+        THashSet<TStringBuf> rendered(std::begin(HIDDEN_FIELDS), std::end(HIDDEN_FIELDS));
+        for (TStringBuf key : FIELD_ORDER) {
+            if (fields.Has(key) && rendered.insert(key).second) {
+                renderField(key);
+            }
+        }
+        for (const auto& [key, value] : fields.GetMap()) {
+            if (rendered.insert(key).second) {
+                renderField(key);
+            }
+        }
+        out << "</tbody></table>";
+        if (fields.Has("Events")) {
+            out << "<h4>" << EncodeHtmlPcdata(title) << " events</h4>";
+            out << "<p>Last " << Self->GetTabletEventHistorySize() << " events, newest first, kept in memory since Hive start.</p>";
+            RenderEventsTable(out, fields["Events"]);
+        }
+        if (fields.Has("Followers")) {
+            for (const NJson::TJsonValue& follower : fields["Followers"].GetArray()) {
+                RenderFields(out, follower, TStringBuilder() << "Follower " << follower["Id"].GetStringRobust());
+            }
+        }
+    }
+
+    void RenderHtml(IOutputStream& out) const {
+        out << "<head><style>";
+        out << "table.simple-table2 th { text-align: left; white-space: nowrap; width: 1%; }";
+        out << "table.simple-table2 td { text-align: left; }";
+        out << "</style></head>";
+        out << "<body>";
+        if (Result.Has("error")) {
+            out << "<p>Tablet " << TabletId << ": " << EncodeHtmlPcdata(Result["error"].GetStringRobust()) << "</p>";
+        } else {
+            out << "<h3>Tablet " << TabletId << " " << EncodeHtmlPcdata(Result["Type"].GetStringRobust()) << "</h3>";
+            // the same pages the standard tablet page (tablet_flat_executed.cpp) links to; Hive pages live under /tablets/app
+            out << "<p>Tablet pages: <a href='../tablets?TabletID=" << TabletId << "'>Tablet</a>"
+                << " | <a href='../tablets/app?TabletID=" << TabletId << "'>App</a>"
+                << " | <a href='../tablets/counters?TabletID=" << TabletId << "'>Counters</a>"
+                << " | <a href='../tablets/executorInternals?TabletID=" << TabletId << "'>Executor DB internals</a>"
+                << " | <a href='../tablets?SsId=" << TabletId << "'>State Storage</a></p>";
+            out << GetHivePagesLine(Self->TabletID(), TStringBuilder()
+                << "<a href='?TabletID=" << Self->TabletID() << "&page=Events&kind=tablet'>All recent tablet events</a>"
+                << " | <a href='?TabletID=" << Self->TabletID() << "&page=TabletInfo&tablet=" << TabletId << "'>JSON</a>");
+            RenderFields(out, Result, "Leader");
+        }
+        out << "</body>";
+    }
+
     void Complete(const TActorContext& ctx) override {
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Result, false)));
+        if (Html) {
+            TStringStream out;
+            RenderHtml(out);
+            ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(out.Str()));
+        } else {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Result, false)));
+        }
     }
 };
 
@@ -4383,14 +4996,16 @@ class TTxMonEvent_ResetTablet : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     TTabletId TabletId = 0;
+    TString User;
     TString Error;
     TIntrusivePtr<TTabletStorageInfo> Info;
     ui32 KnownGeneration = 0;
 
-    TTxMonEvent_ResetTablet(const TActorId& source, TTabletId tabletId, TSelf* hive)
+    TTxMonEvent_ResetTablet(const TActorId& source, TTabletId tabletId, TString user, TSelf* hive)
         : TBase(hive)
         , Source(source)
         , TabletId(tabletId)
+        , User(std::move(user))
     {
     }
 
@@ -4412,6 +5027,11 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Info) {
+            YDB_LOG_INFO("Hive UI: tablet reset requested",
+                {"logPrefix", GetLogPrefix()},
+                {"user", User},
+                {"tabletId", TabletId},
+                {"knownGeneration", KnownGeneration});
             ctx.Register(new TResetter(std::move(Info), Source, KnownGeneration));
         } else if (Error) {
             ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
@@ -4482,8 +5102,9 @@ public:
             db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ObjectDomain>(tablet->ObjectDomain);
             NJson::TJsonValue jsonOperation;
             jsonOperation["Tablet"] = TabletId;
+            jsonOperation["OldObjectDomain"] = TStringBuilder() << oldDomain;
             jsonOperation["ObjectDomain"] = TStringBuilder() << newDomain;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: tablet object domain changed");
             Success = true;
         } else {
             ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Tablet not found\"}"));
@@ -4634,6 +5255,7 @@ public:
         out << "<head>";
         out << "<script>$('.container').toggleClass('container container-fluid').css('padding-left', '5%') .css('padding-right', '5%');</script>";
         out << "</head><body>";
+        out << GetHivePagesLine(Self->TabletID());
 
         out << "<table class='table'>";
         out << "<thead>";
@@ -4777,6 +5399,7 @@ public:
 
     void RenderHTMLPage(IOutputStream &out) {
         out << "<script>$('.container').css('width', 'auto');</script>";
+        out << GetHivePagesLine(Self->TabletID());
 
         if (Kinds) {
             out << "<p><a href=\"?TabletID=" << Self->HiveId << "&page=Storage&kinds=false\">Turn off kinds grouping</a></p>";
@@ -4886,6 +5509,7 @@ public:
         out << "</style>";
         out << "</head>";
         out << "<body>";
+        out << GetHivePagesLine(Self->TabletID());
         out << "<table class='table simple-table2'>";
         out << "<thead>";
         out << "<tr><th>Id</th><th>Description</th><th>Started at</th><th>Stop</th></tr>";
@@ -4906,6 +5530,88 @@ public:
         }
         out << "</tbody>";
         out << "</table>";
+        out << "</body>";
+    }
+};
+
+// Read-only view of what a shrink is still waiting for: which tablets hold history in the pool being removed.
+class TTxMonEvent_ShrinkPool : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+
+    TTxMonEvent_ShrinkPool(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+        , Event(ev->Release())
+    {
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_SHRINK_POOL; }
+
+    bool Execute(TTransactionContext& /*txc*/, const TActorContext& ctx) override {
+        TStringStream str;
+        RenderHTMLPage(str);
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext& /*ctx*/) override {
+    }
+
+    void RenderHTMLPage(IOutputStream& out) {
+        out << "<body>";
+        out << GetHivePagesLine(Self->TabletID());
+        out << "<h3>Storage pools being shrunk</h3>";
+        bool anyPool = false;
+        for (const auto& [name, pool] : Self->StoragePools) {
+            if (pool.RemainingHistory.empty() && pool.InactiveGroups.empty() && !pool.NeedShrinkFromTenant) {
+                continue;
+            }
+            anyPool = true;
+            std::map<TTabletId, std::vector<const TStoragePoolInfo::THistoryEntry*>> byTablet;
+            for (const auto& entry : pool.RemainingHistory) {
+                byTablet[entry.Tablet].push_back(&entry);
+            }
+            out << "<h4>" << name << "</h4>";
+            out << "<p>inactive groups: " << pool.InactiveGroups.size();
+            for (size_t i = 0; i < pool.InactiveGroups.size(); ++i) {
+                out << (i ? ", " : " (") << pool.InactiveGroups[i];
+            }
+            out << (pool.InactiveGroups.empty() ? "" : ")")
+                << " &middot; remaining entries: " << pool.RemainingHistory.size()
+                << " &middot; tablets: " << byTablet.size() << " &middot; waiting for tenant: " << (pool.NeedShrinkFromTenant ? "yes" : "no")
+                << "</p>";
+            out << "<table class='table simple-table'>";
+            out << "<thead><tr><th>Tablet</th><th>Type</th><th>Entries (channel:fromGeneration)</th></tr></thead><tbody>";
+            for (const auto& [tabletId, entries] : byTablet) {
+                const TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
+                out << "<tr><td>" << tabletId << "</td><td>";
+                out << (tablet ? TTabletTypes::TypeToStr(tablet->Type) : "?");
+                out << "</td><td>";
+                for (size_t i = 0; i < entries.size(); ++i) {
+                    out << (i ? ", " : "") << entries[i]->Channel << ":" << entries[i]->Generation;
+                }
+                out << "</td></tr>";
+            }
+            out << "</tbody></table>";
+        }
+        if (!anyPool) {
+            out << "<p>no pool is being shrunk</p>";
+        }
+        out << "<h3>MoveData in flight</h3>";
+        bool anyActor = false;
+        for (const auto* subActor : Self->SubActors) {
+            const TString description = subActor->GetDescription();
+            if (!description.StartsWith("MoveData(")) {
+                continue;
+            }
+            anyActor = true;
+            out << "<p>" << description << " &middot; started at " << subActor->StartTime << "</p>";
+        }
+        if (!anyActor) {
+            out << "<p>no MoveData actor is running</p>";
+        }
         out << "</body>";
     }
 };
@@ -4939,6 +5645,7 @@ public:
         out << "</style>";
         out << "</head>";
         out << "<body>";
+        out << GetHivePagesLine(Self->TabletID());
         out << "<table class='table simple-table2'>";
         out << "<thead>";
         out << "<tr><th>Timestamp</th><th>User</th><th>Description</th></tr>";
@@ -4977,6 +5684,375 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
+// Recent events across the whole Hive: node and tablet events merged by time, filter with kind=node|tablet
+class TTxMonEvent_Events : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+    ui64 MaxCount = THive::RECENT_TABLET_EVENTS_SIZE;
+    bool Json = false;
+    bool ShowNodes = true;
+    bool ShowTablets = true;
+
+    struct TEventView {
+        const THiveEvent* Event;
+        bool IsTablet;
+        TNodeId NodeId;
+        TFullTabletId TabletId;
+    };
+
+    TTxMonEvent_Events(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+        , Event(ev->Release())
+    {
+        auto params = GetParams(Event.Get());
+        MaxCount = FromStringWithDefault(params.Get("max"), MaxCount);
+        Json = params.Get("format") == "json";
+        const TString kind = params.Get("kind");
+        ShowNodes = kind.empty() || kind == "node";
+        ShowTablets = kind.empty() || kind == "tablet";
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_EVENTS; }
+
+    // newest first across both rings, at most MaxCount items
+    std::vector<TEventView> CollectEvents() const {
+        std::vector<TEventView> views;
+        if (ShowNodes) {
+            ForEachNewestFirst(Self->RecentNodeEvents, MaxCount, [&](const TRecentNodeEvent& recent) {
+                views.push_back({.Event = &recent.Event, .IsTablet = false, .NodeId = recent.NodeId, .TabletId = {}});
+            });
+        }
+        if (ShowTablets) {
+            ForEachNewestFirst(Self->RecentTabletEvents, MaxCount, [&](const TRecentTabletEvent& recent) {
+                views.push_back({.Event = &recent.Event, .IsTablet = true, .NodeId = 0, .TabletId = recent.TabletId});
+            });
+        }
+        std::stable_sort(views.begin(), views.end(), [](const TEventView& a, const TEventView& b) {
+            return a.Event->TimestampMs > b.Event->TimestampMs;
+        });
+        if (views.size() > MaxCount) {
+            views.resize(MaxCount);
+        }
+        return views;
+    }
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+        const std::vector<TEventView> views = CollectEvents();
+        if (Json) {
+            NJson::TJsonValue json;
+            NJson::TJsonValue& events = json["Events"];
+            events.SetType(NJson::JSON_ARRAY);
+            for (const TEventView& view : views) {
+                NJson::TJsonValue& jsonEvent = events.AppendValue(EventToJson(*view.Event));
+                if (view.IsTablet) {
+                    jsonEvent["Kind"] = "Tablet";
+                    jsonEvent["TabletId"] = view.TabletId.first;
+                    jsonEvent["FollowerId"] = view.TabletId.second;
+                    if (const TTabletInfo* tablet = Self->FindTablet(view.TabletId)) {
+                        jsonEvent["TabletType"] = TTabletTypes::TypeToStr(tablet->GetTabletType());
+                    }
+                } else {
+                    jsonEvent["Kind"] = "Node";
+                    jsonEvent["NodeId"] = view.NodeId;
+                    if (const TNodeInfo* node = Self->FindNode(view.NodeId)) {
+                        jsonEvent["NodeName"] = node->Name;
+                    }
+                }
+            }
+            TStringStream out;
+            NJson::WriteJson(&out, &json);
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(out.Str()));
+            return true;
+        }
+        TStringStream out;
+        out << "<head>";
+        out << "<style>";
+        out << "table.simple-table2 th { text-align: left; }";
+        out << "table.simple-table2 td { text-align: left; white-space: nowrap; }";
+        out << "table.simple-table2 td:last-child { white-space: normal; }";
+        out << "</style>";
+        out << "</head>";
+        out << "<body>";
+        out << GetHivePagesLine(Self->TabletID());
+        out << "<p>Recent events kept in memory since Hive start: last " << THive::RECENT_NODE_EVENTS_SIZE << " node events and last "
+            << THive::RECENT_TABLET_EVENTS_SIZE << " tablet events, merged by time. "
+            << "Filter: <a href='?TabletID=" << Self->TabletID() << "&page=Events'>all</a> | "
+            << "<a href='?TabletID=" << Self->TabletID() << "&page=Events&kind=node'>nodes</a> | "
+            << "<a href='?TabletID=" << Self->TabletID() << "&page=Events&kind=tablet'>tablets</a>. "
+            << "Click a node or tablet for its info and full history. Add &format=json for machine-readable output.</p>";
+        out << "<table class='table simple-table2'>";
+        out << "<thead>";
+        out << "<tr><th>Timestamp</th><th>Kind</th><th>Subject</th><th>Event</th><th>Reason</th><th>Details</th></tr>";
+        out << "</thead>";
+        out << "<tbody>";
+        for (const TEventView& view : views) {
+            out << "<tr>";
+            out << "<td>" << view.Event->GetTimestamp().ToString() << "</td>";
+            if (view.IsTablet) {
+                const TTabletInfo* tablet = Self->FindTablet(view.TabletId);
+                out << "<td>Tablet</td>";
+                out << "<td>" << GetTabletInfoLink(Self->TabletID(), view.TabletId)
+                    << " " << (tablet ? TTabletTypes::TypeToStr(tablet->GetTabletType()) : "(deleted)") << "</td>";
+            } else {
+                const TNodeInfo* node = Self->FindNode(view.NodeId);
+                out << "<td>Node</td>";
+                out << "<td>" << GetNodeInfoLink(Self->TabletID(), view.NodeId)
+                    << " " << (node ? EncodeHtmlPcdata(node->Name) : TString("(deleted)")) << "</td>";
+            }
+            out << "<td>" << EHiveEventTypeName(view.Event->Type) << "</td>"
+                << "<td>" << EncodeHtmlPcdata(EHiveEventReasonName(view.Event->Reason)) << "</td>"
+                << "<td>" << EncodeHtmlPcdata(view.Event->Details) << "</td>";
+            out << "</tr>";
+        }
+        out << "</tbody>";
+        out << "</table>";
+        out << "</body>";
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(out.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {}
+};
+
+// Everything Hive knows about one node plus the node's event history
+class TTxMonEvent_NodeInfo : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+    TNodeId NodeId = 0;
+    bool Json = false;
+
+    size_t MaxTablets = 100; // per tablet type
+
+    TTxMonEvent_NodeInfo(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+        , Event(ev->Release())
+    {
+        auto params = GetParams(Event.Get());
+        NodeId = FromStringWithDefault<TNodeId>(params.Get("node"), 0);
+        Json = params.Get("format") == "json";
+        MaxTablets = FromStringWithDefault(params.Get("tablets"), MaxTablets);
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_NODE_INFO; }
+
+    TString GetHost() const {
+        auto it = Self->NodesInfo.find(NodeId);
+        if (it == Self->NodesInfo.end()) {
+            return {};
+        }
+        const auto& ni = it->second;
+        return ni.Host.empty() ? ni.Address : ni.Host;
+    }
+
+    TString GetDomainNames(const TVector<TSubDomainKey>& domains) const {
+        TStringBuilder str;
+        for (const auto& domain : domains) {
+            if (!str.empty()) {
+                str << ", ";
+            }
+            str << Self->GetDomainName(domain) << " (" << domain << ")";
+        }
+        return str;
+    }
+
+    // ordered list of (name, value) pairs rendered both as HTML and as JSON
+    std::vector<std::pair<TString, TString>> CollectInfo(const TNodeInfo& node) const {
+        TInstant now = TActivationContext::Now();
+        std::vector<std::pair<TString, TString>> info;
+        auto add = [&info](TString name, auto&& value) {
+            info.emplace_back(std::move(name), TStringBuilder() << value);
+        };
+        add("Id", node.Id);
+        add("Name", node.Name);
+        add("Host", GetHost());
+        add("Local", node.Local);
+        add("State", TNodeInfo::EVolatileStateName(node.GetVolatileState()));
+        add("Alive", node.IsAlive());
+        add("Down", node.Down);
+        add("BecomeUpOnRestart", node.BecomeUpOnRestart);
+        add("Freeze", node.Freeze);
+        add("Drain", node.Drain);
+        add("DrainSeqNo", node.DrainSeqNo);
+        add("DrainInitiators", node.DrainInitiators.size());
+        add("ServicedDomains", GetDomainNames(node.ServicedDomains));
+        add("LastSeenServicedDomains", GetDomainNames(node.LastSeenServicedDomains));
+        add("DataCenter", node.GetDataCenter());
+        add("Location", node.LocationAcquired ? GetLocationString(node.Location) : TString("(not acquired)"));
+        add("BridgePile", node.BridgePileId);
+        add("StartTime", node.StartTime ? node.StartTime.ToStringLocalUpToSeconds() : TString());
+        add("Uptime", node.IsAlive() && node.StartTime ? GetDurationString(now - node.StartTime) : TString());
+        add("LastAlive", node.Statistics.HasLastAliveTimestamp()
+            ? TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()).ToStringLocalUpToSeconds() : TString());
+        add("RestartsInPeriod", node.GetRestartsPerPeriod());
+        add("RestartsRemembered", node.Statistics.RestartTimestampSize());
+        add("DeletionScheduled", node.DeletionScheduled);
+        add("PipeServers", node.PipeServers.size());
+        for (const auto& [state, tablets] : node.Tablets) {
+            add(TStringBuilder() << "Tablets" << TTabletInfo::EVolatileStateName(state), tablets.size());
+        }
+        {
+            TStringBuilder byType;
+            for (const auto& [type, tablets] : node.TabletsRunningByType) {
+                if (!tablets.empty()) {
+                    byType << (byType.empty() ? "" : ", ") << GetTabletTypeShortName(type) << "=" << tablets.size();
+                }
+            }
+            add("TabletsRunningByType", byType);
+        }
+        add("LockedTablets", node.LockedTablets.size());
+        add("FrozenTablets", node.FrozenTablets.size());
+        add("HighImpactTablets", node.HighImpactTablets.size());
+        add("Overloaded", node.IsOverloaded());
+        add("NodeUsage", Sprintf("%.3f", node.GetNodeUsage()));
+        add("NodeTotalUsage", Sprintf("%.3f", node.NodeTotalUsage));
+        add("ResourceValues", GetResourceValuesText(node.ResourceValues));
+        add("ResourceTotalValues", GetResourceValuesText(node.ResourceTotalValues));
+        add("ResourceMaximumValues", GetResourceValuesText(node.ResourceMaximumValues));
+        add("MaxTabletsScheduled", node.GetMaxTabletsScheduled());
+        {
+            TStringBuilder availability;
+            for (const auto& [type, avail] : node.TabletAvailability) {
+                availability << (availability.empty() ? "" : ", ") << GetTabletTypeShortName(type) << "=";
+                if (avail.EffectiveMaxCount == TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE) {
+                    availability << "default";
+                } else {
+                    availability << avail.EffectiveMaxCount;
+                }
+                if (avail.FromLocal.GetMaxCount() != avail.EffectiveMaxCount) {
+                    availability << " (local=" << avail.FromLocal.GetMaxCount() << ")";
+                }
+            }
+            add("TabletAvailability", availability);
+        }
+        {
+            TStringBuilder restrictions;
+            for (const auto& [type, maxCount] : node.TabletAvailabilityRestrictions) {
+                restrictions << (restrictions.empty() ? "" : ", ") << GetTabletTypeShortName(type) << "=" << maxCount;
+            }
+            add("TabletAvailabilityRestrictions", restrictions);
+        }
+        return info;
+    }
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+        const TNodeInfo* node = Self->FindNode(NodeId);
+        if (Json) {
+            NJson::TJsonValue json;
+            if (node == nullptr) {
+                json["error"] = TStringBuilder() << "Node " << NodeId << " not found";
+            } else {
+                NJson::TJsonValue& jsonInfo = json["Node"];
+                for (const auto& [name, value] : CollectInfo(*node)) {
+                    jsonInfo[name] = value;
+                }
+                NJson::TJsonValue& jsonTablets = json["Tablets"];
+                for (const auto& [type, tablets] : node->TabletsRunningByType) {
+                    if (tablets.empty()) {
+                        continue;
+                    }
+                    NJson::TJsonValue& jsonType = jsonTablets[TTabletTypes::TypeToStr(type)];
+                    jsonType["Count"] = tablets.size();
+                    NJson::TJsonValue& ids = jsonType["Tablets"];
+                    ids.SetType(NJson::JSON_ARRAY);
+                    size_t listed = 0;
+                    for (const TTabletInfo* tablet : tablets) {
+                        if (listed++ == MaxTablets) {
+                            break;
+                        }
+                        NJson::TJsonValue& jsonTablet = ids.AppendValue(NJson::TJsonValue());
+                        jsonTablet["TabletId"] = tablet->GetFullTabletId().first;
+                        jsonTablet["FollowerId"] = tablet->GetFullTabletId().second;
+                    }
+                }
+                NJson::TJsonValue& events = json["Events"];
+                events.SetType(NJson::JSON_ARRAY);
+                node->EventHistory.ForEachNewestFirst([&events](const THiveEvent& event) {
+                    events.AppendValue(EventToJson(event));
+                });
+            }
+            TStringStream out;
+            NJson::WriteJson(&out, &json);
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(out.Str()));
+            return true;
+        }
+        TStringStream out;
+        out << "<head>";
+        out << "<style>";
+        out << "table.simple-table2 th { text-align: left; }";
+        out << "table.simple-table2 td { text-align: left; white-space: nowrap; }";
+        out << "table.simple-table2 td:last-child { white-space: normal; }";
+        out << "</style>";
+        out << "</head>";
+        out << "<body>";
+        if (node == nullptr) {
+            out << "<p>Node " << NodeId << " is not known to this Hive.</p>";
+        } else {
+            out << "<h3>Node " << NodeId << " " << EncodeHtmlPcdata(node->Name) << "</h3>";
+            // node monitoring through the mon proxy (/node/<id>/..., as other Hive-adjacent pages do) and directly on the host (as the Nodes tab does)
+            out << "<p>Node pages: <a href='/node/" << NodeId << "/'>Monitoring</a>"
+                << " | <a href='/node/" << NodeId << "/tablets'>Tablets</a>"
+                << " | <a href='/node/" << NodeId << "/actors/nodewarden'>Node warden</a>"
+                << " | <a href='/node/" << NodeId << "/counters'>Counters</a>";
+            out << "</p>";
+            out << GetHivePagesLine(Self->TabletID(), TStringBuilder()
+                << "<a href='?TabletID=" << Self->TabletID() << "&page=Events&kind=node'>All recent node events</a>"
+                << " | <a href='?TabletID=" << Self->TabletID() << "&page=NodeInfo&node=" << NodeId << "&format=json'>JSON</a>");
+            out << "<table class='table simple-table2'>";
+            out << "<tbody>";
+            for (const auto& [name, value] : CollectInfo(*node)) {
+                out << "<tr><th>" << name << "</th><td>" << EncodeHtmlPcdata(value) << "</td></tr>";
+            }
+            out << "</tbody>";
+            out << "</table>";
+            out << "<h4>Tablets</h4>";
+            out << "<p>Running tablets of this node by type, at most " << MaxTablets << " per type are listed in no particular order (use &tablets=N to change).</p>";
+            out << "<table class='table simple-table2'>";
+            out << "<thead><tr><th>Type</th><th>Count</th><th>Tablets</th></tr></thead>";
+            out << "<tbody>";
+            for (const auto& [type, tablets] : node->TabletsRunningByType) {
+                if (tablets.empty()) {
+                    continue;
+                }
+                out << "<tr><td>" << TTabletTypes::TypeToStr(type) << "</td><td>" << tablets.size() << "</td><td style='white-space: normal'>";
+                size_t listed = 0;
+                for (const TTabletInfo* tablet : tablets) {
+                    if (listed == MaxTablets) {
+                        out << ", ... " << (tablets.size() - MaxTablets) << " more";
+                        break;
+                    }
+                    out << (listed++ ? ", " : "") << GetTabletInfoLink(Self->TabletID(), tablet->GetFullTabletId());
+                }
+                out << "</td></tr>";
+            }
+            out << "</tbody>";
+            out << "</table>";
+            out << "<h4>Events</h4>";
+            out << "<p>Last " << Self->GetNodeEventHistorySize() << " events of this node, newest first, kept in memory since Hive start.</p>";
+            out << "<table class='table simple-table2'>";
+            out << "<thead>";
+            out << "<tr><th>Timestamp</th><th>Event</th><th>Reason</th><th>Details</th></tr>";
+            out << "</thead>";
+            out << "<tbody>";
+            node->EventHistory.ForEachNewestFirst([&out](const THiveEvent& event) {
+                out << "<tr>";
+                RenderEventCells(out, event);
+                out << "</tr>";
+            });
+            out << "</tbody>";
+            out << "</table>";
+        }
+        out << "</body>";
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(out.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {}
+};
+
 class TTxMonEvent_ManualOps : public TTransactionBase<THive> {
 public:
     const TActorId Source;
@@ -4992,6 +6068,7 @@ public:
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         TStringStream out;
         out << "<div>";
+        out << GetHivePagesLine(Self->TabletID());
         out << "<form id='dynamicForm' method='POST'>";
         out << R"(
             <div class="form-group">
@@ -5000,12 +6077,19 @@ public:
                     <option>SetDown</option>
                     <option>SetFreeze</option>
                     <option>ReassignTablet</option>
+                    <option>MoveData</option>
                     <option>InitMigration</option>
                     <option>MoveTablet</option>
                     <option>StopTablet</option>
                     <option>ResumeTablet</option>
+        )";
+        if (Self->GetEnableDestroyOperations()) {
+            out << R"(
                     <option>ResetTablet</option>
                     <option>DeleteTablet</option>
+            )";
+        }
+        out << R"(
                     <option>UpdateResources</option>
                     <option>StorageRebalance</option>
                     <option>TabletAvailability</option>
@@ -5198,6 +6282,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     if (page == "ReassignTablet") {
         return Execute(new TTxMonEvent_ReassignTablet(ev->Sender, ev, this, GetParams(ev->Get())), ctx);
     }
+    if (page == "MoveData") {
+        return Execute(new TTxMonEvent_MoveData(ev->Sender, ev, this), ctx);
+    }
     if (page == "InitMigration") {
         return Execute(new TTxMonEvent_InitMigration(ev->Sender, ev, this), ctx);
     }
@@ -5228,7 +6315,7 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     if (page == "ResetTablet") {
         if (IsSafeOperation(ev, ctx)) {
             TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
-            return Execute(new TTxMonEvent_ResetTablet(ev->Sender, tabletId, this), ctx);
+            return Execute(new TTxMonEvent_ResetTablet(ev->Sender, tabletId, GetMonUserForLog(httpInfo), this), ctx);
         }
     }
     if (page == "DeleteTablet") {
@@ -5236,9 +6323,18 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
             if (cgi.Has("owner") && cgi.Has("owner_idx")) {
                 ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0);
                 ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);
+                YDB_LOG_INFO("Hive UI: tablet delete requested",
+                    {"logPrefix", GetLogPrefix()},
+                    {"user", GetMonUserForLog(httpInfo)},
+                    {"owner", owner},
+                    {"ownerIdx", ownerIdx});
                 ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, owner, ownerIdx, this));
             } else if (cgi.Has("tablet")) {
                 TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
+                YDB_LOG_INFO("Hive UI: tablet delete requested",
+                    {"logPrefix", GetLogPrefix()},
+                    {"user", GetMonUserForLog(httpInfo)},
+                    {"tabletId", tabletId});
                 ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, tabletId, this));
             } else {
                 ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes(R"({"error":"tablet or (owner, owner_idx) params must be specified"})"));
@@ -5254,6 +6350,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "Groups") {
         return Execute(new TTxMonEvent_Groups(ev->Sender, ev, this), ctx);
+    }
+    if (page == "ShrinkPool") {
+        return Execute(new TTxMonEvent_ShrinkPool(ev->Sender, ev, this), ctx);
     }
     if (page == "UpdateResources") {
         TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
@@ -5273,6 +6372,10 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
             if (cgi.Get("network")) {
                 metrics.MutableResourceUsage()->SetNetwork(FromStringWithDefault<ui64>(cgi.Get("network"), 0));
             }
+            YDB_LOG_INFO("Hive UI: tablet resource usage update requested",
+                {"logPrefix", GetLogPrefix()},
+                {"user", GetMonUserForLog(httpInfo)},
+                {"metrics", metrics.ShortDebugString()});
             ctx.RegisterWithSameMailbox(new TUpdateResourcesActor(ev->Sender, SelfId(), metrics));
             return;
         }
@@ -5297,6 +6400,12 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "ManualOperations") {
         return Execute(new TTxMonEvent_ManualOps(ev->Sender, ev, this), ctx);
+    }
+    if (page == "Events") {
+        return Execute(new TTxMonEvent_Events(ev->Sender, ev, this), ctx);
+    }
+    if (page == "NodeInfo") {
+        return Execute(new TTxMonEvent_NodeInfo(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
 }

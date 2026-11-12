@@ -216,6 +216,28 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
         ValidateStatistics(runtime, tableInfo.PathId);
     }
 
+    Y_UNIT_TEST_TWIN(ChangeRatioDisabled, ColumnShard) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            auto* stats = settings.AppConfig->MutableStatisticsConfig();
+            stats->SetEnableBackgroundColumnStatsCollection(true);
+            stats->SetBaseStatsSendInitialDelaySeconds(3);
+            settings.FeatureFlags.SetEnableBackgroundAnalyzeChangeRatio(false);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTableWithIndexes(env, "Database", "Table", ColumnShard);
+
+        WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
+
+        TSaveStatisticsObserver observer(runtime, tableInfo.PathId);
+        InsertDataIntoTable(env, "Database", "Table", 500);
+
+        WaitForBackgroundAnalyzeToStabilize(runtime);
+
+        UNIT_ASSERT_VALUES_EQUAL(observer.GetSaveCount(), 0);
+    }
+
     Y_UNIT_TEST_TWIN(NoTriggerBelowThreshold, ColumnShard) {
         TTestEnv env = CreateTestEnv(50);
         auto& runtime = *env.GetServer().GetRuntime();

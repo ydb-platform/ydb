@@ -87,7 +87,7 @@
 (let $38 (DqPhyStage '($35) (lambda '($98) (block '(
   (let $99 (Interval '"1000000"))
   (let $100 (lambda '($107) $107))
-  (let $101 (MultiHoppingCore $98 (lambda '($102) (Member $102 '"k")) (lambda '($103) (Member $103 '"event_time")) $99 $99 (Interval '"5000000") 'true (lambda '($104) (AsStruct '('Sum0 (Member $104 '"v")))) (lambda '($105 $106) (AsStruct '('Sum0 (AggrAdd (Member $105 '"v") (Member $106 'Sum0))))) $100 $100 (lambda '($108 $109) (AsStruct '('Sum0 (AggrAdd (Member $108 'Sum0) (Member $109 'Sum0))))) (lambda '($110 $111 $112) (AsStruct '('Sum0 (Member $111 'Sum0)) '('"group0" $112) '('"k" $110))) '"1" '"group0"))
+  (let $101 (MultiHoppingCore $98 (lambda '($102) (Member $102 '"k")) (lambda '($103) (Member $103 '"event_time")) $99 $99 (Interval '"5000000") 'true (lambda '($104) (AsStruct '('Sum0 (Member $104 '"v")))) (lambda '($105 $106) (AsStruct '('Sum0 (AggrAdd (Member $105 '"v") (Member $106 'Sum0))))) $100 $100 (lambda '($108 $109) (AsStruct '('Sum0 (AggrAdd (Member $108 'Sum0) (Member $109 'Sum0))))) (lambda '($110 $111 $112) (AsStruct '('Sum0 (Member $111 'Sum0)) '('"group0" $112) '('"k" $110))) '"1" '"group0" (Void) (Void) (Void) (Void) 'true))
   (return (Map $101 (lambda '($113) (block '(
     (let $114 (StructType $27 '('"sum" $28)))
     (let $115 (TupleType (TupleType $114) (StructType) (TupleType)))

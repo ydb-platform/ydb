@@ -1,0 +1,12 @@
+USE plato;
+
+CREATE SYMLINK Link TO Input;
+
+COMMIT;
+
+INSERT INTO Link (key, subkey, value)
+VALUES ('a', '1', 'first'), ('b', '2', 'second');
+
+COMMIT;
+
+SELECT * FROM Link;

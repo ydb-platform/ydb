@@ -1,11 +1,11 @@
 self: super: with self; rec {
-  version = "3.5.2";
+  version = "3.6.0";
 
   src = fetchFromGitHub {
     owner = "libffi";
     repo = "libffi";
     rev = "v${version}";
-    hash = "sha256-tvNdhpUnOvWoC5bpezUJv+EScnowhURI7XEtYF/EnQw=";
+    hash = "sha256-bu7O+O/8POQaFpBc+fSJ/RXqjmTsE5weucF7TY9PO9w=";
   };
 
   nativeBuildInputs = [ autoreconfHook ];

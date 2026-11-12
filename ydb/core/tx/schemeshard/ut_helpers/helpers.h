@@ -733,6 +733,7 @@ namespace NSchemeShardUT_Private {
 
             TVector<NScheme::TTypeInfo> KeyColumnTypes;
             TVector<TBorder> Partitioning;
+            ui64 Version = 0;
 
             std::shared_ptr<const TPartitioning> ResolveKey(const TTableRange& range) const;
         };
@@ -773,6 +774,7 @@ namespace NSchemeShardUT_Private {
     void UpdateRow(TTestActorRuntime& runtime, const TString& table, const ui32 key, const TString& value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
     void UpdateRowPg(TTestActorRuntime& runtime, const TString& table, const ui32 key, ui32 value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
     void UploadRow(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values);
+    void UploadRow(TTestActorRuntime& runtime, const NKikimrScheme::TEvDescribeSchemeResult& tableDesc, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values);
     void WriteOp(TTestActorRuntime& runtime, ui64 schemeshardId, const ui64 txId, const TString& tablePath, int partitionIdx, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const std::vector<ui32>& columnIds, TSerializedCellMatrix&& data, bool successIsExpected);
     void WriteRow(TTestActorRuntime& runtime, ui64 schemeshardId, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected = true);
     void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected = true);
@@ -795,6 +797,12 @@ namespace NSchemeShardUT_Private {
     TVector<TString> ReadShards(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table);
     ui32 CountRows(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table);
     ui32 CountRows(TTestActorRuntime& runtime, const TString& table);
+
+    void CreateTestTable(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, bool isColumnTable);
+    void DropTestTable(TTestActorRuntime& runtime, ui64& txId, const TString& parentPath, const TString& tableName, bool isColumnTable, const TVector<TExpectedResult>& expectedResults);
+    void WriteTableData(TTestActorRuntime& runtime, ui64& txId, const TString& tablePath, bool isColumnTable);
+    ui64 CountTableRows(TTestActorRuntime& runtime, const TString& tablePath, bool isColumnTable, ui64 planStep);
+    void VerifyTableEmpty(TTestActorRuntime& runtime, const TString& tablePath, bool isColumnTable, ui64 planStep);
 
     void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,
         ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds = {}, ui32 vectorDimension = 4);

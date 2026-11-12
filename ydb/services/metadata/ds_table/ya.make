@@ -2,25 +2,28 @@ LIBRARY()
 
 SRCS(
     accessor_refresh.cpp
-    accessor_subscribe.cpp
-    accessor_snapshot_simple.cpp
     accessor_snapshot_base.cpp
+    accessor_snapshot_simple.cpp
+    accessor_subscribe.cpp
     behaviour_registrator_actor.cpp
-    scheme_describe.cpp
-    table_exists.cpp
-    service.cpp
     config.cpp
     registration.cpp
+    scheme_describe.cpp
+    service.cpp
+    table_exists.cpp
 )
 
 PEERDIR(
-    ydb/library/actors/core
     ydb/core/base
-    ydb/services/metadata/common
-    ydb/core/grpc_services/local_rpc
-    ydb/core/grpc_services/base
     ydb/core/grpc_services
+    ydb/core/grpc_services/base
+    ydb/core/grpc_services/local_rpc
+    ydb/core/tx/scheme_cache
+    ydb/core/tx/schemeshard
+    ydb/library/actors/core
+    ydb/services/metadata/common
     ydb/services/metadata/initializer
+    ydb/services/metadata/scheme_transaction
     ydb/services/metadata/secret
 )
 

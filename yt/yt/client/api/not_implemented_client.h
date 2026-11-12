@@ -77,14 +77,14 @@ public:
         const TTableWriterOptions& /*options*/))
 
     // Queues
-    UNIMPLEMENTED_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueue, (
+    UNIMPLEMENTED_METHOD(TFuture<TPullQueueResult>, PullQueue, (
         const NYPath::TRichYPath& /*queuePath*/,
         i64 /*offset*/,
         int /*partitionIndex*/,
         const NQueueClient::TQueueRowBatchReadOptions& /*rowBatchReadOptions*/,
         const TPullQueueOptions& /*options*/))
 
-    UNIMPLEMENTED_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueueConsumer, (
+    UNIMPLEMENTED_METHOD(TFuture<TPullQueueResult>, PullQueueConsumer, (
         const NYPath::TRichYPath& /*consumerPath*/,
         const NYPath::TRichYPath& /*queuePath*/,
         std::optional<i64> /*offset*/,

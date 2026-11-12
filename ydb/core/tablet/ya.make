@@ -54,10 +54,14 @@ SRCS(
     simple_tablet.h
     tablet_tracing_signals.cpp
     tablet_tracing_signals.h
-    detailed_metrics/detailed_metrics_counter_set.cpp
-    detailed_metrics/detailed_metrics_counter_set.h
+    detailed_metrics/detailed_metrics_binding.cpp
+    detailed_metrics/detailed_metrics_binding.h
     detailed_metrics/detailed_metrics_tree.cpp
     detailed_metrics/detailed_metrics_tree.h
+    detailed_metrics/detailed_values_accumulator.cpp
+    detailed_metrics/detailed_values_accumulator.h
+    detailed_metrics/memory_tags.cpp
+    detailed_metrics/memory_tags.h
     detailed_metrics/metric_value_aggregator.cpp
     detailed_metrics/metric_value_aggregator.h
     detailed_metrics/node_database_metrics_aggregator.cpp
@@ -96,6 +100,7 @@ PEERDIR(
     ydb/core/sys_view/service
     ydb/core/tracing
     ydb/core/util
+    ydb/core/persqueue/public/metrics
     ydb/library/persqueue/topic_parser
     ydb/library/services
 )

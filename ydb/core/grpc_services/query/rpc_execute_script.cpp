@@ -101,7 +101,7 @@ public:
 
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS;
         if (auto scriptRequest = MakeScriptRequest(issues, status)) {
-            if (Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), scriptRequest.Release())) {
+            if (Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), scriptRequest.Release(), 0, 0, Request->GetWilsonTraceId())) {
                 Become(&TExecuteScriptRPC::StateFunc);
             } else {
                 issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));

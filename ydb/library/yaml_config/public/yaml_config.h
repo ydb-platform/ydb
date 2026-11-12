@@ -139,6 +139,8 @@ public:
 
     bool IsCompatible(const TMap<TString, TString>& labels) const;
 
+    void ForEachActiveRule(const std::function<void(const TIncompatibilityRule&)>& callback) const;
+
     void MergeWith(const TIncompatibilityRules& userRules);
 
     size_t GetRuleCount() const { return RulesByName.size(); }
@@ -202,6 +204,19 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc);
 void ResolveUniqueDocs(
     NFyaml::TDocument& doc,
     const std::function<void(TDocumentConfig&&)>& onDocument);
+
+// Resolve distinct top-level section combinations, preserving selector correlations.
+// "/" selects the full config. Callback nodes are valid only during the call.
+void EnumerateDistinctProjections(
+    NFyaml::TDocument& doc,
+    const TVector<TString>& sections,
+    const std::function<void(NFyaml::TNodeRef)>& onProjection);
+
+// Collect top-level section paths from the base config and all selector overrides.
+TSet<TString> CollectConfigSections(NFyaml::TDocument& doc);
+
+// Check selector application for all compatible labels, resolving each section independently.
+void ValidateResolve(NFyaml::TDocument& doc);
 
 /**
  * Calculates hash of resolved config

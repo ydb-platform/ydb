@@ -1,5 +1,5 @@
---- contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-keyvaluesort.hpp	(index)
-+++ contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-keyvaluesort.hpp	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-includes.h      (index)
++++ contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-includes.h      (working tree)
 @@ -16 +16 @@
 -#include <omp.h>
 +#error #include <omp.h>

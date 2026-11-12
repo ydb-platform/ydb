@@ -1,12 +1,14 @@
 import io
 import warnings
-from typing import Any, Iterable, List, Optional
+from collections.abc import Iterable
+from typing import Any
 from urllib.parse import urlencode
 
 from multidict import MultiDict, MultiDictProxy
 
 from . import hdrs, multipart, payload
 from .helpers import guess_filename
+from .http_writer import _safe_header
 from .payload import Payload
 
 __all__ = ("FormData",)
@@ -22,12 +24,12 @@ class FormData:
         self,
         fields: Iterable[Any] = (),
         quote_fields: bool = True,
-        charset: Optional[str] = None,
+        charset: str | None = None,
         *,
         default_to_multipart: bool = False,
     ) -> None:
         self._writer = multipart.MultipartWriter("form-data")
-        self._fields: List[Any] = []
+        self._fields: list[Any] = []
         self._is_multipart = default_to_multipart
         self._quote_fields = quote_fields
         self._charset = charset
@@ -47,9 +49,9 @@ class FormData:
         name: str,
         value: Any,
         *,
-        content_type: Optional[str] = None,
-        filename: Optional[str] = None,
-        content_transfer_encoding: Optional[str] = None,
+        content_type: str | None = None,
+        filename: str | None = None,
+        content_transfer_encoding: str | None = None,
     ) -> None:
 
         if isinstance(value, io.IOBase):
@@ -63,12 +65,14 @@ class FormData:
                 warnings.warn(msg, DeprecationWarning)
                 filename = name
 
+        _safe_header(name)
         type_options: MultiDict[str] = MultiDict({"name": name})
         if filename is not None and not isinstance(filename, str):
             raise TypeError("filename must be an instance of str. Got: %s" % filename)
         if filename is None and isinstance(value, io.IOBase):
             filename = guess_filename(value, name)
         if filename is not None:
+            _safe_header(filename)
             type_options["filename"] = filename
             self._is_multipart = True
 
@@ -78,6 +82,7 @@ class FormData:
                 raise TypeError(
                     "content_type must be an instance of str. Got: %s" % content_type
                 )
+            _safe_header(content_type)
             headers[hdrs.CONTENT_TYPE] = content_type
             self._is_multipart = True
         if content_transfer_encoding is not None:
@@ -110,13 +115,13 @@ class FormData:
 
             elif isinstance(rec, (list, tuple)) and len(rec) == 2:
                 k, fp = rec
-                self.add_field(k, fp)  # type: ignore[arg-type]
+                self.add_field(k, fp)
 
             else:
                 raise TypeError(
                     "Only io.IOBase, multidict and (name, file) "
                     "pairs allowed, use .add_field() for passing "
-                    "more complex parameters, got {!r}".format(rec)
+                    f"more complex parameters, got {rec!r}"
                 )
 
     def _gen_form_urlencoded(self) -> payload.BytesPayload:

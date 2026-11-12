@@ -186,7 +186,7 @@ NKikimrBlobStorage::TBaseConfig QueryBaseConfig(TTestBasicRuntime& runtime) {
 }
 
 void ReassignGroupDisk(TTestBasicRuntime& runtime, ui64 groupId, ui32 groupGeneration,
-        ui32 targetNodeId, ui32 targetPDiskId) {
+        ui32 targetNodeId, ui32 targetPDiskId, bool suppressDonorMode = false) {
     TActorId edge = runtime.AllocateEdgeActor();
     auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     auto *request = ev->Record.MutableRequest();
@@ -199,6 +199,7 @@ void ReassignGroupDisk(TTestBasicRuntime& runtime, ui64 groupId, ui32 groupGener
     cmd->SetFailRealmIdx(0);
     cmd->SetFailDomainIdx(0);
     cmd->SetVDiskIdx(0);
+    cmd->SetSuppressDonorMode(suppressDonorMode);
     auto *targetPDisk = cmd->MutableTargetPDiskId();
     targetPDisk->SetNodeId(targetNodeId);
     targetPDisk->SetPDiskId(targetPDiskId);
@@ -246,6 +247,147 @@ void WaitForNodeWardenGroupGeneration(TTestBasicRuntime& runtime, ui32 nodeIndex
 }
 
 Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
+
+    Y_UNIT_TEST(DelayedPlacementSubscribesWithoutProxy) {
+        TTestBasicRuntime runtime(3);
+        const ui32 groupId = 0x80000000;
+        ui32 ownerNodeId = 0;
+        bool holdUpdates = false;
+        bool awaitingRegistration = false;
+        bool registeredWithoutGroup = false;
+        bool receivedComprehensive = false;
+        ui32 getGroupRequests = 0;
+        std::vector<std::unique_ptr<IEventHandle>> delayedUpdates;
+        THashMap<ui32, TActorId> wardens;
+        THashMap<TActorId, TActorId> clients;
+
+        auto prevReg = runtime.SetRegistrationObserverFunc(
+            [&](TTestActorRuntimeBase& runtime, const TActorId&, const TActorId& actorId) {
+                if (dynamic_cast<NStorage::TNodeWarden*>(runtime.FindActor(actorId))) {
+                    wardens[actorId.NodeId()] = actorId;
+                    runtime.EnableScheduleForActor(actorId);
+                }
+            });
+        auto prev = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = ev->CastAsLocal<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()) {
+                if (holdUpdates && ownerNodeId && msg->Record.GetNodeID() == ownerNodeId) {
+                    receivedComprehensive |= awaitingRegistration && msg->Record.GetComprehensive();
+                    delayedUpdates.emplace_back(ev.Release());
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            } else if (auto* msg = ev->CastAsLocal<TEvTabletPipe::TEvClientConnected>()) {
+                if (msg->TabletId == MakeBSControllerID() && msg->Status == NKikimrProto::OK) {
+                    clients[ev->Recipient] = msg->ClientId;
+                }
+            } else if (auto* msg = ev->CastAsLocal<TEvBlobStorage::TEvControllerRegisterNode>()) {
+                if (awaitingRegistration && msg->Record.GetNodeID() == ownerNodeId) {
+                    UNIT_ASSERT_VALUES_EQUAL(msg->Record.GroupsSize(), 0);
+                    registeredWithoutGroup = true;
+                }
+            } else if (auto* msg = ev->CastAsLocal<TEvBlobStorage::TEvControllerGetGroup>()) {
+                if (msg->Record.GetNodeID() == ownerNodeId) {
+                    ++getGroupRequests;
+                }
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
+        Setup(runtime);
+        auto base = QueryBaseConfig(runtime);
+        ui32 initialNodeId = 0;
+        for (const auto& vslot : base.GetVSlot()) {
+            if (vslot.GetGroupId() == groupId) {
+                initialNodeId = vslot.GetVSlotId().GetNodeId();
+            }
+        }
+        UNIT_ASSERT(initialNodeId);
+        const ui32 ownerNodeIndex = runtime.GetNodeId(0) == initialNodeId ? 1 : 0;
+        ownerNodeId = runtime.GetNodeId(ownerNodeIndex);
+        ui32 ownerPDiskId = 0;
+        std::vector<std::pair<ui32, ui32>> otherDisks;
+        for (const auto& pdisk : base.GetPDisk()) {
+            if (pdisk.GetNodeId() == ownerNodeId) {
+                ownerPDiskId = pdisk.GetPDiskId();
+            } else {
+                otherDisks.emplace_back(pdisk.GetNodeId(), pdisk.GetPDiskId());
+            }
+        }
+        UNIT_ASSERT(ownerPDiskId);
+        UNIT_ASSERT_VALUES_EQUAL(otherDisks.size(), 2);
+        auto generation = [&] {
+            const auto current = QueryBaseConfig(runtime);
+            for (const auto& group : current.GetGroup()) {
+                if (group.GetGroupId() == groupId) {
+                    return group.GetGroupGeneration();
+                }
+            }
+            UNIT_FAIL("dynamic group missing");
+            return ui32(0);
+        };
+
+        // Move onto an existing PDisk, then out again before NodeWarden applies the placement.
+        holdUpdates = true;
+        ReassignGroupDisk(runtime, groupId, generation(), ownerNodeId, ownerPDiskId, true);
+        ReassignGroupDisk(runtime, groupId, generation(), otherDisks[0].first, otherDisks[0].second, true);
+        const ui32 beforeReconnect = generation();
+        const TActorId warden = wardens.at(ownerNodeId);
+        const TActorId oldClient = clients.at(warden);
+        awaitingRegistration = true;
+        runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, oldClient, {}, nullptr, 0));
+        runtime.WaitFor("registration without unapplied local group", [&] {
+            return registeredWithoutGroup && receivedComprehensive && clients.at(warden) != oldClient;
+        }, TDuration::Seconds(10));
+        awaitingRegistration = false;
+        const TActorId currentClient = clients.at(warden);
+        UNIT_ASSERT_VALUES_EQUAL(getGroupRequests, 0);
+
+        // This also models notifications delayed in the asynchronous cache write queue.
+        holdUpdates = false;
+        for (auto& ev : delayedUpdates) {
+            runtime.Send(ev.release(), ownerNodeIndex, true);
+        }
+        delayedUpdates.clear();
+        WaitForNodeWardenGroupGeneration(runtime, ownerNodeIndex, ownerNodeId, groupId, beforeReconnect);
+
+        // Applying the delayed placement must restore the subscription on the current pipe,
+        // without waiting for a proxy to start or for another reconnect.
+        runtime.WaitFor("subscription after delayed placement", [&] {
+            return getGroupRequests != 0;
+        }, TDuration::Seconds(10));
+        auto* nodeWarden = dynamic_cast<NStorage::TNodeWarden*>(runtime.FindActor(warden));
+        UNIT_ASSERT(nodeWarden);
+        UNIT_ASSERT(nodeWarden->Groups.at(groupId).MustSubscribe);
+        UNIT_ASSERT(!nodeWarden->Groups.at(groupId).ProxyId);
+        UNIT_ASSERT_VALUES_EQUAL(getGroupRequests, 1);
+
+        ReassignGroupDisk(runtime, groupId, generation(), otherDisks[1].first, otherDisks[1].second, true);
+        const ui32 currentGeneration = generation();
+        UNIT_ASSERT(currentGeneration > beforeReconnect);
+        WaitForNodeWardenGroupGeneration(runtime, ownerNodeIndex, ownerNodeId, groupId, currentGeneration);
+        UNIT_ASSERT(!nodeWarden->Groups.at(groupId).ProxyId);
+        UNIT_ASSERT_VALUES_EQUAL(clients.at(warden), currentClient);
+        UNIT_ASSERT_VALUES_EQUAL(getGroupRequests, 1);
+
+        // The proxy can use the updated config without issuing another GetGroup.
+        const TActorId sender = runtime.AllocateEdgeActor(ownerNodeIndex);
+        const TActorId proxy = MakeBlobStorageProxyID(groupId);
+        const TActorId wardenService = MakeBlobStorageNodeWardenID(ownerNodeId);
+        runtime.Send(new IEventHandle(proxy, sender,
+            new TEvBlobStorage::TEvPut(TLogoBlobID(1, 1, 1, 1, 1, 1), "1", TInstant::Max()),
+            IEventHandle::FlagForwardOnNondelivery, 0, &wardenService), ownerNodeIndex, true);
+        auto result = runtime.GrabEdgeEvent<TEvBlobStorage::TEvPutResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT(nodeWarden->Groups.at(groupId).ProxyId);
+        UNIT_ASSERT_VALUES_EQUAL(clients.at(warden), currentClient);
+        UNIT_ASSERT_VALUES_EQUAL(getGroupRequests, 1);
+
+        // A subsequent local placement must not issue another subscription request.
+        ReassignGroupDisk(runtime, groupId, generation(), ownerNodeId, ownerPDiskId, true);
+        WaitForNodeWardenGroupGeneration(runtime, ownerNodeIndex, ownerNodeId, groupId, generation());
+        UNIT_ASSERT_VALUES_EQUAL(getGroupRequests, 1);
+        runtime.SetObserverFunc(prev);
+        runtime.SetRegistrationObserverFunc(prevReg);
+    }
 
     Y_UNIT_TEST(Disconnect) {
         TTestBasicRuntime runtime(1);

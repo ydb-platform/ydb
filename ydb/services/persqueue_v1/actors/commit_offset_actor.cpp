@@ -75,7 +75,9 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
         AnswerError("empty topic in commit offset request", PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
-    topicsToResolve.insert(request->path());
+    topicsToResolve.insert(TopicsHandler->GetConverterFactory()->GetNoDCMode()
+        ? Request_->NormalizePath(request->path())
+        : request->path());
 
     auto topicsList = TopicsHandler->GetReadTopicsList(
             topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString())
@@ -123,6 +125,12 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
     }
     AFL_ENSURE(TopicAndTablets.size() == 1);
     auto& [_, topicInitInfo] = *TopicAndTablets.begin();
+
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications() && !topicInitInfo.IsAsyncReplication) {
+        Reply(Ydb::StatusIds::PRECONDITION_FAILED,
+            NYql::TIssues{NYql::TIssue("Consumer offset commits are disabled")}, ctx);
+        return;
+    }
 
     if (topicInitInfo.Partitions.find(PartitionId) == topicInitInfo.Partitions.end()) {
         AnswerError("partition id not found in topic", PersQueue::ErrorCode::WRONG_PARTITION_NUMBER, ctx);

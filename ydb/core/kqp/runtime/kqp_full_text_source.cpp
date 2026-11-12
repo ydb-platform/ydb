@@ -47,6 +47,8 @@
 
 #include "kqp_full_text_source.h"
 
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -103,6 +105,8 @@ constexpr double B_FACTOR_DEFAULT = 0.75;
 // Threshold below which floating-point settings are treated as "not set".
 constexpr double EPSILON = 1e-6;
 
+ui32 gFulltextPostingReadMaxBytesWithLimit = 1 << 20;
+
 // Sentinel column index used in ResultCellIndices to indicate that the column
 // should be filled with the computed BM25 relevance score rather than a table cell.
 constexpr i32 RELEVANCE_COLUMN_MARKER = -1;
@@ -151,6 +155,10 @@ class TTableReader : public TAtomicRefCount<T> {
     TTableId TableId;
     TString TablePath;
     IKqpGateway::TKqpSnapshot Snapshot;
+    ui64 LockTxId = 0;
+    ui32 LockNodeId = 0;
+    NKikimrDataEvents::ELockMode LockMode = NKikimrDataEvents::ELockMode::OPTIMISTIC;
+    ui64 QuerySpanId = 0;
     TString LogPrefix;
     TString Database;
     TString PoolId;
@@ -159,6 +167,7 @@ class TTableReader : public TAtomicRefCount<T> {
     ui64 ReadBytes = 0;
 
     bool UseArrowFormat = false;
+    ui32 ReadMaxBytes = 0;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<NScheme::TTypeInfo> ResultColumnTypes;
     TVector<i32> ResultColumnIds;
@@ -215,6 +224,20 @@ public:
 
     void SetUseArrowFormat(bool useArrowFormat) {
         UseArrowFormat = useArrowFormat;
+    }
+
+    void SetReadMaxBytes(ui32 maxBytes) {
+        ReadMaxBytes = maxBytes;
+    }
+
+    void SetLockTxId(ui64 lockTxId, ui32 lockNodeId, NKikimrDataEvents::ELockMode lockMode) {
+        LockTxId = lockTxId;
+        LockNodeId = lockNodeId;
+        LockMode = lockMode;
+    }
+
+    void SetQuerySpanId(ui64 spanId) {
+        QuerySpanId = spanId;
     }
 
     const TConstArrayRef<NScheme::TTypeInfo> GetKeyColumnTypes() const {
@@ -275,12 +298,25 @@ public:
             record.MutableSnapshot()->SetTxId(Snapshot.TxId);
         }
 
+        if (LockTxId) {
+            record.SetLockTxId(LockTxId);
+        }
+        if (LockNodeId) {
+            record.SetLockNodeId(LockNodeId);
+        }
+        if (LockMode) {
+            record.SetLockMode(LockMode);
+        }
+        if (QuerySpanId) {
+            record.SetQuerySpanId(QuerySpanId);
+        }
+
         auto defaultSettings = GetDefaultReadSettings()->Record;
         auto MaxRowsDefaultQuota = defaultSettings.GetMaxRows();
         auto MaxBytesDefaultQuota = defaultSettings.GetMaxBytes();
 
         record.SetMaxRows(MaxRowsDefaultQuota);
-        record.SetMaxBytes(MaxBytesDefaultQuota);
+        record.SetMaxBytes(ReadMaxBytes ? Min<ui32>(MaxBytesDefaultQuota, ReadMaxBytes) : MaxBytesDefaultQuota);
         record.SetResultFormat(UseArrowFormat ? NKikimrDataEvents::FORMAT_ARROW : NKikimrDataEvents::FORMAT_CELLVEC);
 
         if (!PoolId.empty()) {
@@ -633,12 +669,13 @@ public:
     // Each value was serialized as a single-cell TSerializedCellVec.
     static TOwnedCellVec ParsePrefixCells(const NKikimrKqp::TKqpFullTextSourceSettings* settings) {
         TVector<TCell> prefixCells;
-        TVector<TSerializedCellVec> prefixHolders;
+        TVector<TCell> cells;
         for (const auto& prefixColumn : settings->GetQuerySettings().GetPrefixColumns()) {
-            TSerializedCellVec vec(prefixColumn.GetValue());
-            YQL_ENSURE(vec.GetCells().size() == 1);
-            prefixCells.push_back(vec.GetCells()[0]);
-            prefixHolders.push_back(std::move(vec));
+            // The parsed cell points into the proto string, which is alive here;
+            // TOwnedCellVec below copies the cell data into owned storage.
+            YQL_ENSURE(TSerializedCellVec::TryParseCells(prefixColumn.GetValue(), cells));
+            YQL_ENSURE(cells.size() == 1);
+            prefixCells.push_back(cells[0]);
         }
         return TOwnedCellVec(prefixCells);
     }
@@ -1197,6 +1234,11 @@ public:
 
     virtual bool Done() const = 0;
 
+    bool NeedsInput(ui64 tokenIndex) const {
+        YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
+        return Streams[tokenIndex]->GetUnprocessedDocumentCount() == 0;
+    }
+
     std::pair<ui64, ui64> GetStats() const {
         std::pair<ui64, ui64> total = {0, 0};
         for(const auto& stream: Streams) {
@@ -1218,7 +1260,7 @@ public:
         return TokenCount;
     }
 
-    virtual std::vector<TDocInfoPtr> FindMatches() = 0;
+    virtual std::vector<TDocInfoPtr> FindMatches(size_t maxMatches) = 0;
     virtual ~IMergeAlgorithm() = default;
 };
 
@@ -1362,14 +1404,14 @@ public:
         } while (true);
     }
 
-    std::vector<TDocInfoPtr> FindMatches() override {
+    std::vector<TDocInfoPtr> FindMatches(size_t maxMatches) override {
         if (FinishedTokens > 0) {
             ConsumeRest();
             return std::vector<TDocInfoPtr>();
         }
 
         std::vector<TDocInfoPtr> matches;
-        while (MatchedTokens.size() + ReadyStreams.size() == TokenCount) {
+        while (matches.size() < maxMatches && MatchedTokens.size() + ReadyStreams.size() == TokenCount) {
             YQL_ENSURE(ReadyStreams.size() > 0, "ReadyStreams must be non-empty");
             if (MatchedTokens.empty()) {
                 MatchedTokens.push_back(ReadyStreams.front());
@@ -1489,11 +1531,11 @@ public:
         return FinishedTokens == TokenCount;
     }
 
-    std::vector<TDocInfoPtr> FindMatches() override {
+    std::vector<TDocInfoPtr> FindMatches(size_t maxMatches) override {
         std::vector<TDocInfoPtr> matches;
         std::vector<size_t> matchedTokens;
         size_t matchedRequired = 0;
-        while(!MergeQueue.empty() && MergeQueue.size() + FinishedTokens == TokenCount) {
+        while(matches.size() < maxMatches && !MergeQueue.empty() && MergeQueue.size() + FinishedTokens == TokenCount) {
             THeapEntry doc = std::move(MergeQueue.top());
             matchedTokens.clear();
             matchedTokens.push_back(doc.WordIndex);
@@ -1783,21 +1825,24 @@ struct TReadInfo {
     ui64 ReadKind;
     ui64 Cookie;
     ui64 ShardId;
-    ui64 LastSeqNo = 0;  // Last acknowledged sequence number (for flow control)
+    ui64 LastSeqNo = 0;  // Last received sequence number (for flow control)
+    ui32 MaxRows = 0;    // Quota to restore on ack; 0 = use default
+    ui32 MaxBytes = 0;   // Quota to restore on ack; 0 = use default
+    bool PendingAck = false;
+    bool RetryScheduled = false;
 };
 
 /**
  * TMainTableReader -- reader for the user's original table.
  *
  * After the merge identifies matching document IDs, this reader fetches the
- * full row data that the user's SELECT requested.  FromSettings() analyzes
- * the requested columns to determine:
+ * full row data that the user's SELECT requested. FromSettings() configures:
  *
  *   - ResultCellIndices: mapping from output column position to either a table
  *     cell index or RELEVANCE_COLUMN_MARKER for the BM25 score column.
  *   - MainTableCovered: true if all requested columns are key columns of the
  *     main table (so no actual read is needed -- the data is already known
- *     from the doc_id).
+ *     from the doc_id). Set by the optimizer, or derived for older settings.
  *   - WithRelevance: true if the user requested __ydb_full_text_relevance and
  *     the index type supports it.
  */
@@ -1853,7 +1898,8 @@ public:
 
         TVector<std::pair<i32, NScheme::TTypeInfo>> resultCellIndices;
         resultCellIndices.reserve(settings->GetColumns().size());
-        bool mainTableCovered = true;
+        // Older saved graphs and task settings do not carry this decision.
+        bool mainTableCovered = !settings->HasMainTableCovered() || settings->GetMainTableCovered();
         for(i32 i = 0; i < settings->GetColumns().size(); i++) {
             const auto& column = settings->GetColumns(i);
             if (column.GetName() == FullTextRelevanceColumn) {
@@ -1867,6 +1913,7 @@ public:
                 continue;
             }
 
+            YQL_ENSURE(!settings->GetMainTableCovered(), "Covered fulltext source requests a non-key column");
             mainTableCovered = false;
             resultColumnTypes.push_back(NScheme::TypeInfoFromProto(
                 column.GetTypeId(), column.GetTypeInfo()));
@@ -1973,11 +2020,13 @@ class TReadsState {
     };
 
     absl::flat_hash_map<ui64, TReadInfo> Reads;
+    // Entries are never erased, so retry counters and pending shard timers survive read replacement.
     absl::flat_hash_map<ui64, TShardInfo> ReadsByShardId;
     absl::flat_hash_set<ui64> PipesCreated;
     const TIntrusivePtr<TKqpCounters> Counters;
     TActorId SelfId;
     const TString LogPrefix;
+    NWilson::TTraceId TraceId;
     ui64 NextReadId = 1;
 
 
@@ -1988,9 +2037,10 @@ class TReadsState {
 
 public:
 
-    explicit TReadsState(const TIntrusivePtr<TKqpCounters>& counters, const TString& logPrefix)
+    explicit TReadsState(const TIntrusivePtr<TKqpCounters>& counters, const TString& logPrefix, NWilson::TTraceId traceId)
         : Counters(counters)
         , LogPrefix(logPrefix)
+        , TraceId(std::move(traceId))
     {}
 
     ui64 GetNextReadId() {
@@ -2006,18 +2056,25 @@ public:
     }
 
     // Send a TEvReadAck to the datashard to replenish the read's row/byte quota.
-    // Called when a non-final TEvReadResult arrives (i.e., more data is expected).
+    // Posting reads wait until their buffered documents have been consumed.
     // Also reduces the retry counter on successful ack (halves if > 3).
     void AckRead(ui64 readId) {
         auto readIt = FindPtr(readId);
-        if (readIt == nullptr) {
+        if (readIt == nullptr || readIt->RetryScheduled) {
             return;
         }
         auto& readInfo = *readIt;
+        readInfo.PendingAck = false;
         ui64 shardId = readInfo.ShardId;
         auto request = GetDefaultReadAckSettings();
         request->Record.SetReadId(readId);
         request->Record.SetSeqNo(readInfo.LastSeqNo);
+        if (readInfo.MaxRows) {
+            request->Record.SetMaxRows(readInfo.MaxRows);
+        }
+        if (readInfo.MaxBytes) {
+            request->Record.SetMaxBytes(readInfo.MaxBytes);
+        }
         Counters->SentIteratorAcks->Inc();
         auto shardInfoIt = ReadsByShardId.find(shardId);
         if (shardInfoIt != ReadsByShardId.end()) {
@@ -2048,6 +2105,10 @@ public:
         auto readId = request->Record.GetReadId();
         const bool needToCreatePipe = PipesCreated.insert(shardId).second;
 
+        // Remember the quota to restore it on every ack
+        readInfo.MaxRows = record.GetMaxRows();
+        readInfo.MaxBytes = record.GetMaxBytes();
+
         YDB_LOG_DEBUG("Sending EvRead request from full text source",
             {"logPrefix", this->LogPrefix},
             {"shardId", shardId},
@@ -2068,7 +2129,7 @@ public:
                     .Subscribe = needToCreatePipe,
                 }),
             IEventHandle::FlagTrackDelivery,
-            readId));
+            readId, nullptr, NWilson::TTraceId(TraceId)));
 
         AddRead(readId, readInfo);
     }
@@ -2126,10 +2187,6 @@ public:
             shardReads.ReadIds.erase(readId);
             if (reduceRetries && shardReads.Retries > 3) {
                 shardReads.Retries = std::max(shardReads.Retries >> 1, (ui64)1);
-            }
-
-            if (shardReads.ReadIds.empty()) {
-                ReadsByShardId.erase(shardId);
             }
         }
     }
@@ -2462,8 +2519,9 @@ private:
     bool PendingNotify = false;      // True when a TEvNewAsyncInputDataArrived is in flight
 
     ui64 ProducedItemsCount = 0;                           // Rows already delivered to compute actor
+    ui64 MatchedItemsCount = 0;                            // Includes pending lookups and buffered rows
+    static constexpr ui64 MatchBatchSize = 256;
     std::deque<TDocInfoPtr> ResultQueue;                   // Ready-to-deliver document rows
-    bool IsNgram = false;                                  // True if the index uses n-gram tokenization
 
     TActorId PipeCacheId;  // Per-node pipe cache for datashard communication
 
@@ -2482,6 +2540,7 @@ private:
     TIntrusivePtr<TDocsTableReader> DocsTableReader;
     TIntrusivePtr<TStatsTableReader> StatsTableReader;
     TIntrusivePtr<TUniqueIndexReader> UniqueIndexReader;  // Resolves __ydb_row_id -> PK via unique secondary index
+    TReadLockInfo LockInfo;
 
     // True when the fulltext index uses __ydb_row_id as the synthetic doc_id, and the
     // primary key must be resolved through UniqueIndexReader before main-table reads.
@@ -2497,6 +2556,7 @@ private:
     static constexpr size_t RowIdResolveBatchSize = 5000;
 
     // Read infrastructure.
+    NWilson::TSpan ReadSpan;
     TReadsState ReadsState;                                // Tracks all in-flight reads
     TReadItemsQueue<TDocInfoPtr> DocsReadingQueue;         // Docs table + main table reads
     TVector<TWordStatePtr> Words;                          // Tokenized query terms
@@ -2518,57 +2578,115 @@ private:
     // Parse the search query string and tokenize it using the analyzer
     // configured on the fulltext index (same analyzer used at index build time).
     // Each resulting token becomes a TWordReadState entry in Words[].
-    // Returns false if no tokens were extracted (reports BAD_REQUEST error).
+    // Returns false if no tokens were extracted. JSON and n-gram sources finish with an
+    // empty result; other full-text sources report a BAD_REQUEST error.
     bool ExtractAndTokenizeExpression() {
         YQL_ENSURE(Settings->GetQuerySettings().GetColumns().size() == 1);
+        const bool isJsonIndex = Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson
+            || Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact;
+        bool isNgram = false;
 
-        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson ||
-            Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
-            // For JSON index, tokens are pre-compiled at query compile time
-            YQL_ENSURE(Settings->GetQuerySettings().TokensSize() > 0, "Expected non-empty tokens");
-            YQL_ENSURE(IndexTableReader, "Index table reader is not initialized");
-
+        YQL_ENSURE(IndexTableReader, "Index table reader is not initialized");
+        if (isJsonIndex) {
             size_t wordIndex = 0;
             for (const TString& token : Settings->GetQuerySettings().GetTokens()) {
                 Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader, PrefixCells));
             }
         } else {
-            YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
-            const auto& expr = Settings->GetQuerySettings().GetQuery();
-
             THashMap<TStringBuf, TWordStatePtr> seen;
-            for (const auto& column : Settings->GetQuerySettings().GetColumns()) {
-                for (const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
-                    if (analyzer.analyzers().use_filter_ngram() || analyzer.analyzers().use_filter_edge_ngram()) {
-                        IsNgram = true;
-                    }
+            size_t wordIndex = 0;
+            auto addWord = [&](const TString& token, bool required) {
+                auto wordIt = seen.find(token);
+                if (wordIt != seen.end()) {
+                    wordIt->second->Required = wordIt->second->Required || required;
+                } else {
+                    auto word = MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader, PrefixCells);
+                    word->Required = required;
+                    seen[word->Word] = word;
+                    Words.emplace_back(std::move(word));
+                }
+            };
 
-                    if (analyzer.column() == column.GetName()) {
-                        size_t wordIndex = 0;
-                        for (const auto& term: NFulltext::BuildSearchTermsStructured(expr, analyzer.analyzers())) {
-                            YQL_ENSURE(IndexTableReader);
-                            auto wordIt = seen.find(term.Token);
-                            if (wordIt != seen.end()) {
-                                // Don't add duplicate words
-                                wordIt->second->Required = wordIt->second->Required || term.Required;
-                            } else {
-                                auto word = MakeIntrusive<TWordState>(wordIndex++, term.Token, IndexTableReader, PrefixCells);
-                                word->Required = term.Required;
-                                seen[word->Word] = word;
-                                Words.emplace_back(std::move(word));
-                            }
-                        }
-                    }
+            const auto& queries = Settings->GetQuerySettings();
+            const auto& expr = queries.GetQuery();
+            YQL_ENSURE(expr.empty() || queries.GetPatternQueries().empty(), "String predicates must remain residual filters beside fulltext queries");
+            const auto& settings = Settings->GetIndexDescription().GetSettings();
+            YQL_ENSURE(settings.columns_size() == 1);
+            const auto& column = settings.columns(0);
+            YQL_ENSURE(column.column() == queries.GetColumns(0).GetName());
+            isNgram = column.analyzers().use_filter_ngram() || column.analyzers().use_filter_edge_ngram();
+            for (const auto& query : queries.GetPatternQueries()) {
+                YQL_ENSURE(query.GetEscape().size() <= 1, "Expected an optional single-byte LIKE escape");
+                std::optional<char> escape;
+                if (!query.GetEscape().empty()) {
+                    escape = query.GetEscape().front();
+                }
+                using TPatternQuery = NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TPatternQuery;
+                const auto terms = NFulltext::BuildStringMatchTerms(
+                    query.GetPattern(), TPatternQuery::EMatchMode_Name(query.GetMode()), escape, column.analyzers());
+                for (const auto& term : terms) {
+                    addWord(term, true);
+                }
+            }
+            if (!expr.empty()) {
+                for (const auto& term : NFulltext::BuildSearchTermsStructured(expr, column.analyzers())) {
+                    addWord(term.Token, term.Required);
                 }
             }
         }
 
         if (Words.empty()) {
-            RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+            if (isJsonIndex || isNgram) {
+                NotifyCA();
+            } else {
+                RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+            }
             return false;
         }
 
         return true;
+    }
+
+    void FetchNextMatches() {
+        if (!MergeAlgo) {
+            return;
+        }
+        // Relevance cannot emit rows until all streams are consumed and IDF is known.
+        size_t maxMatches = std::numeric_limits<size_t>::max();
+        if (!MainTableReader->GetWithRelevance()) {
+            // LIMIT may sit above a wildcard postfilter. Bound lookups even when the
+            // source has no pushed limit, and resume as the consumer drains rows.
+            YQL_ENSURE(ProducedItemsCount <= MatchedItemsCount);
+            const ui64 inFlight = MatchedItemsCount - ProducedItemsCount;
+            YQL_ENSURE(inFlight <= MatchBatchSize);
+            maxMatches = MatchBatchSize - inFlight;
+            if (Limit > 0) {
+                YQL_ENSURE(MatchedItemsCount <= static_cast<ui64>(Limit));
+                maxMatches = std::min<ui64>(maxMatches, Limit - MatchedItemsCount);
+            }
+            if (maxMatches == 0) {
+                return;
+            }
+        }
+        auto matches = MergeAlgo->FindMatches(maxMatches);
+        const bool needsMore = matches.size() < maxMatches;
+        MatchedItemsCount += matches.size();
+        // An empty batch can finalize relevance scoring after the last posting read.
+        FetchDocumentDetails(matches);
+
+        if (needsMore) {
+            // Replenish only exhausted token streams while the consumer has capacity.
+            for (const auto& [readId, readInfo] : ReadsState.GetReads()) {
+                if (readInfo.ReadKind == EReadKind_Word && readInfo.PendingAck && MergeAlgo->NeedsInput(readInfo.Cookie)) {
+                    ReadsState.AckRead(readId);
+                }
+            }
+            for (const auto& word : Words) {
+                if (!word->PendingRead && !word->RangesToRead.empty() && MergeAlgo->NeedsInput(word->WordIndex)) {
+                    ContinueWordRead(word);
+                }
+            }
+        }
     }
 
     // Check whether all merge streams have finished and, if so, compute IDF
@@ -2577,7 +2695,8 @@ private:
         if (IDFComputed) {
             return true;
         }
-        if (!MergeAlgo->Done()) {
+        // Document lengths must also be ready before the global TopK is finalized.
+        if (!MergeAlgo->Done() || !ReadsState.Empty()) {
             return false;
         }
 
@@ -2720,6 +2839,7 @@ private:
         ui64 readId = ReadsState.GetNextReadId();
         auto [shardId, ev] = word->ScheduleNextRead(readId);
         if (ev) {
+            word->PendingRead = true;
             ReadsState.SendEvRead(shardId, ev, TReadInfo{EReadKind_Word, word->WordIndex, shardId});
             return true;
         }
@@ -2849,9 +2969,14 @@ private:
 
     void ResolveTablePartitioning(std::unique_ptr<NSchemeCache::TSchemeCacheRequest>&& request) {
         auto resolveRequest = std::make_unique<TEvTxProxySchemeCache::TEvResolveKeySet>(request.release());
-        this->Send(MakeSchemeCacheID(), resolveRequest.release());
+        this->Send(MakeSchemeCacheID(), resolveRequest.release(), 0, 0, ReadSpan.GetTraceId());
     }
 
+    void CancelRead(ui64 readId, ui64 shardId) {
+        auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+        cancel->Record.SetReadId(readId);
+        this->Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), shardId, false));
+    }
 
 public:
     TFullTextSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,
@@ -2864,7 +2989,7 @@ public:
         const NKikimr::NMiniKQL::TTypeEnvironment& ,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        const NWilson::TTraceId&,
+        const NWilson::TTraceId& traceId,
         TIntrusivePtr<TKqpCounters> counters)
         : Settings(settings)
         , Arena(arena)
@@ -2885,7 +3010,8 @@ public:
         , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance(), PrefixCells))
         , UniqueIndexReader(TUniqueIndexReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
         , UseRowIdAsDocId(UniqueIndexReader != nullptr)
-        , ReadsState(Counters, LogPrefix)
+        , ReadSpan(TWilsonKqp::ReadActor, NWilson::TTraceId(traceId), "Full-text search")
+        , ReadsState(Counters, LogPrefix, ReadSpan.GetTraceId())
         , DocsReadingQueue(this->SelfId(), ReadsState)
     {
         Y_ABORT_UNLESS(Arena);
@@ -2897,10 +3023,55 @@ public:
             Limit = Settings->GetLimit();
         }
 
+        // Plain search with LIMIT likely needs only a few documents, so read in small batches.
+        if (Limit > 0 && !MainTableReader->GetWithRelevance() && IndexTableReader->GetIsCompact()) {
+            IndexTableReader->SetReadMaxBytes(gFulltextPostingReadMaxBytesWithLimit);
+        }
+
         if (Settings->HasSnapshot()) {
             Snapshot = IKqpGateway::TKqpSnapshot(
                 Settings->GetSnapshot().GetStep(),
                 Settings->GetSnapshot().GetTxId());
+        }
+
+        if (Settings->HasLockTxId()) {
+            const ui64 lockTxId = Settings->GetLockTxId();
+            const ui32 lockNodeId = Settings->GetLockNodeId();
+            const auto lockMode = Settings->GetLockMode();
+            if (MainTableReader) {
+                MainTableReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
+            }
+            if (IndexTableReader) {
+                IndexTableReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
+            }
+            if (DocsTableReader) {
+                DocsTableReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
+            }
+            if (StatsTableReader) {
+                StatsTableReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
+            }
+            if (UniqueIndexReader) {
+                UniqueIndexReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
+            }
+        }
+
+        if (Settings->GetQuerySpanId()) {
+            const ui64 spanId = Settings->GetQuerySpanId();
+            if (MainTableReader) {
+                MainTableReader->SetQuerySpanId(spanId);
+            }
+            if (IndexTableReader) {
+                IndexTableReader->SetQuerySpanId(spanId);
+            }
+            if (DocsTableReader) {
+                DocsTableReader->SetQuerySpanId(spanId);
+            }
+            if (StatsTableReader) {
+                StatsTableReader->SetQuerySpanId(spanId);
+            }
+            if (UniqueIndexReader) {
+                UniqueIndexReader->SetQuerySpanId(spanId);
+            }
         }
     }
 
@@ -2951,6 +3122,7 @@ public:
             }
         }
 
+        FetchNextMatches();
         if (!ResultQueue.empty()) {
             NotifyCA();
         }
@@ -2959,27 +3131,39 @@ public:
         return computeBytes;
     }
 
+    TMaybe<google::protobuf::Any> ExtraData() override {
+        google::protobuf::Any result;
+        result.PackFrom(LockInfo.GetExtraData());
+        return result;
+    }
+
     void SaveState(const NDqProto::TCheckpoint&, TSourceState&) override {}
     void CommitState(const NDqProto::TCheckpoint&) override {}
     void LoadState(const TSourceState&) override {}
 
     // Cancel all in-flight reads and disconnect all pipes on actor destruction.
     void PassAway() override {
-        {
-            for (auto& [id, state] : ReadsState.GetReads()) {
-                auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
-                cancel->Record.SetReadId(id);
-                this->Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
-            }
+        for (const auto& [id, state] : ReadsState.GetReads()) {
+            CancelRead(id, state.ShardId);
         }
         this->Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
-
+        if (ReadSpan) {
+            ReadSpan.Attribute("ydb.output_rows", static_cast<i64>(ProducedItemsCount));
+            if (IsFinished()) {
+                ReadSpan.EndOk();
+            } else {
+                ReadSpan.End();
+            }
+        }
         TBase::PassAway();
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode,
         const NYql::TIssues& subIssues = {})
     {
+        if (ReadSpan) {
+            ReadSpan.EndError(message);
+        }
         NYql::TIssue issue(message);
         for (const auto& subIssue : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
@@ -2990,7 +3174,9 @@ public:
     }
 
     bool IsFinished() {
-        return (ReadsState.Empty() && !ResolveInProgress && ResultQueue.empty() && TopKQueue.empty() && RowIdResolvePendingQueue.empty()) || (Limit > 0 && ProducedItemsCount >= static_cast<ui64>(Limit));
+        return (ReadsState.Empty() && !ResolveInProgress && (!MergeAlgo || MergeAlgo->Done())
+            && ResultQueue.empty() && TopKQueue.empty() && RowIdResolvePendingQueue.empty())
+            || (Limit > 0 && ProducedItemsCount >= static_cast<ui64>(Limit));
     }
 
     // Send TEvNewAsyncInputDataArrived to the compute actor so it calls
@@ -3048,7 +3234,8 @@ public:
         auto& word = Words[wordIndex];
         word->BuildRangesToRead();
         ReadsState.RemoveRead(readId);
-        ContinueWordRead(word);
+        word->PendingRead = false;
+        FetchNextMatches();
     }
 
     void RetryTotalStatsRead(ui64 readId) {
@@ -3060,11 +3247,13 @@ public:
     // retry path based on the read's EReadKind.
     void DoRetrySingleRead(ui64 readId) {
         auto readIt = ReadsState.FindPtr(readId);
-        if (readIt == nullptr) {
+        if (readIt == nullptr || !readIt->RetryScheduled || ReadsState.FindShardPtr(readIt->ShardId)->IsScheduledRetry) {
+            // A pending shard retry also handles individually scheduled retries.
             return;
         }
 
         auto readInfo = *readIt;
+        CancelRead(readId, readInfo.ShardId);
 
         switch (readInfo.ReadKind) {
             case EReadKind_DocumentStats:
@@ -3112,8 +3301,14 @@ public:
     // immediately or schedules a TEvRetryRead timer event.
     bool ScheduleShardRetry(ui64 shardId, bool allowInstantRetry, NYql::NDqProto::StatusIds::StatusCode errorStatus) {
         auto shardIt = ReadsState.FindShardPtr(shardId);
-        if (shardIt == nullptr) {
+        if (shardIt == nullptr || shardIt->ReadIds.empty()) {
             return false;
+        }
+
+        for (ui64 readId : shardIt->ReadIds) {
+            auto* read = ReadsState.FindPtr(readId);
+            YQL_ENSURE(read);
+            read->RetryScheduled = true;
         }
 
         if (shardIt->IsScheduledRetry) {
@@ -3410,8 +3605,8 @@ public:
 
     // Process posting list read results for a token.
     // Feeds data into MergeAlgo, updates the resume key (StartReadKeyFrom),
-    // and when the current shard is exhausted, tries to continue from the next
-    // shard partition. Runs merge and routes matches to FetchDocumentDetails.
+    // and marks EOF after the last shard partition. Further reads wait until
+    // FetchNextMatches consumes the buffered documents.
     void WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult> msg, ui64 wordIndex, bool finished) {
         YQL_ENSURE(wordIndex < Words.size());
         auto& incomingWordInfo = Words[wordIndex];
@@ -3424,19 +3619,13 @@ public:
         }
 
         if (finished) {
-            if (!ContinueWordRead(incomingWordInfo)) {
+            incomingWordInfo->PendingRead = false;
+            if (incomingWordInfo->RangesToRead.empty()) {
                 MergeAlgo->FinishTokenStream(wordIndex);
             }
         }
 
-        std::vector<TDocInfoPtr> matches = MergeAlgo->FindMatches();
-        FetchDocumentDetails(matches);
-
-        // When the last stream finishes but FindMatches produces no new docs,
-        // we still need to compute IDF and flush any buffered documents.
-        if (!IDFComputed && TryComputeIDF()) {
-            FlushPendingBM25Documents();
-        }
+        FetchNextMatches();
     }
 
     template<typename TReader>
@@ -3476,12 +3665,17 @@ public:
             if (UniqueIndexReader) {
                 ExportTableReaderStats(stats, UniqueIndexReader);
             }
+
+            LockInfo.FillExtraStats(stats);
         }
     }
 
     void ScheduleReadRetry(ui64 readId, ui64 shardId, bool allowInstantRetry, NYql::NDqProto::StatusIds::StatusCode errorStatus,
         std::optional<TDuration> throttleDelay = std::nullopt)
     {
+        auto* read = ReadsState.FindPtr(readId);
+        YQL_ENSURE(read);
+        read->RetryScheduled = true;
         auto maxRetries = MaxShardRetries();
         TDuration delay;
         if (!throttleDelay) {
@@ -3589,17 +3783,23 @@ public:
         if (it == nullptr) {
             return;
         }
+        // Keep successful in-flight data while retrying; AckRead still suppresses ACKs.
+        if (it->RetryScheduled && record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
+            return;
+        }
 
         auto& readInfo = *it;
+
+        LockInfo.Add(record);
 
         TStringBuilder txLocks;
         for (const auto& lock : record.GetTxLocks()) {
             txLocks << lock.ShortDebugString();
         }
 
-        TStringBuilder borkenTxlocks;
+        TStringBuilder brokenTxLocks;
         for (const auto& lock : record.GetBrokenTxLocks()) {
-            borkenTxlocks << lock.ShortDebugString();
+            brokenTxLocks << lock.ShortDebugString();
         }
 
         YDB_LOG_DEBUG("Received TEvReadResult from full text source",
@@ -3614,9 +3814,10 @@ public:
             {"rowCount", record.GetRowCount()},
             {"resultFormat", NKikimrDataEvents::EDataFormat_Name(record.GetResultFormat())},
             {"txLocks", txLocks},
-            {"brokenTxLocks", borkenTxlocks});
+            {"brokenTxLocks", brokenTxLocks});
 
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
+            readInfo.PendingAck = false;
             HandleReadResultError(readId, readInfo, record);
             return;
         }
@@ -3629,6 +3830,8 @@ public:
 
         if (record.GetFinished()) {
             ReadsState.RemoveRead(readId, true);
+        } else if (readKind == EReadKind_Word) {
+            readInfo.PendingAck = true;
         } else {
             ReadsState.AckRead(readId);
         }
@@ -3723,4 +3926,3 @@ void RegisterKqpFullTextSource(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusive
 }
 
 }
-

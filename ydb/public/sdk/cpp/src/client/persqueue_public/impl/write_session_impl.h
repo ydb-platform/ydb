@@ -345,9 +345,11 @@ private:
     void DoConnect(const TDuration& delay, const std::string& endpoint);
     void InitImpl();
     void ReadFromProcessor(); // Assumes that we're under lock.
-    void WriteToProcessorImpl(TClientMessage&& req); // Assumes that we're under lock.
+    void WriteToProcessorImpl(TClientMessage&& req, size_t requestMemoryUsage = 0); // Assumes that we're under lock.
     void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
     void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration);
+    void OnWriteRequestDone(size_t requestMemoryUsage);
+    bool TryIssueContinuationTokenImpl();
     TProcessSrvMessageResult ProcessServerMessageImpl();
     TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff);
     TBuffer CompressBufferImpl(std::vector<std::string_view>& data, ECodec codec, i32 level);
@@ -363,6 +365,8 @@ private:
     ui64 GetNextIdImpl(const std::optional<ui64>& seqNo);
     ui64 GetSeqNoImpl(ui64 id);
     ui64 GetIdImpl(ui64 seqNo);
+    void ScheduleSendImpl();
+    void PostSendTask();
     void SendImpl();
     void AbortImpl();
     void CloseImpl(EStatus statusCode, NYdb::NIssue::TIssues&& issues);
@@ -407,6 +411,8 @@ private:
     IExecutor::TPtr CompressionExecutor;
     size_t MemoryUsage = 0; //!< Estimated amount of memory used
     bool FirstTokenSent = false;
+    // Queuing a protobuf can exceed the limit while a token is still outstanding.
+    bool ContinuationTokenIssued = false;
 
     TMessageBatch CurrentBatch;
 
@@ -420,6 +426,8 @@ private:
     const size_t MaxBlockMessageCount = 1; //!< Max message count that can be packed into a single block. In block version 0 is equal to 1 for compatibility
     bool Connected = false;
     bool Started = false;
+    bool SendImplScheduled = false;
+    IExecutor::TFunction PendingSendTask;
     std::atomic<int> Aborting = 0;
     bool SessionEstablished = false;
     ui32 PartitionId = 0;

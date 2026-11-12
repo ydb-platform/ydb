@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-
 #include <utility>
 
 namespace NYdb::NUdfStore::NAbi {
@@ -257,9 +256,7 @@ inline TBridgeValue MakeBool(bool v) {
 }
 
 inline TBridgeValue MakeString(const char* data, int64_t len) {
-    return TBridgeValue(
-        BridgeMakeString(reinterpret_cast<uint64_t>(data), len),
-        true);
+    return TBridgeValue(BridgeMakeString(reinterpret_cast<uint64_t>(data), len), true);
 }
 
 //! `inner` keeps its own reference: the host may well answer with the very
@@ -295,9 +292,8 @@ template <class TRelease>
 inline void BridgeDrainReleasedUserData(TRelease&& release) {
     uint64_t batch[16];
     for (;;) {
-        const int32_t taken = BridgeTakeReleasedUserData(
-            reinterpret_cast<uint64_t>(batch),
-            static_cast<int32_t>(sizeof(batch) / sizeof(batch[0])));
+        const int32_t taken =
+            BridgeTakeReleasedUserData(reinterpret_cast<uint64_t>(batch), static_cast<int32_t>(sizeof(batch) / sizeof(batch[0])));
         for (int32_t i = 0; i < taken; ++i) {
             release(batch[i]);
         }
@@ -307,4 +303,4 @@ inline void BridgeDrainReleasedUserData(TRelease&& release) {
     }
 }
 
-} // namespace NYdb::NUdfStore::NAbi
+}   // namespace NYdb::NUdfStore::NAbi

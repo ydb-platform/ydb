@@ -4,6 +4,7 @@
 #include <library/cpp/http/io/stream.h>
 #include <library/cpp/http/fetch/httpheader.h>
 #include <library/cpp/http/fetch/httpfsm.h>
+#include <library/cpp/monlib/encode/format.h>
 #include <library/cpp/uri/http_url.h>
 
 #include <util/generic/buffer.h>
@@ -13,6 +14,16 @@
 #include <util/string/vector.h>
 
 namespace NMonitoring {
+    THttpServerOptions WithMonitoringContentEncodingPolicy(THttpServerOptions options) {
+        auto previousPredicate = std::move(options.ContentEncodingPredicate);
+        options.SetContentEncodingPredicate(
+            [previousPredicate = std::move(previousPredicate)](const THttpHeaders& requestHeaders, const THttpHeaders& responseHeaders) {
+                return (!previousPredicate || previousPredicate(requestHeaders, responseHeaders)) &&
+                       DisableContentEncoding(requestHeaders, responseHeaders);
+            });
+        return options;
+    }
+
     class THttpClient: public IHttpRequest {
     public:
         void ServeRequest(THttpInput& in, IOutputStream& out, const NAddr::IRemoteAddr* remoteAddr, const THandler& Handler) {
@@ -117,6 +128,7 @@ namespace NMonitoring {
                 TContIO io(Socket, c);
                 THttpInput in(&io);
                 THttpOutput out(&io, &in);
+                out.SetContentEncodingPredicate(DisableContentEncoding);
                 // buffer reply so there will be ne context switching
                 TStringStream s;
                 ServeRequest(in, s, RemoteAddr, Parent.Handler);
@@ -204,13 +216,13 @@ namespace NMonitoring {
     };
 
     TMtHttpServer::TMtHttpServer(const TOptions& options, THandler handler, IThreadFactory* pool)
-        : THttpServer(this, options, pool)
+        : THttpServer(this, WithMonitoringContentEncodingPolicy(options), pool)
         , Handler(std::move(handler))
     {
     }
 
     TMtHttpServer::TMtHttpServer(const TOptions& options, THandler handler, TSimpleSharedPtr<IThreadPool> pool)
-        : THttpServer(this, /* mainWorkers = */pool, /* failWorkers = */pool, options)
+        : THttpServer(this, /* mainWorkers = */pool, /* failWorkers = */pool, WithMonitoringContentEncodingPolicy(options))
         , Handler(std::move(handler))
     {
     }

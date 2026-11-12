@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../line_read.h"
-#include "../line_write.h"
+#include "../metric_line.h"
 #include "raw_line_frontend.h"
 
 #include <util/datetime/base.h>
@@ -12,19 +12,17 @@
 
 namespace NActors {
 
-    class TInMemoryMetricsBackend;
-
     template<class TFrontend>
     class TLine;
 
-    template<class TValue = ui64>
+    template<class TValue = ui64, class TStoragePolicy = TUncompressedLineStorage>
     struct TOnChangeLineFrontend {
         using TValueType = TValue;
 
         struct TConfig {};
 
         static TValue DecodeValue(ui64 value) noexcept {
-            return NInMemoryMetricsPrivate::DecodeLineValue<TValue>(value);
+            return TRawLineFrontend<TValue, TStoragePolicy>::DecodeValue(value);
         }
 
         static void ReadRange(const TLineSnapshot& snapshot,
@@ -51,7 +49,7 @@ namespace NActors {
             TValue lastValue{};
             bool hasPointInsideRange = false;
 
-            TRawLineFrontend<TValue>::ForEachStoredRecord(snapshot, [&](TInstant timestamp, const TValue& value) {
+            TRawLineFrontend<TValue, TStoragePolicy>::ForEachStoredRecord(snapshot, [&](TInstant timestamp, const TValue& value) {
                 if (timestamp < beginTs) {
                     hasPreviousValue = true;
                     previousValue = value;
@@ -100,7 +98,8 @@ namespace NActors {
         static const TLineFrontendOps& Descriptor() noexcept {
             static const TLineFrontendOps descriptor{
                 .Name = "on_change",
-                .ReadRange = &TOnChangeLineFrontend<TValue>::ReadRange,
+                .ReadRange = &TOnChangeLineFrontend<TValue, TStoragePolicy>::ReadRange,
+                .ReadNumericRange = &ReadNumericRange,
             };
             return descriptor;
         }
@@ -110,31 +109,50 @@ namespace NActors {
         }
 
     private:
-        friend class TLine<TOnChangeLineFrontend<TValue>>;
-        friend class TInMemoryMetricsBackend;
+        static void ReadNumericRange(const TLineSnapshot& snapshot, TInstant beginTs, TInstant endTs,
+                                     void* opaque, TLineFrontendOps::TInvokeNumericValues invoke) {
+            struct TContext {
+                void* Opaque;
+                TLineFrontendOps::TInvokeNumericValues Invoke;
+            } context{opaque, invoke};
+            ReadRange(snapshot, beginTs, endTs, &context, [](void* opaque, TInstant timestamp, const void* value) {
+                const auto& context = *static_cast<const TContext*>(opaque);
+                const std::array<TLineNumericValue, 1> values = {MakeLineNumericValue(*static_cast<const TValue*>(value))};
+                context.Invoke(context.Opaque, timestamp, values);
+            });
+        }
 
-        static bool Append(TInMemoryMetricsBackend& backend, TLineWriterState* state, const TValueType& value) noexcept;
+        friend class TLine<TOnChangeLineFrontend<TValue, TStoragePolicy>>;
+
+        static bool Append(IMetricLine& line, const TValueType& value) noexcept;
     };
 
-    template<class TValue>
-    bool TOnChangeLineFrontend<TValue>::Append(TInMemoryMetricsBackend& backend, TLineWriterState* state, const TValue& value) noexcept {
-        const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
-        const std::optional<ui64> lastMaterialized = backend.GetLastMaterializedValue(state);
+    template<class TValue, class TStoragePolicy>
+    bool TOnChangeLineFrontend<TValue, TStoragePolicy>::Append(IMetricLine& line, const TValue& value) noexcept {
+        ui64 encoded;
+        if constexpr (TStoragePolicy::Enabled) {
+            if (!TStoragePolicy::template Encode<0>(value, &encoded)) {
+                return false;
+            }
+        } else {
+            encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
+        }
+        const std::optional<ui64> lastMaterialized = line.GetLastMaterializedValue();
 
         if (lastMaterialized && *lastMaterialized == encoded) {
             return true;
         }
 
-        const NHPTimer::STime nowTs = backend.CurrentTimestampTs();
+        const NHPTimer::STime nowTs = line.CurrentTimestampTs();
 
-        typename TRawLineFrontend<TValue>::TStorageRecord record{
+        typename TRawLineFrontend<TValue, TStoragePolicy>::TStorageRecord record{
             .TimestampTs = nowTs,
             .Value = encoded,
         };
-        if (!backend.AccessChunkMemory(state, &record, &TRawLineFrontend<TValue>::WriteRecordToChunkMemory)) {
+        if (!line.AccessChunkMemory(&record, &TRawLineFrontend<TValue, TStoragePolicy>::WriteRecordToChunkMemory)) {
             return false;
         }
-        backend.MarkMaterialized(state, encoded);
+        line.MarkMaterialized(encoded);
         return true;
     }
 

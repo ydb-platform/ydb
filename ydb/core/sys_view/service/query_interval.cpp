@@ -80,12 +80,14 @@ void TQueryInterval::Clear() {
     Texts.clear();
     Metrics.clear();
     ByCpu.clear();
+    TotalCpuTimeUs = 0;
 }
 
 void TQueryInterval::Swap(TQueryInterval& other) {
     Texts.swap(other.Texts);
     Metrics.swap(other.Metrics);
     ByCpu.swap(other.ByCpu);
+    std::swap(TotalCpuTimeUs, other.TotalCpuTimeUs);
 }
 
 void TQueryInterval::Add(TQueryStatsPtr stats) {
@@ -93,6 +95,7 @@ void TQueryInterval::Add(TQueryStatsPtr stats) {
         return;
     }
     auto queryHash = stats->GetQueryTextHash();
+    TotalCpuTimeUs += stats->GetTotalCpuTimeUs();
 
     if (auto metricsIt = Metrics.find(queryHash); metricsIt != Metrics.end()) {
         auto oldCpu = metricsIt->second.GetCpuTimeUs().GetSum();
@@ -114,7 +117,7 @@ void TQueryInterval::Add(TQueryStatsPtr stats) {
     } else {
         auto cpu = stats->GetTotalCpuTimeUs();
 
-        if (ByCpu.size() == CountLimit) {
+        if (ByCpu.size() == NQueryMetricsLimits::NodeCandidateCount) {
             auto it = ByCpu.begin();
             if (it->first >= cpu) {
                 return;
@@ -142,6 +145,18 @@ void TQueryInterval::FillSummary(NKikimrSysView::TEvIntervalQuerySummary::TQuery
     }
 }
 
+ui64 TQueryInterval::GetTotalCpuTimeUs() const {
+    return TotalCpuTimeUs;
+}
+
+ui64 TQueryInterval::GetRetainedCpuTimeUs() const {
+    ui64 result = 0;
+    for (const auto& [cpu, _] : ByCpu) {
+        result += cpu;
+    }
+    return result;
+}
+
 void TQueryInterval::FillMetrics(const NKikimrSysView::TEvGetIntervalMetricsRequest& request,
     NKikimrSysView::TEvGetIntervalMetricsResponse& response) const
 {
@@ -166,4 +181,3 @@ void TQueryInterval::FillMetrics(const NKikimrSysView::TEvGetIntervalMetricsRequ
 
 } // NSysView
 } // NKikimr
-

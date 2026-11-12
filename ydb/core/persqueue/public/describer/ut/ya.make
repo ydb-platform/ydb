@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/core/persqueue/public/describer)
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(4)
 SIZE(MEDIUM)
 
 YQL_LAST_ABI_VERSION()

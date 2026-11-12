@@ -26,6 +26,8 @@
 
 #include <ydb/core/mind/bscontroller/types.h>
 
+#include <util/generic/hash.h>
+
 #include <array>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -59,6 +61,10 @@ public:
     // IDirectBlockGroup implementation
 
     void Register(TVChunkWeakPtr vChunk) override;
+    THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) override;
+    void AllocateDDiskPromotion(ui32 vChunkId, THostIndex hostIndex) override;
+    void CommitDDiskPromotion(const TVChunkConfig& config) override;
+    THostMask SelectDDiskForDemote(THostMask candidates) const override;
 
     TExecutorPtr GetExecutor() override;
     TArenaAllocatorPoolPtr GetArenaAllocatorPool() override;
@@ -97,6 +103,7 @@ public:
         THostIndex hostIndex,
         TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
@@ -105,6 +112,7 @@ public:
         TPBufferKey pBufferKey,
         TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) override;
 
     void WriteBlocksToManyPBuffers(
@@ -115,6 +123,7 @@ public:
         TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId,
         TWriteBlocksToManyPBuffersCallback callback) override;
 
@@ -158,7 +167,10 @@ public:
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
-    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot(
+        EDbgMonSnapshotDetail detail) const override;
+
+    void BalanceDDisks(EDDiskBalanceStrategy strategy) override;
 
     NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
         EVChunkStatsDetail detail) const override;
@@ -265,7 +277,17 @@ private:
 
     [[nodiscard]] TDBGDumpResponse DoDebugPrintDirtyMap() const;
 
-    [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot() const;
+    [[nodiscard]] THostMask GetBalancingAllowedHosts() const;
+    [[nodiscard]] std::array<size_t, MaxHostCount> CountDDisksByHost(
+        EDDiskBalanceStrategy strategy,
+        THostMask allowedForBalancing) const;
+    [[nodiscard]] bool IsBalancingAllowed(
+        const TVChunk& vChunk,
+        EDDiskBalanceStrategy strategy) const;
+    void DoBalanceDDisks(EDDiskBalanceStrategy strategy);
+
+    [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot(
+        EDbgMonSnapshotDetail detail) const;
 
     [[nodiscard]] TVChunkStatsGatherResult DoGatherVChunkStats(
         EVChunkStatsDetail detail) const;
@@ -292,6 +314,7 @@ private:
 
     TDBGConnections Connections;
     TVector<TVChunkWeakPtr> VChunks;
+    THashMap<ui32, THostIndex> PendingDDiskAllocations;
 
     std::array<ui64, MaxHostCount> LastSentBarrierByPBufferHost{};
     TOracle Oracle;

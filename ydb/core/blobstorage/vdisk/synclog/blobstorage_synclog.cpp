@@ -2,6 +2,7 @@
 #include "blobstorage_synclogdata.h"
 #include "blobstorage_synclogmsgwriter.h"
 #include "blobstorage_synclogkeeper.h"
+#include "blobstorage_synclogkeeper_committer.h"
 #include "blobstorage_synclogrecovery.h"
 #include "blobstorage_syncloghttp.h"
 #include "blobstorage_synclogreader.h"
@@ -119,7 +120,7 @@ namespace NKikimr {
                                                                 SlCtx->VCtx->Top,
                                                                 SlCtx->VCtx->VDiskLogPrefix,
                                                                 ctx.ActorSystem());
-                KeeperId = ctx.Register(CreateSyncLogKeeperActor(SlCtx, std::move(Repaired)));
+                KeeperId = ctx.Register(CreateSyncLogKeeperActor(SlCtx, std::move(Repaired), ctx.SelfID));
                 ActiveActors.Insert(KeeperId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 TThis::Become(&TThis::StateFunc);
             }
@@ -207,8 +208,8 @@ namespace NKikimr {
             }
 
             void Handle(TEvSyncLogDbBirthLsn::TPtr &ev, const TActorContext &ctx) {
-                Y_UNUSED(ctx);
                 DbBirthLsn = ev->Get()->DbBirthLsn;
+                ctx.Send(ev->Forward(KeeperId));
             }
 
             void CutLog(const TActorContext &ctx, const TVDiskID &vdisk, ui64 syncedLsn) {
@@ -231,6 +232,16 @@ namespace NKikimr {
             }
 
             void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
+                ctx.Send(ev->Forward(KeeperId));
+            }
+
+            // Committer reports pass this mailbox after the TEvSyncLogPut sent before them (see SyncLogId in
+            // the keeper).
+            void Handle(TEvSyncLogCommitDone::TPtr &ev, const TActorContext &ctx) {
+                ctx.Send(ev->Forward(KeeperId));
+            }
+
+            void Handle(TEvSyncLogDiskOutOfSpace::TPtr &ev, const TActorContext &ctx) {
                 ctx.Send(ev->Forward(KeeperId));
             }
 
@@ -295,6 +306,8 @@ namespace NKikimr {
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
+                HFunc(TEvSyncLogCommitDone, Handle)
+                HFunc(TEvSyncLogDiskOutOfSpace, Handle)
                 HFunc(TEvBlobStorage::TEvVSync, Handle)
                 HFunc(TEvSyncLogReadFinished, Handle)
                 HFunc(TEvSyncLogDbBirthLsn, Handle)

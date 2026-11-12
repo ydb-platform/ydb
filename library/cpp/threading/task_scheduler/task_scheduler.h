@@ -3,7 +3,6 @@
 #include <library/cpp/deprecated/atomic/atomic.h>
 
 #include <util/generic/vector.h>
-#include <util/generic/ptr.h>
 #include <util/generic/map.h>
 
 #include <util/datetime/base.h>
@@ -12,6 +11,7 @@
 #include <util/system/mutex.h>
 
 #include <functional>
+#include <memory>
 
 class TTaskScheduler {
 public:
@@ -75,7 +75,7 @@ private:
     TCondVar CondVar_;
     TMutex Lock_;
 
-    TVector<TAutoPtr<TWorkerThread>> Workers_;
+    TVector<std::unique_ptr<TWorkerThread>> Workers_;
 
     const size_t MaxTaskCount_;
 };

@@ -8,6 +8,7 @@ namespace NKikimr {
 
     struct THullCtx;
     class TPDiskCtx;
+    class TControlWrapper;
 
 
     //////////////////////////////////////////////////////////////////////////////////////
@@ -96,19 +97,22 @@ namespace NKikimr {
             TEvGetLogoBlobIndexStatRequest::TPtr &ev,
             std::unique_ptr<TEvGetLogoBlobIndexStatResponse> result);
 
-    // Collects a weak, monitoring-only view of VDisk-owned chunk space. The
-    // actor reacquires Hull snapshots between short scan quanta and never
-    // retains per-key state after a key has been classified.
-    IActor *CreateVDiskSpaceReportActor(
+    // Periodically collects and caches a weak, monitoring-only view of
+    // VDisk-owned chunk space. Hull scanning is delegated to a batch-pool
+    // worker that reacquires snapshots between short scan quanta.
+    IActor *CreateVDiskSpaceReportManager(
             const TIntrusivePtr<THullCtx>& hullCtx,
             const std::shared_ptr<THugeBlobCtx>& hugeBlobCtx,
             const TPDiskCtxPtr& pdiskCtx,
-            const TActorId& parentId,
+            const TActorId& skeletonId,
             const TActorId& hugeKeeperId,
             const TActorId& syncLogId,
             const TActorId& chunkKeeperId,
+            bool chunkKeeperEnabled,
             ui32 minHugeBlobInBytes,
-            const TEvGetVDiskSpaceReportRequest::TPtr& ev);
+            TControlWrapper periodSeconds,
+            ui32 pdiskId,
+            ui32 vdiskSlotId);
 
     IActor *CreateMonStreamActor(THullDsSnap&& fullSnap, TEvBlobStorage::TEvMonStreamQuery::TPtr& ev);
 

@@ -3,9 +3,12 @@
 #include <ydb/core/tx/datashard/backup_restore_traits.h>
 #include <ydb/core/tx/datashard/export_scan.h>
 
+#include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/array_ref.h>
+#include <util/generic/size_literals.h>
+#include <util/stream/mem.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 
@@ -202,6 +205,69 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
         TestMinBufferSize(dataFormat, minBufferSize);
     }
 
+    Y_UNIT_TEST(EncryptedBatchWithLargeLastRow) {
+        // Use a key and one value column so every input row is smaller than 8 MiB.
+        for (ui32 tag = 2; tag < Tags.size(); ++tag) {
+            TableColumns().erase(tag);
+        }
+        Tags.resize(2);
+
+        const ui64 maxBytes = 32_MB;
+        const NBackup::TEncryptionKey key("256 bit test symmetric key bytes");
+        const auto iv = NBackup::TEncryptionIV::Generate();
+        Settings()
+            .WithEncryption(TS3ExportBufferSettings::TEncryptionSettings()
+                .WithAlgorithm("AES-256-GCM")
+                .WithKey(key)
+                .WithIV(iv))
+            .WithMaxRows(Max<ui64>())
+            .WithMinBytes(5_MB)
+            .WithMaxBytes(maxBytes);
+
+        const auto dataFormat = EDataFormat::YdbDump;
+        auto* buffer = Buffer(dataFormat);
+        TString expected;
+        TBuffer encrypted;
+        ui64 exportedRows = 0;
+        const auto flush = [&](bool last) {
+            NExportScan::IBuffer::TStats stats;
+            THolder<NActors::IEventBase> event(buffer->PrepareEvent(last, stats));
+            UNIT_ASSERT_C(event, buffer->GetError());
+            auto* evBuffer = dynamic_cast<TEvExportScan::TEvBuffer<TBuffer>*>(event.Get());
+            UNIT_ASSERT(evBuffer);
+            encrypted.Append(evBuffer->Buffer.Data(), evBuffer->Buffer.Size());
+            exportedRows += stats.Rows;
+        };
+        const auto collect = [&](ui32 rowKey, TStringBuf value, TStringBuf escapedValue) {
+            UNIT_ASSERT_C(CollectKeyValue(dataFormat, rowKey, value), buffer->GetError());
+            expected += TStringBuilder() << rowKey << ",\"" << escapedValue << "_1_" << rowKey << "\"\n";
+            // Follow the export scanner: check the batch limit after every row.
+            if (buffer->IsFilled()) {
+                flush(false);
+            }
+        };
+
+        const TString smallValue(1_MB, 'a');
+        for (ui32 rowKey = 0; rowKey < 31; ++rowKey) {
+            collect(rowKey, smallValue, smallValue);
+        }
+        UNIT_ASSERT_LT(expected.size(), maxBytes);
+
+        // CGI escaping expands each byte into "%01": 31 MiB + 21 MiB exceeds
+        // the encrypted block limit even though the batch limit is only 32 MiB.
+        const TString largeValue(7_MB, '\1');
+        const TString escapedLargeValue = TString("%01") * largeValue.size();
+        UNIT_ASSERT_GT(expected.size() + escapedLargeValue.size(), NBackup::MAX_BLOCK_SIZE);
+        collect(31, largeValue, escapedLargeValue);
+        flush(true);
+
+        UNIT_ASSERT_VALUES_EQUAL(exportedRows, 32);
+        const TBuffer decrypted = NBackup::TEncryptedFileDeserializer::DecryptFullFile(key, iv, std::move(encrypted));
+        UNIT_ASSERT_VALUES_EQUAL(decrypted.Size(), expected.size());
+        UNIT_ASSERT_C(TStringBuf(decrypted.Data(), decrypted.Size()) == expected,
+            "Decrypted export differs from the original rows");
+    }
+
     Y_UNIT_TEST(MaxBytesCapsUncompressedSizeWithZstd) {
         const ui64 maxBytes = 32'000;
         Settings()
@@ -229,6 +295,64 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
                 << " iteration=" << i);
         }
         UNIT_ASSERT_GT_C(flushes, 0, "expected at least one flush under MaxBytes");
+    }
+
+    // Highly compressible data with zstd: the compressed output stays below MinBytes for a long time,
+    // so the buffer keeps collecting rows. The raw rows must not be accumulated in memory meanwhile,
+    // the memory usage has to stay bounded by MaxBytes regardless of the compression ratio.
+    Y_UNIT_TEST(MemoryIsBoundedWithZstdAndMinBytes) {
+        const ui64 minBytes = 64'000;
+        const ui64 maxBytes = 128'000;
+        Settings()
+            .WithCompression(TS3ExportBufferSettings::ZstdCompression(1))
+            .WithMaxRows(Max<ui64>())
+            .WithMinBytes(minBytes)
+            .WithMaxBytes(maxBytes);
+
+        const auto dataFormat = EDataFormat::YdbDump;
+        const TString value(1024, 'a');
+
+        TString expected;
+        TString compressed;
+        ui64 flushes = 0;
+        ui64 rawBytesPerFlush = 0;
+        ui64 maxMemoryBytes = 0;
+        for (ui32 i = 0; i < 100'000 && flushes < 2; ++i) {
+            UNIT_ASSERT(CollectKeyValue(dataFormat, i, value));
+            expected += ToString(i);
+            for (ui32 tag = 1; tag < Columns.size(); ++tag) {
+                expected += TStringBuilder() << ",\"" << value << "_" << tag << "_" << i << "\"";
+            }
+            expected += "\n";
+
+            auto* buffer = Buffer(dataFormat);
+            maxMemoryBytes = Max(maxMemoryBytes, buffer->GetMemoryBytes());
+            if (!buffer->IsFilled()) {
+                UNIT_ASSERT_LT_C(buffer->GetMemoryBytes(), maxBytes,
+                    "Buffer is not filled but holds " << buffer->GetMemoryBytes() << " bytes in memory"
+                    << ", maxBytes=" << maxBytes << ", iteration=" << i);
+                continue;
+            }
+
+            NExportScan::IBuffer::TStats stats;
+            THolder<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
+            UNIT_ASSERT(event);
+            auto* evBuffer = dynamic_cast<TEvExportScan::TEvBuffer<TBuffer>*>(event.Get());
+            UNIT_ASSERT(evBuffer);
+            UNIT_ASSERT_GE(evBuffer->Buffer.Size(), minBytes);
+            compressed.append(evBuffer->Buffer.Data(), evBuffer->Buffer.Size());
+            rawBytesPerFlush = Max(rawBytesPerFlush, stats.BytesRead);
+            ++flushes;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(flushes, 2);
+        // The scenario is meaningful only if the compression ratio is high enough for the raw data
+        // of a single part to exceed MaxBytes
+        UNIT_ASSERT_GT_C(rawBytesPerFlush, maxBytes * 4, "rawBytesPerFlush=" << rawBytesPerFlush);
+        Cerr << "Raw bytes per flush: " << rawBytesPerFlush << ", max memory: " << maxMemoryBytes << Endl;
+
+        TMemoryInput compressedInput(compressed);
+        TZstdDecompress decompress(&compressedInput);
+        UNIT_ASSERT_VALUES_EQUAL(decompress.ReadAll(), expected);
     }
 }
 

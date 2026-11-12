@@ -1,10 +1,13 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 DATA(
     arcadia/ydb/tests/tools/kqprun/tests/cfg
 )
 
 TEST_SRCS(
+    test_query_files.py
     test_kqprun_recipe.py
 )
 

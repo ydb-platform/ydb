@@ -23,6 +23,7 @@ JS = r"""
 const distributedView=new Map();
 const distributedHosts=new Map();
 const hostRecord=id=>({name:distributedHosts.get(id)||id});
+const deploymentProfile=profile=>profile.benchmark==='dedicated-ydb'||profile.distributed_config?.mode==='deploy';
 function distributedSetLoadMode(raw,name,mode){
   raw.measurement??={};
   const clients=raw['cli-nodes'],client=clients[name];
@@ -50,22 +51,32 @@ function distributedDefault(template,tenant=distributedTargetTenants(template)[0
     tenants:Object.fromEntries(template.tenants.map(t=>[t.path,{'cpu-count':4}])),
     'cli-nodes':clients,measurement:{warmup:2,duration:10,repetitions:1,'verification-repetitions':0}}
 }
-function distributedDeployment(template){
-  return {mode:'deploy','cluster-template':JSON.parse(JSON.stringify(template)),storage:{'cpu-count':4},
+function distributedDeployment(template,dedicated=false){
+  return {...(dedicated?{}:{mode:'deploy'}),'cluster-template':JSON.parse(JSON.stringify(template)),storage:{'cpu-count':4},
     tenants:Object.fromEntries(template.tenants.map(t=>[t.path,{'cpu-count':4}]))};
 }
-async function chooseDistributedProfile(profile,name){
+async function chooseDistributedProfile(profile,name,benchmark='distributed-ydb'){
   const host=editorHost,original=editor.yaml,request=++chooseDistributedProfile.version;
   const active=()=>request===chooseDistributedProfile.version&&host===editorHost&&original===editor.yaml&&location.hash.startsWith('#new');
   try{
-    const records=await editorApi('/api/cluster-templates');
-    if(!active())return;
-    const record=records.find(r=>r.nodes.some(n=>n.role==='static'));
-    if(!record)throw Error('Add a cluster template with a static node.');
+    const dedicated=benchmark==='dedicated-ydb';
+    if(dedicated&&editor.model.profiles.some(p=>p!==profile))
+      throw Error('A dedicated cluster uses one profile. Remove the other profiles before changing the type.');
+    let record=profile?.distributed_config?.['cluster-template'];
+    if(!record){
+      const records=await editorApi('/api/cluster-templates');
+      if(!active())return;
+      record=records.find(r=>r.nodes.some(n=>n.role==='static')&&
+        (dedicated||(r.nodes.some(n=>n.role==='cli')&&distributedTargetTenants(r).length)));
+    }
+    if(!record)throw Error(dedicated?'Add a cluster template with a static node.':'Add a cluster template with static, dynamic and CLI nodes.');
     const model=JSON.parse(JSON.stringify(editor.model));
-    const raw=record.nodes.some(n=>n.role==='cli')&&distributedTargetTenants(record).length?distributedDefault(record):distributedDeployment(record);
-    const item={benchmark:'distributed-ydb',name,key:'distributed-ydb/'+name,distributed_config:raw};
-    if(profile)model.profiles[model.profiles.findIndex(p=>p.key===profile.key)]=item;else model.profiles.push(item);
+    const raw=dedicated?distributedDeployment(record,true):distributedDefault(record);
+    for(const key of ['storage','tenants','reset-disks'])if(Object.hasOwn(profile?.distributed_config||{},key))
+      raw[key]=JSON.parse(JSON.stringify(profile.distributed_config[key]));
+    const item={benchmark,name,key:benchmark+'/'+name,distributed_config:raw};
+    if(dedicated)model.profiles=[item];
+    else if(profile)model.profiles[model.profiles.findIndex(p=>p.key===profile.key)]=item;else model.profiles.push(item);
     const yaml=serializeConfig(model),validated=await editorApi('/api/editor-config',jsonOptions({yaml,perf:false}));
     if(!active())return;
     editor.model=validated;editor.yaml=yaml;editor.perf=false;editor.selected=item.key;saveDraft();renderNew('builder');
@@ -75,9 +86,9 @@ async function chooseDistributedProfile(profile,name){
   }}
 }
 chooseDistributedProfile.version=0;
-function distributedReplaceTemplate(raw,template){
-  if(raw.mode==='deploy'){
-    const next=distributedDeployment(template);next.storage=JSON.parse(JSON.stringify(raw.storage||next.storage));
+function distributedReplaceTemplate(raw,template,dedicated=false){
+  if(dedicated||raw.mode==='deploy'){
+    const next=distributedDeployment(template,dedicated);next.storage=JSON.parse(JSON.stringify(raw.storage||next.storage));
     for(const name of Object.keys(next.tenants))if(raw.tenants?.[name])next.tenants[name]=JSON.parse(JSON.stringify(raw.tenants[name]));
     return {next,removed:[],retargeted:[]};
   }
@@ -108,10 +119,9 @@ function distributedReplaceTemplate(raw,template){
 function distributedProfileControls(profile){
   const template=profile.distributed_config['cluster-template'];
   const benchmarks=editor.model?.benchmarks||[{name:profile.benchmark}];
-  return '<div class=form-grid><div class=field><label for=benchmark>Benchmark</label><select id=benchmark>'+
-    benchmarks.map(b=>'<option value="'+esc(b.name)+'" '+(b.name===profile.benchmark?'selected':'')+'>'+esc(b.name)+'</option>').join('')+
-    '</select></div><div class=field><label for=distributed-mode>Mode</label><select id=distributed-mode><option value=benchmark>Benchmark</option><option value=deploy '+
-    (profile.distributed_config.mode==='deploy'?'selected':'')+'>Deploy cluster</option></select></div>'+
+  return '<div class=form-grid><div class=field><label for=benchmark>Type</label><select id=benchmark>'+
+    benchmarks.map(b=>'<option value="'+esc(b.name)+'" '+(b.name===profile.benchmark?'selected':'')+'>'+esc(b.label||b.name)+'</option>').join('')+
+    '</select></div>'+
     '<div class=field><label for=distributed-template>Cluster template</label><select id=distributed-template disabled>'+
     '<option value="">'+esc(template?.name||'Saved placement')+' · saved snapshot</option></select></div></div>';
 }
@@ -121,11 +131,11 @@ async function bindDistributedTemplate(profile){
   try{
     const records=await editorApi('/api/cluster-templates');if(!active())return;
     select.innerHTML+=records.map((r,index)=>'<option value="'+index+'">'+esc(r.name)+' · revision '+esc(r.revision)+'</option>').join('');
-    select.disabled=!records.length||(!profile.distributed_config['cli-nodes']&&profile.distributed_config.mode!=='deploy');
+    select.disabled=!records.length||(!profile.distributed_config['cli-nodes']&&!deploymentProfile(profile));
     select.onchange=async()=>{
       if(!active()||select.value==='')return;
       try{
-        const {next,removed,retargeted}=distributedReplaceTemplate(profile.distributed_config,records[Number(select.value)]);
+        const {next,removed,retargeted}=distributedReplaceTemplate(profile.distributed_config,records[Number(select.value)],profile.benchmark==='dedicated-ydb');
         if((removed.length||retargeted.length)&&!confirm([
           removed.length?'Remove CLI settings: '+removed.join(', ')+'.':'',
           retargeted.length?'Reset target tenant for: '+retargeted.join(', ')+'.':''
@@ -150,7 +160,7 @@ function distributedProfileEditor(profile){
   const raw=profile.distributed_config;
   const actions='';
   const controls=distributedProfileControls(profile);
-  const deploy=raw?.mode==='deploy';
+  const deploy=deploymentProfile(profile);
   if(!raw?.['cli-nodes']&&!deploy)return controls+'<div class=notice>This profile uses the legacy single-CLI load controller. Its YAML is preserved.</div>'+
     '<button type=button id=distributed-convert>Convert to fixed-load Builder</button>'+actions;
   const view=distributedView.get(profile.key)||{tab:'Cluster',item:''};distributedView.set(profile.key,view);
@@ -175,10 +185,11 @@ function distributedProfileEditor(profile){
     '<select data-distributed-path="'+esc(JSON.stringify(keys))+'">'+
     values.map(v=>'<option '+(v===value?'selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label></div>';
   if(view.tab==='Cluster'){
-    content='<strong>'+esc(template.name)+'</strong>'+template.host_ids.map(host=>
+    content='<strong>'+esc(template.name)+'</strong>'+template.host_ids.filter(host=>
+      !deploy||template.nodes.some(n=>n.host_id===host&&n.role!=='cli')).map(host=>
       '<div class=distributed-host><strong>'+esc(hostRecord(host)?.name||host)+'</strong><div class=table-scroll><table>'+
       '<thead><tr><th>Node</th><th>Type</th><th>Tenant</th><th>DC / rack</th><th>Affinity</th><th>Binary</th></tr></thead><tbody>'+
-      template.nodes.filter(n=>n.host_id===host).map(n=>{
+      template.nodes.filter(n=>n.host_id===host&&(!deploy||n.role!=='cli')).map(n=>{
         const affinity=n.affinity||{},location=n.location||{};
         const placement=affinity.kind==='manual'?'CPUs: '+(affinity.cpus||[]).join(', '):
           affinity.mode==='none'?'No pinning':(affinity.mode||'—')+(affinity.count?' · '+affinity.count+' CPUs':'');
@@ -188,7 +199,8 @@ function distributedProfileEditor(profile){
           '</td><td>'+esc(placement)+'</td><td>'+esc(n.binary||'—')+'</td></tr>';
       }).join('')+'</tbody></table></div></div>').join('');
   }else if(view.tab==='Storage'||view.tab==='Tenants'){
-    content='<div class=distributed-summary>'+template.nodes.filter(n=>view.tab==='Storage'?n.role==='static':n.role==='dynamic'&&n.tenant===view.item)
+    content=view.tab==='Tenants'&&!items.length?'<div class=empty>No tenants in this template.</div>':
+      '<div class=distributed-summary>'+template.nodes.filter(n=>view.tab==='Storage'?n.role==='static':n.role==='dynamic'&&n.tenant===view.item)
       .map(n=>esc(n.name)).join(' · ')+'</div><div class=actor-settings>'+input('vCPU per node',[...path,'cpu-count'],object['cpu-count']??4,'number')+
       '<div class=actor-flags>'+['use-shared-threads','use-united-pool','use-ring-queue'].map(k=>'<label><input type=checkbox data-distributed-path="'+
         esc(JSON.stringify([...path,k]))+'" '+((object[k]??(k==='use-ring-queue'))?'checked':'')+'> '+esc(k)+'</label>').join('')+'</div></div>';
@@ -244,12 +256,15 @@ function distributedProfileEditor(profile){
 function bindDistributedEditor(profile){
   bindDistributedTemplate(profile);
   document.querySelector('#benchmark').onchange=event=>{
+    ++chooseDistributedProfile.version;
     const benchmark=editor.model.benchmarks.find(b=>b.name===event.target.value);
     if(benchmark.name===profile.benchmark)return;
     if(editor.model.profiles.some(p=>p!==profile&&p.benchmark===benchmark.name&&p.name===profile.name)){
       event.target.value=profile.benchmark;document.querySelector('#editor-message').innerHTML=displayError(Error('A profile with this benchmark and name already exists.'));return;
     }
-    if(!confirm('Replace distributed settings with defaults for '+benchmark.name+'?')){event.target.value=profile.benchmark;return}
+    if(['distributed-ydb','dedicated-ydb'].includes(benchmark.profile_kind)){
+      chooseDistributedProfile(profile,profile.name,benchmark.name);return;
+    }
     const next={benchmark:benchmark.name,name:profile.name,key:benchmark.name+'/'+profile.name,
       parameters:Object.fromEntries(benchmark.parameters.map(p=>[p.name,p.default])),threads:[1],duration:3,repetitions:1,
       affinity:['none'],background_load:['none']};
@@ -260,13 +275,6 @@ function bindDistributedEditor(profile){
     editor.selected=next.key;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();
   };
   const convert=document.querySelector('#distributed-convert');
-  const mode=document.querySelector('#distributed-mode');
-  if(mode)mode.onchange=async()=>{try{
-    if(!confirm('Change run mode? Workload settings will be reset.')){renderNew();return}
-    const raw=profile.distributed_config,next=mode.value==='deploy'?distributedDeployment(raw['cluster-template']):distributedDefault(raw['cluster-template']);
-    next.storage=JSON.parse(JSON.stringify(raw.storage||next.storage));next.tenants=JSON.parse(JSON.stringify(raw.tenants||next.tenants));
-    await commitDistributed(profile,next);
-  }catch(error){document.querySelector('#editor-message').innerHTML=displayError(error);renderNew()}};
   if(convert){convert.onclick=async()=>{
     if(!confirm('Replace the legacy workload/search settings with fixed-load defaults? The placement snapshot is retained.'))return;
     const raw=profile.distributed_config;const next=distributedDefault(raw['cluster-template'],raw.tenant);

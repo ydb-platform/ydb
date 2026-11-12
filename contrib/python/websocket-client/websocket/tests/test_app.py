@@ -784,6 +784,46 @@ class WebSocketAppUnitTests(unittest.TestCase):
 
         self.assertEqual(close_results, [(1000, "peer-goodbye")])
 
+    def test_close_captures_frame_when_teardown_clears_socket(self):
+        """close() retains its socket while concurrent teardown clears app.sock."""
+        app = self._build_app()
+        peer_close_frame = ABNF.create_frame(
+            struct.pack("!H", 1000) + b"peer-goodbye", ABNF.OPCODE_CLOSE
+        )
+        close_started = threading.Event()
+        allow_close_to_return = threading.Event()
+        errors = []
+
+        class FakeWebSocket:
+            close_frame = None
+
+            def close(self, **kwargs):
+                self.close_frame = peer_close_frame
+                close_started.set()
+                if not allow_close_to_return.wait(timeout=1):
+                    raise TimeoutError("test did not release FakeWebSocket.close()")
+
+        app.sock = FakeWebSocket()
+
+        def close_app():
+            try:
+                app.close()
+            except Exception as error:
+                errors.append(error)
+
+        close_thread = threading.Thread(target=close_app)
+        close_thread.start()
+        self.assertTrue(close_started.wait(timeout=1))
+
+        # This models run_forever() teardown clearing the shared app reference.
+        app.sock = None
+        allow_close_to_return.set()
+        close_thread.join(timeout=1)
+
+        self.assertFalse(close_thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertIs(app.last_close_frame, peer_close_frame)
+
     def test_last_close_frame_reset_on_reconnect(self):
         """Test that last_close_frame is reset when initializing a new socket."""
         app = self._build_app()

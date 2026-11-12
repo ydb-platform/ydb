@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import re
+import signal
 import shutil
 import sys
 import time
@@ -16,6 +17,8 @@ load_yaml = None
 BUILD_VOLUME_PROFILE_KEY = "build_volume"
 BUILD_VOLUME_STATISTICS_KEY = "source-manager.NumFileBytesInTranslationUnit"
 CLANG_TIDY_STATS_FILE = "clang-tidy-stats.json"
+CLANG_TIDY_MAX_ATTEMPTS = 2
+CLANG_TIDY_SIGSEGV_EXIT_CODE = -signal.SIGSEGV
 
 
 def setup_script(args):
@@ -183,6 +186,21 @@ def compact_profile(profile):
     return {k: round(v, 3) for k, v in grouped_sums.items()}
 
 
+def run_clang_tidy(cmd, process_factory=subprocess.Popen):
+    start_time = time.time()
+    for attempt in range(CLANG_TIDY_MAX_ATTEMPTS):
+        process = process_factory(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        out, err = process.communicate()
+        exit_code = process.returncode
+        if exit_code != CLANG_TIDY_SIGSEGV_EXIT_CODE or attempt + 1 == CLANG_TIDY_MAX_ATTEMPTS:
+            break
+        print(
+            "clang-tidy crashed with exit code {}, retrying once\n{}".format(exit_code, err),
+            file=sys.stderr,
+        )
+    return out, err, time.time() - start_time, exit_code
+
+
 def main():
     args, clang_cmd = parse_args()
     if '-gz=zstd' in clang_cmd:
@@ -258,11 +276,7 @@ def main():
         cmd += ["--checks", args.checks]
 
     print("cmd: {}".format(' '.join(cmd)))
-    start_time = time.time()
-    res = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    out, err = res.communicate()
-    wall_time = time.time() - start_time
-    exit_code = res.returncode
+    out, err, wall_time, exit_code = run_clang_tidy(cmd)
     if filtered_out and exit_code in (0, 1):
         for check in filtered_out["Checks"]:
             abs_check = check.lstrip('-')

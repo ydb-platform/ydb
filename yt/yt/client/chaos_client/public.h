@@ -27,10 +27,13 @@ DECLARE_REFCOUNTED_STRUCT(TReplicationCard)
 DECLARE_REFCOUNTED_STRUCT(TChaosLease)
 
 DECLARE_REFCOUNTED_STRUCT(IReplicationCardCache)
+DECLARE_REFCOUNTED_STRUCT(IChaosLeaseCache)
 DECLARE_REFCOUNTED_STRUCT(TChaosCacheChannelConfig)
 DECLARE_REFCOUNTED_STRUCT(TWatchedReplicationCardCacheConfig)
 DECLARE_REFCOUNTED_STRUCT(TReplicationCardCacheConfig)
 DECLARE_REFCOUNTED_STRUCT(TReplicationCardCacheDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TChaosLeaseCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TChaosLeaseCacheDynamicConfig)
 
 struct TReplicationProgress;
 struct TReplicaHistoryItem;

@@ -18,6 +18,7 @@ void TKeyValueState::ClearMoveDataBlobMovingStage() {
 }
 
 void TKeyValueState::ClearMoveDataTrashCheckingStage() {
+    MoveDataTrashCheckingVacuumResetGeneration = VacuumResetGeneration;
     MoveDataTrashCheckingVacuumGeneration = {};
     MoveDataTrashCheckingBlobId = TLogoBlobID();
     MoveDataTrashCheckingWaitingForGC = false;
@@ -119,7 +120,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::AdvanceMo
             Dereference(blobId, db, false);
 
             item.LogoBlobId = newBlobId;
-            ++RefCounts[newBlobId];
+            ++GetOrCreateRefCount(newBlobId);
 
             MoveDataBlobMovingIsInProgress = false;
             UpdateKeyValue(*MoveDataKey, record, db);
@@ -153,25 +154,41 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
 
     MoveDataBlobId = TLogoBlobID();
 
-    if (result == TEvKeyValue::TEvBlobCopied::EResult::NODATA) {
-        YDB_LOG_NOTICE_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: NODATA",
-            {"keyValue", TabletId},
-            {"marker", "KV100"});
+    switch (result) {
+        case TEvKeyValue::TEvBlobCopied::EResult::OK:
+            ++MoveDataBlobsMoved;
+            TabletCounters->Cumulative()[COUNTER_MOVE_DATA_BLOBS_MOVED].Increment(1);
+            TabletCounters->Cumulative()[COUNTER_MOVE_DATA_BYTES_MOVED].Increment(blobId.BlobSize());
+            break;
 
-        if (!MoveDataRecordTouched || RefCounts.find(blobId) != RefCounts.end()) {
-            // possible data loss, kill tablet
-            YDB_LOG_CRIT_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: possible data loss",
+        case TEvKeyValue::TEvBlobCopied::EResult::NODATA:
+            YDB_LOG_NOTICE_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: NODATA",
                 {"keyValue", TabletId},
-                {"marker", "KV103"});
-            CancelMoveData();
-            return TEvKeyValue::TEvAdvanceMoveDataResult::Error();
-        }
-    }
+                {"marker", "KV100"});
 
-    if (result == TEvKeyValue::TEvBlobCopied::EResult::OK) {
-        ++MoveDataBlobsMoved;
-        TabletCounters->Cumulative()[COUNTER_MOVE_DATA_BLOBS_MOVED].Increment(1);
-        TabletCounters->Cumulative()[COUNTER_MOVE_DATA_BYTES_MOVED].Increment(blobId.BlobSize());
+            if (!MoveDataRecordTouched || RefCounts.find(blobId) != RefCounts.end()) {
+                // possible data loss, kill tablet
+                YDB_LOG_CRIT_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: possible data loss",
+                    {"keyValue", TabletId},
+                    {"marker", "KV103"});
+                ResetMoveData();
+                return TEvKeyValue::TEvAdvanceMoveDataResult::Error();
+            }
+            break;
+
+        case TEvKeyValue::TEvBlobCopied::EResult::YELLOW_STOP:
+            ++MoveDataBlobsMoved;
+            TabletCounters->Cumulative()[COUNTER_MOVE_DATA_BLOBS_MOVED].Increment(1);
+            TabletCounters->Cumulative()[COUNTER_MOVE_DATA_BYTES_MOVED].Increment(blobId.BlobSize());
+
+            YDB_LOG_NOTICE_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: YELLOW_STOP, stop moving data",
+                {"keyValue", TabletId},
+                {"marker", "KV107"});
+            return TEvKeyValue::TEvAdvanceMoveDataResult::NotEnoughSpace();
+
+        case TEvKeyValue::TEvBlobCopied::EResult::ERROR:
+            ResetMoveData();
+            return TEvKeyValue::TEvAdvanceMoveDataResult::Error();
     }
 
     if (MoveDataRecordTouched) {
@@ -192,7 +209,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
         YDB_LOG_CRIT_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: key not found in index",
             {"keyValue", TabletId},
             {"marker", "KV104"});
-        CancelMoveData();
+        ResetMoveData();
         return TEvKeyValue::TEvAdvanceMoveDataResult::Error();
     }
 
@@ -202,7 +219,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
         YDB_LOG_CRIT_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: chain index out of range",
             {"keyValue", TabletId},
             {"marker", "KV105"});
-        CancelMoveData();
+        ResetMoveData();
         return TEvKeyValue::TEvAdvanceMoveDataResult::Error();
     }
 
@@ -212,7 +229,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
         YDB_LOG_CRIT_COMP(NKikimrServices::KEYVALUE, "OnBlobCopied: blob id mismatch",
             {"keyValue", TabletId},
             {"marker", "KV106"});
-        CancelMoveData();
+        ResetMoveData();
         return TEvKeyValue::TEvAdvanceMoveDataResult::Error();
     }
 
@@ -227,7 +244,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
     }
 
     item.LogoBlobId = newBlobId;
-    RefCounts[newBlobId] = 1;
+    GetOrCreateRefCount(newBlobId) = 1;
 
     MoveDataBlobMovingIsInProgress = false;
     UpdateKeyValue(*MoveDataKey, record, db);
@@ -269,6 +286,12 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::CheckTras
     YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "CheckTrash",
         {"keyValue", TabletId},
         {"marker", "KV96"});
+
+    if (MoveDataTrashCheckingVacuumResetGeneration != VacuumResetGeneration) {
+        // A vacuum reset moves blobs between bins and may reuse older generations.
+        // Restart here, after GC has woken the check, to preserve its pending wakeup.
+        ClearMoveDataTrashCheckingStage();
+    }
 
     TSet<TLogoBlobID>* trashBin = &Trash;
 
@@ -328,27 +351,29 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::CheckTras
     return TEvKeyValue::TEvAdvanceMoveDataResult::Success();
 }
 
-void TKeyValueState::FinishMoveData(const TActorContext& ctx) {
+void TKeyValueState::ResetMoveData() {
+    ClearMoveDataBlobMovingStage();
+    ClearMoveDataTrashCheckingStage();
+
+    MoveDataIsInProgress = false;
+    MoveDataGroups.clear();
+    MoveDataRequestSender = {};
+}
+
+void TKeyValueState::FinishMoveDataSuccess(const TActorContext& ctx) {
     ctx.Send(MoveDataRequestSender, new TEvTablet::TEvMoveDataResponse(
         TabletId,
         NKikimrTabletBase::TEvMoveDataResponse::Success));
-
-    ClearMoveDataBlobMovingStage();
-    ClearMoveDataTrashCheckingStage();
-
-    MoveDataIsInProgress = false;
-    MoveDataGroups.clear();
-    MoveDataRequestSender = {};
+    ResetMoveData();
 }
 
-void TKeyValueState::CancelMoveData() {
-    ClearMoveDataBlobMovingStage();
-    ClearMoveDataTrashCheckingStage();
-
-    MoveDataIsInProgress = false;
-    MoveDataGroups.clear();
-    MoveDataRequestSender = {};
+void TKeyValueState::FinishMoveDataNotEnoughSpace(const TActorContext& ctx) {
+    ctx.Send(MoveDataRequestSender, new TEvTablet::TEvMoveDataResponse(
+        TabletId,
+        NKikimrTabletBase::TEvMoveDataResponse::NotEnoughSpace));
+    ResetMoveData();
 }
+
 
 } // NKeyValue
 } // NKikimr

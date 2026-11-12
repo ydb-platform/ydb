@@ -530,8 +530,11 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 TimeOrderRecoverRowLimit = 1'000'000;
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;
+    bool PositionalUnionAll = false;
     bool DeriveColumnOrder = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
+
+    bool ShowLinksInPlan = false;
     THashSet<TString> OptimizerFlags;
     THashSet<TString> PeepholeFlags;
     bool StreamLookupJoin = false;
@@ -547,6 +550,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool FuzzUntypedLambda = false;
     bool FuzzUniversal = false;
     TRuntimeSettings::TConstPtr RuntimeSettings;
+    bool StrictConfigValidation = false;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;
@@ -694,7 +698,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TVector<TString> GetTopNoBlocksTypes(size_t maxCount) const;
 
 private:
-    EDecimalConversionMode DecimalConversionMode_ = EDecimalConversionMode::WithoutCommonTypeFixup;
+    EDecimalConversionMode DecimalConversionMode_ = EDecimalConversionMode::WithCommonTypeFixup;
 };
 
 template <>

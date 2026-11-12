@@ -57,10 +57,10 @@ private:
         return Constructors.IsEmpty();
     }
 
-    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext(
+    virtual std::unique_ptr<NCommon::TDataSourceLease> DoTryExtractNext(
         const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) override final {
         auto constructor = Constructors.PopFront();
-        return constructor.Construct(context);
+        return std::make_unique<NCommon::TDataSourceLease>(constructor.Construct(context));
     }
 
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {

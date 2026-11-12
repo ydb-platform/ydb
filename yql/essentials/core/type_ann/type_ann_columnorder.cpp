@@ -41,6 +41,32 @@ void AddPrefix(TColumnOrder& columnOrder, const TString& prefix) {
 
 } // namespace
 
+IGraphTransformer::TStatus ColumnOrderOfWrapper(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (node->Head().GetTypeAnn() && node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        node->SetTypeAnn(node->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    const auto* stringType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::String);
+    const auto* pairType = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{stringType, stringType});
+    const auto* listType = ctx.Expr.MakeType<TListExprType>(pairType);
+    const auto order = ctx.Types.LookupColumnOrder(node->Head());
+    if (!order) {
+        const auto* optionalType = ctx.Expr.MakeType<TOptionalExprType>(listType);
+        output = ctx.Expr.NewCallable(node->Pos(), "Nothing", {ExpandType(node->Pos(), *optionalType, ctx.Expr)});
+    } else {
+        TExprNode::TListType items{ExpandType(node->Pos(), *listType, ctx.Expr)};
+        for (const auto& [logical, physical] : *order) {
+            items.push_back(ctx.Expr.NewList(node->Pos(), {ctx.Expr.NewCallable(node->Pos(), "String", {ctx.Expr.NewAtom(node->Pos(), logical)}),
+                                                           ctx.Expr.NewCallable(node->Pos(), "String", {ctx.Expr.NewAtom(node->Pos(), physical)})}));
+        }
+        output = ctx.Expr.NewCallable(node->Pos(), "Just", {ctx.Expr.NewCallable(node->Pos(), "List", std::move(items))});
+    }
+    return IGraphTransformer::TStatus::Repeat;
+}
+
 TMaybe<TColumnOrder> InferOrderForUnionAll(
     const TTypeAnnotationNode* resultType,
     const TExprNode::TListType& children,
@@ -91,7 +117,7 @@ TMaybe<TColumnOrder> InferOrderForUnionAll(
     return Nothing();
 }
 
-IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
+IGraphTransformer::TStatus OrderForSqlSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit) {
         return IGraphTransformer::TStatus::Ok;
@@ -133,6 +159,8 @@ IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprN
             columnOrder.AddColumn(alias);
         }
     }
+
+    FilterColumnOrderByType(columnOrder, *node->GetTypeAnn());
 
     return ctx.Types.SetColumnOrder(*node, columnOrder, ctx.Expr);
 }

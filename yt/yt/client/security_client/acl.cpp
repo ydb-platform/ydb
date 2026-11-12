@@ -140,17 +140,18 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCur
     ValidateAceCorrect(ace);
 }
 
-void TSerializableAccessControlEntry::Persist(const TStreamPersistenceContext& context)
+// NB: Columns, Vital and the row access predicate fields are not registered
+// since persistence is intended only for use in controller.
+void TSerializableAccessControlEntry::RegisterMetadata(auto&& registrar)
 {
-    using NYT::Persist;
-
-    Persist(context, Action);
-    Persist(context, Subjects);
-    Persist(context, Permissions);
-    Persist(context, InheritanceMode);
-    Persist(context, SubjectTagFilter);
-    // NB: Columns and Vital are not persisted since this method is intended only for use in controller.
+    PHOENIX_REGISTER_FIELD(1, Action);
+    PHOENIX_REGISTER_FIELD(2, Subjects);
+    PHOENIX_REGISTER_FIELD(3, Permissions);
+    PHOENIX_REGISTER_FIELD(4, InheritanceMode);
+    PHOENIX_REGISTER_FIELD(5, SubjectTagFilter);
 }
+
+PHOENIX_DEFINE_TYPE(TSerializableAccessControlEntry);
 
 bool operator==(const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs)
 {
@@ -167,10 +168,12 @@ void Deserialize(TSerializableAccessControlList& acl, NYTree::INodePtr node)
     NYTree::Deserialize(acl.Entries, node);
 }
 
-void TSerializableAccessControlList::Persist(const TStreamPersistenceContext& context)
+void TSerializableAccessControlList::RegisterMetadata(auto&& registrar)
 {
-    NYT::Persist(context, Entries);
+    PHOENIX_REGISTER_FIELD(1, Entries);
 }
+
+PHOENIX_DEFINE_TYPE(TSerializableAccessControlList);
 
 void Deserialize(TSerializableAccessControlList& acl, NYson::TYsonPullParserCursor* cursor)
 {

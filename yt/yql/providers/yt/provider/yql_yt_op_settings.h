@@ -22,6 +22,10 @@ enum class EYtWriteMode: ui32 {
     Append                  /* "append" */,
     Drop                    /* "drop" */,
     DropIfExists            /* "drop_if_exists" */,
+    CreateSymlink           /* "create_symlink" */,
+    CreateSymlinkIfNotExists /* "create_symlink_if_not_exists" */,
+    DropSymlink             /* "drop_symlink" */,
+    DropSymlinkIfExists     /* "drop_symlink_if_exists" */,
     Flush                   /* "flush" */,
     Create                  /* "create" */,
     CreateIfNotExists       /* "create_if_not_exists" */,
@@ -32,6 +36,16 @@ enum class EYtWriteMode: ui32 {
     DropObject              /* "dropObject" "drop_object" */,
     DropObjectIfExists      /* "dropObjectIfExists" "drop_object_if_exists" */,
 };
+
+constexpr bool IsCreateSymlinkMode(EYtWriteMode mode) {
+    return mode == EYtWriteMode::CreateSymlink
+        || mode == EYtWriteMode::CreateSymlinkIfNotExists;
+}
+
+constexpr bool IsDropSymlinkMode(EYtWriteMode mode) {
+    return mode == EYtWriteMode::DropSymlink
+        || mode == EYtWriteMode::DropSymlinkIfExists;
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -78,6 +92,7 @@ enum class EYtSettingType: ui64 {
     IgnoreTypeV3             /* "ignore_type_v3" "ignoretypev3" */,
     ExtraColumns             /* "extraColumns" */,
     Pruned                   /* "pruned" */,
+    Consumer                 /* "consumer" */,
     // Table content
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,
@@ -134,6 +149,8 @@ enum class EYtSettingType: ui64 {
     MutationId               /* "mutationid", "mutation_id" */,
     ColumnGroups             /* "column_groups", "columngroups" */,
     SecurityTags             /* "security_tags", "securitytags" */,
+    PrimaryKey               /* "primary_key" "primarykey" */,
+    Producer                 /* "producer" */,
     // Create, Alter
     Columns                  /* "columns"*/,
     Actions                  /* "actions"*/,
@@ -194,6 +211,7 @@ const auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Lim
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, TExprContext& ctx);
+bool ParseWritePrimaryKey(TExprNode& setting, TVector<TString>& keyColumns, TExprContext& ctx);
 
 template <class TContainer>
 TExprNode::TPtr ToAtomList(const TContainer& columns, TPositionHandle pos, TExprContext& ctx) {

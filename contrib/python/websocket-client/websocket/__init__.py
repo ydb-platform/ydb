@@ -27,4 +27,4 @@ from ._exceptions import *  # noqa: F401,F403
 from ._logging import *  # noqa: F401,F403
 from ._socket import *  # noqa: F401,F403
 
-__version__ = "1.9.1"
+__version__ = "1.9.2"

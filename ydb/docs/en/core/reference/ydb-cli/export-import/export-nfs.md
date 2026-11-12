@@ -16,6 +16,8 @@ The `export nfs` command starts a server-side export process to the network file
 
 {% endnote %}
 
+{% include [limitation](_includes/limitation-dump-column-tables.md) %}
+
 ## Command line parameters {#pars}
 
 `[options]` — command parameters:

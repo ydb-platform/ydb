@@ -5,6 +5,8 @@
 
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NArrow::NSSA {
 
 NJson::TJsonValue IResourceProcessor::DebugJson() const {
@@ -24,8 +26,9 @@ NJson::TJsonValue IResourceProcessor::DebugJson() const {
     return result;
 }
 
-TConclusion<IResourceProcessor::EExecutionResult> IResourceProcessor::Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("execute", GetProcessorType());
+TConclusion<TExecutionResult> IResourceProcessor::Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
+    YDB_LOG_DEBUG("",
+        {"execute", GetProcessorType()});
     return DoExecute(context, nodeContext);
 }
 

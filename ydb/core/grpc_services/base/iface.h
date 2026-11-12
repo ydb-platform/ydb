@@ -3,6 +3,8 @@
 #include <util/generic/fwd.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
+#include <memory>
+
 namespace google::protobuf {
 class Message;
 class Arena;
@@ -13,6 +15,10 @@ class TUserToken;
 
 }
 namespace NKikimr {
+
+namespace NPathAliasing {
+class TPathNormalizer;
+}
 
 namespace NRpcService {
 struct  TRlPath;
@@ -26,9 +32,17 @@ using TAuditLogHook = std::function<void (ui32 status, const TAuditLogParts&)>;
 
 class IRequestCtxBaseMtSafe {
 public:
+    void EnablePathNormalization() noexcept;
+    void DisablePathNormalization() noexcept;
+    // With relative paths enabled, resolve relative paths against base.
+    // An empty base means the request's database path. A relative base is resolved
+    // against that database; an absolute base is used as-is.
+    // With relative paths disabled, base is ignored and only aliases are applied.
+    TString NormalizePath(TStringBuf path, TStringBuf base = {}) const;
+
     virtual TMaybe<TString> GetTraceId() const = 0;
     virtual NWilson::TTraceId GetWilsonTraceId() const = 0;
-    // Returns client provided database name
+    // Returns the effective database name after ingress initialization.
     virtual const TMaybe<TString> GetDatabaseName() const = 0;
     // Returns "internal" token (result of ticket parser authentication)
     virtual const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const = 0;
@@ -52,6 +66,14 @@ public:
     virtual TMaybe<NRpcService::TRlPath> GetRlPath() const = 0;
     // Return deadile of request execution, calculated from client timeout by grpc
     virtual TInstant GetDeadline() const = 0;
+
+protected:
+    bool IsPathNormalizationEnabled() const noexcept;
+    void SetPathNormalizer(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer) noexcept;
+
+private:
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer_;
+    bool PathNormalizationEnabled_ = false;
 };
 
 

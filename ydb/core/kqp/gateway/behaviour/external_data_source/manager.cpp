@@ -2,15 +2,16 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/external_sources/iceberg_fields.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
-#include <ydb/library/conclusion/generic/result.h>
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/core/external_sources/iceberg_fields.h>
+#include <ydb/library/conclusion/generic/result.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 #include <ydb/services/scheme_secret/resolver.h>
 
 namespace NKikimr::NKqp {
@@ -25,21 +26,17 @@ using TYqlConclusion = TConclusionImpl<TYqlConclusionStatus, TValue>;
 
 //// Async actions
 
-TAsyncStatus ValidateExternalDatasourceSecrets(const NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc, const TExternalDataSourceManager::TInternalModificationContext& context, const std::shared_ptr<std::vector<TString>>& secrets) {
+TAsyncStatus ValidateExternalDatasourceSecrets(const NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc,
+    const TExternalDataSourceManager::TInternalModificationContext& context, const std::shared_ptr<std::vector<TString>>& secrets) {
     const auto& externalData = context.GetExternalData();
     const std::optional<NACLib::TUserToken>& userToken = externalData.GetUserToken();
-    auto describeFuture = DescribeExternalDataSourceSecrets(
-        externalDataSourceDesc.GetAuth(),
-        userToken ? new NACLib::TUserToken(*userToken) : nullptr,
-        externalData.GetDatabase(),
-        externalData.GetActorSystem(),
-        true
-    );
+    auto describeFuture = DescribeExternalDataSourceSecrets(externalDataSourceDesc.GetAuth(),
+        userToken ? new NACLib::TUserToken(*userToken) : nullptr, externalData.GetDatabase(), externalData.GetActorSystem(), true);
 
     return describeFuture.Apply([secrets](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& f) {
         const auto& value = f.GetValue();
         if (value.Status != Ydb::StatusIds::SUCCESS) {
-            return TExternalDataSourceManager::TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(value.Status), value.Issues.ToString());   
+            return TExternalDataSourceManager::TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(value.Status), value.Issues.ToString());
         }
         if (secrets) {
             *secrets = value.SecretValues;
@@ -63,31 +60,28 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     return GetOrEmpty(settings, secretKeyPrefix + "_path");
 }
 
-[[nodiscard]] TYqlConclusionStatus CheckOldSecretCreationAllowed(
-    bool disableOldSecretCreation,
-    const TString& secretName)
+[[nodiscard]] TYqlConclusionStatus CheckOldSecretCreationAllowed(bool disableOldSecretCreation, const TString& secretName)
 {
     if (disableOldSecretCreation && secretName && !NSecret::IsSchemeSecret(secretName)) {
         return TYqlConclusionStatus::Fail(
-            NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-            "Old secrets are disabled for creating new objects. Please use new secrets");
+            NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Old secrets are disabled for creating new objects. Please use new secrets");
     }
     return TYqlConclusionStatus::Success();
 }
 
-[[nodiscard]] TYqlConclusionStatus FillCreateExternalDataSourceDesc(
-    NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc,
-    const TString& name,
-    const NYql::TCreateObjectSettings& settings,
-    NActors::TActorSystem* actorSystem)
+[[nodiscard]] TYqlConclusionStatus FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc,
+    const TString& name, const NYql::TCreateObjectSettings& settings, NActors::TActorSystem* actorSystem)
 {
     externalDataSourceDesc.SetName(name);
-    externalDataSourceDesc.SetSourceType(GetOrEmpty(settings, "source_type"));
+    const auto sourceType = GetOrEmpty(settings, "source_type");
+    if (!NYql::DatabaseTypeFromString(sourceType)) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Unknown source type: " << sourceType);
+    }
+    externalDataSourceDesc.SetSourceType(sourceType);
     externalDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
     externalDataSourceDesc.SetInstallation(GetOrEmpty(settings, "installation"));
 
-    const bool disableOldSecretCreation = actorSystem &&
-        AppData(actorSystem)->FeatureFlags.GetDisableOldSecretCreation();
+    const bool disableOldSecretCreation = actorSystem && AppData(actorSystem)->FeatureFlags.GetDisableOldSecretCreation();
 
     const TString& authMethod = GetOrEmpty(settings, "auth_method");
     if (authMethod == "NONE") {
@@ -96,9 +90,7 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         auto& sa = *externalDataSourceDesc.MutableAuth()->MutableServiceAccount();
         sa.SetId(GetOrEmpty(settings, "service_account_id"));
         sa.SetSecretName(GetSecretName(settings, "service_account_secret"));
-        if (const auto status =
-            CheckOldSecretCreationAllowed(
-                disableOldSecretCreation, sa.GetSecretName()); status.IsFail())
+        if (const auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, sa.GetSecretName()); status.IsFail())
         {
             return status;
         }
@@ -106,9 +98,7 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         auto& basic = *externalDataSourceDesc.MutableAuth()->MutableBasic();
         basic.SetLogin(GetOrEmpty(settings, "login"));
         basic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
-        if (const auto status =
-            CheckOldSecretCreationAllowed(
-                disableOldSecretCreation, basic.GetPasswordSecretName()); status.IsFail())
+        if (const auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, basic.GetPasswordSecretName()); status.IsFail())
         {
             return status;
         }
@@ -118,15 +108,11 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         mdbBasic.SetServiceAccountSecretName(GetSecretName(settings, "service_account_secret"));
         mdbBasic.SetLogin(GetOrEmpty(settings, "login"));
         mdbBasic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
-        if (const auto status =
-            CheckOldSecretCreationAllowed(
-                disableOldSecretCreation, mdbBasic.GetServiceAccountSecretName()); status.IsFail())
+        if (const auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, mdbBasic.GetServiceAccountSecretName()); status.IsFail())
         {
             return status;
         }
-        if (const auto status =
-            CheckOldSecretCreationAllowed(
-                disableOldSecretCreation, mdbBasic.GetPasswordSecretName()); status.IsFail())
+        if (const auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, mdbBasic.GetPasswordSecretName()); status.IsFail())
         {
             return status;
         }
@@ -135,24 +121,18 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         aws.SetAwsAccessKeyIdSecretName(GetSecretName(settings, "aws_access_key_id_secret"));
         aws.SetAwsSecretAccessKeySecretName(GetSecretName(settings, "aws_secret_access_key_secret"));
         aws.SetAwsRegion(GetOrEmpty(settings, "aws_region"));
-        if (const auto status =
-            CheckOldSecretCreationAllowed(
-                disableOldSecretCreation, aws.GetAwsAccessKeyIdSecretName()); status.IsFail())
+        if (const auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, aws.GetAwsAccessKeyIdSecretName()); status.IsFail())
         {
             return status;
         }
-        if (const auto status =
-            CheckOldSecretCreationAllowed(
-                disableOldSecretCreation, aws.GetAwsSecretAccessKeySecretName()); status.IsFail())
+        if (const auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, aws.GetAwsSecretAccessKeySecretName()); status.IsFail())
         {
             return status;
         }
     } else if (authMethod == "TOKEN") {
         auto& token = *externalDataSourceDesc.MutableAuth()->MutableToken();
         token.SetTokenSecretName(GetSecretName(settings, "token_secret"));
-        if (const auto status =
-            CheckOldSecretCreationAllowed(
-                disableOldSecretCreation, token.GetTokenSecretName()); status.IsFail())
+        if (const auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, token.GetTokenSecretName()); status.IsFail())
         {
             return status;
         }
@@ -163,33 +143,32 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         if (auto fValue = settings.GetFeaturesExtractor().Extract("resource_id")) {
             iam.SetResourceId(*fValue);
         }
-        if (const auto status =
-            CheckOldSecretCreationAllowed(
-                disableOldSecretCreation, iam.GetInitialTokenSecretName()); status.IsFail())
+        if (const auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, iam.GetInitialTokenSecretName()); status.IsFail())
         {
             return status;
         }
     } else {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Unknown auth method: " << authMethod);
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Unknown auth method: " << authMethod);
     }
 
-    static const TSet<TString> properties {
-        "database_name", 
-        "protocol", // managed PG, CH
-        "mdb_cluster_id", // managed PG, CH, GP, MY
-        "database_id", // managed YDB
+    static const TSet<TString> properties{
+        "database_name",
+        "protocol",   // managed PG, CH
+        "mdb_cluster_id",   // managed PG, CH, GP, MY
+        "database_id",   // managed YDB
         "use_tls",
-        "schema", // managed PG, GP
-        "service_name", // oracle
-        "folder_id", // logging
-        "reading_mode", // mongodb
-        "unexpected_type_display_mode", // mongodb
-        "unsupported_type_display_mode", // mongodb
-        "grpc_location", // solomon
-        "project", // solomon
-        "cluster", // solomon
-        "shared_reading", // ydb (topics)
-        "shared_reading_group", // ydb (topics)
+        "schema",   // managed PG, GP
+        "service_name",   // oracle
+        "folder_id",   // logging
+        "reading_mode",   // mongodb
+        "unexpected_type_display_mode",   // mongodb
+        "unsupported_type_display_mode",   // mongodb
+        "grpc_location",   // solomon
+        "project",   // solomon
+        "cluster",   // solomon
+        "shared_reading",   // ydb (topics)
+        "shared_reading_group",   // ydb (topics)
     };
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();
@@ -199,23 +178,23 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
             if (property == "shared_reading") {
                 if (!actorSystem || !AppData(actorSystem)->FeatureFlags.GetEnableSharedReadingInStreamingQueries()) {
                     return TYqlConclusionStatus::Fail(
-                        NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-                        "SHARED_READING in External data source is not supported");
+                        NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "SHARED_READING in External data source is not supported");
                 }
             }
-            externalDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
+            externalDataSourceDesc.MutableProperties()->MutableProperties()->insert({ property, *value });
         }
     }
 
     // Iceberg properties for connector
     for (const auto& property : NKikimr::NExternalSource::NIceberg::FieldsToConnector) {
         if (const auto value = featuresExtractor.Extract(property)) {
-            externalDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
+            externalDataSourceDesc.MutableProperties()->MutableProperties()->insert({ property, *value });
         }
     }
 
     if (!featuresExtractor.IsFinished()) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Unknown property: " << featuresExtractor.GetRemainedParamsString());
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Unknown property: " << featuresExtractor.GetRemainedParamsString());
     }
     return TYqlConclusionStatus::Success();
 }
@@ -224,7 +203,8 @@ TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& tableName, 
     std::pair<TString, TString> pathPair;
     TString error;
     if (!NSchemeHelpers::SplitTablePath(tableName, database, pathPair, error, createDir)) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid external data source path: " << error);
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid external data source path: " << error);
     }
     return pathPair;
 }
@@ -232,11 +212,13 @@ TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& tableName, 
 [[nodiscard]] TYqlConclusionStatus CheckFeatureFlag(const TExternalDataSourceManager::TInternalModificationContext& context) {
     auto* actorSystem = context.GetExternalData().GetActorSystem();
     if (!actorSystem) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. EXTERNAL_DATA_SOURCE creation and drop operations needs an actor system. Please contact internal support");
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+            "Internal error. EXTERNAL_DATA_SOURCE creation and drop operations needs an actor system. Please contact internal support");
     }
 
     if (!AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSources()) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNSUPPORTED, "External data sources are disabled. Please contact your system administrator to enable it");
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_UNSUPPORTED, "External data sources are disabled. Please contact your system administrator to enable it");
     }
     return TYqlConclusionStatus::Success();
 }
@@ -246,21 +228,25 @@ TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& tableName, 
 
     switch (activityType) {
         case EActivityType::Undefined:
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Undefined operation for EXTERNAL_DATA_SOURCE object");
+            return TYqlConclusionStatus::Fail(
+                NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Undefined operation for EXTERNAL_DATA_SOURCE object");
         case EActivityType::Upsert:
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Upsert operation for EXTERNAL_DATA_SOURCE objects is not implemented");
+            return TYqlConclusionStatus::Fail(
+                NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Upsert operation for EXTERNAL_DATA_SOURCE objects is not implemented");
         case EActivityType::Alter:
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Alter operation for EXTERNAL_DATA_SOURCE objects is not implemented");
+            return TYqlConclusionStatus::Fail(
+                NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Alter operation for EXTERNAL_DATA_SOURCE objects is not implemented");
         default:
             throw yexception() << "Unexpected status to fail: " << activityType;
     }
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 //// Immediate modification
 
-TAsyncStatus TExternalDataSourceManager::DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
+TAsyncStatus TExternalDataSourceManager::DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
+    const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
     Y_UNUSED(nodeId, manager);
 
     try {
@@ -273,29 +259,36 @@ TAsyncStatus TExternalDataSourceManager::DoModify(const NYql::TObjectSettingsImp
                 return NThreading::MakeFuture<TYqlConclusionStatus>(ErrorFromActivityType(context.GetActivityType()));
         }
     } catch (...) {
-        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during EXTERNAL_DATA_SOURCE modification operation: " << CurrentExceptionMessage()));
+        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+            TStringBuilder() << "Internal error. Got unexpected exception during EXTERNAL_DATA_SOURCE modification operation: "
+                             << CurrentExceptionMessage()));
     }
 }
 
-TAsyncStatus TExternalDataSourceManager::CreateExternalDataSource(const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const {
+TAsyncStatus TExternalDataSourceManager::CreateExternalDataSource(
+    const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const {
     NKqpProto::TKqpSchemeOperation schemeOperation;
     if (auto status = PrepareCreateExternalDataSource(schemeOperation, settings, context); status.IsFail()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(status);
     }
-    return ExecuteSchemeRequest(schemeOperation.GetCreateExternalDataSource(), context.GetExternalData(), NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource);
+    return ExecuteSchemeRequest(
+        schemeOperation.GetCreateExternalDataSource(), context.GetExternalData(), NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource);
 }
 
-TAsyncStatus TExternalDataSourceManager::DropExternalDataSource(const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
+TAsyncStatus TExternalDataSourceManager::DropExternalDataSource(
+    const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
     NKqpProto::TKqpSchemeOperation schemeOperation;
     if (auto status = PrepareDropExternalDataSource(schemeOperation, settings, context); status.IsFail()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(status);
     }
-    return ExecuteSchemeRequest(schemeOperation.GetDropExternalDataSource(), context.GetExternalData(), NKqpProto::TKqpSchemeOperation::kDropExternalDataSource);
+    return ExecuteSchemeRequest(
+        schemeOperation.GetDropExternalDataSource(), context.GetExternalData(), NKqpProto::TKqpSchemeOperation::kDropExternalDataSource);
 }
 
 //// Deferred modification
 
-TYqlConclusionStatus TExternalDataSourceManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
+TYqlConclusionStatus TExternalDataSourceManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation,
+    const NYql::TObjectSettingsImpl& settings, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
     Y_UNUSED(manager);
 
     try {
@@ -308,11 +301,14 @@ TYqlConclusionStatus TExternalDataSourceManager::DoPrepare(NKqpProto::TKqpScheme
                 return ErrorFromActivityType(context.GetActivityType());
         }
     } catch (...) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during preparation of EXTERNAL_DATA_SOURCE modification operation: " << CurrentExceptionMessage());
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+            TStringBuilder() << "Internal error. Got unexpected exception during preparation of EXTERNAL_DATA_SOURCE modification operation: "
+                             << CurrentExceptionMessage());
     }
 }
 
-TYqlConclusionStatus TExternalDataSourceManager::PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const {
+TYqlConclusionStatus TExternalDataSourceManager::PrepareCreateExternalDataSource(
+    NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const {
     if (auto status = CheckFeatureFlag(context); status.IsFail()) {
         return status;
     }
@@ -333,7 +329,8 @@ TYqlConclusionStatus TExternalDataSourceManager::PrepareCreateExternalDataSource
         *schemeTx.MutableCreateExternalDataSource(), name, settings, context.GetExternalData().GetActorSystem());
 }
 
-TYqlConclusionStatus TExternalDataSourceManager::PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
+TYqlConclusionStatus TExternalDataSourceManager::PrepareDropExternalDataSource(
+    NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
     if (auto status = CheckFeatureFlag(context); status.IsFail()) {
         return status;
     }
@@ -356,7 +353,8 @@ TYqlConclusionStatus TExternalDataSourceManager::PrepareDropExternalDataSource(N
 
 //// Apply deferred modification
 
-TAsyncStatus TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation, const ui32 nodeId, const NMetadata::IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
+TAsyncStatus TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation, const ui32 nodeId,
+    const NMetadata::IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
     Y_UNUSED(nodeId, manager);
 
     try {
@@ -366,10 +364,14 @@ TAsyncStatus TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSc
             case NKqpProto::TKqpSchemeOperation::kDropExternalDataSource:
                 return ExecuteSchemeRequest(schemeOperation.GetDropExternalDataSource(), context, schemeOperation.GetOperationCase());
             default:
-                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Execution of prepared operation for EXTERNAL_DATA_SOURCE object: unsupported operation: " << static_cast<i32>(schemeOperation.GetOperationCase())));
+                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                    TStringBuilder() << "Execution of prepared operation for EXTERNAL_DATA_SOURCE object: unsupported operation: "
+                                     << static_cast<i32>(schemeOperation.GetOperationCase())));
         }
     } catch (...) {
-        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during execution of EXTERNAL_DATA_SOURCE modification operation: " << CurrentExceptionMessage()));
+        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+            TStringBuilder() << "Internal error. Got unexpected exception during execution of EXTERNAL_DATA_SOURCE modification operation: "
+                             << CurrentExceptionMessage()));
     }
 }
 
@@ -377,19 +379,24 @@ namespace {
 bool IsIamAuth(const auto& schemeTx) {
     return schemeTx.GetCreateExternalDataSource().GetAuth().identity_case() == NKikimrSchemeOp::TAuth::kIam;
 }
+
 bool IsResolveResourceIdNeeded(const auto& schemeTx) {
     return !schemeTx.GetCreateExternalDataSource().GetAuth().GetIam().HasResourceId();
 }
 
-TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
+TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context,
+    const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
     auto actorSystem = context.GetActorSystem();
-    return ChainFeatures(validationFuture, [schemeTxState, secrets, actorSystem] () -> TAsyncStatus {
+    return ChainFeatures(validationFuture, [schemeTxState, secrets, actorSystem]() -> TAsyncStatus {
         if (!secrets || secrets->size() != 1) {
-            return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "AUTH=IAM expected resolved secrets"));
+            return NThreading::MakeFuture(
+                TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "AUTH=IAM expected resolved secrets"));
         }
         const auto& desc = schemeTxState->GetCreateExternalDataSource();
         if (desc.GetSourceType() != ToString(NYql::EDatabaseType::Ydb)) {
-            return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "AUTH=IAM supported only for EXTERNAL DATA SOURCES ... SOURCE_TYPE=" << NYql::EDatabaseType::Ydb << ", requested for: " << desc.GetSourceType()));
+            return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                TStringBuilder() << "AUTH=IAM supported only for EXTERNAL DATA SOURCES ... SOURCE_TYPE=" << NYql::EDatabaseType::Ydb
+                                 << ", requested for: " << desc.GetSourceType()));
         }
         const auto& prop = desc.GetProperties().GetProperties();
         TString endpoint = desc.GetLocation();
@@ -402,7 +409,8 @@ TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDat
         if (auto it = prop.find("use_tls"); it != prop.end()) {
             auto maybeUseTls = TryFromString<bool>(it->second);
             if (!maybeUseTls) {
-                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "use_tls: expected bool, got " << it->second));
+                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "use_tls: expected bool, got " << it->second));
             }
             useTls = *maybeUseTls;
         }
@@ -416,7 +424,6 @@ TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDat
                 auto& desc = *schemeTxState->MutableCreateExternalDataSource();
                 desc.MutableAuth()->MutableIam()->SetResourceId(value.ResourceId);
                 return TYqlConclusionStatus::Success();
-
             });
     });
 }
@@ -426,32 +433,35 @@ TYqlConclusionStatus YqlConclusionFromGrpcStatus(const NYdbGrpc::TGrpcStatus& gr
         return TYqlConclusionStatus::Success();
     }
     if (grpcStatus.InternalError) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Grpc internal error: "<< grpcStatus.Msg);
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Grpc internal error: " << grpcStatus.Msg);
     }
-    return TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(NKikimr::NRpcService::GrpcStatusToYdbStatus(static_cast<grpc::StatusCode>(grpcStatus.GRpcStatusCode))), grpcStatus.ToDebugString());
+    return TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(NKikimr::NRpcService::GrpcStatusToYdbStatus(
+                                          static_cast<grpc::StatusCode>(grpcStatus.GRpcStatusCode))), grpcStatus.ToDebugString());
 }
 
-TAsyncStatus ValidateServiceAccount(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
+TAsyncStatus ValidateServiceAccount(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context,
+    const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
     auto actorSystem = context.GetActorSystem();
     return ChainFeatures(validationFuture, [schemeTxState, actorSystem, secrets] {
         Y_ENSURE(secrets && secrets->size() == 1);
         auto& iamAuth = schemeTxState->GetCreateExternalDataSource().GetAuth().GetIam();
-        return AuthorizeServiceAccountUse(iamAuth.GetServiceAccountId(),
-                (*secrets)[0],
-                actorSystem
-        ).Apply([](const NThreading::TFuture<NYdbGrpc::TGrpcStatus>& future) {
-            try {
-                auto grpcStatus = future.GetValueSync();
-                return YqlConclusionFromGrpcStatus(grpcStatus);
-            } catch (std::exception&) {
-                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
-            }
-        });
+        return AuthorizeServiceAccountUse(iamAuth.GetServiceAccountId(), (*secrets)[0], actorSystem)
+            .Apply([](const NThreading::TFuture<NYdbGrpc::TGrpcStatus>& future) {
+                try {
+                    auto grpcStatus = future.GetValueSync();
+                    return YqlConclusionFromGrpcStatus(grpcStatus);
+                } catch (std::exception&) {
+                    return TYqlConclusionStatus::Fail(
+                        NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage());
+                }
+            });
     });
 }
-} // namespace {
+}   // namespace
 
-TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
+TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx,
+    const TExternalModificationContext& context, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
     TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
     auto schemeTxState = std::make_shared<NKikimrSchemeOp::TModifyScheme>(schemeTx);
     if (operationCase == NKqpProto::TKqpSchemeOperation::kCreateExternalDataSource) {
@@ -461,7 +471,8 @@ TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchem
         if (isIamAuth) {
             auto actorSystem = context.GetActorSystem();
             if (!AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
-                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNSUPPORTED, "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
+                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_UNSUPPORTED, "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
             }
         }
         validationFuture = ChainFeatures(validationFuture, [schemeTxState, context, secrets] {
@@ -479,4 +490,4 @@ TAsyncStatus TExternalDataSourceManager::ExecuteSchemeRequest(const NKikimrSchem
     });
 }
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

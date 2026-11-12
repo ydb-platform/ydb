@@ -93,9 +93,9 @@ public:
     // The per-node task profile down the task gutter: the nodes along the
     // height, the task count of each across the width, as two translucent
     // areas - all tasks, and over it the ones still running.
-    void PrintNodeTasks(TStringBuilder& builder, const std::vector<TStageNodeTasks>& nodes, ui32 height);
+    void PrintNodeTasks(TStringBuilder& builder, const std::vector<TStageNodeTasks>& nodes);
     // The same for a stage that only reports its totals, drawn as one node.
-    void PrintTasks(TStringBuilder& builder, ui32 tasks, ui32 finishedTasks, ui32 height);
+    void PrintTasks(TStringBuilder& builder, ui32 tasks, ui32 finishedTasks);
     // A red circle with one letter in it, hung at the bottom of a strip and
     // explained by its tooltip.
     void PrintWarningBadge(TStringBuilder& builder, ui32 cx, ui32 bottom, const TString& title, TStringBuf label);

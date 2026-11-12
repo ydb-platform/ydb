@@ -25,7 +25,7 @@ enum ESimpleCounters {
     COUNTER_EVENTQUEUE_SIZE = 15 [(CounterOpts) = {Name: "EventQueueSize"}];
     COUNTER_NODES_TOTAL = 16 [(CounterOpts) = {Name: "NodesTotal"}];
     COUNTER_NODES_CONNECTED = 17 [(CounterOpts) = {Name: "NodesConnected"}];
-    COUNTER_BALANCE_OBJECT_IMBALANCE = 18 [(CounterOpts) = {Name: "BalanceObjectImbalance"}];
+    COUNTER_BALANCE_OBJECT_IMBALANCE_DEPRECATED = 18 [deprecated = true];
     COUNTER_IMBALANCED_OBJECTS = 19 [(CounterOpts) = {Name: "ImbalancedObjects"}];
     COUNTER_WORST_OBJECT_VARIANCE = 20 [(CounterOpts) = {Name: "WorstObjectVariance"}];
     COUNTER_STORAGE_SCATTER = 21 [(CounterOpts) = {Name: "StorageScatter"}];
@@ -39,13 +39,18 @@ enum ESimpleCounters {
     COUNTER_DELETE_TABLET_QUEUE_SIZE = 29 [(CounterOpts) = {Name: "DeleteTabletQueueSize"}];
     COUNTER_TABLETS_DELETING = 30 [(CounterOpts) = {Name: "TabletsDeleting"}];
     COUNTER_TABLETS_REASSIGNING = 31 [(CounterOpts) = {Name: "TabletsMarkedForReassign"}];
+    COUNTER_SHRINK_POOLS = 32 [(CounterOpts) = {Name: "ShrinkingStoragePools"}];
+    COUNTER_SHRINK_HISTORY_ENTRIES = 33 [(CounterOpts) = {Name: "ShrinkRemainingHistoryEntries"}];
+    COUNTER_SHRINK_HISTORY_TABLETS = 34 [(CounterOpts) = {Name: "ShrinkRemainingHistoryTablets"}];
+    COUNTER_SHRINK_MOVE_DATA_INFLIGHT = 35 [(CounterOpts) = {Name: "ShrinkMoveDataInFlight"}];
+    COUNTER_SHRINK_MOVE_DATA_QUEUED = 36 [(CounterOpts) = {Name: "ShrinkMoveDataQueued"}];
 }
 
 enum ECumulativeCounters {
     COUNTER_BOOTQUEUE_PROCESSED = 0 [(CounterOpts) = {Name: "BootQueueProcessed"}];
     COUNTER_BOOTQUEUE_TIME = 1 [(CounterOpts) = {Name: "BootQueueTime"}];
-    COUNTER_AUTOKICK_EXECUTED = 2 [(CounterOpts) = {Name: "AutokickExecuted"}]; // obsolete
-    COUNTER_AUTOKICK_FAILED = 3 [(CounterOpts) = {Name: "AutokickFailed"}]; // obsolete
+    COUNTER_AUTOKICK_EXECUTED_DEPRECATED = 2 [deprecated = true]; // obsolete
+    COUNTER_AUTOKICK_FAILED_DEPRECATED = 3 [deprecated = true]; // obsolete
     COUNTER_BALANCER_EXECUTED = 4 [(CounterOpts) = {Name: "BalancerExecuted"}];
     COUNTER_BALANCER_FAILED = 5 [(CounterOpts) = {Name: "BalancerFailed"}];
     COUNTER_DRAIN_EXECUTED = 6 [(CounterOpts) = {Name: "DrainExecuted"}];
@@ -59,6 +64,9 @@ enum ECumulativeCounters {
     COUNTER_HISTORY_CUT = 14 [(CounterOpts) = {Name: "TabletHistoryCut"}];
     COUNTER_HISTORY_RESTORED = 15 [(CounterOpts) = {Name: "TabletHistoryRestored"}];
     COUNTER_REASSIGN_EXECUTED = 16 [(CounterOpts) = {Name: "ReassignExecuted"}];
+    COUNTER_SHRINK_MOVE_DATA_SENT = 17 [(CounterOpts) = {Name: "ShrinkMoveDataSent"}];
+    COUNTER_SHRINK_MOVE_DATA_ANSWERED = 18 [(CounterOpts) = {Name: "ShrinkMoveDataAnswered"}];
+    COUNTER_SHRINK_MOVE_DATA_RETRIED = 19 [(CounterOpts) = {Name: "ShrinkMoveDataRetried"}];
 }
 
 enum EPercentileCounters {
@@ -121,8 +129,8 @@ enum EPercentileCounters {
 enum ETxTypes {
     TXTYPE_CREATE_TABLET = 0                              [(TxTypeOpts) = {Name: "TxCreateTablet"}];
     TXTYPE_SYNC_TABLETS = 1                               [(TxTypeOpts) = {Name: "TxSyncTablets"}];
-    TXTYPE_KILL_TABLET = 2                                [(TxTypeOpts) = {Name: "TxKillTablet"}];
-    TXTYPE_UPDATE_TABLET_GROUP = 3                        [(TxTypeOpts) = {Name: "TxUpdateTabletGroup"}];
+    TXTYPE_KILL_TABLET_DEPRECATED = 2                     [deprecated = true];
+    TXTYPE_UPDATE_TABLET_GROUP_DEPRECATED = 3             [deprecated = true];
     TXTYPE_UPDATE_TABLET_STATUS = 4                       [(TxTypeOpts) = {Name: "TxUpdateTabletStatus"}];
     TXTYPE_REGISTER_NODE = 5                              [(TxTypeOpts) = {Name: "TxRegisterNode"}];
     TXTYPE_KILL_NODE = 6                                  [(TxTypeOpts) = {Name: "TxKillNode"}];
@@ -192,4 +200,8 @@ enum ETxTypes {
     TXTYPE_PROCESS_TABLET_METRICS = 70                    [(TxTypeOpts) = {Name: "TxProcessTabletMetrics"}];
     TXTYPE_SHRINK_POOL = 71                               [(TxTypeOpts) = {Name: "TxShrinkPool"}];
     TXTYPE_SHRINK_POOL_REPLY = 72                         [(TxTypeOpts) = {Name: "TxShrinkPoolReply"}];
+    TXTYPE_MON_SHRINK_POOL = 73                           [(TxTypeOpts) = {Name: "TxMonShrinkPool"}];
+    TXTYPE_MON_MOVE_DATA = 74                             [(TxTypeOpts) = {Name: "TxMonMoveData"}];
+    TXTYPE_MON_EVENTS = 75                                [(TxTypeOpts) = {Name: "TxMonEvents"}];
+    TXTYPE_MON_NODE_INFO = 76                             [(TxTypeOpts) = {Name: "TxMonNodeInfo"}];
 }

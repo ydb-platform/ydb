@@ -10,6 +10,8 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/defs.h>
 
+#include <util/generic/string.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 namespace NDqHashOperatorCommon {
@@ -20,9 +22,22 @@ extern TStatKey DqHashCombine_MaxRowsCount;
 using TDependsOn = std::function<void(IComputationNode*)>;
 using TOwn = std::function<void(IComputationExternalNode*)>;
 
+enum class EFastFinalizeSource : ui8 {
+    Key,
+    State,
+};
+
+struct TFastFinalizeDescriptor {
+    EFastFinalizeSource Source;
+    ui32 SourceIndex;
+};
+
 struct TCombinerNodes {
     TComputationExternalNodePtrVector ItemNodes, KeyNodes, StateNodes, FinishKeyNodes, FinishStateNodes;
     TComputationNodePtrVector KeyResultNodes, InitResultNodes, UpdateResultNodes, FinishResultNodes;
+
+    std::vector<TFastFinalizeDescriptor> FastFinalize;
+    TString FastFinalizeError;
 
     std::vector<bool> PasstroughtItems;
 

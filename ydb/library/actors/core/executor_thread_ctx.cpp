@@ -108,6 +108,11 @@ namespace NActors {
             }
         }
 
+        return ParkForWaker(stopFlag);
+    }
+
+    bool TExecutorThreadCtx::ParkForWaker(const std::atomic<bool>& stopFlag) {
+        EThreadState state = GetState<EThreadState>();
         if ((state == EThreadState::Sleep || state == EThreadState::Blocking) &&
                 !stopFlag.load(std::memory_order_relaxed)) {
             Y_DEBUG_ABORT_UNLESS(TlsThreadContext);

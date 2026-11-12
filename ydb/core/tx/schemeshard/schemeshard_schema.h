@@ -842,6 +842,7 @@ struct Schema : NIceDb::Schema {
         struct ColumnTableColumnsLimit : Column<32, NScheme::NTypeIds::Uint64> {};
         struct SmallBlobsQuotaExceeded : Column<33, NScheme::NTypeIds::Bool> {};
         struct TablesMetricsLevel : Column<34, NScheme::NTypeIds::Uint32> { using Type = ETablesMetricsLevel; };
+        struct StorageSpaceExhausted : Column<35, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -878,7 +879,8 @@ struct Schema : NIceDb::Schema {
             ServerlessComputeResourcesMode,
             ColumnTableColumnsLimit,
             SmallBlobsQuotaExceeded,
-            TablesMetricsLevel
+            TablesMetricsLevel,
+            StorageSpaceExhausted
         >;
     };
 
@@ -1213,6 +1215,10 @@ struct Schema : NIceDb::Schema {
         struct PlanStep : Column<15, NScheme::NTypeIds::Uint64> { using Type = TStepId; };
         struct NeedUpdateObject : Column<16, NScheme::NTypeIds::Bool> {};
         struct NeedSyncHive : Column<17, NScheme::NTypeIds::Bool> {};
+        // Split/merge ops only: whether this op deepens the by-load split lineage
+        // (propagates LoadSplitLineageDepth at op completion). Absent (pre-upgrade
+        // rows) = false = does not deepen.
+        struct LoadSplitLineage : Column<18, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TxId, TxPartId>;
         using TColumns = TableColumns<
@@ -1232,7 +1238,8 @@ struct Schema : NIceDb::Schema {
             SourceLocalPathId,
             PlanStep,
             NeedUpdateObject,
-            NeedSyncHive
+            NeedSyncHive,
+            LoadSplitLineage
         >;
     };
 
@@ -1499,6 +1506,7 @@ struct Schema : NIceDb::Schema {
         struct RowIdUniqueBuildId : Column<57, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct ParentBuildId : Column<58, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct IsRebuild : Column<59, NScheme::NTypeIds::Bool> {};
+        struct RebuildIndexName : Column<60, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1560,7 +1568,8 @@ struct Schema : NIceDb::Schema {
             RowIdColumnBuildId,
             RowIdUniqueBuildId,
             ParentBuildId,
-            IsRebuild
+            IsRebuild,
+            RebuildIndexName
         >;
     };
 
@@ -1770,6 +1779,7 @@ struct Schema : NIceDb::Schema {
         struct Changefeeds : Column<15, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TImportTableChangefeeds; };
         struct Topic : Column<20, NScheme::NTypeIds::String> {};
         struct SysView : Column<22, NScheme::NTypeIds::String> {};
+        struct ReplicationConfig : Column<23, NScheme::NTypeIds::String> {};
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1804,7 +1814,8 @@ struct Schema : NIceDb::Schema {
             SrcPath,
             Topic,
             ParentIndex,
-            SysView
+            SysView,
+            ReplicationConfig
         >;
     };
 
@@ -1911,6 +1922,8 @@ struct Schema : NIceDb::Schema {
         struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
         struct UserSIDs: Column<11, NScheme::NTypeIds::Bool> {};
         struct TraceIds: Column<12, NScheme::NTypeIds::Bool> {};
+        struct Compression: Column<13, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamCompression; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamCompressionNone; };
+        struct CompressionLevel: Column<14, NScheme::NTypeIds::Int32> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1925,7 +1938,9 @@ struct Schema : NIceDb::Schema {
             ResolvedTimestampsIntervalMs,
             SchemaChanges,
             UserSIDs,
-            TraceIds
+            TraceIds,
+            Compression,
+            CompressionLevel
         >;
     };
 
@@ -1942,6 +1957,8 @@ struct Schema : NIceDb::Schema {
         struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
         struct UserSIDs: Column<11, NScheme::NTypeIds::Bool> {};
         struct TraceIds: Column<12, NScheme::NTypeIds::Bool> {};
+        struct Compression: Column<13, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamCompression; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamCompressionNone; };
+        struct CompressionLevel: Column<14, NScheme::NTypeIds::Int32> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1956,7 +1973,9 @@ struct Schema : NIceDb::Schema {
             ResolvedTimestampsIntervalMs,
             SchemaChanges,
             UserSIDs,
-            TraceIds
+            TraceIds,
+            Compression,
+            CompressionLevel
         >;
     };
 
@@ -2389,9 +2408,10 @@ struct Schema : NIceDb::Schema {
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
         struct Properties : Column<4, NScheme::NTypeIds::String> {};
+        struct OperationOwnerActorId : Column<5, NScheme::NTypeIds::ActorId> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties, OperationOwnerActorId>;
     };
 
     struct ForcedCompactions : Table<130> {

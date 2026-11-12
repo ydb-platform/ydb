@@ -11,6 +11,45 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, size_t ChunkSize>
+TPersistentQueueChunk<T, ChunkSize>::TPersistentQueueChunk()
+{
+    // A user-provided constructor keeps value-initialization from zeroing the storage.
+}
+
+template <class T, size_t ChunkSize>
+TPersistentQueueChunk<T, ChunkSize>::~TPersistentQueueChunk()
+{
+    while (ConstructedSize_ > 0) {
+        std::destroy_at(std::addressof(GetElement(ConstructedSize_ - 1)));
+        --ConstructedSize_;
+    }
+}
+
+template <class T, size_t ChunkSize>
+void TPersistentQueueChunk<T, ChunkSize>::Append(T&& value)
+{
+    YT_ASSERT(ConstructedSize_ < ChunkSize);
+    std::construct_at(reinterpret_cast<T*>(Storage_[ConstructedSize_]), std::move(value));
+    ++ConstructedSize_;
+}
+
+template <class T, size_t ChunkSize>
+T& TPersistentQueueChunk<T, ChunkSize>::GetElement(size_t index)
+{
+    YT_ASSERT(index < ConstructedSize_);
+    return *std::launder(reinterpret_cast<T*>(Storage_[index]));
+}
+
+template <class T, size_t ChunkSize>
+const T& TPersistentQueueChunk<T, ChunkSize>::GetElement(size_t index) const
+{
+    YT_ASSERT(index < ConstructedSize_);
+    return *std::launder(reinterpret_cast<const T*>(Storage_[index]));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T, size_t ChunkSize>
 TPersistentQueueIterator<T, ChunkSize>::TPersistentQueueIterator()
 {  }
 
@@ -40,13 +79,13 @@ TPersistentQueueIterator<T, ChunkSize> TPersistentQueueIterator<T, ChunkSize>::o
 template <class T, size_t ChunkSize>
 const T& TPersistentQueueIterator<T, ChunkSize>::operator*() const
 {
-    return CurrentChunk_->Elements[CurrentIndex_];
+    return CurrentChunk_->GetElement(CurrentIndex_);
 }
 
 template <class T, size_t ChunkSize>
 const T* TPersistentQueueIterator<T, ChunkSize>::operator->() const
 {
-    return &CurrentChunk_->Elements[CurrentIndex_];
+    return &CurrentChunk_->GetElement(CurrentIndex_);
 }
 
 template <class T, size_t ChunkSize>
@@ -95,6 +134,12 @@ auto TPersistentQueueBase<T, ChunkSize>::end() const -> TIterator
     return End();
 }
 
+template <class T, size_t ChunkSize>
+size_t TPersistentQueueBase<T, ChunkSize>::size() const
+{
+    return Size();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, size_t ChunkSize>
@@ -111,25 +156,39 @@ void TPersistentQueueSnapshot<T, ChunkSize>::Save(C& context) const
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, size_t ChunkSize>
+i64 TPersistentQueue<T, ChunkSize>::GetElementByteSize(const T& value)
+{
+    if constexpr (requires { { value.GetByteSize() } -> std::convertible_to<i64>; }) {
+        return value.GetByteSize();
+    } else {
+        return 0;
+    }
+}
+
+template <class T, size_t ChunkSize>
 void TPersistentQueue<T, ChunkSize>::Enqueue(T value)
 {
     auto& head = this->Head_;
     auto& tail = this->Tail_;
     auto& size = this->Size_;
 
+    auto elementByteSize = GetElementByteSize(value);
+
     if (!head.CurrentChunk_) {
-        ++this->ChunkCount_;
         auto chunk = New<TChunk>();
+        ++this->ChunkCount_;
         head.CurrentChunk_ = tail.CurrentChunk_ = chunk;
         head.CurrentIndex_ = tail.CurrentIndex_ = 0;
     }
 
-    head.CurrentChunk_->Elements[head.CurrentIndex_++] = std::move(value);
+    head.CurrentChunk_->Append(std::move(value));
+    ++head.CurrentIndex_;
     ++size;
+    this->ElementsByteSize_ += elementByteSize;
 
     if (head.CurrentIndex_ == ChunkSize) {
-        ++this->ChunkCount_;
         auto chunk = New<TChunk>();
+        ++this->ChunkCount_;
         head.CurrentChunk_->Next = chunk;
         head.CurrentChunk_ = chunk;
         head.CurrentIndex_ = 0;
@@ -144,8 +203,11 @@ T TPersistentQueue<T, ChunkSize>::Dequeue()
 
     YT_ASSERT(size != 0);
 
-    auto result = std::move(tail.CurrentChunk_->Elements[tail.CurrentIndex_++]);
+    auto result = std::move(tail.CurrentChunk_->GetElement(tail.CurrentIndex_));
+    ++tail.CurrentIndex_;
     --size;
+
+    this->ElementsByteSize_ -= GetElementByteSize(result);
 
     if (tail.CurrentIndex_ == ChunkSize) {
         tail.CurrentChunk_ = tail.CurrentChunk_->Next;
@@ -165,12 +227,13 @@ void TPersistentQueue<T, ChunkSize>::Clear()
     this->Tail_ = TPersistentQueueIterator<T, ChunkSize>();
     this->Size_ = 0;
     this->ChunkCount_ = 0;
+    this->ElementsByteSize_ = 0;
 }
 
 template <class T, size_t ChunkSize>
-i64 TPersistentQueue<T, ChunkSize>::GetByteSize() const
+i64 TPersistentQueue<T, ChunkSize>::GetMemoryUsage() const
 {
-    return this->ChunkCount_ * sizeof(TChunk);
+    return this->ChunkCount_ * sizeof(TChunk) + this->ElementsByteSize_;
 }
 
 template <class T, size_t ChunkSize>
@@ -223,9 +286,9 @@ void TIndexedPersistentQueue<T, ChunkSize>::Clear()
 }
 
 template <class T, size_t ChunkSize>
-i64 TIndexedPersistentQueue<T, ChunkSize>::GetByteSize() const
+i64 TIndexedPersistentQueue<T, ChunkSize>::GetMemoryUsage() const
 {
-    return TBase::GetByteSize() + Chunks_.size() * sizeof(TChunk*);
+    return TBase::GetMemoryUsage() + Chunks_.size() * sizeof(TChunk*);
 }
 
 template <class T, size_t ChunkSize>
@@ -247,7 +310,7 @@ const T& TIndexedPersistentQueue<T, ChunkSize>::operator[](int index) const
     auto shiftedIndex = index + Shift_;
     auto chunkIndex = shiftedIndex / ChunkSize;
     auto indexInChunk = shiftedIndex % ChunkSize;
-    return Chunks_[chunkIndex]->Elements[indexInChunk];
+    return Chunks_[chunkIndex]->GetElement(indexInChunk);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

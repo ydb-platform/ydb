@@ -557,7 +557,7 @@ void TCommandConfigReplace::Parse(TConfig& config) {
         NYamlConfig::GetMainMetadata(configStr);
         auto tree = NFyaml::TDocument::Parse(configStr);
 
-        NYamlConfig::ResolveUniqueDocs(tree, [](NYamlConfig::TDocumentConfig&&) {});
+        NYamlConfig::ValidateResolve(tree);
     }
 }
 
@@ -936,9 +936,7 @@ int TCommandConfigVolatileAdd::Run(TConfig& config) {
         auto selectors = volatileCfg.Root().Map().at("selector_config");
         NYamlConfig::AppendVolatileConfigs(tree, selectors);
 
-        auto resolved = NYamlConfig::ResolveAll(tree);
-
-        Y_UNUSED(resolved); // we can't check it better without ydbd
+        NYamlConfig::ValidateResolve(tree);
     }
 
     auto status = client.AddVolatileConfig(configStr).GetValueSync();

@@ -1,0 +1,231 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    *
+WITHOUT
+    b
+FROM (
+    VALUES
+        (1, 'one'),
+        (2, 'two')
+) AS input (
+    a,
+    b
+);
+
+SELECT
+    *
+WITHOUT
+    y.a
+FROM (
+    SELECT
+        0 AS i,
+        1 AS a
+) AS x;
+
+SELECT
+    *
+WITHOUT
+    b,
+    input.c,
+FROM (
+    VALUES
+        (1, 'one', TRUE)
+) AS input (
+    a,
+    b,
+    c
+);
+
+SELECT
+    a AS kept,
+    b AS removed
+WITHOUT
+    removed
+FROM (
+    VALUES
+        (1, 'one')
+) AS input (
+    a,
+    b
+);
+
+SELECT
+    1 AS removed
+WITHOUT
+    removed
+;
+
+SELECT
+    *
+WITHOUT IF EXISTS
+    b,
+    b,
+    missing,
+FROM (
+    VALUES
+        (1, 'one')
+) AS input (
+    a,
+    b
+);
+
+SELECT
+    *
+WITHOUT
+    lhs.b,
+    rhs.c
+FROM (
+    VALUES
+        (1, 'left')
+) AS lhs (
+    key,
+    b
+)
+JOIN (
+    VALUES
+        (1, 'right')
+) AS rhs (
+    key,
+    c
+)
+ON
+    lhs.key == rhs.key
+;
+
+SELECT
+    *
+WITHOUT
+    rhs.key
+FROM (
+    VALUES
+        (1)
+) AS lhs (
+    key
+)
+JOIN (
+    VALUES
+        (1)
+) AS rhs (
+    key
+)
+ON
+    lhs.key == rhs.key
+;
+
+SELECT
+    *
+WITHOUT
+    rhs.key
+FROM (
+    VALUES
+        (1)
+) AS lhs (
+    key
+)
+FULL JOIN (
+    VALUES
+        (2)
+) AS rhs (
+    key
+)
+ON
+    lhs.key == rhs.key
+ORDER BY
+    key
+;
+
+SELECT
+    *
+WITHOUT
+    lhs.key,
+    rhs.key
+FROM (
+    VALUES
+        (1)
+) AS lhs (
+    key
+)
+FULL JOIN (
+    VALUES
+        (2)
+) AS rhs (
+    key
+)
+ON
+    lhs.key == rhs.key
+;
+
+SELECT
+    key
+WITHOUT
+    rhs.key
+FROM (
+    VALUES
+        (1)
+) AS lhs (
+    key
+)
+JOIN (
+    VALUES
+        (1)
+) AS rhs (
+    key
+)
+ON
+    lhs.key == rhs.key
+;
+
+SELECT DISTINCT
+    *
+WITHOUT
+    b
+FROM (
+    VALUES
+        (1, 'one'),
+        (1, 'two')
+) AS input (
+    a,
+    b
+);
+
+SELECT
+    key,
+    COUNT(*) AS count
+WITHOUT
+    key
+FROM (
+    VALUES
+        (1),
+        (1),
+        (2)
+) AS input (
+    key
+)
+GROUP BY
+    key
+;
+
+SELECT
+    *
+WITHOUT
+    b
+FROM (
+    VALUES
+        (1, 'left')
+) AS input (
+    a,
+    b
+)
+UNION ALL
+SELECT
+    *
+WITHOUT
+    b
+FROM (
+    VALUES
+        (2, 'right')
+) AS input (
+    a,
+    b
+);

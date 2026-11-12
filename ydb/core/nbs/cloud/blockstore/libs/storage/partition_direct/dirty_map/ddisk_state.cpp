@@ -199,7 +199,7 @@ TString TDDiskState::DebugPrintBehindBrief() const
     }
 
     TStringBuilder result;
-    result << "b" << BehindField.GetBlockCount() << ";";
+    result << "behind " << BehindField.GetBlockCount() << ";";
     return result;
 }
 

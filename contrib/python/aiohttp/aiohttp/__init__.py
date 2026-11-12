@@ -1,6 +1,6 @@
-__version__ = "3.12.15"
+__version__ = "3.14.3"
 
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 from . import hdrs as hdrs
 from .client import (
@@ -56,7 +56,7 @@ from .connector import (
 )
 from .cookiejar import CookieJar as CookieJar, DummyCookieJar as DummyCookieJar
 from .formdata import FormData as FormData
-from .helpers import BasicAuth, ChainMapProxy, ETag
+from .helpers import BasicAuth, ChainMapProxy, ETag, encode_basic_auth
 from .http import (
     HttpVersion as HttpVersion,
     HttpVersion10 as HttpVersion10,
@@ -130,7 +130,7 @@ if TYPE_CHECKING:
         GunicornWebWorker as GunicornWebWorker,
     )
 
-__all__: Tuple[str, ...] = (
+__all__: tuple[str, ...] = (
     "hdrs",
     # client
     "AddrInfoType",
@@ -190,6 +190,7 @@ __all__: Tuple[str, ...] = (
     "ChainMapProxy",
     "DigestAuthMiddleware",
     "ETag",
+    "encode_basic_auth",
     "set_zlib_backend",
     # http
     "HttpVersion",
@@ -257,7 +258,7 @@ __all__: Tuple[str, ...] = (
 )
 
 
-def __dir__() -> Tuple[str, ...]:
+def __dir__() -> tuple[str, ...]:
     return __all__ + ("__doc__",)
 
 

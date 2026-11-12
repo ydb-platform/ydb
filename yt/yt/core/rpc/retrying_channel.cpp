@@ -7,7 +7,7 @@
 
 #include <yt/yt/core/bus/client.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <util/system/guard.h>
 
@@ -175,7 +175,7 @@ private:
             }
 
         private:
-            YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+            YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
             std::atomic<bool> Canceled_ = false;
             IClientRequestControlPtr Underlying_;
 

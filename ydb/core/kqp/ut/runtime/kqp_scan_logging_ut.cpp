@@ -11,9 +11,9 @@ using namespace NYdb::NTable;
 
 namespace {
 
-TKikimrSettings AppSettings(TStringStream& logStream) {
+TKikimrSettings AppSettings(const TCapturedLog& logStream) {
     TKikimrSettings serverSettings;
-    serverSettings.LogStream = &logStream;
+    serverSettings.LogCapture = logStream;
 
     return serverSettings;
 }
@@ -29,7 +29,7 @@ void FillTableWithData(NQuery::TQueryClient& db, ui64 numRows=300) {
 }
 
 void RunTestForQuery(const std::string& query, const std::string& expectedLog, bool enabledLogs) {
-    TStringStream logsStream;
+    TCapturedLog logsStream;
     {
         Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
         TKikimrRunner kikimr(AppSettings(logsStream));
@@ -56,9 +56,10 @@ void RunTestForQuery(const std::string& query, const std::string& expectedLog, b
         Cout << output << Endl;
     }
 
+    TStringStream input(logsStream.Snapshot());
     bool hasExpectedLog = false;
     TString line;
-    while (logsStream.ReadLine(line)) {
+    while (input.ReadLine(line)) {
         if (line.Contains(expectedLog)) {
             hasExpectedLog = true;
             break;
@@ -91,6 +92,33 @@ Y_UNIT_TEST_TWIN(GraceJoin, EnabledLogs) {
     )";
 
     RunTestForQuery(query, "[GraceJoin]", EnabledLogs);
+}
+
+Y_UNIT_TEST(ReadDecimalWithTraceLogs) {
+    TKikimrRunner kikimr;
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE);
+
+    auto db = kikimr.GetQueryClient();
+
+    auto result = db.ExecuteQuery(R"(
+        CREATE TABLE `/Root/DecimalTable` (
+            Key Uint64 NOT NULL,
+            Value Decimal(22, 2),
+            PRIMARY KEY (Key)
+        );
+    )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    result = db.ExecuteQuery(R"(
+        UPSERT INTO `/Root/DecimalTable` (Key, Value) VALUES (1u, CAST("1.25" AS Decimal(22, 2)));
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    result = db.ExecuteQuery(R"(
+        SELECT Value FROM `/Root/DecimalTable`;
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson(R"([[["1.25"]]])", FormatResultSetYson(result.GetResultSet(0)));
 }
 
 

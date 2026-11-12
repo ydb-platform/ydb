@@ -67,6 +67,55 @@ class ClusterTemplatesTest(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def test_port_ranges_validation_and_snapshot(self):
+        self.value['port_ranges'] = {'http': '8790, 8765-8770, 8769-8789', 'grpc': 2135, 'ic': ''}
+        saved = self.store.save(self.value, {'amd', 'sas'})
+        self.assertEqual({'http': '8765-8790', 'grpc': '2135'}, saved['port_ranges'])
+        self.assertEqual(saved['port_ranges'], self.store.list()[0]['port_ranges'])
+        for invalid in [
+            None,
+            [],
+            {'other': '1'},
+            {'http': True},
+            {'http': [1]},
+            {'http': '0'},
+            {'http': '65536'},
+            {'http': '123-122'},
+            {'http': '123,'},
+            {'http': '-1'},
+            {'http': '1.5'},
+            {'http': '1-2-3'},
+            {'http': '9' * 4097},
+            {'http': 'auto,'},
+            {'http': ',auto'},
+            {'http': 'auto,,123'},
+            {'http': '123,auto,0'},
+            {'http': 'auto-123'},
+            {'http': 'automatic'},
+            {'http': 'auto,' * 1025 + 'auto'},
+        ]:
+            with self.subTest(invalid=invalid), self.assertRaises(BenchmarkError):
+                cluster_templates.validate_template({**self.value, 'port_ranges': invalid}, {'amd', 'sas'})
+        self.assertNotIn(
+            'port_ranges',
+            cluster_templates.validate_template(
+                {**self.value, 'port_ranges': {'http': ' ', 'grpc': ''}}, {'amd', 'sas'}
+            ),
+        )
+        self.assertEqual([(1, 65535)], cluster_templates.parse_port_ranges('1-65535', 'ports'))
+
+    def test_auto_ports_normalize_and_survive_snapshot(self):
+        self.value['port_ranges'] = {'http': 'AUTO, 8790, 8765-8789, auto', 'grpc': 'auto', 'ic': 19001}
+        saved = self.store.save(self.value, {'amd', 'sas'})
+        expected = {'http': '8765-8790, auto', 'grpc': 'auto', 'ic': '19001'}
+        self.assertEqual(expected, saved['port_ranges'])
+        self.assertEqual(expected, self.store.list()[0]['port_ranges'])
+        self.assertEqual(expected, cluster_templates.validate_template(saved, {'amd', 'sas'})['port_ranges'])
+        for value in ('auto', ' Auto ', 'auto, auto'):
+            self.assertEqual(([], True), cluster_templates.parse_port_selection(value, 'ports'))
+        self.assertEqual(([], False), cluster_templates.parse_port_selection('', 'ports'))
+        self.assertEqual(([(19001, 19002)], True), cluster_templates.parse_port_selection('auto,19001-19002', 'ports'))
+
     def test_apply_yaml_adds_entities_without_mutating_original(self):
         hosts = [
             {'id': 'amd', 'name': 'amd.test'},

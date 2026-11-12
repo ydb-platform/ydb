@@ -27,6 +27,11 @@ namespace trace
 class ComposableProbabilitySampler : public ComposableSampler
 {
 public:
+  /**
+   * @param ratio the sampling probability: either 0 (never sample) or a
+   * value in [2^-56, 1.0]. Other values (including NaN) log a warning and
+   * fall back to the default of 1.0.
+   */
   explicit ComposableProbabilitySampler(double ratio);
 
   SamplingIntent GetSamplingIntent(

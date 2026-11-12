@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/core/formats/arrow
     ydb/core/formats/arrow/filter
     ydb/core/formats/arrow/printer

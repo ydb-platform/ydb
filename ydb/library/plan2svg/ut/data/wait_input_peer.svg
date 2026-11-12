@@ -393,8 +393,8 @@
 <path d='M1279,47c0,0,0,-13,0,-13c0,0,0,13,0,13c0,0,0,-4,0,-4c0,0,0,4,0,4c0,0,0,-2,0,-2c0,0,0,2,0,2c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 6 tasks: finished 1 of 1</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
@@ -504,8 +504,8 @@
 <path d='M1013,47c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,-2,8,-2c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,-13,8,-13c2,0,5,13,8,13c3,0,6,0,9,0c2,0,5,-2,8,-2c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,-2,8,-2c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,-2,8,-2c2,0,5,2,8,2c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c2,0,5,0,8,0c3,0,6,0,9,0c2,0,5,0,8,0c3,0,6,0,9,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 5 tasks: finished 228 of 228</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>228</text>
 </g>
@@ -625,8 +625,8 @@
 <path d='M619,47c6,0,13,0,20,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,-9,21,-9c7,0,14,8,21,8c6,0,13,-4,20,-4c7,0,14,2,21,2c6,0,13,3,20,3c7,0,14,0,21,0c7,0,14,-13,21,-13c6,0,13,10,20,10c7,0,14,2,21,2c6,0,13,0,20,0c7,0,14,1,21,1c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,-7,20,-7c7,0,14,4,21,4c6,0,13,-4,20,-4c7,0,14,2,21,2c7,0,14,1,21,1c6,0,13,4,20,4c7,0,14,-11,21,-11c6,0,13,7,20,7c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,1,20,1c7,0,14,1,21,1c6,0,13,2,20,2c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 4 tasks: finished 256 of 256</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 82' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,41L13,82L0,82z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>256</text>
 </g>
@@ -751,8 +751,8 @@
 <path d='M608,47c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-1,21,-1c7,0,14,1,21,1c7,0,14,0,21,0c7,0,14,-13,21,-13c7,0,14,9,21,9c6,0,13,1,20,1c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,1,21,1c7,0,14,2,21,2c7,0,14,0,21,0c7,0,14,-5,21,-5c7,0,14,5,21,5c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 0 tasks: finished 256 of 256</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>256</text>
 </g>
@@ -829,8 +829,8 @@
 <path d='M608,47c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-6,21,-6c7,0,14,-1,21,-1c7,0,14,4,21,4c7,0,14,-9,21,-9c6,0,13,5,20,5c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,7,21,7c7,0,14,-13,21,-13c7,0,14,7,21,7c7,0,14,2,21,2c7,0,14,0,21,0c7,0,14,3,21,3c7,0,14,1,21,1c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>External Source partitions: finished 256 of 256</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 50' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>256</text>
 </g>
@@ -941,8 +941,8 @@
 <path d='M607,47c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-3,11,-3c3,0,7,0,11,0c3,0,7,3,11,3c4,0,8,-5,12,-5c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,2,11,2c4,0,8,1,12,1c3,0,7,0,11,0c3,0,7,-13,11,-13c3,0,7,10,11,10c3,0,7,1,11,1c3,0,7,-2,11,-2c4,0,8,1,12,1c3,0,7,0,11,0c3,0,7,1,11,1c3,0,7,-2,11,-2c3,0,7,1,11,1c3,0,7,1,11,1c4,0,8,0,12,0c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,-5,11,-5c3,0,7,5,11,5c3,0,7,0,11,0c4,0,8,0,12,0c3,0,7,0,11,0c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 3 tasks: finished 256 of 256</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 82' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,41L13,82L0,82z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>256</text>
 </g>
@@ -1067,8 +1067,8 @@
 <path d='M608,47c4,0,8,-1,12,-1c3,0,7,1,11,1c3,0,7,-5,11,-5c3,0,7,5,11,5c3,0,7,-7,11,-7c3,0,7,4,11,4c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,3,11,3c4,0,8,0,12,0c3,0,7,-13,11,-13c3,0,7,11,11,11c3,0,7,-3,11,-3c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,-5,11,-5c3,0,7,3,11,3c3,0,7,1,11,1c4,0,8,-3,12,-3c3,0,7,2,11,2c3,0,7,2,11,2c3,0,7,-2,11,-2c3,0,7,2,11,2c3,0,7,1,11,1c3,0,7,-2,11,-2c3,0,7,2,11,2c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 1 tasks: finished 152 of 152</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>152</text>
 </g>
@@ -1145,8 +1145,8 @@
 <path d='M609,47c3,0,7,-2,11,-2c3,0,7,1,11,1c3,0,7,-6,11,-6c3,0,7,3,11,3c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,4,11,4c3,0,7,-13,11,-13c4,0,8,8,12,8c3,0,7,1,11,1c3,0,7,3,11,3c3,0,7,-5,11,-5c3,0,7,3,11,3c3,0,7,-2,11,-2c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,-4,11,-4c3,0,7,6,11,6c4,0,8,-7,12,-7c3,0,7,4,11,4c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,1,11,1c3,0,7,-1,11,-1c3,0,7,1,11,1c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c4,0,8,0,12,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>External Source partitions: finished 256 of 256</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 50' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>256</text>
 </g>
@@ -1239,8 +1239,8 @@
 <path d='M605,47c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-13,1,-13c0,0,0,10,1,10c0,0,0,-7,0,-7c0,0,0,2,1,2c0,0,0,3,1,3c0,0,0,4,0,4c0,0,0,-1,1,-1c0,0,0,1,1,1c0,0,0,1,0,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 2 tasks: finished 256 of 256</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>256</text>
 </g>
@@ -1317,8 +1317,8 @@
 <path d='M607,47c0,0,0,-7,1,-7c0,0,0,1,0,1c0,0,0,-1,1,-1c0,0,0,0,1,0c0,0,0,-6,1,-6c0,0,0,4,1,4c0,0,0,2,0,2c0,0,0,4,1,4c0,0,0,0,1,0c0,0,0,3,1,3c0,0,0,-6,0,-6c0,0,0,5,1,5c0,0,0,0,1,0c0,0,0,-1,1,-1c0,0,0,-1,1,-1c0,0,0,-1,0,-1c0,0,0,-3,1,-3c0,0,0,0,1,0c0,0,0,4,1,4c0,0,0,2,0,2c0,0,0,1,1,1c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>External Source partitions: finished 256 of 256</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 50' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>256</text>
 </g>
@@ -1375,28 +1375,28 @@
 <text x='396' y='13' class='texte'>Tasks</text>
 <text x='403' y='13' class='texts'>Statistics</text>
 <g><title>2026-09-04T14:27:09.759000Z</title>
-<text x='608' y='13' class='texts'>0:00</text>
+<text x='608' y='13' class='texts'>0</text>
 </g>
 <g><title>2026-09-04T14:27:19.759000Z</title>
-<text x='695' y='13' class='texts'>0:10</text>
+<text x='691' y='13' class='texte'>0:10</text>
 </g>
 <g><title>2026-09-04T14:27:29.759000Z</title>
-<text x='783' y='13' class='texts'>0:20</text>
+<text x='779' y='13' class='texte'>0:20</text>
 </g>
 <g><title>2026-09-04T14:27:39.759000Z</title>
-<text x='870' y='13' class='texts'>0:30</text>
+<text x='866' y='13' class='texte'>0:30</text>
 </g>
 <g><title>2026-09-04T14:27:49.759000Z</title>
-<text x='958' y='13' class='texts'>0:40</text>
+<text x='954' y='13' class='texte'>0:40</text>
 </g>
 <g><title>2026-09-04T14:27:59.759000Z</title>
-<text x='1046' y='13' class='texts'>0:50</text>
+<text x='1042' y='13' class='texte'>0:50</text>
 </g>
 <g><title>2026-09-04T14:28:09.759000Z</title>
-<text x='1133' y='13' class='texts'>1:00</text>
+<text x='1129' y='13' class='texte'>1:00</text>
 </g>
 <g><title>2026-09-04T14:28:19.759000Z</title>
-<text x='1221' y='13' class='texts'>1:10</text>
+<text x='1217' y='13' class='texte'>1:10</text>
 </g>
 </svg>
 <line x1='0' y1='18' x2='1280' y2='18' class='columns' />

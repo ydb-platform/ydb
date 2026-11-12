@@ -1,0 +1,106 @@
+# Storage SelfHeal
+
+Storage SelfHeal is a mechanism for automatically restoring {{ ydb-short-name }} storage fault tolerance.
+
+For an overview of the mechanisms and their operating conditions, see [SelfHeal](selfheal.md). Recovery of State Storage, Board, and SchemeBoard replicas is described in [Metadata Distribution SelfHeal](selfheal-metadata-distribution.md).
+
+## How storage SelfHeal works {#how-it-works}
+
+Sentinel, a component of [CMS](../../concepts/glossary.md#cms), continuously monitors the state of [PDisks](../../concepts/glossary.md#pdisk) and nodes. If a fault persists long enough (about one hour by default), Sentinel initiates relocation of the affected [VDisks](../../concepts/glossary.md#vdisk) to healthy hardware so that the [failure model](../../concepts/topology.md#cluster-config) is satisfied again.
+
+The [Blob Storage Controller](../../concepts/glossary.md#ds-controller) executes the command: data is replicated in the background. The relocation itself can take from minutes to a day, depending on the data volume and the hardware. Once the command has been accepted, CMS treats the task as issued; distributed storage is responsible for completing replication.
+
+Storage SelfHeal is enabled by default for [dynamic groups](../../concepts/glossary.md#dynamic-group). On clusters with configuration V2, you can also enable [static group SelfHeal](../configuration-management/configuration-v2/static-group-self-heal.md). With configuration V1, static group SelfHeal cannot be enabled.
+
+## Enabling and disabling SelfHeal {#on-off}
+
+You can enable and disable SelfHeal using the [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md) utility.
+
+To enable SelfHeal, run the command:
+
+```bash
+ydb-dstool -e <bs_endpoint> cluster set --enable-self-heal
+```
+
+`<bs_endpoint>` is the endpoint of any [storage node](../../concepts/glossary.md#storage-node) in the cluster.
+
+To disable SelfHeal, run the command:
+
+```bash
+ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
+```
+
+### When to disable SelfHeal {#when-to-disable}
+
+SelfHeal is normally left enabled. Temporarily disable it only when automatic relocation is riskier than waiting, for example if:
+
+* an error in SelfHeal has been found that makes relocation create a risk of data loss;
+* many nodes have failed at once, the cluster is overloaded, and additional background replication would increase the load and interfere with restoring cluster availability.
+
+{% note warning %}
+
+While SelfHeal is disabled, VDisks from faulty PDisks are not relocated automatically. Monitor the storage state and re-enable SelfHeal as soon as the cluster stabilizes.
+
+{% endnote %}
+
+## SelfHeal settings {#settings}
+
+The parameters below control different stages of Sentinel operation: polling PDisk state, confirming a persistent state, and retries when sending a new status to the [Blob Storage Controller](../../concepts/glossary.md#ds-controller). For each state, the time until confirmation is the product of **State update interval** and the cycle limit for that state. For example, for most failure states the defaults are 60 seconds and 60 cycles, so the transition to `FAULTY` starts after about one hour. Configuration update intervals and status-change retries are not part of that product.
+
+{% note warning %}
+
+Do not change these parameters in normal operation. The defaults are chosen for typical clusters. Change them only if you understand how shifting the delay affects SelfHeal reaction time, for example on the advice of {{ ydb-short-name }} developers.
+
+{% endnote %}
+
+You can configure SelfHeal in **Viewer** → **Cluster Management System** → **CmsConfigItems**.
+
+To create settings for the first time, click **Create**. If you need to change existing settings, click the ![pencil](../../_assets/pencil.svg) button.
+
+The following settings are available:
+
+| **Parameter** | **Description** |
+| :--- | :--- |
+| **Status** | Enabling and disabling SelfHeal in CMS. |
+| **Dry run** | Enabling and disabling the mode in which CMS does not change the BSC setting. |
+| **Config update interval (sec.)** | Period of configuration updates from BSC. |
+| **Retry interval (sec.)** | Period of retries for configuration updates. |
+| **State update interval (sec.)** | Period of PDisk state updates. |
+| **Timeout (sec.)** | Timeout for PDisk state updates. |
+| **Change status retries** | Number of retries to change the PDisk status in BSC (`ACTIVE`, `FAULTY`, `BROKEN`, etc.). |
+| **Change status retry interval (sec.)** | Delay between retries when submitting a new PDisk status to BSC. |
+| **Default state limit** | For states for which no setting is specified, this "default" value can be used. For unknown PDisk states for which there is no setting, this value is also used. This value is used if the value is not set for states `Initial`, `InitialFormatRead`, `InitialSysLogRead`, `InitialCommonLogRead`, `Normal`. |
+| **Initial** | PDisk starts initialization. Transitions to `FAULTY`. |
+| **InitialFormatRead** | PDisk reads its format record. Transitions to `FAULTY`. |
+| **InitialFormatReadError** | PDisk received an error while reading its format record. Transitions to `FAULTY`. |
+| **InitialSysLogRead** | PDisk reads the system log. Transitions to `FAULTY`. |
+| **InitialSysLogReadError** | PDisk received an error while reading the system log. Transitions to `FAULTY`. |
+| **InitialSysLogParseError** | PDisk received an error while parsing or checking the consistency of the system log. Transitions to `FAULTY`. |
+| **InitialCommonLogRead** | PDisk reads the common log of VDisks. Transitions to `FAULTY`. |
+| **InitialCommonLogReadError** | PDisk received an error while reading the common log of VDisks. Transitions to `FAULTY`. |
+| **InitialCommonLogParseError** | PDisk received an error while parsing or checking the consistency of the common log. Transitions to `FAULTY`. |
+| **CommonLoggerInitError** | PDisk received an error while initializing internal structures intended for writing to the common log. Transitions to `FAULTY`. |
+| **Normal** | PDisk has completed initialization and is operating normally. Transition to `ACTIVE` will occur after the specified number of cycles (for example, if `Normal` persists for 5 minutes, the disk transitions to state `ACTIVE`). |
+| **OpenFileError** | PDisk received an error while opening the disk file. Transitions to `FAULTY`. |
+| **Missing** | The node responds, but this PDisk is not in its list. Transitions to `FAULTY`. |
+| **Timeout** | The node did not respond within the allotted timeout. Transitions to `FAULTY`. |
+| **NodeDisconnected** | Node disconnection. Transitions to `FAULTY`. |
+| **Stopped** | PDisk is stopped. Transitions to `FAULTY`. |
+| **Unknown** | Unexpected response, for example, response `TEvUndelivered` to a state request. Transitions to `FAULTY`. |
+
+## Working with donor disks {#disks}
+
+A donor disk is a previous VDisk after data migration that continues to store its data and only responds to read requests from the new VDisk. When migrating with donor disks enabled, previous VDisks continue to function until the data is fully migrated to new disks. To prevent data loss during VDisk migration, enable the use of donor disks:
+
+
+```bash
+ydb-dstool -e <bs_endpoint> cluster set --enable-donor-mode
+```
+
+
+To disable donor disks, enter the command:
+
+
+```bash
+ydb-dstool -e <bs_endpoint> cluster set --disable-donor-mode
+```

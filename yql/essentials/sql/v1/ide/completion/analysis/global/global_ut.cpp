@@ -24,7 +24,8 @@ Y_UNIT_TEST(TopLevelNamesCollected) {
             $first, $second, $_ = AsTuple(1, 2, 3);
         )";
 
-    TGlobalContext ctx = global->Analyze({.Text = query}, {});
+    TCompletionInput input = {{.Text = query}};
+    TGlobalContext ctx = global->Analyze(input, {});
     Sort(ctx.Names);
 
     TVector<TString> expected = {

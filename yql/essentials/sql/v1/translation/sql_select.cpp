@@ -842,7 +842,7 @@ bool TSqlSelect::ColumnList(TVector<TNodePtr>& keys, const TRule& node) {
         return false;
     }
 
-    for (auto b : node.GetBlock2()) {
+    for (const auto& b : node.GetBlock2()) {
         Token(b.GetToken1());
         if constexpr (std::is_same_v<TRule, TRule_column_list>) {
             result = ColumnName(keys, b.GetRule_column_name2());
@@ -923,7 +923,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
 
     bool listCall = false;
     TSqlCallExpr call(*this);
-    bool initRet = call.Init(block5.GetRule_using_call_expr2());
+    TSQLStatus initRet = call.Init(block5.GetRule_using_call_expr2());
     if (initRet) {
         call.IncCounters();
     }
@@ -1047,7 +1047,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
 
     bool listCall = false;
     TSqlCallExpr call(*this);
-    bool initRet = call.Init(node.GetRule_using_call_expr9());
+    TSQLStatus initRet = call.Init(node.GetRule_using_call_expr9());
     if (initRet) {
         call.IncCounters();
     }
@@ -1283,7 +1283,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         if (!SelectTerm(terms, node.GetRule_result_column5())) {
             return nullptr;
         }
-        for (auto block : node.GetBlock6()) {
+        for (const auto& block : node.GetBlock6()) {
             if (!SelectTerm(terms, block.GetRule_result_column2())) {
                 return nullptr;
             }
@@ -1343,7 +1343,7 @@ TSourcePtr TSqlSelect::CombineCore(const TRule_combine_core& node, const TWriteS
     Token(node.GetToken9());
 
     TSqlCallExpr call(*this);
-    bool initRet = call.Init(node.GetRule_using_call_expr10());
+    TSQLStatus initRet = call.Init(node.GetRule_using_call_expr10());
     if (!initRet) {
         return {};
     }
@@ -1361,7 +1361,7 @@ TSourcePtr TSqlSelect::CombineCore(const TRule_combine_core& node, const TWriteS
                         std::move(combineKeyExpr), udf, std::move(args), settings);
 }
 
-bool TSqlTranslation::OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy) {
+TSQLStatus TSqlTranslation::OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy) {
     return SortSpecificationList(node.GetRule_sort_specification_list3(), orderBy);
 }
 

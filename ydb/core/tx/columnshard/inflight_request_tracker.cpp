@@ -32,6 +32,22 @@ void TInFlightReadsTracker::AddToInFlightRequest(
     AFL_VERIFY(RequestsMeta.emplace(cookie, readMetaBase).second);
 }
 
+NOlap::TLocalActiveSnapshots TInFlightReadsTracker::GetActiveSnapshots(const NOlap::TSnapshot until) const {
+    NOlap::TLocalActiveSnapshots result;
+    for (const auto& [snapshot, info] : SnapshotsLive) {
+        if (snapshot >= until) {
+            break;
+        }
+        for (const auto& [_, pathId] : info.GetRequests()) {
+            auto& snapshots = pathId ? result.ByPathId[*pathId] : result.ForAllTables;
+            if (snapshots.empty() || snapshots.back() != snapshot) {
+                snapshots.push_back(snapshot);
+            }
+        }
+    }
+    return result;
+}
+
 namespace {
 class TTransactionSavePersistentSnapshots: public TExtendedTransactionBase {
 private:
@@ -115,14 +131,15 @@ bool TInFlightReadsTracker::LoadFromDatabase(NTable::TDatabase& tableDB) {
     return true;
 }
 
-ui64 TInFlightReadsTracker::AddInFlightRequest(NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
+ui64 TInFlightReadsTracker::AddInFlightRequest(
+    NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index, const std::optional<TInternalPathId> pathId) {
     const ui64 cookie = NextCookie++;
     auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
     if (it == SnapshotsLive.end()) {
         it = SnapshotsLive.emplace(readMeta->GetRequestSnapshot(), TSnapshotLiveInfo::BuildFromRequest(readMeta->GetRequestSnapshot())).first;
         Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetOldestLiveSnapshot());
     }
-    it->second.AddRequest(cookie);
+    it->second.AddRequest(cookie, pathId);
     AddToInFlightRequest(cookie, readMeta, index);
     return cookie;
 }

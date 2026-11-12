@@ -9,7 +9,7 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
-template <std::totally_ordered TKey, typename TPortion>
+template <typename TPortion>
 struct CompactionTask {
     std::vector<typename TPortion::TConstPtr> Portions;
     ui8 TargetLevel;
@@ -33,7 +33,7 @@ struct TPortionByIdComparator {
     }
 };
 
-template <std::totally_ordered TKey, typename TPortion>
+template <typename TPortion>
 struct ICompactionUnit {
     using TLevelCounters = NTiling::TLevelCounters;
 
@@ -58,11 +58,11 @@ struct ICompactionUnit {
         DoRemovePortion(p);
     }
 
-    std::optional<CompactionTask<TKey, TPortion>> GetNextOptimizationTask(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
+    std::optional<CompactionTask<TPortion>> GetNextOptimizationTask(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
         return DoGetNextOptimizationTask(isLocked);
     }
 
-    virtual std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
+    virtual std::optional<CompactionTask<TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const = 0;
 
     virtual void DoActualize(const TInstant /*currentInstant*/) {
@@ -78,20 +78,21 @@ protected:
     virtual void DoRemovePortion(typename TPortion::TConstPtr p) = 0;
 };
 
-template <std::totally_ordered TKey, typename TPortion>
+template <typename TPortion>
 struct TPortionByIndexKeyEndComparator {
     using is_transparent = void;   // Enable heterogeneous lookup
+    using TKeyRef = typename TPortion::TKeyRef;
 
     bool operator()(const typename TPortion::TConstPtr& left, const typename TPortion::TConstPtr& right) const {
-        return std::tuple(left->IndexKeyEnd(), left->GetPortionId()) < std::tuple(right->IndexKeyEnd(), right->GetPortionId());
+        return std::tuple(left->IndexKeyEndRef(), left->GetPortionId()) < std::tuple(right->IndexKeyEndRef(), right->GetPortionId());
     }
 
-    bool operator()(const typename TPortion::TConstPtr& left, const TKey& right) const {
-        return left->IndexKeyEnd() < right;
+    bool operator()(const typename TPortion::TConstPtr& left, const TKeyRef& right) const {
+        return left->IndexKeyEndRef() < right;
     }
 
-    bool operator()(const TKey& left, const typename TPortion::TConstPtr& right) const {
-        return left < right->IndexKeyEnd();
+    bool operator()(const TKeyRef& left, const typename TPortion::TConstPtr& right) const {
+        return left < right->IndexKeyEndRef();
     }
 };
 

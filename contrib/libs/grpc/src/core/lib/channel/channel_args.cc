@@ -281,25 +281,35 @@ y_absl::optional<bool> ChannelArgs::GetBool(y_absl::string_view name) const {
   }
 }
 
-TString ChannelArgs::Value::ToString() const {
-  if (rep_.c_vtable() == &int_vtable_) {
-    return ::ToString(reinterpret_cast<intptr_t>(rep_.c_pointer()));
-  }
+y_absl::string_view ChannelArgs::Value::ToString(
+    std::list<TString>& backing_strings) const {
   if (rep_.c_vtable() == &string_vtable_) {
-    return TString(
-        static_cast<RefCountedString*>(rep_.c_pointer())->as_string_view());
+    return static_cast<RefCountedString*>(rep_.c_pointer())->as_string_view();
   }
-  return y_absl::StrFormat("%p", rep_.c_pointer());
+  if (rep_.c_vtable() == &int_vtable_) {
+    backing_strings.emplace_back(
+        ::ToString(reinterpret_cast<intptr_t>(rep_.c_pointer())));
+    return backing_strings.back();
+  }
+  backing_strings.emplace_back(y_absl::StrFormat("%p", rep_.c_pointer()));
+  return backing_strings.back();
 }
 
 TString ChannelArgs::ToString() const {
-  std::vector<TString> arg_strings;
-  args_.ForEach(
-      [&arg_strings](const RefCountedStringValue& key, const Value& value) {
-        arg_strings.push_back(
-            y_absl::StrCat(key.as_string_view(), "=", value.ToString()));
-      });
-  return y_absl::StrCat("{", y_absl::StrJoin(arg_strings, ", "), "}");
+  std::vector<y_absl::string_view> strings;
+  std::list<TString> backing_strings;
+  strings.push_back("{");
+  bool first = true;
+  args_.ForEach([&strings, &first, &backing_strings](
+                    const RefCountedStringValue& key, const Value& value) {
+    if (!first) strings.push_back(", ");
+    first = false;
+    strings.push_back(key.as_string_view());
+    strings.push_back("=");
+    strings.push_back(value.ToString(backing_strings));
+  });
+  strings.push_back("}");
+  return y_absl::StrJoin(strings, "");
 }
 
 ChannelArgs ChannelArgs::UnionWith(ChannelArgs other) const {

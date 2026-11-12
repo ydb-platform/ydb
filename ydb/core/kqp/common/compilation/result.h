@@ -57,6 +57,7 @@ struct TKqpCompileResult {
 
     ETableReadType MaxReadType;
     bool AllowCache = true;
+    bool UsedNewRbo = false;
     TMaybe<TQueryAst> QueryAst;
     bool NeedToSplit = false;
     TMaybe<TString> CommandTagName = {};
@@ -74,6 +75,7 @@ struct TKqpStatsCompile {
     bool FromCache = false;
     ui64 DurationUs = 0;
     ui64 CpuTimeUs = 0;
+    bool UsedNewRbo = false;
 };
 } // namespace NKikimr::NKqp
 

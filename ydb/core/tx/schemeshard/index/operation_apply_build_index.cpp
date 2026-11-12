@@ -13,7 +13,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 namespace {
 
-ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard) {
+ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard, bool internal) {
     TPath implTable = index.Child(name);
     {
         // To safely fill the TransactionTemplate below, we need to check if the table is valid.
@@ -37,6 +37,7 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
 
     TTableInfo::TPtr table = context.SS->Tables.at(pathId);
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable);
+    transaction.SetInternal(internal);
 
     auto operation = transaction.MutableAlterTable();
     operation->SetName(name);
@@ -51,7 +52,7 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
     return CreateFinalizeBuildIndexImplTable(partId, transaction);
 }
 
-ISubOperation::TPtr DropIndexImplTable(const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard, bool& rejected) {
+ISubOperation::TPtr DropIndexImplTable(const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard, bool& rejected, bool internal) {
     TPath implTable = index.Child(name);
     {
         const auto checks = implTable.Check();
@@ -79,6 +80,8 @@ ISubOperation::TPtr DropIndexImplTable(const TPath& index, const TOperationId& n
         // otherwise `CheckLocks` check would fail
         *transaction.MutableLockGuard() = lockGuard;
     }
+
+    transaction.SetInternal(internal);
     auto operation = transaction.MutableDrop();
     operation->SetName(name);
     return CreateDropTable(partId, transaction);
@@ -111,10 +114,16 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         }
     }
 
+    if (config.GetForReplication() && (!tx.GetInternal() || !table.IsAsyncReplicaTable())) {
+        return {CreateReject(nextId, NKikimrScheme::StatusInvalidParameter,
+            "Replication index finalization requires an internal operation on a replica")};
+    }
+
     TVector<ISubOperation::TPtr> result;
     {
         auto finalize = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable);
         *finalize.MutableLockGuard() = tx.GetLockGuard();
+        finalize.SetInternal(tx.GetInternal());
         auto op = finalize.MutableFinalizeBuildIndexMainTable();
         op->SetTableName(table.LeafName());
         op->SetSnapshotTxId(config.GetSnapshotTxId());
@@ -132,6 +141,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         TPath index = table.Child(indexName);
         auto tableIndexAltering = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
         *tableIndexAltering.MutableLockGuard() = tx.GetLockGuard();
+        tableIndexAltering.SetInternal(tx.GetInternal());
         auto alterIndex = tableIndexAltering.MutableAlterTableIndex();
         alterIndex->SetName(index.LeafName());
         alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
@@ -143,6 +153,10 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         result.push_back(CreateAlterTableIndex(NextPartId(nextId, result), tableIndexAltering));
     }
 
+    if (config.GetForReplication()) {
+        return result; // Replica impl tables have no shadow data or scan snapshot.
+    }
+
     // IsBuildIndex()
     if (!indexName.empty()) {
         TPath index = table.Child(indexName);
@@ -152,21 +166,23 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
             const auto partId = NextPartId(nextId, result);
             if (NTableIndex::IsBuildImplTable(indexImplTableName)) {
                 bool rejected = false;
-                auto op = DropIndexImplTable(index, nextId, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard(), rejected);
+                auto op = DropIndexImplTable(index, nextId, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard(), rejected, tx.GetInternal());
                 if (rejected) {
                     return {std::move(op)};
                 }
                 result.push_back(std::move(op));
-            } else if (context.SS->TablesWithSnapshots.contains(indexChildItems.second)) {
+            } else if (context.SS->HasTableSnapshot(indexChildItems.second)) {
+                // This is the index impl table during unique-index validation,
+                // which holds exactly one snapshot.
                 auto finalize = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable);
                 *finalize.MutableLockGuard() = tx.GetLockGuard();
                 auto op = finalize.MutableFinalizeBuildIndexMainTable();
                 op->SetTableName(indexImplTableName);
-                op->SetSnapshotTxId(ui64(context.SS->TablesWithSnapshots.at(indexChildItems.second)));
+                op->SetSnapshotTxId(ui64(context.SS->GetSingleTableSnapshot(indexChildItems.second)));
                 op->SetBuildIndexId(config.GetBuildIndexId());
                 result.push_back(CreateFinalizeBuildIndexMainTable(partId, finalize));
             } else {
-                result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard()));
+                result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard(), tx.GetInternal()));
             }
         }
     }
@@ -199,11 +215,17 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         }
     }
 
+    if (config.GetForReplication() && (!tx.GetInternal() || !table.IsAsyncReplicaTable())) {
+        return {CreateReject(nextId, NKikimrScheme::StatusInvalidParameter,
+            "Replication index cancellation requires an internal operation on a replica")};
+    }
+
     TVector<ISubOperation::TPtr> result;
 
     {
         auto finalize = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable);
         *finalize.MutableLockGuard() = tx.GetLockGuard();
+        finalize.SetInternal(tx.GetInternal());
 
         auto op = finalize.MutableFinalizeBuildIndexMainTable();
         op->SetTableName(table.LeafName());
@@ -223,6 +245,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
     if (!indexName.empty()) {
         TPath index = table.Child(indexName);
         auto tableIndexDropping = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
+        tableIndexDropping.SetInternal(tx.GetInternal());
         auto operation = tableIndexDropping.MutableDrop();
         operation->SetName(index.Base()->Name);
 
@@ -232,7 +255,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto partId = NextPartId(nextId, result);
             bool rejected = false;
-            auto op = DropIndexImplTable(index, nextId, partId, indexChildItems.first, indexChildItems.second, tx.GetLockGuard(), rejected);
+            auto op = DropIndexImplTable(index, nextId, partId, indexChildItems.first, indexChildItems.second, tx.GetLockGuard(), rejected, tx.GetInternal());
             if (rejected) {
                 return {std::move(op)};
             }

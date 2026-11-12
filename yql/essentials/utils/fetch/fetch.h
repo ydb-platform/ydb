@@ -21,11 +21,24 @@ public:
 
 using TFetchResultPtr = TIntrusivePtr<IFetchResult>;
 
+enum class EHttpStatusHandling {
+    Throw,
+    ReturnResponse,
+};
+
 THttpURL ParseURL(TStringBuf addr);
 IRetryPolicy<unsigned>::TPtr GetDefaultPolicy();
 ERetryErrorClass DefaultClassifyHttpCode(unsigned code);
 THttpURL AppendUrlPath(const THttpURL& url, const TString& part);
 TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders = {}, const TDuration& timeout = TDuration::Max(), size_t redirects = 10, const IRetryPolicy<unsigned>::TPtr& policy = nullptr);
-TFetchResultPtr FetchEx(const THttpURL& url, TStringBuf method = "GET"_sb, TStringBuf body = {}, const THttpHeaders& additionalHeaders = {}, const TDuration& timeout = TDuration::Max(), size_t redirects = 10, const IRetryPolicy<unsigned>::TPtr& policy = nullptr);
+TFetchResultPtr FetchEx(
+    const THttpURL& url,
+    TStringBuf method = "GET"_sb,
+    TStringBuf body = {},
+    const THttpHeaders& additionalHeaders = {},
+    const TDuration& timeout = TDuration::Max(),
+    size_t redirects = 10,
+    const IRetryPolicy<unsigned>::TPtr& policy = nullptr,
+    EHttpStatusHandling statusHandling = EHttpStatusHandling::Throw);
 
 } // namespace NYql

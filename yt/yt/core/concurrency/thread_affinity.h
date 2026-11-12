@@ -38,17 +38,17 @@ class TThreadAffinitySlot
 {
 public:
     //! Checks if the slot matches the given thread id.
-    void Check(NThreading::TThreadId threadId);
+    void Check(TThreadId threadId);
 
     //! Checks if the slot matches the current thread id.
     void Check();
 
     //! Returns thread id used for affinity check
     //! or #InvalidThreadId if bound thread is still undefined.
-    NThreading::TThreadId GetBoundThreadId() const;
+    TThreadId GetBoundThreadId() const;
 
 private:
-    std::atomic<NThreading::TThreadId> BoundId_ = NThreading::InvalidThreadId;
+    std::atomic<TThreadId> BoundId_ = InvalidThreadId;
 };
 
 #ifdef YT_ENABLE_THREAD_AFFINITY_CHECK

@@ -602,6 +602,7 @@ Y_UNIT_TEST_SUITE(TDbsControllerDatabaseTest)
 
         auto testNodesSubset =
             [&](const TVector<ui32>& nodes,
+                const THashSet<ui32>& lockedNodes,
                 const THashMap<TDbsControllerDatabase::TDirectKey, ui64>&
                     expected,
                 const TString& note)
@@ -618,6 +619,7 @@ Y_UNIT_TEST_SUITE(TDbsControllerDatabaseTest)
                     const bool ok =
                         dbsControllerDb.GetAffectedDBGsWithNodeCounts(
                             nodes,
+                            lockedNodes,
                             actual);
                     UNIT_ASSERT_C(ok, comm);
 
@@ -639,6 +641,7 @@ Y_UNIT_TEST_SUITE(TDbsControllerDatabaseTest)
 
         testNodesSubset(
             {5},
+            {},
             {
                 {{0, 1}, 0},
                 {{1, 0}, 1},
@@ -647,6 +650,7 @@ Y_UNIT_TEST_SUITE(TDbsControllerDatabaseTest)
 
         testNodesSubset(
             {8, 9},
+            {},
             {
                 {{1, 1}, 0},
             },
@@ -654,6 +658,7 @@ Y_UNIT_TEST_SUITE(TDbsControllerDatabaseTest)
 
         testNodesSubset(
             {3, 9},
+            {},
             {
                 {{0, 0}, 1},
                 {{1, 1}, 1},
@@ -662,10 +667,28 @@ Y_UNIT_TEST_SUITE(TDbsControllerDatabaseTest)
 
         testNodesSubset(
             {1, 2},
+            {},
             {
                 {{0, 0}, 1},
             },
             "Two different nodes in one logical node");
+
+        testNodesSubset(
+            {8},
+            {8},
+            {
+                {{1, 1}, 1},
+            },
+            "Request for an already locked node");
+
+        testNodesSubset(
+            {5},
+            {},
+            {
+                {{0, 1}, 0},
+                {{1, 0}, 1},
+            },
+            "Already locked offline node");
     }
 }
 

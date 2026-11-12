@@ -35,10 +35,16 @@ struct TFancyGRpcWrapper {
         Stub_ = Ydb::PersQueue::V1::ClusterDiscoveryService::NewStub(Channel_);
     }
 
-    auto PerformRpc(const DiscoverClustersRequest& request, DiscoverClustersResult& result, const TString& authority = {}) {
+    auto PerformRpc(
+            const DiscoverClustersRequest& request, DiscoverClustersResult& result,
+            const TString& authority = {}, const TString& database = {}
+    ) {
         grpc::ClientContext context;
         if (!authority.empty()) {
             context.set_authority(authority.c_str());
+        }
+        if (!database.empty()) {
+            context.AddMetadata("x-ydb-database", std::string(database));
         }
         DiscoverClustersResponse response;
 
@@ -821,6 +827,29 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         return false;
     }
 
+    // Version 1 is published in the same handler that starts CREATE TABLE Balancer.
+    static void WaitUntilBalancerTableCreated(TPQCDServer& server) {
+        for (size_t i = 0; i < 40; ++i) {
+            if (server.PQClient().TryRunYqlDataQuery("SELECT name, clusters FROM `/Root/PQ/Config/V2/Balancer`;").Defined()) {
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Balancer table was not created");
+    }
+
+    // In-flight list can take ~4s to report the drop; recreation starts only after that.
+    static void WaitUntilDroppedTableRecreated(TPQCDServer& server, const TString& selectQuery, const char* failureMessage) {
+        for (size_t i = 0; i < 200; ++i) {
+            if (server.PQClient().TryRunYqlDataQuery(selectQuery).Defined()) {
+                UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL(failureMessage);
+    }
+
     Y_UNIT_TEST(TestTrackerCreatesMissingClusterTable) {
         TPQCDServer server;
         server.SetNetDataViaFile("::1/128\tdc1");
@@ -970,30 +999,47 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2", "myt"}));
         };
 
-        // Until a Balancer row lists myt, it stays an ordinary cluster.
+        // A balancer list does not make a cluster FNX.
         assertWithMyt({});
         assertWithMyt("localhost");
-
-        {
-            DiscoverClustersRequest request;
-            auto* writeSessionParams = request.add_write_sessions();
-            writeSessionParams->set_topic("topic");
-            writeSessionParams->set_source_id("topic1.log");
-            writeSessionParams->set_preferred_cluster_name("myt");
-            DiscoverClustersResult result;
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, result), Ydb::StatusIds::SUCCESS);
-        }
-
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt", 1);
         wrapper.WaitForExactClustersDataVersion(3);
+        assertWithMyt({});
+        assertWithMyt("logbroker-fnx.yandex.net");
+
+        server.PQClient().RunYqlSchemeQuery("ALTER TABLE `/Root/PQ/Config/V2/Cluster` ADD COLUMN fnx Bool;");
+        server.PQClient().RunYqlDataQuery(
+            "UPDATE `/Root/PQ/Config/V2/Cluster` SET fnx = true WHERE name = \"myt\";\n"
+            "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) "
+            "SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == \"Cluster\";");
+        wrapper.WaitForExactClustersDataVersion(4);
 
         assertOrdinaryOnly("logbroker.yandex.net");
         assertOrdinaryOnly("localhost");
         assertOrdinaryOnly("sas.logbroker.yandex.net");
         assertOrdinaryOnly({});
+        // Reads follow the account, not :authority. Without a database, FNX stays hidden.
+        assertOrdinaryOnly("logbroker-fnx.yandex.net");
+        assertOrdinaryOnly("LOGBROKER-FNX.YANDEX.NET:2135");
 
-        assertWithMyt("logbroker-fnx.yandex.net");
-        assertWithMyt("LOGBROKER-FNX.YANDEX.NET:2135");
+        server.PQClient().RunYqlSchemeQuery(
+            "CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Account` ("
+            "name Utf8, readClusters Utf8, writeClusters Utf8, version Int64, PRIMARY KEY (name));");
+        server.PQClient().RunYqlDataQuery(
+            "UPSERT INTO `/Root/PQ/Config/V2/Account` (name, readClusters, writeClusters, version) "
+            "VALUES (\"prod\", \"\", \"myt\", 1);");
+        wrapper.WaitForExactClustersDataVersion(5);
+        {
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(
+                wrapper.PerformRpc(AllOriginalRequest(), result, "localhost", "/Root/prod"),
+                Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2", "myt"}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                wrapper.PerformRpc(AllOriginalRequest(), result, "logbroker-fnx.yandex.net"),
+                Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2"}));
+        }
 
         {
             DiscoverClustersRequest request;
@@ -1009,15 +1055,18 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         }
 
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "", 2);
-        wrapper.WaitForExactClustersDataVersion(4);
-        // Empty CSV: myt is no longer FNX and is visible for every host.
+        wrapper.WaitForExactClustersDataVersion(6);
+        // Empty CSV leaves the fnx column set, so myt stays hidden.
+        assertOrdinaryOnly("logbroker-fnx.yandex.net");
+        assertOrdinaryOnly({});
+
+        server.PQClient().RunYqlDataQuery(
+            "UPDATE `/Root/PQ/Config/V2/Cluster` SET fnx = false WHERE name = \"myt\";\n"
+            "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) "
+            "SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == \"Cluster\";");
+        wrapper.WaitForExactClustersDataVersion(7);
         assertWithMyt("logbroker-fnx.yandex.net");
         assertWithMyt({});
-
-        server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt,missing", 3);
-        wrapper.WaitForExactClustersDataVersion(5);
-        assertWithMyt("logbroker-fnx.yandex.net");
-        assertOrdinaryOnly({});
     }
 
     Y_UNIT_TEST(TestGetClustersListWhileTrackerIsWaiting) {
@@ -1115,8 +1164,6 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
         auto fnxColumn = server.PQClient().TryRunYqlDataQuery("SELECT fnx FROM `/Root/PQ/Config/V2/Cluster`;");
         UNIT_ASSERT(!fnxColumn.Defined());
-        auto kikimrHost = server.PQClient().TryRunYqlDataQuery("SELECT kikimrHost FROM `/Root/PQ/Config/V2/Cluster`;");
-        UNIT_ASSERT(!kikimrHost.Defined());
 
         TFancyGRpcWrapper wrapper(server.GrpcPort());
         DiscoverClustersResult result;
@@ -1135,6 +1182,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
         TFancyGRpcWrapper wrapper(server.GrpcPort());
         wrapper.WaitForExactClustersDataVersion(1);
+        WaitUntilBalancerTableCreated(server);
 
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt", 1);
         wrapper.WaitForExactClustersDataVersion(2);
@@ -1171,17 +1219,10 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         server.WaitUntilHealthy();
 
         server.PQClient().RunYqlSchemeQuery("DROP TABLE `/Root/PQ/Config/V2/Cluster`;");
-
-        for (size_t i = 0; i < 40; ++i) {
-            auto clusterTable = server.PQClient().TryRunYqlDataQuery(
-                "SELECT name, balancer, local, enabled, weight FROM `/Root/PQ/Config/V2/Cluster`;");
-            if (clusterTable.Defined()) {
-                UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
-                return;
-            }
-            Sleep(TDuration::MilliSeconds(100));
-        }
-        UNIT_FAIL("Cluster table was not recreated after DROP TABLE");
+        WaitUntilDroppedTableRecreated(
+            server,
+            "SELECT name, balancer, local, enabled, weight FROM `/Root/PQ/Config/V2/Cluster`;",
+            "Cluster table was not recreated after DROP TABLE");
     }
 
     Y_UNIT_TEST(TestDroppedVersionsTableIsRecreated) {
@@ -1194,17 +1235,10 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         server.WaitUntilHealthy();
 
         server.PQClient().RunYqlSchemeQuery("DROP TABLE `/Root/PQ/Config/V2/Versions`;");
-
-        for (size_t i = 0; i < 40; ++i) {
-            auto versionsTable = server.PQClient().TryRunYqlDataQuery(
-                "SELECT name, version FROM `/Root/PQ/Config/V2/Versions`;");
-            if (versionsTable.Defined()) {
-                UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
-                return;
-            }
-            Sleep(TDuration::MilliSeconds(100));
-        }
-        UNIT_FAIL("Versions table was not recreated after DROP TABLE");
+        WaitUntilDroppedTableRecreated(
+            server,
+            "SELECT name, version FROM `/Root/PQ/Config/V2/Versions`;",
+            "Versions table was not recreated after DROP TABLE");
     }
 
     Y_UNIT_TEST(TestAllFnxClustersHiddenWithoutBalancer) {
@@ -1218,8 +1252,13 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
         TFancyGRpcWrapper wrapper(server.GrpcPort());
         wrapper.WaitForExactClustersDataVersion(1);
+        WaitUntilBalancerTableCreated(server);
 
-        server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "dc1,dc2", 1);
+        server.PQClient().RunYqlSchemeQuery("ALTER TABLE `/Root/PQ/Config/V2/Cluster` ADD COLUMN fnx Bool;");
+        server.PQClient().RunYqlDataQuery(
+            "UPDATE `/Root/PQ/Config/V2/Cluster` SET fnx = true;\n"
+            "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) "
+            "SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == \"Cluster\";");
         wrapper.WaitForExactClustersDataVersion(2);
 
         {
@@ -1244,6 +1283,50 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             writeSessionParams->set_preferred_cluster_name("dc1");
             DiscoverClustersResult result;
             UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, result), Ydb::StatusIds::BAD_REQUEST);
+        }
+    }
+
+    Y_UNIT_TEST(TestClusterFnxColumnWithoutBalancer) {
+        TPQCDServer server;
+        server.SetNetDataViaFile("::1/128\tdc1");
+        server.Run();
+
+        server.PQClient().InitRoot();
+        server.PQClient().InitDCs();
+        server.WaitUntilHealthy();
+
+        TFancyGRpcWrapper wrapper(server.GrpcPort());
+        wrapper.WaitForExactClustersDataVersion(1);
+
+        server.PQClient().RunYqlSchemeQuery("ALTER TABLE `/Root/PQ/Config/V2/Cluster` ADD COLUMN fnx Bool;");
+        server.PQClient().UpsertCluster("myt", "myt.logbroker.yandex.net", false, true, 1000);
+        wrapper.WaitForExactClustersDataVersion(2);
+        server.PQClient().RunYqlDataQuery(
+            "UPDATE `/Root/PQ/Config/V2/Cluster` SET fnx = true WHERE name = \"myt\";\n"
+            "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) "
+            "SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == \"Cluster\";");
+        wrapper.WaitForExactClustersDataVersion(3);
+
+        {
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2"}));
+        }
+
+        server.PQClient().RunYqlSchemeQuery(
+            "CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Account` ("
+            "name Utf8, readClusters Utf8, writeClusters Utf8, version Int64, PRIMARY KEY (name));");
+        server.PQClient().RunYqlDataQuery(
+            "UPSERT INTO `/Root/PQ/Config/V2/Account` (name, readClusters, writeClusters, version) "
+            "VALUES (\"prod\", \"dc2,myt\", \"myt\", 1);");
+        wrapper.WaitForExactClustersDataVersion(4);
+        {
+            // myt from readClusters alone is ignored; it is readable through writeClusters.
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(
+                wrapper.PerformRpc(AllOriginalRequest(), result, {}, "/Root/prod"),
+                Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc2", "myt"}));
         }
     }
 

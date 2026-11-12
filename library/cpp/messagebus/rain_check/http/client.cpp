@@ -147,7 +147,7 @@ namespace NRainCheck {
     void THttpFuture::SetFail(THttpFuture::EError errorCode, const TStringBuf& errorDescription) {
         ErrorCode = errorCode;
         ErrorDescription = errorDescription;
-        Response.Destroy();
+        Response.reset();
         SetDone();
     }
 

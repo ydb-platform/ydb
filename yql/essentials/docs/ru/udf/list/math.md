@@ -50,6 +50,7 @@ SELECT Math::IsFinite(1.0/0.0); -- false
 * `Math::ErfInv(Double{Flags:AutoMap}) -> Double`
 * `Math::ErfcInv(Double{Flags:AutoMap}) -> Double`
 * `Math::Exp(Double{Flags:AutoMap}) -> Double`
+* `Math::Expm1(Double{Flags:AutoMap}) -> Double`
 * `Math::Exp2(Double{Flags:AutoMap}) -> Double`
 * `Math::Fabs(Double{Flags:AutoMap}) -> Double`
 * `Math::Floor(Double{Flags:AutoMap}) -> Double`
@@ -64,8 +65,11 @@ SELECT Math::IsFinite(1.0/0.0); -- false
 * `Math::Tgamma(Double{Flags:AutoMap}) -> Double`
 * `Math::Trunc(Double{Flags:AutoMap}) -> Double`
 * `Math::Log(Double{Flags:AutoMap}) -> Double`
+* `Math::Log1p(Double{Flags:AutoMap}) -> Double`
 * `Math::Log2(Double{Flags:AutoMap}) -> Double`
 * `Math::Log10(Double{Flags:AutoMap}) -> Double`
+
+`Math::Expm1` и `Math::Log1p` доступны начиная с версии [2026.03](../../changelog/2026.03.md#math-module).
 
 #### Примеры
 

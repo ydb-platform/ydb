@@ -72,7 +72,7 @@ struct OtlpHttpClientOptions
   // Whether to print the status of the HTTP client in the console
   bool console_debug = false;
 
-  std::chrono::system_clock::duration timeout;
+  std::chrono::system_clock::duration timeout{};
 
   // Additional HTTP headers
   OtlpHeaders http_headers;

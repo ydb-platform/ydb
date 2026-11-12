@@ -286,13 +286,13 @@ public:
         const TVersionedLookupRowsOptions&) override;
     TFuture<TPullRowsResult> PullRows(const NYPath::TYPath&, const TPullRowsOptions&) override;
 
-    TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
+    TFuture<TPullQueueResult> PullQueue(
         const NYPath::TRichYPath&,
         i64,
         int,
         const NQueueClient::TQueueRowBatchReadOptions&,
         const TPullQueueOptions&) override;
-    TFuture<NQueueClient::IQueueRowsetPtr> PullQueueConsumer(
+    TFuture<TPullQueueResult> PullQueueConsumer(
         const NYPath::TRichYPath&,
         const NYPath::TRichYPath&,
         std::optional<i64>,
@@ -543,7 +543,7 @@ private:
     IClientPtr ActiveClient_;
     std::atomic<int> ActiveClientIndex_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, Lock_);
 };
 
 DECLARE_REFCOUNTED_TYPE(TTransaction)
@@ -694,7 +694,7 @@ void TClient::CheckClustersHealth()
     }
 
     if (ActiveClientIndex_ != betterClientIndex) {
-        auto guard = NThreading::WriterGuard(Lock_);
+        auto guard = WriterGuard(Lock_);
         ActiveClient_ = UnderlyingClients_[betterClientIndex]->Client;
         ActiveClientIndex_ = betterClientIndex;
     }
@@ -750,8 +750,8 @@ CLIENT_METHOD_IMPL(TSelectRowsResult, SelectRows, (const std::string&, const TSe
 CLIENT_METHOD_IMPL(std::vector<TUnversionedLookupRowsResult>, MultiLookupRows, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
 CLIENT_METHOD_IMPL(TVersionedLookupRowsResult, VersionedLookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
 CLIENT_METHOD_IMPL(TPullRowsResult, PullRows, (const NYPath::TYPath&, const TPullRowsOptions&));
-CLIENT_METHOD_IMPL(NQueueClient::IQueueRowsetPtr, PullQueue, (const NYPath::TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueOptions&));
-CLIENT_METHOD_IMPL(NQueueClient::IQueueRowsetPtr, PullQueueConsumer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, std::optional<i64>, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueConsumerOptions&));
+CLIENT_METHOD_IMPL(TPullQueueResult, PullQueue, (const NYPath::TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueOptions&));
+CLIENT_METHOD_IMPL(TPullQueueResult, PullQueueConsumer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, std::optional<i64>, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueConsumerOptions&));
 CLIENT_METHOD_IMPL(NYson::TYsonString, ExplainQuery, (const std::string&, const TExplainQueryOptions&));
 CLIENT_METHOD_IMPL(NYson::TYsonString, GetNode, (const NYPath::TYPath&, const TGetNodeOptions&));
 CLIENT_METHOD_IMPL(NYson::TYsonString, ListNode, (const NYPath::TYPath&, const TListNodeOptions&));
@@ -832,7 +832,7 @@ void TClient::UpdateActiveClient()
                 YT_TLOG_DEBUG("Active client was changed")
                     .With("PreviousClientIndex", ActiveClientIndex_.load())
                     .With("NewClientIndex", index);
-                auto guard = NThreading::WriterGuard(Lock_);
+                auto guard = WriterGuard(Lock_);
                 ActiveClientIndex_ = index;
                 ActiveClient_ = clientDescription->Client;
             }

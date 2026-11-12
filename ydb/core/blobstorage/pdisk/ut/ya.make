@@ -6,7 +6,7 @@ IF (WITH_VALGRIND)
     ENV(VALGRIND_OPTS=--max-stackframe=16000000)
 ENDIF()
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SPLIT_FACTOR(20)
     SIZE(LARGE)
@@ -36,6 +36,7 @@ ENDIF()
 
 SRCS(
     blobstorage_pdisk_blockdevice_ut.cpp
+    blobstorage_pdisk_compaction_arbiter_ut.cpp
     blobstorage_pdisk_crypto_ut.cpp
     blobstorage_pdisk_device_overestimation_ut.cpp
     blobstorage_pdisk_log_cache_ut.cpp
@@ -47,6 +48,7 @@ SRCS(
     blobstorage_pdisk_ut_context.cpp
     blobstorage_pdisk_ut_env.cpp
     blobstorage_pdisk_ut_helpers.cpp
+    blobstorage_pdisk_ut_log_restart.cpp
     blobstorage_pdisk_ut_races.cpp
     blobstorage_pdisk_ut_run.cpp
     blobstorage_pdisk_ut_sectormap.cpp

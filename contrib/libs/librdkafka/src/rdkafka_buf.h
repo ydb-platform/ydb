@@ -770,6 +770,27 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
         } while (0)
 
 /**
+ * Read standard BYTES representation (4+N), regardless of the buffer's
+ * flexible-version flag: for structures that always use the non-compact
+ * encoding, such as legacy v0..v1 MessageSets in FetchResponses >= v12.
+ * The 'kbytes' will be updated to point to rkbuf data.
+ */
+#define rd_kafka_buf_read_kbytes_fixed(rkbuf, kbytes)                          \
+        do {                                                                   \
+                int32_t _klen;                                                 \
+                rd_kafka_buf_read_i32a(rkbuf, _klen);                          \
+                (kbytes)->len = _klen;                                         \
+                if (RD_KAFKAP_BYTES_IS_NULL(kbytes)) {                         \
+                        (kbytes)->data = NULL;                                 \
+                        (kbytes)->len  = 0;                                    \
+                } else if (RD_KAFKAP_BYTES_LEN(kbytes) == 0)                   \
+                        (kbytes)->data = "";                                   \
+                else if (!((kbytes)->data = rd_slice_ensure_contig(            \
+                               &(rkbuf)->rkbuf_reader, _klen)))                \
+                        rd_kafka_buf_check_len(rkbuf, _klen);                  \
+        } while (0)
+
+/**
  * @brief Read \p size bytes from buffer, setting \p *ptr to the start
  *        of the memory region.
  */

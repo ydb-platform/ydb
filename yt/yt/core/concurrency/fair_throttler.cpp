@@ -490,7 +490,7 @@ private:
 
     std::atomic<TDuration> DistributionPeriod_{};
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     std::deque<TBucketThrottleRequestPtr> Queue_;
 
     void OnRequestComplete(i64 amount, const TError& /*error*/)
@@ -603,7 +603,7 @@ private:
     };
 
     // Protects all Config_ and Buckets_.
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     TFairThrottlerConfigPtr Config_;
     THashMap<std::string, TBucket> Buckets_;
 

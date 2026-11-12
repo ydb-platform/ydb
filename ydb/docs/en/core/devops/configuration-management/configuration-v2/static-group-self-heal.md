@@ -2,7 +2,7 @@
 
 {% include [_](../_includes/experimental_v2.md) %}
 
-When using [configuration V2](index.md), [SelfHeal](../../../maintenance/manual/selfheal.md) can automatically move a static group VDisk from faulty PDisks and restore the group's fault tolerance.
+When using [configuration V2](index.md), [SelfHeal](../../concepts/selfheal-storage.md) can automatically move a static group VDisk from faulty PDisks and restore the group's fault tolerance.
 
 {% note warning %}
 
@@ -19,7 +19,7 @@ To allow distributed configuration to change the static group automatically, ena
 For static group SelfHeal to work, the following must be enabled:
 
 * [distributed configuration](../../../concepts/glossary.md#distributed-configuration) V2 — [`self_management_config.enabled: true`](../../../reference/configuration/self_management_config.md#parameters);
-* the general SelfHeal mechanism, which is [enabled by default](../../../maintenance/manual/selfheal.md#on-off).
+* the general SelfHeal mechanism, which is [enabled by default](../../concepts/selfheal-storage.md#on-off).
 
 The `self_management_config.enabled` parameter enables distributed configuration itself. The `self_management_config.automatic_static_group_management` parameter separately allows automatic relocation of static group VDisks.
 

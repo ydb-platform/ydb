@@ -973,6 +973,11 @@ Edge Mpl2014ContourGenerator::get_exit_edge(const QuadEdge& quad_edge, Dir dir) 
     }
 }
 
+const char* Mpl2014ContourGenerator::get_name() const
+{
+    return "mpl2014";
+}
+
 const double& Mpl2014ContourGenerator::get_point_x(index_t point) const
 {
     assert(point >= 0 && point < _n && "Point index out of bounds.");

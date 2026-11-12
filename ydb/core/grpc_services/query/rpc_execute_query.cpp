@@ -8,7 +8,6 @@
 #include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
@@ -216,9 +215,12 @@ public:
         : Request_(request)
         , FlowControl_(inflightLimitBytes)
         , Span_(TWilsonGrpc::RequestActor, request->GetWilsonTraceId(),
-                "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END) {
-        if (Span_ && AppData()) {
-            Span_.Attribute("database", AppData()->TenantName);
+                "Execute query request", NWilson::EFlags::AUTO_END) {
+        if (Span_) {
+            Span_.Attribute("ydb.actor.type", TString("TExecuteQueryRPC"));
+            if (AppData()) {
+                Span_.Attribute("database", AppData()->TenantName);
+            }
         }
     }
 

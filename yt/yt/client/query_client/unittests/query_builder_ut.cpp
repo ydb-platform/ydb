@@ -1,4 +1,5 @@
 #include <yt/yt/client/query_client/query_builder.h>
+#include <yt/yt/client/query_client/table_hint.h>
 
 #include <yt/yt/core/test_framework/framework.h>
 
@@ -36,6 +37,45 @@ TEST(TQueryBuilderTest, Build)
     EXPECT_NE(source.find("([some_field] * [some_other_field]) AS res"), source.npos);
     EXPECT_NE(source.find("LEFT JOIN [barTable] AS [bar] ON fooTable.[id] = barTable.[id] AND id = 0"), source.npos);
 };
+
+TEST(TQueryBuilderTest, SourceHint)
+{
+    TQueryBuilder builder;
+
+    TTableHint hint;
+    hint.RequireSyncReplica = false;
+    hint.PushDownGroupBy = true;
+    builder.SetSource("fooTable", "foo");
+    builder.SetSourceHint(hint);
+    builder.AddSelectExpression("[id]");
+    builder.AddWhereConjunct("[id] = 42");
+
+    EXPECT_EQ(
+        builder.Build(),
+        "([id]) FROM [fooTable] AS foo WITH HINT \"{push_down_group_by=%true;require_sync_replica=%false;}\" WHERE [id] = 42");
+}
+
+TEST(TQueryBuilderTest, DefaultSourceHintOmitted)
+{
+    TQueryBuilder builder;
+
+    builder.SetSource("fooTable");
+    builder.SetSourceHint(TTableHint());
+    builder.AddSelectExpression("[id]");
+
+    EXPECT_EQ(builder.Build(), "([id]) FROM [fooTable]");
+}
+
+TEST(TQueryBuilderTest, SourceHintWithSubqueryThrows)
+{
+    TQueryBuilder builder;
+
+    builder.SetSource("SELECT * FROM [fooTable]", /*syntaxVersion*/ 1, /*subquerySource*/ true);
+    builder.SetSourceHint(TTableHint());
+    builder.AddSelectExpression("[id]");
+
+    EXPECT_THROW_WITH_SUBSTRING(builder.Build(), "Hint cannot be specified for a subquery source");
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

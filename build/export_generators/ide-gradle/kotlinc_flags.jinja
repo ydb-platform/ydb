@@ -1,17 +1,22 @@
 {%- if with_kotlin -%}
-{%-     if target.kotlinc.flags|length %}
+{%-     if target.kotlinc.flags|length -%}
+{%-         set main_compiler_flags = target.kotlinc.flags|unique|reject('startsWith', FRIEND_PATHS_FLAG) %}
 
 tasks.compileKotlin.configure {
+{{- FriendPaths(target.kotlinc.flags) }}
+{%-         if main_compiler_flags|length %}
     compilerOptions {
-{%-         for kotlinc_flag in target.kotlinc.flags|unique %}
+{%-             for kotlinc_flag in main_compiler_flags %}
         freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
-{%-         endfor %}
+{%-             endfor %}
     }
+{%-         endif %}
 }
 {%      endif -%}
 {%-     if named_tests -%}
 {%-         for extra_target in ordered_extra_targets -%}
 {%-             set testname = SourceSetName(extra_target) -%}
+{%-             set test_compiler_flags = extra_target.kotlinc.flags|unique|reject('startsWith', FRIEND_PATHS_FLAG) -%}
 {%-             if testname == NS_TEST -%}
 {%-                 set kotlinCompile = 'compileTestKotlin' -%}
 {%-             else -%}
@@ -29,9 +34,10 @@ tasks.{{ kotlinCompile }} {
     friendPaths.from(sourceSets.named("{{ TestRelDir2SourceSetName(extra_depend) }}").get().output)
 {%-                 endfor -%}
 {%-             endif -%}
-{%-             if extra_target.kotlinc.flags|length %}
+{{- FriendPaths(extra_target.kotlinc.flags) }}
+{%-             if test_compiler_flags|length %}
     compilerOptions {
-{%-                for kotlinc_flag in extra_target.kotlinc.flags|unique %}
+{%-                for kotlinc_flag in test_compiler_flags %}
         freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
 {%-                endfor %}
     }
@@ -39,16 +45,18 @@ tasks.{{ kotlinCompile }} {
 }
 {%-         endfor -%}
 {%-     else -%}
-{%-         if extra_targets|length %}
+{%-         if extra_targets|length -%}
+{%-             set all_kotlinc_flags = all_targets|selectattr('kotlinc')|map(attribute='kotlinc')|map(attribute='flags')|sum -%}
+{%-             set all_compiler_flags = all_kotlinc_flags|unique|reject('startsWith', FRIEND_PATHS_FLAG) %}
 
 tasks.compileTestKotlin {
 {%-             if target is defined %}
     friendPaths.from(sourceSets.main.get().output)
 {%-             endif -%}
-{%-             set all_kotlinc_flags = all_targets|selectattr('kotlinc')|map(attribute='kotlinc')|map(attribute='flags')|sum -%}
-{%-             if all_kotlinc_flags|length %}
+{{- FriendPaths(all_kotlinc_flags) }}
+{%-             if all_compiler_flags|length %}
     compilerOptions {
-{%-                for kotlinc_flag in all_kotlinc_flags|unique %}
+{%-                for kotlinc_flag in all_compiler_flags %}
         freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
 {%-                endfor %}
     }

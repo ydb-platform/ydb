@@ -162,9 +162,9 @@ struct InvokeCallbackVisitor
   void operator()(const opentelemetry::metrics::ObservableCallbackPtr &callback)
   {
     record->observable_result.GetInstruments(
-        [&](opentelemetry::metrics::ObservableInstrument *instrument) {
+        [&](const opentelemetry::metrics::ObservableInstrument *instrument) {
           auto value_type =
-              static_cast<opentelemetry::sdk::metrics::ObservableInstrument *>(instrument)
+              static_cast<const opentelemetry::sdk::metrics::ObservableInstrument *>(instrument)
                   ->GetInstrumentDescriptor()
                   .value_type_;
           if (value_type == InstrumentValueType::kDouble)
@@ -185,7 +185,7 @@ struct InvokeCallbackVisitor
   template <typename T>
   void invoke_single_instrument_callback(
       const opentelemetry::metrics::ObservableCallbackPtr &callback,
-      opentelemetry::metrics::ObservableInstrument *instrument)
+      const opentelemetry::metrics::ObservableInstrument *instrument)
   {
     // This is all a bit strangely shaped, but it's in the name of back-compat.
     // The signature of ObservableCallbackPtr is that it takes a nostd::shared_ptr to

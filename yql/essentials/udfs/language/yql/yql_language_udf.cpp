@@ -66,6 +66,9 @@ public:
         fullName.SkipPrefix("NSQLv1Generated.");
         for (int i = 0; i < descr->field_count(); ++i) {
             const NProtoBuf::FieldDescriptor* fd = descr->field(i);
+            if (fd->name() == "StartTokenIndex" || fd->name() == "EndTokenIndex") {
+                continue;
+            }
             NProtoBuf::TConstField field(msg, fd);
             if (!field.HasValue()) {
                 continue;
@@ -287,6 +290,9 @@ private:
     void VisitAllFields(const NProtoBuf::Message& msg, const NProtoBuf::Descriptor* descr) {
         for (int i = 0; i < descr->field_count(); ++i) {
             const NProtoBuf::FieldDescriptor* fd = descr->field(i);
+            if (fd->cpp_type() != NProtoBuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+                continue;
+            }
             NProtoBuf::TConstField field(msg, fd);
             if (field.IsMessage()) {
                 for (size_t j = 0; j < field.Size(); ++j) {
@@ -429,15 +435,16 @@ using TSql2YqlResult = TTuple<
     /*IsOk=*/bool,
     /*Issues=*/TListType<char*>>;
 
-SIMPLE_UDF(TSql2Yql, TSql2YqlResult(
-                         TAutoMap<char*> /* query */,
-                         TAutoMap<char*> /* langversion */,
-                         TAutoMap<char*> /* gateways */))
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TSql2Yql, TSql2YqlResult(TAutoMap<char*>,
+                                                       TAutoMap<char*>,
+                                                       TAutoMap<char*>,
+                                                       TOptional<char*>), 1)
 try {
     NYqlLangModule::TSql2YqlInput input = {
         .Query = TString(args[0].AsStringRef()),
         .LangVersion = TString(args[1].AsStringRef()),
         .GatewaysCfg = TString(args[2].AsStringRef()),
+        .GatewaysCfgPatch = args[3] ? TString(args[3].AsStringRef()) : TString(),
     };
 
     NYqlLangModule::TSql2YqlOutput output = NYqlLangModule::Sql2Yql(input);

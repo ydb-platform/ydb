@@ -25,4 +25,6 @@ SRCS(
     ut_move.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(move_replace_path_types.h)
+
 END()

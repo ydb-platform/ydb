@@ -3,6 +3,8 @@
 #include "antlr_token.h"
 #include "select_yql.h"
 #include "sql_expression.h"
+#include "sql_flatten.h"
+#include "sql_group_by.h"
 #include "sql_select_window.h"
 #include "sql_select.h"
 
@@ -614,8 +616,11 @@ private:
         }
 
         if (rule.HasBlock8()) {
-            Token(rule.GetBlock8().GetToken1());
-            return Unsupported("WITHOUT (IF EXISTS)? without_column_list");
+            if (auto result = Build(rule.GetBlock8())) {
+                setItem.Without = std::move(*result);
+            } else {
+                return std::unexpected(result.error());
+            }
         }
 
         if (rule.HasBlock9()) {
@@ -676,8 +681,8 @@ private:
 
         if (rule.HasBlock13()) {
             const auto& w = rule.GetBlock13().GetRule_window_clause1();
-            if (!TSqlWindow(*this).Build(w, windows)) {
-                return std::unexpected(ESQLError::Basic);
+            if (auto status = TSqlWindow(*this).Build(w, windows); !status) {
+                return std::unexpected(status.error());
             }
         }
 
@@ -707,32 +712,86 @@ private:
         return TNonNull(node);
     }
 
+    TSQLResult<TYqlWithout> Build(const TRule_select_core::TBlock8& block) {
+        Token(block.GetToken1());
+        if (auto result = Build(block.GetRule_without_column_list3())) {
+            return TYqlWithout{
+                .Columns = std::move(*result),
+                .IsIfExists = block.HasBlock2(),
+            };
+        } else {
+            return std::unexpected(result.error());
+        }
+    }
+
+    TSQLResult<TVector<TYqlWithout::TColumn>> Build(const TRule_without_column_list& rule) {
+        TVector<TYqlWithout::TColumn> columns(Reserve(1 + rule.GetBlock2().size()));
+        if (auto result = Build(rule.GetRule_without_column_name1())) {
+            columns.emplace_back(std::move(*result));
+        } else {
+            return std::unexpected(result.error());
+        }
+
+        for (const auto& block : rule.GetBlock2()) {
+            Token(block.GetToken1());
+            if (auto result = Build(block.GetRule_without_column_name2())) {
+                columns.emplace_back(std::move(*result));
+            } else {
+                return std::unexpected(result.error());
+            }
+        }
+        return columns;
+    }
+
+    TSQLResult<TYqlWithout::TColumn> Build(const TRule_without_column_name& rule) {
+        TString source;
+        TString name;
+        switch (rule.Alt_case()) {
+            case TRule_without_column_name::kAltWithoutColumnName1:
+                source = Id(rule.GetAlt_without_column_name1().GetRule_an_id1(), *this);
+                name = Id(rule.GetAlt_without_column_name1().GetRule_an_id3(), *this);
+                break;
+            case TRule_without_column_name::kAltWithoutColumnName2:
+                name = Id(rule.GetAlt_without_column_name2().GetRule_an_id_without1(), *this);
+                break;
+            case TRule_without_column_name::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
+        if (name.empty()) {
+            if (!Ctx_.HasPendingErrors) {
+                Error() << "Empty column name is not allowed";
+            }
+            return std::unexpected(ESQLError::Basic);
+        }
+        return TYqlWithout::TColumn{
+            .Position = Ctx_.Pos(),
+            .Source = std::move(source),
+            .Name = std::move(name),
+        };
+    }
+
     TSQLResult<TProjection> BuildProjection(const TRule_select_core& rule) {
         TVector<TNodePtr> terms;
 
         if (auto result = Build(rule.GetRule_result_column5())) {
-            if (std::holds_alternative<TPlainAsterisk>(*result)) {
-                if (!rule.GetBlock6().empty()) {
-                    Error() << "Unable to use plain '*' with other projection items";
-                    return std::unexpected(ESQLError::Basic);
-                }
-
-                return TPlainAsterisk();
+            if ((*result)->IsAsterisk() && !(*result)->GetSourceName() && !rule.GetBlock6().empty()) {
+                Error() << "Unable to use plain '*' with other projection items";
+                return std::unexpected(ESQLError::Basic);
             }
 
-            terms.emplace_back(std::move(std::get<TNodePtr>(*result)));
+            terms.emplace_back(std::move(*result));
         } else {
             return std::unexpected(result.error());
         }
 
         for (const auto& block : rule.GetBlock6()) {
             if (auto result = Build(block.GetRule_result_column2())) {
-                if (std::holds_alternative<TPlainAsterisk>(*result)) {
+                if ((*result)->IsAsterisk() && !(*result)->GetSourceName()) {
                     Error() << "Unable to use plain '*' with other projection items";
                     return std::unexpected(ESQLError::Basic);
                 }
 
-                terms.emplace_back(std::move(std::get<TNodePtr>(*result)));
+                terms.emplace_back(std::move(*result));
             } else {
                 return std::unexpected(result.error());
             }
@@ -741,7 +800,7 @@ private:
         return terms;
     }
 
-    TSQLResult<std::variant<TNodePtr, TPlainAsterisk>> Build(const TRule_result_column& rule) {
+    TNodeResult Build(const TRule_result_column& rule) {
         switch (rule.GetAltCase()) {
             case NSQLv1Generated::TRule_result_column::kAltResultColumn1:
                 return Build(rule.GetAlt_result_column1());
@@ -752,12 +811,14 @@ private:
         }
     }
 
-    TSQLResult<std::variant<TNodePtr, TPlainAsterisk>> Build(const TRule_result_column::TAlt1& alt) {
+    TNodeResult Build(const TRule_result_column::TAlt1& alt) {
+        TMaybe<TString> source;
         if (alt.GetRule_opt_id_prefix1().HasBlock1()) {
-            return Unsupported("an_id DOT ASTERISK");
+            source = OptIdPrefixAsStr(alt.GetRule_opt_id_prefix1(), *this);
         }
 
-        return TPlainAsterisk();
+        Token(alt.GetToken2());
+        return TNonNull(BuildYqlStar(Ctx_.Pos(), std::move(source)));
     }
 
     TNodeResult Build(const TRule_result_column::TAlt2& alt) {
@@ -1015,20 +1076,41 @@ private:
     }
 
     TSQLResult<TYqlSource> Build(const TRule_flatten_source& rule) {
-        if (rule.HasBlock2()) {
-            const auto& block = rule.GetBlock2();
-            Token(block.GetToken1());
-            switch (block.GetBlock2().GetAltCase()) {
-                case TRule_flatten_source_TBlock2_TBlock2::kAlt1:
-                    return Unsupported("FLATTEN (OPTIONAL|LIST|DICT)? BY flatten_by_arg");
-                case TRule_flatten_source_TBlock2_TBlock2::kAlt2:
-                    return Unsupported("FLATTEN COLUMNS");
-                case TRule_flatten_source_TBlock2_TBlock2::ALT_NOT_SET:
-                    YQL_ENSURE(false, "Unreachable");
-            }
+        auto source = Build(rule.GetRule_named_single_source1());
+        if (!source) {
+            return source;
         }
 
-        return Build(rule.GetRule_named_single_source1());
+        if (!rule.HasBlock2()) {
+            return source;
+        }
+
+        return ApplyFlatten(rule.GetBlock2(), std::move(*source));
+    }
+
+    TSQLResult<TYqlSource> ApplyFlatten(const TRule_flatten_source::TBlock2& block, TYqlSource source) {
+        Token(block.GetToken1());
+        const TPosition position = Ctx_.Pos();
+        switch (block.GetBlock2().GetAltCase()) {
+            case TRule_flatten_source_TBlock2_TBlock2::kAlt1: {
+                const auto& alt = block.GetBlock2().GetAlt1();
+                TSqlFlatten flatten(*this);
+                const TStringBuf sourceAlias = source.Alias
+                                                   .Transform([](const TYqlSourceAlias& alias) { return TStringBuf(alias.Name); })
+                                                   .GetOrElse(TStringBuf());
+                auto args = flatten.ParseArgs(sourceAlias, alt.GetRule_flatten_by_arg3());
+                if (!args) {
+                    return std::unexpected(args.error());
+                }
+                source.Flatten = BuildYqlFlattenBy(position, flatten.ParseMode(alt), std::move(*args));
+                return source;
+            }
+            case TRule_flatten_source_TBlock2_TBlock2::kAlt2:
+                source.Flatten = BuildYqlFlattenColumns(position);
+                return source;
+            case TRule_flatten_source_TBlock2_TBlock2::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
     }
 
     TSQLResult<TYqlSource> Build(const TRule_named_single_source& rule) {
@@ -1099,27 +1181,26 @@ private:
             return std::move(*maybe);
         }
 
-        const bool isClusterExplicit = rule.HasBlock1();
-
         TString service = Ctx_.Scoped->CurrService;
         TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
-
-        if (isClusterExplicit) {
-            const auto& expr = rule.GetBlock1().GetRule_cluster_expr1();
-            if (!ClusterExpr(expr, /* allowWildcard = */ false, service, cluster)) {
-                return std::unexpected(ESQLError::Basic);
-            }
+        if (rule.HasBlock1() && !ClusterExpr(rule.GetBlock1().GetRule_cluster_expr1(), /* allowWildcard = */ false, service, cluster)) {
+            return std::unexpected(ESQLError::Basic);
         }
 
-        const bool isAnonymous = rule.HasBlock2();
-
-        return Build(
-            rule,
-            rule.GetBlock3(),
-            std::move(service),
-            std::move(cluster),
-            isAnonymous,
-            isClusterExplicit);
+        switch (rule.GetBlock3().GetAltCase()) {
+            case TRule_table_ref_TBlock3::kAlt1:
+                return Build(rule.GetBlock3().GetAlt1().GetRule_table_key1(), std::move(service), std::move(cluster), rule.HasBlock2());
+            case TRule_table_ref_TBlock3::kAlt2:
+                return Build(rule, rule.GetBlock3().GetAlt2()).transform([](auto node) {
+                    return TYqlSource{.Node = std::move(node)};
+                });
+            case TRule_table_ref_TBlock3::kAlt3:
+                return Build(rule, rule.GetBlock3().GetAlt3(), std::move(service), std::move(cluster)).transform([](auto node) {
+                    return TYqlSource{.Node = std::move(node)};
+                });
+            case TRule_table_ref_TBlock3::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
     }
 
     TMaybe<TSQLResult<TYqlSource>> TryBuildCTE(const TRule_table_ref& rule) {
@@ -1165,37 +1246,6 @@ private:
 
     TSQLResult<TYqlSource>
     Build(
-        const TRule_table_ref& rule,
-        const TRule_table_ref::TBlock3& block,
-        TString service,
-        TDeferredAtom cluster,
-        bool isAnonymous,
-        bool isClusterExplicit)
-    {
-        switch (block.GetAltCase()) {
-            case TRule_table_ref_TBlock3::kAlt1:
-                return Build(
-                    block.GetAlt1().GetRule_table_key1(),
-                    std::move(service),
-                    std::move(cluster),
-                    isAnonymous);
-            case TRule_table_ref_TBlock3::kAlt2:
-                return Build(rule, block.GetAlt2())
-                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
-            case TRule_table_ref_TBlock3::kAlt3:
-                return Build(
-                           block.GetAlt3(),
-                           std::move(service),
-                           std::move(cluster),
-                           isAnonymous,
-                           isClusterExplicit)
-                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
-            case TRule_table_ref_TBlock3::ALT_NOT_SET:
-                YQL_ENSURE(false, "Unreachable");
-        }
-    }
-
-    TSQLResult<TYqlSource> Build(
         const TRule_table_key& rule,
         TString service,
         TDeferredAtom cluster,
@@ -1209,11 +1259,7 @@ private:
             return std::unexpected(ESQLError::Basic);
         }
 
-        if (rule.HasBlock2()) {
-            return Unsupported("(VIEW view_name)");
-        }
-
-        TString key = Id(rule.GetRule_id_table_or_type1(), *this);
+        auto [key, view] = TableKeyImpl(rule, *this, isAnonymous);
         if (key.empty()) {
             return std::unexpected(ESQLError::Basic);
         }
@@ -1222,6 +1268,7 @@ private:
             .Service = std::move(service),
             .Cluster = std::move(cluster),
             .Key = TDeferredAtom(Ctx_.Pos(), key),
+            .View = std::move(view),
             .IsAnonymous = isAnonymous,
         };
 
@@ -1268,14 +1315,14 @@ private:
     }
 
     TNodeResult Build(
+        const TRule_table_ref& rule,
         const TRule_table_ref::TBlock3::TAlt3& alt,
         TString service,
-        TDeferredAtom cluster,
-        bool isAnonymous,
-        bool isClusterExplicit)
+        TDeferredAtom cluster)
     {
         const auto& bindParameter = alt.GetRule_bind_parameter1();
         Token(bindParameter.GetToken1());
+        const TPosition position = Ctx_.Pos();
 
         TString name;
         if (!NamedNodeImpl(bindParameter, name, *this)) {
@@ -1287,33 +1334,88 @@ private:
             return std::unexpected(ESQLError::Basic);
         }
 
-        if (auto source = GetYqlSource(node)) {
-            if (isAnonymous) {
-                return Unsupported("COMMAT bind_parameter");
-            }
-
-            if (isClusterExplicit && !Ctx_.Warning(Ctx_.Pos(), TIssuesIds::WARNING, [](auto& out) {
-                    out << "Explicit cluster is ignored";
-                }))
-            {
+        if (GetYqlSource(node)) {
+            return BuildNamedYqlSource(rule, alt, std::move(node));
+        }
+        if (node->GetSource()) {
+            return Unsupported("bind parameter referencing a legacy source");
+        }
+        if (alt.HasBlock2()) {
+            if (alt.HasBlock3()) {
+                Ctx_.Error() << "View is not supported for subqueries";
                 return std::unexpected(ESQLError::Basic);
             }
 
-            return TNonNull(node);
+            const bool hasArguments = alt.GetBlock2().HasBlock2();
+            // Subqueries are lambdas; optional arguments add a WithOptionalArgs wrapper.
+            const bool isSubquery = node->GetLambdaNode() || node->GetOpName() == "WithOptionalArgs";
+            if (isSubquery || hasArguments) {
+                return UnsupportedBindParameterCall(hasArguments);
+            }
+        }
+        return BuildNamedTablePath(
+            rule,
+            alt,
+            position,
+            std::move(node),
+            std::move(service),
+            std::move(cluster));
+    }
+
+    TNodeResult BuildNamedYqlSource(const TRule_table_ref& rule, const TRule_table_ref::TBlock3::TAlt3& alt, TNodePtr node)
+    {
+        if (rule.HasBlock2()) {
+            return Unsupported("COMMAT bind_parameter");
+        }
+        if (alt.HasBlock2()) {
+            if (alt.HasBlock3()) {
+                Ctx_.Error() << "View is not supported for subqueries";
+                return std::unexpected(ESQLError::Basic);
+            }
+            return UnsupportedBindParameterCall(alt.GetBlock2().HasBlock2());
+        }
+        if (alt.HasBlock3()) {
+            return Unsupported("VIEW for bind_parameter");
+        }
+        if (rule.HasBlock1() && !Ctx_.Warning(Ctx_.Pos(), TIssuesIds::WARNING, [](auto& out) {
+                out << "Explicit cluster is ignored";
+            }))
+        {
+            return std::unexpected(ESQLError::Basic);
+        }
+        return TNonNull(std::move(node));
+    }
+
+    TNodeResult BuildNamedTablePath(
+        const TRule_table_ref& rule,
+        const TRule_table_ref::TBlock3::TAlt3& alt,
+        TPosition position,
+        TNodePtr node,
+        TString service,
+        TDeferredAtom cluster)
+    {
+        if (rule.HasBlock2() && alt.HasBlock3()) {
+            Ctx_.Error(position) << "View is not supported for anonymous tables";
+            return std::unexpected(ESQLError::Basic);
+        }
+        if (cluster.Empty()) {
+            return Unsupported("No cluster name given and no default cluster is selected");
         }
 
-        if (node->GetSource()) {
-            return Unsupported("bind parameter referencing a legacy source");
+        TViewDescription view;
+        if (alt.HasBlock3()) {
+            view = Id(alt.GetBlock3().GetRule_view_name2(), *this);
         }
 
         TYqlTableRefArgs args = {
             .Service = std::move(service),
             .Cluster = std::move(cluster),
             .Key = TDeferredAtom(node, Ctx_),
-            .IsAnonymous = isAnonymous,
+            .View = std::move(view),
+            .IsAnonymous = rule.HasBlock2(),
         };
 
-        return TNonNull(BuildYqlTableRef(Ctx_.Pos(), std::move(args)));
+        return TNonNull(BuildYqlTableRef(position, std::move(args)));
     }
 
     TSQLResult<TVector<TNodePtr>> Build(const TRule_values_source_row& rule) {
@@ -1328,16 +1430,8 @@ private:
     }
 
     TSQLResult<TGroupBy> Build(const TRule_group_by_clause& rule) {
-        TPosition position = Ctx_.TokenPosition(rule.GetToken1());
         Token(rule.GetToken1());
-
-        if (rule.HasBlock2()) {
-            return Unsupported("GROUP COMPACT BY");
-        }
-
-        if (Ctx_.IsAnyUnusedHintForToken(position, [](const auto& hint) { return to_lower(hint.Name) == "compact"; })) {
-            return Unsupported("GROUP /*+ compact */ BY");
-        }
+        const bool isCompact = NSQLTranslationV1::IsCompactGroupBy(Ctx_, rule);
 
         if (TPosition position; IsDistinctOptSet(rule.GetRule_opt_set_quantifier4(), position)) {
             Ctx_.Error(position) << "DISTINCT is not supported in GROUP BY clause yet!";
@@ -1348,7 +1442,11 @@ private:
             return Unsupported("GROUP BY ... WITH an_id");
         }
 
-        return Build(rule.GetRule_grouping_element_list5());
+        auto groupBy = Build(rule.GetRule_grouping_element_list5());
+        if (groupBy) {
+            groupBy->IsCompact = isCompact;
+        }
+        return groupBy;
     }
 
     TSQLResult<TGroupBy> Build(const TRule_grouping_element_list& rule) {
@@ -1780,6 +1878,13 @@ private:
 
     std::unexpected<ESQLError> Unsupported(TStringBuf message) {
         return UnsupportedYqlSelect(Ctx_, message);
+    }
+
+    std::unexpected<ESQLError> UnsupportedBindParameterCall(bool hasArguments) {
+        return Unsupported(
+            hasArguments
+                ? "bind_parameter call with arguments as a table source"
+                : "bind_parameter call with an empty argument list as a table source");
     }
 
     auto WithForkedNamespace(std::invocable<TYqlSelect&> auto&& f) -> decltype(f(std::declval<TYqlSelect&>())) {

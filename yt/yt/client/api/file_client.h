@@ -82,6 +82,7 @@ struct TFileReadRange
 
 struct TPartitionFileOptions
     : public TTransactionalOptions
+    , public TSuppressableAccessTrackingOptions
     , public TTimeoutOptions
 {
     NChunkClient::TFetchChunkSpecConfigPtr FetchChunkSpecConfig;
@@ -151,6 +152,7 @@ struct IFileClient
 
     //! Splits a file into partitions according to the given byte ranges,
     //! one partition per range, preserving range order.
+    //! At least one range must be provided.
     virtual TFuture<TFilePartitions> PartitionFile(
         const NYPath::TYPath& path,
         const std::vector<TFileReadRange>& ranges,

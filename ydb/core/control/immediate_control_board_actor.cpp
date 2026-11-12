@@ -19,12 +19,15 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
         TString ParamName;
         TAtomicBase PrevValue;
         TAtomicBase NewValue;
+        // Operator action that produced this history record.
+        TString Action;
 
-        TLogRecord(TInstant timestamp, TString paramName, TAtomicBase prevValue, TAtomicBase newValue)
+        TLogRecord(TInstant timestamp, TString paramName, TAtomicBase prevValue, TAtomicBase newValue, TString action)
             : Timestamp(timestamp)
             , ParamName(paramName)
             , PrevValue(prevValue)
             , NewValue(newValue)
+            , Action(action)
         {}
 
         TString TimestampToStr() {
@@ -71,33 +74,46 @@ public:
     }
 
 private:
+    // Record a numeric change together with the operator action that caused it.
+    void RecordChange(const TString& name, TAtomicBase prevValue, TAtomicBase newValue, const TString& action) {
+        if (prevValue != newValue) {
+            HistoryLog.emplace_back(TInstant::Now(), name, prevValue, newValue, action);
+        }
+    }
+
     void HandlePostParams(const TCgiParameters &cgi) {
+        // Handle a named restore before the text input from the same form.
+        if (cgi.Has("restoreDefault")) {
+            const TString& controlName = cgi.Get("restoreDefault");
+            TAtomicBase prevValue;
+            TAtomicBase newValue;
+            bool controlExists;
+            if (auto control = Icb->GetControlByName(controlName)) {
+                control->RestoreDefault(prevValue, newValue);
+                controlExists = true;
+            } else {
+                controlExists = Dcb->RestoreDefault(controlName, prevValue, newValue);
+            }
+            if (controlExists) {
+                RecordChange(controlName, prevValue, newValue, "Restore default");
+            }
+            return;
+        }
         if (cgi.Has("restoreDefaults")) {
             Icb->RestoreDefaults();
             Dcb->RestoreDefaults();
-            HistoryLog.emplace_back(TInstant::Now(), "RestoreDefaults", 0, 0);
-            *HasChanged = 0;
-            *ChangedCount = 0;
+            HistoryLog.emplace_back(TInstant::Now(), "RestoreDefaults", 0, 0, "Restore defaults");
+            return;
         }
         for (const auto& [paramName, paramValue] : cgi) {
             TAtomicBase newValue = strtoull(paramValue.data(), nullptr, 10);
             TAtomicBase prevValue = newValue;
-            bool isDefault = false;
             if (auto control = Icb->GetControlByName(paramName)) {
                 prevValue = control->SetFromHtmlRequest(newValue);
-                isDefault = control->IsDefault();
             } else {
-                isDefault = Dcb->SetValue(paramName, newValue, prevValue);
+                Dcb->SetValue(paramName, newValue, prevValue);
             }
-            if (prevValue != newValue) {
-                HistoryLog.emplace_back(TInstant::Now(), paramName, prevValue, newValue);
-                if (isDefault) {
-                    ChangedCount->Dec();
-                } else {
-                    ChangedCount->Inc();
-                }
-                *HasChanged = (ui64)ChangedCount->Val() > 0;
-            }
+            RecordChange(paramName, prevValue, newValue, "Set value");
         }
     }
 
@@ -114,6 +130,10 @@ private:
         renderer.AddNewTable("Dynamic Controls");
         Dcb->RenderAsHtml(renderer);
 
+        const ui64 count = renderer.GetChangedCount();
+        *ChangedCount = count;
+        *HasChanged = count > 0;
+
         str << renderer.GetHtml();
         HTML(str) {
             str << "<h3>History</h3>";
@@ -124,6 +144,7 @@ private:
                         TABLEH() {str << "Parameter"; }
                         TABLEH() {str << "PrevValue"; }
                         TABLEH() {str << "NewValue"; }
+                        TABLEH() {str << "Action"; }
                     }
                 }
                 TABLEBODY() {
@@ -133,6 +154,7 @@ private:
                             TABLED() { str << record.ParamName; }
                             TABLED() { str << record.PrevValue; }
                             TABLED() { str << record.NewValue; }
+                            TABLED() { str << record.Action; }
                         }
                     }
                 }

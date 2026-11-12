@@ -1,3 +1,4 @@
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/cdc_aggregator/service/heartbeat_queue.h>
 
 #include <library/cpp/testing/unittest/registar.h>

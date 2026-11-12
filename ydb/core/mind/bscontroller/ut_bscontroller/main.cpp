@@ -10,6 +10,7 @@
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -3046,6 +3047,91 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 UNIT_ASSERT(groupIds.insert(item.GetGroupID()).second);
             }
             UNIT_ASSERT_VALUES_EQUAL(groupIds.size(), numGroups);
+        }
+    }
+
+    Y_UNIT_TEST(GroupStorageMetadataUsesBlobDepotBackend) {
+        TBlobStorageController::TGroupInfo group(TGroupId::FromValue(0x8200000f), 2, 0,
+            TBlobStorageGroupType::Erasure4Plus2Block, 0, NKikimrBlobStorage::TVDiskKind::Default,
+            0, 0, TString(), TString(), 0, 0, false, true, 0, TBridgePileId(), TBoxStoragePoolId(1, 1),
+            0, 0, 0, false);
+        TBlobStorageController::TStoragePoolInfo pool{};
+        pool.Name = "ordinary-pool-name";
+        pool.Kind = "ssd";
+        const auto check = [&](bool external) {
+            NKikimrBlobStorage::TGroupInfo result;
+            TBlobStorageController::SerializeGroupInfo(&result, group, pool, {});
+            UNIT_ASSERT(result.HasIsExternalStorage());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetIsExternalStorage(), external);
+            UNIT_ASSERT(result.HasStoragePoolKind());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStoragePoolKind(), pool.Kind);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStoragePoolName(), pool.Name);
+        };
+
+        check(false);
+        group.VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::WORKING;
+        group.BlobDepotId = 42;
+        NKikimrBlobDepot::TBlobDepotConfig config;
+        group.BlobDepotConfig = config.SerializeAsString();
+        check(false);
+        const auto diskState = group.GetReportedVirtualGroupState();
+
+        config.MutableS3BackendSettings()->MutableSyncMode();
+        group.BlobDepotConfig = config.SerializeAsString();
+        check(true);
+        const auto s3State = group.GetReportedVirtualGroupState();
+        UNIT_ASSERT(diskState != s3State);
+        config.MutableS3BackendSettings()->MutableAsyncMode();
+        group.BlobDepotConfig = config.SerializeAsString();
+        check(true);
+        UNIT_ASSERT(s3State == group.GetReportedVirtualGroupState());
+    }
+
+    Y_UNIT_TEST(StoragePoolMetadataChangesAdvanceGroupGeneration) {
+        TEnvironmentSetup env(1, 1);
+        bool activeZone;
+        env.Prepare("", [](TTestActorRuntime&) {}, activeZone);
+        TFinalizer finalizer(env);
+        env.DisableLogging();
+
+        NKikimrBlobStorage::TConfigRequest request;
+        env.DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), request);
+        env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, false, request, "none");
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        const auto base = FetchBaseConfig(&env);
+        UNIT_ASSERT_VALUES_EQUAL(base.GroupSize(), 1);
+        const ui32 groupId = base.GetGroup(0).GetGroupId();
+        const auto readGroup = [&] {
+            const TActorId edge = env.Runtime->AllocateEdgeActor();
+            auto event = MakeHolder<TEvBlobStorage::TEvControllerGetGroup>(0, groupId);
+            env.Runtime->SendToPipe(env.TabletId, edge, event.Release(), 0, GetPipeConfigWithRetries(), {}, Max<ui64>());
+            const auto result = env.Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetServiceSet().GroupsSize(), 1);
+            return result->Get()->Record.GetServiceSet().GetGroups(0);
+        };
+
+        auto previous = readGroup();
+        for (const TString& name : {TString("pool"), TString("renamed-pool")}) {
+            NKikimrBlobStorage::TConfigRequest read;
+            auto* cmd = read.AddCommand()->MutableReadStoragePool();
+            cmd->SetBoxId(1);
+            cmd->AddStoragePoolId(1);
+            const auto pool = env.Invoke(read);
+            UNIT_ASSERT_C(pool.GetSuccess(), pool.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(pool.GetStatus(0).StoragePoolSize(), 1);
+            NKikimrBlobStorage::TConfigRequest change;
+            auto* updated = change.AddCommand()->MutableDefineStoragePool();
+            updated->CopyFrom(pool.GetStatus(0).GetStoragePool(0));
+            updated->SetKind("hdd");
+            updated->SetName(name);
+            response = env.Invoke(change);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            const auto current = readGroup();
+            UNIT_ASSERT_GT(current.GetGroupGeneration(), previous.GetGroupGeneration());
+            UNIT_ASSERT_VALUES_EQUAL(current.GetStoragePoolKind(), "hdd");
+            UNIT_ASSERT_VALUES_EQUAL(current.GetStoragePoolName(), name);
+            previous = current;
         }
     }
 

@@ -1,5 +1,3 @@
-import "ydb/core/scheme/protos/pathid.proto";
-
 package NKikimrStoragePool;
 option java_package = "ru.yandex.kikimr.proto";
 
@@ -12,8 +10,6 @@ message TChannelBind {
     //optional uint32 Channel = 1; // it should be equal to array index, so it doesn't make any sense to have one
     optional string StoragePoolName = 2;
     optional string StoragePoolKind = 3;
-    optional NKikimrProto.TPathID ExternalDataSourceId = 4;
-    optional string ExternalDataSourcePath = 5;
     optional float IOPS = 10;
     optional uint64 Throughput = 11;
     optional uint64 Size = 12;

@@ -269,7 +269,8 @@ namespace NKikimr::NBsController {
             if (cur.DDisk) {
                 throw TExError() << "can't invoke DefineStoragePool against DDisk pool";
             }
-            if (cur.SchemeshardId != storagePool.SchemeshardId || cur.PathItemId != storagePool.PathItemId) {
+            if (cur.SchemeshardId != storagePool.SchemeshardId || cur.PathItemId != storagePool.PathItemId ||
+                    cur.Kind != storagePool.Kind || cur.Name != storagePool.Name) {
                 for (auto it = spToGroups.lower_bound({id, Min<TGroupId>()}); it != spToGroups.end() && it->first == id; ++it) {
                     GroupContentChanged.insert(it->second);
                 }

@@ -181,7 +181,7 @@ void TKeyValueState::Clear() {
     CollectOperation.Reset(nullptr);
     IsCollectEventSent = false;
     ChannelDataUsage.fill(0);
-    StorageUsageRevision = 1;
+    GroupDataUsage.clear();
     DiskQuotaExceeded = false;
     UsedChannels.reset();
 
@@ -403,15 +403,15 @@ void TKeyValueState::CountRequestIncoming(TRequestType::EType requestType) {
     }
 }
 
-void TKeyValueState::FillStorageUsageReport(NKikimrKeyValue::StorageUsageReport& report) const {
-    report.set_tablet_id(TabletId);
-    report.set_generation(ExecutorGeneration);
-    report.set_round(StorageUsageRevision);
-    for (ui32 channel = 0; channel < ChannelDataUsage.size(); ++channel) {
-        if (const ui64 bytes = ChannelDataUsage[channel]) {
-            (*report.mutable_bytes_by_channel())[channel] = bytes;
-        }
+THashMap<ui32, ui64> TKeyValueState::GetStorageUsageByGroup() const {
+    auto usage = GroupDataUsage;
+    if (const ui64 inlineBytes = ChannelDataUsage[0]) {
+        const ui32 group = TabletInfo->GroupFor(0, ExecutorGeneration);
+        Y_ABORT_UNLESS(group != Max<ui32>());
+        usage[group] += inlineBytes;
     }
+
+    return usage;
 }
 
 void TKeyValueState::CountTrashRecord(const TLogoBlobID& id) {
@@ -422,7 +422,13 @@ void TKeyValueState::CountTrashRecord(const TLogoBlobID& id) {
     ResourceMetrics->StorageUser.Set(bytes.Get());
     Y_ABORT_UNLESS(id.Channel() < ChannelDataUsage.size());
     ChannelDataUsage[id.Channel()] -= id.BlobSize();
-    ++StorageUsageRevision;
+    const ui32 group = TabletInfo->GroupFor(id);
+    auto it = GroupDataUsage.find(group);
+    Y_ABORT_UNLESS(it != GroupDataUsage.end() && it->second >= id.BlobSize());
+    it->second -= id.BlobSize();
+    if (!it->second) {
+        GroupDataUsage.erase(it);
+    }
 }
 
 void TKeyValueState::CountWriteRecord(const TLogoBlobID& id) {
@@ -431,7 +437,11 @@ void TKeyValueState::CountWriteRecord(const TLogoBlobID& id) {
     ResourceMetrics->StorageUser.Set(TabletCounters->Simple()[COUNTER_RECORD_BYTES].Get());
     Y_ABORT_UNLESS(id.Channel() < ChannelDataUsage.size());
     ChannelDataUsage[id.Channel()] += id.BlobSize();
-    ++StorageUsageRevision;
+    if (id.Channel()) {
+        const ui32 group = TabletInfo->GroupFor(id);
+        Y_ABORT_UNLESS(group != Max<ui32>());
+        GroupDataUsage[group] += id.BlobSize();
+    }
 }
 
 void TKeyValueState::CountDeleteInline(ui32 sizeBytes) {
@@ -440,7 +450,6 @@ void TKeyValueState::CountDeleteInline(ui32 sizeBytes) {
     ResourceMetrics->StorageUser.Set(TabletCounters->Simple()[COUNTER_RECORD_BYTES].Get());
     Y_ABORT_UNLESS(0 < ChannelDataUsage.size());
     ChannelDataUsage[0] -= sizeBytes;
-    ++StorageUsageRevision;
 }
 
 void TKeyValueState::CountInitialTrashRecord(const TLogoBlobID& id) {

@@ -41,9 +41,11 @@ message StorageUsageReport {
     uint64 tablet_id = 1;
     uint32 generation = 2;
     uint64 round = 3;
-    // SchemeShard excludes external channels and maps the rest to per-pool quotas.
-    // The reverse notification carries only the domain-wide DiskQuotaExceeded flag.
-    map<uint32, uint64> bytes_by_channel = 4;
+    reserved 4; // Former bytes_by_channel could not distinguish historical storage groups.
+    reserved "bytes_by_channel";
+    // Present only after every used storage group has been classified; S3 bytes are excluded.
+    optional uint64 total_bytes = 5;
+    map<string, uint64> bytes_by_pool_kind = 6;
 }
 
 message StorageStatusFlags {

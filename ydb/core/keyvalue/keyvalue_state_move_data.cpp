@@ -245,6 +245,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
 
     item.LogoBlobId = newBlobId;
     GetOrCreateRefCount(newBlobId) = 1;
+    CountWriteRecord(newBlobId);
 
     MoveDataBlobMovingIsInProgress = false;
     UpdateKeyValue(*MoveDataKey, record, db);

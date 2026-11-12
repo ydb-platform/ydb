@@ -69,10 +69,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
-namespace NKikimrKeyValue {
-class StorageUsageReport;
-}
-
 namespace NKikimr {
 namespace NSchemeShard {
 using namespace NTableIndex;
@@ -2098,10 +2094,6 @@ struct TRtmrVolumeInfo: TSimpleRefCount<TRtmrVolumeInfo> {
 };
 
 const TString* GetPoolKind(const TChannelBind& channelBind, const TStoragePools& pools);
-
-NKikimrSubDomains::TKeyValuePartitionUsage PrepareKeyValueStorageUsage(
-    const NKikimrKeyValue::StorageUsageReport& report,
-    const TChannelsBindings& bindings, const TStoragePools& pools);
 
 struct TSolomonPartitionInfo: TSimpleRefCount<TSolomonPartitionInfo> {
     using TPtr = TIntrusivePtr<TSolomonPartitionInfo>;

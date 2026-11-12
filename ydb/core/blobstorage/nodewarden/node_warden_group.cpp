@@ -146,6 +146,15 @@ namespace NKikimr::NStorage {
             // apply basic protobuf changes
             if (!currentGroup || currentGroup->GetGroupGeneration() < newGroup->GetGroupGeneration()) {
                 currentGroup.emplace(*newGroup);
+            } else if (fromController && currentGroup->GetGroupGeneration() == newGroup->GetGroupGeneration()) {
+                // Backend metadata can first appear after a BSC upgrade without changing the group generation.
+                if (newGroup->HasIsExternalStorage()) {
+                    currentGroup->SetIsExternalStorage(newGroup->GetIsExternalStorage());
+                }
+
+                if (newGroup->HasStoragePoolKind()) {
+                    currentGroup->SetStoragePoolKind(newGroup->GetStoragePoolKind());
+                }
             }
 
             // apply encryption parameters from new protobuf

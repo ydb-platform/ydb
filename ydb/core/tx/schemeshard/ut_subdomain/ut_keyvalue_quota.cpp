@@ -1,9 +1,12 @@
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/keyvalue/keyvalue_const.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
+
+#include <google/protobuf/unknown_field_set.h>
 
 using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
@@ -17,14 +20,69 @@ struct TSettings {
 };
 
 struct TEnv {
+    static constexpr ui32 HddGroup = 2181038080;
     TTestBasicRuntime Runtime;
-    TTestEnv Env{Runtime};
+    TTestEnv Env{Runtime, TTestEnvOptions().DSProxies({
+        MakeIntrusive<NFake::TProxyDS>(TGroupId::Zero()),
+        MakeIntrusive<NFake::TProxyDS>(TGroupId::FromValue(HddGroup)),
+    })};
     TActorId Edge = Runtime.AllocateEdgeActor();
     ui64 TxId = 100;
     ui64 SchemeShard = TTestTxConfig::SchemeShard;
     TVector<ui64> Tablets;
+    THashMap<ui64, ui32> DataGroups;
+    THashMap<ui64, TVector<TTabletChannelInfo::THistoryEntry>> DataChannelHistory;
+    bool HddGroupExternal = false;
+    std::optional<ui32> HoldGroupInfo;
+    TVector<TAutoPtr<IEventHandle>> HeldGroupInfo;
+    TTestActorRuntime::TEventObserverHolder BootObserver;
+    TTestActorRuntime::TEventObserverHolder GroupInfoObserver;
 
     explicit TEnv(TSettings settings = {}) {
+        // FakeHive does not resolve channel bindings; keep its tablet history consistent with the pools below.
+        BootObserver = Runtime.AddObserver<TEvTablet::TEvBoot>([&](auto& ev) {
+            auto& info = *ev->Get()->TabletStorageInfo;
+            if (info.TabletType == TTabletTypes::KeyValue) {
+                auto& history = DataChannelHistory[info.TabletID];
+                if (history.empty()) {
+                    history.emplace_back(0, 0);
+                }
+
+                const ui32 groupId = DataGroups.Value(info.TabletID, 0);
+                if (history.back().GroupID != groupId) {
+                    history.emplace_back(ev->Get()->Generation, groupId);
+                }
+
+                info.Channels[2].History = history;
+                info.Channels[3].History[0].GroupID = HddGroup;
+            }
+        });
+
+        GroupInfoObserver = Runtime.AddObserver<TEvNodeWardenQueryGroupInfo>([&](auto& ev) {
+            auto* response = new TEvNodeWardenGroupInfo;
+            auto& group = *response->Record.MutableGroup();
+            const ui32 groupId = ev->Get()->Record.GetGroupId();
+            UNIT_ASSERT(groupId == 0 || groupId == HddGroup);
+            group.SetGroupID(groupId);
+            group.SetGroupGeneration(1);
+            const bool external = groupId == HddGroup && HddGroupExternal;
+            group.SetIsExternalStorage(external);
+            if (external) {
+                group.SetBlobDepotId(123);
+            }
+
+            group.SetStoragePoolName(groupId == HddGroup ? "cold" : "data");
+            group.SetStoragePoolKind(groupId == HddGroup ? "hdd" : "ssd");
+            auto reply = MakeHolder<IEventHandle>(ev->Sender, ev->Recipient, response, 0, ev->Cookie);
+            if (HoldGroupInfo == groupId) {
+                HeldGroupInfo.emplace_back(reply.Release());
+            } else {
+                Runtime.Send(reply.Release());
+            }
+
+            ev.Reset();
+        });
+
         Runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(settings.SeparatePools);
         Runtime.GetAppData().FeatureFlags.SetEnableKeyValueStorageUsageReports(settings.ReportStorageUsage);
         const TString tenant = R"(
@@ -91,6 +149,36 @@ struct TEnv {
     void Refresh(ui64 tablet) {
         ForwardToTablet(Runtime, tablet, Edge, new TEvKeyValue::TEvPeriodicRefresh);
         Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    }
+
+    void Report(ui64 tablet, ui32 generation, ui64 round, std::optional<ui64> bytes,
+                const TString& poolKind = "ssd") {
+        auto* ev = new TEvKeyValue::TEvStorageUsageReport;
+        ev->Record.set_tablet_id(tablet);
+        ev->Record.set_generation(generation);
+        ev->Record.set_round(round);
+        if (bytes) {
+            ev->Record.set_total_bytes(*bytes);
+            (*ev->Record.mutable_bytes_by_pool_kind())[poolKind] = *bytes;
+        }
+
+        ForwardToTablet(Runtime, SchemeShard, Edge, ev);
+        Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    }
+
+    void Write(ui64 tablet, const TString& key, const TString& value) {
+        auto* request = new TEvKeyValue::TEvExecuteTransaction;
+        auto* write = request->Record.add_commands()->mutable_write();
+        write->set_key(key);
+        write->set_value(value);
+        write->set_storage_channel(NKeyValue::MainStorageChannelInPublicApi);
+        const auto response = Request<TEvKeyValue::TEvExecuteTransaction, TEvKeyValue::TEvExecuteTransactionResponse>(tablet, request);
+        UNIT_ASSERT_C(response.status() == NKikimrKeyValue::Statuses::RSTATUS_OK, response.ShortDebugString());
+    }
+
+    void RebindDataChannel(ui64 tablet, ui32 groupId) {
+        DataGroups[tablet] = groupId;
+        RebootTablet(Runtime, tablet, Edge);
     }
 };
 
@@ -233,66 +321,132 @@ Y_UNIT_TEST(EnforceQuotaForThePoolHoldingTheValue) {
     env.CheckUsage(value.size(), true);
 }
 
-Y_UNIT_TEST(ExcludeExternalChannelsFromDiskUsage) {
-    TChannelsBindings bindings(4);
-    bindings[0].SetStoragePoolKind("ssd");
-    bindings[1].SetStoragePoolName("data");
-    bindings[2].SetStoragePoolKind("hdd");
-    bindings[3].SetStoragePoolName("external");
-    bindings[3].MutableExternalDataSourceId()->SetOwnerId(1);
-    bindings[3].MutableExternalDataSourceId()->SetLocalId(2);
-    const TStoragePools pools{{"data", "ssd"}};
+Y_UNIT_TEST(AccountHistoricalGroupsAcrossDiskAndS3Rebinds) {
+    TEnv env;
+    const ui64 tablet = env.Tablets.front();
+    env.HddGroupExternal = true;
+    env.Write(tablet, "disk-old", "123");
+    env.Refresh(tablet);
+    env.CheckUsage(3, false);
 
-    NKikimrKeyValue::StorageUsageReport report;
-    report.set_generation(7);
-    report.set_round(9);
-    auto& bytes = *report.mutable_bytes_by_channel();
-    bytes[0] = 2;
-    bytes[1] = 3;
-    bytes[2] = 4;
-    bytes[3] = 100;
-    // Adopted tablets can report channels whose bindings are not known to SchemeShard.
-    bytes[4] = 5;
+    env.RebindDataChannel(tablet, TEnv::HddGroup);
+    env.Write(tablet, "external", "12345");
+    env.Refresh(tablet);
+    env.CheckUsage(3, false);
 
-    const auto usage = NSchemeShard::PrepareKeyValueStorageUsage(report, bindings, pools);
-    UNIT_ASSERT_VALUES_EQUAL(usage.generation(), 7);
-    UNIT_ASSERT_VALUES_EQUAL(usage.round(), 9);
-    UNIT_ASSERT_VALUES_EQUAL(usage.total_bytes(), 14);
-    UNIT_ASSERT_VALUES_EQUAL(usage.bytes_by_pool_kind().size(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(usage.bytes_by_pool_kind().at("ssd"), 5);
-    UNIT_ASSERT_VALUES_EQUAL(usage.bytes_by_pool_kind().at("hdd"), 4);
+    env.RebindDataChannel(tablet, 0);
+    env.Write(tablet, "disk-new", "1234");
+    env.Refresh(tablet);
+    env.CheckUsage(7, false);
+    RebootTablet(env.Runtime, tablet, env.Edge);
+    env.Refresh(tablet);
+    env.CheckUsage(7, false);
 
-    bindings[3].SetStoragePoolKind("ssd");
-    const auto externalWithPoolKind = NSchemeShard::PrepareKeyValueStorageUsage(report, bindings, pools);
-    UNIT_ASSERT_VALUES_EQUAL(externalWithPoolKind.total_bytes(), usage.total_bytes());
-    UNIT_ASSERT_VALUES_EQUAL(externalWithPoolKind.bytes_by_pool_kind().at("ssd"), 5);
+    auto* read = new TEvKeyValue::TEvRequest;
+    read->Record.AddCmdRead()->SetKey("external");
+    UNIT_ASSERT_VALUES_EQUAL(env.LegacyRequest(tablet, read).GetReadResult(0).GetValue(), "12345");
+
+    auto* request = new TEvKeyValue::TEvExecuteTransaction;
+    auto* range = request->Record.add_commands()->mutable_delete_range()->mutable_range();
+    range->set_from_key_inclusive("disk-old");
+    range->set_to_key_inclusive("disk-old");
+    const auto response = env.Request<TEvKeyValue::TEvExecuteTransaction, TEvKeyValue::TEvExecuteTransactionResponse>(tablet, request);
+    UNIT_ASSERT_C(response.status() == NKikimrKeyValue::Statuses::RSTATUS_OK, response.ShortDebugString());
+    env.Refresh(tablet);
+    env.CheckUsage(4, false);
+}
+
+Y_UNIT_TEST(MissingMetadataKeepsUsageAndLateRepliesDoNotRestoreOldUsage) {
+    TEnv env;
+    const ui64 tablet = env.Tablets.front();
+    env.Write(tablet, "key", "123");
+    env.Refresh(tablet);
+    env.CheckUsage(3, false);
+
+    env.RebindDataChannel(tablet, TEnv::HddGroup);
+    env.Write(tablet, "external", "12345");
+    env.Refresh(tablet);
+    env.CheckUsage(8, false);
+
+    env.HoldGroupInfo = TEnv::HddGroup;
+    env.Refresh(tablet);
+    env.CheckUsage(8, false);
+    UNIT_ASSERT(!env.HeldGroupInfo.empty());
+
+    env.Write(tablet, "key", "1234");
+    env.HddGroupExternal = true;
+    env.HoldGroupInfo.reset();
+    env.Refresh(tablet);
+    env.CheckUsage(0, false);
+
+    for (auto& reply : env.HeldGroupInfo) {
+        env.Runtime.Send(reply.Release());
+    }
+
+    env.HeldGroupInfo.clear();
+    env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    env.CheckUsage(0, false);
+}
+
+Y_UNIT_TEST(IgnoreIncompleteReportsAndAcceptExplicitZero) {
+    TEnv env;
+    const ui64 tablet = env.Tablets[0];
+    env.Report(tablet, 100, 1, 20);
+    env.CheckUsage(20, true);
+
+    env.Report(tablet, 100, 2, std::nullopt);
+    env.CheckUsage(20, true);
+
+    auto* legacy = new TEvKeyValue::TEvStorageUsageReport;
+    legacy->Record.set_tablet_id(tablet);
+    legacy->Record.set_generation(101);
+    legacy->Record.set_round(1);
+    // Former map entry at tag 4: channel 2, usage 100. It must not be interpreted as a complete report.
+    legacy->Record.GetReflection()->MutableUnknownFields(&legacy->Record)->AddLengthDelimited(4, "\x08\x02\x10\x64");
+    ForwardToTablet(env.Runtime, env.SchemeShard, env.Edge, legacy);
+    env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    env.CheckUsage(20, true);
+
+    RebootTablet(env.Runtime, env.SchemeShard, env.Edge);
+    env.CheckUsage(20, true);
+
+    // An incomplete report must not advance the persisted sequence number.
+    env.Report(tablet, 100, 2, 0);
+    env.CheckUsage(0, false);
+}
+
+Y_UNIT_TEST(UseReportedStoragePoolAfterReboot) {
+    TEnv env({.SeparatePools = true});
+    const ui64 tablet = env.Tablets[0];
+    env.Report(tablet, 100, 1, 12, "hdd");
+    env.CheckUsage(12, false);
+    RebootTablet(env.Runtime, env.SchemeShard, env.Edge);
+    env.CheckUsage(12, false);
+
+    env.Report(tablet, 100, 2, 12, "ssd");
+    env.CheckUsage(12, true);
+    RebootTablet(env.Runtime, env.SchemeShard, env.Edge);
+    env.CheckUsage(12, true);
+
+    env.Report(tablet, 100, 3, 12, "hdd");
+    env.CheckUsage(12, false);
 }
 
 Y_UNIT_TEST(IgnoreOldReportsAndReleasePoolQuotaOnDrop) {
     TEnv env({.SeparatePools = true});
     const ui64 tablet = env.Tablets[0];
-    const auto report = [&](ui32 generation, ui64 round, ui64 bytes) {
-        auto* ev = new TEvKeyValue::TEvStorageUsageReport;
-        ev->Record.set_tablet_id(tablet);
-        ev->Record.set_generation(generation);
-        ev->Record.set_round(round);
-        (*ev->Record.mutable_bytes_by_channel())[2] = bytes;
-        ForwardToTablet(env.Runtime, TTestTxConfig::SchemeShard, env.Edge, ev);
-        env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
-    };
-
-    report(100, 2, 20);
+    env.Report(tablet, 100, 2, 20);
     env.CheckUsage(20, true);
     RebootTablet(env.Runtime, TTestTxConfig::SchemeShard, env.Edge);
     env.CheckUsage(20, true);
-    report(100, 2, 20);
-    report(100, 1, 4);
-    report(99, 3, 1);
+    env.Report(tablet, 100, 2, 20);
+    env.Report(tablet, 100, 1, 4);
+    env.Report(tablet, 99, 3, 1);
     env.CheckUsage(20, true);
 
     TestDropSolomon(env.Runtime, ++env.TxId, "/MyRoot/Tenant", "KV");
     env.Env.TestWaitNotification(env.Runtime, env.TxId);
-    report(101, 1, 30);
+    env.Report(tablet, 101, 1, 30);
     env.CheckUsage(0, false);
 }
 

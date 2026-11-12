@@ -100,6 +100,12 @@ struct TControllerSchema: NIceDb::Schema {
             static constexpr Type Default = InvalidLocalPathId;
         };
         struct IndexBuild: Column<20, NScheme::NTypeIds::String> {};
+        // Set when the target is created: its workers qualify the destination deduplication
+        // source id with the stream name. Absent on targets created before this column existed,
+        // which keep the bare partition index so their persisted offsets stay valid.
+        struct QualifiedSourceId: Column<21, NScheme::NTypeIds::Bool> {
+            static constexpr bool Default = false;
+        };
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
@@ -122,7 +128,8 @@ struct TControllerSchema: NIceDb::Schema {
             SchemaBarrierFlushTxIds,
             PendingDstPathOwnerId,
             PendingDstPathLocalId,
-            IndexBuild
+            IndexBuild,
+            QualifiedSourceId
         >;
     };
 

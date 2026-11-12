@@ -1061,6 +1061,8 @@ public:
                     auto config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(src, dst);
                     const auto tid = replication->AddTarget(TReplication::ETargetKind::IndexTable, config);
                     replication->FindTarget(tid)->SetIndexBuild(true);
+                    const bool qualifiedSourceId = !replication->GetConfig().GetInitialScan();
+                    replication->FindTarget(tid)->SetSourceIdQualified(qualifiedSourceId);
                     auto& build = Self->IndexBuilds[{key.first, tid}];
                     build.SetPhase(NKikimrReplication::TIndexBuildState::FILLING);
                     build.SetSnapshotTxId(it->second.DstAlterTxId);
@@ -1068,7 +1070,8 @@ public:
                         NIceDb::TUpdate<Schema::Targets::Kind>(TReplication::ETargetKind::IndexTable),
                         NIceDb::TUpdate<Schema::Targets::SrcPath>(src),
                         NIceDb::TUpdate<Schema::Targets::DstPath>(dst),
-                        NIceDb::TUpdate<Schema::Targets::IndexBuild>(build.SerializeAsString())
+                        NIceDb::TUpdate<Schema::Targets::IndexBuild>(build.SerializeAsString()),
+                        NIceDb::TUpdate<Schema::Targets::QualifiedSourceId>(qualifiedSourceId)
                     );
                 }
                 db.Table<Schema::Replications>().Key(key.first).Update(

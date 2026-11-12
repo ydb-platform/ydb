@@ -1,3 +1,4 @@
+#include "event_util.h"
 #include "replication.h"
 #include "target_table.h"
 #include "util.h"
@@ -114,6 +115,26 @@ Y_UNIT_TEST_SUITE(Replication) {
         config.ClearInitialScan();
         replication->SetConfig(std::move(config));
         UNIT_ASSERT(!replication->GetConfig().GetInitialScan());
+    }
+
+    Y_UNIT_TEST(SourceIdPrefixFollowsPersistedTargetFlag) {
+        // The prefix is decided once, when the target is created, and persisted with it. It is
+        // deliberately not recomputed from the replication config: a target created before the
+        // column existed loads with the flag unset and has to keep the bare partition index its
+        // destination offsets were already written under.
+        NKikimrReplication::TReplicationConfig config;
+        config.SetInitialScan(false);
+        auto replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2), config, "/Root/db");
+        const auto id = replication->AddTarget(TReplication::ETargetKind::Table,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/table", "/Root/replica"));
+        auto* target = replication->FindTarget(id);
+        target->SetStreamName("stream-1");
+
+        UNIT_ASSERT(!target->IsSourceIdQualified());
+        UNIT_ASSERT_VALUES_EQUAL(MakeSourceIdPrefix(*target), "");
+
+        target->SetSourceIdQualified(true);
+        UNIT_ASSERT_VALUES_EQUAL(MakeSourceIdPrefix(*target), "stream-1");
     }
 
     struct TLagSetup {

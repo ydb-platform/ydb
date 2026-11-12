@@ -60,4 +60,6 @@ bool EstimateCandidateCosts(TVector<TReadCandidate>& candidates, TOpRead& read, 
 // The candidates from best to worst, by cost or by score. The main table wins ties.
 TVector<size_t> OrderCandidates(const TVector<TReadCandidate>& candidates, bool costBased);
 
+void LogCandidates(const TVector<TReadCandidate>& candidates, const TVector<size_t>& order, bool costBased);
+
 } // namespace NKikimr::NKqp

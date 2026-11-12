@@ -296,17 +296,28 @@ std::optional<TOpRead::TPointPrefix> ExtractPointPrefix(size_t pointPrefixLen, c
     return prefix;
 }
 
-// Index selection is cost-based where the CBO runs
-bool IsCostBasedIndexSelectionEnabled(const TKqpOptimizeContext& kqpCtx, NYql::EStorageType storageType) {
+// Index selection is cost-based from the level the CBO runs for row tables, the only ones with selectable indexes
+bool IsCostBasedIndexSelectionEnabled(const TKqpOptimizeContext& kqpCtx) {
     const auto& config = *kqpCtx.Config;
-    const auto optLevel = config.CostBasedOptimizationLevel.Get().GetOrElse(config.GetDefaultCostBasedOptimizationLevel());
-    return optLevel > 2 || (optLevel == 2 && storageType != NYql::EStorageType::RowStorage);
+    return config.CostBasedOptimizationLevel.Get().GetOrElse(config.GetDefaultCostBasedOptimizationLevel()) >= 3;
 }
 
 // Whether the ranges cover the whole filter predicate, so the extractor pruned it to `true`.
 bool IsPrunedToTrue(const TExprNode::TPtr& prunedLambda) {
     const auto literal = TCoLambda(prunedLambda).Body().Maybe<TCoBool>();
     return literal.IsValid() && literal.Cast().Literal().Value() == "true";
+}
+
+bool HasNoResidualPredicate(const TExprNode::TPtr& prunedLambda) {
+    if (!prunedLambda) {
+        return false;
+    }
+    const auto body = TCoLambda(prunedLambda).Body();
+    if (const auto cond = body.Maybe<TCoConditionalValueBase>()) {
+        const auto boolLit = cond.Cast().Predicate().Maybe<TCoBool>();
+        return boolLit.IsValid() && boolLit.Cast().Literal().Value() == "true" && cond.Cast().Value().Maybe<TCoArgument>().IsValid();
+    }
+    return body.Maybe<TCoArgument>().IsValid();
 }
 
 TVector<TString> FindConsumingTopSortColumns(const IOperator* op, TExprContext& ctx) {
@@ -502,13 +513,32 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     const auto sortColumns =
         read->GetTableStorageType() == NYql::EStorageType::RowStorage ? FindConsumingTopSortColumns(input.get(), ctx) : TVector<TString>();
 
-    // The candidates are matched on the normalized predicate, the extractor builds the ranges of the chosen one only.
-    const auto predicateTree = TPredicateTreeBuilder(nullptr).Build(lambda.Body());
-    const auto normalizedPredicate = TPredicateTreeBuilder::Normalize(predicateTree);
-    if (normalizedPredicate) {
-        YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Normalized predicate of a read of " << tablePath << ":\n"
-                                     << normalizedPredicate->ToString();
+    // Cost-based selection matches the candidates on the normalized predicate and builds the ranges of the chosen one only.
+    // Rule-based selection scores the ranges the extractor builds for every candidate.
+    const bool costBasedSelection = IsCostBasedIndexSelectionEnabled(kqpCtx);
+    std::shared_ptr<TTreeNode> normalizedPredicate;
+    if (costBasedSelection) {
+        normalizedPredicate = TPredicateTreeBuilder::Normalize(TPredicateTreeBuilder(nullptr).Build(lambda.Body()));
+        if (normalizedPredicate) {
+            YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Normalized predicate of a read of " << tablePath << ":\n"
+                                         << normalizedPredicate->ToString();
+        }
     }
+
+    // The extractor results of the candidates, by candidate, when rule-based
+    TVector<IPredicateRangeExtractor::TBuildResult> built;
+    auto matchKey = [&](const TVector<TString>& keyColumns, std::optional<IPredicateRangeExtractor::TBuildResult>& result) {
+        if (costBasedSelection) {
+            return MatchKey(normalizedPredicate, keyColumns, settings.MaxRanges);
+        }
+        result = extractor->BuildComputeNode(keyColumns, ctx, typeCtx);
+        return TKeyMatch{
+            .PointPrefixLen = result->PointPrefixLen,
+            .UsedPrefixLen = result->UsedPrefixLen,
+            .ExpectedMaxRanges = result->ExpectedMaxRanges,
+            .HasResidual = !HasNoResidualPredicate(result->PrunedLambda),
+        };
+    };
 
     // Point prefixes are computed for every table the read can be redirected to, so a lookup join can
     // choose the one which fits its keys best. Otherwise only the table chosen for the read gets one.
@@ -525,7 +555,8 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         }
     };
 
-    auto mainMatch = MatchKey(normalizedPredicate, mainKeyColumns, settings.MaxRanges);
+    std::optional<IPredicateRangeExtractor::TBuildResult> mainBuilt;
+    auto mainMatch = matchKey(mainKeyColumns, mainBuilt);
     if (allPointPrefixes) {
         addPointPrefix(mainMeta, mainMatch.PointPrefixLen, mainKeyColumns);
     }
@@ -539,6 +570,9 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         .Score = std::move(mainScore),
     });
     SetTableSize(candidates.front(), mainMeta);
+    if (mainBuilt) {
+        built.push_back(std::move(*mainBuilt));
+    }
 
     if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !candidates.front().Score.PointCoversKey) {
         const auto filterPhysical = FilterPhysicalColumns(*filter, *read, props);
@@ -557,7 +591,8 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             }
 
             auto indexKeyColumns = ResolveExposedKeyColumns(extractorNames, indexMeta->KeyColumnNames);
-            auto indexMatch = MatchKey(normalizedPredicate, indexKeyColumns, settings.MaxRanges);
+            std::optional<IPredicateRangeExtractor::TBuildResult> indexBuilt;
+            auto indexMatch = matchKey(indexKeyColumns, indexBuilt);
             if (indexMatch.UsedPrefixLen == 0) {
                 continue;
             }
@@ -590,25 +625,35 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                 .Score = std::move(score),
             });
             SetTableSize(candidates.back(), mainMeta);
+            if (indexBuilt) {
+                built.push_back(std::move(*indexBuilt));
+            }
         }
     }
 
-    const bool costBased = IsCostBasedIndexSelectionEnabled(kqpCtx, read->GetTableStorageType()) && candidates.size() > 1
+    const bool costBased = costBasedSelection && candidates.size() > 1
         && EstimateCandidateCosts(candidates, *read, normalizedPredicate, mainMeta.RecordsCount, rboCtx, props);
+    const auto order = OrderCandidates(candidates, costBased);
+    LogCandidates(candidates, order, costBased);
 
-    // An index whose ranges the extractor builds shorter than matched is rejected; the main table is always accepted
     size_t winnerIdx = 0;
     IPredicateRangeExtractor::TBuildResult chosen;
 
-    for (const size_t idx : OrderCandidates(candidates, costBased)) {
-        const auto& candidate = candidates[idx];
-        chosen = extractor->BuildComputeNode(candidate.KeyColumns, ctx, typeCtx);
-        if (idx == 0 || (chosen.ComputeNode && chosen.UsedPrefixLen >= candidate.Match.UsedPrefixLen)) {
-            winnerIdx = idx;
-            break;
+    if (!costBasedSelection) {
+        winnerIdx = order.front();
+        chosen = std::move(built[winnerIdx]);
+    } else {
+        // An index whose ranges the extractor builds shorter than matched is rejected; the main table is always accepted
+        for (const size_t idx : order) {
+            const auto& candidate = candidates[idx];
+            chosen = extractor->BuildComputeNode(candidate.KeyColumns, ctx, typeCtx);
+            if (idx == 0 || (chosen.ComputeNode && chosen.UsedPrefixLen >= candidate.Match.UsedPrefixLen)) {
+                winnerIdx = idx;
+                break;
+            }
+            YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Index " << candidate.IndexName << " uses " << chosen.UsedPrefixLen
+                                         << " key columns instead of " << candidate.Match.UsedPrefixLen << ", rejected";
         }
-        YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Index " << candidate.IndexName << " uses " << chosen.UsedPrefixLen
-                                     << " key columns instead of " << candidate.Match.UsedPrefixLen << ", rejected";
     }
 
     const auto& winner = candidates[winnerIdx];

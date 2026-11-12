@@ -107,13 +107,28 @@ bool EstimateCandidateCosts(TVector<TReadCandidate>& candidates, TOpRead& read, 
         candidate.SelTotal = selTotal;
         candidate.SelRange = consumed ? computer.ComputeSelectivity(consumed) : 1.0;
         candidate.Cost = EstimateAccessPathCost(candidate, mainRows);
-        YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Access path " << (candidate.IndexName.empty() ? "main" : candidate.IndexName)
-                                     << ": used " << candidate.Match.UsedPrefixLen << ", points " << candidate.Match.PointPrefixLen
-                                     << ", covering " << candidate.Covering << ", residual " << candidate.Match.HasResidual
-                                     << ", sel range " << candidate.SelRange << ", cost " << candidate.Cost;
     }
 
     return true;
+}
+
+void LogCandidates(const TVector<TReadCandidate>& candidates, const TVector<size_t>& order, bool costBased) {
+    for (size_t rank = 0; rank < order.size(); ++rank) {
+        const auto& candidate = candidates[order[rank]];
+        const auto& match = candidate.Match;
+        const auto& score = candidate.Score;
+        TStringBuilder line;
+        line << "\n[NEW RBO] Access path #" << rank << " " << (candidate.IndexName.empty() ? "main" : candidate.IndexName)
+             << ": score (" << score.SortMatchesAndNoResidual << ", " << score.PointCoversKey << ", " << score.PointPrefixLen
+             << ", " << score.UsedCoversKey << ", " << score.UsedPrefixLen << "), covering " << candidate.Covering
+             << ", sort matches " << score.SortMatches << ", points " << match.PointPrefixLen << ", used " << match.UsedPrefixLen
+             << ", ranges " << (match.ExpectedMaxRanges ? ToString(*match.ExpectedMaxRanges) : "?") << ", residual " << match.HasResidual;
+        if (costBased) {
+            line << ", rows " << candidate.TableRows << ", sel range " << candidate.SelRange << ", sel total " << candidate.SelTotal
+                 << ", cost " << candidate.Cost;
+        }
+        YQL_CLOG(TRACE, ProviderKqp) << line;
+    }
 }
 
 TVector<size_t> OrderCandidates(const TVector<TReadCandidate>& candidates, bool costBased) {

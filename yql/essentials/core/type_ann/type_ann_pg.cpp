@@ -11,21 +11,12 @@
 #include <yql/essentials/core/yql_expr_type_annotation_pg.h>
 
 #include <yql/essentials/parser/pg_catalog/catalog.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
 
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
 
 namespace NYql::NTypeAnnImpl {
-
-bool EnsurePgTypesSupported(TPositionHandle pos, TExprContext& ctx) {
-    if (!NKikimr::NPg::TypeDescFromPgTypeName("pgbool")) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), "PostgreSQL types are not supported"));
-        return false;
-    }
-    return true;
-}
 
 const NPg::TTypeDesc& GetTypeDescOfNode(const TExprNodePtr& node)
 {
@@ -195,10 +186,6 @@ IGraphTransformer::TStatus InferPgCommonType(
 }
 
 IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-    if (!EnsurePgTypesSupported(input->Pos(), ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
     bool isResolved = input->Content().StartsWith("PgResolvedCall");
     if (!EnsureMinArgsCount(*input, isResolved ? 3 : 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -528,10 +515,6 @@ IGraphTransformer::TStatus FromPgWrapper(const TExprNode::TPtr& input, TExprNode
 
 const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx, bool& isUniversal) {
     isUniversal = false;
-    if (!EnsurePgTypesSupported(pos, ctx)) {
-        return nullptr;
-    }
-
     bool isOptional;
     const TDataExprType* dataType;
     if (!EnsureDataOrOptionalOfData(pos, type, isOptional, dataType, ctx, isUniversal)) {
@@ -1520,10 +1503,6 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
 
 IGraphTransformer::TStatus PgTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
-    if (!EnsurePgTypesSupported(input->Pos(), ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }

@@ -6,12 +6,23 @@
 
 In row-oriented tables, compression is configured at the [column group](datamodel/table.md#column-groups) level. To compress rarely read fields or store them on a different storage tier, you can place columns in separate groups.
 
-Each column group has a `COMPRESSION` codec. Allowed values:
+The `COMPRESSION` parameter sets the compression algorithm for a column group. Allowed values:
 
 - `off` — no compression;
-- `lz4` — [LZ4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)).
+- `lz4` — [LZ4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm));
+- `zstd` — [Zstandard](https://en.wikipedia.org/wiki/Zstd), with a configurable compression level.
 
-Column groups in row-oriented tables do **not** support other algorithms, including `zstd`. Primary key columns always belong to the `default` group and cannot be moved to another group.
+For `zstd`, the `COMPRESSION_LEVEL` parameter sets the compression level to an integer from `0` to `22`. A value of `0` selects Zstandard's default level, `3`. This parameter is not supported for `off` or `lz4`.
+
+If you omit the compression level:
+
+- When [creating a table](../yql/reference/syntax/create_table/family.md), the default level configured by the administrator is used. If none is configured, the level is `1`.
+- When [altering a column group](../yql/reference/syntax/alter_table/family.md) that already uses ZSTD, the previous level is kept.
+- When switching from `off` or `lz4` to `zstd`, the level is `1`.
+
+Switching to `off` or `lz4` clears the `COMPRESSION_LEVEL` setting.
+
+Primary key columns always belong to the `default` group and cannot be moved to another group.
 
 Changes to compression codecs and storage types are not applied immediately to data already on disk: new parameters take effect during subsequent background [LSM compaction](glossary.md#compaction). If you change these parameters in an existing table with `ALTER TABLE`, disk space savings also appear gradually. To apply the new settings to existing data sooner, run a [forced compaction](../yql/reference/syntax/alter_table/compact.md) with `ALTER TABLE … COMPACT`.
 
@@ -41,15 +52,15 @@ Columnar storage often achieves strong compression because values in a column te
 
 ## Algorithm comparison {#algorithm-comparison}
 
-| Algorithm | Available for | Properties |
-| --------- | ------------- | ---------- |
-| `lz4` | Row-oriented and column-oriented tables; in row-oriented tables, via column groups | Fast algorithm with low CPU overhead |
-| `zstd` | Column-oriented tables only | Supports compression `level`; typically achieves higher compression than `lz4` |
-| `off` | Row-oriented and column-oriented tables | Compression disabled in {{ ydb-short-name }} |
+| Algorithm | Properties |
+| --------- | ---------- |
+| `lz4` | Fast algorithm with low CPU overhead |
+| `zstd` | Supports a compression level; typically achieves higher compression than `lz4` |
+| `off` | Compression disabled in {{ ydb-short-name }} |
 
 ## Examples {#examples}
 
-Row-oriented table: frequently read columns stay uncompressed; large JSON uses `lz4` in a separate group. Allowed `DATA` values depend on cluster configuration — see [CREATE TABLE — column families](../yql/reference/syntax/create_table/family.md).
+Row-oriented table: frequently read columns stay uncompressed; large JSON uses `zstd` at level `3` in a separate group. Allowed `DATA` values depend on cluster configuration — see [CREATE TABLE — column families](../yql/reference/syntax/create_table/family.md).
 
 ```yql
 CREATE TABLE user_profiles (
@@ -63,7 +74,8 @@ CREATE TABLE user_profiles (
     ),
     FAMILY payload (
         DATA = "ssd",
-        COMPRESSION = "lz4"
+        COMPRESSION = "zstd",
+        COMPRESSION_LEVEL = 3
     )
 );
 ```
@@ -87,6 +99,12 @@ Enable compression for the `default` group, for example, if you later need to co
 ALTER TABLE user_profiles ALTER FAMILY default SET COMPRESSION "lz4";
 ```
 
+Change the ZSTD compression level for the `payload` group:
+
+```yql
+ALTER TABLE user_profiles ALTER FAMILY payload SET COMPRESSION_LEVEL 5;
+```
+
 Move `profile_json` to a group on `rot` storage:
 
 ```yql
@@ -103,7 +121,7 @@ Compression parameters are part of the table DDL. The YQL command [{#T}](../yql/
 SHOW CREATE TABLE user_profiles;
 ```
 
-In [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), for a row-oriented table use [`scheme describe`](../reference/ydb-cli/commands/scheme-describe.md): the output includes a `Column families` section with a `Compression` field.
+In [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), for a row-oriented table use [`scheme describe`](../reference/ydb-cli/commands/scheme-describe.md): the output includes a `Column families` section with a `Compression` field. An explicitly configured ZSTD level is shown in parentheses, for example, `ZSTD(5)`.
 
 You can also view the table schema in [{{ ydb-ui-name }}](../reference/ydb-ui/index.md).
 

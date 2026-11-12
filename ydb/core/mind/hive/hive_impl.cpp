@@ -2390,9 +2390,11 @@ THive::TNamedResourcesMoveEffect THive::CheckNamedResourcesMoveEffect(const TTab
     if (source == nullptr) {
         return effect;
     }
+
     auto overCapacity = [](ui64 value, ui64 maximum) -> ui64 {
         return value > maximum ? value - maximum : 0;
     };
+
     // usage stdev over the nodes which have the resource, with the tablet moved by delta between them
     auto usageStDev = [&](const TString& name, ui64 value, bool moved) -> double {
         double sum = 0;
@@ -2406,6 +2408,7 @@ THive::TNamedResourcesMoveEffect THive::CheckNamedResourcesMoveEffect(const TTab
             if (!maximum) {
                 continue;
             }
+
             double nodeValue = ni.NamedResourceValues.GetValue(name);
             if (moved && nodeId == source->Id) {
                 nodeValue -= std::min<double>(nodeValue, value);
@@ -2413,6 +2416,7 @@ THive::TNamedResourcesMoveEffect THive::CheckNamedResourcesMoveEffect(const TTab
             if (moved && nodeId == node.Id) {
                 nodeValue += value;
             }
+
             const double usage = nodeValue / std::max<ui64>(*maximum, 1);
             sum += usage;
             sumSquares += usage * usage;
@@ -2424,16 +2428,19 @@ THive::TNamedResourcesMoveEffect THive::CheckNamedResourcesMoveEffect(const TTab
         const double mean = sum / count;
         return std::sqrt(std::max(0.0, sumSquares / count - mean * mean));
     };
+
     for (const auto& v : tablet.GetResourceValues().NamedResources) {
         const auto& settings = GetNamedResourceSettings(v.Name);
         if (!settings.IsBalanced()) {
             continue;
         }
+
         const auto sourceMaximum = source->GetNamedResourceMaximum(v.Name);
         const auto targetMaximum = node.GetNamedResourceMaximum(v.Name);
         if (!sourceMaximum || !targetMaximum) {
             continue; // capacity unknown, the resource does not tell anything about the move
         }
+
         double before = 0;
         double after = 0;
         switch (settings.BalanceMode) {
@@ -2451,19 +2458,21 @@ THive::TNamedResourcesMoveEffect THive::CheckNamedResourcesMoveEffect(const TTab
             default:
                 continue;
         }
+
         if (after < before && !effect.Improved && !effect.Worsened) {
             effect.Resource = v.Name;
             effect.Before = before;
             effect.After = after;
-        }
-        if (after > before && !effect.Worsened) {
+        } else if (after > before && !effect.Worsened) {
             effect.Resource = v.Name;
             effect.Before = before;
             effect.After = after;
         }
+
         effect.Improved |= after < before;
         effect.Worsened |= after > before;
     }
+
     return effect;
 }
 

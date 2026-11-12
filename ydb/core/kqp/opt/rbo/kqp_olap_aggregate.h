@@ -52,4 +52,18 @@ struct TOlapDistinct {
 std::optional<TOlapDistinct> MatchOlapDistinct(const TOpAggregate& aggregate, const TString& forcedKey,
                                                const TInfoUnitRegistry& registry);
 
+// The keys of an aggregate over a column table read. As in the old optimizer, PRAGMA
+// OptEnableOlapProvideComputeSharding passes them to the read, so column shards send
+// all rows of a key to one compute task. The aggregate itself may stay in compute.
+struct TOlapComputeSharding {
+    TOpRead* Read = nullptr;
+    // Distinct storage columns of the keys.
+    TVector<TString> Columns;
+};
+
+// Match an intermediate aggregate with keys over a column table read in its stage,
+// when all the keys are read columns.
+std::optional<TOlapComputeSharding> MatchOlapComputeSharding(const TOpAggregate& aggregate,
+                                                             const TInfoUnitRegistry& registry);
+
 } // namespace NKikimr::NKqp

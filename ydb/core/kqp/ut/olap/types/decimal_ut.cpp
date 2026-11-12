@@ -1,6 +1,10 @@
 #include "column_type_scenarios.h"
 #include "column_type_test_base.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
+
+#include <util/system/event.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -343,6 +347,21 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         RunScenario<TTraits>(scenario, scan, table, load);
     }
 
+    class TDecimalRestartController: public NYDBTest::NColumnShard::TController {
+        TManualEvent TabletInitialized;
+
+        void DoOnTabletInitCompleted(const NColumnShard::TColumnShard& shard) override {
+            TController::DoOnTabletInitCompleted(shard);
+            TabletInitialized.Signal();
+        }
+
+    public:
+        void WaitForInitialization() {
+            UNIT_ASSERT_C(TabletInitialized.WaitT(TDuration::Seconds(30)), "ColumnShard initialization timed out");
+            TabletInitialized.Reset();
+        }
+    };
+
     }   // namespace
 
     Y_UNIT_TEST(TestSimpleQueries, EQueryMode, ETableKind, ELoadKind) {
@@ -547,13 +566,14 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         RunFilterEqualForPrecision<12, 2>(Arg<0>(), Arg<1>(), Arg<2>());
     }
 
-    void CheckPrimaryKeyOrder(const TString& reader, const bool separatePortions, const ui32 scale = 0) {
+    void CheckPrimaryKeyOrder(
+        const TString& reader, const bool separatePortions, const ui32 scale = 0, const bool checkPersistence = false) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.SetColumnShardReaderClassName(reader);
-        settings.AppConfig.MutableColumnShardConfig()->SetEnableDecimalKeyComparison(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetEnableDecimalKeyComparison(!checkPersistence);
         settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         TKikimrRunner kikimr(settings);
-        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<TDecimalRestartController>();
         controller->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
         auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
         const TString decimalType = TStringBuilder() << "Decimal(22, " << scale << ")";
@@ -566,6 +586,20 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
         )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+        controller->WaitForInitialization();
+
+        const auto restart = [&] {
+            const auto shards = controller->GetShardActualIds();
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+            kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(),
+                new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), shards.front(), false));
+            controller->WaitForInitialization();
+        };
+
+        if (checkPersistence) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetEnableDecimalKeyComparison(true);
+            restart();
+        }
 
         const auto execute = [&](const TString& query) {
             auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -589,6 +623,16 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         if (!separatePortions) {
             execute("INSERT INTO `/Root/Decimals` (key, value) VALUES " + rows);
         }
+
+        if (checkPersistence) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetEnableDecimalKeyComparison(false);
+            auto alter = session.ExecuteQuery("ALTER TABLE `/Root/Decimals` ADD COLUMN extra Decimal(22, 0)",
+                NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(alter.IsSuccess(), alter.GetIssues().ToString());
+            restart();
+            execute("UPSERT INTO `/Root/Decimals` (key, value) VALUES (Unwrap(CAST(\"256\" AS " + decimalType + ")), 256)");
+        }
+
         for (const bool reverse : {false, true}) {
             for (const ui32 limit : {1u, 4u, ui32(values.size())}) {
                 const TString query = TStringBuilder() << "SELECT value FROM `/Root/Decimals` ORDER BY key "
@@ -629,6 +673,14 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
                 UNIT_ASSERT_C(!parser.TryNextRow(), query);
             }
         }
+    }
+
+    Y_UNIT_TEST(PrimaryKeyComparisonPersistsAfterRestartSimple) {
+        CheckPrimaryKeyOrder("SIMPLE", true, 0, true);
+    }
+
+    Y_UNIT_TEST(PrimaryKeyComparisonPersistsAfterRestartTrivial) {
+        CheckPrimaryKeyOrder("TRIVIAL", true, 0, true);
     }
 
     Y_UNIT_TEST(PrimaryKeySinglePortionSimple) {

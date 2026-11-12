@@ -298,6 +298,19 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     const bool isFirstRun = txc.DB.GetScheme().IsEmpty();
     NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
 
+    {
+        NIceDb::TNiceDb db(txc.DB);
+        ui64 decimalKeyComparisonEnabled = 0;
+        if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::DecimalKeyComparisonEnabled, decimalKeyComparisonEnabled)) {
+            return false;
+        }
+
+        // Commit the irreversible comparison mode before normalizers or schemas use it.
+        if (!decimalKeyComparisonEnabled && AppDataVerified().ColumnShardConfig.GetEnableDecimalKeyComparison()) {
+            Schema::SaveSpecialValue(db, Schema::EValueIds::DecimalKeyComparisonEnabled, ui64(1));
+        }
+    }
+
     if (!NYDBTest::TControllers::GetColumnShardController()->BuildLocalBaseModifier()) {
         NIceDb::TNiceDb db(txc.DB);
         if (!Self->NormalizerController.InitControllerState(db)) {

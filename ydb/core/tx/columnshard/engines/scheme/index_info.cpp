@@ -22,7 +22,8 @@
 
 namespace NKikimr::NOlap {
 
-std::shared_ptr<arrow::Field> TIndexInfo::BuildArrowField(const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache) {
+std::shared_ptr<arrow::Field> TIndexInfo::BuildArrowField(
+    const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache, const bool decimalKeyComparisonEnabled) {
     std::shared_ptr<arrow::DataType> arrowType;
 
     if (column.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
@@ -33,8 +34,7 @@ std::shared_ptr<arrow::Field> TIndexInfo::BuildArrowField(const NTable::TColumn&
         arrowType = result.ValueUnsafe();
     }
     auto f = std::make_shared<arrow::Field>(column.Name, arrowType, !column.NotNull);
-    if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal && HasAppData() &&
-        AppDataVerified().ColumnShardConfig.GetEnableDecimalKeyComparison()) {
+    if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal && decimalKeyComparisonEnabled) {
         f = f->WithMetadata(arrow::key_value_metadata({ NArrow::TKeyColumnComparator::DecimalComparisonMetadata }, { "1" }));
     }
     if (cache) {
@@ -151,7 +151,7 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
     /// @note Setting replace and sorting key to PK we are able to:
     /// * apply REPLACE by MergeSort
     /// * apply PK predicate before REPLACE
-    PrimaryKey = MakeArrowSchema(columns, PKColumnIds, nullptr);
+    PrimaryKey = MakeArrowSchema(columns, PKColumnIds, nullptr, DecimalKeyComparisonEnabled);
 
     AFL_VERIFY(PKColumns.empty());
     for (auto&& i : PKColumnIds) {
@@ -409,7 +409,7 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
 
 std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const ui64 presetId, const NKikimrSchemeOp::TColumnTableSchema& schema,
     const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache) {
-    TIndexInfo result(presetId);
+    TIndexInfo result(presetId, cache->IsDecimalKeyComparisonEnabled());
     if (!result.DeserializeFromProto(schema, operators, cache)) {
         return std::nullopt;
     }
@@ -428,23 +428,23 @@ std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const TSchemaDiffView& diff
     return TIndexInfo(prevSchema, diff, operators, cache);
 }
 
-std::vector<std::shared_ptr<arrow::Field>> TIndexInfo::MakeArrowFields(
-    const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache) {
+std::vector<std::shared_ptr<arrow::Field>> TIndexInfo::MakeArrowFields(const NTable::TScheme::TTableSchema::TColumns& columns,
+    const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache, const bool decimalKeyComparisonEnabled) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (const ui32 id : ids) {
         AFL_VERIFY(!TIndexInfo::IsSpecialColumn(id));
         auto it = columns.find(id);
         AFL_VERIFY(it != columns.end());
-        auto f = TIndexInfo::BuildArrowField(it->second, cache);
+        auto f = TIndexInfo::BuildArrowField(it->second, cache, decimalKeyComparisonEnabled);
         fields.emplace_back(f);
     }
 
     return fields;
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(
-    const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache) {
-    return std::make_shared<arrow::Schema>(TIndexInfo::MakeArrowFields(columns, ids, cache));
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids,
+    const std::shared_ptr<TSchemaObjectsCache>& cache, const bool decimalKeyComparisonEnabled) {
+    return std::make_shared<arrow::Schema>(TIndexInfo::MakeArrowFields(columns, ids, cache, decimalKeyComparisonEnabled));
 }
 
 void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns,
@@ -458,7 +458,7 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
         }
 
         std::sort(SchemaColumnIdsWithSpecials.begin(), SchemaColumnIdsWithSpecials.end());
-        auto originalFields = TIndexInfo::MakeArrowFields(columns, SchemaColumnIdsWithSpecials, cache);
+        auto originalFields = TIndexInfo::MakeArrowFields(columns, SchemaColumnIdsWithSpecials, cache, DecimalKeyComparisonEnabled);
         IIndexInfo::AddSpecialFields(originalFields);
         SchemaWithSpecials = std::make_shared<NArrow::TSchemaLite>(originalFields);
     }
@@ -648,7 +648,10 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexV
 TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, const std::shared_ptr<IStoragesManager>& operators,
     const std::shared_ptr<TSchemaObjectsCache>& cache)
     : PresetId(original.PresetId)
+    , DecimalKeyComparisonEnabled(original.DecimalKeyComparisonEnabled)
 {
+    AFL_VERIFY(cache->IsDecimalKeyComparisonEnabled() == DecimalKeyComparisonEnabled);
+
     {
         std::vector<std::shared_ptr<arrow::Field>> fields;
         const auto addFromOriginal = [&](const ui32 index) {
@@ -670,7 +673,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
             SchemaColumnIdsWithSpecials.emplace_back(colId);
             auto tableCol = BuildColumnFromProto(col, cache);
             Columns.emplace(colId, TNameTypeInfo(tableCol.Name, tableCol.PType));
-            fields.emplace_back(BuildArrowField(tableCol, cache));
+            fields.emplace_back(BuildArrowField(tableCol, cache, DecimalKeyComparisonEnabled));
         };
         diff.ApplyForColumns(original.SchemaColumnIdsWithSpecials, addFromOriginal, addFromDiff);
         IIndexInfo::AddSpecialFields(fields);

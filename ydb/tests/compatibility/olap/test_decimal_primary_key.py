@@ -106,6 +106,7 @@ class TestDecimalPrimaryKeyRepair(RestartToAnotherVersionFixture):
             )[0].rows
             assert rows[0]["rows"] == len(values)
 
+        self.config.yaml_config["column_shard_config"]["enable_decimal_key_comparison"] = False
         self.config.yaml_config["column_shard_config"]["repairs"] = [
             {"class_name": "RebuildDecimalPrimaryKey", "description": "decimal-pk-forward-compatibility"},
         ]

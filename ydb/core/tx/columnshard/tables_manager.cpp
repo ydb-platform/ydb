@@ -143,7 +143,8 @@ void TTablesManager::Init(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId tab
     } else {
         TabletPathId.emplace(tabletPathId);
         AFL_VERIFY(!SchemaObjectsCache);
-        SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(tabletSchemeShardLocalPathId, info->TenantPathId);
+        SchemaObjectsCache =
+            NOlap::TSchemaCachesManager::GetCache(tabletSchemeShardLocalPathId, info->TenantPathId, DecimalKeyComparisonEnabled);
         Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, tabletSchemeShardLocalPathId.GetRawValue());
         Schema::SaveSpecialValue(db, Schema::EValueIds::InternalOwnerPathId, tabletInternalPathId.GetRawValue());
         if (GenerateInternalPathId) {
@@ -163,6 +164,12 @@ void TTablesManager::AddTableInfo(const TUnifiedPathId unifiedPathId, TTableInfo
 }
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info) {
+    ui64 decimalKeyComparisonEnabled = 0;
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::DecimalKeyComparisonEnabled, decimalKeyComparisonEnabled)) {
+        return false;
+    }
+
+    DecimalKeyComparisonEnabled = decimalKeyComparisonEnabled != 0;
     {
         std::optional<ui64> tabletSchemeShardLocalPathIdValue;
         if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::OwnerPathId, tabletSchemeShardLocalPathIdValue)) {
@@ -180,9 +187,10 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             TabletPathId.emplace(TUnifiedPathId::BuildValid(TInternalPathId::FromRawValue(*tabletInternalPathIdValue),
                 TSchemeShardLocalPathId::FromRawValue(*tabletSchemeShardLocalPathIdValue)));
             if (info) {
-                SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(TabletPathId->SchemeShardLocalPathId, info->TenantPathId);
+                SchemaObjectsCache =
+                    NOlap::TSchemaCachesManager::GetCache(TabletPathId->SchemeShardLocalPathId, info->TenantPathId, DecimalKeyComparisonEnabled);
             } else {
-                SchemaObjectsCache = std::make_shared<NOlap::TSchemaObjectsCache>();
+                SchemaObjectsCache = std::make_shared<NOlap::TSchemaObjectsCache>(DecimalKeyComparisonEnabled);
             }
         }
 

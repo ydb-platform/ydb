@@ -113,18 +113,21 @@ private:
     TInsertOptionsPolicy InsertOptions;
 
     TPresetId PresetId;
+    bool DecimalKeyComparisonEnabled = false;
     ui64 Version = 0;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> PrimaryKey;
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 
-    TIndexInfo(const ui64 presetId)
+    TIndexInfo(const ui64 presetId, const bool decimalKeyComparisonEnabled = false)
         : PresetId(presetId)
+        , DecimalKeyComparisonEnabled(decimalKeyComparisonEnabled)
     {
     }
 
-    static std::shared_ptr<arrow::Field> BuildArrowField(const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache);
+    static std::shared_ptr<arrow::Field> BuildArrowField(
+        const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache, const bool decimalKeyComparisonEnabled);
 
     static NTable::TColumn BuildColumnFromProto(
         const NKikimrSchemeOp::TOlapColumnDescription& col, const std::shared_ptr<TSchemaObjectsCache>& cache) {
@@ -201,8 +204,8 @@ public:
         return PresetId.GetPresetId();
     }
 
-    static std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(
-        const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache);
+    static std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const NTable::TScheme::TTableSchema::TColumns& columns,
+        const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache, const bool decimalKeyComparisonEnabled = false);
 
     const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& GetCompactionPlannerConstructor() const;
 
@@ -505,7 +508,7 @@ public:
 };
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids,
-    const std::shared_ptr<TSchemaObjectsCache>& cache = nullptr);
+    const std::shared_ptr<TSchemaObjectsCache>& cache = nullptr, const bool decimalKeyComparisonEnabled = false);
 
 /// Extracts columns with the specific ids from the schema.
 std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const std::vector<ui32>& ids);

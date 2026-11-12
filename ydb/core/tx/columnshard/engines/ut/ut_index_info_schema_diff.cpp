@@ -1,3 +1,4 @@
+#include <ydb/core/formats/arrow/key_comparator.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_diff.h>
@@ -42,6 +43,38 @@ NKikimrSchemeOp::TColumnTableSchema MakeSchemaV2AfterDropAndAdd() {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
+    Y_UNIT_TEST(DecimalComparisonSurvivesSchemaDiffWithSeparateCaches) {
+        const auto owner = NColumnShard::TSchemeShardLocalPathId::FromRawValue(42);
+        const TPathId tenant(1, 1);
+        const auto legacyCache = TSchemaCachesManager::GetCache(owner, tenant, false);
+        const auto decimalCache = TSchemaCachesManager::GetCache(owner, tenant, true);
+        UNIT_ASSERT(legacyCache != decimalCache);
+        UNIT_ASSERT(TSchemaCachesManager::GetCache(owner, tenant, false) == legacyCache);
+        UNIT_ASSERT(TSchemaCachesManager::GetCache(owner, tenant, true) == decimalCache);
+
+        auto schemaV1 = MakeSchemaV1();
+        *schemaV1.MutableColumns(0) =
+            NArrow::NTest::TTestColumn("timestamp", NScheme::TTypeInfo(NScheme::TDecimalType(22, 0))).SetNullable(false).CreateColumn(1);
+        auto schemaV2 = MakeSchemaV2AfterDropAndAdd();
+        *schemaV2.MutableColumns(0) = schemaV1.GetColumns(0);
+        *schemaV2.MutableColumns(2) = NArrow::NTest::TTestColumn("added", NScheme::TTypeInfo(NScheme::TDecimalType(22, 0))).CreateColumn(4);
+        const auto diffProto = TSchemaDiffView::MakeSchemasDiff(schemaV1, schemaV2);
+        const auto storages = TTestStoragesManager::GetInstance();
+        for (const auto& cache : { legacyCache, decimalCache }) {
+            const bool enabled = cache == decimalCache;
+            auto indexInfoV1 = TIndexInfo::BuildFromProto(1, schemaV1, storages, cache);
+            UNIT_ASSERT(indexInfoV1);
+            auto cachedV1 = cache->UpsertIndexInfo(std::move(*indexInfoV1));
+            UNIT_ASSERT_VALUES_EQUAL(NArrow::TKeyComparator::HasDecimalComparison(*cachedV1->GetPrimaryKey()), enabled);
+            auto indexInfoV2 = TIndexInfo::BuildFromProto(diffProto, *cachedV1, storages, cache);
+            UNIT_ASSERT(indexInfoV2);
+            auto cachedV2 = cache->UpsertIndexInfo(std::move(*indexInfoV2));
+            UNIT_ASSERT_VALUES_EQUAL(NArrow::TKeyComparator::HasDecimalComparison(*cachedV2->GetPrimaryKey()), enabled);
+            UNIT_ASSERT_VALUES_EQUAL(NArrow::TKeyColumnComparator::IsDecimal(*cachedV2->GetColumnFieldVerified(1)), enabled);
+            UNIT_ASSERT_VALUES_EQUAL(NArrow::TKeyColumnComparator::IsDecimal(*cachedV2->GetColumnFieldVerified(4)), enabled);
+        }
+    }
+
     Y_UNIT_TEST(GetColumnsConsistentAfterDropAndAddColumns) {
         auto storages = TTestStoragesManager::GetInstance();
         auto cache = std::make_shared<TSchemaObjectsCache>();

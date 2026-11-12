@@ -1,5 +1,3 @@
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
@@ -56,15 +54,17 @@ public:
 
     TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
         const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override {
-        if (!AppDataVerified().ColumnShardConfig.GetEnableDecimalKeyComparison()) {
-            return TConclusionStatus::Fail("RebuildDecimalPrimaryKey requires EnableDecimalKeyComparison");
-        }
         NIceDb::TNiceDb db(txc.DB);
         NColumnShard::TTablesManager tables(
             controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<NColumnShard::TPortionIndexStats>(), 0);
         if (!tables.InitFromDB(db, nullptr)) {
             return TConclusionStatus::Fail("Cannot load table schemas");
         }
+
+        if (!tables.IsDecimalKeyComparisonEnabled()) {
+            return TConclusionStatus::Fail("RebuildDecimalPrimaryKey requires EnableDecimalKeyComparison");
+        }
+
         std::vector<INormalizerTask::TPtr> tasks;
         if (!tables.HasPrimaryIndex()) {
             return tasks;

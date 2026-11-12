@@ -43,6 +43,7 @@ struct TTestSchemaOptions {
     bool WithMaxIndex = false;
     bool WithBloomIndex = false;
     bool WithDecimalKey = false;
+    bool DecimalKeyComparisonEnabled = false;
 };
 
 void FillDefaultSchemaProto(NKikimrSchemeOp::TColumnTableSchema& proto, const ui64 presetId) {
@@ -58,7 +59,7 @@ void FillDefaultSchemaProto(NKikimrSchemeOp::TColumnTableSchema& proto, const ui
 
 ISnapshotSchema::TPtr MakeTestSchema(const ui64 presetId, const TTestSchemaOptions& options) {
     auto storages = TTestStoragesManager::GetInstance();
-    auto cache = std::make_shared<TSchemaObjectsCache>();
+    auto cache = std::make_shared<TSchemaObjectsCache>(options.DecimalKeyComparisonEnabled);
 
     NKikimrSchemeOp::TColumnTableSchema proto;
     FillDefaultSchemaProto(proto, presetId);
@@ -223,7 +224,6 @@ Y_UNIT_TEST_SUITE(TDecimalRepairPortionTests) {
     Y_UNIT_TEST(RewritePreservesHistoricalVisibilityAndRebuildsIndexes) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalKeyComparison(false);
         const auto oldSchema = MakeTestSchema(1, { .WithMaxIndex = true, .WithDecimalKey = true });
         arrow::FixedSizeBinaryBuilder pkBuilder(arrow::fixed_size_binary(sizeof(NYql::NDecimal::TInt128)));
         for (const NYql::NDecimal::TInt128 value : { 256, 1, -1 }) {
@@ -242,8 +242,7 @@ Y_UNIT_TEST_SUITE(TDecimalRepairPortionTests) {
         auto meta = originalInfo.GetMeta().SerializeToProto(original.GetPortionResult().GetBlobIds(), NPortion::EProduced::INSERTED);
         meta.SetRebuildDecimalPrimaryKey(true);
 
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalKeyComparison(true);
-        const auto newSchema = MakeTestSchema(1, { .WithMaxIndex = true, .WithDecimalKey = true });
+        const auto newSchema = MakeTestSchema(1, { .WithMaxIndex = true, .WithDecimalKey = true, .DecimalKeyComparisonEnabled = true });
         auto loadedCtor = originalInfo.BuildConstructor(true);
         UNIT_ASSERT(loadedCtor->MutableMeta().LoadMetadata(meta, newSchema->GetIndexInfo(), TFakeGroupSelector()));
         const auto loaded = original.GetPortionResult().SwitchPortionInfo(loadedCtor->Build());

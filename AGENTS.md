@@ -1,5 +1,10 @@
 # Project
 
+## Pull Requests
+
+- Create pull requests only from branches in the user's personal fork.
+- Never create or push branches in the upstream `ydb-platform/ydb` repository.
+
 ## Build & Test
 
 ```bash

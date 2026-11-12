@@ -1588,6 +1588,36 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetPathDescription().GetCdcStreamDescription().GetAggregatorTabletId(), aggregatorTabletId);
     }
 
+    Y_UNIT_TEST(AggregatorRejectsTopicAutoPartitioning) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableCdcAggregator(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              ResolvedTimestampsIntervalMs: 1000
+            }
+            TopicAutoPartitioning: true
+            MaxPartitionCount: 10
+        )", {{NKikimrScheme::StatusInvalidParameter, "topic autopartitioning"}});
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
+    }
+
     Y_UNIT_TEST(AggregatorCreatedOnRotation) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()

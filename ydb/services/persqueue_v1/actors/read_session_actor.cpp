@@ -1506,15 +1506,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
         }
     }
 
-<<<<<<< HEAD
     YDB_LOG_DEBUG_CTX(ctx, "Sending to client partition status",
         {"PQLOGPREFIX", PQ_LOG_PREFIX});
-    SendControlMessage(it->second.Partition, std::move(result), ctx, false);
-=======
-    LOG_D("Sending to client partition status");
     // A status read_offset must not overtake the data already read at that offset.
     SendControlMessage(it->second.Partition, std::move(result), ctx);
->>>>>>> 71a0fd381a9 (KIKIMR-27616 topic data loss detect (#58407))
 }
 
 template <bool UseMigrationProtocol>

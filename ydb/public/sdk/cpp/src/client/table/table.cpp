@@ -150,9 +150,18 @@ std::optional<EColumnFamilyCompression> TColumnFamilyDescription::GetCompression
             return EColumnFamilyCompression::None;
         case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
             return EColumnFamilyCompression::LZ4;
+        case Ydb::Table::ColumnFamily::COMPRESSION_ZSTD:
+            return EColumnFamilyCompression::ZSTD;
         default:
             return { };
     }
+}
+
+std::optional<std::int32_t> TColumnFamilyDescription::GetCompressionLevel() const {
+    if (GetProto().has_compression_level()) {
+        return GetProto().compression_level();
+    }
+    return { };
 }
 
 std::optional<EColumnFamilyCacheMode> TColumnFamilyDescription::GetCacheMode() const {
@@ -1309,7 +1318,15 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompress
         case EColumnFamilyCompression::LZ4:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
             break;
+        case EColumnFamilyCompression::ZSTD:
+            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+            break;
     }
+    return *this;
+}
+
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompressionLevel(std::int32_t level) {
+    Impl_->Proto.set_compression_level(level);
     return *this;
 }
 

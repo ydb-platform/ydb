@@ -3057,19 +3057,19 @@ void FillColumnFamily(Ydb::Table::ColumnFamily& out, const NKikimrSchemeOp::TFam
             case NKikimrSchemeOp::ColumnCodecLZ4:
                 out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
                 break;
-            case NKikimrSchemeOp::ColumnCodecZSTD: {
-                if (!isColumnTable) {
-                    break; // FIXME: not supported
-                }
+            case NKikimrSchemeOp::ColumnCodecZSTD:
                 out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
                 break;
-            }
         }
     } else if (in.GetCodec() == 1) {
         // Legacy setting, see datashard
         out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
     } else {
         out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
+    }
+
+    if (in.HasColumnCodecLevel()) {
+        out.set_compression_level(in.GetColumnCodecLevel());
     }
 
     // Check legacy settings for permanent in-memory cache

@@ -102,6 +102,7 @@ void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result) {
     //        const ui32 catIdx = (ui32)result.GetCategory();
     THashSet<TString> scopeIds;
     for (auto&& t : result) {
+<<<<<<< HEAD
         bool found = false;
         for (auto&& i : Processes) {
             if (i.GetCategory()->GetCategory() == t.GetCategory()) {
@@ -113,6 +114,46 @@ void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result) {
                 i.GetCategory()->PutTaskResult(std::move(t), scopeIds);
                 break;
             }
+=======
+        auto& link = FindCategoryLink(t.GetCategory());
+        link.GetCounters()->WaitingHistogram.Collect((t.GetStart() - t.GetCreateInstant()).MicroSeconds());
+        link.GetCounters()->TaskExecuteHistogram.Collect((t.GetFinish() - t.GetStart()).MicroSeconds());
+        link.GetCounters()->ExecuteDuration->Add((t.GetFinish() - t.GetStart()).MicroSeconds());
+        link.GetCPUUsage()->Exchange(t.GetPredictedDuration(), t.GetStart(), t.GetFinish());
+        link.GetCategory()->PutTaskResult(std::move(t), scopeIds);
+        link.OnTaskFinished();
+    }
+}
+
+TWeightedCategory& TWorkersPool::FindCategoryLink(const ESpecialTaskCategory category) {
+    const auto it = std::find_if(CategoryLinks.begin(), CategoryLinks.end(), [&](const auto& link) {
+        return link.GetCategory()->GetCategory() == category;
+    });
+    Y_ENSURE(it != CategoryLinks.end(), "worker pool link is missing for category " << category);
+    return *it;
+}
+
+void TWorkersPool::ApplyTopologyUpdate(
+    const NConfig::TWorkersPool& config, const std::vector<std::shared_ptr<TProcessCategory>>& categories) {
+    std::vector<TWeightedCategory> oldProcesses = std::move(CategoryLinks);
+    std::vector<TWeightedCategory> newProcesses;
+    newProcesses.reserve(config.GetLinks().size());
+
+    for (const auto& linkConfig : config.GetLinks()) {
+        const auto category = linkConfig.GetCategory();
+        auto oldIt = std::find_if(oldProcesses.begin(), oldProcesses.end(), [&](const TWeightedCategory& process) {
+            return process.GetCategory()->GetCategory() == category;
+        });
+        if (oldIt != oldProcesses.end()) {
+            Y_ENSURE(!oldIt->GetStopPrepare(), "retained link is prepared for removal");
+            oldIt->SetWeight(linkConfig.GetWeight());
+            newProcesses.emplace_back(std::move(*oldIt));
+            oldProcesses.erase(oldIt);
+        } else {
+            Y_ENSURE((ui64)category < categories.size(), "worker pool category index is out of range: " << (ui64)category);
+            newProcesses.emplace_back(
+                linkConfig.GetWeight(), categories[(ui64)category], Counters->GetCategorySignals(category));
+>>>>>>> f5e52afa4b2 (Hide ColumnShard node service counters until a ColumnShard starts (#58269))
         }
         AFL_VERIFY(found);
     }

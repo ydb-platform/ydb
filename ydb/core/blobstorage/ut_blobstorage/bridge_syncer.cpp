@@ -5,7 +5,6 @@
 #include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
-#include <ydb/core/sys_view/common/events.h>
 #include <ydb/library/testlib/helpers.h>
 
 #include <util/system/type_name.h>
@@ -1575,22 +1574,10 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
             runtime->Send(ev.release(), env.Settings.ControllerNodeId);
         };
         auto lastProgress = [&] {
-            env.Sim(TDuration::Seconds(6));
-            const auto edge = runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
-            runtime->SendToPipe(env.TabletId, edge, new NSysView::TEvSysView::TEvGetGroupsRequest, 0,
-                TTestActorSystem::GetPipeConfigWithRetries());
-            auto response = env.WaitForEdgeActorEvent<NSysView::TEvSysView::TEvGetGroupsResponse>(edge, false,
-                runtime->GetClock() + TDuration::Seconds(30));
-            UNIT_ASSERT(response);
-            for (const auto& entry : response->Get()->Record.GetEntries()) {
-                if (entry.GetKey().GetGroupId() == targetGroupId) {
-                    UNIT_ASSERT_VALUES_EQUAL(entry.GetInfo().GetBridgeSyncStage(), "WRITE_KEEP_BARRIER_DONOTKEEP_DATA");
-                    UNIT_ASSERT(entry.GetInfo().HasBridgeSyncLastProgressTimestamp());
-                    return entry.GetInfo().GetBridgeSyncLastProgressTimestamp();
-                }
-            }
-            UNIT_FAIL("Target group is missing from system view");
-            Y_UNREACHABLE();
+            const auto info = QueryGroupSystemView(env, targetGroupId, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(info.GetBridgeSyncStage(), "WRITE_KEEP_BARRIER_DONOTKEEP_DATA");
+            UNIT_ASSERT(info.HasBridgeSyncLastProgressTimestamp());
+            return info.GetBridgeSyncLastProgressTimestamp();
         };
         sendProgress(true);
         const ui64 baselineProgress = lastProgress();

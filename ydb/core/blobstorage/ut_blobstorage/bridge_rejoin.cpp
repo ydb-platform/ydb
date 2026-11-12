@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/protos/bridge_storage.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 
 #include <map>
@@ -303,29 +304,19 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         UNIT_ASSERT_VALUES_EQUAL(pileGroups.size(), 2);
         const ui32 targetGroupId = pileGroups[1];
         auto groupMetrics = [&](const TString& phase) {
-            env.Sim(TDuration::Seconds(6));
-            const auto edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
-            env.Runtime->SendToPipe(env.TabletId, edge, new NSysView::TEvSysView::TEvGetGroupsRequest, 0,
-                TTestActorSystem::GetPipeConfigWithRetries());
-            const auto response = WaitReply<NSysView::TEvSysView::TEvGetGroupsResponse>(env, edge, "fault metrics");
-            for (const auto& entry : response->Get()->Record.GetEntries()) {
-                if (entry.GetKey().GetGroupId() == targetGroupId) {
-                    const auto& info = entry.GetInfo();
-                    UNIT_ASSERT(info.HasBridgeSyncStatus());
-                    Cerr << "*** fault metrics " << phase << " at " << env.Runtime->GetClock()
-                        << " stage=" << info.GetBridgeSyncStage()
-                        << " running=" << info.GetBridgeSyncRunning()
-                        << " bytes_per_second=" << info.GetBridgeSyncCopyBytesPerSecond()
-                        << " last_progress=" << (info.HasBridgeSyncLastProgressTimestamp()
-                            ? ToString(info.GetBridgeSyncLastProgressTimestamp()) : "unknown")
-                        << " error_count=" << info.GetBridgeSyncErrorCount()
-                        << " last_error_at=" << info.GetBridgeSyncLastErrorTimestamp()
-                        << " last_error=" << info.GetBridgeSyncLastError() << Endl;
-                    return info;
-                }
-            }
-            UNIT_FAIL("Synchronization target is missing from system views");
-            return NKikimrSysView::TGroupInfo{};
+            Cerr << "*** querying fault metrics " << phase << Endl;
+            const auto info = NBridgeTest::QueryGroupSystemView(env, targetGroupId);
+            UNIT_ASSERT_C(info.HasBridgeSyncStatus(), phase);
+            Cerr << "*** fault metrics " << phase << " at " << env.Runtime->GetClock()
+                << " stage=" << info.GetBridgeSyncStage()
+                << " running=" << info.GetBridgeSyncRunning()
+                << " bytes_per_second=" << info.GetBridgeSyncCopyBytesPerSecond()
+                << " last_progress=" << (info.HasBridgeSyncLastProgressTimestamp()
+                    ? ToString(info.GetBridgeSyncLastProgressTimestamp()) : "unknown")
+                << " error_count=" << info.GetBridgeSyncErrorCount()
+                << " last_error_at=" << info.GetBridgeSyncLastErrorTimestamp()
+                << " last_error=" << info.GetBridgeSyncLastError() << Endl;
+            return info;
         };
         UNIT_ASSERT(groupMetrics("initial").GetBridgeSyncStatus() == NKikimrBridge::SYNCED);
         NBridgeTest::TDataChecker checker(env);
@@ -447,25 +438,14 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             return std::make_tuple(info.GetBridgeGroupState().GetPile(1).GetStage(), info.GetGroupGeneration());
         };
         auto groupSysView = [&] {
-            env.Sim(TDuration::Seconds(6)); // BSC publishes the system views every 5 s
-            const TActorId edge = runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
-            runtime->SendToPipe(env.TabletId, edge, new NSysView::TEvSysView::TEvGetGroupsRequest, 0,
-                TTestActorSystem::GetPipeConfigWithRetries());
-            const auto res = WaitReply<NSysView::TEvSysView::TEvGetGroupsResponse>(env, edge, "group system view");
-            for (const auto& entry : res->Get()->Record.GetEntries()) {
-                if (entry.GetKey().GetGroupId() == target.GetRawId()) {
-                    const auto& info = entry.GetInfo();
-                    mark(TStringBuilder() << "metrics stage=" << info.GetBridgeSyncStage()
-                        << " remaining=" << (info.HasBridgeSyncRemainingBytes() ? ToString(info.GetBridgeSyncRemainingBytes()) : "unknown")
-                        << " complete=" << info.GetBridgeSyncRemainingBytesComplete()
-                        << " bytes_per_second=" << info.GetBridgeSyncCopyBytesPerSecond()
-                        << " running=" << info.GetBridgeSyncRunning()
-                        << " last_progress_us=" << info.GetBridgeSyncLastProgressTimestamp());
-                    return entry.GetInfo();
-                }
-            }
-            UNIT_FAIL("no system view entry for the target group");
-            Y_UNREACHABLE();
+            const auto info = NBridgeTest::QueryGroupSystemView(env, target.GetRawId());
+            mark(TStringBuilder() << "metrics stage=" << info.GetBridgeSyncStage()
+                << " remaining=" << (info.HasBridgeSyncRemainingBytes() ? ToString(info.GetBridgeSyncRemainingBytes()) : "unknown")
+                << " complete=" << info.GetBridgeSyncRemainingBytesComplete()
+                << " bytes_per_second=" << info.GetBridgeSyncCopyBytesPerSecond()
+                << " running=" << info.GetBridgeSyncRunning()
+                << " last_progress_us=" << info.GetBridgeSyncLastProgressTimestamp());
+            return info;
         };
         auto poolCounter = [&](const TString& name) {
             env.Sim(TDuration::Seconds(6)); // BSC refreshes the counters every 5 s

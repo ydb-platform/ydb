@@ -351,17 +351,19 @@ message TBridgePileInfo {
     optional uint32 AliveStorageNodes = 9;
     optional uint32 ComputeNodes = 10; // Known dynamic nodes.
     optional uint32 AliveComputeNodes = 11;
-    // Logical databases with fully bridged effective storage, keyed by synchronization status.
+    // Storage-owning databases with fully bridged pools, keyed by synchronization status.
+    // Serverless databases without own storage pools do not increase these counts.
     // Shares completeness with TBridgeInfo.BridgeDatabasesComplete.
     map<string, uint64> DatabaseCountsBySyncStatus = 12;
 }
 
 message TBridgeInfo {
     repeated TBridgePileInfo Piles = 1;
-    // Logical databases with fully bridged own/shared storage, including the root database.
+    // Known storage-owning databases with fully bridged pools, including the root database.
+    // Serverless databases without own storage pools do not increase this count.
     // A lower bound while BridgeDatabasesComplete is false.
     optional uint64 BridgeDatabases = 2;
-    // False if database inventory, storage metadata or the matching BSC snapshot is incomplete.
+    // False if pool ownership is incomplete or the matching BSC snapshot is unavailable/incomplete.
     optional bool BridgeDatabasesComplete = 3;
 }
 

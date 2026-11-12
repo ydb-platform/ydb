@@ -1,7 +1,6 @@
 #include "bridge_common.h"
 
 #include <ydb/core/base/bridge.h>
-#include <ydb/core/sys_view/common/events.h>
 
 using NBridgeTest::GetBridgedLocation;
 
@@ -61,20 +60,7 @@ Y_UNIT_TEST_SUITE(BridgeStaticSyncerLifetime) {
             .GetUpdateBridgeGroupInfo().GetBridgeGroupInfo().GetBridgeGroupState();
         const ui32 targetGroupId = NBridge::GetGroupPile(pendingState, TBridgePileId::FromPileIndex(1))->GetGroupId();
         auto getProgressTimestamp = [&] {
-            env.Sim(TDuration::Seconds(6));
-            const auto edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
-            env.Runtime->SendToPipe(env.TabletId, edge, new NSysView::TEvSysView::TEvGetGroupsRequest, 0,
-                TTestActorSystem::GetPipeConfigWithRetries());
-            const auto reply = env.WaitForEdgeActorEvent<NSysView::TEvSysView::TEvGetGroupsResponse>(edge, false,
-                env.Runtime->GetClock() + TDuration::Minutes(1));
-            UNIT_ASSERT(reply);
-            for (const auto& entry : reply->Get()->Record.GetEntries()) {
-                if (entry.GetKey().GetGroupId() == targetGroupId) {
-                    return entry.GetInfo().GetBridgeSyncLastProgressTimestamp();
-                }
-            }
-            UNIT_FAIL("Static synchronization target is missing from system views");
-            return ui64{0};
+            return NBridgeTest::QueryGroupSystemView(env, targetGroupId).GetBridgeSyncLastProgressTimestamp();
         };
         const ui64 beforeCommit = getProgressTimestamp();
         UNIT_ASSERT_GT(beforeCommit, 0);

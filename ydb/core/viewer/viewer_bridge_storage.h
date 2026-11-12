@@ -39,7 +39,6 @@ struct TBridgeGroupCounts {
 struct TBridgeDatabaseStats {
     NKikimrBridge::EStorageMode Mode = NKikimrBridge::STORAGE_MODE_UNSPECIFIED;
     TBridgeGroupCounts Groups;
-    THashMap<TString, TBridgeGroupCounts> Piles;
 
     NKikimrBridge::ESynchronizationStatus GetStatus() const {
         return Groups.GetStatus();
@@ -78,7 +77,7 @@ class TBridgeStorageSnapshot {
         TString Name;
         NKikimrBridge::EStorageMode Mode = NKikimrBridge::STORAGE_MODE_UNSPECIFIED;
         TBridgeGroupCounts Groups;
-        THashMap<TString, TBridgeGroupCounts> Piles;
+        THashSet<TString> PileNames;
         bool HasUnplaced = false;
         bool Valid = true;
     };
@@ -114,12 +113,10 @@ public:
                     target.Valid = false;
                 }
                 if (row.has_pile_name()) {
-                    const auto [pile, inserted] = target.Piles.emplace(row.pile_name(), TBridgeGroupCounts{});
-                    if (!inserted) {
+                    if (!target.PileNames.insert(row.pile_name()).second) {
                         target.Valid = false;
                         continue;
                     }
-                    pile->second.Add(row.groups());
                 } else if (target.HasUnplaced) {
                     target.Valid = false;
                     continue;
@@ -152,9 +149,6 @@ public:
             result.Mode = result.Mode == NKikimrBridge::STORAGE_MODE_UNSPECIFIED ? pool.Mode
                 : result.Mode == pool.Mode ? pool.Mode : NKikimrBridge::MIXED;
             result.Groups.Add(pool.Groups);
-            for (const auto& [pile, counts] : pool.Piles) {
-                result.Piles[pile].Add(counts);
-            }
         }
         return result;
     }

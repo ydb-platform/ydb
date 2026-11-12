@@ -1,7 +1,6 @@
 #pragma once
 #include "json_handlers.h"
 #include "json_pipe_req.h"
-#include "viewer_bridge_storage.h"
 #include <ydb/core/blobstorage/base/bridge_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include "viewer.h"
@@ -23,7 +22,6 @@ class TJsonCluster : public TViewerPipeClient {
     using TThis = TJsonCluster;
     using TBase = TViewerPipeClient;
     using TPDiskId = std::pair<TNodeId, ui32>;
-    using TBridgeNavigate = NSchemeCache::TSchemeCacheNavigate;
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfigResponse;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
@@ -35,11 +33,6 @@ class TJsonCluster : public TViewerPipeClient {
     // bridge mode only, for the names of the pools in the sync state of piles
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> StoragePoolsResponse;
     std::optional<TRequestResponse<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>> BridgeStorageResponse;
-    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> BridgeDatabasesNavigateResponse;
-    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> BridgeResourcesNavigateResponse;
-    std::vector<TString> BridgeDatabasePaths;
-    bool BridgeDatabaseInventoryKnown = false;
-    bool BridgeDatabaseMetadataRequested = false;
     std::optional<TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStatsResponse;
 
     int WhiteboardStateRequestsInFlight = 0;
@@ -169,8 +162,7 @@ public:
         if (AppData()->BridgeModeEnabled) {
             StoragePoolsResponse = MakeCachedRequestBSControllerPools();
             auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
-            request->Record.SetView(NKikimrBridge::TStorageQuery::DATABASES);
-            request->Record.SetGroupByStoragePool(true);
+            request->Record.SetView(NKikimrBridge::TStorageQuery::PILES);
             BridgeStorageResponse = MakeRequestToTablet<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(
                 GetBSControllerId(), request.release());
         }
@@ -678,23 +670,12 @@ private:
         if (ListTenantsResponse && ListTenantsResponse->IsDone()) {
             if (ListTenantsResponse->IsOk()) {
                 Ydb::Cms::ListDatabasesResult listTenantsResult;
-                const bool parsed = ListTenantsResponse->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+                ListTenantsResponse->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
                 ClusterInfo.SetTenants(listTenantsResult.paths().size());
-                if (AppData()->BridgeModeEnabled && parsed && !DomainName.empty()) {
-                    BridgeDatabasePaths.push_back(DomainName);
-                    for (const auto& path : listTenantsResult.paths()) {
-                        BridgeDatabasePaths.push_back(CanonizePath(SplitPath(path)));
-                    }
-                    std::sort(BridgeDatabasePaths.begin(), BridgeDatabasePaths.end());
-                    BridgeDatabasePaths.erase(std::unique(BridgeDatabasePaths.begin(), BridgeDatabasePaths.end()),
-                        BridgeDatabasePaths.end());
-                    BridgeDatabaseInventoryKnown = true;
-                }
             } else {
                 AddProblem("no-tenants-info");
             }
             ListTenantsResponse.reset();
-            MaybeRequestBridgeDatabaseMetadata();
         }
 
         if (!WhiteboardRequestsSent && TimeToAskWhiteboard()) {
@@ -1050,83 +1031,6 @@ private:
 
     void Handle(TEvBlobStorage::TEvControllerQueryBridgeStorageResult::TPtr& ev) {
         if (BridgeStorageResponse && BridgeStorageResponse->Set(std::move(ev))) {
-            MaybeRequestBridgeDatabaseMetadata();
-            RequestDone();
-        }
-    }
-
-    void MaybeRequestBridgeDatabaseMetadata() {
-        if (BridgeDatabaseMetadataRequested || !BridgeDatabaseInventoryKnown || !BridgeStorageResponse ||
-                !BridgeStorageResponse->IsOk()) {
-            return;
-        }
-        const auto& storage = BridgeStorageResponse->Get()->Record;
-        if (storage.GetStatus() != Ydb::StatusIds::SUCCESS || !storage.HasDatabases()) {
-            return;
-        }
-        BridgeDatabaseMetadataRequested = true;
-        auto request = MakeHolder<TBridgeNavigate>();
-        for (const auto& path : BridgeDatabasePaths) {
-            auto& entry = request->ResultSet.emplace_back();
-            entry.Path = SplitPath(path);
-            entry.Operation = TBridgeNavigate::OpPath;
-            entry.RedirectRequired = false;
-            entry.ShowPrivatePath = true;
-        }
-        if (auto token = GetRequest().GetUserTokenObject()) {
-            request->UserToken = new NACLib::TUserToken(token);
-        }
-        BridgeDatabasesNavigateResponse = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(),
-            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0, 0);
-    }
-
-    void RequestBridgeResourceMetadata() {
-        if (!BridgeDatabasesNavigateResponse || !BridgeDatabasesNavigateResponse->IsOk()) {
-            return;
-        }
-        const auto& entries = BridgeDatabasesNavigateResponse->Get()->Request->ResultSet;
-        if (entries.size() != BridgeDatabasePaths.size()) {
-            return;
-        }
-        THashSet<TPathId> resolved;
-        for (const auto& entry : entries) {
-            if (entry.Status == TBridgeNavigate::EStatus::Ok && entry.DomainInfo) {
-                resolved.insert(entry.DomainInfo->DomainKey);
-            }
-        }
-        THashSet<TPathId> resources;
-        for (const auto& entry : entries) {
-            if (entry.Status == TBridgeNavigate::EStatus::Ok && entry.DomainInfo) {
-                const auto resource = entry.DomainInfo->ResourcesDomainKey;
-                if (resource && !resolved.contains(resource)) {
-                    resources.insert(resource);
-                }
-            }
-        }
-        if (resources.empty()) {
-            return;
-        }
-        auto request = MakeHolder<TBridgeNavigate>();
-        for (const auto& resource : resources) {
-            auto& entry = request->ResultSet.emplace_back();
-            entry.TableId.PathId = resource;
-            entry.RequestType = TBridgeNavigate::TEntry::ERequestType::ByTableId;
-            entry.Operation = TBridgeNavigate::OpPath;
-            entry.RedirectRequired = false;
-            entry.ShowPrivatePath = true;
-        }
-        BridgeResourcesNavigateResponse = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(),
-            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0, 1);
-    }
-
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const bool resource = ev->Cookie != 0;
-        auto& response = resource ? BridgeResourcesNavigateResponse : BridgeDatabasesNavigateResponse;
-        if (response && response->Set(std::move(ev))) {
-            if (!resource) {
-                RequestBridgeResourceMetadata();
-            }
-            ProcessResponses();
             RequestDone();
         }
     }
@@ -1360,7 +1264,6 @@ private:
             hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
             hFunc(TEvBlobStorage::TEvControllerQueryBridgeStorageResult, Handle);
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvHive::TEvResponseHiveNodeStats, Handle);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
             hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
@@ -1408,71 +1311,39 @@ private:
 
     void FillBridgeDatabaseCounts(NKikimrViewer::TBridgeInfo& bridgeInfo) const {
         bridgeInfo.SetBridgeDatabasesComplete(false);
-        if (!BridgeDatabaseInventoryKnown || !BridgeStorageResponse || !BridgeStorageResponse->IsOk()) {
+        if (!BridgeStorageResponse || !BridgeStorageResponse->IsOk()) {
             return;
         }
         const auto& response = BridgeStorageResponse->Get()->Record;
-        const auto& storageConfig = NodeWardenStorageConfigResponse->Get()->Config;
-        const TBridgeStorageSnapshot snapshot(response);
-        if (!snapshot.IsValid() || !storageConfig || !storageConfig->HasClusterState() ||
-                response.GetDatabases().cluster_state_generation() != storageConfig->GetClusterState().GetGeneration()) {
+        const auto& config = NodeWardenStorageConfigResponse->Get()->Config;
+        if (response.GetStatus() != Ydb::StatusIds::SUCCESS || !response.HasPiles() ||
+                !response.GetPiles().has_bridge_databases() || !config || !config->HasClusterState() ||
+                response.GetPiles().cluster_state_generation() != config->GetClusterState().GetGeneration()) {
             return;
         }
-        THashMap<TPathId, const TBridgeNavigate::TEntry*> metadata;
-        const auto collect = [&](const auto& result) {
-            if (result && result->IsOk()) {
-                for (const auto& entry : result->Get()->Request->ResultSet) {
-                    if (entry.Status == TBridgeNavigate::EStatus::Ok && entry.DomainInfo) {
-                        metadata.emplace(entry.DomainInfo->DomainKey, &entry);
-                    }
-                }
+        const auto& snapshot = response.GetPiles();
+        bridgeInfo.SetBridgeDatabases(snapshot.bridge_databases());
+        bool complete = snapshot.unattributed_storage_pools() == 0;
+        THashMap<TStringBuf, const NKikimrBridge::TDatabaseSyncCounts*> byPile;
+        for (const auto& pile : snapshot.piles()) {
+            if (pile.has_pile_name() && pile.has_bridge_databases()) {
+                byPile.emplace(pile.pile_name(), &pile.bridge_databases());
             }
-        };
-        collect(BridgeDatabasesNavigateResponse);
-        collect(BridgeResourcesNavigateResponse);
+        }
         for (auto& pile : *bridgeInfo.MutablePiles()) {
-            auto& counts = *pile.MutableDatabaseCountsBySyncStatus();
-            for (auto status : {NKikimrBridge::SYNCED, NKikimrBridge::SYNCING, NKikimrBridge::PENDING,
-                    NKikimrBridge::UNKNOWN, NKikimrBridge::NOT_REQUIRED}) {
-                counts[NKikimrBridge::ESynchronizationStatus_Name(status)] = 0;
+            const auto it = byPile.find(pile.GetName());
+            if (it == byPile.end()) {
+                complete = false;
+                continue;
             }
+            const auto& counts = *it->second;
+            auto& target = *pile.MutableDatabaseCountsBySyncStatus();
+            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::SYNCED)] = counts.synced();
+            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::SYNCING)] = counts.syncing();
+            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::PENDING)] = counts.pending();
+            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::UNKNOWN)] = counts.unknown();
+            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::NOT_REQUIRED)] = counts.not_required();
         }
-        ui64 databases = 0;
-        bool complete = true;
-        THashSet<TPathId> counted;
-        if (!BridgeDatabasesNavigateResponse || !BridgeDatabasesNavigateResponse->IsOk() ||
-                BridgeDatabasesNavigateResponse->Get()->Request->ResultSet.size() != BridgeDatabasePaths.size()) {
-            complete = false;
-        } else {
-            for (const auto& entry : BridgeDatabasesNavigateResponse->Get()->Request->ResultSet) {
-                if (entry.Status != TBridgeNavigate::EStatus::Ok || !entry.DomainInfo || !entry.DomainInfo->DomainKey) {
-                    complete = false;
-                    continue;
-                }
-                const auto& domain = *entry.DomainInfo;
-                if (!counted.insert(domain.DomainKey).second) {
-                    continue;
-                }
-                const auto owner = metadata.find(domain.ResourcesDomainKey);
-                const auto pools = GetBridgeDatabaseStoragePools(entry, owner != metadata.end() ? owner->second : nullptr);
-                const auto stats = pools ? snapshot.Resolve(*pools) : std::nullopt;
-                if (!stats) {
-                    complete = false;
-                    continue;
-                }
-                if (stats->Mode != NKikimrBridge::BRIDGED) {
-                    continue;
-                }
-                ++databases;
-                for (auto& pile : *bridgeInfo.MutablePiles()) {
-                    const auto copy = stats->Piles.find(pile.GetName());
-                    const auto status = copy != stats->Piles.end() ? copy->second.GetStatus() : NKikimrBridge::UNKNOWN;
-                    complete &= copy != stats->Piles.end();
-                    ++(*pile.MutableDatabaseCountsBySyncStatus())[NKikimrBridge::ESynchronizationStatus_Name(status)];
-                }
-            }
-        }
-        bridgeInfo.SetBridgeDatabases(databases);
         bridgeInfo.SetBridgeDatabasesComplete(complete);
     }
 

@@ -1512,8 +1512,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT(mixed->Mode == NKikimrBridge::MIXED);
         UNIT_ASSERT(mixed->GetStatus() == NKikimrBridge::SYNCING);
         UNIT_ASSERT_VALUES_EQUAL(mixed->Groups.Required, 2);
-        UNIT_ASSERT(mixed->Piles.at("pile0").GetStatus() == NKikimrBridge::SYNCED);
-        UNIT_ASSERT(mixed->Piles.at("pile2").GetStatus() == NKikimrBridge::SYNCING);
         UNIT_ASSERT(!GetBridgeDatabaseStoragePools(database));
         resource.DomainInfo = new NSchemeCache::TDomainInfo(TPathId(1, 30), TPathId(1, 30));
         UNIT_ASSERT(!GetBridgeDatabaseStoragePools(database, &resource));
@@ -1889,9 +1887,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
         bool OffloadMerge = false;
         bool IncludeSyncInfo = false;
         std::optional<ui64> DatabaseCountsGeneration;
-        bool DatabaseCountsMissingMetadata = false;
-        bool DatabaseCountsMixedServerless = false;
+        bool DatabaseCountsUnattributedPool = false;
+        bool DatabaseCountsMixedOwner = false;
         bool DatabaseCountsBridgedRoot = false;
+        bool DatabaseCountsUnavailable = false;
+        bool DatabaseCountsLegacyResponse = false;
+        bool DatabaseCountsMissingPile = false;
         bool ProvidePileMap = true;
         bool DropNodesInfo = false;
         bool DropWhiteboard = false;
@@ -1953,7 +1954,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         runtime.GetAppData(4).BridgeModeEnabled = true;
         runtime.GetAppData(5).BridgeModeEnabled = true;
         const ui32 firstNodeId = runtime.GetNodeId(0);
-        const auto rootSchemeShard = runtime.GetAppData().DomainsInfo->GetDomain()->SchemeRoot;
 
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
         bridgeInfo->Piles.resize(4);
@@ -1985,7 +1985,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         ui32 httpsRequests = 0;
         ui32 bridgeDatabaseQueries = 0;
-        ui32 bridgeMetadataBatches = 0;
         std::unordered_set<ui32> skippedOffloadNodeIndexes;
         struct TForwardedRequest {
             TActorId Sender;
@@ -2089,16 +2088,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     }
                     break;
                 case NConsole::TEvConsole::EvListTenantsResponse:
-                    if (options.DatabaseCountsGeneration && isClusterActor(ev->GetRecipientRewrite())) {
-                        Ydb::Cms::ListDatabasesResult databases;
-                        for (const char* path : {"/Root/shared", "/Root/serverless1", "/Root/serverless2",
-                                "/Root/pending", "/Root/synced"}) {
-                            databases.add_paths(path);
-                        }
-                        ev->Get<NConsole::TEvConsole::TEvListTenantsResponse>()->Record.MutableResponse()
-                            ->mutable_operation()->mutable_result()->PackFrom(databases);
-                    }
-                    [[fallthrough]];
                 case TEvHive::EvResponseHiveNodeStats:
                 case NSysView::TEvSysView::EvGetPDisksResponse:
                 case NSysView::TEvSysView::EvGetVSlotsResponse:
@@ -2115,37 +2104,50 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     UNIT_ASSERT(!options.LocalPileNodeStats);
                     ++bridgeDatabaseQueries;
                     const auto& query = ev->Get<TEvBlobStorage::TEvControllerQueryBridgeStorage>()->Record;
-                    UNIT_ASSERT(query.GetView() == NKikimrBridge::TStorageQuery::DATABASES);
-                    UNIT_ASSERT(query.GetGroupByStoragePool());
+                    UNIT_ASSERT(query.GetView() == NKikimrBridge::TStorageQuery::PILES);
+                    UNIT_ASSERT(!query.GetGroupByStoragePool());
                     UNIT_ASSERT(!query.GetFilterPools());
+                    UNIT_ASSERT(!query.HasStoragePool());
+                    UNIT_ASSERT_VALUES_EQUAL(query.StoragePoolIdsSize(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(query.PoolNamesSize(), 0);
                     auto response = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>();
                     auto& record = response->Record;
-                    record.SetStatus(options.DatabaseCountsGeneration ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAVAILABLE);
-                    if (options.DatabaseCountsGeneration) {
-                        auto* snapshot = record.MutableDatabases();
+                    record.SetStatus(options.DatabaseCountsGeneration && !options.DatabaseCountsUnavailable
+                        ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAVAILABLE);
+                    if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
+                        auto* snapshot = record.MutablePiles();
                         snapshot->set_cluster_state_generation(*options.DatabaseCountsGeneration);
-                        for (ui64 poolId : {10, 20, 30}) {
-                            const TString name = poolId == 10 ? "shared-pool" : poolId == 20 ? "pending-pool" : "synced-pool";
-                            for (ui32 pile : {0, 2, 3}) {
-                                const auto status = pile == 3 ? NKikimrBridge::NOT_REQUIRED : pile == 0 || poolId == 30
-                                    ? NKikimrBridge::SYNCED : poolId == 10 ? NKikimrBridge::SYNCING : NKikimrBridge::PENDING;
-                                AddBridgePoolSnapshotRow(record, poolId, name, NKikimrBridge::BRIDGED,
-                                    TStringBuilder() << "pile" << pile, status);
+                        snapshot->set_unattributed_storage_pools(options.DatabaseCountsUnattributedPool ? 1 : 0);
+                        // Shared storage contributes one owner, regardless of its serverless databases.
+                        const ui64 owners = 3 + options.DatabaseCountsBridgedRoot - options.DatabaseCountsMixedOwner;
+                        snapshot->set_bridge_databases(owners);
+                        for (ui32 pile : {0, 2, 3}) {
+                            if (options.DatabaseCountsMissingPile && pile == 2) {
+                                continue;
                             }
-                        }
-                        if (options.DatabaseCountsBridgedRoot) {
-                            for (ui32 pile : {0, 2, 3}) {
-                                AddBridgePoolSnapshotRow(record, 90, "root-pool", NKikimrBridge::BRIDGED,
-                                    TStringBuilder() << "pile" << pile,
-                                    pile == 3 ? NKikimrBridge::NOT_REQUIRED : NKikimrBridge::SYNCED);
+                            auto* row = snapshot->add_piles();
+                            row->set_pile_name(TStringBuilder() << "pile" << pile);
+                            auto* counts = row->mutable_bridge_databases();
+                            counts->set_total(owners);
+                            if (pile == 3) {
+                                counts->set_not_required(owners);
+                            } else if (pile == 0) {
+                                counts->set_synced(owners);
+                            } else {
+                                counts->set_synced(1 + options.DatabaseCountsBridgedRoot);
+                                counts->set_syncing(options.DatabaseCountsMixedOwner ? 0 : 1);
+                                counts->set_pending(1);
                             }
-                        } else {
-                            AddBridgePoolSnapshotRow(record, 90, "root-pool", NKikimrBridge::ORDINARY,
-                                "pile0", NKikimrBridge::NOT_REQUIRED);
+                            // The pre-existing counters also include ordinary and mixed storage owners.
+                            row->mutable_databases()->CopyFrom(*counts);
+                            row->mutable_databases()->set_total(owners + 2);
+                            row->mutable_databases()->set_not_required(counts->not_required() + 2);
                         }
-                        if (options.DatabaseCountsMixedServerless) {
-                            AddBridgePoolSnapshotRow(record, 40, "ordinary-extra", NKikimrBridge::ORDINARY,
-                                "pile2", NKikimrBridge::NOT_REQUIRED);
+                        if (options.DatabaseCountsLegacyResponse) {
+                            snapshot->clear_bridge_databases();
+                            for (auto& row : *snapshot->mutable_piles()) {
+                                row.clear_bridge_databases();
+                            }
                         }
                     }
                     runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie),
@@ -2153,48 +2155,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 case TEvTxProxySchemeCache::EvNavigateKeySet: {
-                    if (!options.DatabaseCountsGeneration || !isClusterActor(ev->Sender)) {
-                        break;
-                    }
-                    UNIT_ASSERT(!options.LocalPileNodeStats);
-                    ++bridgeMetadataBatches;
-                    auto result = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-                    for (const auto& incoming : ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request->ResultSet) {
-                        const TString path = incoming.TableId.PathId == TPathId(rootSchemeShard, 10)
-                            ? TString("/Root/shared") : CanonizePath(incoming.Path);
-                        ui64 pathId = 1;
-                        TString pool;
-                        if (path == "/Root/shared") { pathId = 10; pool = "shared-pool"; }
-                        else if (path == "/Root/serverless1") { pathId = 11; }
-                        else if (path == "/Root/serverless2") {
-                            pathId = 12;
-                            if (options.DatabaseCountsMixedServerless) {
-                                pool = "ordinary-extra";
-                            }
-                        }
-                        else if (path == "/Root/pending") { pathId = 20; pool = "pending-pool"; }
-                        else if (path == "/Root/synced") { pathId = 30; pool = "synced-pool"; }
-                        else { UNIT_ASSERT_VALUES_EQUAL(path, "/Root"); pool = "root-pool"; }
-                        auto& entry = result->ResultSet.emplace_back();
-                        entry.Path = SplitPath(path);
-                        entry.TableId.PathId = TPathId(rootSchemeShard, pathId);
-                        if (options.DatabaseCountsMissingMetadata && pathId == 12) {
-                            entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown;
-                            continue;
-                        }
-                        entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
-                        entry.DomainInfo = new NSchemeCache::TDomainInfo(entry.TableId.PathId,
-                            TPathId(rootSchemeShard, pathId == 11 || pathId == 12 ? 10 : pathId));
-                        auto* description = new NSchemeCache::TSchemeCacheNavigate::TDomainDescription();
-                        if (!pool.empty()) {
-                            description->Description.AddStoragePools()->SetName(pool);
-                        }
-                        entry.DomainDescription = description;
-                    }
-                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
-                        new TEvTxProxySchemeCache::TEvNavigateKeySetResult(result.release()), 0, ev->Cookie),
-                        ev->Sender.NodeId() - firstNodeId);
-                    return TTestActorRuntime::EEventAction::DROP;
+                    UNIT_ASSERT_C(!isClusterActor(ev->Sender), "/viewer/cluster must not navigate database metadata");
+                    break;
                 }
                 case TEvBlobStorage::EvNodeWardenQueryStorageConfig: {
                     if (!isClusterActor(ev->Sender)) {
@@ -2306,7 +2268,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(httpsRequests, options.ExpectedHttpsRequests);
         if (options.DatabaseCountsGeneration) {
             UNIT_ASSERT_VALUES_EQUAL(bridgeDatabaseQueries, 1);
-            UNIT_ASSERT(bridgeMetadataBatches <= 2);
         }
         UNIT_ASSERT_VALUES_EQUAL_C(skippedOffloadNodeIndexes.size(), options.MissingOffloadNodeIndexes.size(),
             "The partial offload response was not simulated for all requested nodes");
@@ -2379,40 +2340,40 @@ Y_UNIT_TEST_SUITE(Viewer) {
             }
         } else {
             UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
-            UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "5");
-            UNIT_ASSERT_VALUES_EQUAL(piles[0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "5");
+            UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
+            UNIT_ASSERT_VALUES_EQUAL(piles[0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "3");
             const auto& counts = piles[1]["DatabaseCountsBySyncStatus"];
             for (const char* status : {"SYNCED", "PENDING"}) {
                 UNIT_ASSERT_VALUES_EQUAL(counts[status].GetStringRobust(), "1");
             }
-            UNIT_ASSERT_VALUES_EQUAL(counts["SYNCING"].GetStringRobust(), "3");
+            UNIT_ASSERT_VALUES_EQUAL(counts["SYNCING"].GetStringRobust(), "1");
             UNIT_ASSERT_VALUES_EQUAL(counts["UNKNOWN"].GetStringRobust(), "0");
             UNIT_ASSERT_VALUES_EQUAL(counts["NOT_REQUIRED"].GetStringRobust(), "0");
-            UNIT_ASSERT_VALUES_EQUAL(piles[2]["DatabaseCountsBySyncStatus"]["NOT_REQUIRED"].GetStringRobust(), "5");
+            UNIT_ASSERT_VALUES_EQUAL(piles[2]["DatabaseCountsBySyncStatus"]["NOT_REQUIRED"].GetStringRobust(), "3");
         }
     }
 
     Y_UNIT_TEST(ClusterBridgeDatabaseCountsPartial) {
         const auto json = GetClusterBridgeInfo({
             .DatabaseCountsGeneration = 42,
-            .DatabaseCountsMissingMetadata = true,
+            .DatabaseCountsUnattributedPool = true,
         });
         const auto& bridgeInfo = json["BridgeInfo"];
-        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "4");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
         UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
         UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
-        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "4");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "3");
     }
 
-    Y_UNIT_TEST(ClusterBridgeDatabaseCountsMixedServerless) {
+    Y_UNIT_TEST(ClusterBridgeDatabaseCountsMixedOwner) {
         const auto json = GetClusterBridgeInfo({
             .DatabaseCountsGeneration = 42,
-            .DatabaseCountsMixedServerless = true,
+            .DatabaseCountsMixedOwner = true,
         });
         const auto& bridgeInfo = json["BridgeInfo"];
-        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "4");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "2");
         UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
-        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][1]["DatabaseCountsBySyncStatus"]["SYNCING"].GetStringRobust(), "2");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][1]["DatabaseCountsBySyncStatus"]["SYNCING"].GetStringRobust(), "0");
     }
 
     Y_UNIT_TEST(ClusterBridgeDatabaseCountsIncludesRoot) {
@@ -2421,9 +2382,40 @@ Y_UNIT_TEST_SUITE(Viewer) {
             .DatabaseCountsBridgedRoot = true,
         });
         const auto& bridgeInfo = json["BridgeInfo"];
-        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "6");
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "4");
         UNIT_ASSERT(bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
         UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["Piles"][1]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "2");
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgeDatabaseCountsUnavailable, legacyResponse) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsUnavailable = !legacyResponse,
+            .DatabaseCountsLegacyResponse = legacyResponse,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT(!bridgeInfo.Has("BridgeDatabases"));
+        UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
+        UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        for (const auto& pile : bridgeInfo["Piles"].GetArraySafe()) {
+            UNIT_ASSERT(!pile.Has("DatabaseCountsBySyncStatus"));
+        }
+    }
+
+    Y_UNIT_TEST(ClusterBridgeDatabaseCountsMissingPile) {
+        const auto json = GetClusterBridgeInfo({
+            .DatabaseCountsGeneration = 42,
+            .DatabaseCountsMissingPile = true,
+        });
+        const auto& bridgeInfo = json["BridgeInfo"];
+        UNIT_ASSERT_VALUES_EQUAL(bridgeInfo["BridgeDatabases"].GetStringRobust(), "3");
+        UNIT_ASSERT(bridgeInfo.Has("BridgeDatabasesComplete"));
+        UNIT_ASSERT(!bridgeInfo["BridgeDatabasesComplete"].GetBoolean());
+        const auto& piles = bridgeInfo["Piles"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(piles.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(piles[0]["DatabaseCountsBySyncStatus"]["SYNCED"].GetStringRobust(), "3");
+        UNIT_ASSERT(!piles[1].Has("DatabaseCountsBySyncStatus"));
+        UNIT_ASSERT_VALUES_EQUAL(piles[2]["DatabaseCountsBySyncStatus"]["NOT_REQUIRED"].GetStringRobust(), "3");
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeNoAliveNodes, offloadMerge) {

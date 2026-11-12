@@ -870,7 +870,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         }
         UNIT_ASSERT(blockedTargetNode);
         holdSourceReplies = true;
-        configuration.Apply(&env, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}});
+        configuration.Apply(&env, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}});
         env.Sim(TDuration::Seconds(30));
         UNIT_ASSERT(!heldSourceReplies.empty());
         UNIT_ASSERT_VALUES_EQUAL(blockedMetadataDone, 0);

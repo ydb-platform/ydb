@@ -492,13 +492,18 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
     query << "SELECT " << BuildQuotedIdentifierList(columnNames)
         << " FROM `" << fullTablePath << '`';
     if (lastWrittenPK) {
+        const auto& pkColumns = desc.GetPrimaryKeyColumns();
         const auto nullCells = NullCellsOf(*lastWrittenPK);
-        Y_ENSURE(nullCells.size() == desc.GetPrimaryKeyColumns().size());
-        if (std::find(nullCells.begin(), nullCells.end(), true) == nullCells.end()) {
+        Y_ENSURE(nullCells.size() == pkColumns.size());
+        const bool hasNullCell = std::find(nullCells.begin(), nullCells.end(), true) != nullCells.end();
+        if (pkColumns.size() > 1 && !hasNullCell) {
             // the usual case: a tuple comparison, which KQP turns into a key range
             query << " WHERE (" << quotedPkList << ") > $pk";
         } else {
-            query << " WHERE " << BuildResumeCondition(desc.GetPrimaryKeyColumns(), nullCells);
+            // A saved key with NULL cells needs the comparison expanded per column, see BuildResumeCondition.
+            // A single-column key is expanded as well: in YQL "(a) > $pk" is the scalar a compared with a tuple,
+            // which does not compile.
+            query << " WHERE " << BuildResumeCondition(pkColumns, nullCells);
         }
     }
     // lastWrittenPK is only a valid resume point if every attempt, including the first,

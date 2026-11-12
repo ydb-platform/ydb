@@ -81,9 +81,19 @@ Y_UNIT_TEST(ResumeConditionForSingleColumnKey) {
         .AddNullableColumn("v", EPrimitiveType::Utf8)
         .SetPrimaryKeyColumns({"a"})
         .Build();
-    const auto lastPK = TValueBuilder().BeginTuple().AddElement().EmptyOptional(EPrimitiveType::Int64).EndTuple().Build();
-    const auto [query, params] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", lastPK);
-    UNIT_ASSERT_C(query.EndsWith("SELECT `a`, `v` FROM `/Root/t` WHERE (`a` IS NOT NULL) ORDER BY `a`;"), query);
+    const auto conditionFor = [&](std::optional<i64> a) {
+        const auto lastPK = TValueBuilder().BeginTuple().AddElement().OptionalInt64(a).EndTuple().Build();
+        const auto [query, params] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", lastPK);
+        const TString prefix = "SELECT `a`, `v` FROM `/Root/t` WHERE ";
+        const TString suffix = " ORDER BY `a`;";
+        const size_t from = query.find(prefix);
+        UNIT_ASSERT_C(from != TString::npos && query.EndsWith(suffix), query);
+        return query.substr(from + prefix.size(), query.size() - from - prefix.size() - suffix.size());
+    };
+
+    // never "(`a`) > $pk": in YQL that is the scalar `a` compared with a tuple, which does not compile
+    UNIT_ASSERT_VALUES_EQUAL(conditionFor(1), "(`a` > $pk.0)");
+    UNIT_ASSERT_VALUES_EQUAL(conditionFor(std::nullopt), "(`a` IS NOT NULL)");
 }
 
 }

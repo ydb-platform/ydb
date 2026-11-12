@@ -78,7 +78,7 @@ private:
 public:
     TKqpBufferLookupActor(TKqpBufferTableLookupSettings&& settings)
         : Settings(std::move(settings))
-        , Partitioning(Settings.TxManager->GetPartitioning(Settings.TableId))
+        , Partitioning(Settings.TxManager->GetTableMeta(Settings.TableId).InitialPartitioning)
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
             << "SessionActorId: " << Settings.SessionActorId) {
     }
@@ -362,9 +362,6 @@ public:
             {"readId", record.GetReadId()},
             {"shardId", shardId});
 
-        Settings.TxManager->AddShard(shardId, false, worker->GetTablePath());
-        Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
-
         const auto& lookupState = CookieToLookupState.at(cookie);
         if (lookupState.MvccSnapshot) {
             record.MutableSnapshot()->SetStep(lookupState.MvccSnapshot->GetStep());
@@ -446,19 +443,23 @@ public:
             return;
         }
 
-        Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
-
         auto& read = readIt->second;
-        ShardReadTrace.ReadResult(LookupActorSpan, read.ShardId, ev->Sender.NodeId(),
-            record.GetReadId(), record.GetRowCount(), record.GetStatus().GetCode(), record.GetFinished());
         const auto shardId = read.ShardId;
         const auto cookie = read.LookupCookie;
+
+        ShardReadTrace.ReadResult(LookupActorSpan, shardId, ev->Sender.NodeId(),
+            record.GetReadId(), record.GetRowCount(), record.GetStatus().GetCode(), record.GetFinished());
 
         auto& shardState = ShardToState.at(shardId);
 
         auto& lookupState = CookieToLookupState.at(cookie);
         AFL_ENSURE(lookupState.Worker);
         AFL_ENSURE(lookupState.ReadsInflight > 0);
+
+        // At current time don't add shard partitioning metadata for reads. (Read Committed doesn't collect locks for reads.)
+        Settings.TxManager->AddShard(shardId, false, lookupState.Worker->GetTablePath());
+        Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
+        Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         TStringBuilder txLocks;
         for (const auto& lock : record.GetTxLocks()) {

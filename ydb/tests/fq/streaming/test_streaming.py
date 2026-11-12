@@ -2329,7 +2329,8 @@ FROM `{table_name}`"""
                             baz: List<Int>?,
                             bat: Tuple<Int, String?>?,
                             bet: Dict<String, Int>?,
-                            bum: Variant<
+                            bum: Dict<Utf8, Bool?>?,
+                            but: Variant<
                                 a: Tuple<Int, String>?,
                                 b: List<Int>,
                                 cd: Variant<
@@ -2350,8 +2351,8 @@ FROM `{table_name}`"""
                 $in = SELECT * FROM $in FLATTEN COLUMNS; -- expand foo
                 $in = SELECT
                         i.*,
-                        bum.a AS ua, bum.b AS ub, bum.cd.c AS uc, bum.cd.d AS ud, bum.e AS ue, bum.f AS uf
-                      WITHOUT bum
+                        but.a AS ua, but.b AS ub, but.cd.c AS uc, but.cd.d AS ud, but.e AS ue, but.f AS uf
+                      WITHOUT but
                       FROM $in AS i;
                 -- $in = SELECT * FROM $in FLATTEN LIST BY baz; -- prevents pushdown
                 INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
@@ -2372,20 +2373,23 @@ FROM `{table_name}`"""
 
         longstr = '23456789876543212345678987654321'  # so that it won't fit SSO/embedded
         data = [
-            '{"foo":{"bar":"before lunch", "bat":[0], "bum":null}}',
-            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2},"bum":[123,456]},"test":"xy{longstr}z"}',
-            '{"foo":{"bar":"after lunch", "baz":[], "bat":[2,"t{longstr}a"],"bet":{"a":2,"c{longstr}d":3},"bum":[789,"foo"]},"test":"x{longstr}yz"}',
-            '{"foo":{"bar":"is lunch over", "bat":[3],"bum":true},"test":"x{longstr}yz"}',
-            '{"foo":{"bar":"lunch was yummy", "bat":[4,null,"that"],"bum":1234},"test":"x{longstr}yz"}',
-            '{"foo":{"bar":"lunch time again", "bat":[5],"bum":{"foo": 12356789,"bar":987654321,"xyz":null}},"test":"x{longstr}yz"}',
+            '{"foo":{"bar":"before lunch", "bat":[0], "but":null}}',
+            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2},"bum":{"обед":true,"полдник":null},,"but":[123,456]},"test":"xy{longstr}z"}',
+            '{"foo":{"bar":"after lunch", "baz":[], "bat":[2,"t{longstr}a"],"bet":{"a":2,"c{longstr}d":3},"bum":{"supper":false},"but":[789,"foo"]},"test":"x{longstr}yz"}',
+            '{"foo":{"bar":"is lunch over", "bat":[3],"but":true},"test":"x{longstr}yz"}',
+            '{"foo":{"bar":"lunch was yummy", "bat":[4,null,"that"],"but":1234},"test":"x{longstr}yz"}',
+            '{"foo":{"bar":"lunch time again", "bat":[5],"but":{"foo": 12356789,"bar":987654321,"xyz":null}},"test":"x{longstr}yz"}',
         ]
         data = [*map(lambda x: x.replace('{longstr}', longstr), data)]
         expected_data = [
-            '{"bar":"lunch time","bat":[1,"{longstr}"],"baz":[1,2],"bet":{"a":1,"b{longstr}c":2},"test":"xy{longstr}z","ua":null,"ub":[123,456],"uc":null,"ud":null,"ue":null,"uf":null}',
-            '{"bar":"after lunch","bat":[2,"t{longstr}a"],"baz":[],"bet":{"a":2,"c{longstr}d":3},"test":"x{longstr}yz","ua":[789,"foo"],"ub":null,"uc":null,"ud":null,"ue":null,"uf":null}',
-            '{"bar":"is lunch over","bat":[3,null],"baz":null,"bet":null,"test":"x{longstr}yz","ua":null,"ub":null,"uc":true,"ud":null,"ue":null,"uf":null}',
-            '{"bar":"lunch was yummy","bat":[4,null],"baz":null,"bet":null,"test":"x{longstr}yz","ua":null,"ub":null,"uc":null,"ud":null,"ue":1234,"uf":null}',
-            '{"bar":"lunch time again","bat":[5,null],"baz":null,"bet":null,"test":"x{longstr}yz","ua":null,"ub":null,"uc":null,"ud":null,"ue":null,"uf":{"bar":987654321,"foo":12356789,"xyz":null}}',
+            '{"bar":"lunch time","bat":[1,"{longstr}"],"baz":[1,2],"bet":{"a":1,"b{longstr}c":2},'
+            + '"bum":{"обед":true,"полдник":null},"test":"xy{longstr}z","ua":null,"ub":[123,456],"uc":null,"ud":null,"ue":null,"uf":null}',
+            '{"bar":"after lunch","bat":[2,"t{longstr}a"],"baz":[],"bet":{"a":2,"c{longstr}d":3},'
+            + '"bum":{"supper":false},"test":"x{longstr}yz","ua":[789,"foo"],"ub":null,"uc":null,"ud":null,"ue":null,"uf":null}',
+            '{"bar":"is lunch over","bat":[3,null],"baz":null,"bet":null,"bum":null,"test":"x{longstr}yz","ua":null,"ub":null,"uc":true,"ud":null,"ue":null,"uf":null}',
+            '{"bar":"lunch was yummy","bat":[4,null],"baz":null,"bet":null,"bum":null,"test":"x{longstr}yz","ua":null,"ub":null,"uc":null,"ud":null,"ue":1234,"uf":null}',
+            '{"bar":"lunch time again","bat":[5,null],"baz":null,"bet":null,'
+            + '"bum":null,"test":"x{longstr}yz","ua":null,"ub":null,"uc":null,"ud":null,"ue":null,"uf":{"bar":987654321,"foo":12356789,"xyz":null}}',
         ] * 2
         expected_data = [*map(lambda x: x.replace('{longstr}', longstr), expected_data)]
 
@@ -2621,6 +2625,306 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(sql.format(query_name=query_name))
 
     @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize(
+        "kikimr",
+        [{"enable_shared_reading_structured_json_parsing": True}],
+        indirect=["kikimr"],
+    )
+    def test_structured_json_skip_errors_nested(
+        self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
+    ) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"structured_json_skip_errors_nested{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
+
+        name = f"test_structured_json_skip_errors_nested_{local_topics!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT * FROM {inp}
+                WITH (
+                    FORMAT = "json_each_row",
+                    `skip.json.errors` = "true",
+                    SCHEMA = (
+                        top Struct<
+                            a: List<Int>?,
+                            b: Tuple<Int, String?>?,
+                            c: Dict<String, Int>?,
+                            d: Int?,
+                            e: String?
+                        >,
+                        req Struct<
+                            id: Int,
+                            name: String?
+                        >,
+                        note String
+                    )
+                );
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, name)
+
+        messages = [
+            # Valid row with all nested containers.
+            '{"top":{"a":[1,2],"b":[3,"s"],"c":{"k":1},"d":4,"e":"x"},"req":{"id":10,"name":"y"},"note":"ok"}',
+            # Errors: missing required nested field.
+            '{"req":{"name":"no"},"note":"skip-missing-req"}',
+            # Errors: top-level structured field has wrong type.
+            '{"top":"bad","note":"skip-top-type"}',
+            # Errors: list element type mismatch.
+            '{"top":{"a":[1,"bad"]},"note":"skip-list-element"}',
+            # Errors: null list element for non-optional Int.
+            '{"top":{"a":[null]},"note":"skip-list-null"}',
+            # Errors: tuple too short, missing non-optional first element.
+            '{"top":{"b":[]},"note":"skip-tuple-short"}',
+            # Errors: null first tuple element, first element is non-optional.
+            '{"top":{"b":[null,"x"]},"note":"skip-tuple-null"}',
+            # Errors: dict payload type mismatch.
+            '{"top":{"c":{"k":"bad"}},"note":"skip-dict-payload"}',
+            # Errors: null dict payload for non-optional Int.
+            '{"top":{"c":{"k":null}},"note":"skip-dict-null"}',
+            # Errors: nested required scalar wrong type.
+            '{"req":{"id":"bad"},"note":"skip-req-type"}',
+            # Errors: nested required scalar null.
+            '{"req":{"id":null},"note":"skip-req-null"}',
+            # Valid: tuple has extra elements, extra tuple elements are ignored.
+            '{"top":{"b":[5,"t","extra"]},"req":{"id":1},"note":"ok-extra"}',
+            # Valid: explicit nulls for optional top-level structs.
+            '{"top":null,"req":null,"note":"ok-nulls"}',
+            # Valid: optional top-level structs omitted.
+            '{"note":"ok-omitted"}',
+            # Valid: empty list and empty dict.
+            '{"top":{"a":[],"c":{}},"note":"ok-empty"}',
+            # Valid: only one nested scalar present.
+            '{"top":{"d":101},"note":"ok-only-d"}',
+            # Valid: tuple trailing optional element omitted.
+            '{"top":{"b":[7]},"note":"ok-tuple-trailing-optional"}',
+            # Valid: explicit null for optional list.
+            '{"top":{"a":null},"note":"ok-list-null"}',
+            # Valid: unknown top-level and nested keys are ignored.
+            '{"top":{"extra":"ignored"},"extra":"ignored","note":"ok-extra-keys"}',
+        ]
+
+        self.write_stream(messages, endpoint=endpoint)
+
+        expected_notes = {
+            "ok",
+            "ok-extra",
+            "ok-nulls",
+            "ok-omitted",
+            "ok-empty",
+            "ok-only-d",
+            "ok-tuple-trailing-optional",
+            "ok-list-null",
+            "ok-extra-keys",
+        }
+
+        rows = [
+            *map(json.loads, self.read_stream(len(expected_notes), topic_path=self.output_topic, endpoint=endpoint))
+        ]
+        assert len(rows) == len(expected_notes)
+
+        parsed = {row["note"]: row for row in rows}
+        assert set(parsed) == expected_notes
+
+        # Fully populated valid row.
+        assert parsed["ok"]["top"] == {
+            "a": [1, 2],
+            "b": [3, "s"],
+            "c": {"k": 1},
+            "d": 4,
+            "e": "x",
+        }
+        assert parsed["ok"]["req"] == {"id": 10, "name": "y"}
+
+        # Extra tuple elements are ignored.
+        extra_top = parsed["ok-extra"]["top"]
+        assert extra_top.get("b") == [5, "t"]
+        assert extra_top.get("a") is None
+        assert extra_top.get("c") is None
+        assert extra_top.get("d") is None
+        assert extra_top.get("e") is None
+
+        extra_req = parsed["ok-extra"]["req"]
+        assert extra_req.get("id") == 1
+        assert extra_req.get("name") is None
+
+        # Explicit optional nulls.
+        assert parsed["ok-nulls"].get("top") is None
+        assert parsed["ok-nulls"].get("req") is None
+
+        # Omitted optional top-level structs.
+        assert parsed["ok-omitted"].get("top") is None
+        assert parsed["ok-omitted"].get("req") is None
+
+        # Empty containers are valid.
+        empty_top = parsed["ok-empty"]["top"]
+        assert empty_top.get("a") == []
+        assert empty_top.get("c") == {}
+        assert empty_top.get("b") is None
+
+        # Only one scalar field present.
+        only_d_top = parsed["ok-only-d"]["top"]
+        assert only_d_top.get("d") == 101
+        assert only_d_top.get("a") is None
+        assert only_d_top.get("b") is None
+        assert parsed["ok-only-d"].get("req") is None
+
+        # Tuple trailing optional element omitted.
+        trailing_b = parsed["ok-tuple-trailing-optional"]["top"].get("b")
+        assert trailing_b == [7, None]
+
+        # Explicit null optional list.
+        ok_list_top = parsed["ok-list-null"]["top"]
+        assert ok_list_top is not None
+        assert ok_list_top.get("a") is None
+        assert parsed["ok-list-null"].get("req") is None
+
+        # Unknown keys were ignored and the row was still emitted.
+        assert "ok-extra-keys" in parsed
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize(
+        "kikimr",
+        [{"enable_shared_reading_structured_json_parsing": True}],
+        indirect=["kikimr"],
+    )
+    def test_structured_json_skip_errors_required_top_level(
+        self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
+    ) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"structured_json_skip_errors_required{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
+
+        name = f"test_structured_json_skip_errors_required_{local_topics!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT * FROM {inp}
+                WITH (
+                    FORMAT = "json_each_row",
+                    `skip.json.errors` = "true",
+                    SCHEMA = (
+                        payload Struct<
+                            id: Int,
+                            name: String?
+                        > NOT NULL,
+                        note String
+                    )
+                );
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, name)
+
+        # Put the valid row after several invalid rows to ensure the parser recovers.
+        messages = [
+            '{"note":"skip-missing-payload"}',
+            '{"payload":null,"note":"skip-null-payload"}',
+            '{"payload":{"name":"b"},"note":"skip-missing-id"}',
+            '{"payload":{"id":"bad"},"note":"skip-id-type"}',
+            '{"payload":{"id":null},"note":"skip-id-null"}',
+            '{"payload":{"id":1,"name":"a"},"note":"ok"}',
+        ]
+
+        self.write_stream(messages, endpoint=endpoint)
+
+        rows = [*map(json.loads, self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint))]
+        assert len(rows) == 1
+
+        row = rows[0]
+        assert row["note"] == "ok"
+        assert row["payload"] == {"id": 1, "name": "a"}
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize(
+        "kikimr",
+        [{"enable_shared_reading_structured_json_parsing": True}],
+        indirect=["kikimr"],
+    )
+    def test_structured_json_skip_errors_invalid_documents(
+        self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
+    ) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"structured_json_skip_errors_docs{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
+
+        name = f"test_structured_json_skip_errors_docs_{local_topics!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT * FROM {inp}
+                WITH (
+                    FORMAT = "json_each_row",
+                    `skip.json.errors` = "true",
+                    SCHEMA = (
+                        payload Struct<
+                            id: Int
+                        >,
+                        note String
+                    )
+                );
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, name)
+
+        messages = [
+            # Malformed JSON document.
+            "not json",
+            # Valid JSON documents, but not JSON objects, are invalid for json_each_row.
+            "[1,2] ",
+            '"scalar" ',
+            "42 ",
+            "true ",
+            # Valid object with all optional fields omitted.
+            '{"note":"valid-empty"}',
+            # Valid object.
+            '{"payload":{"id":1},"note":"valid1"}',
+        ]
+
+        self.write_stream(messages, endpoint=endpoint)
+
+        expected_notes = {"valid-empty", "valid1"}
+
+        rows = [
+            *map(json.loads, self.read_stream(len(expected_notes), topic_path=self.output_topic, endpoint=endpoint))
+        ]
+        assert len(rows) == len(expected_notes)
+
+        parsed = {row["note"]: row for row in rows}
+        assert set(parsed) == expected_notes
+
+        assert parsed["valid1"]["payload"] == {"id": 1}
+        assert parsed["valid-empty"].get("payload") is None
+        assert parsed["valid-empty"]["note"] == "valid-empty"
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_pushdown(
         self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
@@ -2643,14 +2947,35 @@ FROM `{table_name}`"""
                     SCHEMA=(
                         str1 String,
                         str2 String,
+                        d Date, -- YQ-5737
+                        ts Timestamp, -- YQ-5738
+                        i Interval,
                         ev String
                     )
                 )
                 WHERE COALESCE(str1, str2) IS DISTINCT FROM "DONE"
                   AND CAST(str1 AS Utf8) NOT REGEXP "foobar" -- YQ-5727
+                  AND CAST(str1 AS Utf8) NOT LIKE "%foo%bar%" -- YQ-4054
+                  AND str1 NOT LIKE "%foo%bar%" -- YQ-4054
+                  AND str1 NOT ILIKE "%FOO%BAR%" -- YQ-4054
+                  AND str1 NOT ILIKE "%Foo%Bar!%" ESCAPE "!" -- YQ-4054
+                  AND (CAST(CAST(d AS String) AS Date) = Date("1984-01-01"))
+                  AND (i < Interval("PT3600S"))
+                  AND (i > Interval("-PT1S"))
+                  AND (ts = Timestamp("1991-08-19T05:00:00.123456Z"))
+                  AND (str1??"x" <= MAX_OF(str1??"x", str2??"x"))
+                  AND (str2??"y" >= MIN_OF(str2??"y", str1??"y"))
+                  AND (str1??"y" IN ("xop","xep","y"))
+                  AND (str1??"tep" LIKE "%p")
+                  AND (str1??"xar" LIKE "x%")
+                  AND (str1??"pat" LIKE "%p%")
+                  AND (str1??"xyp" LIKE "x%p")
+                  AND (str1??"xtp" LIKE "%x%p")
+                  AND (CAST(str1 AS Datetime) >= CAST(str2 AS Datetime) OR ev != "foobar") -- YQ-5747
                   AND (Unwrap(COALESCE(str1, Just(ev), str2)) IS DISTINCT FROM "DONE"
                     OR ToBytes(COALESCE(CAST(str1 AS Utf8), CAST(ev AS Utf8))) IS NOT DISTINCT FROM "DONE")
                 ;
+                $in = SELECT * WITHOUT d, ts, i FROM $in;
                 INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
             END DO;'''
 
@@ -2663,11 +2988,11 @@ FROM `{table_name}`"""
         self.wait_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count", expected_value=1)
 
         data = [
-            '{"str1":null,"str2":"DONE","ev":"skipped"}',
-            '{"str1":"xop","str2":"DONE","ev":"xep"}',
-            '{"str1":"foobar","str2":"DONE","ev":"xin"}',
-            '{"str1":null,"str2":null,"ev":"xap"}',
-            '{"str1":"xep","str2":"xip","ev":"xup"}',
+            '{"str1":null,"str2":"DONE","ev":"skipped","d":"1990-01-01","ts":"2012-01-01T12:13:14Z","i":"PT10S"}',
+            '{"str1":"xop","str2":"DONE","ev":"xep","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z","i":"PT360S"}',
+            '{"str1":"foobar","str2":"DONE","ev":"xin","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z","i":"PT102S"}',
+            '{"str1":null,"str2":null,"ev":"xap","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z","i":"PT104S"}',
+            '{"str1":"xep","str2":"xip","ev":"xup","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z","i":"PT1055S"}',
         ]
         expected_data = [
             '{"ev":"xep","str1":"xop","str2":"DONE"}',
@@ -2702,6 +3027,25 @@ FROM `{table_name}`"""
                     assert "`str1`" in filter
                     assert "`str2`" in filter
                     assert " REGEXP " in filter
+                    assert " LIKE " in filter
+                    assert " ILIKE " in filter
+                    assert " ESCAPE " in filter
+                    assert " IN (" in filter
+                    assert ">= MIN_OF(" in filter
+                    assert "<= MAX_OF(" in filter
+                    assert "1984-01-01" in filter
+                    assert "1991-08-19" in filter
+                    assert '"PT3600S"' in filter
+                    assert '"-PT1S"' in filter
+                    # validate simplified LIKE
+                    assert "EndsWith(" in filter
+                    assert "StartsWith(" in filter
+                    assert "Contains(" in filter
+                    assert '"tep"' in filter
+                    assert '"xar"' in filter
+                    assert '"pat"' in filter
+                    assert '"xyp"' in filter
+                    assert '"xtp"' in filter
                     sources += 1
         assert sources > 0
 
@@ -3202,7 +3546,7 @@ FROM `{table_name}`"""
         argvalues=[
             ("join", "row", {}),
             ("join", "column", {}),
-            ("native_join", "row", {"kqp_constraints_transformer": False}),
+            ("native_join", "row", {"enable_kqp_constraints_transformer": False}),
             ("output", "row", {}),
             ("output", "column", {}),
         ],
@@ -3635,3 +3979,71 @@ FROM `{table_name}`"""
                 # The fixture is shared: stopping processes does not immediately remove them
                 # from KQP placement snapshots. Wait before the next case creates a query.
                 kikimr.wait_kqp_node_count(original_node_count)
+
+    @pytest.mark.parametrize("kikimr", [{"max_message_size": 136314880}], indirect=True)
+    @pytest.mark.parametrize("local_topics", [True, False], ids=["local", "external"])
+    def test_read_large_topic_message(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+    ) -> None:
+        max_message_size = 136314880
+        partition_write_speed = 50 * 1024 * 1024
+        timeout = plain_or_under_sanitizer(60, 300)
+        source_name = entity_name("large_topic_message")
+        self.init_topics(source_name, endpoint=kikimr.endpoint)
+        input_name = f"`{self.input_topic}`"
+        output_name = f"`{self.output_topic}`"
+        if not local_topics:
+            # Use the same cluster through gRPC to exercise the C++ SDK driver limits.
+            self.create_source(kikimr, source_name, endpoint=kikimr.endpoint)
+            input_name = f"`{source_name}`.{input_name}"
+            output_name = f"`{source_name}`.{output_name}"
+
+        driver_config = ydb.DriverConfig(
+            endpoint=kikimr.endpoint.endpoint,
+            database=kikimr.get_database_name(),
+            auth_token="root@builtin",
+            channel_options=[
+                ("grpc.max_receive_message_length", max_message_size),
+                ("grpc.max_send_message_length", max_message_size),
+            ],
+        )
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(timeout=10, fail_fast=True)
+            topic_client = driver.topic_client
+            for topic in (self.input_topic, self.output_topic):
+                topic_client.alter_topic(
+                    topic,
+                    set_partition_write_speed_bytes_per_second=partition_write_speed,
+                    set_partition_write_burst_bytes=partition_write_speed,
+                )
+
+            future = kikimr.ydb_client.query_async(
+                f"""
+                    INSERT INTO {output_name}
+                    SELECT Data FROM {input_name} WITH (
+                        STREAMING = "TRUE",
+                        FORMAT = "raw",
+                        SCHEMA = (Data String NOT NULL)
+                    )
+                    LIMIT 1;
+                """,
+                timeout=timeout,
+            )
+            data = b"x" * 130000000
+            writer = topic_client.writer(self.input_topic, codec=ydb.TopicCodec.RAW)
+            try:
+                writer.write_with_ack(data, timeout=timeout)
+            finally:
+                writer.close(flush=False, timeout=timeout)
+
+            with topic_client.reader(self.output_topic, consumer=self.consumer_name) as reader:
+                message = reader.receive_message(timeout=timeout)
+                assert len(message.data) == len(data)
+                # Keep assertion diagnostics from printing the entire 130 MB payload.
+                contents_match = message.data == data
+                assert contents_match, "Large topic message contents differ"
+                reader.commit_with_ack(message, timeout=timeout)
+            future.result(timeout=timeout)

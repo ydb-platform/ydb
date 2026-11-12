@@ -11,17 +11,43 @@ import time
 from pathlib import Path
 
 
-def read_proc_stat() -> tuple[float, float]:
-    """Read /proc/stat, return (total_jiffies, idle_jiffies including iowait)."""
+def read_proc_stat() -> dict[str, int]:
+    """Read host CPU counters; guest time is already included in user/nice."""
     with open("/proc/stat") as f:
         line = f.readline()
     parts = line.split()
     # user nice system idle iowait irq softirq steal. guest and guest_nice are already inside user and nice.
-    total = sum(int(x) for x in parts[1:9])
-    idle = int(parts[4]) if len(parts) > 4 else 0
-    iowait = int(parts[5]) if len(parts) > 5 else 0
-    idle += iowait
-    return float(total), float(idle)
+    return dict(zip(("user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal"), map(int, parts[1:9])))
+
+
+def read_cpu_cgroups(pid: int) -> dict:
+    """Read raw CPU limits/counters from standard CI cgroup mounts and parents."""
+    result = {}
+    try:
+        for line in Path(f"/proc/{pid}/cgroup").read_text().splitlines():
+            _, controllers, path = line.split(":", 2)
+            if controllers and "cpu" not in controllers.split(","):
+                continue
+            if ".." in Path(path).parts:
+                result["error"] = "CPU cgroup is outside the visible namespace"
+                continue
+            root = Path("/sys/fs/cgroup/cpu" if controllers else "/sys/fs/cgroup")
+            current = root / path.lstrip("/")
+            while True:
+                for name in ("cpu.stat", "cpu.max", "cpu.cfs_quota_us", "cpu.cfs_period_us"):
+                    file = current / name
+                    try:
+                        result[str(file)] = file.read_text().strip()
+                    except FileNotFoundError:
+                        pass  # Some files only exist in v1 or v2, or below the root.
+                    except OSError as e:
+                        result[str(file)] = {"error": str(e)}
+                if current == root:
+                    break
+                current = current.parent
+    except OSError as e:
+        result["error"] = str(e)
+    return result
 
 
 def _read_cmdline(pid: int) -> str:
@@ -285,8 +311,9 @@ def run_monitor(
 
             # CPU total (absolute)
             curr_stat = read_proc_stat()
-            total_delta = curr_stat[0] - prev_stat[0]
-            idle_delta = curr_stat[1] - prev_stat[1]
+            cpu_deltas = {key: max(0, value - prev_stat.get(key, value)) for key, value in curr_stat.items()}
+            total_delta = sum(cpu_deltas.values())
+            idle_delta = cpu_deltas.get("idle", 0) + cpu_deltas.get("iowait", 0)
             cpu_total_pct = 100.0 * (1 - idle_delta / total_delta) if total_delta > 0 else 0.0
             prev_stat = curr_stat
 
@@ -294,6 +321,11 @@ def run_monitor(
             process_snapshot = read_process_snapshot()
             ya_pids = find_ya_process_tree(process_snapshot)
             pid_data = list(process_snapshot.values())
+            cpu_cgroups = read_cpu_cgroups(os.getpid())
+            # ya make runs in its own systemd scope, outside the monitor's cgroup.
+            for pid in ya_pids:
+                if process_snapshot[pid]["ppid"] not in ya_pids:
+                    cpu_cgroups.update(read_cpu_cgroups(pid))
 
             cpu_ya_jiffies = 0
             ram_ya_kb = 0
@@ -358,6 +390,11 @@ def run_monitor(
             }
             record["cpu_cores"] = cpu_cores
             record["ram_total_gb"] = ram_total_gb
+            record.update({
+                f"cpu_{key}_pct": round(100.0 * value / total_delta, 2) if total_delta > 0 else 0.0
+                for key, value in cpu_deltas.items()
+            })
+            record["cpu_cgroups"] = cpu_cgroups
             jf.write(json.dumps(record) + "\n")
             jf.flush()
 

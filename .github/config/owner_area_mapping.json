@@ -11,5 +11,6 @@
   "ui-backend": "area/ui",
   "engineering": "area/engineering",
   "security": "area/security",
-  "nbs": "area/nbs"
+  "nbs": "area/nbs",
+  "infra": "area/infra"
 }

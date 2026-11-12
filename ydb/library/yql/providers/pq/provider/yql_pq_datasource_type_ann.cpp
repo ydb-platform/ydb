@@ -551,7 +551,7 @@ public:
         }
 
         const auto metadataKey = TString(key->TailPtr()->Content());
-        const auto descriptor = GetPqMetaFieldDescriptorByKey(metadataKey, State_->AddTransparentPrefixToTransparentSystemColumns,
+        const auto descriptor = GetPqMetaFieldDescriptorByKey(metadataKey, State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
             State_->EnableUserAttributesInTopicQuery, State_->ForbidYqlSysColumnsAndSystemMetadata);
         if (!descriptor) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Metadata key " << metadataKey << " wasn't found"));

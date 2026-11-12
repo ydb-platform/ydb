@@ -8,12 +8,15 @@ SRCS(
     kqp_batch_operations.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
+    kqp_expr_helpers.cpp
+    kqp_expr_helpers.h
     kqp_lwtrace_probes.cpp
     kqp_lwtrace_probes.h
     kqp_resolve.cpp
     kqp_resolve.h
     kqp_row_builder.cpp
     kqp_ru_calc.cpp
+    kqp_shard_meta.cpp
     kqp_timeouts.cpp
     kqp_timeouts.h
     kqp_tx.cpp
@@ -27,6 +30,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/common/compile_cache
     library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/protobuf/json
@@ -68,6 +72,7 @@ END()
 
 RECURSE(
     compilation
+    compile_cache
     events
     result_set_format
     simple

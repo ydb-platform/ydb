@@ -46,10 +46,10 @@
 - Графический план запроса
     - [Расположение информации в плане запроса](layout.md)
         - [Отдельные регионы (колонки)](layout.md#regions)
-        - [Колонка ResultSet, Sink и Precompute](layout.md#resultset-column)
+        - [Колонка ResultSet, Sink и Precompute](layout.md#structure)
         - [Операторная статистика](layout.md#operators)
         - [Число задач стадии и прогресс их выполнения](layout.md#progress)
-        - [Метрики по стадиям](layout.md#stages)
+        - [Метрики по стадиям](layout.md#statistics)
         - [Временные графики](layout.md#timeline)
         - [Интерактивные возможности](layout.md#interactive)
     - [Структура фактического плана запроса](structure.md)

@@ -25,7 +25,7 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        const auto& params(Event->Get()->Request.GetParams());
+        const auto& params = Params;
         ui32 timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         if (params.Has("permissions")) {
             Split(params.Get("permissions"), ",", Permissions);

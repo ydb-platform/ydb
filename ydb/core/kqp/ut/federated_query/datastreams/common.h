@@ -66,7 +66,7 @@ class TStreamingTestFixture: public NUnitTest::TBaseFixture {
 public:
     // External YDB recipe
     inline static const std::string YDB_ENDPOINT = GetEnv("YDB_ENDPOINT");
-    inline static const std::string YDB_DATABASE = GetEnv("YDB_DATABASE");
+    inline static const std::string YDB_DATABASE = "/" + GetEnv("YDB_DATABASE");
 
     // Local kikimr test cluster
     inline static constexpr char TEST_DATABASE[] = "/Root";
@@ -162,12 +162,13 @@ public:
 
     void ExecSchemeQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
 
-    void WaitForClassifierPropagation();
+    void WaitForClassifierPropagation(const TString& poolId = {});
 
     // Query client SDK
 
     std::vector<NYdb::TResultSet> ExecQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS,
-        const std::string& expectedError = "", std::function<void(const std::string&)> astValidator = nullptr);
+        const std::string& expectedError = "", std::function<void(const std::string&)> astValidator = nullptr,
+        TDuration timeout = TDuration::Zero());
 
     void CreatePqSource(const std::string& pqSourceName);
 

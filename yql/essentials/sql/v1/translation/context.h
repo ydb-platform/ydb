@@ -27,7 +27,7 @@ inline bool IsAnonymousName(const TString& name) {
 }
 
 inline bool IsStreamingService(const TString& service) {
-    return service == NYql::RtmrProviderName || service == NYql::PqProviderName;
+    return service == NYql::PqProviderName;
 }
 
 struct TNodeWithUsageInfo: public TThrRefBase {
@@ -59,6 +59,7 @@ struct TScopedState: public TThrRefBase {
     bool SimplePgByDefault = false;
     TNamedNodesMap NamedNodes;
     THashSet<std::pair</*prefix=*/TString, /*pragma=*/TString>> ActivePragmas;
+    THashSet<std::pair</*prefix=*/TString, /*pragma=*/TString>> QueryPragmas;
 
     struct TLocal {
         TVector<std::pair<TString, TDeferredAtom>> UsedClusters;
@@ -179,6 +180,7 @@ public:
 
     bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
     void SetRelativePathPrefix(const TString& value);
+    void ResetRelativePathPrefix();
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
@@ -416,7 +418,7 @@ public:
 
     THashMap<TString, ui32> PackageVersions;
     NYql::TWarningPolicy WarningPolicy;
-    TString PqReadByRtmrCluster;
+    bool PqReadByDq = false;
     bool EmitStartsWith = true;
     TMaybe<bool> EmitAggApply;
     bool UseBlocks = false;

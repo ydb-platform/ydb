@@ -80,6 +80,14 @@
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
+#include <ydb/core/persqueue/pq.h>
+#include <ydb/core/persqueue/deferred_publish/registry_actor.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/core/fq/libs/init/init.h>
+#include <ydb/core/fq/libs/mock/yql_mock.h>
+#include <ydb/services/metadata/ds_table/service.h>
+#include <ydb/services/metadata/service.h>
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
@@ -134,6 +142,8 @@
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/udf_store/compile_controller/compile_controller.h>
 #include <ydb/services/view/grpc_service.h>
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
+#include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
@@ -553,7 +563,7 @@ namespace Tests {
 
             const auto& pathMapping = Settings->AppConfig->GetResourcePathPrefixMapping();
             if (pathMapping.RulesSize()) {
-                appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping);
+                appData.SetPathNormalizer(std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping, appData.Counters));
             }
 
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
@@ -722,7 +732,7 @@ namespace Tests {
 
     void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId, const std::optional<TString>& tenant) {
         auto* grpcInfo = &TenantsGRpc[tenant ? *tenant : Settings->DomainName][grpcServiceNodeId];
-        grpcInfo->Shutdown();
+        grpcInfo->Shutdown(StoppedGRpcServers);
 
         grpcInfo->GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto& counters = grpcInfo->GRpcServerRootCounters;
@@ -1403,7 +1413,12 @@ namespace Tests {
         }
 
         {
-            const auto& appData = Runtime->GetAppData(nodeIdx);
+            auto& appData = Runtime->GetAppData(nodeIdx);
+            auto gateway = std::make_shared<NWorkloadManager::NPrivate::TWorkloadManagerGateway>();
+            appData.WorkloadManagerGateway = gateway;
+            TActorId stateActorId = Runtime->Register(NWorkloadManager::CreateWorkloadManagerStateActor(gateway), nodeIdx, userPoolId, TMailboxType::HTSwap, 0);
+            Runtime->RegisterService(NWorkloadManager::MakeWorkloadManagerStateActorId(Runtime->GetNodeId(nodeIdx)), stateActorId, nodeIdx);
+
             IActor* workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData.Counters));
             TActorId workloadManagerId = Runtime->Register(workloadManager, nodeIdx, userPoolId, TMailboxType::HTSwap, 0);
             Runtime->RegisterService(NWorkloadManager::MakeServiceId(Runtime->GetNodeId(nodeIdx)), workloadManagerId, nodeIdx);
@@ -1512,7 +1527,11 @@ namespace Tests {
             }
 
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, *Settings->AppConfig);
+            const auto& featureFlags = Runtime->GetAppData(nodeIdx).FeatureFlags;
+            auto schedulerAppConfig = *Settings->AppConfig;
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableResourcePoolsScheduler(featureFlags.GetEnableResourcePoolsScheduler());
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(featureFlags.GetEnableComputeSchedulerMemory());
+            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, schedulerAppConfig);
 
             if (!Settings->AppConfig->GetTableServiceConfig().HasEnableCompileCacheWarmup()) {
                 Settings->AppConfig->MutableTableServiceConfig()->SetEnableCompileCacheWarmup(false);
@@ -1587,6 +1606,11 @@ namespace Tests {
             IActor* pqReadCacheService = NPQ::CreatePQDReadCacheService(Runtime->GetDynamicCounters());
             TActorId readCacheId = Runtime->Register(pqReadCacheService, nodeIdx, userPoolId);
             Runtime->RegisterService(NPQ::MakePQDReadCacheServiceActorId(), readCacheId, nodeIdx);
+        }
+        {
+            IActor* writeSessionsQuoter = NPQ::CreateWriteSessionsQuoter();
+            TActorId writeSessionsQuoterId = Runtime->Register(writeSessionsQuoter, nodeIdx, userPoolId);
+            Runtime->RegisterService(NPQ::MakeWriteSessionsQuoterId(), writeSessionsQuoterId, nodeIdx);
         }
         {
             IActor* deferredPublishRegistry = NPQ::NDeferredPublish::CreateDeferredPublishRegistryActor();
@@ -2541,6 +2565,20 @@ namespace Tests {
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::CreateIndexedTable(const TString& parent,
+            const NKikimrSchemeOp::TIndexedTableCreationConfig& table, TDuration timeout) {
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
+        op->SetWorkingDir(parent);
+        op->MutableCreateIndexedTable()->CopyFrom(table);
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse& response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 

@@ -64,6 +64,7 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
 
     bool hasOpenTxs = false;
     bool loanedTables = false;
+    NTable::TRowVersionRanges removedRowVersions;
 
     for (auto &pr : op->InReadSets()) {
         for (auto& rsdata : pr.second) {
@@ -97,6 +98,17 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                 if (DataShard.GetSnapshotManager().GetLowWatermark() < lowWatermark)
                     DataShard.GetSnapshotManager().SetLowWatermark(db, lowWatermark);
 
+                if (rs.HasRemovedRowVersions()) {
+                    for (const auto& range : rs.GetRemovedRowVersions().GetRanges()) {
+                        removedRowVersions.Add(TRowVersion::FromProto(range.GetLowerInclusive()),
+                            TRowVersion::FromProto(range.GetUpperExclusive()));
+                    }
+                } else {
+                    // Old CopyTable sources did not preserve registry snapshots.
+                    // Restore this guarantee even while the registry is unready.
+                    removedRowVersions.Add(TRowVersion::Min(), lowWatermark);
+                }
+
                 if (rs.GetWithOpenTxs()) {
                     hasOpenTxs = true;
                 }
@@ -119,13 +131,14 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
 
     const auto minVersion = DataShard.GetSnapshotManager().GetLowWatermark();
 
-    // If MinWriteVersion is not zero, then all versions below it are inaccessible
-    if (minVersion) {
-        for (const auto& kv : DataShard.GetUserTables()) {
-            ui32 localTableId = kv.second->LocalTid;
-            txc.DB.RemoveRowVersions(localTableId, TRowVersion::Min(), minVersion);
-        }
+    for (const auto& range : removedRowVersions) {
+        txc.DB.RemoveRowVersions(userTable->LocalTid, range.Lower, range.Upper);
     }
+    // Source deletions were restored unconditionally above. The watermark alone
+    // does not prove that retained points in this or other user tables are gone.
+    // Additional cleanup uses each destination table identity and deliberately
+    // waits for registry readiness when retention is enabled.
+    DataShard.GetSnapshotManager().CleanupUnretainedRowVersions(txc.DB, TRowVersion::Min(), minVersion);
 
     if (hasOpenTxs && loanedTables) {
         // We must wait for loan to complete, so ReceiveSnapshotCleanup would

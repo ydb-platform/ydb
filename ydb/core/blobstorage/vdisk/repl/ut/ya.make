@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/blobstorage/vdisk/repl)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(5)
 
 SIZE(MEDIUM)
 

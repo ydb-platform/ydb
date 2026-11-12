@@ -447,6 +447,38 @@ class TNeumannHashTable {
 
         return iters;
     }
+    void PrefetchDirectory(const ui8 *const row) const {
+        const THash thash = ReadUnaligned<THash>(row);
+        NYql::PrefetchForRead(&Directories_[getDirectorySlot(thash)]);
+    }
+
+    void PrefetchBuffer(const ui8 *const row) const {
+        const THash thash = ReadUnaligned<THash>(row);
+        const TDirectory dir = Directories_[getDirectorySlot(thash)];
+        if (kBloomTags[thash.BloomTagSlot] & dir.BloomFilter) {
+            return;
+        }
+        NYql::PrefetchForRead(Buffer_.data() + BufferSlotSize_ * dir.BufferSlot);
+    }
+
+    void PrefetchTuple(const ui8 *const row) const {
+        if (IsInplace_) {
+            return;
+        }
+        const THash thash = ReadUnaligned<THash>(row);
+        const Hash dirSlot = getDirectorySlot(thash);
+        const TDirectory dir = Directories_[dirSlot];
+        if (kBloomTags[thash.BloomTagSlot] & dir.BloomFilter) {
+            return;
+        }
+        const ui8 *const it = Buffer_.data() + BufferSlotSize_ * dir.BufferSlot;
+        if (it == Buffer_.data() + BufferSlotSize_ * Directories_[dirSlot + 1].BufferSlot) {
+            return;
+        }
+        const TOutplace outRow = ReadUnaligned<TOutplace>(it);
+        NYql::PrefetchForRead(Tuples_ + Layout_->TotalRowSize * outRow.Index);
+    }
+
     bool Empty() const{
         return Buffer_.empty();
     }

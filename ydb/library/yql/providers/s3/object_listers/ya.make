@@ -15,7 +15,6 @@ PEERDIR(
     ydb/library/yql/providers/s3/credentials
     yql/essentials/utils
     ydb/library/yql/utils/actor_log
-    yql/essentials/utils/threading
 )
 
 END()

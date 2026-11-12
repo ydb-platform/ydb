@@ -608,6 +608,11 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         NYdb::NTopic::TTopicClient topicClient(driver);
         auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl").GetValueSync();
         UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetRetentionPeriod(), TDuration::Minutes(1));
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            describe.GetTopicDescription().GetConsumers()[0].GetAvailabilityPeriod(),
+            TDuration::Days(4));
 
         driver.Stop(true);
     }
@@ -1406,6 +1411,38 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                 const auto json = ParseSqsResponse(ESqsProtocol::Xml, res.Body);
                 UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
                 UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(ClientModificationsSendMessage, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        auto& flags = KikimrServer->GetRuntime()->GetAppData().FeatureFlags;
+        flags.SetEnableSQSMigrationCompatibility(false);
+        flags.SetEnableSQSMigrationTopicCreation(false);
+
+        auto created = CreateQueue({{"QueueName", "ClientModifications"}});
+        auto queueUrl = GetByPath<TString>(created, "QueueUrl");
+        for (bool enableClientModifications : {false, true}) {
+            flags.SetEnableClientModifications(enableClientModifications);
+
+            auto single = SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "single"}}, enableClientModifications ? 200 : 400);
+            auto batch = SendMessageBatch({
+                {"QueueUrl", queueUrl},
+                {"Entries", NJson::TJsonArray{
+                    NJson::TJsonMap{{"Id", "first"}, {"MessageBody", "first"}},
+                    NJson::TJsonMap{{"Id", "second"}, {"MessageBody", "second"}}
+                }}
+            }, enableClientModifications ? 200 : 400);
+
+            if (enableClientModifications) {
+                UNIT_ASSERT(!GetByPath<TString>(single, "MessageId").empty());
+                UNIT_ASSERT_VALUES_EQUAL(batch["Successful"].GetArray().size(), 2);
+            } else {
+                for (const auto* result : {&single, &batch}) {
+                    UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(*result, "__type"), "AccessDeniedException");
+                    UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(*result, "message"), "Client data writes are disabled");
+                }
             }
         }
     }
@@ -2846,6 +2883,8 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetEnabled(), true);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetDeadLetterQueue(), "sqs://cloud4/folder4/DLQ.fifo");
             UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetRetentionPeriod(), TDuration::Minutes(1));
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(678));
         }
 
         driver.Stop(true);
@@ -2868,6 +2907,43 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             {"QueueUrl", queueUrl},
             {"Attributes", NJson::TJsonMap{{"UnknownAttribute", "value"}}}
         }, 400);
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributesRetentionPeriod, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        const TString queueName = "SetAttrsRetention";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "3600"}}}
+        });
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        {
+            const auto description = DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), TDuration::Minutes(1));
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(3600));
+        }
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "7200"}}}
+        });
+
+        {
+            const auto description = DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), TDuration::Minutes(1));
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(7200));
+        }
+
+        const auto attrJson = GetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"AttributeNames", NJson::TJsonArray{"MessageRetentionPeriod"}}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], "7200");
     }
 
     Y_UNIT_TEST_F(TestSetQueueAttributes_TableImplementation, THttpProxyTestMock) {

@@ -1,0 +1,614 @@
+#pragma once
+
+#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+
+#include <util/string/printf.h>
+
+#include <deque>
+#include <map>
+#include <set>
+
+// helpers shared by bridge tests
+namespace NBridgeTest {
+
+    // nodes of natively bridged cluster: 8 nodes per pile
+    inline TNodeLocation GetBridgedLocation(ui32 nodeId) {
+        NActorsInterconnect::TNodeLocation location;
+        location.SetBridgePileName(TStringBuilder() << "pile_" << (nodeId - 1) / 8 + 1);
+        location.SetDataCenter("my_dc");
+        location.SetRack(TStringBuilder() << "rack_" << nodeId);
+        location.SetUnit(TStringBuilder() << "unit_" << nodeId);
+        return TNodeLocation(location);
+    }
+
+    // nodes of the cluster being converted have no pile names in their locations
+    inline TNodeLocation GetUnbridgedLocation(ui32 nodeId) {
+        NActorsInterconnect::TNodeLocation location;
+        location.SetDataCenter("my_dc");
+        location.SetRack(TStringBuilder() << "rack_" << nodeId);
+        location.SetUnit(TStringBuilder() << "unit_" << nodeId);
+        return TNodeLocation(location);
+    }
+
+    // settings of the cluster to be converted into bridged one
+    inline TEnvironmentSetup::TSettings MakeUnbridgedSettings(bool setupHive = false, ui32 nodeCount = 9) {
+        return {
+            .NodeCount = nodeCount, // 9 is one spare node to make disk reassignment possible
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetUnbridgedLocation,
+            .SetupHive = setupHive,
+            .SelfManagementConfig = true,
+            .AutomaticBootstrap = true,
+        };
+    }
+
+    // the same with one more node than a group has VDisks, so that a node other than the controller one has no VDisks of
+    // a group
+    inline TEnvironmentSetup::TSettings MakeUnbridgedSettingsWithSpareNode(bool setupHive = false) {
+        return MakeUnbridgedSettings(setupHive, 10);
+    }
+
+    // send the event the filter function of the test runtime has held anew: runtime resolves service id of the recipient
+    // at send, and the actor it was resolved to may be gone already
+    inline void ResendEvent(TEnvironmentSetup& env, ui32 nodeId, std::unique_ptr<IEventHandle> ev) {
+        const TActorId forwardOnNondelivery = ev->GetForwardOnNondeliveryRecipient();
+        const TActorId *forward = forwardOnNondelivery ? &forwardOnNondelivery : nullptr;
+        env.Runtime->Send(ev->HasEvent()
+            ? new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie, forward)
+            // events coming from other nodes are kept serialized, and some local ones have no event object
+            : new IEventHandle(ev->Type, ev->Flags, ev->Recipient, ev->Sender, ev->ReleaseChainBuffer(), ev->Cookie,
+                forward), nodeId);
+    }
+
+    // check that the read result contains exactly one blob with the expected data
+    inline void CheckGetResult(const TEvBlobStorage::TEvGetResult& m, const TString& data) {
+        UNIT_ASSERT_VALUES_EQUAL_C(m.Status, NKikimrProto::OK, m.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(m.ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(m.Responses[0].Status, NKikimrProto::OK, m.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(m.Responses[0].Buffer.ConvertToString(), data);
+    }
+
+    inline const NKikimrBlobStorage::TBaseConfig::TGroup& FindGroup(const NKikimrBlobStorage::TBaseConfig& baseConfig,
+            ui32 groupId) {
+        for (const auto& group : baseConfig.GetGroup()) {
+            if (group.GetGroupId() == groupId) {
+                return group;
+            }
+        }
+        UNIT_FAIL("group not found GroupId# " << groupId);
+        Y_UNREACHABLE();
+    }
+
+    class TDataChecker {
+        TEnvironmentSetup& Env;
+        ui32 Step = 1;
+        std::vector<std::tuple<ui32, TLogoBlobID, TString>> Written;
+
+    public:
+        TDataChecker(TEnvironmentSetup& env)
+            : Env(env)
+        {}
+
+        void Write(ui32 groupId, ui32 nodeId = 1) {
+            const TActorId edge = Env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            SendPut(groupId, edge);
+            auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        }
+
+        // send put without waiting for its result, which is to be checked by the caller
+        void SendPut(ui32 groupId, TActorId edge) {
+            const TString data = TStringBuilder() << "data for step " << Step;
+            const TLogoBlobID id(100500, 1, Step++, 0, data.size(), 0);
+            Env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            });
+            Written.emplace_back(groupId, id, data);
+        }
+
+        const std::vector<std::tuple<ui32, TLogoBlobID, TString>>& GetWritten() const {
+            return Written;
+        }
+
+        void CheckAll(ui32 nodeId = 1) {
+            const TActorId edge = Env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            for (const auto& [groupId, id, data] : Written) {
+                Env.Runtime->WrapInActorContext(edge, [&] {
+                    SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                        NKikimrBlobStorage::FastRead));
+                });
+                CheckGetResult(*Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false)->Get(), data);
+            }
+        }
+    };
+
+    // make nodes (all of them by default) bridge-capable with single pile by restarting them one by one
+    inline void RollingRestartWithSinglePileBridgeConfig(TEnvironmentSetup& env, TDataChecker& checker, ui32 groupId,
+            std::optional<std::vector<ui32>> nodeIds = std::nullopt) {
+        auto& bridgeConfig = env.Runtime->GetAppDataBridgeConfig();
+        if (!bridgeConfig.PilesSize()) {
+            bridgeConfig.AddPiles()->SetName("pile_1");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(bridgeConfig.PilesSize(), 1);
+
+        if (!nodeIds) {
+            nodeIds.emplace();
+            for (ui32 nodeId : env.Runtime->GetNodes()) {
+                if (nodeId <= env.ConfiguredNodeCount) { // the rest are not started yet
+                    nodeIds->push_back(nodeId);
+                }
+            }
+        }
+        for (ui32 nodeId : *nodeIds) {
+            Cerr << "*** restarting node " << nodeId << " with single-pile bridge config" << Endl;
+            env.RestartNode(nodeId);
+            env.Sim(TDuration::Seconds(30));
+            checker.Write(groupId);
+            checker.CheckAll();
+        }
+    }
+
+    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult InvokeDistconf(TEnvironmentSetup& env,
+            const std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&)>& fill, ui32 nodeId = 1,
+            TInstant deadline = TInstant::Max()) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        fill(ev->Record);
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge, ev.release()), nodeId);
+        auto res = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge, false, deadline);
+        UNIT_ASSERT_C(res, "Timed out waiting for a bridge configuration command");
+        return res->Get()->Record;
+    }
+
+    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult ConvertToBridge(TEnvironmentSetup& env,
+            bool skipStoragePoolConversion = false) {
+        return InvokeDistconf(env, [&](auto& record) {
+            record.MutableConvertToBridge()->SetSkipStoragePoolConversion(skipStoragePoolConversion);
+        });
+    }
+
+    inline NKikimrBlobStorage::TStorageConfig QueryStorageConfig(TEnvironmentSetup& env, ui32 nodeId = 1,
+            TInstant deadline = TInstant::Max()) {
+        deadline = Min(deadline, env.Runtime->GetClock() + TDuration::Seconds(30));
+        for (;;) {
+            const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryConfig(); }, nodeId, deadline);
+            if (res.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                return res.GetQueryConfig().GetConfig();
+            }
+            UNIT_ASSERT_C(res.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE
+                && env.Runtime->GetClock() < deadline, res.DebugString());
+            env.Sim(TDuration::MilliSeconds(10));
+        }
+    }
+
+    inline void SwitchBridgePileState(TEnvironmentSetup& env, ui32 pileIndex,
+            NKikimrBridge::TClusterState::EPileState state) {
+        using TState = NKikimrBridge::TClusterState;
+        const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+        std::optional<std::pair<ui64, TState::EPileState>> previous;
+        for (;;) {
+            const auto config = QueryStorageConfig(env, 1, deadline);
+            const auto& current = config.GetClusterState();
+            const auto currentState = current.GetPerPileState(pileIndex);
+            const bool rejoining = previous && state == TState::NOT_SYNCHRONIZED_1
+                && (previous->second == TState::DISCONNECTED || previous->second == TState::SUSPENDED
+                    || previous->second == TState::NOT_SYNCHRONIZED_1);
+            if (previous && current.GetGeneration() > previous->first
+                    && (currentState == state || (rejoining
+                        && (currentState == TState::NOT_SYNCHRONIZED_2 || currentState == TState::SYNCHRONIZED)))) {
+                return;
+            }
+            const auto response = InvokeDistconf(env, [&](auto& record) {
+                auto *cmd = record.MutableSwitchBridgeClusterState();
+                cmd->SetExpectedGeneration(config.GetClusterState().GetGeneration());
+                auto *next = cmd->MutableNewClusterState();
+                next->CopyFrom(config.GetClusterState());
+                next->SetPerPileState(pileIndex, state);
+                next->SetGeneration(next->GetGeneration() + 1);
+            }, 1, deadline);
+            if (response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                return;
+            }
+            UNIT_ASSERT_C((response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE
+                    || response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::GENERATION_MISMATCH
+                    || response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM)
+                && env.Runtime->GetClock() < deadline, response.DebugString());
+            previous.emplace(current.GetGeneration(), currentState);
+            env.Sim(TDuration::MilliSeconds(10));
+        }
+    }
+
+    inline std::vector<const NKikimrBlobStorage::TBaseConfig::TGroup*> GetPoolGroups(
+            const NKikimrBlobStorage::TBaseConfig& baseConfig, ui64 storagePoolId) {
+        std::vector<const NKikimrBlobStorage::TBaseConfig::TGroup*> res;
+        for (const auto& group : baseConfig.GetGroup()) {
+            if (group.GetStoragePoolId() == storagePoolId) {
+                res.push_back(&group);
+            }
+        }
+        return res;
+    }
+
+    inline NKikimrBlobStorage::TDefineStoragePool ReadStoragePool(TEnvironmentSetup& env, ui64 storagePoolId) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *read = request.AddCommand()->MutableReadStoragePool();
+        read->SetBoxId(1);
+        read->AddStoragePoolId(storagePoolId);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).StoragePoolSize(), 1);
+        return response.GetStatus(0).GetStoragePool(0);
+    }
+
+    inline void SetNumGroups(TEnvironmentSetup& env, ui64 storagePoolId, ui32 numGroups) {
+        NKikimrBlobStorage::TDefineStoragePool pool = ReadStoragePool(env, storagePoolId);
+        pool.SetNumGroups(numGroups);
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    // move one of the group's VDisks to another PDisk; this also bumps the group generation
+    inline void ReassignOneDisk(TEnvironmentSetup& env, ui32 groupId) {
+        const auto baseConfig = env.FetchBaseConfig();
+        const NKikimrBlobStorage::TBaseConfig::TVSlot *target = nullptr;
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            if (vslot.GetGroupId() == groupId) {
+                target = &vslot;
+                break;
+            }
+        }
+        UNIT_ASSERT(target);
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
+        reassign->SetGroupId(groupId);
+        reassign->SetGroupGeneration(target->GetGroupGeneration());
+        reassign->SetFailRealmIdx(target->GetFailRealmIdx());
+        reassign->SetFailDomainIdx(target->GetFailDomainIdx());
+        reassign->SetVDiskIdx(target->GetVDiskIdx());
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    // define new storage pool with the same settings as the existing one
+    inline void CreateAnotherPool(TEnvironmentSetup& env, ui64 storagePoolId) {
+        NKikimrBlobStorage::TDefineStoragePool pool = ReadStoragePool(env, 1);
+        pool.SetStoragePoolId(storagePoolId);
+        pool.SetName(TStringBuilder() << "pool_" << storagePoolId);
+        pool.SetKind(pool.GetName());
+        pool.SetNumGroups(1);
+        pool.ClearItemConfigGeneration();
+
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    // keeps the latest group info distributed by BS_CONTROLLER to nodes; Filter is to be called from the filter function
+    // of the test runtime
+    class TGroupInfoTracker {
+        THashMap<ui32, NKikimrBlobStorage::TGroupInfo> Groups;
+
+    public:
+        bool Filter(ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                for (const auto& group : record.GetServiceSet().GetGroups()) {
+                    auto& info = Groups[group.GetGroupID()];
+                    if (info.GetGroupGeneration() <= group.GetGroupGeneration()) {
+                        info.CopyFrom(group); // the update of the same generation may change decommit status
+                    }
+                }
+            }
+            return true;
+        }
+
+        const NKikimrBlobStorage::TGroupInfo& Get(ui32 groupId) const {
+            const auto it = Groups.find(groupId);
+            UNIT_ASSERT_C(it != Groups.end(), "group info not distributed GroupId# " << groupId);
+            return it->second;
+        }
+    };
+
+    // wait until the condition holds, checking it every step of simulated time; describe tells the state on failure
+    inline void WaitUntil(TEnvironmentSetup& env, const std::function<bool()>& condition, const TString& what,
+            TDuration step = TDuration::Seconds(10), ui32 numSteps = 60,
+            const std::function<TString()>& describe = {}) {
+        for (ui32 i = 0; i < numSteps; ++i) {
+            if (condition()) {
+                return;
+            }
+            env.Sim(step);
+        }
+        UNIT_ASSERT_C(condition(), what << " not reached" << (describe ? " " + describe() : TString()));
+    }
+
+    inline void WaitUntil(TEnvironmentSetup& env, const std::function<bool()>& condition, const TString& what,
+            const std::function<TString()>& describe) {
+        WaitUntil(env, condition, what, TDuration::Seconds(10), 60, describe);
+    }
+
+    // request the change of the pile state in the next cluster state generation
+    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult TrySwitchPileState(TEnvironmentSetup& env, ui32 pileIndex,
+            NKikimrBridge::TClusterState::EPileState state) {
+        auto clusterState = QueryStorageConfig(env).GetClusterState();
+        clusterState.SetPerPileState(pileIndex, state);
+        clusterState.SetGeneration(clusterState.GetGeneration() + 1);
+        return InvokeDistconf(env, [&](auto& record) {
+            record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(clusterState);
+        });
+    }
+
+    inline void SwitchPileState(TEnvironmentSetup& env, ui32 pileIndex, NKikimrBridge::TClusterState::EPileState state) {
+        const auto res = TrySwitchPileState(env, pileIndex, state);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+    }
+
+    inline NKikimrBridge::TClusterState::EPileState GetPileState(TEnvironmentSetup& env, ui32 pileIndex) {
+        return QueryStorageConfig(env).GetClusterState().GetPerPileState(pileIndex);
+    }
+
+    inline void WaitForPileState(TEnvironmentSetup& env, ui32 pileIndex, NKikimrBridge::TClusterState::EPileState state) {
+        WaitUntil(env, [&] { return GetPileState(env, pileIndex) == state; },
+            TStringBuilder() << "pile state " << NKikimrBridge::TClusterState::EPileState_Name(state));
+    }
+
+    // group info from distconf for static groups and from BSC for dynamic ones
+    inline NKikimrBlobStorage::TGroupInfo GetGroupInfo(TEnvironmentSetup& env, ui32 groupId) {
+        if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
+            const auto config = QueryStorageConfig(env);
+            for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                if (group.GetGroupID() == groupId) {
+                    return group;
+                }
+            }
+            UNIT_FAIL("static group not found GroupId# " << groupId);
+        }
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerGetGroup>();
+        request->Record.AddGroupIDs(groupId);
+        // cookie Max<ui64>() marks the request not coming from NodeWarden
+        env.Runtime->SendToPipe(env.TabletId, edge, request.release(), Max<ui64>(),
+            TTestActorSystem::GetPipeConfigWithRetries());
+        auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(edge, false);
+        for (const auto& group : response->Get()->Record.GetServiceSet().GetGroups()) {
+            if (group.GetGroupID() == groupId) {
+                return group;
+            }
+        }
+        UNIT_FAIL("group not found GroupId# " << groupId);
+        Y_UNREACHABLE();
+    }
+
+    // ids of the parts of the bridged group, indexed by pile
+    inline std::vector<ui32> GetPileGroups(TEnvironmentSetup& env, ui32 groupId) {
+        const auto info = GetGroupInfo(env, groupId);
+        std::vector<ui32> res;
+        for (const auto& pile : info.GetBridgeGroupState().GetPile()) {
+            res.push_back(pile.GetGroupId());
+        }
+        return res;
+    }
+
+    // the group is an inline pile in the designated pile: it has its own VDisks there and serves as its own bridge proxy
+    // group, with numPiles entries in its pile list; returns its info
+    inline NKikimrBlobStorage::TGroupInfo CheckInlinePileGroup(TEnvironmentSetup& env, ui32 groupId, ui32 numPiles = 1,
+            ui32 pileIndex = 0) {
+        const auto info = GetGroupInfo(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL_C(info.GetBridgeProxyGroupId(), groupId, info.ShortDebugString());
+        UNIT_ASSERT_C(TBridgePileId::FromProto(&info, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId) ==
+            TBridgePileId::FromPileIndex(pileIndex), info.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(info.GetBridgeGroupState().PileSize(), numPiles, info.ShortDebugString());
+        const auto& pile = info.GetBridgeGroupState().GetPile(pileIndex);
+        UNIT_ASSERT_VALUES_EQUAL_C(pile.GetGroupId(), groupId, info.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(pile.GetGroupGeneration(), info.GetGroupGeneration(), info.ShortDebugString());
+        UNIT_ASSERT_C(info.RingsSize(), info.ShortDebugString());
+        const auto baseConfig = env.FetchBaseConfig(); // the group is referenced by pointer
+        const auto& group = FindGroup(baseConfig, groupId);
+        UNIT_ASSERT_C(!group.GetIsProxyGroup() && group.VSlotIdSize(), group.ShortDebugString());
+        return info;
+    }
+
+    // nodes started in the environment that have no VDisks of the group; they get its info only when using it
+    inline std::vector<ui32> GetNodesWithoutGroupVDisks(TEnvironmentSetup& env, ui32 groupId) {
+        std::set<ui32> hosting;
+        const auto baseConfig = env.FetchBaseConfig(); // a temporary would be gone before the loop body (pre-C++23)
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            if (vslot.GetGroupId() == groupId) {
+                hosting.insert(vslot.GetVSlotId().GetNodeId());
+            }
+        }
+        std::vector<ui32> res;
+        for (ui32 nodeId : env.Runtime->GetNodes()) {
+            if (nodeId <= env.ConfiguredNodeCount && !hosting.contains(nodeId)) {
+                res.push_back(nodeId);
+            }
+        }
+        return res;
+    }
+
+    // the node having no VDisks of the group, other than the controller one; the test holds the info of the group on its
+    // way to the node warden there (IsGroupInfoForNode), so that the proxy of the group starts without configuration
+    inline ui32 PickNodeWithoutGroupVDisks(TEnvironmentSetup& env, ui32 groupId) {
+        for (ui32 nodeId : GetNodesWithoutGroupVDisks(env, groupId)) {
+            if (nodeId != env.Settings.ControllerNodeId) {
+                return nodeId;
+            }
+        }
+        UNIT_FAIL("no node without VDisks of GroupId# " << groupId);
+        return 0;
+    }
+
+    // does the event bring the info of the group to the node warden of the node: an update from BS controller, or the
+    // cached info from distconf
+    inline bool IsGroupInfoForNode(IEventHandle& ev, ui32 groupId, ui32 nodeId) {
+        if (ev.Recipient.NodeId() != nodeId) {
+            return false;
+        } else if (ev.GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+            const auto& record = ev.Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+            for (const auto& group : record.GetServiceSet().GetGroups()) {
+                if (group.GetGroupID() == groupId) {
+                    return true;
+                }
+            }
+        } else if (ev.GetTypeRewrite() == TEvBlobStorage::EvNodeWardenQueryCacheResult && ev.HasEvent()) {
+            const auto *msg = ev.Get<NStorage::TEvNodeWardenQueryCacheResult>();
+            return msg->GenerationValue && msg->Key == Sprintf("G%08" PRIx32, groupId);
+        }
+        return false;
+    }
+
+    // current generation of the group as the node knows it
+    inline ui32 GetNodeGroupGeneration(TEnvironmentSetup& env, ui32 groupId, ui32 nodeId) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge,
+            new TEvNodeWardenQueryGroupInfo(groupId)), nodeId);
+        auto info = env.WaitForEdgeActorEvent<TEvNodeWardenGroupInfo>(edge, false);
+        UNIT_ASSERT_C(info->Get()->Record.HasGroup(), info->Get()->Record.DebugString());
+        return info->Get()->Record.GetGroup().GetGroupGeneration();
+    }
+
+    // send the request to the physical group of the pile directly, bypassing the bridge proxy, and wait for the result
+    template<typename TResult, typename TRequest>
+    inline std::unique_ptr<TResult> QueryPileGroup(TEnvironmentSetup& env, ui32 pileGroupId, ui32 nodeId,
+            TRequest *request) {
+        request->ForceGroupGeneration = GetNodeGroupGeneration(env, pileGroupId, nodeId);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, pileGroupId, request);
+        });
+        auto res = env.WaitForEdgeActorEvent<TResult>(edge, false);
+        return std::unique_ptr<TResult>(res->Release().Release());
+    }
+
+    // read the blob from the physical group of the pile, so that the bridge proxy can't restore it
+    inline NKikimrProto::EReplyStatus ReadFromPileGroup(TEnvironmentSetup& env, ui32 pileGroupId, ui32 nodeId,
+            const TLogoBlobID& id, const TString& data) {
+        const auto res = QueryPileGroup<TEvBlobStorage::TEvGetResult>(env, pileGroupId, nodeId,
+            new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead));
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res->ResponseSz, 1);
+        if (res->Responses[0].Status == NKikimrProto::OK) {
+            UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].Buffer.ConvertToString(), data);
+        }
+        return res->Responses[0].Status;
+    }
+
+    // create storage pool with the designated number of groups and wait for them to start; returns the first group id
+    inline ui32 CreatePoolAndGetGroup(TEnvironmentSetup& env, ui32 numGroups = 1) {
+        env.CreatePool(numGroups);
+        env.Sim(TDuration::Seconds(30));
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), numGroups);
+        return groups.front();
+    }
+
+    // create cluster with dynamic groups and convert it into single-pile bridged one; returns the first group id, which
+    // some data is written to; groups of BSC stay non-bridged when skipStoragePoolConversion is set, which requires
+    // non-uniform storage to be enabled in the bridge config
+    inline ui32 ConvertCluster(TEnvironmentSetup& env, TDataChecker& checker, ui32 numGroups = 1,
+            bool skipStoragePoolConversion = false) {
+        const ui32 groupId = CreatePoolAndGetGroup(env, numGroups);
+
+        checker.Write(groupId);
+        env.Runtime->GetAppDataBridgeConfig().SetEnableNonUniformStorage(skipStoragePoolConversion);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+
+        const auto res = ConvertToBridge(env, skipStoragePoolConversion);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Minutes(1));
+        const auto config = QueryStorageConfig(env);
+        const auto& details = config.GetClusterStateDetails();
+        UNIT_ASSERT(!details.GetBscConversionPending());
+        UNIT_ASSERT_VALUES_EQUAL(details.GetNonUniformStorageEnabled(), skipStoragePoolConversion);
+        return groupId;
+    }
+
+    inline NKikimrBlobStorage::TUpdateSettings ReadSettings(TEnvironmentSetup& env) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableReadSettings();
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        return response.GetStatus(0).GetSettings();
+    }
+
+    inline void SetBridgeSyncMaxSyncers(TEnvironmentSetup& env, ui32 maxSyncers) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableUpdateSettings()->AddBridgeSyncMaxSyncers(maxSyncers);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    // Follows the syncers of dynamic groups as BSC assigns them to nodes, and holds their completions on demand, so that
+    // they stay running. Updates for different nodes may come in any order, so the numbers are exact when things settle.
+    struct TSyncerTracker {
+        bool Hold = false; // whether completions are put into Held
+        std::map<ui32, std::set<ui32>> NodeSyncers; // node -> target groups, as the last update from BSC says
+        std::vector<std::pair<ui32, ui32>> Started; // node and target group, in the order of starting
+        std::deque<std::pair<ui32, std::unique_ptr<IEventHandle>>> Held; // node and completion, in the order of arrival
+        std::set<const void*> Released; // completions on their way through the filter again, not to be held twice
+
+        // to be called from the filter function, whose result it returns
+        bool OnEvent(ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                if (record.GetUpdateSyncers()) {
+                    std::set<ui32> targets;
+                    for (const auto& syncer : record.GetSyncers()) {
+                        if (IsDynamicGroup(TGroupId::FromValue(syncer.GetBridgeProxyGroupId()))) {
+                            targets.insert(syncer.GetTargetGroupId());
+                        }
+                    }
+                    auto& current = NodeSyncers[nodeId];
+                    for (ui32 target : targets) {
+                        if (!current.contains(target)) {
+                            Started.emplace_back(nodeId, target);
+                        }
+                    }
+                    current = std::move(targets);
+                }
+            } else if (Hold && ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                if (IsDynamicGroup(msg->BridgeProxyGroupId) && !Released.erase(msg)) {
+                    Held.emplace_back(nodeId, std::move(ev));
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        size_t GetNumRunning() const {
+            size_t res = 0;
+            for (const auto& [nodeId, targets] : NodeSyncers) {
+                res += targets.size();
+            }
+            return res;
+        }
+
+        void ReleaseOne(TEnvironmentSetup& env) {
+            UNIT_ASSERT(!Held.empty());
+            auto [nodeId, ev] = std::move(Held.front());
+            Held.pop_front();
+            Released.insert(ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>());
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+
+        // lets held syncers finish one by one until the condition is met, checking the number of the running ones
+        void RunUntil(TEnvironmentSetup& env, size_t maxRunning, const TString& what, const std::function<bool()>& condition) {
+            for (ui32 i = 0; i < 1000 && !condition(); ++i) {
+                env.Sim(TDuration::Seconds(1));
+                UNIT_ASSERT_LE(GetNumRunning(), maxRunning);
+                if (!Held.empty()) {
+                    ReleaseOne(env);
+                }
+            }
+            UNIT_ASSERT_C(condition(), what);
+        }
+    };
+
+} // NBridgeTest

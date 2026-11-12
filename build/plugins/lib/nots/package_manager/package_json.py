@@ -1,8 +1,7 @@
 import json
 import logging
 import os
-
-from .utils import build_pj_path
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +39,14 @@ class PackageJson(object):
 
         self.path = path
         self.data = None
+        self.indent = "  "
 
     def read(self):
         with open(self.path, 'rb') as f:
-            self.data = json.load(f)
+            content = f.read()
+            self.data = json.loads(content)
+            indent = re.search(rb'^[ \t]+(?=")', content, re.MULTILINE)
+            self.indent = indent.group().decode('ascii') if indent else "  "
 
     def write(self, path=None):
         """
@@ -58,7 +61,7 @@ class PackageJson(object):
             os.mkdir(directory)
 
         with open(path, "w") as f:
-            json.dump(self.data, f, indent=2, ensure_ascii=False)
+            json.dump(self.data, f, indent=self.indent, ensure_ascii=False)
             f.write('\n')  # it's better for diff algorithm in arc
             logger.debug("Written {}".format(path))
 
@@ -117,34 +120,14 @@ class PackageJson(object):
             for bin in bins.values():
                 yield bin
 
-    def get_bin_path(self, bin_name=None):
-        # type: (str|None) -> str|None
-        actual_bin_name = bin_name or self.get_name()  # type: str
-
-        bins = self.data.get("bin")
-
-        if isinstance(bins, str):
-            if bin_name is not None:
-                logger.warning("bin_name is unused, because 'bin' is a string")
-
-            return bins
-
-        if isinstance(bins, dict):
-            for name, path in bins.items():
-                if name == actual_bin_name:
-                    return path
-
-        return None
-
     def get_workspace_dep_spec_paths(self) -> list[tuple[str, str]]:
         """
         Returns names and paths from specifiers of the defined workspace dependencies.
         :rtype: list[tuple[str, str]]
         """
-        return [(name, relative) for name, relative, _ in self._workspace_dep_spec_paths_iter()]
+        return list(self._workspace_dep_spec_paths_iter())
 
     def _workspace_dep_spec_paths_iter(self):
-        # Keep the protocol for consumers that validate workspace package names.
         # file: can use an alias or an override selector unrelated to the manifest name.
         schema = self.WORKSPACE_SCHEMA
         schema_len = len(schema)
@@ -157,7 +140,7 @@ class PackageJson(object):
                     os.path.isfile(os.path.join(directory, "ya.make"))
                     or os.path.isfile(os.path.join(directory, "output.tar.uuid"))
                 ):
-                    yield name, relative, False
+                    yield name, relative
                 continue
             if not spec.startswith(schema):
                 continue
@@ -170,7 +153,7 @@ class PackageJson(object):
                     )
                 )
 
-            yield name, spec_path, True
+            yield name, spec_path
 
     def get_workspace_dep_paths(self, base_path=None):
         """
@@ -184,90 +167,17 @@ class PackageJson(object):
 
         return [os.path.normpath(os.path.join(base_path, p)) for _, p in self.get_workspace_dep_spec_paths()]
 
-    def get_workspace_deps(self):
-        """
-        :rtype: list of PackageJson
-        """
-        ws_deps = []
-        pj_dir = os.path.dirname(self.path)
-
-        for name, rel_path, is_workspace in self._workspace_dep_spec_paths_iter():
-            dep_path = os.path.normpath(os.path.join(pj_dir, rel_path))
-            dep_pj_path = build_pj_path(dep_path)
-            try:
-                dep_pj = PackageJson.load(dep_pj_path)
-            except IOError as e:
-                logger.debug(f"{self.path}: cannot load {name}: {e}. Process dependency as empty package.")
-                dep_pj = PackageJson(dep_pj_path)
-                dep_pj.data = {"name": name if is_workspace else os.path.basename(dep_path)}
-
-            if is_workspace and name != dep_pj.get_name():
-                raise PackageJsonWorkspaceError(
-                    "Workspace dependency name mismatch, found '{}' instead of '{}' in {}".format(
-                        name, dep_pj.get_name(), self.path
-                    )
-                )
-
-            ws_deps.append(dep_pj)
-
-        return ws_deps
-
-    def get_workspace_map(self, ignore_self=False):
-        """
-        Returns absolute paths of the workspace dependencies (including transitive) mapped to package.json and depth.
-        :param ignore_self: whether path of the current module will be excluded
-        :type ignore_self: bool
-        :rtype: dict of (PackageJson, int)
-        """
-        ws_deps = {}
-        # list of (pj, depth)
-        pj_queue = [(self, 0)]
-
-        while len(pj_queue):
-            pj, depth = pj_queue.pop()
-            pj_dir = os.path.dirname(pj.path)
-            if pj_dir in ws_deps:
-                continue
-
-            if not ignore_self or pj != self:
-                ws_deps[pj_dir] = (pj, depth)
-
-            for dep_pj in pj.get_workspace_deps():
-                pj_queue.append((dep_pj, depth + 1))
-
-        return ws_deps
-
-    def get_dep_paths_by_names(self):
-        """
-        Returns dict of {dependency_name: dependency_path}
-        """
-        ws_map = self.get_workspace_map()
-        return {pj.get_name(): path for path, (pj, _) in ws_map.items()}
-
-    def validate_prebuilds(self, requires_build_packages: list[str], common_overrides=None):
+    def validate_prebuilds(self, common_overrides=None):
         pnpm_overrides = dict(common_overrides or {})
         pnpm_overrides.update(self.data.get("pnpm", {}).get("overrides", {}))
-        use_prebuild_flags: dict[str, bool] = self.data.get("@yatool/prebuilder", {}).get("usePrebuild", {})
-
-        def covered(k: str) -> bool:
-            if k.startswith("@yandex-prebuild/"):
-                return True
-            return k in use_prebuild_flags
-
-        not_covered = [key for key in requires_build_packages if not covered(key)]
-        use_prebuild_keys = [key for key in use_prebuild_flags if use_prebuild_flags[key]]
-        missing_overrides = [key for key in use_prebuild_keys if key not in pnpm_overrides]
-
+        use_prebuild_flags = self.data.get("@yatool/prebuilder", {}).get("usePrebuild", {})
+        missing_overrides = [
+            key for key, enabled in use_prebuild_flags.items() if enabled and key not in pnpm_overrides
+        ]
         messages = []
-
-        if not_covered:
-            messages.append("These packages possibly have addons but are not checked yet:")
-            messages.extend([f"  - {key}" for key in not_covered])
-
         if missing_overrides:
             messages.append("These packages have addons but overrides are not set:")
-            messages.extend([f"  - {key}" for key in missing_overrides])
-
+            messages.extend(f"  - {key}" for key in missing_overrides)
         return (not messages, messages)
 
     def get_pnpm_patched_dependencies(self) -> dict[str, str]:

@@ -1,6 +1,8 @@
 UNITTEST_FOR(yql/essentials/core)
 
 SRCS(
+    yql_project_settings_qstorage_ut.cpp
+    yql_project_settings_ut.cpp
     yql_column_order_ut.cpp
     yql_default_valid_value_ut.cpp
     yql_expr_constraint_ut.cpp
@@ -38,7 +40,7 @@ PEERDIR(
     yql/essentials/sql/pg
     yql/essentials/sql
     yql/essentials/sql/v1/translation
-    yql/essentials/udfs/common/string
+    yql/essentials/udfs/common/string/impl
 )
 
 RESOURCE(

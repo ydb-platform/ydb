@@ -7,8 +7,6 @@ SRCS(
     normalize_name.cpp
     simple_types.h
     simple_types.cpp
-    spark_functions.h
-    spark_functions.cpp
     yql_atom_enums.h
     yql_callable_names.h
 )

@@ -1,5 +1,9 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/testlib/storage_helpers.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
+
+#include <memory>
 
 namespace NKikimr {
 
@@ -17,7 +21,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
     static const TString PresentShortValue3("_Some_value_3_");
     static const TString DeletedLongValue4(size_t(100 * 1024), 't');
 
-    auto SetupWithTable(bool withCompaction) {
+    auto SetupWithTable(bool withCompaction, bool snapshotRetention = false) {
         TVector<TIntrusivePtr<NFake::TProxyDS>> proxyDSs {
             MakeIntrusive<NFake::TProxyDS>(TGroupId::FromValue(0)),
             MakeIntrusive<NFake::TProxyDS>(TGroupId::FromValue(2181038080)),
@@ -28,12 +32,29 @@ Y_UNIT_TEST_SUITE(Vacuum) {
             .SetUseRealThreads(false)
             .SetKeepSnapshotTimeout(TDuration::Seconds(1))
             .SetProxyDSMocks(proxyDSs);
+        NKikimrConfig::TAppConfig app;
+        if (snapshotRetention) {
+            app.MutableFeatureFlags()->SetEnableSnapshotsLocking(false);
+            app.MutableFeatureFlags()->SetEnableDataShardSnapshotLocking(true);
+            // Publish registry views explicitly, preserving the default
+            // promotion/skew margin that exceeds this test's MVCC timeout.
+            app.MutableLongTxServiceConfig()->SetSnapshotsRegistryUpdateIntervalSeconds(3600);
+            serverSettings.SetAppConfig(app);
+        }
 
         Tests::TServer::TPtr server = MakeIntrusive<TServer>(serverSettings);
         auto& runtime = *server->GetRuntime();
+        if (snapshotRetention) {
+            runtime.GetAppData(0).LongTxServiceConfig = app.GetLongTxServiceConfig();
+        }
         auto sender = runtime.AllocateEdgeActor();
 
         InitRoot(server, sender);
+        if (snapshotRetention) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(true);
+            runtime.GetAppData(0).SnapshotRegistryHolder->Set(nullptr);
+        }
 
         auto opts = TShardedTableOptions()
             .Columns({
@@ -91,6 +112,56 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_VALUES_EQUAL(ev.Record.GetVacuumGeneration(), generation);
     }
 
+    void VacuumAndCheck(TTestActorRuntime& runtime, TActorId sender, ui64 tabletId, ui64 generation) {
+        auto request = MakeHolder<TEvDataShard::TEvVacuum>(generation);
+        runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+        const auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
+        CheckResultEvent(*ev->Get(), tabletId, generation);
+    }
+
+    void PublishSnapshotRegistry(TTestActorRuntime& runtime, const TTableId& tableId,
+        const TVector<TRowVersion>& snapshots = {})
+    {
+        auto builder = CreateImmutableSnapshotRegistryBuilder();
+        builder->SetOldestCollectionTime(runtime.GetCurrentTime());
+        builder->SetSnapshotBorder(TRowVersion::Max());
+        for (const auto& snapshot : snapshots) {
+            builder->AddSnapshot({tableId}, snapshot);
+        }
+        runtime.GetAppData(0).SnapshotRegistryHolder->Set(std::move(*builder).Build());
+    }
+
+    void AdvanceSnapshotRetentionWindow(TTestActorRuntime& runtime) {
+        const auto& config = runtime.GetAppData(0).LongTxServiceConfig;
+        const auto margin = TDuration::Seconds(config.GetLocalSnapshotPromotionTimeSeconds())
+            + TDuration::MilliSeconds(config.GetMaxClockSkewMs());
+        runtime.SimulateSleep(margin + TDuration::Seconds(2));
+    }
+
+    std::unique_ptr<TEvDataShard::TEvReadResult> ReadSnapshotKeys(Tests::TServer::TPtr server,
+        TActorId sender, ui64 tabletId, const TTableId& tableId, const TRowVersion& snapshot,
+        ui64 maxRows = Max<ui64>())
+    {
+        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        auto& record = request->Record;
+        record.SetReadId(1);
+        record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+        record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+        record.AddColumns(1);
+        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+        record.SetMaxRows(maxRows);
+        snapshot.ToProto(record.MutableSnapshot());
+        AddFullRangeQuery(*request);
+        return SendRead(server, tabletId, request.release(), sender);
+    }
+
+    void CheckDeletedRowsRetained(const TVector<TIntrusivePtr<NFake::TProxyDS>>& proxyDSs) {
+        UNIT_ASSERT(BlobStorageContains(proxyDSs, DeletedSubkey1));
+        UNIT_ASSERT(BlobStorageContains(proxyDSs, DeletedSubkey4));
+        UNIT_ASSERT(BlobStorageContains(proxyDSs, DeletedShortValue1));
+        UNIT_ASSERT(BlobStorageContains(proxyDSs, DeletedLongValue4));
+    }
+
     void CheckTableData(Tests::TServer::TPtr server, const TVector<TIntrusivePtr<NFake::TProxyDS>>& proxyDSs, const TString& table) {
         auto result = ReadShardedTable(server, table);
         UNIT_ASSERT_VALUES_EQUAL(result,
@@ -129,6 +200,76 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         cleanupAndCheck(24);
         cleanupAndCheck(25);
 
+        CheckTableData(server, proxyDSs, "/Root/table-1");
+    }
+
+    Y_UNIT_TEST_TWIN(VacuumPreservesRetainedSnapshot, LocalIterator) {
+        auto [server, sender, tableShards, proxyDSs] = SetupWithTable(true, true);
+        auto& runtime = *server->GetRuntime();
+        const auto shard = tableShards.at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const auto snapshot = AcquireReadSnapshot(runtime, "/Root");
+        std::unique_ptr<TEvDataShard::TEvReadResult> first;
+        if (LocalIterator) {
+            first = ReadSnapshotKeys(server, sender, shard, tableId, snapshot, 1);
+            UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(first.get()), "1\n");
+            UNIT_ASSERT(!first->Record.GetFinished());
+        }
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-1` WHERE key IN (1, 4);");
+        AdvanceSnapshotRetentionWindow(runtime);
+        PublishSnapshotRegistry(runtime, tableId,
+            LocalIterator ? TVector<TRowVersion>{} : TVector<TRowVersion>{snapshot});
+
+        // The ordinary MVCC window and the registry freshness margin have
+        // expired. Only the explicit registration or acquired iterator remains.
+        VacuumAndCheck(runtime, sender, shard, 24);
+        CheckDeletedRowsRetained(proxyDSs);
+
+        if (LocalIterator) {
+            auto ack = MakeHolder<TEvDataShard::TEvReadAck>();
+            ack->Record.SetReadId(first->Record.GetReadId());
+            ack->Record.SetSeqNo(first->Record.GetSeqNo());
+            ack->Record.SetMaxRows(100);
+            ack->Record.SetMaxBytes(Max<ui32>());
+            runtime.SendToPipe(shard, sender, ack.Release());
+            const auto rest = WaitReadResult(server);
+            UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(rest.get()), "2\n3\n4\n");
+            UNIT_ASSERT(rest->Record.GetFinished());
+        } else {
+            const auto retained = ReadSnapshotKeys(server, sender, shard, tableId, snapshot);
+            UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(retained.get()), "1\n2\n3\n4\n");
+            UNIT_ASSERT(retained->Record.GetFinished());
+        }
+
+        // A completed generation is idempotent. Reclaiming history released
+        // after it completed requires a new generation.
+        PublishSnapshotRegistry(runtime, tableId);
+        VacuumAndCheck(runtime, sender, shard, 25);
+        CheckTableData(server, proxyDSs, "/Root/table-1");
+    }
+
+    Y_UNIT_TEST_TWIN(VacuumPreservesHistoryUntilRegistryRefresh, MissingRegistry) {
+        auto [server, sender, tableShards, proxyDSs] = SetupWithTable(true, true);
+        auto& runtime = *server->GetRuntime();
+        const auto shard = tableShards.at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        if (!MissingRegistry) {
+            // Freeze an empty registry at a time when the soon-to-be-deleted
+            // data is still inside the default 35-second freshness window.
+            PublishSnapshotRegistry(runtime, tableId);
+        }
+
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-1` WHERE key IN (1, 4);");
+        AdvanceSnapshotRetentionWindow(runtime);
+        VacuumAndCheck(runtime, sender, shard, 24);
+        CheckDeletedRowsRetained(proxyDSs);
+
+        // Wall-clock time alone cannot replace fresh registry knowledge.
+        // Once it arrives, the next Vacuum can physically remove the rows.
+        PublishSnapshotRegistry(runtime, tableId);
+        VacuumAndCheck(runtime, sender, shard, 25);
         CheckTableData(server, proxyDSs, "/Root/table-1");
     }
 

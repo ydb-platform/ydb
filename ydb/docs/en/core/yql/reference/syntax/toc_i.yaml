@@ -69,15 +69,14 @@ items:
 - { name: EXPORT and IMPORT,            href: export_import.md,              when: feature_mapreduce }
 - { name: INSERT,                       href: insert_into.md }
 - { name: INTO RESULT,                  href: into_result.md }
+- { name: KILL SESSION,                 href: kill-session.md,               when: backend_name == "YDB" }
 - { name: PRAGMA,                       href: pragma.md }
-- { name: PROCESS STREAM,               href: process.md,                    when: feature_mapreduce and process_command == "PROCESS STREAM" }
 - { name: PROCESS,                      href: process.md,                    when: feature_mapreduce and process_command == "PROCESS" }
 - { name: REDUCE,                       href: reduce.md,                     when: feature_mapreduce and reduce_command == "REDUCE" }
 - { name: REPLACE,                      href: replace_into.md,               when: feature_replace }
 - { name: REVOKE,                       href: revoke.md,                     when: feature_user_and_group }
 - { name: RESTORE,                      href: restore-backup-collection.md,  when: feature_backup_collections }
 - { name: SELECT,                       include: { mode: link, path: select/toc_p.yaml }  }
-- { name: SELECT STREAM,                href: select_stream.md,              when: feature_mapreduce and process_command == "PROCESS STREAM" }
 - { name: SUBQUERY,                     href: subquery.md,                   when: feature_subquery }
 - { name: SHOW CREATE,                  href: show_create.md }
 - { name: TRUNCATE TABLE,               href: truncate-table.md }

@@ -194,17 +194,19 @@ def confirm_timeout_for(nemesis_type: str) -> float:
 def supports_boundary_scheduler(nemesis_type: str) -> bool:
     """Whether the boundary scheduler may inject this type on the target it reserved.
 
-    Safe: a DATACENTER target (fanned out over exactly that DC), a toggle fault (dispatched directly,
-    bypassing planners), or the default planner (injects the candidate it is handed). A custom planner
-    must opt in with ``boundary_safe``: one that keeps its own targets would inject something the
-    guard never reserved. Never builds the planner to ask — constructors may talk to the cluster.
+    Safe: a DATACENTER or PILE target (fanned out over exactly that group, not the planner's own
+    pick), a toggle fault (dispatched directly, bypassing planners), or the default planner (injects
+    the candidate it is handed). A custom planner must opt in with ``boundary_safe``: one that keeps
+    its own targets would inject something the guard never reserved. Never builds the planner to ask
+    — constructors may talk to the cluster.
     """
     spec = NEMESIS_TYPES.get(nemesis_type)
     if spec is None:
         return False
     if "boundary_safe" in spec:
         return bool(spec["boundary_safe"])
-    if target_kind_for(nemesis_type) is TargetKind.DATACENTER:
+    kind = target_kind_for(nemesis_type)
+    if kind is TargetKind.DATACENTER or kind is TargetKind.PILE:
         return True
     if recovery_mode_for(nemesis_type) == "extract":
         return True

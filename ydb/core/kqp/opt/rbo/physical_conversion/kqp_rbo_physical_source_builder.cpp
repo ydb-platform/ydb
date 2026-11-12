@@ -5,12 +5,198 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
+TString TPhysicalSourceBuilder::GetOlapAggregateField(TInfoUnitId output, TStringBuf function) const {
+    return Names.GetTemporaryName(TStringBuilder() << "__kqp_olap_agg_" << function << "_" << output << "_");
+}
+
+TExprNode::TPtr TPhysicalSourceBuilder::AddOlapAggregate(TExprNode::TPtr processLambda, TVector<TString>& outputFields) const {
+    TVector<TExprBase> projections;
+    TVector<TExprBase> aggregates;
+    auto addAggregate = [&](TString field, TStringBuf function, const TString& column) {
+        // clang-format off
+        aggregates.push_back(Build<TKqpOlapAggOperation>(Ctx, Pos)
+            .Name().Build(field)
+            .Type().Build(function)
+            .Column().Build(column)
+        .Done());
+        // clang-format on
+        outputFields.push_back(std::move(field));
+    };
+
+    // Storage column -> its Double cast, which all AVGs of the column share.
+    THashMap<TString, TString> averageInputs;
+    for (const auto& aggregation : OlapAggregate->Aggregations) {
+        // COUNT(*) has no column argument.
+        const TString column = aggregation.Column ? Registry.Get(*aggregation.Column).GetColumnName() : TString("*");
+        if (aggregation.Function != "avg") {
+            addAggregate(GetOlapAggregateField(aggregation.Output, aggregation.Function), aggregation.Function, column);
+            continue;
+        }
+
+        // Column shards return AVG as its sum and count. Cast the input to Double
+        // before SUM, so integer sums cannot overflow and Float sums are Double.
+        // Without scalar apply the sum keeps the stored type, see BuildOlapAverageState.
+        TString sumColumn = column;
+        const auto& columnType = *Read.GetIUType(*aggregation.Column, Ctx);
+        if (OlapAggregate->CastAverageInput && IsOlapAverageCast(columnType)) {
+            const auto [it, inserted] = averageInputs.emplace(column, GetOlapAggregateField(aggregation.Output, "avg_input"));
+            if (inserted) {
+                projections.push_back(BuildOlapDoubleCast(column, columnType, it->second));
+            }
+            sumColumn = it->second;
+        }
+        addAggregate(GetOlapAggregateField(aggregation.Output, "sum"), "sum", sumColumn);
+        addAggregate(GetOlapAggregateField(aggregation.Output, "count"), "count", column);
+    }
+
+    // Several key IDs may name one storage column; group by it once.
+    TVector<TCoAtom> keys;
+    THashSet<TString> keyColumns;
+    for (const auto key : OlapAggregate->Keys) {
+        const auto& column = Registry.Get(key).GetColumnName();
+        if (keyColumns.insert(column).second) {
+            keys.push_back(Build<TCoAtom>(Ctx, Pos).Value(column).Done());
+            outputFields.push_back(column);
+        }
+    }
+    // Block reads expose the program row in lexical field order.
+    std::sort(outputFields.begin(), outputFields.end());
+
+    TExprBase input = TCoLambda(processLambda).Body();
+    if (!projections.empty()) {
+        // clang-format off
+        input = Build<TKqpOlapProjections>(Ctx, Pos)
+            .Input(input)
+            .Projections()
+                .Add(projections)
+            .Build()
+        .Done();
+        // clang-format on
+    }
+
+    // clang-format off
+    auto olapAgg = Build<TKqpOlapAgg>(Ctx, Pos)
+        .Input(input)
+        .Aggregates<TKqpOlapAggOperationList>()
+            .Add(aggregates)
+        .Build()
+        .KeyColumns<TCoAtomList>()
+            .Add(keys)
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+    return Ctx.ChangeChild(*processLambda, TCoLambda::idx_Body, std::move(olapAgg));
+}
+
+TExprNode::TPtr TPhysicalSourceBuilder::AddOlapDistinct(TExprNode::TPtr processLambda, TVector<TString>& outputFields) const {
+    const auto column = Registry.Get(OlapDistinct->Key).GetColumnName();
+    outputFields.push_back(column);
+    // clang-format off
+    auto olapDistinct = Build<TKqpOlapDistinct>(Ctx, Pos)
+        .Input(TCoLambda(processLambda).Body())
+        .Key().Build(column)
+    .Done().Ptr();
+    // clang-format on
+    return Ctx.ChangeChild(*processLambda, TCoLambda::idx_Body, std::move(olapDistinct));
+}
+
+TExprBase TPhysicalSourceBuilder::BuildOlapDoubleCast(const TString& column, const TTypeAnnotationNode& columnType, const TString& field) const {
+    const TVector<const TItemExprType*> rowItems{Ctx.MakeType<TItemExprType>(column, &columnType)};
+    const auto* rowType = Ctx.MakeType<TStructExprType>(rowItems);
+    const auto* doubleType = Ctx.MakeType<TDataExprType>(EDataSlot::Double);
+    // clang-format off
+    return Build<TKqpOlapProjection>(Ctx, Pos)
+        .OlapOperation<TKqpOlapApply>()
+            .Lambda()
+                .Args({"value"})
+                .Body<TCoSafeCast>()
+                    .Value("value")
+                    .Type(ExpandType(Pos, *doubleType, Ctx))
+                .Build()
+            .Build()
+            .Args()
+                .Add<TKqpOlapApplyColumnArg>()
+                    .TableRowType(ExpandType(Pos, *rowType, Ctx))
+                    .ColumnName().Build(column)
+                .Build()
+            .Build()
+            .KernelName().Build("")
+        .Build()
+        .ColumnName().Build(field)
+    .Done();
+    // clang-format on
+}
+
+TExprNode::TPtr TPhysicalSourceBuilder::BuildOlapAggregateRow(const TProgramFields& fields) const {
+    TExprNode::TListType members;
+    auto addMember = [&](TInfoUnitId id, TExprNode::TPtr value) {
+        members.push_back(Ctx.NewList(Pos, {Ctx.NewAtom(Pos, Names.Get(id)), std::move(value)}));
+    };
+
+    for (const auto key : OlapAggregate->Keys) {
+        addMember(key, fields.at(Registry.Get(key).GetColumnName()));
+    }
+    for (const auto& aggregation : OlapAggregate->Aggregations) {
+        if (aggregation.Function == "avg") {
+            addMember(aggregation.Output, BuildOlapAverageState(aggregation, fields));
+        } else {
+            addMember(aggregation.Output, fields.at(GetOlapAggregateField(aggregation.Output, aggregation.Function)));
+        }
+    }
+    return Ctx.NewCallable(Pos, "AsStruct", std::move(members));
+}
+
+TExprNode::TPtr TPhysicalSourceBuilder::BuildOlapAverageState(const TOlapAggregation& aggregation, const TProgramFields& fields) const {
+    // The AVG state of TPhysicalAggregationBuilder is (sum as Double, count).
+    // AddOlapAggregate sums Double values, unless the read program cannot cast the input:
+    // then, as in the old optimizer, the sum of the stored type is converted here.
+    const auto& columnType = *Read.GetIUType(*aggregation.Column, Ctx);
+    auto sum = fields.at(GetOlapAggregateField(aggregation.Output, "sum"));
+    if (!OlapAggregate->CastAverageInput && IsOlapAverageCast(columnType)) {
+        // clang-format off
+        sum = Ctx.Builder(Pos)
+            .Callable("Convert")
+                .Add(0, std::move(sum))
+                .Atom(1, "Double")
+            .Seal().Build();
+        // clang-format on
+    }
+    auto count = fields.at(GetOlapAggregateField(aggregation.Output, "count"));
+    if (!columnType.IsOptionalOrNull()) {
+        return Ctx.NewList(Pos, {std::move(sum), std::move(count)});
+    }
+
+    // An optional column with no values in the group has no sum, and no state.
+    const TTypeAnnotationNode::TListType stateItems{
+        Ctx.MakeType<TDataExprType>(EDataSlot::Double), Ctx.MakeType<TDataExprType>(EDataSlot::Uint64)};
+    const auto* stateType = Ctx.MakeType<TOptionalExprType>(Ctx.MakeType<TTupleExprType>(stateItems));
+    // clang-format off
+    return Ctx.Builder(Pos)
+        .Callable("IfPresent")
+            .Add(0, std::move(sum))
+            .Lambda(1)
+                .Param("sum")
+                .Callable(0, "Just")
+                    .List(0)
+                        .Arg(0, "sum")
+                        .Add(1, std::move(count))
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Callable(2, "Nothing")
+                .Add(0, ExpandType(Pos, *stateType, Ctx))
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
     TExprNode::TPtr source;
     TVector<TString> storageColumns;
     TVector<std::pair<TString, TString>> renames;
@@ -32,9 +218,7 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
     std::sort(storageColumns.begin(), storageColumns.end());
     storageColumns.erase(std::unique(storageColumns.begin(), storageColumns.end()), storageColumns.end());
     TVector<TExprNode::TPtr> columns;
-    THashMap<TString, ui32> positions;
     for (const auto& column : storageColumns) {
-        positions.emplace(column, columns.size());
         columns.push_back(Ctx.NewAtom(Pos, column));
     }
     // Extract ranges.
@@ -89,20 +273,10 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             .Done().Ptr();
             // clang-format on
 
-            const auto programArg = Build<TCoArgument>(Ctx, Pos).Name("program_arg").Done().Ptr();
-            const auto renameMap = NPhysicalConvertionUtils::BuildRenameMap(programArg, renames, Ctx);
-            // clang-format off
-            source = Build<TDqPhyStage>(Ctx, Pos)
-                .Inputs()
-                    .Add({source})
-                .Build()
-                .Program()
-                    .Args({programArg})
-                    .Body(renameMap)
-                .Build()
-                .Settings(NYql::NDq::TDqStageSettings::New(StageGUID).BuildNode(Ctx, Pos))
-            .Done().Ptr();
-            // clang-format on
+            // The stage program reads the source through an argument.
+            auto programArg = Build<TCoArgument>(Ctx, Pos).Name("program_arg").Done().Ptr();
+            StageSource = TStageSource{std::move(source), programArg};
+            source = NPhysicalConvertionUtils::BuildRenameMap(std::move(programArg), renames, Ctx);
             break;
         }
         case NYql::EStorageType::ColumnStorage: {
@@ -120,11 +294,31 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                     Read.OlapFilterLambda, olapNames, Ctx));
             }
 
+            // The program row fields, in the lexical order of block reads.
+            TVector<TString> outputFields;
+            if (OlapAggregate) {
+                processLambda = AddOlapAggregate(processLambda, outputFields);
+            } else if (OlapDistinct) {
+                processLambda = AddOlapDistinct(processLambda, outputFields);
+            } else {
+                outputFields = storageColumns;
+            }
+
             TKqpReadTableSettings settings;
             if (Read.Limit) {
                 settings.SetItemsLimit(Read.Limit);
+            } else if (OlapDistinctLimit) {
+                // Column shards count distinct keys, not rows, against this limit.
+                // clang-format off
+                settings.SetItemsLimit(Build<TCoUint64>(Ctx, Pos)
+                    .Literal<TCoAtom>()
+                        .Value(ToString(OlapDistinctLimit))
+                    .Build()
+                .Done().Ptr());
+                // clang-format on
             }
 
+            settings.RequireSortedRead = Read.RequireSortedRead;
             if (Read.SortDir != ESortDir::None) {
                 const auto sortDirection = Read.SortDir == ESortDir::Asc ? ERequestSorting::ASC : ERequestSorting::DESC;
                 settings.SetSorting(sortDirection);
@@ -153,15 +347,47 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             .Done().Ptr();
             // clang-format on
 
+            // When each program field holds exactly one output, the block read already is the
+            // wide body: its slots are the outputs, in program field order.
+            // A DISTINCT program yields only its key column, so it qualifies only when the key
+            // is the only output.
+            const THashMap<TString, TString> outputNames(renames.begin(), renames.end());
+            bool wide = !OlapAggregate && renames.size() == outputFields.size();
+            TVector<TString> layout;
+            layout.reserve(outputFields.size());
+            for (const auto& field : outputFields) {
+                const auto* name = outputNames.FindPtr(field);
+                if (!wide || !name) {
+                    wide = false;
+                    break;
+                }
+                layout.push_back(*name);
+            }
+            if (wide) {
+                YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical source] " << KqpExprToPrettyString(TExprBase(flowNonBlockRead), Ctx);
+                return NPhysicalConvertionUtils::TStageBody::Wide(flowNonBlockRead, std::move(layout));
+            }
+
             TExprNode::TListType args;
-            for (ui32 i = 0; i < storageColumns.size(); ++i) {
+            TProgramFields fieldArgs;
+            for (ui32 i = 0; i < outputFields.size(); ++i) {
                 args.push_back(Ctx.NewArgument(Pos, "column_" + ToString(i)));
+                fieldArgs.emplace(outputFields[i], args.back());
             }
-            TExprNode::TListType fields;
-            for (const auto& [column, name] : renames) {
-                fields.push_back(Ctx.NewList(Pos, {Ctx.NewAtom(Pos, name), args.at(positions.at(column))}));
+            TExprNode::TPtr row;
+            if (OlapAggregate) {
+                row = BuildOlapAggregateRow(fieldArgs);
+            } else {
+                TExprNode::TListType fields;
+                for (const auto& [column, name] : renames) {
+                    // A DISTINCT program yields only its key column.
+                    if (OlapDistinct && !fieldArgs.contains(column)) {
+                        continue;
+                    }
+                    fields.push_back(Ctx.NewList(Pos, {Ctx.NewAtom(Pos, name), fieldArgs.at(column)}));
+                }
+                row = Ctx.NewCallable(Pos, "AsStruct", std::move(fields));
             }
-            auto row = Ctx.NewCallable(Pos, "AsStruct", std::move(fields));
             auto lambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, std::move(args)), std::move(row));
             auto narrowMap = Build<TCoNarrowMap>(Ctx, Pos).Input(flowNonBlockRead).Lambda(lambda).Done().Ptr();
 
@@ -178,5 +404,5 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
 
     YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical source] " << KqpExprToPrettyString(TExprBase(source), Ctx);
 
-    return source;
+    return NPhysicalConvertionUtils::TStageBody::Narrow(source);
 }

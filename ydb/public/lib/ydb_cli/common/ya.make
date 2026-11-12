@@ -32,7 +32,6 @@ SRCS(
     oidc_options.cpp
     oidc_token_cache.cpp
     parameter_stream.cpp
-    parameters.cpp
     pg_dump_parser.cpp
     pretty_table.cpp
     print_operation.cpp
@@ -91,20 +90,18 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/credentials/oidc
     ydb/public/sdk/cpp/src/client/types/status
     ydb/library/arrow_parquet
+    ydb/library/naming_conventions
     ydb/library/plan2svg
     ydb/library/yverify_stream
     ydb/public/lib/ydb_cli/common/ini_config
-    ydb/public/lib/ydb_cli/common/yql_parser
 )
 
 GENERATE_ENUM_SERIALIZATION(formats.h)
-GENERATE_ENUM_SERIALIZATION(parameters.h)
 
 END()
 
 RECURSE(
     ini_config
-    yql_parser
 )
 
 RECURSE_FOR_TESTS(

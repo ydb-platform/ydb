@@ -43,18 +43,32 @@ Y_UNIT_TEST_SUITE(TStateStorage2RingGroups) {
             Env.Sim(TDuration::Seconds(10));
             TabletId = Env.TabletId;
         }
+
+        void CheckLookupReplyAndSignatures() {
+            const TActorId proxy = MakeStateStorageProxyID();
+            const auto edge = Runtime.AllocateEdgeActor(1);
+            Runtime.WrapInActorContext(edge, [&] {
+                Runtime.Send(new IEventHandle(proxy, edge, new TEvStateStorage::TEvLookup(TabletId, 0,
+                    TEvStateStorage::TProxyOptions::SigAsync), IEventHandle::FlagTrackDelivery));
+            });
+
+            auto reply = Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvInfo>(edge, false);
+            auto signatures = reply->Get()->Signature;
+            UNIT_ASSERT(signatures.Size() <= 10);
+            while (signatures.Size() < 10) {
+                auto update = Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvUpdateSignature>(edge, false);
+                const auto& next = update->Get()->Signature;
+                signatures.Merge(next);
+                UNIT_ASSERT_VALUES_EQUAL(signatures.Size(), next.Size());
+                UNIT_ASSERT(signatures.Size() <= 10);
+            }
+            Runtime.DestroyActor(edge);
+        }
     };
 
     Y_UNIT_TEST(TestStateStorageReplyOnce) {
         StateStorage2RingGroupsTest test(StateStorage2RingGroupsTest::StateStorageInfoGenerator);
-        const TActorId proxy = MakeStateStorageProxyID();
-        const auto edge1 = test.Runtime.AllocateEdgeActor(1);
-        test.Runtime.WrapInActorContext(edge1, [&] {
-            test.Runtime.Send(new IEventHandle(proxy, edge1, new TEvStateStorage::TEvLookup(test.TabletId, 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)), IEventHandle::FlagTrackDelivery));
-        });
-        test.Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvInfo>(edge1, false);
-        auto ev2 = test.Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvUpdateSignature>(edge1);
-        UNIT_ASSERT_EQUAL(ev2->Get()->Signature.Size(), 10);
+        test.CheckLookupReplyAndSignatures();
     }
 
     Y_UNIT_TEST(TestStateStorageReplyOnceWriteOnly) {
@@ -63,16 +77,7 @@ Y_UNIT_TEST_SUITE(TStateStorage2RingGroups) {
             ssInfo->RingGroups[1].WriteOnly = true;
             return ssInfo;
         });
-        const TActorId proxy = MakeStateStorageProxyID();
-        const auto edge1 = test.Runtime.AllocateEdgeActor(1);
-        test.Runtime.WrapInActorContext(edge1, [&] {
-            test.Runtime.Send(new IEventHandle(proxy, edge1, new TEvStateStorage::TEvLookup(test.TabletId, 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)), IEventHandle::FlagTrackDelivery));
-        });
-        test.Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvInfo>(edge1, false);
-        test.Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvUpdateSignature>(edge1, false);
-        test.Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvUpdateSignature>(edge1, false);
-        auto ev2 = test.Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvUpdateSignature>(edge1);
-        UNIT_ASSERT_EQUAL(ev2->Get()->Signature.Size(), 10);
+        test.CheckLookupReplyAndSignatures();
     }
 
     Y_UNIT_TEST(TestStateStorageReplyOnceWriteOnlyReverseEventsOrder) {
@@ -81,13 +86,6 @@ Y_UNIT_TEST_SUITE(TStateStorage2RingGroups) {
             ssInfo->RingGroups[0].WriteOnly = true;
             return ssInfo;
         });
-        const TActorId proxy = MakeStateStorageProxyID();
-        const auto edge1 = test.Runtime.AllocateEdgeActor(1);
-        test.Runtime.WrapInActorContext(edge1, [&] {
-            test.Runtime.Send(new IEventHandle(proxy, edge1, new TEvStateStorage::TEvLookup(test.TabletId, 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)), IEventHandle::FlagTrackDelivery));
-        });
-        test.Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvInfo>(edge1, false);
-        auto ev2 = test.Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvUpdateSignature>(edge1);
-        UNIT_ASSERT_EQUAL(ev2->Get()->Signature.Size(), 10);
+        test.CheckLookupReplyAndSignatures();
     }
 }

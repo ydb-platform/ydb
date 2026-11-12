@@ -433,7 +433,7 @@ TEST_P(TRdmaSyncActorTest, HandshakeStopsSyncActorWhenProxyDisconnects) {
         runtime.AddLocalService(
             MakeCqActorId(),
             TActorSetupCmd(
-                CreateCqActor(CreateRdmaRuntimeParams(16, true), GetParam(), nullptr),
+                CreateCqActor(CreateRdmaRuntimeParams(16, true, 8, 0), GetParam(), nullptr),
                 TMailboxType::ReadAsFilled,
                 runtime.InterconnectPoolId()),
             nodeIndex);

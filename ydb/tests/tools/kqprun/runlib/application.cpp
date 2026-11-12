@@ -8,7 +8,6 @@
 #include <library/cpp/getopt/last_getopt.h>
 #include <util/stream/file.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <yql/essentials/public/udf/udf_static_registry.h>
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
@@ -191,16 +190,7 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> TMainBase::CreateFunc
         NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, paths)->Clone();
     std::signal(SIGINT, previousHandler);   // Restore previous signal handler after udfs load
 
-    if (ExcludeLinkedUdfs) {
-        for (const auto& wrapper : NYql::NUdf::GetStaticUdfModuleWrapperList()) {
-            auto [name, ptr] = wrapper();
-            if (!functionRegistry->IsLoadedUdfModule(name)) {
-                functionRegistry->AddModule(TString(NKikimr::NMiniKQL::StaticModulePrefix) + name, name, std::move(ptr));
-            }
-        }
-    } else {
-        NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
-    }
+    NKikimr::NMiniKQL::FillStaticModules(*functionRegistry, ExcludeLinkedUdfs);
 
     return functionRegistry;
 }

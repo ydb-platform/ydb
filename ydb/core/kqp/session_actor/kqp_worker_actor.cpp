@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/security/util.h>
@@ -126,6 +127,9 @@ public:
         }
 
         Config->ApplyServiceConfig(Settings.TableService);
+        if (auto normalizer = AppData()->GetPathNormalizer()) {
+            Config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
+        }
 
         Config->FreezeDefaults();
 
@@ -196,7 +200,7 @@ public:
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, FederatedQuerySetup,
             QueryState->RequestEv->GetUserToken(), GUCSettings, QueryServiceConfig, Settings.ApplicationName, AppData(ctx)->FunctionRegistry,
-            !Settings.LongSession, false, nullptr, nullptr, nullptr, QueryState->RequestEv->GetUserRequestContext());
+            !Settings.LongSession, QueryState->RequestEv->IsInternalCall(), nullptr, nullptr, nullptr, QueryState->RequestEv->GetUserRequestContext());
 
         auto& queryRequest = QueryState->RequestEv;
         QueryState->ProxyRequestId = proxyRequestId;
@@ -580,6 +584,7 @@ private:
 
     IKqpHost::TExecScriptSettings ParseExecScriptSettings() {
         IKqpHost::TExecScriptSettings execSettings;
+        execSettings.IsInternalCall = QueryState->RequestEv->IsInternalCall();
         execSettings.Deadlines = QueryState->QueryDeadlines;
         execSettings.RpcCtx = QueryState->RequestEv->GetRequestCtx();
         auto statsMode = GetStatsMode(QueryState->RequestEv.get(), EKikimrStatsMode::Basic);

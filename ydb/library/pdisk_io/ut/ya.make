@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/library/pdisk_io)
 
 SRCS(
     aio_completion_ut.cpp
+    sector_map_ut.cpp
 )
 
 IF (OS_LINUX)

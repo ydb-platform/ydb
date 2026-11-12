@@ -1,4 +1,5 @@
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_TEST_DISABLE_MLOCK=1)
 
 DEPENDS(
     ydb/apps/ydbd

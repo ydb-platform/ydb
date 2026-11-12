@@ -2,7 +2,7 @@
 
 Web-viewer Hive предоставляет визуальный интерфейс работы с [Hive](../../concepts/glossary.md#hive).
 
-Попасть на страницу Web-viewer Hive можно по ссылке Developer UI из вкладки Tablets в [{{ ydb-ui-name }}](index.md). Для доступа к странице необходимо быть аутентифицированным как пользователь, входящий в список `monitoring_allowed_sids` в [конфигурации безопасности кластера](../configuration/index.md#security).
+Попасть на страницу Web-viewer Hive можно по ссылке Developer UI из вкладки Tablets в [{{ ydb-ui-name }}](index.md). Для доступа к странице необходимо быть аутентифицированным как пользователь, входящий в список `monitoring_allowed_sids` в [конфигурации безопасности кластера](../configuration/security_config.md#security-access-levels).
 
 ## Главная страница
 

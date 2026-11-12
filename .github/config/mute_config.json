@@ -17,5 +17,14 @@
   "default_build_types": [
     "relwithdebinfo"
   ],
-  "branch_overrides": {}
+  "branch_overrides": {
+    "main": [
+      "relwithdebinfo",
+      "release-asan"
+    ],
+    "stable-26-4-1": [
+      "relwithdebinfo",
+      "release-asan"
+    ]
+  }
 }

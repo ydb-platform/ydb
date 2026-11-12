@@ -1,0 +1,23 @@
+USE plato;
+PRAGMA config.flags("ShowLinksInPlan");
+
+$script = @@
+def JoinValues(key, values):
+    return {"key": key, "value": b"|".join(sorted(values))}
+@@;
+
+$join = Python3::JoinValues(
+    Callable<(String, Stream<String>)->Struct<key:String, value:String>>,
+    $script
+);
+
+$mapped = (
+    SELECT
+        String::AsciiToLower(key) AS key,
+        String::AsciiToUpper(value) AS value
+    FROM Input
+);
+$reduced = (REDUCE $mapped ON key USING $join(value));
+
+INSERT INTO Output WITH TRUNCATE
+SELECT * FROM $reduced;

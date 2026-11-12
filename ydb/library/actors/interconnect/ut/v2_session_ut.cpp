@@ -631,6 +631,63 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
 #endif
     }
 
+    Y_UNIT_TEST(EngineStartsAndStopsClientOnce) {
+        if (!TUringContext::IsAvailable()) {
+            Cerr << "io_uring not available; skipping" << Endl;
+            return;
+        }
+
+        class TClient final : public IUringEngineClient {
+            ui32& StopCalls;
+
+        public:
+            explicit TClient(ui32& stopCalls)
+                : StopCalls(stopCalls)
+            {}
+
+            void Start(const TUringEnginePtr& engine) override {
+                ++StartCalls;
+                StartedEngine = engine.Get();
+            }
+
+            void Stop() override {
+                ++StopCalls;
+            }
+
+            ui64 GetAndResetDestroyEventsCycles() override {
+                return 0;
+            }
+
+            void Send(std::unique_ptr<IEventHandle>) override {
+                UNIT_FAIL("an engine without sessions must not send events");
+            }
+
+            void DestroyEvent(std::unique_ptr<IEventBase>, TIntrusivePtr<TEventSerializedData>) override {
+                UNIT_FAIL("an engine without sessions must not release objects");
+            }
+
+            ui32 StartCalls = 0;
+            IUringEngine* StartedEngine = nullptr;
+        };
+
+        ui32 stopCalls = 0;
+        auto common = MakeIntrusive<TInterconnectProxyCommon>();
+        common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        common->Settings.V2.Threads = 1;
+        auto engine = CreateUringEngine(common);
+        UNIT_ASSERT(engine);
+        auto client = std::make_shared<TClient>(stopCalls);
+        engine->SetClient(client);
+        UNIT_ASSERT_VALUES_EQUAL(client->StartCalls, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(client->StartedEngine, engine.Get());
+        UNIT_ASSERT_VALUES_EQUAL(stopCalls, 0u);
+        engine->Stop();
+        UNIT_ASSERT_VALUES_EQUAL(stopCalls, 1u);
+        engine->Stop();
+        engine.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(stopCalls, 1u);
+    }
+
     // Normal actor-system traffic must round-trip over a v2 session.
     Y_UNIT_TEST(ActorSystemRoundTrip) {
         if (!TUringContext::IsAvailable()) {

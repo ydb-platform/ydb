@@ -2,6 +2,7 @@
 
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard_cdc_stream_common.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -170,9 +171,13 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
-                .NotAsyncReplicaTable()
                 .IsUnderOperation()
                 .IsUnderTheSameOperation(OperationId.GetTxId());
+
+            // Dropping the table must also remove its CDC streams.
+            if (checks && !tablePath.IsUnderDeleting()) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (checks && !tablePath.IsInsideTableIndexPath()) {
                 checks.IsCommonSensePath();
@@ -185,6 +190,10 @@ public:
         }
 
         auto guard = context.DbGuard();
+        context.MemChanges.GrabPath(context.SS, streamPath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(streamPath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
@@ -206,8 +215,9 @@ public:
         return result;
     }
 
-    void AbortPropose(TProposeContext&) override {
-        Y_ABORT("no AbortPropose for TDropCdcStream");
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+        context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(1);
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
@@ -268,9 +278,7 @@ protected:
     void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
         TConfigurePartsAtTable::FillNotice(pathId, tx, context);
 
-        Y_ABORT_UNLESS(context.SS->TablesWithSnapshots.contains(pathId));
-        const auto snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
-
+        const auto snapshotTxId = context.SS->GetSingleTableSnapshot(pathId);
         Y_ABORT_UNLESS(context.SS->SnapshotsStepIds.contains(snapshotTxId));
         const auto snapshotStep = context.SS->SnapshotsStepIds.at(snapshotTxId);
 
@@ -420,7 +428,7 @@ public:
             return result;
         }
 
-        if (DropSnapshot && !context.SS->TablesWithSnapshots.contains(tablePath.Base()->PathId)) {
+        if (DropSnapshot && !context.SS->HasTableSnapshot(tablePath.Base()->PathId)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, TStringBuilder() << "Table has no snapshots"
                 << ": pathId# " << tablePath.Base()->PathId);
             return result;
@@ -440,6 +448,9 @@ public:
 
         // Validate and mark all streams for drop in single transaction
         for (const auto& streamPath : streamPaths) {
+            context.MemChanges.GrabPath(context.SS, streamPath.Base()->PathId);
+            context.DbChanges.PersistPath(streamPath.Base()->PathId);
+
             Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
             auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
 
@@ -478,6 +489,7 @@ public:
 
     void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
+        context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(StreamNames.size());
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
@@ -605,6 +617,7 @@ void DoDropStream(
         auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
         outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
         outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+        NCdcStreamAtTable::MaybeGuardIndexWithBaseCdcScanLock(outTx, workingDirPath, context);
 
         result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     }

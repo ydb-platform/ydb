@@ -27,6 +27,7 @@ struct TWorkloadManagerEvents {
         EvSubscribeOnPoolChanges,
         EvFetchDatabaseResponse,
         EvWmStateChanged,
+        EvEnsurePoolSubscribed,
     };
 };
 
@@ -51,6 +52,17 @@ struct TEvWmStateChanged: public NActors::TEventLocal<TEvWmStateChanged, TWorklo
 
 struct TEvSubscribeOnPoolChanges: public NActors::TEventLocal<TEvSubscribeOnPoolChanges, TWorkloadManagerEvents::EvSubscribeOnPoolChanges> {
     TEvSubscribeOnPoolChanges(const TString& databaseId, const TString& poolId)
+        : DatabaseId(databaseId)
+        , PoolId(poolId)
+    {
+    }
+
+    const TString DatabaseId;
+    const TString PoolId;
+};
+
+struct TEvEnsurePoolSubscribed: public NActors::TEventLocal<TEvEnsurePoolSubscribed, TWorkloadManagerEvents::EvEnsurePoolSubscribed> {
+    TEvEnsurePoolSubscribed(const TString& databaseId, const TString& poolId)
         : DatabaseId(databaseId)
         , PoolId(poolId)
     {

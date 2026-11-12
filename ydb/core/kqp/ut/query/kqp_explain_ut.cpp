@@ -1,3 +1,4 @@
+#include <cmath>
 #include <functional>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -174,6 +175,86 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(aggregate.IsDefined());
         UNIT_ASSERT(aggregate.GetMapSafe().at("GroupBy").GetStringSafe() == "item.App");
         UNIT_ASSERT(aggregate.GetMapSafe().at("Aggregation").GetStringSafe() == "{MAX(item.Message),MIN(item.Message)}");
+    }
+
+    Y_UNIT_TEST_TWIN(LegacyAggregationEstimates, ColumnStore) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableNewRBO(false);
+
+        NKikimrKqp::TKqpSetting statistics;
+        statistics.SetName("OptOverrideStatistics");
+        statistics.SetValue(R"({"/Root/Input": {"n_rows": 2000, "byte_size": 48000}})");
+        TKikimrRunner kikimr(TKikimrSettings(app).SetWithSampleTables(false).SetKqpSettings({statistics}));
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        AssertSuccessResult(tableSession.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `/Root/Input` (
+                id Uint64 NOT NULL,
+                key Uint64,
+                value Uint64,
+                PRIMARY KEY (id)
+            )
+        )" << (ColumnStore ? "WITH (STORE = COLUMN);" : ";")).GetValueSync());
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (bool yqlSelect : {false, true}) {
+            TVector<TString> queries = {
+                "SELECT COUNT(*), SUM(value) FROM `/Root/Input`;",
+                "SELECT key, COUNT(*), SUM(value) FROM `/Root/Input` GROUP BY key;",
+                "SELECT key, COUNT(DISTINCT value) FROM `/Root/Input` GROUP BY key;"
+            };
+            if (yqlSelect) {
+                queries.push_back(R"(
+                SELECT l.key, COUNT(*) FROM `/Root/Input` AS l
+                WHERE EXISTS (
+                    SELECT * FROM `/Root/Input` AS r
+                    WHERE r.key = l.key AND r.value != l.value
+                ) AND NOT EXISTS (
+                    SELECT * FROM `/Root/Input` AS r
+                    WHERE r.key = l.key AND r.value != l.value AND r.id > r.value
+                )
+                GROUP BY l.key;
+                )");
+            }
+            for (ui32 cboLevel : {0, 4}) {
+                for (const auto& query : queries) {
+                    const TString queryText = TStringBuilder()
+                        << "PRAGMA ydb.CostBasedOptimizationLevel = '" << cboLevel << "';\n"
+                        << (yqlSelect ? "PRAGMA YqlSelect = 'force';\n" : "") << query;
+                    Cerr << queryText << Endl;
+                    auto result = session.ExecuteQuery(queryText, NQuery::TTxControl::NoTx(),
+                        NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                    UNIT_ASSERT(result.GetStats());
+                    UNIT_ASSERT(result.GetStats()->GetPlan());
+
+                    NJson::TJsonValue plan;
+                    NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+                    Cerr << plan << Endl;
+                    for (const auto* planName : {"Plan", "SimplifiedPlan"}) {
+                        ui32 aggregates = 0;
+                        for (const auto& operators : FindPlanNodes(plan.GetMapSafe().at(planName), "Operators")) {
+                            for (const auto& op : operators.GetArraySafe()) {
+                                if (op["Name"] != "Aggregate" && op["Name"] != "PartitionByKey") {
+                                    continue;
+                                }
+                                ++aggregates;
+                                for (const auto* estimate : {"E-Rows", "E-Size", "E-Cost"}) {
+                                    if (cboLevel == 0) {
+                                        UNIT_ASSERT_C(!op.Has(estimate), op);
+                                    } else {
+                                        UNIT_ASSERT_C(op[estimate].IsString(), op);
+                                        double value = 0;
+                                        UNIT_ASSERT_C(TryFromString(op[estimate].GetStringSafe(), value), op);
+                                        UNIT_ASSERT_C(std::isfinite(value) && value >= 0, op);
+                                    }
+                                }
+                            }
+                        }
+                        UNIT_ASSERT_C(aggregates > 0, plan);
+                    }
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(ComplexJoin) {

@@ -75,6 +75,8 @@ class TPortionInfo {
 public:
     using TConstPtr = std::shared_ptr<const TPortionInfo>;
     using TPtr = std::shared_ptr<TPortionInfo>;
+    using TKey = NArrow::TSimpleRow;
+    using TKeyRef = NArrow::TSimpleRowRef;
     using TRuntimeFeatures = ui8;
     enum class ERuntimeFeature: TRuntimeFeatures {
         Optimized = 1 /* "optimized" */
@@ -428,6 +430,14 @@ public:
         return Meta.IndexKeyEnd();
     }
 
+    NArrow::TSimpleRowRef IndexKeyStartRef() const {
+        return Meta.IndexKeyStartRef();
+    }
+
+    NArrow::TSimpleRowRef IndexKeyEndRef() const {
+        return Meta.IndexKeyEndRef();
+    }
+
     virtual const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const = 0;
     virtual const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const = 0;
 
@@ -447,6 +457,8 @@ public:
 
     ui64 GetColumnRawBytes() const;
     ui64 GetColumnBlobBytes() const;
+
+    bool HasBlobsInBlobStorage(const TIndexInfo& indexInfo) const;
 
     ui64 GetTotalBlobBytes() const noexcept {
         return GetIndexBlobBytes() + GetColumnBlobBytes();

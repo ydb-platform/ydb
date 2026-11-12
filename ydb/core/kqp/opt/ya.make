@@ -22,6 +22,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/query_plan
     ydb/core/kqp/common
     ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/cbo/solver

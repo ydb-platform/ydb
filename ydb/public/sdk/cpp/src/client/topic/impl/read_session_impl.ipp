@@ -2132,7 +2132,7 @@ template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl(TDeferredActions<UseMigrationProtocol>* deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    if (!Aborting) {
+    if (ClientContext) {
         Aborting = true;
         CallCloseCallbackImpl(deferred);
 
@@ -2167,6 +2167,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Close(std::function<vo
     TDeferredActions<UseMigrationProtocol> deferred;
     std::lock_guard guard(Lock);
     if (Aborting) {
+        AbortImpl(&deferred);
         callback();
         return;
     }

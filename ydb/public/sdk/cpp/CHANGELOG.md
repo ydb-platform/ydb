@@ -26,7 +26,7 @@
 
 * Fixed a Topic read session crash (Panic in `OnUserRetrievedEvent`) when an unrecoverable stream read error tore down the session while data events were still queued for delivery; the teardown now releases the accounting for undelivered events exactly once.
 
-* Fixed driver shutdown blocking while Topic or PersQueue read sessions closed with a zero timeout remain alive.
+* Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
 
 ## v3.26.0
 

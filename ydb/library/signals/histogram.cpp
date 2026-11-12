@@ -2,44 +2,42 @@
 
 namespace NKikimr::NColumnShard {
 
-TIncrementalHistogram::TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::set<i64>& values)
-    : TBase(moduleId)
+TIncrementalHistogram::TBuckets::TBuckets(const TString& moduleId, const TString& metricId, const TString& category,
+    const std::vector<std::pair<i64, TString>>& borders, TIntrusivePtr<NMonitoring::TDynamicCounters> baseSignals)
+    : TBase(moduleId, baseSignals)
 {
     DeepSubGroup("metric", metricId);
     if (category) {
         DeepSubGroup("category", category);
     }
     std::optional<TString> predName;
-    for (auto&& i : values) {
+    for (auto&& [border, name] : borders) {
+        Borders.emplace_back(border);
         if (!predName) {
-            Counters.emplace(i, TBase::GetValue("(-Inf," + ::ToString(i) + "]"));
+            Names.emplace_back("(-Inf," + name + "]");
         } else {
-            Counters.emplace(i, TBase::GetValue("(" + *predName + "," + ::ToString(i) + "]"));
+            Names.emplace_back("(" + *predName + "," + name + "]");
         }
-        predName = ::ToString(i);
+        predName = name;
     }
     Y_ABORT_UNLESS(predName);
-    PlusInf = TBase::GetValue("(" + *predName + ",+Inf)");
+    Names.emplace_back("(" + *predName + ",+Inf)");
+}
+
+TIncrementalHistogram::TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::set<i64>& values,
+    TIntrusivePtr<NMonitoring::TDynamicCounters> baseSignals)
+{
+    std::vector<std::pair<i64, TString>> borders;
+    for (auto&& i : values) {
+        borders.emplace_back(i, ::ToString(i));
+    }
+    Buckets = std::make_shared<TBuckets>(moduleId, metricId, category, borders, baseSignals);
 }
 
 TIncrementalHistogram::TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::map<i64, TString>& values)
-    : TBase(moduleId)
 {
-    DeepSubGroup("metric", metricId);
-    if (category) {
-        DeepSubGroup("category", category);
-    }
-    std::optional<TString> predName;
-    for (auto&& i : values) {
-        if (!predName) {
-            Counters.emplace(i.first, TBase::GetValue("(-Inf," + i.second + "]"));
-        } else {
-            Counters.emplace(i.first, TBase::GetValue("(" + *predName + "," + i.second + "]"));
-        }
-        predName = i.second;
-    }
-    Y_ABORT_UNLESS(predName);
-    PlusInf = TBase::GetValue("(" + *predName + ",+Inf)");
+    std::vector<std::pair<i64, TString>> borders(values.begin(), values.end());
+    Buckets = std::make_shared<TBuckets>(moduleId, metricId, category, borders, nullptr);
 }
 
 TDeriviativeHistogram::TDeriviativeHistogram(const TString& moduleId, const TString& signalName, const TString& category, const std::set<i64>& values)

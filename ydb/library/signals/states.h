@@ -7,6 +7,8 @@
 #include <util/generic/serialized_enum.h>
 
 #include <map>
+#include <memory>
+#include <mutex>
 #include <set>
 
 namespace NKikimr::NOlap::NCounters {
@@ -30,37 +32,51 @@ public:
     }
 };
 
+// A state's signals are registered on its first transition, so a state never entered is not exported.
 template <class EState>
 class TStateSignalsOwner: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
-    std::vector<TStateCounters> States;
+    std::vector<TString> StateNames;
+    std::vector<std::once_flag> Registered;
+    std::vector<std::unique_ptr<TStateCounters>> States;
+
+    TStateCounters& GetState(const EState state) {
+        const ui32 index = (ui32)state;
+        AFL_VERIFY(index < StateNames.size())("state", state)("size", StateNames.size());
+        std::call_once(Registered[index], [&] {
+            States[index] = std::make_unique<TStateCounters>(*this, StateNames[index]);
+        });
+        return *States[index];
+    }
 
 public:
     void ExchangeState(const std::optional<EState> from, const std::optional<EState> to, const std::optional<TDuration> d, const ui32 size = 1) {
         if (from) {
-            AFL_VERIFY((ui32)*from < States.size())("from", from)("size", States.size());
-            States[(ui32)*from].Volume->Sub(size);
-            States[(ui32)*from].Remove->Add(size);
+            TStateCounters& state = GetState(*from);
+            state.Volume->Sub(size);
+            state.Remove->Add(size);
             if (d) {
-                States[(ui32)*from].Duration->Add(d->MicroSeconds());
+                state.Duration->Add(d->MicroSeconds());
             }
         }
         if (to) {
-            AFL_VERIFY((ui32)*to < States.size())("to", to)("size", States.size());
-            States[(ui32)*to].Volume->Add(size);
-            States[(ui32)*to].Add->Add(size);
+            TStateCounters& state = GetState(*to);
+            state.Volume->Add(size);
+            state.Add->Add(size);
         }
     }
 
     TStateSignalsOwner(TCommonCountersOwner& base, const TString& stateName)
         : TBase(base, "states", stateName) {
         for (auto&& i : GetEnumAllValues<EState>()) {
-            while (States.size() < (ui32)i) {
-                States.emplace_back(*this, "UNDEFINED");
+            while (StateNames.size() < (ui32)i) {
+                StateNames.emplace_back("UNDEFINED");
             }
-            States.emplace_back(*this, ::ToString(i));
+            StateNames.emplace_back(::ToString(i));
         }
+        Registered = std::vector<std::once_flag>(StateNames.size());
+        States.resize(StateNames.size());
     }
 };
 

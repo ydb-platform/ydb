@@ -6,6 +6,7 @@
 
 namespace NKikimr::NColumnShard {
 class TCommonCountersOwner;
+class TLazyValue;
 
 class TSignalAggregations {
 public:
@@ -20,16 +21,20 @@ public:
     }
 };
 
+// The SUM/MIN/MAX signals are registered on the first status after a client was written,
+// so an aggregation nobody writes is not exported.
 class TValueAggregationAgent: TNonCopyable {
 private:
-    ::NMonitoring::TDynamicCounters::TCounterPtr ValueSignalSum;
-    ::NMonitoring::TDynamicCounters::TCounterPtr ValueSignalMin;
-    ::NMonitoring::TDynamicCounters::TCounterPtr ValueSignalMax;
+    const std::shared_ptr<TLazyValue> ValueSignalSum;
+    const std::shared_ptr<TLazyValue> ValueSignalMin;
+    const std::shared_ptr<TLazyValue> ValueSignalMax;
+    mutable bool Exported = false;
     mutable std::list<std::shared_ptr<TValueAggregationClient>> Values;
     TMutex Mutex;
 
     bool CalcAggregationsAndClean(i64& sum, i64& minValue, i64& maxValue) const;
     std::optional<TSignalAggregations> GetAggregations() const;
+    bool HasWrittenClient() const;
 
 public:
     TValueAggregationAgent(const TString& signalName, const TCommonCountersOwner& signalsOwner);

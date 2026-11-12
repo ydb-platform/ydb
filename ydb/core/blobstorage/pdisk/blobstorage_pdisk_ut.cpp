@@ -1650,6 +1650,31 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
     }
 
+    // A sys log record whose group size in units info declares more bytes than the record holds makes the start of
+    // the PDisk fail with a parse error instead of terminating the process
+    Y_UNIT_TEST(SysLogRecordWithTruncatedGroupSizeInUnitsInfo) {
+        TActorTestContext testCtx({});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        // the record the PDisk writes itself is read back fine
+        testCtx.RestartPDiskSync();
+        vdisk.InitFull();
+
+        testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* pdisk) {
+            pdisk->GroupSizeInUnitsInfoSizeExcessForTest = 1000;
+        });
+        TVDiskMock anotherVDisk(&testCtx);
+        anotherVDisk.InitFull(); // the new owner makes the PDisk write a sys log record
+
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
+                NKikimrProto::OK);
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, (void*)(&testCtx.MainKey)),
+                NKikimrProto::CORRUPTED);
+    }
+
     Y_UNIT_TEST(TestFakeErrorPDiskManyChunkRead) {
         for (bool encryption: {true, false}) {
             TActorTestContext::TSettings settings{};

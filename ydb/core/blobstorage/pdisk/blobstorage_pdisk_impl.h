@@ -300,6 +300,9 @@ public:
 
     // Serialized compatibility info record
     std::optional<TString> SerializedCompatibilityInfo;
+    // Added to the length of the group size in units info written to the sys log; tests use it to make a record
+    // whose last section runs past the end of the record
+    ui32 GroupSizeInUnitsInfoSizeExcessForTest = 0;
 
     // Debug
     std::function<TString()> DebugInfoGenerator;

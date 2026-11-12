@@ -146,16 +146,9 @@ class TestExecuteSqlWithFormats(BaseTestSqlWithDatabase):
 
 
 class TestExecuteSqlWithParamsFromJson(BaseTestSqlWithDatabase):
-    @classmethod
-    def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class.__func__(cls)
-        cls.session = cls.driver.table_client.session().create()
-
     @pytest.fixture(autouse=True, scope='function')
     def init_test(self, tmp_path):
         self.tmp_path = tmp_path
-        self.table_path = self.root_dir + "/" + self.tmp_path.name
-        create_table_with_data(self.session, self.table_path)
 
     @staticmethod
     def write_data(data, filename):
@@ -174,16 +167,9 @@ class TestExecuteSqlWithParamsFromJson(BaseTestSqlWithDatabase):
 
 @pytest.mark.parametrize("command", ["sql"])
 class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
-    @classmethod
-    def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class.__func__(cls)
-        cls.session = cls.driver.table_client.session().create()
-
     @pytest.fixture(autouse=True, scope='function')
     def init_test(self, tmp_path):
         self.tmp_path = tmp_path
-        self.table_path = self.root_dir + "/" + self.tmp_path.name
-        create_table_with_data(self.session, self.table_path)
 
     @staticmethod
     def write_data(data, filename):
@@ -596,16 +582,9 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
 class TestExecuteSqlWithStdinDetection(BaseTestSqlWithDatabase):
     """Test cases for stdin detection and parameter handling in various scenarios"""
 
-    @classmethod
-    def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class.__func__(cls)
-        cls.session = cls.driver.table_client.session().create()
-
     @pytest.fixture(autouse=True, scope='function')
     def init_test(self, tmp_path):
         self.tmp_path = tmp_path
-        self.table_path = self.root_dir + "/" + self.tmp_path.name
-        create_table_with_data(self.session, self.table_path)
 
     @staticmethod
     def write_data(data, filename):
@@ -826,16 +805,9 @@ class TestExecuteSqlWithStdinDetection(BaseTestSqlWithDatabase):
 class TestExecuteSqlWithParameterEdgeCases(BaseTestSqlWithDatabase):
     """Additional test cases for parameter handling edge cases and error conditions"""
 
-    @classmethod
-    def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class.__func__(cls)
-        cls.session = cls.driver.table_client.session().create()
-
     @pytest.fixture(autouse=True, scope='function')
     def init_test(self, tmp_path):
         self.tmp_path = tmp_path
-        self.table_path = self.root_dir + "/" + self.tmp_path.name
-        create_table_with_data(self.session, self.table_path)
 
     @staticmethod
     def write_data(data, filename):

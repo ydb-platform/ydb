@@ -24,6 +24,9 @@ struct TOlapAggregate {
     // Distinct read columns to group by.
     TVector<TInfoUnitId> Keys;
     TVector<TOlapAggregation> Aggregations;
+    // Whether the read program casts the input of an AVG to Double before summing it, which needs scalar apply.
+    // Otherwise, as in the old optimizer, column shards sum the stored type and compute converts the sum.
+    bool CastAverageInput = true;
 };
 
 // Match an aggregate whose keys and aggregations column shards can compute over
@@ -33,7 +36,6 @@ std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, 
 // AVG accumulates in Double. The read program casts an AVG column of any other
 // type with a YQL kernel, which column shards run only with scalar apply enabled.
 bool IsOlapAverageCast(const TTypeAnnotationNode& columnType);
-bool HasOlapAverageCast(const TOlapAggregate& aggregate, TExprContext& ctx);
 
 // A trivial DISTINCT whose key the program of a column table read marks. Column
 // shards then skip repeated keys and stop after a forced number of distinct

@@ -6214,6 +6214,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             }
         });
 
+        // Tracked deliveries need a registered recipient before the observer can intercept them.
+        runtime.RegisterService(NCdcAggregator::MakeCdcAggregatorServiceId(runtime.GetNodeId(0)), runtime.AllocateEdgeActor());
         TBlockEvents<TEvWriteHeartbeat> heartbeats(runtime);
         auto answerHeartbeats = [&]() {
             TVector<TRowVersion> versions;

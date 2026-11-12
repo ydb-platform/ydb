@@ -8,6 +8,7 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/library/aws_init/aws.h>
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
@@ -259,6 +260,164 @@ Y_UNIT_TEST_SUITE(BootstrapImport) {
 
     Y_UNIT_TEST_TWIN(DropCascadeWithDestinationCdc, GlobalConsistency) {
         TestBootstrap(false, false, false, GlobalConsistency, true);
+    }
+}
+
+Y_UNIT_TEST_SUITE(DoneReplication) {
+    Y_UNIT_TEST(CascadeDropKeepsDetachedTables) {
+        // After DONE the replicas are plain tables holding the user's data. CASCADE drops replicas,
+        // so it must leave them alone (manual switchover plan, C3).
+        NTestHelpers::TEnv env;
+        auto& runtime = env.GetRuntime();
+        const auto service = runtime.Register(CreateReplicationService());
+        runtime.RegisterService(MakeReplicationServiceId(runtime.GetNodeId(0)), service);
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto sessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto scheme = [&](const TString& query) {
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        const auto execute = [&](const TString& query) {
+            auto result = session.ExecuteDataQuery(query,
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+        const auto read = [&](const TString& table) {
+            const auto result = execute(TStringBuilder() << "SELECT key, value FROM " << table << " ORDER BY key;");
+            return NYdb::FormatResultSetYson(result.GetResultSet(0));
+        };
+        const auto replicaMode = [&](const TString& path) {
+            return env.GetDescription(path).GetPathDescription().GetTable().GetReplicationConfig().GetMode();
+        };
+
+        scheme("CREATE TABLE `/Root/source` (key Uint32, value Utf8, PRIMARY KEY (key));");
+        execute(R"(UPSERT INTO `/Root/source` (key, value) VALUES (1u, "one"u), (2u, "two"u);)");
+        const auto expected = read("`/Root/source`");
+        scheme(Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`
+            WITH (CONNECTION_STRING="grpc://%s/?database=/Root", TOKEN="root@builtin");
+        )", env.GetEndpoint().c_str()));
+        const auto tryRead = [&](const TString& table) -> TMaybe<TString> {
+            auto result = session.ExecuteDataQuery(TStringBuilder() << "SELECT key, value FROM " << table << " ORDER BY key;",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            if (!result.IsSuccess()) {
+                return Nothing();
+            }
+            return NYdb::FormatResultSetYson(result.GetResultSet(0));
+        };
+        WaitFor([&] { return tryRead("`/Root/replica`") == expected; }, "initial scan");
+        UNIT_ASSERT_VALUES_EQUAL(replicaMode("/Root/replica"), TReplicationConfig::REPLICATION_MODE_READ_ONLY);
+
+        scheme(R"(ALTER ASYNC REPLICATION `/Root/replication` SET (STATE="DONE");)");
+        WaitFor([&] {
+            return replicaMode("/Root/replica") == TReplicationConfig::REPLICATION_MODE_NONE;
+        }, "replica detached by DONE");
+
+        scheme("DROP ASYNC REPLICATION `/Root/replication` CASCADE;");
+        WaitFor([&] {
+            return env.GetDescription("/Root/replication").GetSchemeStatus() == NKikimrScheme::StatusPathDoesNotExist;
+        }, "replication dropped");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica").GetSchemeStatus(), NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL(read("`/Root/replica`"), expected);
+        execute(R"(UPSERT INTO `/Root/replica` (key, value) VALUES (3u, "three"u);)");
+    }
+}
+
+Y_UNIT_TEST_SUITE(ConsistentDone) {
+    Y_UNIT_TEST_TWIN(GlobalDoneWaitsForAssignedTransactions, FlagOn) {
+        // A GLOBAL replica stages rows under write transaction ids that commit at the next
+        // heartbeat. DONE stops the workers at once, so rows of an interval that was assigned but
+        // not yet committed are lost. With EnableConsistentReplicationDone a consistent DONE is
+        // deferred until the commit loop has drained (manual switchover plan, C2).
+        NTestHelpers::TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableConsistentReplicationDone(FlagOn);
+        NTestHelpers::TEnv env(flags);
+        auto& runtime = env.GetRuntime();
+        const auto service = runtime.Register(CreateReplicationService());
+        runtime.RegisterService(MakeReplicationServiceId(runtime.GetNodeId(0)), service);
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto sessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto scheme = [&](const TString& query) {
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        const auto execute = [&](const TString& query) {
+            // Changefeed creation and the detach bump the tables' schema versions; a data query
+            // prepared against the old version is invalidated once and must be retried.
+            for (int attempt = 0;; ++attempt) {
+                auto result = session.ExecuteDataQuery(query,
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                if (result.IsSuccess() || attempt >= 10) {
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                    return result;
+                }
+                Sleep(TDuration::MilliSeconds(200));
+            }
+        };
+        const auto read = [&](const TString& table) {
+            const auto result = execute(TStringBuilder() << "SELECT key, value FROM " << table << " ORDER BY key;");
+            return NYdb::FormatResultSetYson(result.GetResultSet(0));
+        };
+        const auto replicaMode = [&](const TString& path) {
+            return env.GetDescription(path).GetPathDescription().GetTable().GetReplicationConfig().GetMode();
+        };
+
+        scheme("CREATE TABLE `/Root/source` (key Uint32, value Utf8, PRIMARY KEY (key));");
+        execute(R"(UPSERT INTO `/Root/source` (key, value) VALUES (1u, "one"u);)");
+        // A long commit interval keeps the last interval assigned but uncommitted for a while.
+        scheme(Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`
+            WITH (CONNECTION_STRING="grpc://%s/?database=/Root", TOKEN="root@builtin",
+                  CONSISTENCY_LEVEL="GLOBAL", COMMIT_INTERVAL=Interval("PT30S"));
+        )", env.GetEndpoint().c_str()));
+        const auto tryRead = [&](const TString& table) -> TMaybe<TString> {
+            auto result = session.ExecuteDataQuery(TStringBuilder() << "SELECT key, value FROM " << table << " ORDER BY key;",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            if (!result.IsSuccess()) {
+                return Nothing();
+            }
+            return NYdb::FormatResultSetYson(result.GetResultSet(0));
+        };
+        WaitFor([&] { return tryRead("`/Root/replica`") == TMaybe<TString>(read("`/Root/source`")); }, "initial scan committed");
+
+        // Rows of the current interval: staged on the replica, visible only after the next commit.
+        execute(R"(UPSERT INTO `/Root/source` (key, value) VALUES (2u, "two"u), (3u, "three"u);)");
+        const auto expected = read("`/Root/source`");
+        const auto controllerId = env.GetDescription("/Root/replication").GetPathDescription()
+            .GetReplicationDescription().GetControllerId();
+        const auto replicationId = env.GetPathId("/Root/replication");
+        const auto assignedTransactions = [&] {
+            auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+            replicationId.ToProto(request->Record.MutablePathId());
+            const auto description = env.Send<TEvController::TEvDescribeReplicationResult>(controllerId, std::move(request));
+            return description->Get()->Record.GetTransactions().assigned_size();
+        };
+        WaitFor([&] { return assignedTransactions() > 0; }, "an assigned, uncommitted interval");
+
+        scheme(R"(ALTER ASYNC REPLICATION `/Root/replication` SET (STATE="DONE", FAILOVER_MODE="CONSISTENT");)");
+        WaitFor([&] {
+            return replicaMode("/Root/replica") == TReplicationConfig::REPLICATION_MODE_NONE;
+        }, "replica detached by DONE");
+        if (FlagOn) {
+            // Detached only after the interval was committed: the staged rows are visible.
+            // The detach bumps the schema version, so the first read may need a retry.
+            WaitFor([&] { return tryRead("`/Root/replica`") == TMaybe<TString>(expected); },
+                "committed rows visible on the detached replica");
+            UNIT_ASSERT_VALUES_EQUAL(read("`/Root/replica`"), expected);
+        } else {
+            // The legacy DONE detaches at once; the rows of the open interval are not committed,
+            // which is the loss the flag prevents. Only check that the replica is writable.
+            WaitFor([&] {
+                auto result = session.ExecuteDataQuery(R"(UPSERT INTO `/Root/replica` (key, value) VALUES (4u, "four"u);)",
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                return result.IsSuccess();
+            }, "detached replica writable");
+        }
     }
 }
 

@@ -80,6 +80,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         Self->DeferredAlters.erase(Replication->GetId());
+        Self->ConsistentDoneReplications.erase(Replication->GetId());
         for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
             if (it->first.first != Replication->GetId()) {
                 ++it;
@@ -129,7 +130,9 @@ public:
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );
 
-            if (record.GetCascade()) {
+            // A target that DONE already detached is a plain table with the user's data; CASCADE
+            // drops replicas, not the tables a finished replication left behind.
+            if (record.GetCascade() && target->GetDstState() != TReplication::EDstState::Done) {
                 target->SetDstState(TReplication::EDstState::Removing);
                 db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                     NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())

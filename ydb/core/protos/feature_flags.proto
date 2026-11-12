@@ -482,4 +482,7 @@ message TFeatureFlags {
     // Gate for HNSW creation and acceleration once the implementation is included.
     optional bool EnableHnswIndex = 384 [default = false];
     optional bool EnableColumnshardCutHistorySending = 385 [default = false];
+    // A DONE with FAILOVER_MODE_CONSISTENT on a GLOBAL replication keeps the workers until every
+    // assigned write transaction is committed, instead of stopping them at once.
+    optional bool EnableConsistentReplicationDone = 386 [default = false];
 }

@@ -1,6 +1,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#include <ydb/core/tx/datashard/hnsw_index/hnsw_index_build_unit.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -44,6 +46,10 @@ EExecutionStatus TLoadTxDetailsUnit::Execute(TOperation::TPtr op,
 
     if (!Pipeline.LoadTxDetails(txc, ctx, tx, tx->GetUserCtx()))
         return EExecutionStatus::Restart;
+
+    if (tx->IsSchemeTx()) {
+        AddHnswIndexBuildToExecutionPlan(*tx);
+    }
 
     return EExecutionStatus::Executed;
 }

@@ -14,6 +14,29 @@ using namespace NActors;
 
 namespace {
 
+const NKikimrSchemeOp::TIndexDescription* FindHnswIndexDescription(
+        const NKikimrSchemeOp::TTableDescription& alter) {
+    for (const auto& index : alter.GetTableIndexes()) {
+        if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                && index.HasHnswIndexDescription()
+                && index.GetHnswIndexDescription().HasEmbeddingColumnId()
+                && index.GetHnswIndexDescription().GetSettings().has_settings()) {
+            return &index;
+        }
+    }
+    return nullptr;
+}
+
+bool IsHnswPostingTablePublication(const NKikimrTxDataShard::TFlatSchemeTransaction& schemeTx) {
+    if (!schemeTx.HasAlterTable()) {
+        return false;
+    }
+    const auto& alter = schemeTx.GetAlterTable();
+    return alter.GetPartitionConfig().HasShadowData()
+        && !alter.GetPartitionConfig().GetShadowData()
+        && FindHnswIndexDescription(alter);
+}
+
 class THnswIndexBuildJob : public TActorBootstrapped<THnswIndexBuildJob>, public IActorExceptionHandler {
 public:
     THnswIndexBuildJob(TActorId replyTo, ui64 txId, Ydb::Table::VectorIndexSettings settings,
@@ -102,6 +125,24 @@ private:
 
 } // namespace
 
+void AddHnswIndexBuildToExecutionPlan(TActiveTransaction& tx) {
+    if (!AppData()->FeatureFlags.GetEnableHnswIndex()
+            || !IsHnswPostingTablePublication(tx.GetSchemeTx())) {
+        return;
+    }
+
+    // Recovery initially builds a plan without the transaction body. Insert the
+    // restartable unit only after LoadTxDetails has established its eligibility,
+    // before AlterTable commits and forbids further restarts in that transaction.
+    const auto& plan = tx.GetExecutionPlan();
+    TVector<EExecutionUnitKind> remaining(plan.begin() + tx.GetCurrentUnitIndex() + 1, plan.end());
+    const auto alter = Find(remaining, EExecutionUnitKind::AlterTable);
+    if (alter != remaining.end() && Find(remaining, EExecutionUnitKind::BuildHnswIndex) == remaining.end()) {
+        remaining.insert(alter + 1, EExecutionUnitKind::BuildHnswIndex);
+        tx.RewriteExecutionPlan(remaining);
+    }
+}
+
 IActor* CreateHnswIndexBuildJob(const TActorId& replyTo, ui64 txId,
         const Ydb::Table::VectorIndexSettings& settings, std::shared_ptr<std::atomic<bool>> cancelled) {
     return new THnswIndexBuildJob(replyTo, txId, settings, std::move(cancelled));
@@ -125,16 +166,7 @@ protected:
                 && !tx->IsWaitingForAsyncJob() && !tx->IsWaitingForRestart()) {
             return false;
         }
-        const auto& schemeTx = tx->GetSchemeTx();
-        if (!schemeTx.HasAlterTable()) {
-            return false;
-        }
-        const auto& alter = schemeTx.GetAlterTable();
-        // Eager construction belongs to publishing the posting table's shadow
-        // data. Ordinary metadata changes retain the lazy rebuild lifecycle.
-        return alter.GetPartitionConfig().HasShadowData()
-            && !alter.GetPartitionConfig().GetShadowData()
-            && FindIndexDescription(alter) != nullptr;
+        return IsHnswPostingTablePublication(tx->GetSchemeTx());
     }
 
     bool IsWaiting(TOperation::TPtr op) const override {
@@ -182,7 +214,7 @@ protected:
 
         // The name map is updated only when this scheme transaction commits,
         // so use the column tag propagated by schemeshard directly.
-        const auto* description = FindIndexDescription(alter);
+        const auto* description = FindHnswIndexDescription(alter);
         Y_ENSURE(description);
         IndexId = TPathId(description->GetPathOwnerId(), description->GetLocalPathId());
         const auto& hnsw = description->GetHnswIndexDescription();
@@ -263,7 +295,10 @@ protected:
         auto* result = CheckedCast<THnswIndexBuildProduct*>(op->AsyncJobResult().Get());
         bool retry = false;
         ScanControl.reset();
-        BuildAttempts += result->RowCount != 0;
+        // Empty graphs are constructions too, even when installation is rejected.
+        if (result->Index || result->RowCount) {
+            ++BuildAttempts;
+        }
         DataShard.HnswBuildsInFlight.erase(BuildToken);
         const bool current = DataShard.IsHnswBuildCurrent(LocalTid, BuildToken, IndexId);
         if (current) {
@@ -289,7 +324,15 @@ protected:
             retry = !DataShard.GetHnswIndex(LocalTid, VectorColumnTag,
                 Settings, false, BaseVersion, IndexId);
         } else if (result->BelowMinRows) {
-            DataShard.DisableHnswIndexBuild(LocalTid, IndexId);
+            const auto& entry = *DataShard.FindHnswIndexEntry(LocalTid, IndexId);
+            if (entry.Changes->CountAfter(entry.BuildVersion)) {
+                // Recheck a partition that changed after its snapshot rather
+                // than waiting for an additional write to re-enable building.
+                DataShard.DeferHnswIndexBuild(LocalTid, TDuration::Zero(), IndexId);
+                retry = RetryCount++ < 30;
+            } else {
+                DataShard.DisableHnswIndexBuild(LocalTid, IndexId);
+            }
         } else {
             DataShard.DeferHnswIndexBuild(LocalTid, TDuration::Seconds(5), IndexId);
             retry = result->Retryable && RetryCount++ < 30;
@@ -332,19 +375,6 @@ public:
     }
 
 private:
-    static const NKikimrSchemeOp::TIndexDescription* FindIndexDescription(
-            const NKikimrSchemeOp::TTableDescription& alter) {
-        for (const auto& index : alter.GetTableIndexes()) {
-            if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw
-                    && index.HasHnswIndexDescription()
-                    && index.GetHnswIndexDescription().HasEmbeddingColumnId()
-                    && index.GetHnswIndexDescription().GetSettings().has_settings()) {
-                return &index;
-            }
-        }
-        return nullptr;
-    }
-
     bool ScheduleMemoryRetry(TOperation::TPtr op, const TActorContext& ctx) {
         // Bound all admission/contention retries, including repeated obsolete
         // builds. HNSW is optional acceleration, so it cannot pin a scheme tx.

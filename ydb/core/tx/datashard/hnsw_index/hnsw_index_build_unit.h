@@ -16,6 +16,11 @@
 
 namespace NKikimr::NDataShard {
 
+class TActiveTransaction;
+
+// Called after scheme transaction details have been loaded, including recovery.
+void AddHnswIndexBuildToExecutionPlan(TActiveTransaction& tx);
+
 // Result of the eager HNSW build, delivered back to the waiting scheme
 // transaction via TEvDataShard::TEvAsyncJobComplete (see TRestoreUnit for the
 // same pattern). Index is nullptr when the build failed; Error says why.

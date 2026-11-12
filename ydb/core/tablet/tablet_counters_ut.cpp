@@ -2,6 +2,7 @@
 #include "tablet_counters_protobuf.h"
 #include "private/aggregated_tablet_counters.h"
 
+#include <ydb/core/protos/counters_blob_depot.pb.h>
 #include <ydb/core/protos/counters_bs_controller.pb.h>
 #include <ydb/core/protos/counters_cms.pb.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
@@ -225,6 +226,18 @@ Y_UNIT_TEST_SUITE(TTabletCountersPublish) {
         UNIT_ASSERT(executorGroup->FindCounter("SUM(CacheTotalSharedBody)"));
         UNIT_ASSERT(!executorGroup->FindCounter("TxWastedBytes"));
         UNIT_ASSERT(executorGroup->FindCounter("TxCachedBytes"));
+
+        auto blobDepotGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TProtobufTabletCounters<NKikimrBlobDepot::ESimpleCounters_descriptor, NKikimrBlobDepot::ECumulativeCounters_descriptor,
+            NKikimrBlobDepot::EPercentileCounters_descriptor, NKikimrBlobDepot::ETxTypes_descriptor> blobDepotCounters;
+        NPrivate::TAggregatedTabletCounters blobDepot(blobDepotGroup);
+        blobDepot.Initialize(&blobDepotCounters);
+        UNIT_ASSERT(!blobDepotGroup->FindCounter("SUM(BlobDepot/S3/Get/ReadsInFlight)"));
+        UNIT_ASSERT(blobDepotGroup->FindCounter("SUM(BlobDepot/S3/Put/WritesInFlight)"));
+        UNIT_ASSERT(!blobDepotGroup->FindCounter("BlobDepot/S3/Gets/Ok"));
+        UNIT_ASSERT(blobDepotGroup->FindCounter("BlobDepot/S3/Puts/Ok"));
+        UNIT_ASSERT(!blobDepotGroup->FindHistogram("BlobDepot/S3/Router/Balancer/LatencyMs"));
+        UNIT_ASSERT(blobDepotGroup->FindHistogram("BlobDepot/SelectGroups"));
 
         auto appGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
         TProtobufTabletCounters<NDataShard::ESimpleCounters_descriptor, NDataShard::ECumulativeCounters_descriptor,

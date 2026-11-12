@@ -6,6 +6,9 @@
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -14,6 +17,8 @@
 #include <ydb/core/tx/tx.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/library/aclib/user_context.h>
+
+#include <library/cpp/json/json_reader.h>
 
 #include <util/generic/bitmap.h>
 #include <util/string/printf.h>
@@ -2034,6 +2039,204 @@ tkey = 100, key = 4
             version = recordVersion;
         }
         UNIT_ASSERT(streamKeys.empty());
+    }
+
+    Y_UNIT_TEST_TWIN(ConditionalEraseRowsSyncIndexCdcModifiedRow, changeIndexKey) {
+        using TEvChangeExchange = NChangeExchange::TEvChangeExchange;
+        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+
+        TPortManager pm;
+        NKikimrPQ::TPQConfig pqConfig;
+        pqConfig.SetEnableProtoSourceIdInfo(true);
+        pqConfig.SetTopicsAreFirstClassCitizen(true);
+        TServerSettings settings(pm.GetPort(2134), {}, pqConfig);
+        settings.SetDomainName("Root").SetUseRealThreads(false)
+            .SetEnableChangefeedsOnIndexTables(true);
+
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateIndexedTable(server, sender, "/Root", "table-1");
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
+                (1, 10, 100, Timestamp("2020-01-01T00:00:00Z")),
+                (2, 20, 200, Timestamp("2020-01-01T00:00:00Z"));
+        )");
+
+        const TString indexPath = "/Root/table-1/by_skey/indexImplTable";
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root/table-1/by_skey", "indexImplTable", {
+            .Name = "stream",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeUpdate,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatJson,
+        }));
+        TBlockEvents<TEvChangeExchange::TEvEnqueueRecords> enqueued(runtime);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const auto indexes = GetIndexes(server, sender, "/Root/table-1");
+        auto delayed = ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1", tableId, 4, currentTime, indexes);
+        UNIT_ASSERT(!delayed.empty());
+
+        // TTL has selected both rows, but must recheck the modified row before erasing it.
+        if constexpr (changeIndexKey) {
+            ExecSQL(server, sender, "UPDATE `/Root/table-1` SET skey = 90 WHERE key = 2;");
+        } else {
+            ExecSQL(server, sender, R"(
+                UPDATE `/Root/table-1` SET value = Timestamp("2030-01-01T00:00:00Z") WHERE key = 2;
+            )");
+        }
+        for (auto& ev : delayed) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+        const auto response = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), changeIndexKey
+            ? "key = 2, skey = 90, tkey = 200, value = 2020-01-01T00:00:00.000000Z\n"
+            : "key = 2, skey = 20, tkey = 200, value = 2030-01-01T00:00:00.000000Z\n");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, indexPath), changeIndexKey
+            ? "skey = 90, key = 2\n" : "skey = 20, key = 2\n");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1/by_tkey/indexImplTable"), "tkey = 200, key = 2\n");
+
+        SimulateSleep(server, TDuration::Seconds(1));
+        size_t ttlChanges = 0;
+        size_t writeChanges = 0;
+        for (const auto& event : enqueued) {
+            for (const auto& info : event->Get()->Records) {
+                runtime.Send(event->Sender, sender, new TEvChangeExchange::TEvRequestRecords({{info.Order}}));
+                const auto reply = runtime.GrabEdgeEventRethrow<TEvChangeExchange::TEvRecords>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Records.size(), 1);
+                const auto& record = static_cast<const NDataShard::TChangeRecord&>(*reply->Get()->Records.front());
+                UNIT_ASSERT(record.GetKind() == NDataShard::TChangeRecord::EKind::CdcDataChange);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetKey().size(), 2);
+                if (record.GetUserCtx()->GetUserSID() == "ttl@system") {
+                    UNIT_ASSERT(record.GetDataChange().HasErase());
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetKey()[0].AsValue<ui32>(), 10);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetKey()[1].AsValue<ui32>(), 1);
+                    ++ttlChanges;
+                } else {
+                    // The index-key change has its own erase and upsert, unrelated to TTL.
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetKey()[1].AsValue<ui32>(), 2);
+                    ++writeChanges;
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ttlChanges, 1);
+        UNIT_ASSERT_VALUES_EQUAL(writeChanges, changeIndexKey ? 2 : 0);
+    }
+
+    Y_UNIT_TEST(ConditionalEraseRowsSyncIndexCdcInitialScan) {
+        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+
+        TPortManager pm;
+        NKikimrPQ::TPQConfig pqConfig;
+        pqConfig.SetEnabled(true);
+        pqConfig.SetEnableProtoSourceIdInfo(true);
+        pqConfig.SetTopicsAreFirstClassCitizen(true);
+        pqConfig.SetMaxReadCookies(10);
+        pqConfig.SetCheckACL(false);
+        pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+        TServerSettings settings(pm.GetPort(2134), {}, pqConfig);
+        settings.SetDomainName("Root").SetUseRealThreads(false)
+            .SetEnableChangefeedsOnIndexTables(true)
+            .SetEnableChangefeedInitialScan(true);
+
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateIndexedTable(server, sender, "/Root", "table-1");
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
+                (1, 10, 100, Timestamp("2020-01-01T00:00:00Z")),
+                (2, 20, 200, Timestamp("2030-01-01T00:00:00Z"));
+        )");
+
+        // Keep the scan before the expired row, with its snapshot already established.
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest> scans(runtime);
+        const TString indexPath = "/Root/table-1/by_skey/indexImplTable";
+        const TString streamPath = indexPath + "/stream";
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root/table-1/by_skey", "indexImplTable", {
+            .Name = "stream",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeUpdate,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatJson,
+            .InitialState = NKikimrSchemeOp::ECdcStreamStateScan,
+        }));
+        runtime.WaitFor("blocked index initial scan", [&] { return !scans.empty(); }, TDuration::Seconds(10));
+
+        bool scanDone = false;
+        auto observeScan = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanResponse>([&](auto& ev) {
+            if (ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
+                scanDone = true;
+            }
+        });
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const auto indexes = GetIndexes(server, sender, "/Root/table-1");
+        ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 4, currentTime, TUnit::AUTO, indexes);
+        const auto response = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);
+        UNIT_ASSERT(!scanDone);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"),
+            "key = 2, skey = 20, tkey = 200, value = 2030-01-01T00:00:00.000000Z\n");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, indexPath), "skey = 20, key = 2\n");
+
+        scans.Stop().Unblock();
+        runtime.WaitFor("index initial scan completion", [&] { return scanDone; }, TDuration::Seconds(10));
+
+        // Read the delivered stream in partition order and apply every record as a consumer would.
+        const auto stream = Ls(runtime, sender, streamPath);
+        const auto& children = stream->ResultSet.at(0).ListNodeEntry->Children;
+        UNIT_ASSERT_VALUES_EQUAL(children.size(), 1);
+        const auto topic = Navigate(server, sender, streamPath + "/" + children.front().Name, TNavigate::OpTopic);
+        const auto& partitions = topic->ResultSet.at(0).PQGroupInfo->Description.GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+        const auto& partition = partitions.Get(0);
+        auto readRecords = [&] {
+            auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+            auto& part = *request->Record.MutablePartitionRequest();
+            part.SetTopic(streamPath);
+            part.SetPartition(partition.GetPartitionId());
+            auto& read = *part.MutableCmdRead();
+            read.SetClientId(NPQ::CLIENTID_WITHOUT_CONSUMER);
+            read.SetCount(100);
+            read.SetOffset(0);
+            read.SetReadTimestampMs(0);
+            read.SetExternalOperation(true);
+            ForwardToTablet(runtime, partition.GetTabletId(), sender, request.Release());
+            const auto reply = runtime.GrabEdgeEventRethrow<TEvPersQueue::TEvResponse>(sender);
+            TVector<NJson::TJsonValue> records;
+            for (const auto& record : reply->Get()->Record.GetPartitionResponse().GetCmdReadResult().GetResult()) {
+                const auto data = GetDeserializedData(record.GetData());
+                UNIT_ASSERT(NJson::ReadJsonTree(data.GetData(), &records.emplace_back()));
+            }
+            return records;
+        };
+        TVector<NJson::TJsonValue> records;
+        for (size_t attempt = 0; attempt < 10; ++attempt) {
+            SimulateSleep(server, TDuration::Seconds(1));
+            records = readRecords();
+            if (records.size() >= 3) {
+                break;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(records.size(), 3); // Two snapshot rows and the TTL erase.
+        THashSet<std::pair<ui32, ui32>> replica;
+        size_t erases = 0;
+        for (const auto& record : records) {
+            const auto& cells = record["key"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(cells.size(), 2);
+            const auto key = std::make_pair(ui32(cells[0].GetUInteger()), ui32(cells[1].GetUInteger()));
+            if (record.Has("erase")) {
+                UNIT_ASSERT_VALUES_EQUAL(key.first, 10);
+                UNIT_ASSERT_VALUES_EQUAL(key.second, 1);
+                UNIT_ASSERT_VALUES_EQUAL(replica.erase(key), 1);
+                ++erases;
+            } else {
+                UNIT_ASSERT(record.Has("update"));
+                UNIT_ASSERT(replica.insert(key).second);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(erases, 1);
+        UNIT_ASSERT_VALUES_EQUAL(replica.size(), 1);
+        UNIT_ASSERT(replica.contains(std::make_pair(20u, 2u)));
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsSyncIndexCdcVolatileDependency) {

@@ -1,6 +1,7 @@
 PY3TEST()
 
 SIZE(MEDIUM)
+TAG(ya:manual)
 FORK_SUBTESTS()
 # Each current scenario gets its own timeout, including the BSC warmup.
 SPLIT_FACTOR(32)

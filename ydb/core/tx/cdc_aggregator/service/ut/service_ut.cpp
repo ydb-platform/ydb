@@ -8,6 +8,12 @@
 
 namespace NKikimr::NCdcAggregator {
 
+namespace {
+
+constexpr ui64 Cookie = 42;
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(TCdcAggregatorServiceTest) {
     Y_UNIT_TEST(ReturnsRetryToWriteHeartbeat) {
         TTestBasicRuntime runtime(1, false);
@@ -25,11 +31,11 @@ Y_UNIT_TEST_SUITE(TCdcAggregatorServiceTest) {
         };
 
         const auto edge = runtime.AllocateEdgeActor();
-        runtime.Send(new IEventHandle(serviceId, edge, request.Release(), 0, 42));
+        runtime.Send(new IEventHandle(serviceId, edge, request.Release(), 0, Cookie));
 
         auto result = runtime.GrabEdgeEvent<TEvCdcAggregatorService::TEvWriteHeartbeatResult>(edge);
         UNIT_ASSERT_C(result->Get()->Status == TEvCdcAggregatorService::TEvWriteHeartbeatResult::EStatus::Retry, result->Get()->ToString());
-        UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 42);
+        UNIT_ASSERT_VALUES_EQUAL(result->Cookie, Cookie);
     }
 }
 

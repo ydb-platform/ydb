@@ -174,6 +174,8 @@
 
 #include <ydb/core/tracing/tablet_info.h>
 
+#include <ydb/core/tx/cdc_aggregator/public/events.h>
+#include <ydb/core/tx/cdc_aggregator/service/service.h>
 #include <ydb/core/tx/cdc_aggregator/tablet/tablet.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
@@ -3400,6 +3402,10 @@ void TReplicationServiceInitializer::InitializeServices(NActors::TActorSystemSet
     setup->LocalServices.emplace_back(
         NReplication::MakeReplicationServiceId(NodeId),
         TActorSetupCmd(NReplication::CreateReplicationService(), TMailboxType::HTSwap, appData->UserPoolId)
+    );
+    setup->LocalServices.emplace_back(
+        NCdcAggregator::MakeCdcAggregatorServiceId(NodeId),
+        TActorSetupCmd(NCdcAggregator::CreateCdcAggregatorService(), TMailboxType::HTSwap, appData->UserPoolId)
     );
 }
 

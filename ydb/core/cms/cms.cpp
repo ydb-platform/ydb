@@ -844,7 +844,8 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         return false;
     }
 
-    if (!ClusterInfo->IsStateStorageReplicaNode(node.NodeId)) {
+    const auto* replicaRings = ClusterInfo->FindStateStorageReplicaRings(node.NodeId);
+    if (!replicaRings) {
         return true;
     }
 
@@ -855,17 +856,33 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         return false;
     }
 
-    const ui32 ringGroupId = node.PileId.GetOrElse(0);
-    Y_ABORT_UNLESS(ringGroupId < ClusterInfo->StateStorageInfo->RingGroups.size());
+    const auto now = AppData(ctx)->TimeProvider->Now();
+    const TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
+    for (const auto& [ringGroupId, ringId] : *replicaRings) {
+        if (ClusterInfo->StateStorageInfo->RingGroups[ringGroupId].WriteOnly) {
+            continue;
+        }
+        if (!CheckStateStorageRingGroup(ringGroupId, ringId, opts, now, duration, defaultDeadline, error)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TCms::CheckStateStorageRingGroup(ui32 ringGroupId,
+    ui32 currentRing,
+    const TActionOptions& opts,
+    TInstant now,
+    TDuration duration,
+    TInstant defaultDeadline,
+    TErrorInfo& error) const
+{
     const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[ringGroupId].NToSelect;
-    const ui32 currentRing = ClusterInfo->GetRingId(node.NodeId);
     ui8 currentRingState = TStateStorageRingInfo::Unknown;
     bool hasRestartRingsByThisRequest = false;
     ui32 restartRings = 0;
     ui32 lockedRings = 0;
     ui32 disabledRings = 0;
-    auto now = AppData(ctx)->TimeProvider->Now();
-    TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
     for (auto ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
         auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
         YDB_LOG_DEBUG("Dump ring",
@@ -3259,6 +3276,20 @@ void TCms::Handle(TEvCms::TEvGetLogTailRequest::TPtr &ev, const TActorContext &c
     Execute(CreateTxGetLogTail(ev), ctx);
 }
 
+void TCms::Handle(NStorage::TEvNodeConfigGetSelfHealState::TPtr &ev, const TActorContext &ctx)
+{
+    if (State->Sentinel) {
+        ctx.Send(ev->Forward(State->Sentinel));
+    } else if (!State->Config.SentinelConfig.Enable) {
+        auto response = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+        response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+        response->Record.SetErrorReason("Sentinel is disabled");
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+    } else {
+        YDB_LOG_DEBUG("Sentinel is not ready for State Storage selfheal state refresh");
+    }
+}
+
 void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorContext &ctx)
 {
     if (State->Sentinel) {
@@ -3346,6 +3377,8 @@ void TCms::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev,
 void TCms::Handle(::NKikimr::TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx)
 {
     const auto& record = *ev->Get();
+
+    State->BridgeInfo = record.BridgeInfo;
 
     if (!record.Config || !record.Config->HasClusterState()) {
         return;

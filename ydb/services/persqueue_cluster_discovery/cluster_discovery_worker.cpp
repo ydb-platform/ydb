@@ -1,5 +1,6 @@
 #include "cluster_discovery_worker.h"
 
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_select.h>
 #include <ydb/services/persqueue_cluster_discovery/cluster_ordering/weighed_ordering.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -114,7 +115,7 @@ public:
             auto& clusterInfo = *sessionClusters.add_clusters();
             clusterInfo.set_endpoint(cluster.Balancer);
             clusterInfo.set_name(cluster.Name);
-            clusterInfo.set_available(cluster.IsEnabled);
+            clusterInfo.set_available(cluster.IsEnabled && cluster.IsAvailable);
         }
 
         return true;
@@ -177,10 +178,12 @@ public:
             }
 
             const auto& visibleClusters = ClustersList->GetClusters(authority);
+            const TString account = AccountNameFromDatabase(Request->GetDatabaseName().GetOrElse(TString()));
+            const auto& readClusters = ClustersList->GetReadClusters(account);
 
             statusCode = ProcessWriteSessions(visibleClusters, *result);
             if (statusCode == Ydb::StatusIds::SUCCESS) {
-                statusCode = ProcessReadSessions(visibleClusters, *result);
+                statusCode = ProcessReadSessions(readClusters, *result);
             }
 
             result->set_version(ClustersList->Version);

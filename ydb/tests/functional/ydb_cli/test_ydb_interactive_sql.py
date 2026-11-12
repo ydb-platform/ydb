@@ -37,6 +37,15 @@ class BaseSqlInteractiveTest(BaseInteractiveTest):
         """Wait for the YQL interactive prompt to appear."""
         child.expect("YQL\033\\[22;39m>", timeout=self.PROMPT_TIMEOUT)
 
+    def _discard_and_exit(self, child):
+        try:
+            child.sendcontrol("c")
+            self._wait_for_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.close_interactive(child)
+
     @classmethod
     def create_profile(cls, profile_name: str, profile_file: str, active: bool = False):
         profile_data = {
@@ -161,9 +170,8 @@ class TestInteractiveExitCommands(BaseSqlInteractiveTest):
             self._wait_for_prompt(child)
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
-            child.expect(pexpect.EOF, timeout=5)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_double_ctrl_c_exits(self):
         """Two Ctrl+Cs sent within the double-Ctrl+C window terminate the session."""
@@ -175,9 +183,8 @@ class TestInteractiveExitCommands(BaseSqlInteractiveTest):
             self._wait_for_prompt(child)
             child.sendcontrol("c")
             child.expect("Bye!", timeout=10)
-            child.expect(pexpect.EOF, timeout=5)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_consecutive_ctrl_c_without_prompt(self):
         """A burst of Ctrl+Cs sent without waiting for prompt redraw must terminate the session cleanly."""
@@ -190,9 +197,8 @@ class TestInteractiveExitCommands(BaseSqlInteractiveTest):
             # the gap between consecutive cancels beyond the double-Ctrl+C window.
             child.send("\x03\x03\x03\x03")
             child.expect("Bye!", timeout=10)
-            child.expect(pexpect.EOF, timeout=5)
         finally:
-            child.close()
+            self.close_interactive(child)
 
 
 # =============================================================================
@@ -437,9 +443,8 @@ class TestInteractivePexpect(BaseSqlInteractiveTest):
             child.expect("YQL.*>.*Enter to execute, Ctrl\\+Enter for newline.*Ctrl\\+D to exit", timeout=self.PROMPT_TIMEOUT)
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
-            child.expect(pexpect.EOF, timeout=5)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_sql_query_produces_output(self):
         child = self.spawn_interactive()
@@ -455,7 +460,7 @@ class TestInteractivePexpect(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_help_command_produces_output(self):
         child = self.spawn_interactive()
@@ -468,7 +473,7 @@ class TestInteractivePexpect(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_explain_shows_query_plan(self):
         child = self.spawn_interactive()
@@ -481,7 +486,7 @@ class TestInteractivePexpect(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_explain_ast_shows_query_ast(self):
         child = self.spawn_interactive()
@@ -494,7 +499,7 @@ class TestInteractivePexpect(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_explain_followed_by_regular_query(self):
         """After EXPLAIN, normal queries should still execute correctly."""
@@ -511,7 +516,7 @@ class TestInteractivePexpect(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_set_stats_invalid_shows_error(self):
         child = self.spawn_interactive()
@@ -524,7 +529,7 @@ class TestInteractivePexpect(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_set_stats_valid_no_error(self):
         child = self.spawn_interactive()
@@ -540,7 +545,7 @@ class TestInteractivePexpect(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_invalid_sql_shows_error_and_continues(self):
         child = self.spawn_interactive()
@@ -556,7 +561,7 @@ class TestInteractivePexpect(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_quit_exits_session(self):
         child = self.spawn_interactive()
@@ -565,9 +570,8 @@ class TestInteractivePexpect(BaseSqlInteractiveTest):
             self._wait_for_prompt(child)
             self._send_query(child, "quit")
             child.expect("Bye!", timeout=10)
-            child.expect(pexpect.EOF, timeout=5)
         finally:
-            child.close()
+            self.close_interactive(child)
 
 
 # =============================================================================
@@ -625,7 +629,7 @@ class TestInteractiveConfigCommand(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_config_esc_on_main_menu_returns_to_prompt(self):
         """Pressing Escape on the main /config menu returns to the YQL prompt."""
@@ -639,7 +643,7 @@ class TestInteractiveConfigCommand(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     # ------------------------------------------------------------------
     # Enable/Disable hints  (item 0)
@@ -660,7 +664,7 @@ class TestInteractiveConfigCommand(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_config_hints_esc_in_submenu_closes_config(self):
         """Pressing Escape inside the hints sub-menu closes /config entirely."""
@@ -676,7 +680,7 @@ class TestInteractiveConfigCommand(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     # ------------------------------------------------------------------
     # Enable/Disable colors  (item 1)
@@ -700,7 +704,7 @@ class TestInteractiveConfigCommand(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_config_colors_esc_in_submenu_closes_config(self):
         """Pressing Escape inside the colors sub-menu closes /config entirely."""
@@ -717,7 +721,7 @@ class TestInteractiveConfigCommand(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     # ------------------------------------------------------------------
     # Choose color theme  (item 2)
@@ -740,7 +744,7 @@ class TestInteractiveConfigCommand(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     # ------------------------------------------------------------------
     # Clone color theme  (item 3)
@@ -763,7 +767,7 @@ class TestInteractiveConfigCommand(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
     def test_config_clone_theme_navigate_source_list(self):
         """Arrow keys navigate the clone source picker without crashing."""
@@ -784,7 +788,7 @@ class TestInteractiveConfigCommand(BaseSqlInteractiveTest):
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
         finally:
-            child.close()
+            self.close_interactive(child)
 
 
 # =============================================================================
@@ -804,12 +808,6 @@ class TestInteractiveHighlightAndCompletion(BaseSqlInteractiveTest):
     def _send_ctrl_down(child):
         child.send("\x1b[1;5B")
 
-    def _discard_and_exit(self, child):
-        child.sendcontrol('c')
-        child.sendcontrol('c')
-        child.sendcontrol('c')
-        child.sendcontrol('c')
-
     # ------------------------------------------------------------------
     # 1. Syntax highlighting
     # ------------------------------------------------------------------
@@ -826,7 +824,6 @@ class TestInteractiveHighlightAndCompletion(BaseSqlInteractiveTest):
             child.expect(" \x1b.*\\[.*SELECT\x1b", timeout=5)
         finally:
             self._discard_and_exit(child)
-            child.close()
 
     # ------------------------------------------------------------------
     # 2. Keyword completion
@@ -845,7 +842,6 @@ class TestInteractiveHighlightAndCompletion(BaseSqlInteractiveTest):
             child.expect("SELECT", timeout=self.COMPLETION_TIMEOUT)
         finally:
             self._discard_and_exit(child)
-            child.close()
 
     def test_tab_shows_candidate_list_for_ambiguous_prefix(self):
         child = self.spawn_interactive()
@@ -858,7 +854,6 @@ class TestInteractiveHighlightAndCompletion(BaseSqlInteractiveTest):
             self._wait_for_prompt(child)
         finally:
             self._discard_and_exit(child)
-            child.close()
 
     def test_hints_showed_for_ambiguous_prefix(self):
         child = self.spawn_interactive()
@@ -870,7 +865,6 @@ class TestInteractiveHighlightAndCompletion(BaseSqlInteractiveTest):
             child.expect("SHOW CREATE", timeout=self.COMPLETION_TIMEOUT)
         finally:
             self._discard_and_exit(child)
-            child.close()
 
     def test_interactive_commands_completion(self):
         child = self.spawn_interactive()
@@ -883,7 +877,6 @@ class TestInteractiveHighlightAndCompletion(BaseSqlInteractiveTest):
             self._wait_for_prompt(child)
         finally:
             self._discard_and_exit(child)
-            child.close()
 
     def test_interactive_commands_hints_listing(self):
         child = self.spawn_interactive()
@@ -901,7 +894,6 @@ class TestInteractiveHighlightAndCompletion(BaseSqlInteractiveTest):
             child.expect("/.*config", timeout=self.COMPLETION_TIMEOUT)
         finally:
             self._discard_and_exit(child)
-            child.close()
 
     # ------------------------------------------------------------------
     # 3. Schema-aware completion
@@ -918,7 +910,6 @@ class TestInteractiveHighlightAndCompletion(BaseSqlInteractiveTest):
             self._wait_for_prompt(child)
         finally:
             self._discard_and_exit(child)
-            child.close()
 
 
 # =============================================================================
@@ -1410,10 +1401,6 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             env=env,
         )
 
-    def _discard_and_exit(self, child):
-        for _ in range(4):
-            child.sendcontrol('c')
-
     def _expect_keyword(self, child, keyword: str, *, anchor: str = ""):
         # Replxx may interleave color escape sequences inside the rendered
         # keyword/candidate text, so accept ANSI noise between letters.
@@ -1478,7 +1465,6 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             child.expect("SHOW CREATE", timeout=self.COMPLETION_TIMEOUT)
         finally:
             self._discard_and_exit(child)
-            child.close()
 
     def test_tab_completes_beg_to_begin(self):
         """`BEG<TAB>` should expand to BEGIN."""
@@ -1491,7 +1477,6 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             self._expect_keyword(child, "BEGIN")
         finally:
             self._discard_and_exit(child)
-            child.close()
 
     def test_tab_completes_partial_transaction(self):
         """`BEGIN T<TAB>` should expand to TRANSACTION (single candidate)."""
@@ -1504,7 +1489,6 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             self._expect_keyword(child, "TRANSACTION")
         finally:
             self._discard_and_exit(child)
-            child.close()
 
     def test_tab_after_begin_with_s_proposes_modes(self):
         """`BEGIN s<TAB>` proposes the s-prefixed mode names only."""
@@ -1522,7 +1506,6 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             self._expect_s_prefixed_tx_modes(child, "BEGIN s")
         finally:
             self._discard_and_exit(child)
-            child.close()
 
     def test_tab_completes_com_to_commit(self):
         """`COM<TAB>` should expand to COMMIT."""
@@ -1535,7 +1518,6 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             self._expect_keyword(child, "COMMIT")
         finally:
             self._discard_and_exit(child)
-            child.close()
 
     def test_tab_completes_rol_to_rollback(self):
         """`ROL<TAB>` should expand to ROLLBACK."""
@@ -1548,7 +1530,6 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             self._expect_keyword(child, "ROLLBACK")
         finally:
             self._discard_and_exit(child)
-            child.close()
 
 
 class TestInteractiveTransactionsNotInPublicYdb(BaseSqlInteractiveTest):

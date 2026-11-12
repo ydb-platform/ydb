@@ -1,5 +1,6 @@
 #include "distconf.h"
 #include "distconf_quorum.h"
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/protos/node_broker.pb.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -112,7 +113,16 @@ namespace NKikimr::NStorage {
     };
 
     void TDistributedConfigKeeper::CheckBindingLiveness() {
-        if (Binding && Binding->RootNodeId && Binding->SessionId && !BindingLivenessActorId) {
+        // Keep ordinary V1 clusters independent of keeper liveness. The startup flag applies only
+        // before bootstrap, so a committed disable also stops an already running watchdog.
+        const bool bootstrapping = BaseConfig->GetSelfManagementConfig().GetEnabled()
+            && (!StorageConfig || !StorageConfig->GetGeneration());
+        if (!SelfManagementEnabled && !bootstrapping) {
+            CancelBindingLiveness();
+            return;
+        }
+        if (Binding && Binding->RootNodeId && Binding->SessionId && Binding->SupportsDirectRootQueries
+            && !BindingLivenessActorId) {
             BindingLivenessActorId = RegisterWithSameMailbox(new TBindingLivenessActor(this, *Binding));
         }
     }
@@ -234,7 +244,7 @@ namespace NKikimr::NStorage {
     };
 
     void TDistributedConfigKeeper::RequestConfigRefill() {
-        if (PendingConfigRefill && !BridgeInfo && !HasLocalConfig() && Binding && Binding->RootNodeId
+        if (PendingConfigRefill && !IsBridged() && !HasLocalConfig() && Binding && Binding->RootNodeId
             && !LegacyConfigRefill && !ConfigRefillActorId) {
             ConfigRefillActorId = RegisterWithSameMailbox(new TConfigRefillActor(this, *Binding));
         }
@@ -249,7 +259,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::DeferConfigRefill(const NKikimrBlobStorage::TStorageConfig& config) {
-        if (BridgeInfo || HasLocalConfig() || !config.GetGeneration() || !Binding || LegacyConfigRefill) {
+        if (IsBridged() || HasLocalConfig() || !config.GetGeneration() || !Binding || LegacyConfigRefill) {
             return false;
         }
         if (!PendingConfigRefill || PendingConfigRefill->GetGeneration() < config.GetGeneration()) {
@@ -469,7 +479,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::IssueNextBindRequest() {
         Y_DEBUG_ABORT_UNLESS(IsSelfStatic);
 
-        if (Binding || RootProbe || RootState == ERootState::ERROR_TIMEOUT) {
+        if (Binding || RootProbe || RootState == ERootState::ERROR_TIMEOUT || Halted) {
             return;
         }
 
@@ -539,7 +549,7 @@ namespace NKikimr::NStorage {
         record.SetInitial(true);
         record.SetSubtreeHeight(GetSubtreeHeight());
         record.SetSupportsMetadataOnlyCollect(true);
-        if (BridgeInfo && StorageConfig->GetGeneration()
+        if (IsBridged() && StorageConfig->GetGeneration()
             && ((!LocalCommittedStorageConfig
                     || LocalCommittedStorageConfig->GetGeneration() < StorageConfig->GetGeneration())
                 || (!CommittedStorageConfig && !DirectBoundNodes.empty()))) {
@@ -734,8 +744,9 @@ namespace NKikimr::NStorage {
 
         // abort or restart scatter tasks issued to newly added nodes
         const TMonotonic now = TActivationContext::Monotonic();
-        for (auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0}); it != AddedNodesScatterTasks.end(); ) {
-            const auto& [nodeId, cookie] = *it;
+        for (auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0});
+                it != AddedNodesScatterTasks.end() && std::get<0>(*it) == nodeId; ) {
+            const ui64 cookie = std::get<1>(*it);
 
             // find matching scatter task
             const auto jt = ScatterTasks.find(cookie);
@@ -743,8 +754,9 @@ namespace NKikimr::NStorage {
             TScatterTask& task = jt->second;
 
             if (task.StartTimestamp + TDuration::Seconds(3) <= now) { // task has timed out -- abort it
+                AddedNodesScatterTasks.erase(it);
                 AbortScatterTask(cookie, nodeId);
-                it = AddedNodesScatterTasks.erase(it);
+                it = AddedNodesScatterTasks.lower_bound({nodeId, 0});
             } else { // restart scatter task for this node
                 IssueAddedNodeScatterTask(nodeId, cookie, task);
                 ++it;
@@ -753,7 +765,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::IsProvisionalPeer(ui32 nodeId) const {
-        return !BridgeInfo && Scepter && CurrentProposition
+        return !IsBridged() && Scepter && CurrentProposition
                && std::ranges::binary_search(CurrentProposition->AddedOrChangedNodeIdentifiers,
                    nodeId, {}, &TNodeIdentifier::NodeId);
     }
@@ -779,6 +791,11 @@ namespace NKikimr::NStorage {
             return;
         }
         if (const auto it = SubscribedSessions.find(nodeId); it != SubscribedSessions.end()) {
+            // Dynamic peers are not listed in AllNodeIds. Dropping their distconf
+            // subscription must not close the session used by other actors.
+            const auto& dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
+            const bool isRemovedStaticNode = !AllNodeIds.contains(nodeId)
+                && (!dynamicNameserviceConfig || nodeId <= dynamicNameserviceConfig->MaxStaticNodeId);
             TSessionSubscription& subs = it->second;
             YDB_LOG_DEBUG("UnsubscribeInterconnect",
                 {"marker", "NWDC55"},
@@ -791,16 +808,16 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(jt != SubscriptionCookieMap.end());
                 Y_ABORT_UNLESS(jt->second == nodeId);
                 SubscriptionCookieMap.erase(jt);
-                if (!AllNodeIds.contains(nodeId)) {
+                if (isRemovedStaticNode) {
                     TActivationContext::Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0,
                         TActivationContext::InterconnectProxy(nodeId), {}, nullptr, 0));
                 }
             } else {
                 // we already had TEvNodeConnected, so we have to unsubscribe
                 Y_ABORT_UNLESS(subs.SessionId);
-                ui32 event = AllNodeIds.contains(nodeId)
-                    ? TEvents::TSystem::Unsubscribe
-                    : TEvents::TSystem::Poison;
+                const ui32 event = isRemovedStaticNode
+                    ? TEvents::TSystem::Poison
+                    : TEvents::TSystem::Unsubscribe;
                 TActivationContext::Send(new IEventHandle(event, 0, subs.SessionId, SelfId(), nullptr, 0));
             }
             SubscribedSessions.erase(it);
@@ -927,6 +944,10 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(!Binding || Binding->RootNodeId != SelfId().NodeId());
 
             if (Binding) {
+                Binding->SupportsDirectRootQueries = record.GetSupportsDirectRootQueries();
+                if (!Binding->SupportsDirectRootQueries) {
+                    CancelBindingLiveness();
+                }
                 BindFailuresStreak = 0;
                 LastUnboundWarnAt = TInstant::Zero();
             }
@@ -1025,7 +1046,7 @@ namespace NKikimr::NStorage {
             boundNode->MutableMeta()->CopyFrom(node.Configs.back());
         }
 
-        if (Scepter && !BridgeInfo) {
+        if (Scepter && !IsBridged()) {
             const bool appliedConfigChanged = RememberAppliedConfig(meta);
             if ((prev != node.Configs.back() || (refInserted && !meta.GetGeneration()))
                 && (!meta.GetGeneration() || meta.GetGeneration() > StorageConfig->GetGeneration()
@@ -1105,6 +1126,9 @@ namespace NKikimr::NStorage {
 
         if (!knownNode) {
             // node has been already deleted from the config, but new subscription is coming through -- ignoring it
+            SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
+            return;
+        } else if (Halted) {
             SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
             return;
         }
@@ -1221,7 +1245,7 @@ namespace NKikimr::NStorage {
             FanOutReversePush(CommittedStorageConfig.get());
         }
 
-        if (BridgeInfo && record.GetRequestedCommittedConfigGeneration()) {
+        if (IsBridged() && record.GetRequestedCommittedConfigGeneration()) {
             const ui64 generation = record.GetRequestedCommittedConfigGeneration();
             if (CommittedStorageConfig && generation <= CommittedStorageConfig->GetGeneration()) {
                 auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId());

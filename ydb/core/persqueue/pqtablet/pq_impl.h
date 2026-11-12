@@ -43,6 +43,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat, public TLogPrefix {
     void CreatedHook(const TActorContext& ctx) override;
     bool HandleHook(STFUNC_SIG) override;
 
+    bool IsTopicMutateDisabled(const TActorContext& ctx) const;
+
     void ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
 
     void HandleWakeup(const TActorContext&);
@@ -159,13 +161,16 @@ class TPersQueue : public NKeyValue::TKeyValueFlat, public TLogPrefix {
     DESCRIBE_HANDLE(HandleGetMaxSeqNoRequest)
     DESCRIBE_HANDLE(HandleSetClientOffsetRequest)
     DESCRIBE_HANDLE(HandleGetClientOffsetRequest)
-    DESCRIBE_HANDLE(HandleWriteRequest)
     DESCRIBE_HANDLE(HandleUpdateWriteTimestampRequest)
     DESCRIBE_HANDLE(HandleRegisterMessageGroupRequest)
     DESCRIBE_HANDLE(HandleDeregisterMessageGroupRequest)
     DESCRIBE_HANDLE(HandleUpdateReadMetricsRequest)
     DESCRIBE_HANDLE(HandleSplitMessageGroupRequest)
 #undef DESCRIBE_HANDLE
+
+    void HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
+                            const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
+                            bool fromMirrorer = false);
 
 #define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,\

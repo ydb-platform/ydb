@@ -1,0 +1,11 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT x.*, y.*
+FROM       (VALUES (1)) AS x(a)
+CROSS JOIN (VALUES (2)) AS y(b);
+
+SELECT * FROM (
+    SELECT x.*, y.*
+    FROM       (VALUES (1)) AS x(a)
+    CROSS JOIN (VALUES (2)) AS y(b)
+);

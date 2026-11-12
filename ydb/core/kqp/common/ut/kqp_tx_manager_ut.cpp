@@ -239,6 +239,88 @@ Y_UNIT_TEST_SUITE(TxManagerShardMeta) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TxManagerPessimisticLock) {
+
+    Y_UNIT_TEST(PessimisticLockMakesTxNotReadOnly) {
+        auto txManager = CreateKqpTransactionManager();
+        txManager->AddShard(1, false, "/Root/Table");
+        txManager->AddAction(1, IKqpTransactionManager::EAction::PESSIMISTIC_LOCK);
+
+        UNIT_ASSERT(!txManager->IsReadOnly());
+        UNIT_ASSERT(txManager->NeedCommit());
+    }
+
+    Y_UNIT_TEST(ReadActionStaysReadOnly) {
+        auto txManager = CreateKqpTransactionManager();
+        txManager->AddShard(1, false, "/Root/Table");
+        txManager->AddAction(1, IKqpTransactionManager::EAction::READ);
+
+        UNIT_ASSERT(txManager->IsReadOnly());
+    }
+
+    Y_UNIT_TEST(PessimisticLockShardParticipatesInCommit) {
+        auto txManager = CreateKqpTransactionManager();
+        txManager->AddShard(1, false, "/Root/Table");
+        txManager->AddAction(1, IKqpTransactionManager::EAction::PESSIMISTIC_LOCK);
+
+        UNIT_ASSERT(!txManager->IsEmpty());
+        UNIT_ASSERT(txManager->IsSingleShard());
+    }
+
+    Y_UNIT_TEST(PessimisticLockShardWithLocksIsSender) {
+        auto txManager = CreateKqpTransactionManager();
+        txManager->AddShard(1, false, "/Root/Table");
+        txManager->AddAction(1, IKqpTransactionManager::EAction::PESSIMISTIC_LOCK);
+        UNIT_ASSERT(txManager->AddLock(1, {}));
+
+        txManager->StartPrepare();
+        const auto info = txManager->GetPrepareTransactionInfo();
+        UNIT_ASSERT(info.SendingShards.contains(1));
+        UNIT_ASSERT(!info.ReceivingShards.contains(1));
+    }
+
+    Y_UNIT_TEST(CommitInfoMasksPessimisticLock) {
+        // The coordinator's affected-set flags only distinguish read (1) and
+        // write (2): PESSIMISTIC_LOCK must not leak into the flags, a shard
+        // pessimistically locked (with or without reads) is reported as write.
+        auto txManager = CreateKqpTransactionManager();
+        txManager->AddShard(1, false, "/Root/Table");
+        txManager->AddAction(1, IKqpTransactionManager::EAction::PESSIMISTIC_LOCK);
+        // In production the flag is only registered together with locks taken
+        // on the shard (see the lock actors), so model that state here.
+        txManager->AddLock(1, {});
+        txManager->AddShard(2, false, "/Root/Table");
+        txManager->AddAction(2, IKqpTransactionManager::EAction::WRITE | IKqpTransactionManager::EAction::PESSIMISTIC_LOCK);
+        txManager->AddShard(3, false, "/Root/Table");
+        txManager->AddAction(3, IKqpTransactionManager::EAction::WRITE);
+        txManager->AddShard(4, false, "/Root/Table");
+        txManager->AddAction(4, IKqpTransactionManager::EAction::READ | IKqpTransactionManager::EAction::PESSIMISTIC_LOCK);
+        // In production the flag is only registered together with locks taken
+        // on the shard (see the lock actors), so model that state here.
+        txManager->AddLock(4, {});
+
+        txManager->StartPrepare();
+        UNIT_ASSERT(!txManager->ConsumePrepareTransactionResult({1, 100, 200, 777}));
+        UNIT_ASSERT(!txManager->ConsumePrepareTransactionResult({2, 100, 200, 777}));
+        UNIT_ASSERT(!txManager->ConsumePrepareTransactionResult({3, 100, 200, 777}));
+        UNIT_ASSERT(txManager->ConsumePrepareTransactionResult({4, 100, 200, 777}));
+        txManager->StartExecute();
+
+        const auto commitInfo = txManager->GetCommitInfo();
+        UNIT_ASSERT_VALUES_EQUAL(commitInfo.ShardsInfo.size(), 4u);
+
+        THashMap<ui64, ui32> flags;
+        for (const auto& shardInfo : commitInfo.ShardsInfo) {
+            flags.emplace(shardInfo.ShardId, shardInfo.AffectedFlags);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(flags.at(1), static_cast<ui32>(IKqpTransactionManager::EAction::WRITE));
+        UNIT_ASSERT_VALUES_EQUAL(flags.at(2), static_cast<ui32>(IKqpTransactionManager::EAction::WRITE));
+        UNIT_ASSERT_VALUES_EQUAL(flags.at(3), static_cast<ui32>(IKqpTransactionManager::EAction::WRITE));
+        UNIT_ASSERT_VALUES_EQUAL(flags.at(4), static_cast<ui32>(
+            IKqpTransactionManager::EAction::READ | IKqpTransactionManager::EAction::WRITE));
+    }
+}
+
 Y_UNIT_TEST_SUITE(SameBorders) {
 
     // TTableRange holds non-owning TConstArrayRef borders, so the cell vectors

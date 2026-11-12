@@ -325,7 +325,6 @@ public:
         const auto shardId = requestState.ShardId;
         const auto cookie = requestState.LockCookie;
 
-        // TODO: Add Action Lock?
         if (Settings.CollectShardMetas) {
             Settings.TxManager->AddShard(shardId, false, Settings.TablePath, ShardMetas.at(shardId));
         } else {
@@ -446,6 +445,14 @@ public:
 
         Settings.Counters->ModifiedRowsCount->Add(record.ModifiedKeysSize());
         Settings.Counters->LockedRowsCount->Add(record.LockedKeysSize());
+
+        // The shard is a pessimistic-lock commit participant only when it
+        // actually holds locks: a success result with no taken locks (e.g. all
+        // rows were absent and skipped) must not make it participate, or the
+        // commit would wait forever for a prepare that is never sent to it.
+        if (!record.GetLocks().empty()) {
+            Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::PESSIMISTIC_LOCK, Settings.QuerySpanId);
+        }
 
         for (const auto& lock : record.GetLocks()) {
             AFL_ENSURE(Settings.TxManager->AddLock(shardId, lock, Settings.QuerySpanId));

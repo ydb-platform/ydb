@@ -12,6 +12,11 @@ TConfigFlags::TConfigFlags(TTypeAnnotationContext& types, TAllowSettingPolicy po
     , Policy_(std::move(policy))
 {
     InitFlags();
+    for (const auto name : {"ValidateUdf", "LLVM_OFF", "LLVM", "UdfSupportsYield", "GeobaseDownloadUrl"}) {
+        auto flagIt = Flags_.find(name);
+        YQL_ENSURE(flagIt != Flags_.end(), "Unknown flag " << name);
+        flagIt->second.AllowInProjectSettings = true;
+    }
 }
 
 TConfigFlags::TFlagHandler TConfigFlags::ToggleHandler(bool* field, TStringBuf enableName) {
@@ -152,6 +157,36 @@ void TConfigFlags::AddFlag(TStringBuf name, TStringBuf disableName, bool system,
     }
 }
 
+bool TConfigFlags::ApplyProjectSettings(TExprContext& ctx) {
+    for (const auto& pragma : Types_.ProjectSettings.Pragmas) {
+        if (!pragma.Name.StartsWith("config.")) {
+            continue;
+        }
+        if (Types_.StrictConfigValidation && pragma.Name != "config.flags") {
+            continue;
+        }
+        const TStringBuf name = pragma.Value.empty() ? TStringBuf{} : TStringBuf(pragma.Value.front());
+        const auto flagIt = Flags_.find(name);
+        if (flagIt == Flags_.end() && Types_.StrictConfigValidation) {
+            continue;
+        }
+        if (pragma.Name != "config.flags" || pragma.Value.empty() || name.empty() || flagIt == Flags_.end() || !flagIt->second.AllowInProjectSettings || (Policy_ && !Policy_(name))) {
+            if (Types_.StrictConfigValidation) {
+                TIssue issue(TPosition(), TStringBuilder() << "Unknown or disallowed project setting " << pragma.Name.Quote() << " (flag: " << name << ")");
+                issue.SetCode(EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, TSeverityIds::S_ERROR);
+                ctx.AddError(issue);
+                return false;
+            }
+            continue;
+        }
+        const TVector<TStringBuf> args(pragma.Value.begin() + 1, pragma.Value.end());
+        if (!ApplyFlag({}, name, args, ctx)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void TConfigFlags::InitFlags() {
     AddFlag("UnsecureCredential", {}, /*system=*/false, DelegateHandler(&TConfigFlags::AddCredential));
     AddFlag("ImportUdfs", {}, /*system=*/false, DelegateHandler(&TConfigFlags::ImportUdfs));
@@ -183,7 +218,8 @@ void TConfigFlags::InitFlags() {
         if (ForPartialTypeCheck_) {
             return true;
         }
-        if (Types_.UdfBridgeBinaryPath.empty()) {
+        const bool replayingMetadata = Types_.QContext.CanRead() && Types_.QContext.CaptureMode() != EQPlayerCaptureMode::Full;
+        if (Types_.UdfBridgeBinaryPath.empty() && !replayingMetadata) {
             ctx.AddError(TIssue(pos, "udf_bridge is not available"));
             return false;
         }
@@ -459,6 +495,17 @@ void TConfigFlags::InitFlags() {
         }
         Types_.DeriveColumnOrder = (name == "OrderedColumns");
         Types_.OrderedColumns = (name == "OrderedColumns");
+        return true;
+    });
+
+    AddFlag("PositionalUnionAll", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (!args.empty()) {
+            ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+            return false;
+        }
+        Types_.PositionalUnionAll = true;
+        Types_.OrderedColumns = true;
+        Types_.DeriveColumnOrder = true;
         return true;
     });
 

@@ -32,7 +32,7 @@ public:
     NCommon::TConfSetting<ui64, Static> LabelsListingLimit;
 };
 
-struct TSolomonConfiguration: public TSolomonSettings, public NCommon::TSettingDispatcher {
+struct TSolomonConfiguration: public NCommon::TDispatcherAndSettings<TSolomonSettings> {
     using TPtr = TIntrusivePtr<TSolomonConfiguration>;
 
     explicit TSolomonConfiguration(bool strictConfigValidation = false);

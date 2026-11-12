@@ -14,8 +14,9 @@
 #define ICPROXY_PROFILED TFunction func(*this, __func__, __LINE__)
 
 namespace NActors {
-
-    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(int maxWr, bool enableSendReceive) noexcept;
+    extern const ui32 RdmaRuntimeMaxQpPoolSize;
+    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(
+        int maxWr, bool enableSendReceive, ui32 qpPoolSize, ui32 qpCachePoolId) noexcept;
 
     /* WARNING: all proxy actors should be alive during actorsystem activity */
     class TInterconnectProxyTCP

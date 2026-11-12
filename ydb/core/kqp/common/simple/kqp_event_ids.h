@@ -57,6 +57,8 @@ struct TKqpEvents {
         EvCurrentQueryStats,
         EvKillSessionRequest,
         EvKillSessionResponse,
+        EvGetVectorIndexLevelsCacheRequest,
+        EvGetVectorIndexLevelsCacheResponse,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
@@ -74,7 +76,7 @@ struct TKqpExecuterEvents {
         EvTableResolveStatus,
         EvShardsResolveStatus,
         EvDelayedExecution,
-        EvPqTopicResolveStatus,
+        EvStreamingQueryPrepared,
         EvCurrentExecutionStats,
     };
 };
@@ -136,6 +138,7 @@ struct TKqpResourceManagerEvents {
         Unused4, // EvEstimateResourcesResponse,
         Unused1, // EvAllocateTaskResourcesRequest, extra resources allocation
         Unused2, // EvAllocateTaskResourcesResponse
+        EvQueryMemoryState,
     };
 };
 
@@ -185,6 +188,7 @@ struct TKqpScriptExecutionEvents {
         EvResetScriptExecutionRetriesResponse,
         EvGetScriptExecutionPhysicalGraph,
         EvDescribeResourceIdResponse,
+        EvFetchScriptResultsRequest,
     };
 };
 

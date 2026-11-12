@@ -14,6 +14,11 @@ void TSessionsManager::Start(NColumnShard::TColumnShard& shard) const {
     YDB_LOG_CREATE_CONTEXT(
         {"sessions", "start"},
         {"tabletId", shard.TabletID()});
+    if (!shard.GetIndexAs<TColumnEngineForLogs>().AreAllPortionsLoaded(std::nullopt)) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"skipReason", "portions_not_loaded"});
+        return;
+    }
     for (auto&& i : SourceSessions) {
         if (i.second->IsReadyForStarting()) {
             i.second->PrepareToStart(shard);
@@ -24,7 +29,6 @@ void TSessionsManager::Start(NColumnShard::TColumnShard& shard) const {
             i.second->PrepareToStart(shard);
         }
     }
-
     for (auto&& i : SourceSessions) {
         if (i.second->IsPrepared()) {
             TConclusionStatus status = i.second->TryStart(shard);
@@ -129,7 +133,6 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ProposeDestSession(
     NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
-    OnSharingAdmission();
     AFL_VERIFY(session);
     return std::make_unique<TTxProposeFromInitiator>(self, session, DestSessions, "tx_propose_from_initiator");
 }
@@ -142,7 +145,6 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ConfirmDest
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::InitializeSourceSession(
     NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session) {
-    OnSharingAdmission();
     AFL_VERIFY(session);
     return std::make_unique<TTxStartToSource>(self, session, SourceSessions, "tx_start_to_source");
 }

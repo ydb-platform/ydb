@@ -143,7 +143,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
         Y_ABORT_UNLESS(ss->TableProfilesLoaded);
         Ydb::StatusIds::StatusCode status;
-        if (!FillColumnTableDescription(modifyScheme, *item.Table, status, error)) {
+        if (!FillColumnTableDescription(modifyScheme, *item.Table, status, error,
+                item.Metadata.GetSourceDatabase(), CanonizePath(ss->RootPathElements))) {
             return nullptr;
         }
     } else {
@@ -218,6 +219,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
                 descs->Clear();
                 for (auto& desc : compatible) {
                     *descs->Add() = desc;
+                }
+            }
+        }
+
+        if (item.ReplicationConfig) {
+            auto config = *item.ReplicationConfig;
+            config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
+            *tableDesc.MutableReplicationConfig() = config;
+            for (auto& index : *indexedTable.MutableIndexDescription()) {
+                // Match the index types with independent replication targets in
+                // replication/controller/target_discoverer.cpp.
+                if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobal
+                        || index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                    *index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig() = config;
                 }
             }
         }
@@ -495,6 +510,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
 
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
+    modifyScheme.SetInternal(true);
     auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);

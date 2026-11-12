@@ -24,22 +24,18 @@ PEERDIR(
     ydb/library/yql/dq/common
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime
-    ydb/library/yql/dq/tasks
-    ydb/library/yql/providers/dq/actors/events
     ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/counters
     ydb/library/yql/providers/dq/interface
     ydb/library/yql/providers/dq/planner
-    ydb/library/yql/providers/dq/task_runner
     ydb/library/yql/providers/dq/task_runner_actor
     ydb/library/yql/providers/dq/worker_manager
     ydb/library/yql/providers/dq/worker_manager/interface
     ydb/library/yql/utils/actors
     ydb/library/yql/utils/actor_log
     ydb/public/api/protos
-    ydb/public/lib/yson_value
     yql/essentials/core
     yql/essentials/providers/common/metrics
     yql/essentials/public/issue

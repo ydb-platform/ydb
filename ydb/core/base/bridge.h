@@ -95,6 +95,27 @@ namespace NKikimr {
             }
         }
 
+        // Does the part of the bridged group at this stage take TEvPut of the requests coming to the group (the part of
+        // the pile in data quorum, that is); the one being synced or dropped doesn't yet/already. Bridge proxy routes
+        // writes by this rule, and BS_CONTROLLER counts the space of the group by it.
+        constexpr bool GroupPartTakesPuts(NKikimrBridge::TGroupState::EStage stage) {
+            switch (stage) {
+                case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA:
+                case NKikimrBridge::TGroupState::SYNCED:
+                    return true;
+
+                case NKikimrBridge::TGroupState::BLOCKS:
+                case NKikimrBridge::TGroupState::WRITE_KEEP:
+                case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
+                    return false;
+
+                case NKikimrBridge::TGroupState_EStage_TGroupState_EStage_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKikimrBridge::TGroupState_EStage_TGroupState_EStage_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    break;
+            }
+            Y_ABORT();
+        }
+
         bool IsSameClusterState(const NKikimrBridge::TClusterState& x, const NKikimrBridge::TClusterState& y);
 
         // State of the pile in the cluster state; the pile not listed there is INACTIVE.
@@ -166,6 +187,11 @@ namespace NKikimr {
                 groupId));
         }
 
+        // Pile whose part of the bridged group is the only one sure to hold everything written to the group: the one
+        // designated in TGroupState.AuthorityPileId, or the one of the only part of the group. Invalid pile id means
+        // that parts in synchronized piles hold everything, as it is the case for the groups following pile states.
+        TBridgePileId GetAuthorityPileId(const NKikimrBridge::TGroupState& state);
+
         // Pile of the operation changing the set of piles which is pending, or invalid pile id if there is none.
         inline TBridgePileId GetPendingPileOperationPileId(const NKikimrBridge::TClusterStateDetails& details) {
             return details.HasPendingPileOperation()
@@ -174,9 +200,19 @@ namespace NKikimr {
                 : TBridgePileId();
         }
 
+        // The bridged cluster is being rolled back to ordinary one (see TPendingPileOperation.ROLLBACK).
+        inline bool IsRollbackPending(const NKikimrBridge::TClusterStateDetails& details) {
+            return details.HasPendingPileOperation() && details.GetPendingPileOperation().GetKind() ==
+                NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ROLLBACK;
+        }
+
         // Make an entry for the part of the bridged group in the designated pile, which the group has no part in yet
         // (filling the gap with absent entries); returns the entry to fill in.
         NKikimrBridge::TGroupState::TPile *AddGroupPile(NKikimrBridge::TGroupState *state, TBridgePileId bridgePileId);
+
+        // Drop the part of the bridged group in the designated pile (the pile is being removed); absent entries at the end
+        // are not stored.
+        void RemoveGroupPile(NKikimrBridge::TGroupState *state, TBridgePileId bridgePileId);
 
         // Pile implied for nodes without pile name and groups without pile id by the pile registry implied by bridge
         // config: single-pile cluster (this is the case of the cluster converted from non-bridged one) has them in its
@@ -206,8 +242,8 @@ namespace NKikimr {
 
         // Pile registry for the new bridge config: piles remaining in the config keep their ids, slots of the dropped
         // ones get free, new piles take free slots in ascending order before the registry grows, free slots at the end
-        // are trimmed. Implicit pile setting is kept only while its pile remains in the config, PileListChanged is kept
-        // as is.
+        // are trimmed. Implicit pile setting is kept only while its pile remains in the config, other settings (like
+        // PileListChanged and RequiredFeatureLevel) are kept as they are.
         NKikimrBridge::TPileRegistry AssignPileIds(const NKikimrBridge::TPileRegistry& registry,
             const NKikimrConfig::TBridgeConfig& bridgeConfig);
 
@@ -231,8 +267,10 @@ namespace NKikimr {
 
         // Inline pile is the group serving as the only pile of its own (this is what groups of the cluster converted
         // from non-bridged one become): pile 0 of the group references the group itself with its current generation.
-        void MakeInlinePileGroupState(NKikimrBridge::TGroupState *state, TGroupId groupId, ui32 generation);
+        // Ordinary group of the multi-pile cluster becomes inline pile in the pile it resides in.
         TBridgePileId GetInlinePileId();
+        void MakeInlinePileGroupState(NKikimrBridge::TGroupState *state, TGroupId groupId, ui32 generation,
+            TBridgePileId bridgePileId = GetInlinePileId());
         // make the group (with its id and generation already filled in) an inline pile
         void MakeInlinePile(NKikimrBlobStorage::TGroupInfo *group);
 

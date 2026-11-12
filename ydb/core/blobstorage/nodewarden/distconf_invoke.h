@@ -40,6 +40,7 @@ namespace NKikimr::NStorage {
         bool EnablingDistconf = false;
         bool Detached = false;
         bool AdvancesConflictingGeneration = false;
+        bool RecoveryProposition = false;
 
     public: // Error handling
         struct TExError : yexception {
@@ -53,6 +54,10 @@ namespace NKikimr::NStorage {
 
         struct TExRace : TExError {
             TExRace() { Status = TResult::RACE; }
+        };
+
+        struct TExGenerationMismatch : TExError {
+            TExGenerationMismatch() { Status = TResult::GENERATION_MISMATCH; }
         };
 
         struct TExNoQuorum : TExError {
@@ -113,6 +118,8 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenBaseConfig::TPtr ev);
         void CheckReassignGroupDisk();
         void ReassignGroupDiskExecute();
+        void CheckBridgedPartDataRestorable(const NKikimrBlobStorage::TStorageConfig& config,
+            const NKikimrBlobStorage::TGroupInfo& group, TVDiskID vdiskId);
         void UpdateBridgeGroupInfo(const TQuery::TUpdateBridgeGroupInfo& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -153,6 +160,7 @@ namespace NKikimr::NStorage {
         TMonotonic CommitConfirmationDeadline;
         bool FullCommitConfirmationNeeded = false;
         static constexpr ui64 ConfigValidationTimeoutCookie = 1;
+        static constexpr ui64 VStatusTimeoutCookie = 2;
         bool WaitingForConfigValidation = false;
 
         TActorId ControllerPipeId;
@@ -163,7 +171,15 @@ namespace NKikimr::NStorage {
             DISABLE_DISTCONF,
             OTHER,
             ADD_BRIDGE_PILE, // BSC validates addition of the pile, then ProposedStorageConfig gets proposed
+            REMOVE_BRIDGE_PILE, // BSC validates removal of the pile, then ProposedStorageConfig gets proposed
+            BRIDGE_ROLLBACK, // BSC validates the rollback of the bridged cluster, then ProposedStorageConfig gets proposed
         } ControllerOp = EControllerOp::UNSET;
+
+        // for the operations BSC validates before ProposedStorageConfig gets proposed: the interface version BSC needs,
+        // the validation request, and what is being done (for the error message)
+        using TBridgePileControllerOp = std::tuple<ui32, NKikimrBlobStorage::TEvControllerDistconfRequest::EOperation,
+            const char*>;
+        std::optional<TBridgePileControllerOp> GetBridgePileControllerOp() const;
 
         void FetchStorageConfig(const TQuery::TFetchStorageConfig& request);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
@@ -172,6 +188,8 @@ namespace NKikimr::NStorage {
         void ReplyToFetchStorageConfig(const std::optional<TString>& mainConfigYaml,
             const std::optional<TString>& storageConfigYaml, bool transient);
         void ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request);
+        void ValidateReplaceStorageConfig(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
+                ui64 expectedStorageYamlVersion);
         void ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
                 ui64 expectedStorageYamlVersion, bool enablingDistconf);
         void ReplaceStorageConfigExecute();
@@ -198,18 +216,27 @@ namespace NKikimr::NStorage {
         void NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd);
 
         void ConvertToBridge(const TQuery::TConvertToBridge& cmd);
+        void RollbackBridge(const TQuery::TRollbackBridge& cmd);
 
-        // check that every node runs with BridgeConfig (and with support of changes of the list of piles, when
-        // pileListChange is set), then invoke the callback; every static node listed in requiredNodeIds must report it,
-        // while nodes listed in ignoredNodeIds may not report anything (they are leaving the cluster)
-        void RequireBridgeCapability(bool pileListChange, THashSet<ui32> requiredNodeIds,
+        // check that every node runs with BridgeConfig (and supports bridge features of minFeatureLevel, when it is set),
+        // then invoke the callback; every static node listed in requiredNodeIds must report it, while nodes listed in
+        // ignoredNodeIds may not report anything (they are leaving the cluster)
+        void RequireBridgeCapability(ui32 minFeatureLevel, THashSet<ui32> requiredNodeIds,
             THashSet<ui32> ignoredNodeIds, std::function<void()> callback);
         void NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& cmd);
 
-        TBridgePileId AddedBridgePileId; // set while adding pile, BaseConfig is requested for it
+        TBridgePileId BridgePileOpPileId; // the pile being added or removed, see ControllerOp
+
+        // common checks of the operations changing the set of piles: the pile is listed in BridgeConfig and it is in the
+        // expected state, no other operation is in progress; returns the id of the pile
+        TBridgePileId CheckPileOperation(const TString& pileName, NKikimrBridge::TClusterState::EPileState expectedState,
+            bool adding);
+        // every node remaining in the cluster has to support pile operations (see RequireBridgeCapability)
+        void RequirePileOperationCapability(TBridgePileId leavingPileId, std::function<void()> callback);
 
         void AddBridgePile(const TQuery::TAddBridgePile& cmd);
         void AddBridgePileWithBaseConfig();
+        void RemoveBridgePile(const TQuery::TRemoveBridgePile& cmd);
         void NotifyBridgePileOperation(const TQuery::TNotifyBridgePileOperation& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -223,6 +250,7 @@ namespace NKikimr::NStorage {
         void AdvanceGeneration();
         void QueryConfig(const TQuery::TQueryConfig& request);
         void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false);
+        void StartRecoveryProposition(TProcessCollectConfigsResult& result);
         void CollectBridgeConfig(const NKikimrBlobStorage::TStorageConfig& config, std::function<void()> callback);
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev = true,
             const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr, bool fromBootstrap = false);

@@ -72,6 +72,7 @@ public:
         , QueryClient(NQuery::TQueryClient(Env.GetDriver()))
         , Session(QueryClient.GetSession().GetValueSync().GetSession())
     {
+        Runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         CreateTier("tier1");
         CreateTier("tier2");
     }

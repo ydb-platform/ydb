@@ -24,6 +24,7 @@
 #include <util/generic/queue.h>
 #include <util/generic/stack.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 namespace NKikimr::NCms {
 
@@ -300,6 +301,7 @@ private:
             HFunc(TEvCms::TEvSetMarkerRequest, Handle);
             HFunc(TEvCms::TEvGetLogTailRequest, Handle);
             HFunc(TEvCms::TEvGetSentinelStateRequest, Handle);
+            HFunc(NStorage::TEvNodeConfigGetSelfHealState, Handle);
             FFunc(TEvCms::EvGetClusterInfoRequest, EnqueueRequest);
             HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
@@ -393,6 +395,13 @@ private:
         const TNodeInfo &node,
         TErrorInfo &error,
         const TActorContext &ctx) const;
+    bool CheckStateStorageRingGroup(ui32 ringGroupId,
+        ui32 currentRing,
+        const TActionOptions& options,
+        TInstant now,
+        TDuration duration,
+        TInstant defaultDeadline,
+        TErrorInfo& error) const;
     void AcceptPermissions(NKikimrCms::TPermissionResponse &resp, const TString &requestId,
         const TString &owner, i32 priority, const TActorContext &ctx, bool check = false);
     void ScheduleUpdateClusterInfo(const TActorContext &ctx, bool now = false);
@@ -490,6 +499,7 @@ private:
     void Handle(TEvCms::TEvSetMarkerRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvGetLogTailRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(NStorage::TEvNodeConfigGetSelfHealState::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev, const TActorContext &ctx);

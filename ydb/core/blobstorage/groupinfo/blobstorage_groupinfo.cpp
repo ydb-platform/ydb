@@ -494,6 +494,7 @@ IBlobToDiskMapper *TBlobStorageGroupInfo::TTopology::CreateMapper(TBlobStorageGr
     switch (gtype.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::Erasure4Plus2Block:
+        case TBlobStorageGroupType::Erasure8Plus2Block:
         case TBlobStorageGroupType::Erasure4Plus3Block:
         case TBlobStorageGroupType::Erasure3Plus3Block:
         case TBlobStorageGroupType::ErasureMirror3of4:
@@ -513,6 +514,7 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
     switch (topology->GType.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::Erasure4Plus2Block:
+        case TBlobStorageGroupType::Erasure8Plus2Block:
         case TBlobStorageGroupType::Erasure4Plus3Block:
         case TBlobStorageGroupType::Erasure3Plus3Block:
             return new TQuorumCheckerOrdinary(topology);
@@ -534,13 +536,14 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
 TBlobStorageGroupInfo::IDataIntegrityChecker*
 TBlobStorageGroupInfo::TTopology::CreateDataIntegrityChecker(const TTopology* topology) {
     switch (topology->GType.GetErasure()) {
+        case TBlobStorageGroupType::Erasure4Plus2Block:
+            return new TDataIntegrityCheckerBlock42(topology);
+
+        case TBlobStorageGroupType::Erasure8Plus2Block:
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::Erasure4Plus3Block:
         case TBlobStorageGroupType::Erasure3Plus3Block:
             return new TDataIntegrityCheckerTrivial(topology);
-
-        case TBlobStorageGroupType::Erasure4Plus2Block:
-            return new TDataIntegrityCheckerBlock42(topology);
 
         case TBlobStorageGroupType::ErasureMirror3dc:
             return new TDataIntegrityCheckerMirror3dc(topology);
@@ -637,7 +640,8 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology
     , AcceptedScope(acceptedScope)
     , StoragePoolName(std::move(storagePoolName))
     , DeviceType(deviceType)
-{}
+{
+}
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TTopology&& topology, TDynamicInfo&& dyn, TString storagePoolName,
         TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType, ui32 groupSizeInUnits)
@@ -664,6 +668,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
 {
     Dynamic.ServiceIdForOrderNumber.resize(Topology->GetTotalVDisksNum(), TActorId());
     Dynamic.ServiceIdForOrderNumber[GetOrderNumber(vdiskId)] = actorId;
+    Dynamic.Mirror3dcState = info->Dynamic.Mirror3dcState;
 }
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TBlobStorageGroupInfo& other, TInlinePileViewTag)
@@ -726,9 +731,15 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     TBlobStorageGroupInfo::TTopology topology(type);
     TBlobStorageGroupInfo::TDynamicInfo dyn(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
         group.GetGroupGeneration());
+    if (group.HasMirror3dcState()) {
+        dyn.Mirror3dcState.State = group.GetMirror3dcState();
+    }
     topology.FailRealms.resize(group.RingsSize());
     for (ui32 ringIdx = 0; ringIdx < group.RingsSize(); ++ringIdx) {
         const auto& realm = group.GetRings(ringIdx);
+        if (type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc && ringIdx < dyn.Mirror3dcState.FailRealmStates.size()) {
+            dyn.Mirror3dcState.FailRealmStates[ringIdx] = realm.GetState();
+        }
         TBlobStorageGroupInfo::TFailRealm& bsFailRealm = topology.FailRealms[ringIdx];
         bsFailRealm.FailDomains.resize(realm.FailDomainsSize());
         for (ui32 domainIdx = 0; domainIdx < realm.FailDomainsSize(); ++domainIdx) {

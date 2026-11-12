@@ -1,5 +1,7 @@
 #include "import_actor.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/backup/async_jobs/import_downloader.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -39,38 +41,30 @@ public:
     }
 };
 
-TString TImportActor::StageToString(EStage stage) {
-    switch (stage) {
-        case EStage::Initialization:
-            return "Initialization";
-        case EStage::WaitData:
-            return "WaitData";
-        case EStage::WaitWriting:
-            return "WaitWriting";
-        case EStage::WaitSaveCursor:
-            return "WaitSaveCursor";
-        case EStage::Finished:
-            return "Finished";
-    }
-    return "Unknown";
-}
-
 void TImportActor::ScheduleTimeoutCheck() {
     Schedule(TimeoutCheckInterval, new NActors::TEvents::TEvWakeup());
 }
 
-void TImportActor::HandleWakeup() {
-    if (Stage == EStage::Finished || Stage == EStage::WaitSaveCursor) {
+void TImportActor::Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
+    if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished() || Stage == EStage::Finished ||
+        Stage == EStage::WaitSaveCursor) {
+        return;
+    }
+    if (ev->Get()->Tag == WriteRetryTag) {
+        if (Stage == EStage::WaitWriting) {
+            SendWriteRequest();
+        }
         return;
     }
     const auto elapsed = TInstant::Now() - StageStartTime;
-    if (elapsed > OperationTimeout) {
+    const auto operationTimeout = TDuration::Seconds(AppDataVerified().ColumnShardConfig.GetBackupSettings().GetImportOperationTimeoutSeconds());
+    if (elapsed > operationTimeout) {
         const TString errorMessage = TStringBuilder() << "Import operation timed out after " << elapsed.Seconds() << "s"
-                                                      << " in stage " << StageToString(Stage) << ", tablet " << TabletId << ", importActorId "
+                                                      << " in stage " << ::ToString(Stage) << ", tablet " << TabletId << ", importActorId "
                                                       << (ImportActorId ? ImportActorId.ToString() : "none");
         YDB_LOG_ERROR("",
             {"event", "import_timeout"},
-            {"stage", StageToString(Stage)},
+            {"stage", ::ToString(Stage)},
             {"elapsedSec", elapsed.Seconds()},
             {"tabletId", TabletId},
             {"importActorId", ImportActorId ? ImportActorId.ToString() : "none"});
@@ -81,7 +75,7 @@ void TImportActor::HandleWakeup() {
     if (elapsed > WarningInterval) {
         YDB_LOG_WARN("",
             {"event", "import_slow_operation"},
-            {"stage", StageToString(Stage)},
+            {"stage", ::ToString(Stage)},
             {"elapsedSec", elapsed.Seconds()},
             {"tabletId", TabletId},
             {"importActorId", ImportActorId ? ImportActorId.ToString() : "none"});
@@ -105,15 +99,12 @@ void TImportActor::AbortImport(const TString& errorMessage) {
     ImportSession->Abort(errorMessage);
     PendingBlobs.clear();
     PendingPayloadSchema.clear();
+    WriteRetryState.reset();
     if (ImportActorId) {
         Send(ImportActorId, new NActors::TEvents::TEvPoisonPill());
         ImportActorId = {};
     }
-    if (Stage == EStage::WaitData) {
-        Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
-    } else if (Stage == EStage::WaitWriting) {
-        Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
-    }
+    Counters.OnOperationsCancelled();
     Stage = EStage::WaitSaveCursor;
     StageStartTime = TInstant::Now();
     Counters.OnSaveProgressStarted();
@@ -126,7 +117,6 @@ void TImportActor::PassAway() {
         Send(ImportActorId, new NActors::TEvents::TEvPoisonPill());
         ImportActorId = {};
     }
-    Counters.OnActorDead();
     TBase::PassAway();
 }
 
@@ -145,7 +135,7 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
         YDB_LOG_WARN("",
             {"event", "import_batch_after_terminal"},
-            {"stage", StageToString(Stage)},
+            {"stage", ::ToString(Stage)},
             {"isFinished", ImportSession->IsFinished()},
             {"isAborted", ImportSession->IsReadyForRemoveOnFinished()});
         return;
@@ -196,12 +186,21 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
 }
 
 void TImportActor::SendNextBlob() {
+    static const auto retryPolicy = IRetryPolicy<>::GetExponentialBackoffPolicy([]() {
+        return ERetryErrorClass::LongRetry;
+    }, TDuration::Seconds(1), TDuration::Seconds(1), TDuration::Seconds(30));
+    WriteRetryState = retryPolicy->CreateRetryState();
+    Counters.OnWriteStarted();
+    WriteStartTime = TInstant::Now();
+    SendWriteRequest();
+}
+
+void TImportActor::SendWriteRequest() {
     AFL_VERIFY(!PendingBlobs.empty());
     AFL_VERIFY(PendingPayloadSchema);
     auto writeEvent = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*writeEvent);
-    writer.AddDataToPayload(std::move(PendingBlobs.front()));
-    PendingBlobs.pop_front();
+    writer.AddDataToPayload(TString(PendingBlobs.front()));
 
     auto* operation = writeEvent->Record.AddOperations();
     operation->SetPayloadSchema(PendingPayloadSchema);
@@ -212,21 +211,33 @@ void TImportActor::SendNextBlob() {
     operation->MutableTableId()->SetSchemaVersion(ImportSession->GetTask().GetSchemaVersion().value_or(0));
     operation->SetIsBulk(true);
     Send(TabletActorId, writeEvent.Release());
-    Counters.OnWriteStarted();
-    WriteStartTime = TInstant::Now();
 }
 
 void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
         YDB_LOG_WARN("",
             {"event", "import_write_result_after_terminal"},
-            {"stage", StageToString(Stage)},
+            {"stage", ::ToString(Stage)},
             {"isFinished", ImportSession->IsFinished()},
             {"isAborted", ImportSession->IsReadyForRemoveOnFinished()});
         return;
     }
+    if (!ev->Get()->IsComplete()) {
+        Counters.OnError();
+        if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED) {
+            // Keep the cursor and the write timeout unchanged until this blob is written.
+            if (const auto delay = WriteRetryState->GetNextRetryDelay()) {
+                Schedule(*delay, new NActors::TEvents::TEvWakeup(WriteRetryTag));
+                return;
+            }
+        }
+        AbortImport(ev->Get()->GetError());
+        return;
+    }
     Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
-    AFL_VERIFY(ev->Get()->IsComplete())("error", ev->Get()->GetError());
+    AFL_VERIFY(!PendingBlobs.empty());
+    PendingBlobs.pop_front();
+    WriteRetryState.reset();
     if (!PendingBlobs.empty()) {
         SendNextBlob();
         StageStartTime = TInstant::Now();
@@ -240,7 +251,7 @@ void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
 }
 
 void TImportActor::SwitchStage(const EStage from, const EStage to) {
-    AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
+    AFL_VERIFY(Stage == from)("from", from)("real", Stage)("to", to);
     Stage = to;
     StageStartTime = TInstant::Now();
 }
@@ -274,12 +285,12 @@ TImportActor::TImportActor(std::shared_ptr<NBackground::TSession> bgSession, con
 void TImportActor::OnSessionProgressSaved() {
     Counters.OnSaveProgressFinished(TInstant::Now() - SaveProgressStartTime);
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
-        AFL_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor)("real", (ui32)Stage);
+        AFL_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor)("real", Stage);
         Stage = EStage::Finished;
         StageStartTime = TInstant::Now();
         SaveSessionState();
     } else {
-        AFL_VERIFY(Stage == EStage::WaitData)("real", (ui32)Stage);
+        AFL_VERIFY(Stage == EStage::WaitData)("real", Stage);
         StageStartTime = TInstant::Now();
         AFL_VERIFY(ImportActorId);
         Counters.OnReadStarted();

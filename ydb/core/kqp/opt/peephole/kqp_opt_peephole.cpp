@@ -2,6 +2,7 @@
 #include "kqp_opt_peephole_rules.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp_expr_helpers.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/host/kqp_transform.h>
@@ -10,6 +11,7 @@
 #include <ydb/library/naming_conventions/naming_conventions.h>
 
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_join.h>
@@ -19,24 +21,12 @@
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 
+#include <library/cpp/yson/node/node_io.h>
+
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 
 namespace NKikimr::NKqp::NOpt {
-
-std::unordered_set<std::string_view> GetNonDeterministicFunctions() {
-    static const std::unordered_set<std::string_view> nonDeterministicFunctions = {
-        "RandomNumber",
-        "Random",
-        "RandomUuid",
-        "Now",
-        "CurrentUtcDate",
-        "CurrentUtcDatetime",
-        "CurrentUtcTimestamp"
-    };
-
-    return nonDeterministicFunctions;
-}
 
 namespace {
 
@@ -56,7 +46,7 @@ TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& c
     auto status = OptimizeExpr(input, output, [paramBindings](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (auto maybeCallable = TMaybeNode<TCallable>(node)) {
             auto callable = maybeCallable.Cast();
-            if (GetNonDeterministicFunctions().contains(callable.CallableName()) && callable.Ref().ChildrenSize() == 0) {
+            if (IsQueryBoundNonDeterministic(callable.Ref())) {
                 const auto paramName = TStringBuilder() << ParamNamePrefix
                     << NNaming::CamelToSnakeCase(TString(callable.CallableName()));
 
@@ -104,6 +94,7 @@ public:
         AddHandler(0, &TDqPhyCrossJoin::Match, HNDL(RewriteCrossJoin));
         AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
+        AddHandler(0, &TDqPhyHashJoin::Match, HNDL(ChooseHashJoin));
         AddHandler(0, &TDqPhyBlockHashJoin::Match, HNDL(RewriteBlockHashJoin));
         AddHandler(0, &TDqPhyScalarHashJoin::Match, HNDL(RewriteScalarHashJoin));
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
@@ -165,6 +156,12 @@ protected:
     TMaybeNode<TExprBase> RewriteLength(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqPeepholeRewriteLength(node, ctx, *GetTypes());
         DumpAppliedRule("RewriteLength", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> ChooseHashJoin(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeChooseHashJoin(node, ctx);
+        DumpAppliedRule("ChooseHashJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -439,6 +436,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 auto oldArg = stage.Program().Args().Arg(i);
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
+                newArg.MutableRef().SetConstraints(oldArg.Ref().GetConstraintSet());
                 newArgs.emplace_back(newArg);
 
                 if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); scalarHashShuffleCount <= 1 && connection &&
@@ -465,6 +463,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                                 .Body(newBody)
                             .Build()
                             .ArgsType(inputProgram.ArgsType())
+                            .ArgsConstraints(inputProgram.ArgsConstraints())
                             .Done();
 
                         // Run the peephole optimization on new program again to update type annotations.
@@ -483,6 +482,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
                     // Update the type annotation for an argument with return value of the input program.
                     newArg.MutableRef().SetTypeAnn(programs.at(stageUid).Lambda().Body().Ref().GetTypeAnn());
+                    newArg.MutableRef().SetConstraints(programs.at(stageUid).Lambda().Body().Ref().GetConstraintSet());
                 } else {
                     argsMap.emplace(oldArg.Raw(), newArg.Ptr());
                 }
@@ -493,6 +493,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
                 YQL_ENSURE(argsMap.emplace(oldArg.Raw(), newArg.Ptr()).second);
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
+                newArg.MutableRef().SetConstraints(oldArg.Ref().GetConstraintSet());
                 newArgs.emplace_back(newArg);
             }
         }
@@ -504,15 +505,27 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             .Done();
 
         TVector<const TTypeAnnotationNode*> argTypes;
+        argTypes.reserve(newArgs.size());
         for (const auto& arg : newArgs) {
             YQL_ENSURE(arg.Ref().GetTypeAnn());
             argTypes.push_back(arg.Ref().GetTypeAnn());
+        }
+
+        TExprNode::TListType argConstraints;
+        argConstraints.reserve(newArgs.size());
+        for (const auto& arg : newArgs) {
+            argConstraints.push_back(ctx.NewAtom(
+                stage.Pos(),
+                NYT::NodeToYsonString(arg.Ref().GetConstraintSet().ToYson(), NYson::EYsonFormat::Text),
+                TNodeFlags::MultilineContent
+            ));
         }
 
         // TODO: get rid of TKqpProgram-callable (YQL-10078)
         auto program = Build<TKqpProgram>(ctx, stage.Pos())
             .Lambda(lambda)
             .ArgsType(ExpandType(stage.Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
+            .ArgsConstraints(ctx.NewList(stage.Pos(), std::move(argConstraints)))
             .Done();
 
         TExprNode::TPtr newProgram;

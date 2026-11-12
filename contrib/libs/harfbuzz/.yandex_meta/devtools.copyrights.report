@@ -1,0 +1,1324 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 00734b9904dd12cf1288419f22ed28d1
+BELONGS ya.make
+    License text:
+         * Copyright © 2022  Red Hat, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-cairo-utils.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 045ed0eb7ea0cefb6a387f443f3dce0d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+        src/hb-ft.cc [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0866831758e3815fa54922aaf9a4ce5a
+BELONGS ya.make
+    License text:
+         * Copyright © 2011,2012,2013  Google, Inc.
+         * Copyright © 2021  Khaled Hosny
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ms-feature-ranges.hh [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0ad10c0497fc0fa9ebf797d2a29d0929
+BELONGS ya.make
+    License text:
+         * Copyright © 2007,2008,2009  Red Hat, Inc.
+         * Copyright © 2012,2013  Google, Inc.
+         * Copyright © 2019, Facebook Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-face-table-list.hh [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0d758d5ae4514e55e7229873b5ecdf7e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0ddc673f3fe08e496ea02088b8889281
+BELONGS ya.make
+    License text:
+         * Copyright © 2011,2014  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-font.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1979a5ac9ddcf12bf817ce149f41fa14
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+        src/hb-unicode.cc [2:4]
+        src/hb-unicode.h [2:4]
+        src/hb-unicode.hh [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a18c787d761dcacf0939cb59560c395
+BELONGS ya.make
+    License text:
+         * Copyright © 2012  Mozilla Foundation.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-coretext.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ea7cf0369ffe920ad0f3a3a2cbdb64a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ff508616a38a42100d137f42fc296fe
+BELONGS ya.make
+    License text:
+         * Copyright © 2022  Behdad Esfahbod
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-buffer-verify.cc [2:2]
+        src/hb-cplusplus.hh [2:2]
+        src/hb-ft-colr.hh [2:2]
+        src/hb-geometry.hh [2:2]
+        src/hb-limits.hh [2:2]
+        src/hb-multimap.hh [2:2]
+        src/hb-paint-bounded.cc [2:2]
+        src/hb-paint-bounded.hh [2:2]
+        src/hb-paint-extents.cc [2:2]
+        src/hb-paint-extents.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 208adbe57f76a0aea35b7f5728c590ad
+BELONGS glib/ya.make ya.make
+    License text:
+         * Copyright © 2009  Red Hat, Inc.
+         * Copyright © 2011  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-face.hh [2:3]
+        src/hb-fallback-shape.cc [2:2]
+        src/hb-font.hh [2:3]
+        src/hb-glib.cc [2:3]
+        src/hb-glib.h [2:3]
+        src/hb-gobject-structs.h [2:2]
+        src/hb-gobject.h [2:2]
+        src/hb-icu.h [2:3]
+        src/hb-ot-tag.cc [2:3]
+        src/hb-uniscribe.h [2:2]
+        src/hb-version.h [2:2]
+    Belongs difference:
+        + glib/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22abf03ccc33b26dcbd776d798a13b50
+BELONGS glib/ya.make ya.make
+    License text:
+         * Copyright © 2009  Red Hat, Inc.
+         * Copyright © 2018  Ebrahim Byagowi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-blob.cc [2:3]
+        src/hb-blob.h [2:2]
+        src/hb-blob.hh [2:3]
+        src/hb-face-builder.cc [2:3]
+        src/hb-face.cc [2:3]
+        src/hb-face.h [2:2]
+        src/hb-face.hh [2:3]
+        src/hb-font.cc [2:3]
+        src/hb-font.h [2:2]
+        src/hb-font.hh [2:3]
+        src/hb-ft.cc [2:4]
+        src/hb-ft.h [2:3]
+        src/hb-glib.cc [2:3]
+        src/hb-glib.h [2:3]
+        src/hb-icu.h [2:3]
+        src/hb-ot-tag.cc [2:3]
+        src/hb-ot.h [2:2]
+        src/hb-shape.cc [2:3]
+        src/hb-shape.h [2:3]
+        src/hb-unicode.cc [2:4]
+        src/hb-unicode.h [2:4]
+        src/hb-unicode.hh [2:4]
+        src/hb.h [2:2]
+    Belongs difference:
+        + glib/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 23c393e045115941080f564ce02da491
+BELONGS ya.make
+    License text:
+         * Copyright © 1998-2004  David Turner and Werner Lemberg
+         * Copyright © 2004,2007,2009  Red Hat, Inc.
+         * Copyright © 2011,2012  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-buffer.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2693a7c60470dc7be825e32f936cc396
+BELONGS ya.make
+    License text:
+         * Copyright © 2009,2010  Red Hat, Inc.
+         * Copyright © 2010,2011,2012,2013  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-map.hh [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 269e0d40cf2fbd054d03c20b5874112a
+BELONGS ya.make
+    License text:
+         * Copyright © 2013  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-buffer-deserialize-json.hh [4:4]
+        src/hb-buffer-deserialize-text-glyphs.hh [4:4]
+        src/hb-buffer-deserialize-text-unicode.hh [4:4]
+        src/hb-deprecated.h [2:2]
+        src/hb-ot-layout-jstf-table.hh [2:2]
+        src/hb-ot-shaper-hangul.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 273b16bce631013a856e6897864b9f85
+BELONGS ya.make
+    License text:
+         * Copyright © 2007  Chris Wilson
+         * Copyright © 2009,2010  Red Hat, Inc.
+         * Copyright © 2011,2012  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/OT/name/name.hh [2:2]
+        src/hb-atomic.hh [2:4]
+        src/hb-buffer.cc [2:4]
+        src/hb-buffer.h [2:4]
+        src/hb-buffer.hh [2:4]
+        src/hb-common.cc [2:3]
+        src/hb-common.h [2:3]
+        src/hb-mutex.hh [2:4]
+        src/hb-object.hh [2:4]
+        src/hb-ot-hhea-table.hh [2:2]
+        src/hb-ot-hmtx-table.hh [2:2]
+        src/hb-ot-maxp-table.hh [2:2]
+        src/hb-ot-name-table.hh [2:2]
+        src/hb-ot-os2-table.hh [2:3]
+        src/hb-ot-shape-fallback.cc [2:2]
+        src/hb-ot-shape-normalize.cc [2:2]
+        src/hb-ot-shaper-indic-machine.hh [4:4]
+        src/hb-ot-shaper-indic.cc [2:2]
+        src/hb-ot-shaper-khmer-machine.hh [4:4]
+        src/hb-ot-shaper-khmer.cc [2:2]
+        src/hb-ot-shaper-myanmar-machine.hh [4:4]
+        src/hb-script-list.h [2:3]
+        src/hb-unicode.h [2:4]
+        src/hb.hh [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2862313dc57df093ddbf43dfbf5d6e51
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2a64f09570aa387f5a567c384ec58efd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d273e605d51f4b3cac12733c84f490e
+BELONGS ya.make
+    License text:
+         * Copyright © 2013  Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-shape.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d707f4d94eaea23e664b850c9d64f75
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+        src/hb-atomic.hh [2:4]
+        src/hb-mutex.hh [2:4]
+        src/hb-object.hh [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 305be8c84f2c1a0f7b72df712d29009a
+BELONGS ya.make
+    License text:
+         * Copyright © 2011,2012,2014  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-utf.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 356ca27d9304a998d8b81bf56037f07e
+BELONGS ya.make
+    License text:
+         * Copyright © 2009  Red Hat, Inc.
+         * Copyright © 2009  Keith Stribley
+         * Copyright © 2015  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ft.cc [2:4]
+        src/hb-ft.h [2:3]
+        src/hb-ot-glyf-table.hh [2:4]
+        src/hb-ot-shaper-arabic.hh [2:3]
+        src/hb-ot-shaper-use-machine.hh [4:5]
+        src/hb-ot-shaper-use.cc [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3b3d5cf8a836cd2c778ae53150703c9f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+        src/hb-ot-math-table.hh [2:2]
+        src/hb-ot-math.cc [2:2]
+        src/hb-ot-math.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4029b8d1562b5fcbf158e67233d687df
+BELONGS ya.make
+    License text:
+         * Copyright © 2016  Google, Inc.
+         * Copyright © 2018  Ebrahim Byagowi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/OT/Color/CBDT/CBDT.hh [2:2]
+        src/OT/Color/CPAL/CPAL.hh [2:3]
+        src/hb-ot-color.cc [2:3]
+        src/hb-ot-color.h [2:4]
+        src/hb-ot-post-table.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 412239bb880d5ebb8d63d5188f416a3c
+BELONGS ya.make
+    License text:
+         * Copyright © 2016  Elie Roux <elie.roux@telecom-bretagne.eu>
+         * Copyright © 2018  Google, Inc.
+         * Copyright © 2018-2019  Ebrahim Byagowi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-layout-base-table.hh [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 44b5528e38713eedf46d05dbcb41d1d7
+BELONGS ya.make
+    License text:
+         * Copyright © 2007,2008,2009  Red Hat, Inc.
+         * Copyright © 2010,2011,2012  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/OT/Layout/GDEF/GDEF.hh [2:3]
+        src/hb-ot-layout-gdef-table.hh [2:3]
+        src/hb-ot-shape.cc [2:3]
+        src/hb-ot-shaper.hh [2:2]
+        src/hb-unicode.cc [2:4]
+        src/hb-unicode.hh [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 44d231c463472dbb58a9978eafd3d881
+BELONGS ya.make
+    License text:
+         * Copyright © 2012,2017  Google, Inc.
+         * Copyright © 2021 Behdad Esfahbod
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-bit-page.hh [2:3]
+        src/hb-bit-set-invertible.hh [2:3]
+        src/hb-bit-set.hh [2:3]
+        src/hb-ot-shaper-syllabic.cc [2:2]
+        src/hb-ot-shaper-syllabic.hh [2:2]
+        src/hb-set.hh [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 45101ba3ae4abc9f36cb7c201c478bc5
+BELONGS ya.make
+    License text:
+         * Copyright © 2018  Ebrahim Byagowi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/OT/Color/COLR/COLR.hh [2:3]
+        src/OT/Color/COLR/colrv1-closure.hh [2:3]
+        src/OT/Color/CPAL/CPAL.hh [2:3]
+        src/OT/Color/sbix/sbix.hh [2:3]
+        src/OT/Color/svg/svg.hh [2:2]
+        src/hb-aat-layout-ankr-table.hh [2:2]
+        src/hb-aat-layout-bsln-table.hh [2:2]
+        src/hb-aat-layout-feat-table.hh [2:2]
+        src/hb-aat-layout-just-table.hh [2:2]
+        src/hb-aat-layout-kerx-table.hh [2:3]
+        src/hb-aat-layout-trak-table.hh [2:3]
+        src/hb-aat-layout.cc [2:3]
+        src/hb-aat-layout.h [2:2]
+        src/hb-aat-ltag-table.hh [2:2]
+        src/hb-aat.h [2:2]
+        src/hb-blob.cc [2:3]
+        src/hb-ot-color.cc [2:3]
+        src/hb-ot-color.h [2:4]
+        src/hb-ot-gasp-table.hh [2:2]
+        src/hb-ot-metrics.h [2:2]
+        src/hb-ot-metrics.hh [2:2]
+        src/hb-ot-name.h [2:2]
+        src/hb-ot-os2-table.hh [2:3]
+        src/hb-ot-stat-table.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49dcd856e3ae6b8f6939b3f9ea7fd37b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4ede9c11a8c1dadbda1acbe041f5b4be
+BELONGS ya.make
+    License text:
+         * Copyright © 2017  Google, Inc.
+         * Copyright © 2019  Facebook, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-algs.hh [2:3]
+        src/hb-config.hh [2:2]
+        src/hb-free-pool.hh [2:2]
+        src/hb-iter.hh [2:3]
+        src/hb-serialize.hh [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5408321784bac99f80166a028e01feb1
+BELONGS ya.make
+    License text:
+         * Copyright © 2020  Ebrahim Byagowi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-draw.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 558d535ff3d7ecd2e1d0f0359111befa
+BELONGS ya.make
+    License text:
+         * Copyright © 2012  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-cache.hh [2:2]
+        src/hb-face-builder.cc [2:3]
+        src/hb-face.cc [2:3]
+        src/hb-font.cc [2:3]
+        src/hb-open-file.hh [2:3]
+        src/hb-open-type.hh [2:3]
+        src/hb-ot-head-table.hh [2:3]
+        src/hb-ot-shape-fallback.hh [2:2]
+        src/hb-ot-shape-normalize.hh [2:2]
+        src/hb-ot-shaper-arabic-fallback.hh [2:2]
+        src/hb-ot-shaper-indic.hh [2:2]
+        src/hb-set-digest.hh [2:2]
+        src/hb-set.cc [2:2]
+        src/hb-set.h [2:2]
+        src/hb-shape-plan.cc [2:2]
+        src/hb-shape-plan.h [2:2]
+        src/hb-shape.cc [2:3]
+        src/hb-shape.h [2:3]
+        src/hb-shaper-impl.hh [2:2]
+        src/hb-shaper-list.hh [2:2]
+        src/hb-shaper.cc [2:2]
+        src/hb-shaper.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 56d020fcc4fa120fae7c60d2c9f66704
+BELONGS ya.make
+    License text:
+         * Copyright © 2019 Adobe Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-bimap.hh [2:2]
+        src/hb-ot-glyf-table.hh [2:4]
+        src/hb-ot-var-gvar-table.hh [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5888f84ee394921a32620707be618ee0
+BELONGS ya.make
+    License text:
+           Copyright (C) 2012 Zilong Tan (eric.zltan@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-algs.hh [383:383]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c1f01989040fed08a4a3e46038383e3
+BELONGS ya.make
+    License text:
+         * Copyright © 2018 Adobe Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-cff-interp-common.hh [2:2]
+        src/hb-cff-interp-cs-common.hh [2:2]
+        src/hb-cff-interp-dict-common.hh [2:2]
+        src/hb-cff1-interp-cs.hh [2:2]
+        src/hb-cff2-interp-cs.hh [2:2]
+        src/hb-ot-cff-common.hh [2:2]
+        src/hb-ot-cff1-table.cc [2:2]
+        src/hb-ot-cff1-table.hh [2:2]
+        src/hb-ot-cff2-table.cc [2:2]
+        src/hb-ot-cff2-table.hh [2:2]
+        src/hb-ot-vorg-table.hh [2:2]
+        src/hb-subset-cff-common.cc [2:2]
+        src/hb-subset-cff-common.hh [2:2]
+        src/hb-subset-cff1.cc [2:2]
+        src/hb-subset-cff2.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5e6e843de16ba4948270b6e574f72fcf
+BELONGS ya.make
+    License text:
+         * Copyright © 2007,2008,2009,2010  Red Hat, Inc.
+         * Copyright © 2012,2018  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-dispatch.hh [2:3]
+        src/hb-machinery.hh [2:3]
+        src/hb-sanitize.hh [2:3]
+        src/hb-serialize.hh [2:4]
+        src/hb-shape-plan.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5ec81f884d6ef6725f78959ad15f00ee
+BELONGS ya.make
+    License text:
+         * Copyright © 2019-2020  Ebrahim Byagowi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-draw.cc [2:2]
+        src/hb-draw.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 60e0afe9a6c29c9d8a223f718a90d8d5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+        src/hb-outline.cc [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 64f18391a189f2b4cb70774f7658fad1
+BELONGS ya.make
+    License text:
+         * Copyright © 2016  Google, Inc.
+         * Copyright © 2018  Khaled Hosny
+         * Copyright © 2018  Ebrahim Byagowi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-color.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 66870d7cf4671daec33d50a1462c3102
+BELONGS ya.make
+    License text:
+         * Copyright © 2017  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-aat-layout-common.hh [2:2]
+        src/hb-aat-layout-morx-table.hh [2:2]
+        src/hb-aat-layout.cc [2:3]
+        src/hb-aat-layout.hh [2:2]
+        src/hb-algs.hh [2:3]
+        src/hb-debug.hh [2:2]
+        src/hb-kern.hh [2:2]
+        src/hb-ot-kern-table.hh [2:2]
+        src/hb-ot-post-macroman.hh [2:2]
+        src/hb-ot-var-avar-table.hh [2:2]
+        src/hb-ot-var-fvar-table.hh [2:2]
+        src/hb-ot-var-hvar-table.hh [2:2]
+        src/hb-ot-var-mvar-table.hh [2:2]
+        src/hb-ot-var.cc [2:2]
+        src/hb-ot-var.h [2:2]
+        src/hb-string-array.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 69a2d0da3da98631d400ebb978af776b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 69dd2554f84f55c10f92d29d49ddd1af
+BELONGS ya.make
+    License text:
+         * Copyright © 2007,2008,2009,2010  Red Hat, Inc.
+         * Copyright © 2010,2012,2013  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-layout-gpos-table.hh [2:3]
+        src/hb-ot-layout-gsub-table.hh [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6d45e95ed23ecdb0a05aadc44623853b
+BELONGS ya.make
+    License text:
+         * Copyright © 2023  Behdad Esfahbod
+         * Copyright © 1999  David Turner
+         * Copyright © 2005  Werner Lemberg
+         * Copyright © 2013-2015  Alexei Podtelezhnikov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-outline.cc [2:5]
+        src/hb-outline.hh [2:2]
+        src/hb-subset-instancer-solver.cc [2:2]
+        src/hb-subset-instancer-solver.hh [2:2]
+        src/hb-subset-plan-member-list.hh [2:3]
+        src/hb-wasm-api-blob.hh [2:2]
+        src/hb-wasm-api-buffer.hh [2:2]
+        src/hb-wasm-api-common.hh [2:2]
+        src/hb-wasm-api-face.hh [2:2]
+        src/hb-wasm-api-font.hh [2:2]
+        src/hb-wasm-api-list.hh [2:2]
+        src/hb-wasm-api-shape.hh [2:2]
+        src/hb-wasm-api.h [2:2]
+        src/hb-wasm-api.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71e0d01d95d31fbb85642b63a7552ed4
+BELONGS ya.make
+    License text:
+         * Copyright © 2019  Adobe, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-cff1-std-str.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 743c934b635da69878dcbac19b0fff91
+BELONGS ya.make
+    License text:
+         * Copyright © 2017,2018  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-vector.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 79dff5efc68613fcc88fe32cfd0e79db
+BELONGS ya.make
+    License text:
+         * Copyright © 2021  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-post-table-v2subset.hh [2:2]
+        src/hb-ot-var-common.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c16020e4a9fc83994d1a30b5f94e861
+BELONGS ya.make
+    License text:
+         * Copyright © 2011,2012,2013  Google, Inc.
+         * Copyright © 2021  Khaled Hosny
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ms-feature-ranges.hh [2:3]
+        src/hb-ot-shaper-myanmar.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7cbc222e780dc793f0b4feaeb846143d
+BELONGS ya.make
+    License text:
+         * Copyright © 2012,2013  Mozilla Foundation.
+         * Copyright © 2012,2013  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-coretext.hh [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7d3d117001019dca66fd9d3608f9bb2b
+BELONGS ya.make
+    License text:
+         * Copyright © 2023  Behdad Esfahbod
+         * Copyright © 1999  David Turner
+         * Copyright © 2005  Werner Lemberg
+         * Copyright © 2013-2015  Alexei Podtelezhnikov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-outline.cc [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7f08aa2fb2a9c1b921c21a5355aa8306
+BELONGS ya.make
+    License text:
+         * Copyright © 2010  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-shape.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 82b0f982901fbe95d8d8f5faaa1a371e
+BELONGS ya.make
+    License text:
+         * Copyright © 2012,2017  Google, Inc.
+         * Copyright © 2021 Behdad Esfahbod
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-bit-page.hh [2:3]
+        src/hb-bit-set-invertible.hh [2:3]
+        src/hb-bit-set.hh [2:3]
+        src/hb-set.hh [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 835a349ecae31b4ae34536e7081877f4
+BELONGS ya.make
+    License text:
+         * Copyright © 2015-2019  Ebrahim Byagowi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-directwrite.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 86b1a2a734bd6f7b14d535bc595ea4d8
+BELONGS ya.make
+    License text:
+         * Copyright © 2014  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-cmap-table.hh [2:2]
+        src/hb-ot-font.h [2:2]
+        src/hb-ot-shaper-arabic-win1256.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8de673c86ac7cc7f733237af53d490fb
+BELONGS ya.make
+    License text:
+         * Copyright © 2025  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/graph/ligature-graph.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 91c805ad582816d4bb15d503532874a2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 964d86693e05cf5359bd99ee0d7ec6cc
+BELONGS ya.make
+    License text:
+         * Copyright © 2018  Ebrahim Byagowi
+         * Copyright © 2018  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-aat-layout-kerx-table.hh [2:3]
+        src/hb-aat-layout-trak-table.hh [2:3]
+        src/hb-aat-map.hh [2:2]
+        src/hb-array.hh [2:2]
+        src/hb-blob.hh [2:3]
+        src/hb-iter.hh [2:3]
+        src/hb-map.cc [2:2]
+        src/hb-map.h [2:2]
+        src/hb-map.hh [2:2]
+        src/hb-meta.hh [2:2]
+        src/hb-null.hh [2:2]
+        src/hb-ot-deprecated.h [2:2]
+        src/hb-ot-face.cc [2:2]
+        src/hb-ot-hdmx-table.hh [2:2]
+        src/hb-ot-layout-base-table.hh [2:4]
+        src/hb-ot-name-language-static.hh [2:2]
+        src/hb-ot-name-language.hh [2:2]
+        src/hb-ot-name.cc [2:2]
+        src/hb-ot-os2-unicode-ranges.hh [2:2]
+        src/hb-ot-shaper-vowel-constraints.hh [2:2]
+        src/hb-static.cc [2:2]
+        src/hb-subset-input.cc [2:2]
+        src/hb-subset-input.hh [2:2]
+        src/hb-subset-plan-member-list.hh [2:3]
+        src/hb-subset-plan.cc [2:2]
+        src/hb-subset-plan.hh [2:2]
+        src/hb-subset-table.hh [2:2]
+        src/hb-subset.cc [2:2]
+        src/hb-subset.h [2:2]
+        src/hb-subset.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 966e412749676a1a54226a4c869cf804
+BELONGS ya.make
+    License text:
+         * Copyright © 2012,2013  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-buffer-serialize.cc [2:2]
+        src/hb-coretext.hh [2:3]
+        src/hb-ot-face-table-list.hh [2:4]
+        src/hb-ot-face.hh [2:3]
+        src/hb-ot-layout.cc [2:5]
+        src/hb-ot-layout.hh [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a36d0314e3e23e2393475bbc40586cf8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a4e9792dc1140763714e8b98255ee2de
+BELONGS ya.make
+    License text:
+         * Copyright © 2023  Behdad Esfahbod
+         * Copyright © 1999  David Turner
+         * Copyright © 2005  Werner Lemberg
+         * Copyright © 2013-2015  Alexei Podtelezhnikov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-outline.cc [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a8240e44528c20c2f67632c756ad7611
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aaf25436775ec6d5d75312607ab67d9d
+BELONGS ya.make
+    License text:
+         * Copyright © 2009,2010  Red Hat, Inc.
+         * Copyright © 2010,2011,2013  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-aat-map.cc [2:3]
+        src/hb-atomic.hh [2:4]
+        src/hb-common.cc [2:3]
+        src/hb-mutex.hh [2:4]
+        src/hb-object.hh [2:4]
+        src/hb-ot-map.cc [2:3]
+        src/hb-ot-map.hh [2:3]
+        src/hb-ot-shape.cc [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b42d9e3f0d97dc9c849bac640d4a8662
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bd378036bd702d5fa3a9fa37a347818e
+BELONGS ya.make
+    License text:
+         * Copyright © 1998-2004  David Turner and Werner Lemberg
+         * Copyright © 2004,2007,2009,2010  Red Hat, Inc.
+         * Copyright © 2011,2012  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-buffer.cc [2:4]
+        src/hb-buffer.hh [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c150a18b4e47d4e297917165e06c3abb
+BELONGS ya.make
+    License text:
+         * Copyright © 1998-2004  David Turner and Werner Lemberg
+         * Copyright © 2004,2007,2009,2010  Red Hat, Inc.
+         * Copyright © 2011,2012  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-buffer.cc [2:4]
+        src/hb-buffer.h [2:4]
+        src/hb-buffer.hh [2:4]
+        src/hb-ot-layout.cc [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c24497cf6a37880aba6feed5143d1499
+BELONGS ya.make
+    License text:
+         * Copyright © 2023  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-var-cvar-table.hh [2:2]
+        src/hb-subset-plan-layout.cc [2:2]
+        src/hb-subset-plan-var.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c2c7a1d76fb4cc1c46b5b0d83e7a4488
+BELONGS ya.make
+    License text:
+         * Copyright © 2022  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/graph/classdef-graph.hh [2:2]
+        src/graph/coverage-graph.hh [2:2]
+        src/graph/graph.hh [2:2]
+        src/graph/gsubgpos-context.cc [2:2]
+        src/graph/gsubgpos-context.hh [2:2]
+        src/graph/gsubgpos-graph.hh [2:2]
+        src/graph/markbasepos-graph.hh [2:2]
+        src/graph/pairpos-graph.hh [2:2]
+        src/graph/serialize.hh [2:2]
+        src/graph/split-helpers.hh [2:2]
+        src/hb-subset-accelerator.hh [2:2]
+        src/hb-subset-serialize.cc [2:2]
+        src/hb-subset-serialize.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c45d7435276e3adb6938044df9651779
+BELONGS ya.make
+    License text:
+         * Copyright © 1998-2004  David Turner and Werner Lemberg
+         * Copyright © 2006  Behdad Esfahbod
+         * Copyright © 2007,2008,2009  Red Hat, Inc.
+         * Copyright © 2012,2013  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-layout.cc [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c7db37fb7de5ed4ea9c47c8b49768ce3
+BELONGS ya.make
+    License text:
+         * Copyright © 2009,2010  Red Hat, Inc.
+         * Copyright © 2010,2011,2013  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-aat-map.cc [2:3]
+        src/hb-ot-map.cc [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c83fd4a6f68c6ec2d5c3a91224f76770
+BELONGS ya.make
+    License text:
+         * Copyright © 2011  Martin Hosken
+         * Copyright © 2011  SIL International
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-graphite2.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c8f7a19f71f6f77c8f117aefa050dbce
+BELONGS ya.make
+    License text:
+         * Copyright © 2015  Mozilla Foundation.
+         * Copyright © 2015  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-shaper-arabic.hh [2:3]
+        src/hb-ot-shaper-use-machine.hh [4:5]
+        src/hb-ot-shaper-use.cc [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9902e8f722de3b7a992b94e4de60359
+BELONGS ya.make
+    License text:
+         * Copyright © 2019  Ebrahim Byagowi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-aat-layout-opbd-table.hh [2:2]
+        src/hb-gdi.h [2:2]
+        src/hb-number-parser.hh [4:4]
+        src/hb-number.cc [2:2]
+        src/hb-number.hh [2:2]
+        src/hb-ot-glyf-table.hh [2:4]
+        src/hb-ot-meta-table.hh [2:2]
+        src/hb-ot-meta.cc [2:2]
+        src/hb-ot-meta.h [2:2]
+        src/hb-ot-var-gvar-table.hh [2:3]
+        src/hb-style.cc [2:2]
+        src/hb-style.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ca304665f1599e0bbdcab5afef6add80
+BELONGS ya.make
+    License text:
+         * Copyright © 2010  Red Hat, Inc.
+         * Copyright © 2012  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-head-table.hh [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d0fea061729ee36b07210de20a2eba2f
+BELONGS ya.make
+    License text:
+         * Copyright © 2007,2008,2009,2010  Red Hat, Inc.
+         * Copyright © 2012,2018  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-dispatch.hh [2:3]
+        src/hb-machinery.hh [2:3]
+        src/hb-open-type.hh [2:3]
+        src/hb-ot-layout-gpos-table.hh [2:3]
+        src/hb-ot-layout-gsub-table.hh [2:3]
+        src/hb-ot-layout-gsubgpos.hh [2:3]
+        src/hb-sanitize.hh [2:3]
+        src/hb-serialize.hh [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d4eaeb647d20ac13447af4b077da1e0e
+BELONGS ya.make
+    License text:
+         * Copyright © 2022 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-cairo.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL db0451aa31659acfd7596b2128250416
+BELONGS ya.make
+    License text:
+         * Copyright © 2020  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/OT/Color/COLR/COLR.hh [2:3]
+        src/OT/Color/COLR/colrv1-closure.hh [2:3]
+        src/OT/Color/sbix/sbix.hh [2:3]
+        src/hb-priority-queue.hh [2:2]
+        src/hb-repacker.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL db7cd55b85f46c9698327a00808c0f33
+BELONGS ya.make
+    License text:
+         * Copyright © 2016  Elie Roux <elie.roux@telecom-bretagne.eu>
+         * Copyright © 2018  Google, Inc.
+         * Copyright © 2018-2019  Ebrahim Byagowi
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-layout-base-table.hh [2:4]
+        src/hb-ot-metrics.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e17690d32bc97d97ee91f592ebe80e78
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-unicode-emoji-table.hh [11:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eb104bf762d393e9ebf2e7ee1f8858ba
+BELONGS ya.make
+    License text:
+         * Copyright © 2011  Martin Hosken
+         * Copyright © 2011  SIL International
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-graphite2.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec7427f4df239cc7b11f81a9d756346b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+        src/hb-paint.cc [2:2]
+        src/hb-paint.h [2:2]
+        src/hb-paint.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f05370cf4367e77f750fea631adc3c5d
+BELONGS ya.make
+    License text:
+         * Copyright © 2024  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ot-var-varc-table.hh [2:2]
+        src/hb-subset-instancer-iup.cc [2:2]
+        src/hb-subset-instancer-iup.hh [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f0aca191b6ac85ad6eb98d5a2b6da3db
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2012 Grigori Goronzy <greg@kinoho.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-ucd.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f1dcfdd91e2d0a90e76ef4929be94140
+BELONGS ya.make
+    License text:
+         * Copyright © 2007,2008,2009  Red Hat, Inc.
+         * Copyright © 2011,2012  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/OT/Layout/Common/Coverage.hh [2:3]
+        src/OT/Layout/Common/CoverageFormat1.hh [2:3]
+        src/OT/Layout/Common/CoverageFormat2.hh [2:3]
+        src/OT/Layout/Common/RangeRecord.hh [2:3]
+        src/OT/Layout/GDEF/GDEF.hh [2:3]
+        src/OT/Layout/types.hh [2:3]
+        src/hb-common.h [2:3]
+        src/hb-open-file.hh [2:3]
+        src/hb-ot-face-table-list.hh [2:4]
+        src/hb-ot-face.hh [2:3]
+        src/hb-ot-layout-common.hh [2:3]
+        src/hb-ot-layout-gdef-table.hh [2:3]
+        src/hb-ot-layout.cc [2:5]
+        src/hb-ot-layout.h [2:2]
+        src/hb-ot-layout.hh [2:3]
+        src/hb-script-list.h [2:3]
+        src/hb.hh [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f7ff8e4f7a94f695830560a7abe03ee4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [5:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fbd915a5c92f0ab6869cc4eec172f8e9
+BELONGS ya.make
+    License text:
+         * Copyright © 2007,2008,2009  Red Hat, Inc.
+         * Copyright © 2010,2012  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/OT/Layout/Common/Coverage.hh [2:3]
+        src/OT/Layout/Common/CoverageFormat1.hh [2:3]
+        src/OT/Layout/Common/CoverageFormat2.hh [2:3]
+        src/OT/Layout/Common/RangeRecord.hh [2:3]
+        src/OT/Layout/types.hh [2:3]
+        src/hb-ot-layout-common.hh [2:3]
+        src/hb-ot-layout-gsubgpos.hh [2:3]
+        src/hb-ot-shaper-arabic.cc [2:2]
+        src/hb-ot-shaper-default.cc [2:2]
+        src/hb-ot-shaper-hebrew.cc [2:2]
+        src/hb-ot-shaper-thai.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ff8c03f94acdd4b93fe52140e5a3f778
+BELONGS ya.make
+    License text:
+         * Copyright © 2025 Behdad Esfahbod
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hb-decycler.hh [2:2]

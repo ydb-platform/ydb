@@ -1,6 +1,7 @@
 #include "has_path_matcher.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
@@ -34,10 +35,17 @@ bool MatchesPqTopicSink(const NResourcePool::TRegexPredicate& predicate, const N
     return predicate.Match(CanonizePath(pqSink.GetTopicPath()));
 }
 
-}   // anonymous namespace
+const TString& GetPath(const TString& path) {
+    return path;
+}
 
-bool MatchesPath(const std::optional<NResourcePool::TRegexPredicate>& predicate, const TVector<TString>& queryTables,
-    const NKqpProto::TKqpPhyQuery& phyQuery) {
+const TString& GetPath(const NKqp::TQueryTable& table) {
+    return table.Path;
+}
+
+template <typename TTables>
+bool MatchesPathImpl(
+    const std::optional<NResourcePool::TRegexPredicate>& predicate, const TTables& queryTables, const NKqpProto::TKqpPhyQuery& phyQuery) {
     if (!predicate) {
         return true;
     }
@@ -46,8 +54,8 @@ bool MatchesPath(const std::optional<NResourcePool::TRegexPredicate>& predicate,
     // Defensive coverage for TableOps + StreamLookup + Sequencer + ReadRangesSource
     // + FullTextSource + InternalSink (with index Docs/Dict/Stats sub-tables) +
     // OutputTransforms. Mostly overlaps with (B), retained as a safety net.
-    for (const auto& path : queryTables) {
-        if (predicate->Match(CanonizePath(path))) {
+    for (const auto& table : queryTables) {
+        if (predicate->Match(CanonizePath(GetPath(table)))) {
             return true;
         }
     }
@@ -87,6 +95,18 @@ bool MatchesPath(const std::optional<NResourcePool::TRegexPredicate>& predicate,
     }
 
     return false;
+}
+
+}   // anonymous namespace
+
+bool MatchesPath(const std::optional<NResourcePool::TRegexPredicate>& predicate, const TVector<TString>& queryTables,
+    const NKqpProto::TKqpPhyQuery& phyQuery) {
+    return MatchesPathImpl(predicate, queryTables, phyQuery);
+}
+
+bool MatchesPath(const std::optional<NResourcePool::TRegexPredicate>& predicate, const TVector<NKqp::TQueryTable>& queryTables,
+    const NKqpProto::TKqpPhyQuery& phyQuery) {
+    return MatchesPathImpl(predicate, queryTables, phyQuery);
 }
 
 }   // namespace NKikimr::NWorkloadManager

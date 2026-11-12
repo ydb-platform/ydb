@@ -6,7 +6,7 @@ ADDINCL(
 
 FORK_SUBTESTS()
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -17,10 +17,11 @@ ENDIF()
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    viewer_ut.cpp
-    viewer_subscriptions_ut.cpp
     topic_data_ut.cpp
     ut/ut_utils.cpp
+    ut/viewer_query_ut.cpp
+    viewer_subscriptions_ut.cpp
+    viewer_ut.cpp
 )
 
 PEERDIR(

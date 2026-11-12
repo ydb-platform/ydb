@@ -32,7 +32,8 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
-                {"Index": 2, "Name": "TablePath", "Type": "TCoAtom"}
+                {"Index": 2, "Name": "TablePath", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -535,7 +536,8 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Replication", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Cascade", "Type":  "TCoAtom"}
+                {"Index": 3, "Name": "Cascade", "Type":  "TCoAtom"},
+                {"Index": 4, "Name": "SourceCleanup", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {

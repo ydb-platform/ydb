@@ -1,0 +1,1 @@
+SELECT Digest::Md5Hex(Cast(index AS String)) AS index FROM Input;

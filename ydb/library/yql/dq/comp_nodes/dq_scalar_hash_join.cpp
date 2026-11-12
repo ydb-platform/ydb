@@ -242,6 +242,7 @@ private:
                                                               .Probe = Converters_.Probe->GetTupleLayout()})
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
             , PairFilter_(std::move(pairFilter))
+            , OutputRows_(MakeJoinOutputRowsCounter(ctx))
         {}
 
         EFetchResult FetchValues(NUdf::TUnboxedValue* const* output) {
@@ -262,6 +263,7 @@ private:
                 Buffer_.reset();
                 BufferPos_ = 0;
             }
+            OutputRows_.Inc();
             return EFetchResult::One;
         }
 
@@ -293,6 +295,7 @@ private:
         std::optional<TPackedTuplePairFilter> PairFilter_;
         std::optional<typename TRenamesScalarOutput<Join>::TFlushResult> Buffer_;
         size_t BufferPos_ = 0;
+        NYql::NUdf::TCounter OutputRows_;
     };
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
@@ -345,6 +348,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsFlow(), "Expected WideFlow as a left flow");
+    EnsureNoPgTypes(leftType);
     const auto leftFlowType = AS_TYPE(TFlowType, leftType);
     MKQL_ENSURE(leftFlowType->GetItemType()->IsMulti(), "Expected Multi as a left flow item type");
     const auto leftFlowComponents = GetWideComponents(leftFlowType);
@@ -354,6 +358,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const auto rightType = callable.GetInput(1).GetStaticType();
     MKQL_ENSURE(rightType->IsFlow(), "Expected WideFlow as a right flow");
+    EnsureNoPgTypes(rightType);
     const auto rightFlowType = AS_TYPE(TFlowType, rightType);
     MKQL_ENSURE(rightFlowType->GetItemType()->IsMulti(), "Expected Multi as a right flow item type");
     const auto rightFlowComponents = GetWideComponents(rightFlowType);
@@ -391,6 +396,9 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
                               meta.ColumnPermutation);
     const ESide preservedSide = PreservedSideForLeftBuild(leftIsBuild);
     meta.UserTypes = ForceOptionalOnNullableSide(meta.InputTypes, joinKind, OtherSide(preservedSide), ctx.Env);
+    for (ESide side : EachSide) {
+        EnsureNoResourceKeys(meta.UserTypes.SelectSide(side), meta.KeyColumns.SelectSide(side));
+    }
 
     const auto flows = SidesForLeftBuild(leftIsBuild, leftFlow, rightFlow);
     TJoinFilters filters = ParseJoinFiltersForBuildSide(ctx, callable, filterStart, leftIsBuild);

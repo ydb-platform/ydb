@@ -3,6 +3,7 @@
 #include <ydb/core/base/memory_controller_iface.h>
 
 #include <util/generic/map.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 
 #include <atomic>
@@ -12,6 +13,8 @@ namespace NKikimr::NMemory {
 // One registrant's own consumer object; SetReport is safe to call from any thread.
 class TRegistrantConsumer : public IMemoryConsumer {
 public:
+    explicit TRegistrantConsumer(bool demandOnly = false) : DemandOnly(demandOnly) {}
+    const bool DemandOnly;
     void SetReport(TConsumerReport report) override;
 
     // Snapshot with the read-side clamp applied, so a torn triple cannot break the invariants.
@@ -33,10 +36,11 @@ struct TConsumerShare {
 class TConsumerCollection {
 public:
     // Returns the sender's own consumer; a re-register by the same actor replaces it with a fresh one.
-    TIntrusivePtr<TRegistrantConsumer> Register(TActorId registrant);
+    TIntrusivePtr<TRegistrantConsumer> Register(TActorId registrant, bool demandOnly = false);
 
     // Drops the registrant's entry; false for an actor that holds none.
-    bool Unregister(TActorId registrant);
+    bool Unregister(TActorId registrant, bool retainUntilUnused = false);
+    void CollectRetired();
 
     bool IsEmpty() const {
         return Registrants.empty();
@@ -57,6 +61,7 @@ public:
 
 private:
     TMap<TActorId, TIntrusivePtr<TRegistrantConsumer>> Registrants;
+    THashSet<TActorId> Retiring;
 };
 
 }

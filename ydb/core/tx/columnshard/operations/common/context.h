@@ -51,6 +51,7 @@ private:
     const std::shared_ptr<TActivityChecker> ActivityChecker;
     YDB_READONLY(bool, NoTxWrite, false);
     YDB_READONLY(bool, IsBulk, false);
+    YDB_READONLY(bool, PassWriteGate, false);
 
 public:
     void MergeFrom(const TWritingContext& newContext) {
@@ -79,7 +80,7 @@ public:
         const std::shared_ptr<NColumnShard::TWriteCounters>& writingCounters, const TSnapshot& applyToSnapshot,
         const std::optional<ui64>& lockId, const std::optional<NKikimrDataEvents::ELockMode>& lockMode,
         const std::shared_ptr<TActivityChecker>& activityChecker, const bool noTxWrite, const NActors::TActorId& bufferizationPortionsActorId,
-        const bool isBulk)
+        const bool isBulk, const bool passWriteGate)
         : TabletId(tabletId)
         , BufferizationPortionsActorId(bufferizationPortionsActorId)
         , TabletActorId(tabletActorId)
@@ -93,6 +94,7 @@ public:
         , ActivityChecker(activityChecker)
         , NoTxWrite(noTxWrite)
         , IsBulk(isBulk)
+        , PassWriteGate(passWriteGate)
     {
         AFL_VERIFY(ActivityChecker);
     }

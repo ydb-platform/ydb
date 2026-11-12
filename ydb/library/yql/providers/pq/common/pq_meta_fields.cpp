@@ -166,7 +166,11 @@ std::vector<TString> GetAllowedPqMetaSysColumns(bool addTransparentPrefix, bool 
     return res;
 }
 
-std::vector<TString> GetAllowedYdbSysColumns(bool includeUserAttributes) {
+std::vector<TString> GetAllowedYdbSysColumns(bool includeUserAttributes, bool allowYdbSysColumns) {
+    if (!allowYdbSysColumns) {
+        return {};
+    }
+
     std::vector<TString> res;
     res.reserve(PqMetaFields.size());
 

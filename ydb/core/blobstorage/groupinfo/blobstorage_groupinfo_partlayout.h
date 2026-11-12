@@ -3,6 +3,8 @@
 #include "defs.h"
 #include "blobstorage_groupinfo.h"
 
+#include <util/generic/bitmap.h>
+
 #include <bit>
 
 namespace NKikimr {
@@ -13,24 +15,26 @@ namespace NKikimr {
     // matching the number of parts for the specific erasure type, whereas each cell in a row contains a bit indicating
     // whether a specific part (identified by row number) is present on a subgroup's disk (identified by column number)
     class TSubgroupPartLayout {
-        static constexpr ui32 MaxNodes = 9;
-        static constexpr ui64 CellMask = (1 << MaxNodes) - 1;
+        static constexpr ui32 MaxNodes = TBlobStorageGroupType::MaxSubgroupSize;
+        static constexpr ui32 MaxParts = TBlobStorageGroupType::MaxTotalParts;
+        static constexpr ui32 MaxCells = 128;
+        static_assert(MaxParts * MaxNodes <= MaxCells);
+        static constexpr ui32 CellMask = (1 << MaxNodes) - 1;
 
-        ui64 Value = 0;
+        // Rows use a fixed stride. Bits 120..127 are reserved and never set.
+        TBitMap<MaxCells, ui64> Value;
 
     public:
-        TSubgroupPartLayout() {
-            Value = 0;
-        }
+        TSubgroupPartLayout() = default;
 
         void AddItem(ui32 nodeId, ui32 partIdx, const TBlobStorageGroupType &gtype) {
-            Y_ABORT_UNLESS(nodeId < gtype.BlobSubgroupSize() && partIdx < gtype.TotalPartCount() && nodeId < MaxNodes);
-            Value |= ui64(1) << partIdx * MaxNodes + nodeId;
+            Y_ABORT_UNLESS(nodeId < gtype.BlobSubgroupSize() && partIdx < gtype.TotalPartCount());
+            Value.Set(partIdx * MaxNodes + nodeId);
         }
 
         void ClearItem(ui32 nodeId, ui32 partIdx, const TBlobStorageGroupType& gtype) {
-            Y_ABORT_UNLESS(nodeId < gtype.BlobSubgroupSize() && partIdx < gtype.TotalPartCount() && nodeId < MaxNodes);
-            Value &= ~(ui64(1) << partIdx * MaxNodes + nodeId);
+            Y_ABORT_UNLESS(nodeId < gtype.BlobSubgroupSize() && partIdx < gtype.TotalPartCount());
+            Value.Reset(partIdx * MaxNodes + nodeId);
         }
 
         void Merge(const TSubgroupPartLayout& other, const TBlobStorageGroupType& /*type*/) {
@@ -85,14 +89,21 @@ namespace NKikimr {
         }
 
         ui32 GetDisksWithPart(ui32 partIdx) const {
-            return Value >> partIdx * MaxNodes & CellMask;
+            Y_ABORT_UNLESS(partIdx < MaxParts);
+            ui64 row = 0;
+            // Export into ui64: a row starting at bit 60 spans both chunks,
+            // and exporting directly into ui32 can shift beyond its width.
+            Value.Export(partIdx * MaxNodes, row);
+            return row & CellMask;
         }
 
         void Mask(ui32 partIdx, ui32 disks) {
-            Y_ABORT_UNLESS(disks <= CellMask);
-            const ui32 offset = partIdx * MaxNodes;
-            const ui64 partMask = CellMask << offset;
-            Value &= ui64(disks) << offset | ~partMask;
+            Y_ABORT_UNLESS(partIdx < MaxParts && disks <= CellMask);
+            for (ui32 nodeId = 0; nodeId < MaxNodes; ++nodeId) {
+                if (!(disks & (1 << nodeId))) {
+                    Value.Reset(partIdx * MaxNodes + nodeId);
+                }
+            }
         }
 
         std::pair<ui32, ui32> GetMirror3of4State() const {
@@ -114,7 +125,8 @@ namespace NKikimr {
         }
 
         template<typename F>
-        static void GeneratePossibleLayouts(const TBlobStorageGroupType& gtype, ui32 maxHandoffBits, F&& callback) {
+        static void GeneratePossibleLayouts(const TBlobStorageGroupType& gtype, ui32 maxHandoffBits, F&& callback,
+                size_t maxLayouts = Max<size_t>()) {
             std::vector<std::vector<ui32>> perDiskPartMasks(gtype.BlobSubgroupSize());
             for (ui32 idxInSubgroup = 0; idxInSubgroup < perDiskPartMasks.size(); ++idxInSubgroup) {
                 auto& partMasks = perDiskPartMasks[idxInSubgroup];
@@ -144,8 +156,8 @@ namespace NKikimr {
                 }
             }
 
-            std::vector<ui8> state(perDiskPartMasks.size(), 0);
-            for (;;) {
+            std::vector<size_t> state(perDiskPartMasks.size(), 0);
+            for (size_t emitted = 0; emitted < maxLayouts; ++emitted) {
                 TSubgroupPartLayout layout;
 
                 for (ui32 idxInSubgroup = 0; idxInSubgroup < state.size(); ++idxInSubgroup) {

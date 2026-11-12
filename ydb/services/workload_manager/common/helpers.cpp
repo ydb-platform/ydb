@@ -12,6 +12,11 @@ TString DatabaseIdToDatabase(TStringBuf databaseId) {
                                                   : CanonizePath(TString(databaseId));   // Dedicated
 }
 
+bool IsServerlessDatabaseId(TStringBuf databaseId) {
+    const TStringBuf prefix = databaseId.Before('/');
+    return prefix.size() < databaseId.size() && prefix.EndsWith(':');
+}
+
 NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message) {
     NYql::TIssue rootIssue(message);
 

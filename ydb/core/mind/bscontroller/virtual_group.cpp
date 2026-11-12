@@ -102,7 +102,7 @@ namespace NKikimr::NBsController {
 
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
-        group->CalculateLayoutStatus(&Self, group->Topology.get(), {});
+        group->CalculateLayoutStatus(&Self, {});
 
         NKikimrBlobDepot::TBlobDepotConfig config;
         config.SetVirtualGroupId(group->ID.GetRawId());
@@ -138,6 +138,10 @@ namespace NKikimr::NBsController {
             } else if (group->IsBridgePileOnly()) {
                 // bridged group is decommitted as a whole through its bridge proxy group, single piles are not
                 throw TExError() << "can't decommit a pile of bridged group, decommit its bridge proxy group instead"
+                    << TErrorParams::GroupId(groupId);
+            } else if (group->BridgeGroupInfo && Self.IsBeingRolledBack()) {
+                // the group has to stay the inline pile with all its data until it is made ordinary one
+                throw TExError() << "bridged group can't be decommitted while the cluster is being rolled back"
                     << TErrorParams::GroupId(groupId);
             }
 
@@ -310,6 +314,13 @@ namespace NKikimr::NBsController {
                 if (group->VirtualGroupState != NKikimrBlobStorage::EVirtualGroupState::WORKING) {
                     throw TExError() << "virtual group is not in WORKING state" << TErrorParams::GroupId(groupId);
                 }
+                // bridged group keeps its VDisks in its piles, and the one decommitted completely would get VDisks
+                // allocated outside of any pile
+                if (group->BridgeGroupInfo || (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE &&
+                        StoragePools.Get().at(group->StoragePoolId).BridgeMode)) {
+                    throw TExError() << "recommissioning of groups in bridge mode is not supported"
+                        << TErrorParams::GroupId(groupId);
+                }
 
                 switch (group->DecommitStatus) {
                     case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
@@ -394,10 +405,11 @@ namespace NKikimr::NBsController {
                 Y_ABORT_UNLESS(group);
                 if (Callback(*group, *State)) {
                     group->CalculateGroupStatus();
-                    group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
+                    group->CalculateLayoutStatus(Self, [&] {
                         const auto& pools = State->StoragePools.Get();
                         if (const auto it = pools.find(group->StoragePoolId); it != pools.end()) {
-                            return TGroupGeometryInfo(group->Topology->GType, it->second.GetGroupGeometry());
+                            return TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                                State->GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
                         }
                         Y_DEBUG_ABORT();
                         return TGroupGeometryInfo();

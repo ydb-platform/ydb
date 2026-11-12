@@ -253,10 +253,15 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
             return ring.CountState(node->StartTime + elapsed, TDuration::Seconds(1),
                                    TDuration::Seconds(1), "request", config.StateStorageRestartCooldown);
         };
-        UNIT_ASSERT_VALUES_EQUAL(stateAfter(TDuration::Seconds(2)), TStateStorageRingInfo::Locked);
-        UNIT_ASSERT_VALUES_EQUAL(stateAfter(TDuration::Minutes(2)), TStateStorageRingInfo::Locked);
-        UNIT_ASSERT_VALUES_EQUAL(stateAfter(TDuration::Minutes(2) + TDuration::MicroSeconds(1)),
-                                 TStateStorageRingInfo::Ok);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(stateAfter(TDuration::Seconds(2))),
+            static_cast<int>(TStateStorageRingInfo::Locked));
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(stateAfter(TDuration::Minutes(2))),
+            static_cast<int>(TStateStorageRingInfo::Locked));
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(stateAfter(TDuration::Minutes(2) + TDuration::MicroSeconds(1))),
+            static_cast<int>(TStateStorageRingInfo::Ok));
 
         NKikimrCms::TCmsConfig proto;
         proto.SetStateStorageRestartCooldown(1000000);
@@ -264,11 +269,17 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         NKikimrCms::TCmsConfig serialized;
         config.Serialize(serialized);
         UNIT_ASSERT_VALUES_EQUAL(serialized.GetStateStorageRestartCooldown(), 1000000);
-        UNIT_ASSERT_VALUES_EQUAL(stateAfter(TDuration::Seconds(1)), TStateStorageRingInfo::Locked);
-        UNIT_ASSERT_VALUES_EQUAL(stateAfter(TDuration::Seconds(2)), TStateStorageRingInfo::Ok);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(stateAfter(TDuration::Seconds(1))),
+            static_cast<int>(TStateStorageRingInfo::Locked));
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(stateAfter(TDuration::Seconds(2))),
+            static_cast<int>(TStateStorageRingInfo::Ok));
 
         node->State = DOWN;
-        UNIT_ASSERT_VALUES_EQUAL(stateAfter(TDuration::Seconds(2)), TStateStorageRingInfo::Restart);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(stateAfter(TDuration::Seconds(2))),
+            static_cast<int>(TStateStorageRingInfo::Restart));
     }
     Y_UNIT_TEST(DeviceId) {
         UNIT_ASSERT(!TPDiskInfo::IsDeviceName("pdisk"));

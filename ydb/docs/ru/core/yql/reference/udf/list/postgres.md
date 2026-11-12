@@ -2,6 +2,12 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
+{% note alert %}
+
+В сервере {{ ydb-short-name }} поддержка типов, функций и литералов PostgreSQL [удалена](../../../../postgresql/intro.md). Используйте нативные [типы данных](../../types/index.md) и [функции YQL](../../builtins/index.md).
+
+{% endnote %}
+
 [YQL](../../index.md) предоставляет возможность доступа к [функциям](https://www.postgresql.org/docs/16/functions.html) и [типам данных](https://www.postgresql.org/docs/16/datatype.html) PostgreSQL.
 
 Имена PostgreSQL типов в YQL получаются добавлением префикса `Pg` к исходному имени типа.

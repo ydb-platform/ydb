@@ -181,7 +181,10 @@ class TestKiKiMRDistConfSelfHealReassignNodeAfterReconfiguration(KiKiMRDistConfN
         self.kill_nodes(lambda hosts, i: i == 1 or i == 2)
 
         def wait_first_reassign():
-            rg = self.do_request_config()[f"{configName}Config"]["Ring"]
+            config = self.do_request_config()[f"{configName}Config"]
+            # Mid-heal config may still be RingGroups; KeyError is not retried by retry_assertions.
+            assert_that("Ring" in config, f"still waiting for single Ring: {config}")
+            rg = config["Ring"]
             self.validate_not_contains_nodes(rg, [2, 3])
             self.validate_contains_nodes(rg, [6, 12, 15])
             assert_eq(rg["RingGroupActorIdOffset"], 1)  # full reconfiguration applied
@@ -191,7 +194,9 @@ class TestKiKiMRDistConfSelfHealReassignNodeAfterReconfiguration(KiKiMRDistConfN
         self.cluster.nodes[12].stop()
 
         def wait_second_reassign():
-            rg = self.do_request_config()[f"{configName}Config"]["Ring"]
+            config = self.do_request_config()[f"{configName}Config"]
+            assert_that("Ring" in config, f"still waiting for single Ring: {config}")
+            rg = config["Ring"]
             self.validate_not_contains_nodes(rg, [12])
             self.validate_contains_nodes(rg, [6, 9, 15])  # 12 -> 9 reassigned
             assert_eq(rg["RingGroupActorIdOffset"], 1)  # offset not changed -> reassign node api used

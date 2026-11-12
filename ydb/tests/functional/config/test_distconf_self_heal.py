@@ -245,7 +245,10 @@ class TestKiKiMRDistConfSelfHealParallelCall(KiKiMRDistConfSelfHealTest):
         assert_eq(len(self.do_request_config()[f"{configName}Config"]["RingGroups"]), 2)
 
         def wait_parallel_healed():
-            rg = self.do_request_config()[f"{configName}Config"]["Ring"]
+            config = self.do_request_config()[f"{configName}Config"]
+            # Heal goes RingGroups → single Ring; KeyError is not retried by retry_assertions.
+            assert_that("Ring" in config, f"still waiting for single Ring: {config}")
+            rg = config["Ring"]
             assert_eq(rg["NToSelect"], 9)
             assert_eq(len(rg["Ring"]), 9)
 

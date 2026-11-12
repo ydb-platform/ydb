@@ -9,6 +9,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
+    ydb/core/testlib/audit_helpers
     ydb/core/testlib/pg
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
@@ -20,6 +21,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_base.cpp
+    ut_audit_log.cpp
     ut_operation_registry.cpp
     ut_counters.cpp
     ut_info_types.cpp

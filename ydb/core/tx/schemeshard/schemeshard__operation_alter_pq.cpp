@@ -278,15 +278,15 @@ public:
                 // Validate explicit channel profiles alter attempt
                 const auto& ecps = alterConfig.GetPartitionConfig().GetExplicitChannelProfiles();
                 if (ecps.size() < 3 || ui32(ecps.size()) > NHive::MAX_TABLET_CHANNELS) {
-                    auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be [3 .. %lu]",
-                                        ecps.size(),
-                                        NHive::MAX_TABLET_CHANNELS);
+                    errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be [3 .. %lu]",
+                                     ecps.size(),
+                                     NHive::MAX_TABLET_CHANNELS);
                     return nullptr;
                 }
                 if (ecps.size() < tabletConfig->GetPartitionConfig().GetExplicitChannelProfiles().size()) {
-                    auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be at least %lu (current config)",
-                                        ecps.size(),
-                                        tabletConfig->GetPartitionConfig().ExplicitChannelProfilesSize());
+                    errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be at least %lu (current config)",
+                                     ecps.size(),
+                                     tabletConfig->GetPartitionConfig().ExplicitChannelProfilesSize());
                     return nullptr;
                 }
             } else if (tabletConfig->GetPartitionConfig().ExplicitChannelProfilesSize() > 0) {

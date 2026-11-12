@@ -9,7 +9,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/services/workload_manager/events.h>
-#include <ydb/services/workload_manager/service/service.h>
+#include <ydb/services/workload_manager/common/service_id.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/protos/feature_flags.pb.h>

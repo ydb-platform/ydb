@@ -1,6 +1,6 @@
 #include "common.h"
 
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/common/events/scan.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 

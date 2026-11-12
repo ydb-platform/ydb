@@ -66,6 +66,7 @@ RECURSE(
     host
     node_service
     opt
+    predictor
     provider
     proxy_service
     query_plan

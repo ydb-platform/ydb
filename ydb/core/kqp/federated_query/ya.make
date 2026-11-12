@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/fq/libs/credentials
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/state
+    ydb/core/kqp/predictor
     ydb/core/kqp/query_data
     ydb/core/local_proxy/local_pq_client
     ydb/core/protos

@@ -81,6 +81,7 @@ PEERDIR(
     ydb/library/yql/dq/runtime
     ydb/library/yverify_stream
     ydb/public/sdk/cpp/src/client/params
+    ydb/services/workload_manager/common
     yql/essentials/minikql/comp_nodes
     yql/essentials/minikql/computation/llvm16
     yql/essentials/utils

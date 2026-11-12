@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/kqp/predictor
     ydb/core/protos
     ydb/core/tx/columnshard/flow_control_manager
     ydb/core/tx/data_events

@@ -1,0 +1,115 @@
+{
+  "checker": "PChecker, randomized bounded exploration (not exhaustive)",
+  "p_command": "/tmp/sync-guid-p",
+  "seed": 1,
+  "schedules_requested": 50,
+  "max_steps": 10000,
+  "source_sha256": {
+    "PSpec/Invariants.p": "43f0b573b76fb41e67a7f8026825d7285469cf78c1f810e8fbfe6d857dec3b4a",
+    "PSrc/Events.p": "899fd534288065a0483d358dd5c53087bde9cfcb54f1f17a587240c109fe85e5",
+    "PSrc/GuidRecovery.p": "54de7f5dfe70ac65b922c6bbb34c142c66e6648ccd5d28bc4d88896c63bd166d",
+    "PSrc/Storage.p": "940ff610e9cf3f58ae74fab00baa279b9c5f8c2ba8bb234a37ade9ed0f3240ba",
+    "PTst/Scenarios.p": "b66d731a17c9ea47955be936b289d8b0ae364c330b40d8377d0e38e8a10bfa9f",
+    "PTst/Tests.p": "268094a7cf1c5d6fe4841dcb5a8a8abfd722302f767a2832c060b9b557d21e39"
+  },
+  "results": [
+    {
+      "testcase": "tcStaleMetadata",
+      "exit_code": 1,
+      "expected_monitor": "misses committed 42",
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "1",
+        "schedules": "1",
+        "max_depth": "629",
+        "time_seconds": "0.29",
+        "memory_max_mb": "0"
+      },
+      "log": "/tmp/sync-guid-recovery-verified/tcStaleMetadata.log"
+    },
+    {
+      "testcase": "tcDelayedSelfGuid",
+      "exit_code": 1,
+      "expected_monitor": "Intact local Final rejected",
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "1",
+        "schedules": "1",
+        "max_depth": "534",
+        "time_seconds": "0.27",
+        "memory_max_mb": "0"
+      },
+      "log": "/tmp/sync-guid-recovery-verified/tcDelayedSelfGuid.log"
+    },
+    {
+      "testcase": "tcFalseFirstRun",
+      "exit_code": 1,
+      "expected_monitor": "Existing VDisk was classified FirstRun",
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "1",
+        "schedules": "1",
+        "max_depth": "563",
+        "time_seconds": "0.25",
+        "memory_max_mb": "0"
+      },
+      "log": "/tmp/sync-guid-recovery-verified/tcFalseFirstRun.log"
+    },
+    {
+      "testcase": "tcNoWipes",
+      "exit_code": 0,
+      "expected_monitor": null,
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "166",
+        "time_seconds": "1",
+        "memory_max_mb": "0.02"
+      },
+      "log": "/tmp/sync-guid-recovery-verified/tcNoWipes.log"
+    },
+    {
+      "testcase": "tcRetainedSource",
+      "exit_code": 0,
+      "expected_monitor": null,
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "572",
+        "time_seconds": "2.97",
+        "memory_max_mb": "0.02"
+      },
+      "log": "/tmp/sync-guid-recovery-verified/tcRetainedSource.log"
+    },
+    {
+      "testcase": "tcWipedWithWitnesses",
+      "exit_code": 0,
+      "expected_monitor": null,
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "150",
+        "time_seconds": "1.02",
+        "memory_max_mb": "0.02"
+      },
+      "log": "/tmp/sync-guid-recovery-verified/tcWipedWithWitnesses.log"
+    },
+    {
+      "testcase": "tcFreshGroup",
+      "exit_code": 0,
+      "expected_monitor": null,
+      "matched_expectation": true,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "86",
+        "time_seconds": "0.5",
+        "memory_max_mb": "0.01"
+      },
+      "log": "/tmp/sync-guid-recovery-verified/tcFreshGroup.log"
+    }
+  ]
+}

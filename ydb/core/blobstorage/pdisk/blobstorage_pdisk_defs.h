@@ -13,6 +13,9 @@
 namespace NKikimr {
 
     namespace NPDisk {
+        // A live backend service stall, distinct from the terminal device watchdog.
+        inline constexpr ui64 IoStallThresholdMs = 10'000;
+
         struct TPrintable_ui8 {
             ui8 Val;
 

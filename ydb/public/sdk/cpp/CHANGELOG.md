@@ -1,5 +1,7 @@
 ## v3.27.0
 
+* Added `TSelfCheckSettings::IncludeStorageIoHealth()` to query current local I/O progress for static storage while bypassing the SelfCheck metadata cache.
+
 * Fixed static login credentials failing permanently when the initial Login operation returns a transient service error.
 
 * Added draft `TBridgeClient::Rollback()` to roll a cluster converted into a bridged one back to ordinary mode, and `TBridgeClient::GetRollbackStatus()` to show the progress of the rollback.

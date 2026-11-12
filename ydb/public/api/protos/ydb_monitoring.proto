@@ -31,6 +31,8 @@ message SelfCheckRequest {
     bool do_not_cache = 5; // by default database health state is taken from metadata cache; this option can be used to force bypassing that cache
     bool merge_records = 6; // combine similar records with similar status, message and level into one issue
     bool return_hints = 7; // return hints for common problems
+    // Query current local PDisk I/O progress for static storage; always bypasses the metadata cache.
+    bool include_storage_io_health = 8;
 }
 
 message SelfCheckResponse {
@@ -234,6 +236,13 @@ message SelfCheckResult {
     repeated IssueLog issue_log = 2;
     repeated DatabaseStatus database_status = 3;
     LocationNode location = 4;
+    // Participating piles whose every referenced static device supplied an identity-validated Ready/Normal sample.
+    // Coverage describes sampling, not health: a stalled device can still be covered.
+    repeated string storage_io_health_covered_piles = 5;
+    // Storage-group IDs affected by a current, identity-validated static-device I/O stall.
+    // Collected before issue merging/filtering; group redundancy thresholds still apply.
+    // This source marker alone is not a storage-group failure verdict.
+    repeated string storage_io_stalled_groups = 6;
 }
 
 message ClusterStateRequest {

@@ -15,6 +15,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    node_whiteboard_ut.cpp
     bootstrapper_ut.cpp
     pipe_tracker_ut.cpp
     resource_broker_ut.cpp

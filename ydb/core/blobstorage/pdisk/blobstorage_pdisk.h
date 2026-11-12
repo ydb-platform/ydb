@@ -1794,6 +1794,20 @@ struct TEvConfigureSchedulerResult :
 ////////////////////////////////////////////////////////////////////////////
 // CONTROL
 ////////////////////////////////////////////////////////////////////////////
+// This query is answered by the PDisk actor without entering the device or PDisk worker.
+struct TEvIoProgressRequest : TEventLocal<TEvIoProgressRequest, TEvBlobStorage::EvPDiskIoProgressRequest> {};
+
+struct TEvIoProgressResult : TEventLocal<TEvIoProgressResult, TEvBlobStorage::EvPDiskIoProgressResult> {
+    ui32 PDiskId = 0;
+    ui64 Guid = 0;
+    bool Ready = false;
+    NKikimrBlobStorage::TPDiskState::E CurrentState = NKikimrBlobStorage::TPDiskState::Unknown;
+    // Admitted backend service work; this does not assert kernel submission.
+    ui64 PendingOperations = 0;
+    ui64 NoCompletionMs = 0;
+    TActorId Incarnation;
+};
+
 struct TEvYardControl : TEventLocal<TEvYardControl, TEvBlobStorage::EvYardControl> {
     enum EAction {
         ActionPause = 0,

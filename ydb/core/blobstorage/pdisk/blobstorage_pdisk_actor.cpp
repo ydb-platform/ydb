@@ -3,6 +3,7 @@
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_factory.h"
 #include "blobstorage_pdisk_impl.h"
+#include "blobstorage_pdisk_io_progress.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_requestimpl.h"
 #include "blobstorage_pdisk_state.h"
@@ -73,6 +74,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> PDiskCounters;
     TIntrusivePtr<TPDisk> PDisk;
     bool IsMagicAlreadyChecked = false;
+    TIoProgressTracker IoProgressTracker;
 
     THolder<TPDiskFunctionThread> FormattingThread;
     bool IsFormattingNow = false;
@@ -248,6 +250,7 @@ public:
     }
 
     void StartPDiskThread() {
+        IoProgressTracker.Reset();
         PDisk = new TPDisk(PCtx, Cfg, PDiskCounters);
 
         RealtimeFlag.RemoveSources();
@@ -285,6 +288,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Init state
     void InitError(const TString &errorReason, bool allowMetadataHandling = false) {
+        IoProgressTracker.Reset();
         Become(&TThis::StateError);
         for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
             std::visit([this, &errorReason](const auto& ev) {
@@ -656,6 +660,7 @@ public:
     }
 
     void InitSuccess() {
+        IoProgressTracker.Reset();
         Become(&TThis::StateOnline);
         for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
             std::visit([this](const auto& ev) {
@@ -1187,6 +1192,11 @@ public:
                 break;
 
             case EMetadataHandlingState::PROCESSING:
+                if (const auto progress = SampleIoProgress(); progress && progress->PendingOperations > 0
+                        && progress->NoCompletionMs >= IoStallThresholdMs) {
+                    Send(ev->Sender, new TEvReadMetadataResult(EPDiskMetadataOutcome::ERROR, PDiskGuid), 0, ev->Cookie);
+                    break;
+                }
                 PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TReadMetadata>(ev->Sender, MainKey));
                 break;
 
@@ -1264,7 +1274,44 @@ public:
             {"marker", "BSP01"});
     }
 
+    std::optional<TIoProgressTracker::TSample> SampleIoProgress() {
+        if (CurrentStateFunc() != &TThis::StateOnline || !PDisk || IsFormattingNow ||
+                !AtomicGet(PDisk->IsStarted) || Cfg->MetadataOnly ||
+                PDisk->Mon.PDiskState->Val() != NKikimrBlobStorage::TPDiskState::Normal) {
+            IoProgressTracker.Reset();
+            return std::nullopt;
+        }
+
+        // A retirement racing the pair of reads must not retain an old age.
+        const i64 before = PDisk->Mon.DeviceLandings->Val();
+        const i64 takeoffs = PDisk->Mon.DeviceTakeoffs->Val();
+        const i64 landings = PDisk->Mon.DeviceLandings->Val();
+        if (before != landings) {
+            IoProgressTracker.Reset();
+            return std::nullopt;
+        }
+        return IoProgressTracker.Update(TMonotonic::Now(), takeoffs, landings);
+    }
+
+    void Handle(TEvIoProgressRequest::TPtr& ev) {
+        const auto progress = SampleIoProgress();
+        auto result = std::make_unique<TEvIoProgressResult>();
+        result->PDiskId = PCtx->PDiskId;
+        result->Guid = Cfg->PDiskGuid;
+        result->CurrentState = PDisk
+            ? static_cast<NKikimrBlobStorage::TPDiskState::E>(PDisk->Mon.PDiskState->Val())
+            : NKikimrBlobStorage::TPDiskState::Unknown;
+        result->Ready = progress.has_value();
+        if (progress) {
+            result->PendingOperations = progress->PendingOperations;
+            result->NoCompletionMs = progress->NoCompletionMs;
+        }
+        result->Incarnation = SelfId();
+        Send(ev->Sender, result.release(), 0, ev->Cookie);
+    }
+
     void HandleWakeup() {
+        SampleIoProgress();
         Schedule(TDuration::MilliSeconds(Cfg->StatisticsUpdateIntervalMs), new TEvents::TEvWakeup());
 
         TCpuTimer timer;
@@ -1607,6 +1654,7 @@ public:
             hFunc(TEvents::TEvPoison, HandlePoison);
             hFunc(NMon::TEvHttpInfo, InitHandle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            hFunc(NPDisk::TEvIoProgressRequest, Handle);
             hFunc(NPDisk::TEvDeviceError, Handle);
             hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
             hFunc(NPDisk::TEvFormatReencryptionFinish, InitHandle);
@@ -1659,6 +1707,7 @@ public:
             hFunc(TEvents::TEvPoison, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            hFunc(NPDisk::TEvIoProgressRequest, Handle);
             hFunc(NPDisk::TEvDeviceError, Handle);
             hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
 
@@ -1701,6 +1750,7 @@ public:
             hFunc(TEvents::TEvPoison, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            hFunc(NPDisk::TEvIoProgressRequest, Handle);
             hFunc(NPDisk::TEvDeviceError, Handle);
             hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
 

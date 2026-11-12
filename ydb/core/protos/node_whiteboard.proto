@@ -182,10 +182,21 @@ message TDDiskStateInfo {
     optional string StoragePoolName = 14; // controller identity, also available without whiteboard samples
 }
 
+// A live, request-correlated PDisk sample. Missing samples carry no health meaning.
+message TPDiskIoProgressInfo {
+    optional uint32 PDiskId = 1;
+    optional uint64 Guid = 2;
+    optional bool Ready = 3;
+    optional uint64 PendingOperations = 4;
+    optional uint64 NoCompletionMs = 5;
+    optional NKikimrBlobStorage.TPDiskState.E State = 6;
+}
+
 message TEvPDiskStateRequest {
     optional uint64 ChangedSince = 1;
     repeated int32 FieldsRequired = 2 [packed = true];
     optional bool IncludeDDiskState = 3 [default = false];
+    optional bool IncludeIoProgress = 4 [default = false];
 }
 
 message TEvPDiskStateResponse {
@@ -193,6 +204,7 @@ message TEvPDiskStateResponse {
     optional uint64 ResponseTime = 2;
     optional uint32 ResponseDuration = 3; // filled during collect
     repeated TDDiskStateInfo DDiskStateInfo = 4;
+    repeated TPDiskIoProgressInfo PDiskIoProgressInfo = 5;
 }
 
 // The structure reports VDisk compaction satisfaction rank, i.e.

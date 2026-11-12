@@ -22,6 +22,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -36,6 +37,9 @@
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <regex>
+#include <map>
+#include <set>
+#include <type_traits>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -734,6 +738,18 @@ public:
     TList<NKikimrWhiteboard::TPDiskStateInfo> PDisksAppended;
     std::unordered_map<TString, const NKikimrWhiteboard::TPDiskStateInfo*> MergedPDiskState;
 
+    struct TStaticPDiskIdentity {
+        TNodeId NodeId = 0;
+        ui64 Guid = 0;
+        std::optional<TString> PileName;
+        bool Participating = true;
+    };
+    // Keep configured identities separate: filtered cached whiteboard records may omit their GUID.
+    std::unordered_map<TString, TStaticPDiskIdentity> StaticPDiskIdentities;
+    std::unordered_map<TGroupId, std::optional<TString>> StaticGroupPileNames;
+    std::unordered_map<TString, const NKikimrWhiteboard::TPDiskIoProgressInfo*> PDiskIoProgress;
+    std::set<TString> StorageIoStalledGroups;
+
     THashMap<TNodeId, TRequestResponse<TEvWhiteboard::TEvBSGroupStateResponse>> NodeBSGroupState;
     TList<NKikimrWhiteboard::TBSGroupStateInfo> BSGroupAppended;
     std::unordered_map<TGroupId, const NKikimrWhiteboard::TBSGroupStateInfo*> MergedBSGroupState;
@@ -866,7 +882,8 @@ public:
             RequestBsController();
         }
 
-        if (!IsSpecificDatabaseFilter() || IsBridgeMode(TActivationContext::AsActorContext())) {
+        if (Request->Request.include_storage_io_health() || !IsSpecificDatabaseFilter()
+                || IsBridgeMode(TActivationContext::AsActorContext())) {
             NodeWardenStorageConfig = RequestStorageConfig();
         }
 
@@ -903,7 +920,12 @@ public:
             return;
         }
         const NKikimrBlobStorage::TStorageConfig& config = *NodeWardenStorageConfig->Get()->Config;
-        RequestDone("TEvNodeWardenStorageConfig");
+        if (Request->Request.include_storage_io_health()) {
+            RequestStorageIoHealth(config);
+        }
+        if (!Request->Request.include_storage_io_health()) {
+            RequestDone("TEvNodeWardenStorageConfig");
+        }
         if (config.GetSelfManagementConfig().GetEnabled() && config.GetGeneration() == 0) {
             auto result = MakeHolder<TEvSelfCheckResult>();
             result->Result.set_self_check_result(Ydb::Monitoring::SelfCheck_Result::SelfCheck_Result_MAINTENANCE_REQUIRED);
@@ -961,6 +983,55 @@ public:
                         DatabaseState[DomainPath].StoragePoolNames.emplace(storagePoolName);
                     }
                 }
+            }
+        }
+        if (Request->Request.include_storage_io_health()) {
+            RequestDone("TEvNodeWardenStorageConfig");
+        }
+    }
+
+    void RequestPDiskNode(TNodeId nodeId) {
+        if (!NodePDiskState.contains(nodeId)) {
+            NodePDiskState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId));
+            ++Requests;
+        }
+    }
+
+    void RequestStorageIoHealth(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (!config.HasBlobStorageConfig() || !config.GetBlobStorageConfig().HasServiceSet()) {
+            return;
+        }
+        const auto& serviceSet = config.GetBlobStorageConfig().GetServiceSet();
+        std::unordered_map<TString, ui64> configuredGuids;
+        for (const auto& pDisk : serviceSet.GetPDisks()) {
+            configuredGuids.emplace(GetPDiskId(pDisk), pDisk.GetPDiskGuid());
+        }
+        const auto* bridgeInfo = GetBridgeInfo();
+        for (const auto& vDisk : serviceSet.GetVDisks()) {
+            const auto groupId = vDisk.GetVDiskID().GetGroupID();
+            if (!IsStaticGroup(groupId)) {
+                continue;
+            }
+            const auto& location = vDisk.GetVDiskLocation();
+            const TString pDiskId = TStringBuilder() << location.GetNodeID() << "-" << location.GetPDiskID();
+            auto& identity = StaticPDiskIdentities[pDiskId];
+            identity.NodeId = location.GetNodeID();
+            if (const auto it = configuredGuids.find(pDiskId); it != configuredGuids.end()) {
+                identity.Guid = it->second;
+            }
+            if (bridgeInfo) {
+                const auto* pile = bridgeInfo->GetPileForNode(identity.NodeId);
+                identity.Participating = pile && !pile->IsFreeSlot && NBridge::PileStateTraits(pile->State).RequiresDataQuorum;
+                if (pile && !pile->IsFreeSlot) {
+                    identity.PileName = pile->Name;
+                }
+            }
+            auto [group, inserted] = StaticGroupPileNames.emplace(groupId, identity.PileName);
+            if (!inserted && group->second != identity.PileName) {
+                group->second.reset(); // mixed-pile groups have no single pile attribution
+            }
+            if (identity.Participating) {
+                RequestPDiskNode(identity.NodeId);
             }
         }
     }
@@ -1259,6 +1330,11 @@ public:
         for (int field : GetRequiredFields<TEvent>()) {
             request->Record.AddFieldsRequired(field);
         }
+        if constexpr (std::is_same_v<TEvent, TEvWhiteboard::TEvPDiskStateRequest>) {
+            if (Request->Request.include_storage_io_health()) {
+                request->Record.SetIncludeIoProgress(true);
+            }
+        }
         TRequestResponse<typename WhiteboardResponse<TEvent>::Type> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
         if (response.Span) {
             response.Span.Attribute("target_node_id", nodeId);
@@ -1289,10 +1365,7 @@ public:
                 NodeVDiskState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId));
                 ++Requests;
             }
-            if (NodePDiskState.count(nodeId) == 0) {
-                NodePDiskState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId));
-                ++Requests;
-            }
+            RequestPDiskNode(nodeId);
             if (NodeBSGroupState.count(nodeId) == 0) {
                 NodeBSGroupState.emplace(nodeId, RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId));
                 ++Requests;
@@ -2033,6 +2106,20 @@ public:
         }
         for (auto& [nodeId, nodePDiskState] : NodePDiskState) {
             if (nodePDiskState.IsOk()) {
+                if (Request->Request.include_storage_io_health()) {
+                    for (const auto& progress : nodePDiskState->Record.GetPDiskIoProgressInfo()) {
+                        const TString id = TStringBuilder() << nodeId << "-" << progress.GetPDiskId();
+                        const auto expected = StaticPDiskIdentities.find(id);
+                        if (expected != StaticPDiskIdentities.end() && expected->second.Participating
+                                && expected->second.Guid != 0 && progress.GetGuid() == expected->second.Guid) {
+                            // Duplicate identities are ambiguous and cannot establish current health.
+                            const auto [it, inserted] = PDiskIoProgress.emplace(id, &progress);
+                            if (!inserted) {
+                                it->second = nullptr;
+                            }
+                        }
+                    }
+                }
                 for (NKikimrWhiteboard::TPDiskStateInfo& state : *nodePDiskState->Record.MutablePDiskStateInfo()) {
                     state.set_nodeid(nodeId);
                     auto id = GetPDiskId(state);
@@ -2576,6 +2663,84 @@ public:
         }
     }
 
+    static bool IsIoStalled(const NKikimrWhiteboard::TPDiskIoProgressInfo& progress) {
+        return progress.GetReady() && progress.GetState() == NKikimrBlobStorage::TPDiskState::Normal
+            && progress.GetPendingOperations() > 0 && progress.GetNoCompletionMs() >= NPDisk::IoStallThresholdMs;
+    }
+
+    const NKikimrWhiteboard::TPDiskIoProgressInfo* GetPDiskIoFailure(const TString& pDiskId,
+            const TSelfCheckContext& context) const
+    {
+        const auto it = PDiskIoProgress.find(pDiskId);
+        if (it == PDiskIoProgress.end() || !it->second) {
+            return nullptr;
+        }
+        const auto& progress = *it->second;
+        if (!IsIoStalled(progress) && progress.GetState() != NKikimrBlobStorage::TPDiskState::DeviceIoError) {
+            return nullptr;
+        }
+        const auto& group = context.Location.storage().pool().group();
+        const auto expected = StaticPDiskIdentities.find(pDiskId);
+        if (expected == StaticPDiskIdentities.end() || (group.has_pile() && expected->second.PileName != group.pile().name())) {
+            return nullptr;
+        }
+        return &progress;
+    }
+
+    bool ReportPDiskIoFailure(const TString& pDiskId, TSelfCheckContext& context) const {
+        const auto* progress = GetPDiskIoFailure(pDiskId, context);
+        if (!progress) {
+            return false;
+        }
+        context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
+            IsIoStalled(*progress) ? "PDisk I/O service is stalled" : "PDisk state is DeviceIoError", ETags::PDiskState);
+        return true;
+    }
+
+    void ReportVDiskIoFailure(const NKikimrWhiteboard::TPDiskIoProgressInfo& progress,
+            Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext& context)
+    {
+        if (IsIoStalled(progress) && context.Upper) {
+            // The VDisk context clears its group IDs; its parent retains the
+            // exact physical group before issue merging/filtering/truncation.
+            for (const auto& group : context.Upper->Location.storage().pool().group().id()) {
+                StorageIoStalledGroups.insert(group);
+            }
+        }
+        context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
+            IsIoStalled(progress) ? "VDisk I/O service is stalled" : "VDisk is not available",
+            ETags::VDiskState, {ETags::PDiskState});
+        storageVDiskStatus.set_overall(context.GetOverallStatus());
+    }
+
+    void FillStorageIoHealth(Ydb::Monitoring::SelfCheckResult& result) const {
+        if (!Request->Request.include_storage_io_health()) {
+            return;
+        }
+        std::map<TString, bool> coveredPiles;
+        for (const auto& [id, identity] : StaticPDiskIdentities) {
+            if (!identity.Participating || !identity.PileName) {
+                continue;
+            }
+            const auto it = PDiskIoProgress.find(id);
+            const auto* progress = it != PDiskIoProgress.end() ? it->second : nullptr;
+            const bool covered = progress && progress->GetReady()
+                && progress->GetState() == NKikimrBlobStorage::TPDiskState::Normal;
+            auto [pile, inserted] = coveredPiles.emplace(*identity.PileName, covered);
+            if (!inserted) {
+                pile->second = pile->second && covered;
+            }
+        }
+        for (const auto& [pile, covered] : coveredPiles) {
+            if (covered) {
+                result.add_storage_io_health_covered_piles(pile);
+            }
+        }
+        for (const auto& group : StorageIoStalledGroups) {
+            result.add_storage_io_stalled_groups(group);
+        }
+    }
+
     void FillPDiskStatus(const TString& pDiskId, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
         context.Location.clear_database(); // PDisks are shared between databases
         context.Location.mutable_storage()->mutable_pool()->clear_name(); // PDisks are shared between pools
@@ -2585,6 +2750,10 @@ public:
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_pdisk();
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->begin()->set_id(pDiskId);
         storagePDiskStatus.set_id(pDiskId);
+        if (ReportPDiskIoFailure(pDiskId, context)) {
+            storagePDiskStatus.set_overall(context.GetOverallStatus());
+            return;
+        }
 
         auto itPDisk = PDisksMap.find(pDiskId);
         if (itPDisk == PDisksMap.end()) { // this report, in theory, can't happen because there was pdisk mention in bsc vslot info. this pdisk info have to exists in bsc too
@@ -2690,6 +2859,14 @@ public:
         storageVDiskStatus.set_id(GetVSlotId(vSlot->GetKey()));
 
         const auto& vSlotInfo = vSlot->GetInfo();
+        if (!PDiskIoProgress.empty() && vSlot->GetKey().HasPDiskId()) {
+            const TString pDiskId = GetPDiskId(vSlot->GetKey());
+            if (const auto* progress = GetPDiskIoFailure(pDiskId, context)) {
+                FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
+                ReportVDiskIoFailure(*progress, storageVDiskStatus, context);
+                return;
+            }
+        }
 
         if (!vSlotInfo.HasStatusV2()) {
             // this should mean that BSC recently restarted and does not have accurate data yet - we should not report to avoid false positives
@@ -2793,6 +2970,11 @@ public:
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->begin()->set_path(pDiskInfo.path());
         storagePDiskStatus.set_id(pDiskId);
 
+        if (ReportPDiskIoFailure(pDiskId, context)) {
+            storagePDiskStatus.set_overall(context.GetOverallStatus());
+            return;
+        }
+
         const auto replyState = GetWhiteboardReplyState(NodePDiskState, pDiskInfo.nodeid());
         if (pDiskInfo.HasState()) {
             ReportPDiskState(pDiskInfo.GetState(), context);
@@ -2850,6 +3032,11 @@ public:
         auto itPDisk = MergedPDiskState.find(pDiskId);
         if (itPDisk != MergedPDiskState.end()) {
             FillPDiskStatusWithWhiteboard(pDiskId, *itPDisk->second, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
+        }
+
+        if (const auto* progress = GetPDiskIoFailure(pDiskId, context)) {
+            ReportVDiskIoFailure(*progress, storageVDiskStatus, context);
+            return false;
         }
 
         if (!vDiskInfo.HasVDiskState()) {
@@ -3576,6 +3763,9 @@ public:
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->Clear();
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id(ToString(groupId));
         storageGroupStatus.set_id(ToString(groupId));
+        if (const auto it = StaticGroupPileNames.find(groupId); it != StaticGroupPileNames.end() && it->second) {
+            context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(*it->second);
+        }
 
         auto itGroup = GroupState.find(groupId);
         if (itGroup == GroupState.end()) {
@@ -3614,6 +3804,13 @@ public:
                 pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(group->Id));
                 CheckGroupVSlots(checker, group->VSlots, storageGroupStatus, pileContext);
                 checker.ReportStatus(pileContext);
+                // VDiskStatuses may already contain this physical part. Keep
+                // its cause on the logical group even when the cache was used.
+                if (!StorageIoStalledGroups.empty()
+                    && StorageIoStalledGroups.contains(pileContext.Location.storage().pool().group().id(0)))
+                {
+                    StorageIoStalledGroups.insert(context.Location.storage().pool().group().id(0));
+                }
                 return pileContext.GetOverallStatus();
             };
             auto isSyncPile = [&](const TGroupState* group) {
@@ -4055,6 +4252,7 @@ public:
         }
 
         FillResult({&result});
+        FillStorageIoHealth(result);
         RemoveUnrequestedEntries(result, Request->Request);
 
         return ReplyAndPassAway(std::move(response));

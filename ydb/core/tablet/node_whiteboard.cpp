@@ -3,15 +3,148 @@
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/util/cpuinfo.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <optional>
 #include <unordered_set>
 
 namespace NKikimr::NNodeWhiteboard {
 
 using namespace NActors;
+
+// The collector owns exactly one whiteboard response and never publishes samples
+// into the whiteboard cache. A reply establishes freshness only for this request.
+class TPDiskIoProgressCollector : public TActorBootstrapped<TPDiskIoProgressCollector> {
+public:
+    struct TDisk {
+        ui32 PDiskId;
+        ui64 Guid;
+        TActorId Incarnation;
+        bool Pending = false;
+        std::optional<NKikimrWhiteboard::TPDiskIoProgressInfo> Sample;
+    };
+
+    TPDiskIoProgressCollector(TActorId recipient, ui64 cookie,
+            THolder<TEvWhiteboard::TEvPDiskStateResponse> response, TVector<TDisk> disks)
+        : Recipient(recipient)
+        , Cookie(cookie)
+        , Response(std::move(response))
+        , Disks(std::move(disks))
+        , Deadline(TActivationContext::Monotonic() + TDuration::MilliSeconds(500))
+    {}
+
+    void Bootstrap() {
+        if (TActivationContext::Monotonic() >= Deadline) {
+            Reply();
+            return;
+        }
+        Become(&TThis::StateFunc);
+        for (size_t i = 0; i < Disks.size(); ++i) {
+            auto& disk = Disks[i];
+            const auto serviceId = MakeBlobStoragePDiskID(SelfId().NodeId(), disk.PDiskId);
+            disk.Incarnation = TActivationContext::ActorSystem()->LookupLocalService(serviceId);
+            if (disk.Incarnation && disk.Incarnation.NodeId() == SelfId().NodeId()) {
+                disk.Pending = true;
+                ++Pending;
+                Send(serviceId, new NPDisk::TEvIoProgressRequest,
+                    IEventHandle::FlagTrackDelivery, i + 1);
+            }
+        }
+        if (Pending) {
+            Schedule(Deadline, new TEvents::TEvWakeup);
+        } else {
+            Reply();
+        }
+    }
+
+private:
+    const TActorId Recipient;
+    const ui64 Cookie;
+    THolder<TEvWhiteboard::TEvPDiskStateResponse> Response;
+    TVector<TDisk> Disks;
+    size_t Pending = 0;
+    const TMonotonic Deadline;
+
+    bool IsCurrent(const TDisk& disk) const {
+        return TActivationContext::ActorSystem()->LookupLocalService(
+            MakeBlobStoragePDiskID(SelfId().NodeId(), disk.PDiskId)) == disk.Incarnation;
+    }
+
+    void Reply() {
+        for (auto& disk : Disks) {
+            // A disk may restart after its reply while another query is pending.
+            if (disk.Sample && IsCurrent(disk)) {
+                Response->Record.AddPDiskIoProgressInfo()->Swap(&*disk.Sample);
+            }
+        }
+        Response->Record.SetResponseTime(TActivationContext::Now().MilliSeconds());
+        Send(Recipient, Response.Release(), 0, Cookie);
+        PassAway();
+    }
+
+    TDisk* FindPending(ui64 cookie) {
+        if (cookie == 0 || cookie > Disks.size()) {
+            return nullptr;
+        }
+        auto& disk = Disks[cookie - 1];
+        return disk.Pending ? &disk : nullptr;
+    }
+
+    void Complete(TDisk& disk) {
+        disk.Pending = false;
+        if (!--Pending) {
+            Reply();
+        }
+    }
+
+    void Handle(NPDisk::TEvIoProgressResult::TPtr& ev) {
+        if (TActivationContext::Monotonic() >= Deadline) {
+            Reply();
+            return;
+        }
+        auto* disk = FindPending(ev->Cookie);
+        const auto& result = *ev->Get();
+        if (!disk || ev->Sender != disk->Incarnation || result.Incarnation != ev->Sender
+                || result.PDiskId != disk->PDiskId || result.Guid != disk->Guid || !IsCurrent(*disk)) {
+            return;
+        }
+        auto& sample = disk->Sample.emplace();
+        sample.SetPDiskId(result.PDiskId);
+        sample.SetGuid(result.Guid);
+        sample.SetReady(result.Ready);
+        sample.SetPendingOperations(result.PendingOperations);
+        sample.SetNoCompletionMs(result.NoCompletionMs);
+        sample.SetState(result.CurrentState);
+        Complete(*disk);
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        if (TActivationContext::Monotonic() >= Deadline) {
+            Reply();
+            return;
+        }
+        if (ev->Get()->SourceType != NPDisk::TEvIoProgressRequest::EventType) {
+            return;
+        }
+        if (auto* disk = FindPending(ev->Cookie)) {
+            const auto serviceId = MakeBlobStoragePDiskID(SelfId().NodeId(), disk->PDiskId);
+            if (ev->Sender == serviceId || ev->Sender == disk->Incarnation) {
+                Complete(*disk);
+            }
+        }
+    }
+
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NPDisk::TEvIoProgressResult, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle);
+            cFunc(TEvents::TSystem::Wakeup, Reply);
+        }
+    }
+};
 
 class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService> {
     struct TEvPrivate {
@@ -1020,10 +1153,15 @@ protected:
         ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;
         TAutoPtr<TEvWhiteboard::TEvPDiskStateResponse> response = new TEvWhiteboard::TEvPDiskStateResponse();
         auto& record = response->Record;
+        TVector<TPDiskIoProgressCollector::TDisk> disks;
         for (const auto& pr : PDiskStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
                 NKikimrWhiteboard::TPDiskStateInfo &pDiskStateInfo = *record.AddPDiskStateInfo();
                 Copy(pDiskStateInfo, pr.second, request);
+                if (request.GetIncludeIoProgress() && pr.second.HasGuid()) {
+                    // Use the selected cache identity even when FieldsRequired omits it.
+                    disks.push_back({pr.first, pr.second.GetGuid(), {}, false, {}});
+                }
             }
         }
         if (request.GetIncludeDDiskState()) {
@@ -1037,7 +1175,12 @@ protected:
             }
         }
         response->Record.SetResponseTime(TActivationContext::Now().MilliSeconds());
-        Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        if (request.GetIncludeIoProgress()) {
+            Register(new TPDiskIoProgressCollector(ev->Sender, ev->Cookie,
+                THolder<TEvWhiteboard::TEvPDiskStateResponse>(response.Release()), std::move(disks)));
+        } else {
+            Send(ev->Sender, response.Release(), 0, ev->Cookie);
+        }
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateDelete::TPtr& ev) {

@@ -3028,6 +3028,14 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UndeliveredOnce, // the first request is undelivered, its retry gets the reply
     };
 
+    struct TPDiskIoSample {
+        bool Ready = true;
+        ui64 PendingOperations = 1;
+        ui64 NoCompletionMs = 10'000;
+        NKikimrBlobStorage::TPDiskState::E State = NKikimrBlobStorage::TPDiskState::Normal;
+        ui64 GuidOffset = 0;
+    };
+
     struct TStaticWhiteboardDisk {
         ui32 Node = 0; // index of the static node
         ui32 Realm = 0;
@@ -3036,6 +3044,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         std::optional<NKikimrWhiteboard::EVDiskState> VDiskState = NKikimrWhiteboard::EVDiskState::OK;
         // state in a received PDisk reply
         NKikimrBlobStorage::TPDiskState::E PDiskState = NKikimrBlobStorage::TPDiskState::Normal;
+        std::optional<TPDiskIoSample> IoSample;
     };
 
     struct TStaticWhiteboardScenario {
@@ -3048,6 +3057,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         ui32 GroupBridgePileId = 1; // proto ID; normally the fixture registry contains only pile0 (ID 1)
         bool FreeGroupPile = false;
         bool MergeRecords = false;
+        TString PileName = "pile0";
+        bool IncludeStorageIoHealth = false;
+        bool BscAvailable = false;
+        bool InactivePile = false;
+        bool ImplicitPile = false;
+        ui32* IoRequestCount = nullptr;
         TDuration OperationTimeout; // zero means the server default, 20 s
     };
 
@@ -3102,7 +3117,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
         if (scenario.Bridge) {
-            bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "pile0", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+            bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = scenario.PileName, .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
             if (scenario.FreeGroupPile) {
                 bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1),
                     .IsFreeSlot = true, .State = NKikimrBridge::TClusterState::INACTIVE});
@@ -3110,6 +3125,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     .Name = "pile2", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
             }
             bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
+            if (scenario.InactivePile) {
+                bridgeInfo->Piles[0].State = NKikimrBridge::TClusterState::INACTIVE;
+            }
+            if (scenario.ImplicitPile) {
+                bridgeInfo->ImplicitPile = bridgeInfo->Piles.data();
+            }
             for (ui32 node = 0; node < scenario.StaticNodes; ++node) {
                 bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(node)] = &bridgeInfo->Piles[0];
             }
@@ -3119,7 +3140,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
 
         ui32 groupId = 0;
-        ui32 generation = 0;
+        ui32 generation = 1;
         auto indexForNode = [&](TNodeId nodeId) -> std::optional<ui32> {
             for (ui32 index = 0; index < scenario.StaticNodes; ++index) {
                 if (runtime.GetNodeId(index) == nodeId) {
@@ -3132,8 +3153,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         std::map<std::pair<ui32, ui32>, ui32> requestCounts;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             const auto type = ev->GetTypeRewrite();
-            // force the whiteboard fallback
-            if (EventSpaceBegin(TKikimrEvents::ES_SYSTEM_VIEW) <= type && type <= EventSpaceEnd(TKikimrEvents::ES_SYSTEM_VIEW)) {
+            // Existing scenarios force the whiteboard fallback; I/O tests can keep BSC green.
+            if (!scenario.BscAvailable && EventSpaceBegin(TKikimrEvents::ES_SYSTEM_VIEW) <= type && type <= EventSpaceEnd(TKikimrEvents::ES_SYSTEM_VIEW)) {
                 return TTestActorRuntime::EEventAction::DROP;
             }
             if (type == TEvBlobStorage::EvNodeWardenStorageConfig) {
@@ -3160,6 +3181,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     pDisk->CopyFrom(samplePDisk);
                     pDisk->SetNodeID(nodeId);
                     pDisk->SetPDiskID(PDISK_START_ID + i);
+                    pDisk->SetPDiskGuid(100 + i);
                     auto* vDisk = serviceSet->add_vdisks();
                     vDisk->CopyFrom(sampleVDisk);
                     auto* id = vDisk->MutableVDiskID();
@@ -3172,6 +3194,45 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 (*x)->Get()->Config = std::make_shared<NKikimrBlobStorage::TStorageConfig>(std::move(config));
                 if (scenario.Bridge) {
                     (*x)->Get()->BridgeInfo = bridgeInfo;
+                }
+            }
+            if (scenario.BscAvailable && type == NSysView::TEvSysView::EvGetGroupsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
+                record.ClearEntries();
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetGroupId(groupId);
+                auto* info = entry->MutableInfo();
+                info->SetStoragePoolId(0);
+                info->SetGeneration(generation);
+                info->SetErasureSpeciesV2(scenario.Erasure);
+                info->SetLayoutCorrect(true);
+            }
+            if (scenario.BscAvailable && type == NSysView::TEvSysView::EvGetVSlotsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
+                record.ClearEntries();
+                for (ui32 i = 0; i < scenario.Disks.size(); ++i) {
+                    const auto& disk = scenario.Disks[i];
+                    auto* entry = record.AddEntries();
+                    entry->MutableKey()->SetNodeId(runtime.GetNodeId(disk.Node));
+                    entry->MutableKey()->SetPDiskId(PDISK_START_ID + i);
+                    entry->MutableKey()->SetVSlotId(i);
+                    auto* info = entry->MutableInfo();
+                    info->SetGroupId(groupId);
+                    info->SetGroupGeneration(generation);
+                    info->SetFailRealm(disk.Realm);
+                    info->SetFailDomain(disk.Domain);
+                    info->SetVDisk(0);
+                    info->SetStatusV2("READY");
+                }
+            }
+            if (scenario.BscAvailable && type == NSysView::TEvSysView::EvGetPDisksResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetPDisksResponse>()->Record;
+                record.ClearEntries();
+                for (ui32 i = 0; i < scenario.Disks.size(); ++i) {
+                    auto* entry = record.AddEntries();
+                    entry->MutableKey()->SetNodeId(runtime.GetNodeId(scenario.Disks[i].Node));
+                    entry->MutableKey()->SetPDiskId(PDISK_START_ID + i);
+                    entry->MutableInfo()->SetState("Normal");
                 }
             }
             if (type == TEvWhiteboard::EvBSGroupStateResponse) {
@@ -3199,6 +3260,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             if (type == TEvWhiteboard::EvVDiskStateRequest || type == TEvWhiteboard::EvPDiskStateRequest) {
                 const auto node = indexForNode(ev->GetRecipientRewrite().NodeId());
                 if (node) {
+                    if (type == TEvWhiteboard::EvPDiskStateRequest) {
+                        const auto& request = ev->Get<TEvWhiteboard::TEvPDiskStateRequest>()->Record;
+                        UNIT_ASSERT_VALUES_EQUAL(request.GetIncludeIoProgress(), scenario.IncludeStorageIoHealth);
+                        if (request.GetIncludeIoProgress() && scenario.IoRequestCount) {
+                            ++*scenario.IoRequestCount;
+                        }
+                    }
                     const auto reply = type == TEvWhiteboard::EvVDiskStateRequest ? scenario.VDiskReplies[*node] : scenario.PDiskReplies[*node];
                     const bool first = requestCounts[{*node, type}]++ == 0;
                     if (reply == EWhiteboardReply::Unreachable || (reply == EWhiteboardReply::UndeliveredOnce && first)) {
@@ -3251,12 +3319,23 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     auto* x = reinterpret_cast<TEvWhiteboard::TEvPDiskStateResponse::TPtr*>(&ev);
                     auto& record = (*x)->Get()->Record;
                     record.clear_pdiskstateinfo();
+                    record.ClearPDiskIoProgressInfo();
                     for (ui32 i = 0; i < scenario.Disks.size(); ++i) {
                         const auto& disk = scenario.Disks[i];
                         if (disk.Node == *node) {
                             auto* state = record.add_pdiskstateinfo();
                             state->set_pdiskid(PDISK_START_ID + i);
                             state->set_state(disk.PDiskState);
+                            if (scenario.IncludeStorageIoHealth && disk.IoSample) {
+                                const auto& sample = *disk.IoSample;
+                                auto* progress = record.AddPDiskIoProgressInfo();
+                                progress->SetPDiskId(PDISK_START_ID + i);
+                                progress->SetGuid(100 + i + sample.GuidOffset);
+                                progress->SetReady(sample.Ready);
+                                progress->SetPendingOperations(sample.PendingOperations);
+                                progress->SetNoCompletionMs(sample.NoCompletionMs);
+                                progress->SetState(sample.State);
+                            }
                         }
                     }
                 }
@@ -3270,6 +3349,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto* request = new NHealthCheck::TEvSelfCheckRequest;
         request->Request.set_return_verbose_status(true);
         request->Request.set_merge_records(scenario.MergeRecords);
+        request->Request.set_include_storage_io_health(scenario.IncludeStorageIoHealth);
         if (scenario.OperationTimeout) {
             SetDuration(scenario.OperationTimeout, *request->Request.mutable_operation_params()->mutable_operation_timeout());
         }
@@ -3417,6 +3497,198 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         scenario.VDiskReplies = {EWhiteboardReply::Missing};
         scenario.PDiskReplies = {EWhiteboardReply::Missing};
         return scenario;
+    }
+
+    TStaticWhiteboardScenario IoHealthScenario(bool bscAvailable = false) {
+        TStaticWhiteboardScenario scenario;
+        scenario.Disks = Block42Disks();
+        for (auto& disk : scenario.Disks) {
+            disk.IoSample = TPDiskIoSample{.PendingOperations = 0};
+        }
+        scenario.VDiskReplies = {EWhiteboardReply::Received};
+        scenario.PDiskReplies = {EWhiteboardReply::Received};
+        scenario.Bridge = true;
+        scenario.IncludeStorageIoHealth = true;
+        scenario.BscAvailable = bscAvailable;
+        return scenario;
+    }
+
+    void CheckStorageIoFailureGraph(const Ydb::Monitoring::SelfCheckResult& result, const TString& message,
+            size_t failedDisks)
+    {
+        const auto& group = GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED);
+        UNIT_ASSERT_VALUES_EQUAL(group.location().storage().pool().group().pile().name(), "pile0");
+        const auto vdisks = GetReasonIssues(result, group, "VDISK", Ydb::Monitoring::StatusFlag::RED);
+        UNIT_ASSERT_VALUES_EQUAL(vdisks.size(), failedDisks);
+        for (const auto* vdisk : vdisks) {
+            UNIT_ASSERT_VALUES_EQUAL(vdisk->message(), message == "PDisk I/O service is stalled"
+                ? "VDisk I/O service is stalled" : "VDisk is not available");
+            UNIT_ASSERT_VALUES_EQUAL(vdisk->location().storage().pool().group().pile().name(), "pile0");
+            const auto pdisks = GetReasonIssues(result, *vdisk, "PDISK", Ydb::Monitoring::StatusFlag::RED);
+            UNIT_ASSERT_VALUES_EQUAL(pdisks.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(pdisks.front()->message(), message);
+            UNIT_ASSERT_VALUES_EQUAL(pdisks.front()->location().storage().node().id(), vdisk->location().storage().node().id());
+            UNIT_ASSERT_VALUES_EQUAL(pdisks.front()->location().storage().pool().group().pile().name(), "pile0");
+            UNIT_ASSERT_VALUES_EQUAL(pdisks.front()->reason_size(), 0);
+        }
+        CheckAllReasonsResolve(result);
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::RED, "Pool failed");
+    }
+
+    Y_UNIT_TEST(StorageIoHealthOptOutDoesNotQueryLiveProgress) {
+        auto scenario = IoHealthScenario(true);
+        scenario.IncludeStorageIoHealth = false;
+        ui32 ioRequests = 0;
+        scenario.IoRequestCount = &ioRequests;
+        for (auto& disk : scenario.Disks) {
+            disk.IoSample = TPDiskIoSample{};
+        }
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        UNIT_ASSERT_VALUES_EQUAL(ioRequests, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles_size(), 0);
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::GREEN);
+        CheckNoIssues(result, "STORAGE_GROUP");
+    }
+
+    Y_UNIT_TEST(StorageIoHealthCurrentStallOverridesGreenBsc) {
+        auto scenario = IoHealthScenario(true);
+        ui32 ioRequests = 0;
+        scenario.IoRequestCount = &ioRequests;
+        for (ui32 i = 0; i < 3; ++i) {
+            scenario.Disks[i].IoSample = TPDiskIoSample{};
+        }
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        UNIT_ASSERT_VALUES_EQUAL(ioRequests, 1);
+        CheckStorageIoFailureGraph(result, "PDisk I/O service is stalled", 3);
+        UNIT_ASSERT_VALUES_EQUAL(result.storage_io_stalled_groups_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.storage_io_stalled_groups(0),
+            GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED).location().storage().pool().group().id(0));
+        UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles(0), "pile0");
+    }
+
+    Y_UNIT_TEST(StorageIoHealthCurrentStallOverridesReceivedWhiteboardOk) {
+        auto scenario = IoHealthScenario();
+        for (ui32 i = 0; i < 3; ++i) {
+            scenario.Disks[i].IoSample = TPDiskIoSample{};
+        }
+        CheckStorageIoFailureGraph(RequestHcWithStaticWhiteboard(scenario), "PDisk I/O service is stalled", 3);
+    }
+
+    Y_UNIT_TEST(StorageIoHealthRequiresCurrentQualifiedSample) {
+        for (bool bscAvailable : {false, true}) {
+            for (ui32 invalid = 0; invalid < 6; ++invalid) {
+                auto scenario = IoHealthScenario(bscAvailable);
+                for (auto& disk : scenario.Disks) {
+                    disk.IoSample = TPDiskIoSample{};
+                    switch (invalid) {
+                        case 0: disk.IoSample->NoCompletionMs = 9'999; break;
+                        case 1: disk.IoSample->PendingOperations = 0; break;
+                        case 2: disk.IoSample->Ready = false; break;
+                        case 3: disk.IoSample.reset(); break;
+                        case 4: disk.IoSample->GuidOffset = 1; break;
+                        case 5: disk.IoSample->State = NKikimrBlobStorage::TPDiskState::Initial; break;
+                    }
+                }
+                const auto result = RequestHcWithStaticWhiteboard(scenario);
+                CheckNoIssues(result, "STORAGE_GROUP");
+                CheckNoIssues(result, "PDISK");
+                CheckStaticPool(result, Ydb::Monitoring::StatusFlag::GREEN);
+                UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles_size(), invalid < 2 ? 1 : 0);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StorageIoHealthMissingProgressDoesNotChangeGreenBsc) {
+        auto scenario = IoHealthScenario(true);
+        scenario.PDiskReplies[0] = EWhiteboardReply::Missing;
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        CheckNoIssues(result, "STORAGE_GROUP");
+        CheckNoIssues(result, "PDISK");
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::GREEN);
+        UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles_size(), 0);
+    }
+
+    Y_UNIT_TEST(StorageIoHealthDeviceErrorOverridesStaleOk) {
+        for (bool bscAvailable : {false, true}) {
+            auto scenario = IoHealthScenario(bscAvailable);
+            for (ui32 i = 0; i < 3; ++i) {
+                scenario.Disks[i].IoSample = TPDiskIoSample{.Ready = false,
+                    .State = NKikimrBlobStorage::TPDiskState::DeviceIoError};
+            }
+            const auto result = RequestHcWithStaticWhiteboard(scenario);
+            CheckStorageIoFailureGraph(result, "PDisk state is DeviceIoError", 3);
+            UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles_size(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(StorageIoHealthPreservesErasureThreshold) {
+        for (bool bscAvailable : {false, true}) {
+            auto scenario = IoHealthScenario(bscAvailable);
+            for (ui32 i = 0; i < 2; ++i) {
+                scenario.Disks[i].IoSample = TPDiskIoSample{};
+            }
+            const auto result = RequestHcWithStaticWhiteboard(scenario);
+            CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+            GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE);
+            CheckStaticPool(result, Ydb::Monitoring::StatusFlag::ORANGE, "Pool has no redundancy");
+        }
+    }
+
+    Y_UNIT_TEST(StorageIoHealthCoverageRequiresEveryParticipatingDevice) {
+        for (bool bscAvailable : {false, true}) {
+            auto scenario = IoHealthScenario(bscAvailable);
+            scenario.Disks.back().IoSample.reset();
+            auto result = RequestHcWithStaticWhiteboard(scenario);
+            UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles_size(), 0);
+            CheckStaticPool(result, Ydb::Monitoring::StatusFlag::GREEN);
+            scenario.Disks.clear();
+            result = RequestHcWithStaticWhiteboard(scenario);
+            UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles_size(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(StorageIoHealthCoverageHandlesImplicitAndInactivePiles) {
+        auto scenario = IoHealthScenario();
+        scenario.ImplicitPile = true;
+        auto result = RequestHcWithStaticWhiteboard(scenario);
+        UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles(0), "pile0");
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::GREEN);
+        scenario.InactivePile = true;
+        result = RequestHcWithStaticWhiteboard(scenario);
+        UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles_size(), 0);
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::GREEN);
+    }
+
+    Y_UNIT_TEST(StorageIoHealthEmptyPileNameRetainsCoverageAndFailureAttribution) {
+        for (bool bscAvailable : {false, true}) {
+            auto scenario = IoHealthScenario(bscAvailable);
+            scenario.PileName = "";
+            for (ui32 i = 0; i < 3; ++i) {
+                scenario.Disks[i].IoSample = TPDiskIoSample{};
+            }
+            const auto result = RequestHcWithStaticWhiteboard(scenario);
+            UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles(0), "");
+            UNIT_ASSERT_VALUES_EQUAL(result.storage_io_stalled_groups_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.storage_io_stalled_groups(0),
+                GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED).location().storage().pool().group().id(0));
+            const auto& group = GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED);
+            UNIT_ASSERT(group.location().storage().pool().group().has_pile());
+            UNIT_ASSERT_VALUES_EQUAL(group.location().storage().pool().group().pile().name(), "");
+            CheckAllReasonsResolve(result);
+        }
+    }
+
+    Y_UNIT_TEST(StorageIoHealthMissingRepliesStayGrey) {
+        auto scenario = AllMissingScenario();
+        scenario.IncludeStorageIoHealth = true;
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::RED, "Pool failed");
+        UNIT_ASSERT_VALUES_EQUAL(result.storage_io_health_covered_piles_size(), 0);
     }
 
     Y_UNIT_TEST(WhiteboardMissingRepliesAreNotGroupFailure) {

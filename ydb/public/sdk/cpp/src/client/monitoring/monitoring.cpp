@@ -61,6 +61,10 @@ public:
             request.set_do_not_cache(settings.NoCache_.value());
         }
 
+        if (settings.IncludeStorageIoHealth_) {
+            request.set_include_storage_io_health(settings.IncludeStorageIoHealth_.value());
+        }
+
         if (settings.MinimumStatus_) {
             request.set_minimum_status((::Ydb::Monitoring::StatusFlag_Status)settings.MinimumStatus_.value());
         }

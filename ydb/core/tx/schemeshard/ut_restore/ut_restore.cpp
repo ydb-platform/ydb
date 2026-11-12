@@ -8152,17 +8152,22 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     void MaterializedIndex(
             Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode,
+<<<<<<< HEAD
             const TString& metadata = R"({"version": 1})", bool replica = false,
             bool enableDataShardDirectPartImport = false)
+=======
+            bool enableDataShardDirectPartImport,
+            const TString& metadata = R"({"version": 1})", bool replica = false, bool asyncIndex = false)
+>>>>>>> a617606a4e1 (fix: rebuild async indexes on import (#59102))
     {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
         if (replica) {
-            CreateReplicaPlaceholder(runtime, env, 10, "Table", true);
+            CreateReplicaPlaceholder(runtime, env, 10, "Table", !asyncIndex);
         }
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
 
-        const auto a = GenerateTestData(R"(
+        const auto a = GenerateTestData(Sprintf(R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -8175,9 +8180,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             indexes {
               name: "by_value"
               index_columns: "value"
-              global_index {}
+              %s {}
             }
-        )", {{"a", 1}}, "", metadata);
+        )", asyncIndex ? "global_async_index" : "global_index"), {{"a", 1}}, "", metadata);
 
         auto b = GenerateTestData(R"(
             columns {
@@ -8193,8 +8198,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", {{"b", 1}}, "", metadata);
         b.Data[0] = TTestData("\"value1\",\"b1\"\n", GenerateTestData("b", 1).YsonStr);
 
-        const bool importedIndex = mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
-            || (mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO && metadata == R"({"version": 1})");
+        const bool importedIndex = !asyncIndex && (mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
+            || (mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO && metadata == R"({"version": 1})"));
         ui32 finalAlterRequests = 0;
         auto finalAlterObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
             ui32 tables = 0;
@@ -8205,7 +8210,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
             if (tables) {
                 UNIT_ASSERT(replica);
-                UNIT_ASSERT_VALUES_EQUAL(tables, importedIndex ? 1 : 2);
+                UNIT_ASSERT_VALUES_EQUAL(tables, importedIndex || asyncIndex ? 1 : 2);
                 ++finalAlterRequests;
             }
         });
@@ -8229,7 +8234,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(finalAlterRequests, replica ? (importedIndex ? 2 : 1) : 0);
         if (replica) {
             CheckImportedReplica(runtime, "/MyRoot/Table");
-            CheckImportedReplica(runtime, "/MyRoot/Table/by_value/indexImplTable");
+            if (!asyncIndex) {
+                CheckImportedReplica(runtime, "/MyRoot/Table/by_value/indexImplTable");
+            }
         }
         const auto table = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
         const auto index = DescribePrivatePath(runtime, "/MyRoot/Table/by_value/indexImplTable", true, true);
@@ -8246,8 +8253,29 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             R"({"version": 1})", true, EnableDataShardDirectPartImport);
     }
 
+<<<<<<< HEAD
     Y_UNIT_TEST(MaterializedIndexBuild) {
         MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD);
+=======
+    Y_UNIT_TEST_QUAD(AsyncIndexAlwaysBuilt, Replica, EnableDataShardDirectPartImport) {
+        for (const auto mode : {
+                Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD,
+                Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
+                Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO})
+        {
+            // The archived index contains an extra row and misses a row from the base table.
+            // Both metadata layouts must ignore that data, including when restoring a replica.
+            for (const auto& metadata : {
+                    R"({"version": 1})",
+                    R"({"version": 1, "indexes": [{"export_prefix": "by_value/indexImplTable", "impl_table_prefix": "by_value/indexImplTable"}]})"}) {
+                MaterializedIndex(mode, EnableDataShardDirectPartImport, metadata, Replica, true);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(MaterializedIndexBuild, EnableDataShardDirectPartImport) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD, EnableDataShardDirectPartImport);
+>>>>>>> a617606a4e1 (fix: rebuild async indexes on import (#59102))
     }
 
     Y_UNIT_TEST(MaterializedIndexImport) {
@@ -8262,11 +8290,15 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT, R"({"version": 0})");
     }
 
+<<<<<<< HEAD
     void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool shouldFail) {
+=======
+    void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool shouldFail, bool enableDataShardDirectPartImport, bool asyncIndex = false) {
+>>>>>>> a617606a4e1 (fix: rebuild async indexes on import (#59102))
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
 
-        const auto a = GenerateTestData(R"(
+        const auto a = GenerateTestData(Sprintf(R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -8279,9 +8311,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             indexes {
               name: "by_value"
               index_columns: "value"
-              global_index {}
+              %s {}
             }
-        )", {{"a", 1}});
+        )", asyncIndex ? "global_async_index" : "global_index"), {{"a", 1}});
 
         const auto expectedStatus = shouldFail ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS;
         Run(runtime, env, ConvertTestData({{"/a", a}}), Sprintf(R"(
@@ -8316,6 +8348,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(MaterializedIndexAbsentAuto) {
         MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO, false);
+    }
+
+    Y_UNIT_TEST_QUAD(AsyncIndexAbsent, Import, EnableDataShardDirectPartImport) {
+        MaterializedIndexAbsent(Import
+                ? Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
+                : Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO,
+            false, EnableDataShardDirectPartImport, true);
     }
 
     void ShouldSucceedOnIndexedTableImpl(

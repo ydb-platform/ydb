@@ -23,6 +23,7 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <util/generic/hash_set.h>
 #include <util/stream/file.h>
 #include <util/system/fs.h>
 #include <util/folder/path.h>
@@ -728,6 +729,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         item.MaterializedIndexes.emplace_back(indexImplTablePrefix, std::move(request));
 
         auto nextStep = [this]() {
+<<<<<<< HEAD
             if (++IndexCheckedMaterializedIndexImplTable >= IndexImplTablePrefixes.size()) {
                 StartDownloadingChangefeeds();
             } else {
@@ -735,6 +737,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
                     IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
             }
+=======
+            ++IndexCheckedMaterializedIndexImplTable;
+            Become(&TThis::StateCheckIndexes);
+            DownloadMaterializedIndexes();
+>>>>>>> a617606a4e1 (fix: rebuild async indexes on import (#59102))
         };
 
         if (NeedValidateChecksums) {
@@ -933,6 +940,17 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         IndexCheckedMaterializedIndexImplTable = 0;
         item.MaterializedIndexes.clear();
 
+        // Older backups may contain async index data inconsistent with the base table.
+        // Leave these indexes out of the materialized items so import builds them instead.
+        AsyncIndexes.clear();
+        if (item.Table) {
+            for (const auto& index : item.Table->indexes()) {
+                if (index.has_global_async_index()) {
+                    AsyncIndexes.insert(index.name());
+                }
+            }
+        }
+
         if (const auto& indexes = item.Metadata.GetIndexes()) {
             IndexImplTablePrefixes.reserve(indexes->size());
             for (const auto& index : *indexes) {
@@ -946,6 +964,9 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                     IndexImplTablePrefixes.reserve(item.Table->indexes_size());
 
                     for (const auto& index : item.Table->indexes()) {
+                        if (index.has_global_async_index()) {
+                            continue;
+                        }
                         const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
                         if (!indexType) {
                             return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unsupported index"
@@ -970,10 +991,23 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     }
 
     void DownloadMaterializedIndexes() {
+<<<<<<< HEAD
         if (!IndexImplTablePrefixes.empty()) {
             Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
             HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
                 IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
+=======
+        // Preserve metadata positions: encrypted index schemes use them to derive their IVs.
+        while (IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size()) {
+            const auto& prefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ImplTablePrefix;
+            if (!AsyncIndexes.contains(prefix.substr(0, prefix.find('/')))) {
+                break;
+            }
+            ++IndexCheckedMaterializedIndexImplTable;
+        }
+        if (IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size()) {
+            HeadObject(CurrentMaterializedIndexSchemeKey());
+>>>>>>> a617606a4e1 (fix: rebuild async indexes on import (#59102))
         } else {
             StartDownloadingChangefeeds();
         }
@@ -1133,6 +1167,7 @@ private:
     ui64 IndexDownloadedChangefeed = 0;
 
     TVector<NBackup::TIndexMetadata> IndexImplTablePrefixes;
+    THashSet<TString> AsyncIndexes;
     ui64 IndexCheckedMaterializedIndexImplTable = 0;
     Ydb::Import::ImportFromS3Settings::IndexPopulationMode IndexPopulationMode;
 

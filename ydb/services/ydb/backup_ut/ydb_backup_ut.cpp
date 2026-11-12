@@ -4488,6 +4488,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         csController->SetSkipSpecialCheckForEvict(true);
         csController->SetOverrideTasksActualizationLag(TDuration::Zero());
         TS3TestEnv testEnv;
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableTieringInColumnShard(true);
         testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableColumnTableImportDependencyRetry(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", testEnv.GetServer().GetPort()))
@@ -4628,6 +4629,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
         if constexpr (DifferentDatabase) {
             NKikimrConfig::TAppConfig restoredConfig;
+            restoredConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
             restoredConfig.MutableFeatureFlags()->SetEnableTieringInColumnShard(true);
             restoredConfig.MutableFeatureFlags()->SetEnableColumnTableImportDependencyRetry(true);
             TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> restoredServer(restoredConfig);

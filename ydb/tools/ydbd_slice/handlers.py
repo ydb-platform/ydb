@@ -269,6 +269,7 @@ class Slice:
                 self._update_kikimr()
 
             self._format_drives()
+            self._clear_locations()
             self._set_locations()
             if 'cfg' in self.components.get('kikimr', []):
                 static_cfg_path = self.configurator.create_static_cfg()

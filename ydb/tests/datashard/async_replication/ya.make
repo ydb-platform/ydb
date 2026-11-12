@@ -12,10 +12,14 @@ ENDIF()
 TEST_SRCS(
     test_async_replication.py
     test_consistency.py
+    test_external_backup_replication.py
 )
 
 PEERDIR(
     contrib/python/boto3
+    contrib/python/grpcio
+    ydb/public/api/grpc
+    ydb/public/api/protos
     ydb/tests/datashard/lib
     ydb/tests/library
     ydb/tests/sql/lib

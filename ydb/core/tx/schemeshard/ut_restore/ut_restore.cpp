@@ -8738,8 +8738,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST_QUAD(AsyncIndexAbsent, Import, EnableDataShardDirectPartImport) {
-        MaterializedIndexAbsent(Import ? Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
-                                      : Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO,
+        MaterializedIndexAbsent(Import
+                ? Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
+                : Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO,
             false, EnableDataShardDirectPartImport, true);
     }
 

@@ -2367,12 +2367,18 @@ public:
             auto itBSGroupStateResponse = BSGroupStateResponse.find(nodeId);
             if (itBSGroupStateResponse != BSGroupStateResponse.end()) {
                 if (itBSGroupStateResponse->second.Error("NodeDisconnected")) {
-                    // groups are requested from whiteboard only when BSC data is not available,
-                    // so the groups known only to this node are missing from the response
-                    AddProblem("wb-incomplete-groups");
+                    AddWhiteboardGroupsProblemOnFallback();
                     BSGroupRequestDone();
                 }
             }
+        }
+    }
+
+    void AddWhiteboardGroupsProblemOnFallback() {
+        // without BSC data the whiteboard is the only source of the groups,
+        // so the groups known only to the lost node are missing from the response
+        if (FallbackToWhiteboard) {
+            AddProblem("wb-incomplete-groups");
         }
     }
 

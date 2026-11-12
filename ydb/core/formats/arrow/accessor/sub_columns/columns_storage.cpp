@@ -13,7 +13,7 @@ TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
         ui32 idx = 0;
         std::vector<ui32> indexesToRemove;
         for (auto&& i : records.GetColumns()) {
-            AFL_VERIFY(Stats.GetColumnName(idx) == records.GetSchema()->field(idx)->name());
+            YDB_LOG_VERIFY(Stats.GetColumnName(idx) == records.GetSchema()->field(idx)->name());
             if (i->GetRecordsCount() > i->GetNullsCount()) {
                 builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType(),
                     Stats.GetValueType(idx));
@@ -39,7 +39,7 @@ TColumnsData TColumnsData::ApplyFilter(const TColumnFilter& filter) const {
         ui32 idx = 0;
         std::vector<ui32> indexesToRemove;
         for (auto&& i : records->GetColumns()) {
-            AFL_VERIFY(Stats.GetColumnName(idx) == records->GetSchema()->field(idx)->name());
+            YDB_LOG_VERIFY(Stats.GetColumnName(idx) == records->GetSchema()->field(idx)->name());
             if (i->GetRecordsCount() > i->GetNullsCount()) {
                 builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType(),
                     Stats.GetValueType(idx));
@@ -78,10 +78,10 @@ void TColumnsData::TIterator::InitArrays() {
             }
             break;
         } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
-            AFL_VERIFY(localIndex < ChunkAddress->GetArray()->length())
-                ("localIndex", localIndex)
-                ("CurrentArray->length()", ChunkAddress->GetArray()->length())
-                ("CurrentArray", ChunkAddress->GetArray()->ToString());
+            YDB_LOG_VERIFY(localIndex < ChunkAddress->GetArray()->length(),
+                {"localIndex", localIndex},
+                {"#_CurrentArray->length", ChunkAddress->GetArray()->length()},
+                {"currentArray", ChunkAddress->GetArray()->ToString()});
             if (ChunkAddress->GetArray()->IsNull(localIndex) &&
                 std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
                 CurrentIndex = ChunkAddress->GetAddress().GetGlobalFinishPosition();
@@ -89,10 +89,13 @@ void TColumnsData::TIterator::InitArrays() {
                 break;
             }
         } else {
-            AFL_VERIFY(false)("type", FullArrayAddress->GetArray()->GetType());
+            YDB_LOG_VERIFY(false,
+                {"type", FullArrayAddress->GetArray()->GetType()});
         }
     }
-    AFL_VERIFY(CurrentIndex <= GlobalChunkedArray->GetRecordsCount())("index", CurrentIndex)("count", GlobalChunkedArray->GetRecordsCount());
+    YDB_LOG_VERIFY(CurrentIndex <= GlobalChunkedArray->GetRecordsCount(),
+        {"index", CurrentIndex},
+        {"count", GlobalChunkedArray->GetRecordsCount()});
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

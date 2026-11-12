@@ -29,11 +29,12 @@ protected:
     void Initialize(const std::shared_ptr<arrow::RecordBatch>& data) {
         Schema = data->schema();
         Rows = TRowsCollection(data);
-        AFL_VERIFY(data);
+        YDB_LOG_VERIFY(data);
         Y_DEBUG_ABORT_UNLESS(data->ValidateFull().ok());
-        AFL_VERIFY(data->num_rows());
-        AFL_VERIFY(data->num_columns());
-        AFL_VERIFY(data->num_rows() <= 2)("count", data->num_rows());
+        YDB_LOG_VERIFY(data->num_rows());
+        YDB_LOG_VERIFY(data->num_columns());
+        YDB_LOG_VERIFY(data->num_rows() <= 2,
+            {"count", data->num_rows()});
     }
 
 public:

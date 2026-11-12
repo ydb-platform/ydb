@@ -42,7 +42,9 @@ private:
                     case ENoColumnPolicy::Ignore:
                         break;
                     case ENoColumnPolicy::Verify:
-                        AFL_VERIFY(false)("reason", "no_column")("column_name", colName);
+                        YDB_LOG_VERIFY(false,
+                            {"reason", "no_column"},
+                            {"columnName", colName});
                     case ENoColumnPolicy::ReturnEmpty:
                         return {};
                 }
@@ -70,7 +72,7 @@ public:
 
     template <class TAction>
     static void CalcForAll(const std::shared_ptr<arrow::Array>& array, const ui64 seed, const TAction& action) {
-        AFL_VERIFY(array);
+        YDB_LOG_VERIFY(array);
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
             using T = typename TWrap::T;
@@ -88,7 +90,7 @@ public:
                     action(CalcSimple(&value, sizeof(value), seed), idx);
                 } else {
                     static_assert(arrow::is_decimal_type<T>());
-                    AFL_VERIFY(false);
+                    YDB_LOG_VERIFY(false);
                 }
             }
             return true;
@@ -158,7 +160,7 @@ public:
             result.emplace_back(hash);
         };
 
-        AFL_VERIFY(ExecuteToArrayImpl(batch, acceptor));
+        YDB_LOG_VERIFY(ExecuteToArrayImpl(batch, acceptor));
         return result;
     }
 };

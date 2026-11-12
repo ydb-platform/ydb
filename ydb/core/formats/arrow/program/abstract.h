@@ -153,26 +153,26 @@ public:
 
     ui32 GetColumnIdVerified(const char* name) const {
         auto result = GetColumnIdOptional(name);
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return *result;
     }
 
     ui32 GetColumnIdVerified(const TString& name) const {
         auto result = GetColumnIdOptional(name);
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return *result;
     }
 
     ui32 GetColumnIdVerified(const std::string& name) const {
         auto result = GetColumnIdOptional(TString(name.data(), name.size()));
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return *result;
     }
 
     std::set<ui32> GetColumnIdsSetVerified(const std::set<TString>& columnNames) const {
         std::set<ui32> result;
         for (auto&& i : columnNames) {
-            AFL_VERIFY(result.emplace(GetColumnIdVerified(i)).second);
+            YDB_LOG_VERIFY(result.emplace(GetColumnIdVerified(i)).second);
         }
         return result;
     }
@@ -191,12 +191,12 @@ private:
 
 public:
     virtual TString GetColumnName(ui32 id, bool required = true) const override {
-        AFL_VERIFY(id);
+        YDB_LOG_VERIFY(id);
         if (id < (ui32)Schema->num_fields() + 1) {
             const std::string& name = Schema->field(id - 1)->name();
             return TString(name.data(), name.size());
         } else {
-            AFL_VERIFY(!required);
+            YDB_LOG_VERIFY(!required);
             return "";
         }
     }
@@ -209,7 +209,7 @@ public:
         }
     }
     virtual TColumnInfo GetDefaultColumn() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TColumnInfo::Generated(0, "");
     }
     TSchemaColumnResolver(const std::shared_ptr<arrow::Schema>& schema)
@@ -335,7 +335,7 @@ public:
     TCompositeResourcesAggregator(const std::vector<std::shared_ptr<IResourcesAggregator>>& aggregators)
         : Aggregators(aggregators)
     {
-        AFL_VERIFY(Aggregators.size());
+        YDB_LOG_VERIFY(Aggregators.size());
     }
 };
 
@@ -356,7 +356,7 @@ public:
     }
 
     static TExecutionResult Pending(std::shared_ptr<IAsyncJob>&& job) {
-        AFL_VERIFY(job);
+        YDB_LOG_VERIFY(job);
         TExecutionResult result;
         result.AsyncJob = std::move(job);
         return result;
@@ -367,7 +367,7 @@ public:
     }
 
     std::shared_ptr<IAsyncJob> ExtractPendingJob() {
-        AFL_VERIFY(AsyncJob);
+        YDB_LOG_VERIFY(AsyncJob);
         return std::move(AsyncJob);
     }
 
@@ -420,26 +420,26 @@ public:
     void ExchangeInput(const ui32 resourceIdFrom, const ui32 resourceIdTo) {
         bool found = false;
         for (auto&& i : Input) {
-            AFL_VERIFY(i.GetColumnId() != resourceIdTo);
+            YDB_LOG_VERIFY(i.GetColumnId() != resourceIdTo);
             if (i.GetColumnId() == resourceIdFrom) {
-                AFL_VERIFY(!found);
+                YDB_LOG_VERIFY(!found);
                 found = true;
                 i = TColumnChainInfo(resourceIdTo);
             }
         }
-        AFL_VERIFY(found);
+        YDB_LOG_VERIFY(found);
     }
 
     void AddInput(const ui32 resourceId) {
         for (auto&& i : Input) {
-            AFL_VERIFY(i.GetColumnId() != resourceId);
+            YDB_LOG_VERIFY(i.GetColumnId() != resourceId);
         }
         Input.emplace_back(TColumnChainInfo(resourceId));
     }
 
     void AddOutput(const ui32 resourceId) {
         for (auto&& i : Output) {
-            AFL_VERIFY(i.GetColumnId() != resourceId);
+            YDB_LOG_VERIFY(i.GetColumnId() != resourceId);
         }
         Output.emplace_back(TColumnChainInfo(resourceId));
     }
@@ -452,7 +452,7 @@ public:
                 return;
             }
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
     bool HasInput(const ui32 resourceId) {
@@ -465,17 +465,20 @@ public:
     }
 
     void SetOutputResourceIdOnce(const ui32 resourceId) {
-        AFL_VERIFY(Output.size() == 1)("size", Output.size());
+        YDB_LOG_VERIFY(Output.size() == 1,
+            {"size", Output.size()});
         Output.front() = TColumnChainInfo(resourceId);
     }
 
     ui32 GetOutputColumnIdOnce() const {
-        AFL_VERIFY(Output.size() == 1)("size", Output.size());
+        YDB_LOG_VERIFY(Output.size() == 1,
+            {"size", Output.size()});
         return Output.front().GetColumnId();
     }
 
     ui32 GetInputColumnIdOnce() const {
-        AFL_VERIFY(Input.size() == 1)("size", Input.size());
+        YDB_LOG_VERIFY(Input.size() == 1,
+            {"size", Input.size()});
         return Input.front().GetColumnId();
     }
 
@@ -517,7 +520,7 @@ public:
         , ColumnsToDrop(std::move(toDrop))
         , Processor(std::move(processor))
     {
-        AFL_VERIFY(Processor);
+        YDB_LOG_VERIFY(Processor);
     }
 
     const IResourceProcessor* operator->() const {

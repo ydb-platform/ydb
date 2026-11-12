@@ -61,15 +61,15 @@ public:
             , ValuesReader(records->GetColumnVerified(2)) {
             if (RecordsCount) {
                 auto recordIndexChunk = RecordIndexReader.GetReadChunk(0);
-                AFL_VERIFY(recordIndexChunk.GetArray()->length() == RecordsCount);
+                YDB_LOG_VERIFY(recordIndexChunk.GetArray()->length() == RecordsCount);
                 RecordIndex = std::static_pointer_cast<arrow::UInt32Array>(recordIndexChunk.GetArray());
 
                 auto keyIndexChunk = KeyIndexReader.GetReadChunk(0);
-                AFL_VERIFY(keyIndexChunk.GetArray()->length() == RecordsCount);
+                YDB_LOG_VERIFY(keyIndexChunk.GetArray()->length() == RecordsCount);
                 KeyIndex = std::static_pointer_cast<arrow::UInt32Array>(keyIndexChunk.GetArray());
 
                 auto valuesChunk = ValuesReader.GetReadChunk(0);
-                AFL_VERIFY(valuesChunk.GetArray()->length() == RecordsCount);
+                YDB_LOG_VERIFY(valuesChunk.GetArray()->length() == RecordsCount);
                 Values = std::static_pointer_cast<arrow::BinaryArray>(valuesChunk.GetArray());
             }
 
@@ -77,7 +77,7 @@ public:
         }
 
         bool SkipRecordTo(const ui32 recordIndex) {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             if (recordIndex <= RecordIndex->Value(CurrentIndex)) {
                 return true;
             }
@@ -87,7 +87,7 @@ public:
                 return false;
             } else {
                 CurrentIndex = *idx;
-                AFL_VERIFY(recordIndex <= RecordIndex->Value(CurrentIndex));
+                YDB_LOG_VERIFY(recordIndex <= RecordIndex->Value(CurrentIndex));
                 return CurrentIndex < RecordsCount;
             }
         }
@@ -98,21 +98,21 @@ public:
 
         void MoveToPosition(const ui32 index) {
             CurrentIndex = index;
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
         }
 
         ui32 GetRecordIndex() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return RecordIndex->Value(CurrentIndex);
         }
 
         ui32 GetKeyIndex() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return KeyIndex->Value(CurrentIndex);
         }
 
         std::string_view GetRawValue() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             auto view = Values->GetView(CurrentIndex);
             auto res = std::string_view(view.data(), view.size());
             return res;
@@ -121,23 +121,23 @@ public:
         // The Others store is always BinaryJson; exposed as (array, local index) like the column
         // iterator so the general iterator reads both uniformly.
         const arrow::Array& GetArray() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return *Values;
         }
         ui32 GetLocalIndex() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return CurrentIndex;
         }
 
         NArrow::NAccessor::TJsonValueView GetValue() const;
 
         bool HasValue() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return true;
         }
 
         bool Next() {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return ++CurrentIndex < RecordsCount;
         }
 
@@ -164,11 +164,12 @@ public:
     TOthersData(const TDictStats& stats, const std::shared_ptr<TGeneralContainer>& records)
         : Stats(stats)
         , Records(records) {
-        AFL_VERIFY(Records);
-        AFL_VERIFY(Records->num_columns() == 3)("count", Records->num_columns());
-        AFL_VERIFY(Records->GetColumnVerified(0)->GetDataType()->id() == arrow::uint32()->id());
-        AFL_VERIFY(Records->GetColumnVerified(1)->GetDataType()->id() == arrow::uint32()->id());
-        AFL_VERIFY(Records->GetColumnVerified(2)->GetDataType()->id() == arrow::binary()->id());
+        YDB_LOG_VERIFY(Records);
+        YDB_LOG_VERIFY(Records->num_columns() == 3,
+            {"count", Records->num_columns()});
+        YDB_LOG_VERIFY(Records->GetColumnVerified(0)->GetDataType()->id() == arrow::uint32()->id());
+        YDB_LOG_VERIFY(Records->GetColumnVerified(1)->GetDataType()->id() == arrow::uint32()->id());
+        YDB_LOG_VERIFY(Records->GetColumnVerified(2)->GetDataType()->id() == arrow::binary()->id());
     }
 
     const std::shared_ptr<IChunkedArray>& GetValuesArray() const {

@@ -72,18 +72,22 @@ bool CanBeDictionaryEncoded(EValueType valueType) {
 TJsonValueView ArrayElementToJsonValueView(const arrow::Array& array, const i64 index, const EValueType valueType) {
     switch (valueType) {
         case EValueType::String: {
-            AFL_VERIFY(array.type_id() == arrow::Type::STRING)("actual", (ui32)array.type_id());
+            YDB_LOG_VERIFY(array.type_id() == arrow::Type::STRING,
+                {"actual", (ui32)array.type_id()});
             const auto view = static_cast<const arrow::StringArray&>(array).GetView(index);
             return TJsonValueView::OfString(TStringBuf(view.data(), view.size()));
         }
         case EValueType::Double:
-            AFL_VERIFY(array.type_id() == arrow::Type::DOUBLE)("actual", (ui32)array.type_id());
+            YDB_LOG_VERIFY(array.type_id() == arrow::Type::DOUBLE,
+                {"actual", (ui32)array.type_id()});
             return TJsonValueView::OfNumber(static_cast<const arrow::DoubleArray&>(array).Value(index));
         case EValueType::Bool:
-            AFL_VERIFY(array.type_id() == arrow::Type::BOOL)("actual", (ui32)array.type_id());
+            YDB_LOG_VERIFY(array.type_id() == arrow::Type::BOOL,
+                {"actual", (ui32)array.type_id()});
             return TJsonValueView::OfBool(static_cast<const arrow::BooleanArray&>(array).Value(index));
         case EValueType::BinaryJson: {
-            AFL_VERIFY(array.type_id() == arrow::Type::BINARY)("actual", (ui32)array.type_id());
+            YDB_LOG_VERIFY(array.type_id() == arrow::Type::BINARY,
+                {"actual", (ui32)array.type_id()});
             const auto view = static_cast<const arrow::BinaryArray&>(array).GetView(index);
             return TJsonValueView::OfBinaryJson(TStringBuf(view.data(), view.size()));
         }
@@ -117,18 +121,18 @@ std::unique_ptr<arrow::ArrayBuilder> MakeBuilderForValueType(const EValueType va
 void AppendValueFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::TBinaryJson& blob, const EValueType valueType) {
     switch (valueType) {
         case EValueType::BinaryJson:
-            AFL_VERIFY(NArrow::Append<arrow::BinaryType>(builder, arrow::util::string_view(blob.data(), blob.size())));
+            YDB_LOG_VERIFY(NArrow::Append<arrow::BinaryType>(builder, arrow::util::string_view(blob.data(), blob.size())));
             return;
         case EValueType::String: {
             const auto scalar = ExtractStringScalar(blob);
-            AFL_VERIFY(NArrow::Append<arrow::StringType>(builder, arrow::util::string_view(scalar.data(), scalar.size())));
+            YDB_LOG_VERIFY(NArrow::Append<arrow::StringType>(builder, arrow::util::string_view(scalar.data(), scalar.size())));
             return;
         }
         case EValueType::Double:
-            AFL_VERIFY(NArrow::Append<arrow::DoubleType>(builder, ExtractDoubleScalar(blob)));
+            YDB_LOG_VERIFY(NArrow::Append<arrow::DoubleType>(builder, ExtractDoubleScalar(blob)));
             return;
         case EValueType::Bool:
-            AFL_VERIFY(NArrow::Append<arrow::BooleanType>(builder, ExtractBoolScalar(blob)));
+            YDB_LOG_VERIFY(NArrow::Append<arrow::BooleanType>(builder, ExtractBoolScalar(blob)));
             return;
     }
 }
@@ -138,23 +142,23 @@ void AppendValueFromView(arrow::ArrayBuilder& builder, const TJsonValueView& val
         [&builder, valueType](const TStringBuf& value) {
             switch (valueType) {
                 case EValueType::BinaryJson:
-                    AFL_VERIFY(NArrow::Append<arrow::BinaryType>(builder, arrow::util::string_view(value.data(), value.size())));
+                    YDB_LOG_VERIFY(NArrow::Append<arrow::BinaryType>(builder, arrow::util::string_view(value.data(), value.size())));
                     return;
                 case EValueType::String:
-                    AFL_VERIFY(NArrow::Append<arrow::StringType>(builder, arrow::util::string_view(value.data(), value.size())));
+                    YDB_LOG_VERIFY(NArrow::Append<arrow::StringType>(builder, arrow::util::string_view(value.data(), value.size())));
                     return;
                 case EValueType::Double:
                 case EValueType::Bool:
-                    AFL_VERIFY(false);
+                    YDB_LOG_VERIFY(false);
             }
         },
         [&builder, valueType](const double value) {
-            AFL_VERIFY(valueType == EValueType::Double);
-            AFL_VERIFY(NArrow::Append<arrow::DoubleType>(builder, value));
+            YDB_LOG_VERIFY(valueType == EValueType::Double);
+            YDB_LOG_VERIFY(NArrow::Append<arrow::DoubleType>(builder, value));
         },
         [&builder, valueType](const bool value) {
-            AFL_VERIFY(valueType == EValueType::Bool);
-            AFL_VERIFY(NArrow::Append<arrow::BooleanType>(builder, value));
+            YDB_LOG_VERIFY(valueType == EValueType::Bool);
+            YDB_LOG_VERIFY(NArrow::Append<arrow::BooleanType>(builder, value));
         }});
 }
 

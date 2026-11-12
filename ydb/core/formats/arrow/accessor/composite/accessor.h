@@ -38,12 +38,12 @@ private:
 
 protected:
     virtual ui32 DoGetNullsCount() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
     virtual std::optional<bool> DoHasNulls() const override;
     virtual ui32 DoGetValueRawBytes() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
 
@@ -51,7 +51,8 @@ protected:
         const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
-        AFL_VERIFY(false)("problem", "cannot use method");
+        YDB_LOG_VERIFY(false,
+            {"problem", "cannot use method"});
         return nullptr;
     }
     virtual std::optional<ui64> DoGetRawSize() const override {
@@ -106,7 +107,7 @@ public:
         }
 
         const std::shared_ptr<IChunkedArray>& GetArray() const {
-            AFL_VERIFY(CurrentChunk);
+            YDB_LOG_VERIFY(CurrentChunk);
             return CurrentChunk->GetArray();
         }
 
@@ -115,10 +116,10 @@ public:
         }
 
         bool Next() {
-            AFL_VERIFY(IsValid());
-            AFL_VERIFY(CurrentChunk);
+            YDB_LOG_VERIFY(IsValid());
+            YDB_LOG_VERIFY(CurrentChunk);
             RecordIndex += CurrentChunk->GetArray()->GetRecordsCount();
-            AFL_VERIFY(RecordIndex <= Owner->GetRecordsCount());
+            YDB_LOG_VERIFY(RecordIndex <= Owner->GetRecordsCount());
             if (IsValid()) {
                 CurrentChunk = Owner->GetArray(CurrentChunk, RecordIndex, Owner);
                 return true;
@@ -143,18 +144,20 @@ public:
         TBuilder(const std::shared_ptr<arrow::DataType>& type)
             : Type(type)
         {
-            AFL_VERIFY(Type);
+            YDB_LOG_VERIFY(Type);
         }
 
         void AddChunk(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arr) {
-            AFL_VERIFY(!Finished);
-            AFL_VERIFY(arr->GetDataType()->id() == Type->id())("incoming", arr->GetDataType()->ToString())("main", Type->ToString());
+            YDB_LOG_VERIFY(!Finished);
+            YDB_LOG_VERIFY(arr->GetDataType()->id() == Type->id(),
+                {"incoming", arr->GetDataType()->ToString()},
+                {"main", Type->ToString()});
             Chunks.emplace_back(arr);
             RecordsCount += arr->GetRecordsCount();
         }
 
         std::shared_ptr<IChunkedArray> Finish() {
-            AFL_VERIFY(!Finished);
+            YDB_LOG_VERIFY(!Finished);
             Finished = true;
             if (Chunks.size() == 1) {
                 return Chunks.front();

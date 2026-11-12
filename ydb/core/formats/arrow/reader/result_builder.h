@@ -36,13 +36,13 @@ public:
         }
 
         ~TRecordGuard() {
-            AFL_VERIFY(ColumnIdx == Builders.size());
+            YDB_LOG_VERIFY(ColumnIdx == Builders.size());
         }
 
         void Add(const arrow::Array& arr, const ui32 position, ui64* recordSize = nullptr) {
-            AFL_VERIFY(ColumnIdx < Builders.size());
-            AFL_VERIFY(NArrow::Append(*Builders[ColumnIdx], arr, position, recordSize));
-            AFL_VERIFY(++ColumnIdx <= Builders.size());
+            YDB_LOG_VERIFY(ColumnIdx < Builders.size());
+            YDB_LOG_VERIFY(NArrow::Append(*Builders[ColumnIdx], arr, position, recordSize));
+            YDB_LOG_VERIFY(++ColumnIdx <= Builders.size());
         }
     };
 

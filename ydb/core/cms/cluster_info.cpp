@@ -1014,7 +1014,7 @@ void TClusterInfo::MigrateOldInfo(TClusterInfoPtr old)
 void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> info) {
     StateStorageInfoReceived = true;
     Y_ABORT_UNLESS(info->RingGroups.size() > 0);
-    const ui64 rGroupSize = IsBridgeMode ? info->RingGroups.size() : 1;
+    const ui64 rGroupSize = info->RingGroups.size();
     StateStorageRings.resize(rGroupSize);
 
     for (ui64 rGroupId = 0; rGroupId < rGroupSize; ++rGroupId) {
@@ -1040,8 +1040,7 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
                     continue;
                 }
                 ringInfo->AddNode(Nodes[nodeId]);
-                StateStorageReplicas.insert(nodeId);
-                StateStorageNodeToRingId[nodeId] = ringId;
+                StateStorageNodeToRings[nodeId][rGroupId] = ringId;
             }
 
             StateStorageRings[rGroupId].push_back(ringInfo);

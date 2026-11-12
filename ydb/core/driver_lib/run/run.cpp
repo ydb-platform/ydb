@@ -309,12 +309,8 @@ class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     bool Started = false;
     bool StopScheduled = false;
-<<<<<<< HEAD
-    bool WaitingForDisconnectRequest = false;
-=======
     bool RetiredServersCheckScheduled = false;
-    THashSet<TActorId> DisconnectRequests;
->>>>>>> 9999a3580af (Fix node crash on bridge pile takedown with in-flight gRPC requests (#56646))
+    bool WaitingForDisconnectRequest = false;
     TDuration WarmupTimeout = TDuration::Zero();
     bool WarmupReceived = false;
 

@@ -27,6 +27,7 @@ public:
 private:
     TGCListsByGroup ListsByGroupId;
     const std::optional<TGenStep> CollectGenStepInFlight;
+    const bool FirstGC;
     const ui64 TabletId;
     const ui64 CurrentGen;
     std::deque<TUnifiedBlobId> KeepsToErase;
@@ -48,7 +49,7 @@ protected:
 public:
     TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, const std::optional<TGenStep>& collectGenStepInFlight,
         std::deque<TUnifiedBlobId>&& keepsToErase, const std::shared_ptr<TBlobManager>& manager, TBlobsCategories&& blobsToRemove,
-        const std::shared_ptr<TRemoveGCCounters>& counters, const ui64 tabletId, const ui64 currentGen);
+        const std::shared_ptr<TRemoveGCCounters>& counters, const ui64 tabletId, const ui64 currentGen, const bool firstGC);
 
     const TGCListsByGroup& GetListsByGroupId() const {
         return ListsByGroupId;

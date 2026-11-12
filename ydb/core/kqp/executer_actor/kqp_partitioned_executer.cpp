@@ -102,7 +102,6 @@ public:
         , TliConfig(std::move(settings.ExecuterConfig.TliConfig))
         , MutableExecuterConfig(std::move(settings.ExecuterConfig.MutableConfig))
         , UserRequestContext(std::move(settings.UserRequestContext))
-        , StatementResultIndex(std::move(settings.StatementResultIndex))
         , AsyncIoFactory(std::move(std::move(settings.AsyncIoFactory)))
         , PreparedQuery(std::move(settings.PreparedQuery))
         , FederatedQuerySetup(std::move(settings.FederatedQuerySetup))
@@ -729,7 +728,7 @@ private:
         auto batchSettings = NBatchOperations::TSettings(partInfo->LimitSize, Settings.MinBatchSize);
         const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig, TliConfig, UserCtx);
         auto* executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
-            executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
+            executerConfig, AsyncIoFactory, SelfId(), UserRequestContext,
             FederatedQuerySetup, GUCSettings, prunerConfig, /* tableIdsForSnapshot */ {}, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
             llvmSettings, /* queryServiceConfig */ {}, ChannelService, PreparedQuery->GetUseKqpTasksGraphV2());
         auto exId = RegisterWithSameMailbox(executerActor);
@@ -1094,7 +1093,6 @@ private:
     TIntrusivePtr<TExecuterMutableConfig> MutableExecuterConfig;
 
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
-    ui32 StatementResultIndex;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;

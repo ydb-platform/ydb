@@ -62,11 +62,8 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         CheckScriptResults(scriptExecutionOperation, readyOp, db);
     }
 
-    Y_UNIT_TEST_TWIN(ExecuteScriptOnlyCommentsRejected, PerStatementExecution) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableAstCache(true);
-        app.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(PerStatementExecution);
-        auto kikimr = DefaultKikimrRunner({}, app);
+    Y_UNIT_TEST(ExecuteScriptOnlyCommentsRejected) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         for (const auto& query : {"-- empty query", "/* Multi-line\n   comment */"}) {
@@ -116,11 +113,8 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
     }
 
-    Y_UNIT_TEST(SyntaxV0ReturnsBadRequestWithPerStatementExecution) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST(SyntaxV0ReturnsBadRequest) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto scriptExecutionOperation = db.ExecuteScript(R"(

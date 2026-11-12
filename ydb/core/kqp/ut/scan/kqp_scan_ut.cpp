@@ -99,14 +99,13 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
 
 Y_UNIT_TEST_SUITE(KqpScan) {
 
-    Y_UNIT_TEST_TWIN(SamplingHintWithNewRboWithoutFallback, AstCache) {
+    Y_UNIT_TEST(SamplingHintWithNewRboWithoutFallback) {
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
         auto* tableService = settings.AppConfig.MutableTableServiceConfig();
         tableService->SetEnableNewRBO(true);
         tableService->SetEnableFallbackToYqlOptimizer(false);
         tableService->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-        tableService->SetEnableAstCache(AstCache);
         tableService->SetEnableKqpScanQuerySourceRead(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -156,7 +155,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_EQUAL(rboSuccess->Val(), successBefore);
         UNIT_ASSERT_VALUES_EQUAL(rboFailed->Val(), failedBefore);
 
-        // Cached ASTs need the same explicit translation mode as the RBO tests.
         auto ordinary = kikimr.GetQueryClient().ExecuteQuery(
             "PRAGMA YqlSelect = 'force'; SELECT Key FROM `/Root/FourShard` ORDER BY Key",
             NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -165,13 +163,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_EQUAL(rboSuccess->Val(), successBefore + 1);
         UNIT_ASSERT_VALUES_EQUAL(rboFailed->Val(), failedBefore);
 
-        if (!AstCache) {
-            auto unsupported = kikimr.GetQueryClient().ExecuteQuery(R"(
-                SELECT Key FROM `/Root/FourShard` WITH (foo="bar");
-            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(!unsupported.IsSuccess(), "Unsampled table hints must not bypass forced RBO translation");
-            UNIT_ASSERT_STRING_CONTAINS(unsupported.GetIssues().ToString(), "table_hints");
-        }
+        auto unsupported = kikimr.GetQueryClient().ExecuteQuery(R"(
+            SELECT Key FROM `/Root/FourShard` WITH (foo="bar");
+        )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(!unsupported.IsSuccess(), "Unsampled table hints must not bypass forced RBO translation");
+        UNIT_ASSERT_STRING_CONTAINS(unsupported.GetIssues().ToString(), "table_hints");
     }
 
     Y_UNIT_TEST_TWIN(RejectUnsupportedSamplingHints, NewRbo) {

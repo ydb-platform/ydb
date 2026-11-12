@@ -1208,7 +1208,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
         if (hasData) {
             ctx.AddError(YqlIssue(ctx.GetPosition(commit.Pos()), TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX,
                 "KILL SESSION cannot be combined with data queries in a single compiled query. "
-                "Use separate queries or per-statement execution."));
+                "Use separate queries."));
             return nullptr;
         }
         return MakeSchemeTx(commit, ctx);

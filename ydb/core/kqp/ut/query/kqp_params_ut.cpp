@@ -353,11 +353,11 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CheckCacheByAst) {
-        auto query1 = Q1_(R"(
+    Y_UNIT_TEST(CheckCacheByText) {
+        const TString query1 = Q1_(R"(
             SELECT * FROM `/Root/Test` WHERE Group = 1 AND Name = "2";
         )");
-        auto query2 = Q1_(R"(
+        const TString query2 = Q1_(R"(
             select * from `/Root/Test` where Group = 1 AND Name = "2";
         )");
 
@@ -365,59 +365,17 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         execSettings.KeepInQueryCache(true);
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-        {
-            // Check disable setting
-            auto setting = NKikimrKqp::TKqpSetting();
-            auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
-            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
-            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
-            auto db = kikimr.GetTableClient();
-            auto session = db.CreateSession().GetValueSync().GetSession();
-
-            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
-
-            result = session.ExecuteDataQuery(query2, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
-        }
-
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-
-        {
-            // Check 2 exec queries
-            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
-            auto db = kikimr.GetTableClient();
-            auto session = db.CreateSession().GetValueSync().GetSession();
-
-            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
-
-            result = session.ExecuteDataQuery(query2, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
-        }
-        {
-            // Check Prepare and Exec queries
-            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
-            auto db = kikimr.GetTableClient();
-            auto session = db.CreateSession().GetValueSync().GetSession();
-
-            auto prepareResult = session.PrepareDataQuery(query1).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
-
-            auto execResult = session.ExecuteDataQuery(query2, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
-            auto stats = NYdb::TProtoAccessor::GetProto(*execResult.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        for (const auto& query : {query1, query2}) {
+            for (bool fromCache : {false, true}) {
+                auto result = session.ExecuteDataQuery(query,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), fromCache);
+            }
         }
     }
 
@@ -777,7 +735,6 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
 
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);

@@ -5,6 +5,7 @@ PY_SRCS(
 )
 
 PEERDIR(
+    contrib/python/pytest
     ydb/tests/stress/snapshot_retention/workload
 )
 

@@ -18,6 +18,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -28,6 +29,84 @@ using namespace NSchemeShard;
 
 namespace {
 
+<<<<<<< HEAD
+=======
+bool CheckColumnFamilySettings(
+        const NKikimrSchemeOp::TFamilyDescription& expected,
+        const NKikimrSchemeOp::TFamilyDescription& actual,
+        TString& error)
+{
+    const auto name = GetFamilyName(expected);
+
+    const auto expectedCodec = GetColumnCodec(expected);
+    const auto actualCodec = GetColumnCodec(actual);
+    if (expectedCodec != actualCodec) {
+        error = TStringBuilder() << "Column family codec mismatch"
+            << ": name: " << name
+            << ", expected: " << static_cast<ui32>(expectedCodec)
+            << ", got: " << static_cast<ui32>(actualCodec);
+        return false;
+    }
+
+    if (expectedCodec == NKikimrSchemeOp::ColumnCodecZSTD) {
+        const auto expectedLevel = expected.HasColumnCodecLevel() ? expected.GetColumnCodecLevel() : 1;
+        const auto actualLevel = actual.HasColumnCodecLevel() ? actual.GetColumnCodecLevel() : 1;
+        if (expectedLevel != actualLevel) {
+            error = TStringBuilder() << "Column family compression level mismatch"
+                << ": name: " << name
+                << ", expected: " << expectedLevel
+                << ", got: " << actualLevel;
+            return false;
+        }
+    }
+
+    const auto expectedCacheMode = expected.GetColumnCacheMode();
+    const auto actualCacheMode = actual.GetColumnCacheMode();
+    if (expectedCacheMode != actualCacheMode) {
+        error = TStringBuilder() << "Column family cache mode mismatch"
+            << ": name: " << name
+            << ", expected: " << static_cast<ui32>(expectedCacheMode)
+            << ", got: " << static_cast<ui32>(actualCacheMode);
+        return false;
+    }
+
+    const auto& expectedData = expected.GetStorageConfig().GetData();
+    const auto& expectedMedia = expectedData.GetPreferredPoolKind();
+    if (!expectedMedia || expectedData.GetAllowOtherKinds()) {
+        return true;
+    }
+
+    const auto& actualData = actual.GetStorageConfig().GetData();
+    const auto& actualMedia = actualData.GetPreferredPoolKind();
+    if (expectedMedia == actualMedia && !actualData.GetAllowOtherKinds()) {
+        return true;
+    }
+
+    error = TStringBuilder() << "Column family media mismatch"
+        << ": name: " << name
+        << ", expected: " << expectedMedia
+        << ", got: " << actualMedia;
+    return false;
+}
+
+bool AreLiteralDefaultsEqual(
+        const NKikimrSchemeOp::TColumnDescription& expected,
+        const NKikimrSchemeOp::TColumnDescription& actual)
+{
+    if (expected.HasDefaultFromLiteral() != actual.HasDefaultFromLiteral()) {
+        return false;
+    }
+
+    if (!expected.HasDefaultFromLiteral()) {
+        return true;
+    }
+
+    const auto& expectedDefault = expected.GetDefaultFromLiteral();
+    const auto& actualDefault = actual.GetDefaultFromLiteral();
+    return expectedDefault.SerializeAsString() == actualDefault.SerializeAsString();
+}
+
+>>>>>>> b1f5c5ad725 (Preserve literal defaults during replication initial sync (#59099))
 bool IsImported(const NKikimrSchemeOp::TTableDescription& table) {
     return table.GetReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED;
 }
@@ -206,7 +285,22 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
 
         Ydb::Table::CreateTableRequest scheme;
-        result.GetTableDescription().SerializeTo(scheme);
+        const auto description = result.GetTableDescription();
+        description.SerializeTo(scheme);
+
+        // SDK table descriptions do not retain literal defaults when serialized.
+        const auto& source = NYdb::TProtoAccessor::GetProto(description);
+        THashMap<TStringBuf, const Ydb::TypedValue*> literalDefaults;
+        for (const auto& column : source.columns()) {
+            if (column.has_from_literal()) {
+                literalDefaults.emplace(column.name(), &column.from_literal());
+            }
+        }
+        for (auto& column : *scheme.mutable_columns()) {
+            if (const auto it = literalDefaults.find(column.name()); it != literalDefaults.end()) {
+                column.mutable_from_literal()->CopyFrom(*it->second);
+            }
+        }
 
         // filter out unsupported index types
         auto& indexes = *scheme.mutable_indexes();
@@ -578,7 +672,52 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 error = TStringBuilder() << "Column type mismatch"
                     << ": name: " << column.GetName()
                     << ", expected: " << column.GetType()
+<<<<<<< HEAD
                     << ", got: " << it->second;
+=======
+                    << ", got: " << it->second->GetType();
+                return false;
+            }
+
+            if (!AreLiteralDefaultsEqual(column, *it->second)) {
+                error = TStringBuilder() << "Column literal default mismatch"
+                    << ": name: " << column.GetName();
+                return false;
+            }
+
+            const auto expectedFamily = GetColumnFamilyName(column);
+            const auto name = gotFamilyNames.find(it->second->GetFamily());
+            const TStringBuf actualFamily = name == gotFamilyNames.end() ? TStringBuf("<unknown>") : name->second;
+            if (name == gotFamilyNames.end() || actualFamily != expectedFamily) {
+                error = TStringBuilder() << "Column family mismatch"
+                    << ": column: " << column.GetName()
+                    << ", expected: " << expectedFamily
+                    << ", got: " << actualFamily;
+                return false;
+            }
+        }
+
+        for (const auto& expected : tableDesc->GetPartitionConfig().GetColumnFamilies()) {
+            const auto name = GetFamilyName(expected);
+            auto it = families.find(name);
+            if (it == families.end()) {
+                error = TStringBuilder() << "Cannot find column family"
+                    << ": name: " << name;
+                return false;
+            }
+
+            if (!CheckColumnFamilySettings(expected, *it->second, error)) {
+                return false;
+            }
+
+            families.erase(it);
+        }
+
+        for (const auto& item : families) {
+            if (item.first != DefaultFamilyName) {
+                error = TStringBuilder() << "Unexpected column family"
+                    << ": name: " << item.first;
+>>>>>>> b1f5c5ad725 (Preserve literal defaults during replication initial sync (#59099))
                 return false;
             }
         }

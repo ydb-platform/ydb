@@ -414,4 +414,67 @@ Y_UNIT_TEST_SUITE(AttachmentCompatibility) {
     }
 }
 
+Y_UNIT_TEST_SUITE(DoneReplication) {
+    Y_UNIT_TEST(CascadeDropKeepsDetachedTables) {
+        // After DONE the replicas are plain tables holding the user's data. CASCADE drops replicas,
+        // so it must leave them alone (manual switchover plan, C3).
+        NTestHelpers::TEnv env;
+        auto& runtime = env.GetRuntime();
+        const auto service = runtime.Register(CreateReplicationService());
+        runtime.RegisterService(MakeReplicationServiceId(runtime.GetNodeId(0)), service);
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto sessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto scheme = [&](const TString& query) {
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        const auto execute = [&](const TString& query) {
+            auto result = session.ExecuteDataQuery(query,
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+        const auto read = [&](const TString& table) {
+            const auto result = execute(TStringBuilder() << "SELECT key, value FROM " << table << " ORDER BY key;");
+            return NYdb::FormatResultSetYson(result.GetResultSet(0));
+        };
+        const auto replicaMode = [&](const TString& path) {
+            return env.GetDescription(path).GetPathDescription().GetTable().GetReplicationConfig().GetMode();
+        };
+
+        scheme("CREATE TABLE `/Root/source` (key Uint32, value Utf8, PRIMARY KEY (key));");
+        execute(R"(UPSERT INTO `/Root/source` (key, value) VALUES (1u, "one"u), (2u, "two"u);)");
+        const auto expected = read("`/Root/source`");
+        scheme(Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`
+            WITH (CONNECTION_STRING="grpc://%s/?database=/Root", TOKEN="root@builtin");
+        )", env.GetEndpoint().c_str()));
+        const auto tryRead = [&](const TString& table) -> TMaybe<TString> {
+            auto result = session.ExecuteDataQuery(TStringBuilder() << "SELECT key, value FROM " << table << " ORDER BY key;",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            if (!result.IsSuccess()) {
+                return Nothing();
+            }
+            return NYdb::FormatResultSetYson(result.GetResultSet(0));
+        };
+        WaitFor([&] { return tryRead("`/Root/replica`") == expected; }, "initial scan");
+        UNIT_ASSERT_VALUES_EQUAL(replicaMode("/Root/replica"), TReplicationConfig::REPLICATION_MODE_READ_ONLY);
+
+        scheme(R"(ALTER ASYNC REPLICATION `/Root/replication` SET (STATE="DONE");)");
+        WaitFor([&] {
+            return replicaMode("/Root/replica") == TReplicationConfig::REPLICATION_MODE_NONE;
+        }, "replica detached by DONE");
+
+        scheme("DROP ASYNC REPLICATION `/Root/replication` CASCADE;");
+        WaitFor([&] {
+            return env.GetDescription("/Root/replication").GetSchemeStatus() == NKikimrScheme::StatusPathDoesNotExist;
+        }, "replication dropped");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica").GetSchemeStatus(), NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL(read("`/Root/replica`"), expected);
+        execute(R"(UPSERT INTO `/Root/replica` (key, value) VALUES (3u, "three"u);)");
+    }
+}
+
 } // namespace NKikimr::NReplication::NController

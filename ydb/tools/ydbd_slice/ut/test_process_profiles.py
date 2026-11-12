@@ -259,6 +259,50 @@ class SlotIndexProfileTest(TestCase):
 
 
 class YamlConfiguratorEmitTest(TestCase):
+    def test_v2_config_preserves_directives(self):
+        source = """\
+metadata: {kind: MainConfig, cluster: test, version: 0}
+config:
+  static_erasure: none
+  hosts:
+  - host: h.search.yandex.net
+selector_config:
+- description: dynamic nodes
+  selector: {node_type: dynamic}
+  config:
+    feature_flags: !inherit
+      enable_external_data_sources: true
+    entries: !inherit:name
+    - !remove {name: old}
+    extra_entries: !append [new]
+"""
+        for strip in (False, True):
+            with self.subTest(strip=strip), tempfile.TemporaryDirectory() as tmp:
+                config_path = os.path.join(tmp, 'src-config.yaml')
+                databases_path = os.path.join(tmp, 'databases.yaml')
+                with open(config_path, 'w') as f:
+                    f.write(source + ('process_profiles: []\n' if strip else ''))
+                with open(databases_path, 'w') as f:
+                    f.write('domains: []\n')
+
+                configurator = yaml_configurator.YamlConfigurator(databases_path, tmp, config_path)
+                configurator.create_static_cfg()
+                with open(os.path.join(tmp, 'config.yaml')) as f:
+                    rendered = f.read()
+                if not strip:
+                    self.assertEqual(rendered, source + '\n')
+                parsed = cluster_description.safe_load_no_duplicates(rendered)
+                self.assertNotIn('process_profiles', parsed)
+                config = parsed['selector_config'][0]['config']
+                self.assertEqual(config['feature_flags'].tag, '!inherit')
+                self.assertEqual(config['feature_flags'].value, {'enable_external_data_sources': True})
+                self.assertEqual(config['entries'].tag, '!inherit:name')
+                removed = config['entries'].value[0]
+                self.assertEqual(removed.tag, '!remove')
+                self.assertEqual(removed.value, {'name': 'old'})
+                self.assertEqual(config['extra_entries'].tag, '!append')
+                self.assertEqual(config['extra_entries'].value, ['new'])
+
     def test_create_static_cfg_emits_profile_files_when_enabled(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = os.path.join(tmp, 'src-config.yaml')

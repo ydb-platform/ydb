@@ -119,12 +119,12 @@ class YamlConfigurator(object):
 
     @property
     def static_yaml(self):
-        return yaml.dump(self.__static_dict)
+        return yaml.dump(self.__static_dict, Dumper=cluster_description.ConfigDumper)
 
     @static.setter
     def static(self, value):
         try:
-            self.__static_dict = yaml.safe_load(value)
+            self.__static_dict = cluster_description.safe_load_no_duplicates(value)
         except (yaml.scanner.ScannerError, yaml.parser.ParserError) as e:  # type: ignore
             raise ValueError(f"Invalid yaml config: {e}")
 
@@ -257,7 +257,12 @@ class YamlConfigurator(object):
         if self.enable_process_profiles or process_profiles.needs_strip(self.static_dict):
             write_to_file(
                 config_yaml_path,
-                process_profiles.dump_yaml(process_profiles.strip_slice_only_fields(self.static_dict)),
+                yaml.dump(
+                    process_profiles.strip_slice_only_fields(self.static_dict),
+                    Dumper=cluster_description.ConfigDumper,
+                    sort_keys=False,
+                    allow_unicode=True,
+                ),
             )
         else:
             write_to_file(config_yaml_path, self.static)

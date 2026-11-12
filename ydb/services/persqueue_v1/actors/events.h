@@ -79,7 +79,7 @@ struct TEvPQProxy {
         EvReadingStarted,
         EvReadingFinished,
         EvAlterTopicResponse,
-        EvParentCommitedToFinish,
+        EvAncestorState,
         EvUpdateReadMetrics,
         EvEnd,
     };
@@ -391,12 +391,21 @@ struct TEvPQProxy {
         bool ReadingFinishedSent;
     };
 
-    struct TEvParentCommitedToFinish : public NActors::TEventLocal<TEvParentCommitedToFinish, EvParentCommitedToFinish> {
-        explicit TEvParentCommitedToFinish(ui64 parentPartitionId)
-            : ParentPartitionId(parentPartitionId)
+    enum class EAncestorState {
+        Locked, // This session locked the ancestor, so a descendant waits before its first commit.
+        Released, // This session no longer holds the ancestor.
+        CommittedToFinish, // The ancestor offset is at its end.
+        Skipped, // The ancestor finished without delivering data, so the descendant commit must commit it.
+    };
+
+    struct TEvAncestorState : public NActors::TEventLocal<TEvAncestorState, EvAncestorState> {
+        TEvAncestorState(ui64 ancestorPartitionId, EAncestorState state)
+            : AncestorPartitionId(ancestorPartitionId)
+            , State(state)
         { }
 
-        ui64 ParentPartitionId;
+        ui64 AncestorPartitionId;
+        EAncestorState State;
     };
 
     struct TEvReleasePartition : public NActors::TEventLocal<TEvReleasePartition, EvReleasePartition> {
@@ -633,7 +642,7 @@ struct TEvPQProxy {
 
         TString Topic;
         ui32 PartitionId;
-        bool FirstMessage;
+        bool FirstMessage; // The partition delivered no data to the session.
 
         std::vector<ui32> AdjacentPartitionIds;
         std::vector<ui32> ChildPartitionIds;

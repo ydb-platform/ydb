@@ -10,6 +10,7 @@
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 #include <library/cpp/random_provider/random_provider.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/join.h>
 #include <util/string/strip.h>
 
@@ -616,6 +617,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvGetStatus::TPtr& ev, con
 
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::DropPartition(TPartitionsMapIterator& it, const TActorContext& ctx) {
+    NotifyDescendants(it->second, TEvPQProxy::EAncestorState::Released, ctx);
     ctx.Send(it->second.Actor, new TEvents::TEvPoisonPill());
 
     bool res = ActualPartitionActors.erase(it->second.Actor);
@@ -722,24 +724,56 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvCommitDone::TPtr& ev, co
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::NotifyChildren(const TPartitionActorInfo& partition, const TActorContext& ctx) {
     if (partition.IsLastOffsetCommitted()) {
-        auto topicName = partition.Topic->GetInternalName();
-        auto topicIt = Topics.find(partition.Topic->GetInternalName());
-        if (topicIt == Topics.end()) {
-            return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
-                << "unknown topic: " << topicName, ctx);
-        }
+        NotifyDescendants(partition, partition.StartedFromEnd ? TEvPQProxy::EAncestorState::Skipped : TEvPQProxy::EAncestorState::CommittedToFinish, ctx);
+    }
+}
 
-        const auto& topic = topicIt->second;
-        auto partitionGraph = topic->GetPartitionGraph();
-        const auto& directChildren = partitionGraph->GetPartition(partition.Partition.Partition)->DirectChildren;
-        if (!directChildren.empty()) {
-            for (auto& [_, actorInfo]: Partitions) {
-                for (auto& child: directChildren) {
-                    if (actorInfo.Partition.Partition == child->Id && actorInfo.Topic->GetInternalName() == topicName) {
-                        ctx.Send(actorInfo.Actor, new TEvPQProxy::TEvParentCommitedToFinish(partition.Partition.Partition));
-                    }
-                }
-            }
+template <EProtocol Protocol>
+typename TReadSessionActor<Protocol>::TParentCommitSets TReadSessionActor<Protocol>::MakeParentCommitSets(const NKikimr::NPQ::TPartitionGraph::Node& partitionNode, TStringBuf topicName, TConstArrayRef<ui32> skippedFromLock) const {
+    TParentCommitSets result;
+    result.SkippedParents.insert(skippedFromLock.begin(), skippedFromLock.end());
+    for (const NKikimr::NPQ::TPartitionGraph::Node* parent : partitionNode.AllParents) {
+        if (result.SkippedParents.contains(parent->Id)) {
+            continue;
+        }
+        const TPartitionActorInfo* parentInfo = FindPartitionActor(parent->Id, topicName);
+        if (parentInfo == nullptr) {
+            continue; // Another session holds it, or its Lock has not arrived. The transaction checks it.
+        }
+        if (parentInfo->ReadingFinished && parentInfo->StartedFromEnd) {
+            result.SkippedParents.insert(parent->Id);
+        } else if (!parentInfo->IsLastOffsetCommitted()) {
+            result.NotCommitedToFinishParents.insert(parent->Id);
+        }
+    }
+    return result;
+}
+
+template <EProtocol Protocol>
+const TPartitionActorInfo* TReadSessionActor<Protocol>::FindPartitionActor(ui64 partitionId, TStringBuf topicName) const {
+    for (const auto& [_, actorInfo] : Partitions) {
+        if (actorInfo.Partition.Partition == partitionId && actorInfo.Topic->GetInternalName() == topicName) {
+            return &actorInfo;
+        }
+    }
+    return nullptr;
+}
+
+template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::NotifyDescendants(const TPartitionActorInfo& ancestor, TEvPQProxy::EAncestorState state, const TActorContext& ctx) {
+    const TString topicName = ancestor.Topic->GetInternalName();
+    TTopicHolder::TPtr topic = Topics.Value(topicName, nullptr);
+    if (topic == nullptr) {
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder() << "unknown topic: " << topicName, ctx);
+    }
+
+    std::shared_ptr<const NKikimr::NPQ::TPartitionGraph> partitionGraph = topic->GetPartitionGraph();
+    const NKikimr::NPQ::TPartitionGraph::Node* node = partitionGraph->GetPartition(ancestor.Partition.Partition);
+    AFL_ENSURE(node != nullptr);
+    for (const auto& [_, actorInfo] : Partitions) {
+        const NKikimr::NPQ::TPartitionGraph::Node* descendant = partitionGraph->GetPartition(actorInfo.Partition.Partition);
+        if (actorInfo.Topic->GetInternalName() == topicName && descendant != nullptr && AnyOf(descendant->AllParents, [node](const NKikimr::NPQ::TPartitionGraph::Node* parent) { return parent->Id == node->Id; })) {
+            ctx.Send(actorInfo.Actor, new TEvPQProxy::TEvAncestorState(ancestor.Partition.Partition, state));
         }
     }
 }
@@ -1346,21 +1380,14 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
         return CloseSession(PersQueue::ErrorCode::ERROR, error, ctx);
     }
 
-    std::unordered_set<ui64> notCommitedToFinishParents;
-    for (auto& parent: partitionNode->DirectParents) {
-        for (auto& [_, actorInfo]: Partitions) { // TODO: map
-            if (actorInfo.Partition.Partition == parent->Id && actorInfo.Topic->GetInternalName() == name && !actorInfo.IsLastOffsetCommitted()) {
-                notCommitedToFinishParents.emplace(actorInfo.Partition.Partition);
-            }
-        }
-    }
+    const TParentCommitSets parentCommitSets = MakeParentCommitSets(*partitionNode, name, record.GetSkippedParentPartitions());
 
     const auto database = topic->DbPath;
     const TActorId actorId = ctx.Register(new TPartitionActor(
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
         record.GetStep(), record.GetTabletId(), it->second, ClientDC, RangesMode,
         converterIter->second, database, DirectRead, Protocol, maxLag, readTimestampMs,
-        topic, notCommitedToFinishParents, PartitionMaxInFlightBytes, BatchingSupported));
+        topic, parentCommitSets.NotCommitedToFinishParents, parentCommitSets.SkippedParents, PartitionMaxInFlightBytes, BatchingSupported));
 
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);
@@ -1375,6 +1402,8 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
 
     res = ActualPartitionActors.insert(actorId).second;
     AFL_ENSURE(res);
+
+    NotifyDescendants(Partitions.at(assignId), TEvPQProxy::EAncestorState::Locked, ctx);
 
     it->second.PartitionsLocked.Inc();
     it->second.PartitionsInfly.Inc();
@@ -2538,6 +2567,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
 
     partitionInfo->EndOffset = msg->EndOffset;
     partitionInfo->ReadingFinished = true;
+    partitionInfo->StartedFromEnd = msg->FirstMessage;
 
     NotifyChildren(*partitionInfo, ctx);
 

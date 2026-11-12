@@ -1,4 +1,13 @@
-/* syntax version 1 */
+$rows = [
+    <|ftztimestamp: Just(TzTimestamp("2001-11-17T21:20:19.345678,GMT"))|>,
+    <|ftztimestamp: Just(TzTimestamp("1970-01-01T11:14:00.000000,GMT"))|>,
+    <|ftztimestamp: Just(TzTimestamp("2105-12-01T01:08:00.000000,Europe/Moscow"))|>,
+    <|ftztimestamp: Just(TzTimestamp("2049-06-13T00:00:00.000000,GMT"))|>,
+    <|ftztimestamp: Just(TzTimestamp("2000-01-31T16:15:00.000000,Europe/Uzhgorod"))|>,
+    <|ftztimestamp: Just(TzTimestamp("2024-02-29T01:02:03.456789,Europe/Moscow"))|>,
+    <|ftztimestamp: Just(TzTimestamp("1970-02-01T02:00:00.444123,Europe/Moscow"))|>,
+];
+
 $check = ($arg) -> {
     return <|
         sh10y:   CAST(DateTime::MakeTzTimestamp(DateTime::ShiftYears($arg, 10)) as String),
@@ -19,13 +28,11 @@ $check = ($arg) -> {
 };
 
 $typeDispatcher = ($row) -> {
-    $tm = $row.tm;
+    $tm = $row.ftztimestamp;
     return <|
         explicit: $check(DateTime::Split($tm)),
         implicit: $check($tm),
     |>;
 };
 
-$input = SELECT CAST(ftztimestamp as TzTimestamp) as tm FROM Input;
-
-PROCESS $input USING $typeDispatcher(TableRow());
+PROCESS AS_TABLE($rows) USING $typeDispatcher(TableRow());

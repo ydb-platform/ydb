@@ -19,6 +19,7 @@
 
 #include <util/system/info.h>
 #include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
 #include <util/string/vector.h>
 
 #include <unordered_map>
@@ -47,7 +48,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvSendTabletMetrics : TEventLocal<TEvSendTabletMetrics, EvSendTabletMetrics> {};
+        struct TEvSendTabletMetrics : TEventLocal<TEvSendTabletMetrics, EvSendTabletMetrics> {
+            const ui64 Generation;
+            explicit TEvSendTabletMetrics(ui64 generation)
+                : Generation(generation)
+            {}
+        };
         struct TEvUpdateSystemUsage : TEventLocal<TEvUpdateSystemUsage, EvUpdateSystemUsage> {};
         struct TEvLocalDrainTimeout : TEventLocal<TEvLocalDrainTimeout, EvLocalDrainTimeout> {};
     };
@@ -104,7 +110,23 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     TInstant StartTime;
     std::unordered_map<TTabletId, TTabletEntry> InbootTablets;
     std::unordered_map<TTabletId, TOnlineTabletEntry> OnlineTablets;
-    std::unordered_map<TTabletId, ui32> UpdatedTabletMetrics;
+    struct TUpdatedTabletMetrics {
+        bool InFlight = false;
+        bool UpdatedAfterSend = false;
+    };
+    std::unordered_map<TTabletId, TUpdatedTabletMetrics> UpdatedTabletMetrics;
+    // Legacy ACKs identify tablets, but not batches or tablet incarnations.
+    // Keep their conservative counters across tablet death and replacement.
+    std::unordered_map<TTabletId, ui32> LegacyPendingTabletMetrics;
+    ui64 NextTabletMetricsCookie = 0;
+    ui64 TabletMetricsInFlightCookie = 0;
+    ui64 TabletMetricsScheduleGeneration = 0;
+    bool TabletMetricsAckCookiesSupported = false;
+    // Promotion keeps the same actor online as a follower and in boot as a
+    // leader, so each state needs its own reverse index.
+    THashMap<TActorId, TTabletId> InbootTabletsByActor;
+    THashMap<TActorId, TTabletId> OnlineTabletsByActor;
+
     bool SendTabletMetricsInProgress;
     TInstant SendTabletMetricsTime;
     TDuration LastSendTabletMetricsDuration = {};
@@ -158,6 +180,23 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelDemotedByBS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelUnknownReason;
 
+    template <class TTablets>
+    static auto FindTabletByActor(TTablets& tablets, const THashMap<TActorId, TTabletId>& index, TActorId actor) {
+        auto it = index.find(actor);
+        if (it == index.end()) {
+            return tablets.end();
+        }
+        auto tablet = tablets.find(it->second);
+        Y_ABORT_UNLESS(tablet != tablets.end() && tablet->second.Tablet == actor);
+        return tablet;
+    }
+
+    template <class TTablets>
+    static void EraseTablet(TTablets& tablets, THashMap<TActorId, TTabletId>& index, typename TTablets::iterator it) {
+        index.erase(it->second.Tablet);
+        tablets.erase(it);
+    }
+
     static TTabletId LeaderId(TTabletId tabletId) {
         return {tabletId.first, 0};
     }
@@ -175,11 +214,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             ctx.Send(xpair.second.Tablet, new TEvents::TEvPoisonPill());
         }
         OnlineTablets.clear();
+        OnlineTabletsByActor.clear();
 
         for (const auto &xpair : InbootTablets) {
             ctx.Send(xpair.second.Tablet, new TEvents::TEvPoisonPill());
         }
         InbootTablets.clear();
+        InbootTabletsByActor.clear();
 
         TActor::Die(ctx);
     }
@@ -236,6 +277,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::HandlePipeDestroyed: disconnected from hive");
         HivePipeClient = TActorId();
         Connected = false;
+        TabletMetricsInFlightCookie = 0;
+        TabletMetricsAckCookiesSupported = false;
+        ++TabletMetricsScheduleGeneration; // Ignore timers from the old pipe.
+        SendTabletMetricsInProgress = false;
+        for (auto& [_, state] : UpdatedTabletMetrics) {
+            state.InFlight = false;
+        }
         TryToRegister(ctx);
         if (SentDrainNode && !DrainResultReceived) {
             YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar: drain complete, hive pipe destroyed",
@@ -281,7 +329,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (msg->ClientId != HivePipeClient)
             return;
         if (msg->Status == NKikimrProto::OK) {
-            SendTabletMetricsInProgress = false;
             return;
         }
         HandlePipeDestroyed(ctx);
@@ -363,6 +410,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 for (const auto &x : InbootTablets)
                     ctx.Send(x.second.Tablet, new TEvents::TEvPoisonPill());
                 InbootTablets.clear();
+                InbootTabletsByActor.clear();
             }
 
             if (record.GetPurge()) {
@@ -373,6 +421,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                     }
                 }
                 OnlineTablets.clear();
+                OnlineTabletsByActor.clear();
+                UpdatedTabletMetrics.clear();
             }
 
             ResourceProfiles = new TResourceProfiles;
@@ -410,6 +460,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
 
         HiveGeneration = hiveGen;
+        if (sender != BootQueue) {
+            LegacyPendingTabletMetrics.clear();
+        }
         BootQueue = sender;
 
         // we send status of the 'local' to become online and available for new tablets
@@ -422,7 +475,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         TTabletId leaderId = LeaderId(tabletId);
         TTabletEntry& leaderEntry = InbootTablets[leaderId];
         followerEntry.IsPromoting = true;
+        InbootTabletsByActor.erase(leaderEntry.Tablet);
         leaderEntry = followerEntry;
+        InbootTabletsByActor[leaderEntry.Tablet] = leaderId;
         leaderEntry.From = now;
         leaderEntry.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER;
         leaderEntry.Generation = suggestedGen;
@@ -431,7 +486,11 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     void FinishPromotion(TTabletId tabletId, TTabletEntry& entry) {
         TTabletId promotedTablet{tabletId.first, entry.PromotingFromFollower};
-        OnlineTablets.erase(promotedTablet);
+        UpdatedTabletMetrics.erase(promotedTablet);
+        auto it = OnlineTablets.find(promotedTablet);
+        if (it != OnlineTablets.end()) {
+            EraseTablet(OnlineTablets, OnlineTabletsByActor, it);
+        }
         entry.IsPromoting = false;
         entry.PromotingFromFollower = 0;
     }
@@ -486,7 +545,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                     return;
                 }
                 ctx.Send(it->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
-                OnlineTablets.erase(it);
+                UpdatedTabletMetrics.erase(tabletId);
+                EraseTablet(OnlineTablets, OnlineTabletsByActor, it);
             }
         }
 
@@ -504,6 +564,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             ctx.Send(entry.Tablet, new TEvents::TEvPoisonPill());
         }
 
+        InbootTabletsByActor.erase(entry.Tablet);
         TTabletSetupInfo *setupInfo = it->second.SetupInfo.Get();
         switch (record.GetBootMode()) {
         case NKikimrLocal::BOOT_MODE_LEADER:
@@ -516,6 +577,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             break;
         }
 
+        InbootTabletsByActor[entry.Tablet] = tabletId;
         entry.Generation = suggestedGen;
         entry.From = ctx.Now();
         entry.TabletType = tabletType;
@@ -605,14 +667,20 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 }
             }
             auto after = it->second.ResourceValues.ByteSize();
-            if (after == 0 && before == 0) {
+            if (after == 0 && before == 0 && !UpdatedTabletMetrics.contains(tabletId)) {
                 return;
+            }
+            if (!TabletMetricsAckCookiesSupported) {
+                auto [legacy, inserted] = LegacyPendingTabletMetrics.emplace(tabletId, 1);
+                if (!inserted) {
+                    legacy->second = 2;
+                }
             }
             auto uit = UpdatedTabletMetrics.find(tabletId);
             if (uit == UpdatedTabletMetrics.end()) {
-                UpdatedTabletMetrics.emplace(tabletId, 1);
-            } else {
-                uit->second = 2;
+                UpdatedTabletMetrics.emplace(tabletId, TUpdatedTabletMetrics{});
+            } else if (uit->second.InFlight) {
+                uit->second.UpdatedAfterSend = true;
             }
             if (Connected) {
                 ScheduleSendTabletMetrics(ctx);
@@ -620,12 +688,25 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
-    void Handle(TEvPrivate::TEvSendTabletMetrics::TPtr&, const TActorContext& ctx) {
+    void Handle(TEvPrivate::TEvSendTabletMetrics::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Generation != TabletMetricsScheduleGeneration || TabletMetricsInFlightCookie != 0) {
+            return;
+        }
         if (Connected) {
             TAutoPtr<TEvHive::TEvTabletMetrics> event = new TEvHive::TEvTabletMetrics;
             NKikimrHive::TEvTabletMetrics& record = event->Record;
-            for (const auto& prTabletId : UpdatedTabletMetrics) {
-                AddTabletMetrics(prTabletId.first, record);
+            for (auto it = UpdatedTabletMetrics.begin(); it != UpdatedTabletMetrics.end();) {
+                if (!OnlineTablets.contains(it->first)) {
+                    it = UpdatedTabletMetrics.erase(it);
+                    continue;
+                }
+                AddTabletMetrics(it->first, record);
+                if (!TabletMetricsAckCookiesSupported) {
+                    LegacyPendingTabletMetrics.emplace(it->first, 1);
+                }
+                it->second.InFlight = true;
+                it->second.UpdatedAfterSend = false;
+                ++it;
             }
             if (UserPoolUsage != 0) {
                 record.MutableTotalResourceUsage()->SetCPU(UserPoolUsage);
@@ -636,7 +717,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             record.SetTotalNodeUsage(NodeUsage);
             record.SetTotalNodeCpuUsage(CpuUsage);
             FillResourceMaximum(record.MutableResourceMaximum());
-            NTabletPipe::SendData(ctx, HivePipeClient, event.Release());
+            TabletMetricsInFlightCookie = ++NextTabletMetricsCookie;
+            Y_ABORT_UNLESS(TabletMetricsInFlightCookie != 0);
+            NTabletPipe::SendData(ctx, HivePipeClient, event.Release(), TabletMetricsInFlightCookie);
             SendTabletMetricsTime = ctx.Now();
         } else {
             SendTabletMetricsInProgress = false;
@@ -648,7 +731,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             TDuration schedulePeriod = LastSendTabletMetricsDuration * 2 + TABLET_METRICS_BATCH_INTERVAL;
             schedulePeriod = Max(schedulePeriod, TABLET_METRICS_BATCH_INTERVAL);
             schedulePeriod = Min(schedulePeriod, TDuration::Seconds(60));
-            ctx.Schedule(schedulePeriod, new TEvPrivate::TEvSendTabletMetrics());
+            ctx.Schedule(schedulePeriod, new TEvPrivate::TEvSendTabletMetrics(++TabletMetricsScheduleGeneration));
             SendTabletMetricsInProgress = true;
         }
     }
@@ -666,20 +749,54 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     void Handle(TEvLocal::TEvTabletMetricsAck::TPtr& ev, const TActorContext& ctx) {
         TEvLocal::TEvTabletMetricsAck* msg = ev->Get();
+        if (TabletMetricsInFlightCookie == 0 || ev->Sender != BootQueue) {
+            return;
+        }
+        const bool versioned = ev->Cookie != 0;
+        if (versioned ? ev->Cookie != TabletMetricsInFlightCookie : TabletMetricsAckCookiesSupported) {
+            return;
+        }
+        if (versioned && !TabletMetricsAckCookiesSupported) {
+            TabletMetricsAckCookiesSupported = true;
+            LegacyPendingTabletMetrics.clear();
+        }
         auto size = msg->Record.TabletIdSize();
         Y_ABORT_UNLESS(msg->Record.FollowerIdSize() == size);
         for (decltype(size) i = 0; i < size; ++i) {
             TTabletId tabletId(msg->Record.GetTabletId(i), msg->Record.GetFollowerId(i));
+            bool clear = false;
+            if (!versioned) {
+                auto legacy = LegacyPendingTabletMetrics.find(tabletId);
+                if (legacy == LegacyPendingTabletMetrics.end()) {
+                    continue;
+                }
+                clear = --legacy->second == 0;
+                if (clear) {
+                    LegacyPendingTabletMetrics.erase(legacy);
+                }
+            }
             auto uit = UpdatedTabletMetrics.find(tabletId);
-            if (uit != UpdatedTabletMetrics.end() && --uit->second == 0) {
+            if (uit == UpdatedTabletMetrics.end() || !uit->second.InFlight) {
+                continue;
+            }
+            auto& state = uit->second;
+            state.InFlight = false;
+            if (versioned) {
+                clear = !state.UpdatedAfterSend;
+            }
+            if (clear) {
                 UpdatedTabletMetrics.erase(uit);
                 auto it = OnlineTablets.find(tabletId);
                 if (it != OnlineTablets.end()) {
-                    TOnlineTabletEntry& tablet = it->second;
-                    tablet.ResourceValues.Clear();
+                    it->second.ResourceValues.Clear();
                 }
             }
         }
+        // A partial/empty ACK leaves unacknowledged snapshots pending for retry.
+        for (auto& [_, state] : UpdatedTabletMetrics) {
+            state.InFlight = false;
+        }
+        TabletMetricsInFlightCookie = 0;
         LastSendTabletMetricsDuration = ctx.Now() - SendTabletMetricsTime;
         SendTabletMetricsInProgress = false;
         if (!UpdatedTabletMetrics.empty()) {
@@ -774,8 +891,11 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (inbootIt->second.IsPromoting) {
             FinishPromotion(tabletId, inbootIt->second);
         }
-        OnlineTablets.emplace(tabletId, inbootIt->second);
-        InbootTablets.erase(inbootIt);
+        auto [onlineIt, inserted] = OnlineTablets.emplace(tabletId, inbootIt->second);
+        if (inserted) {
+            OnlineTabletsByActor[onlineIt->second.Tablet] = tabletId;
+        }
+        EraseTablet(InbootTablets, InbootTabletsByActor, inbootIt);
     }
 
     void Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorContext&) {
@@ -794,9 +914,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvTablet::TEvReady: tablet ready",
             {"tabletId", tabletId},
             {"generation", msg->Generation});
-        auto inbootIt = std::find_if(InbootTablets.begin(), InbootTablets.end(), [&](const auto& pr) -> bool {
-            return pr.second.Tablet == ev->Sender;
-        });
+        auto inbootIt = FindTabletByActor(InbootTablets, InbootTabletsByActor, ev->Sender);
         if (inbootIt == InbootTablets.end())
             return;
         TTabletEntry &entry = inbootIt->second;
@@ -914,9 +1032,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
 
         // known tablets should be in online-tablets or in inboot-tablets (with correct generation).
-        auto onlineIt = std::find_if(OnlineTablets.begin(), OnlineTablets.end(), [&](const auto& pr) -> bool {
-            return pr.second.Tablet == ev->Sender;
-        });
+        auto onlineIt = FindTabletByActor(OnlineTablets, OnlineTabletsByActor, ev->Sender);
         if (onlineIt != OnlineTablets.end()) { // from online list
             MarkDeadTablet(onlineIt->first, generation, TEvLocal::TEvTabletStatus::StatusFailed, msg->Reason, ctx);
             if (onlineIt->second.IsPromoting) {
@@ -924,26 +1040,25 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 auto inbootIt = InbootTablets.find(leader);
                 if (inbootIt != InbootTablets.end()) {
                     MarkDeadTablet(leader, inbootIt->second.Generation, TEvLocal::TEvTabletStatus::StatusFailed, msg->Reason, ctx);
-                    InbootTablets.erase(inbootIt);
+                    EraseTablet(InbootTablets, InbootTabletsByActor, inbootIt);
                 }
             }
             if (onlineIt->first.second == 0) { // leader
                 RetainedCutHistory.erase(onlineIt->first.first);
             }
-            OnlineTablets.erase(onlineIt);
+            UpdatedTabletMetrics.erase(onlineIt->first);
+            EraseTablet(OnlineTablets, OnlineTabletsByActor, onlineIt);
             UpdateEstimate();
             return;
         }
 
-        auto inbootIt = std::find_if(InbootTablets.begin(), InbootTablets.end(), [&](const auto& pr) -> bool {
-            return pr.second.Tablet == ev->Sender;
-        });
+        auto inbootIt = FindTabletByActor(InbootTablets, InbootTabletsByActor, ev->Sender);
         if (inbootIt != InbootTablets.end() && inbootIt->second.Generation <= generation) {
             MarkDeadTablet(inbootIt->first, generation, TEvLocal::TEvTabletStatus::StatusBootFailed, msg->Reason, ctx);
             if (inbootIt->first.second == 0) { // leader
                 RetainedCutHistory.erase(inbootIt->first.first);
             }
-            InbootTablets.erase(inbootIt);
+            EraseTablet(InbootTablets, InbootTabletsByActor, inbootIt);
             return;
         }
 

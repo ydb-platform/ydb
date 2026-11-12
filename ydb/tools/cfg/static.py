@@ -543,6 +543,10 @@ class StaticConfigGenerator(object):
         return self.__cluster_details.get_service("deduplication_grouped_memory_limiter_config")
 
     @property
+    def small_blobs_quota_config(self):
+        return self.__cluster_details.get_service("small_blobs_quota_config")
+
+    @property
     def statistics_config(self):
         return self.__cluster_details.get_service("statistics_config")
 
@@ -897,6 +901,9 @@ class StaticConfigGenerator(object):
 
         if self.deduplication_grouped_memory_limiter_config:
             normalized_config["deduplication_grouped_memory_limiter_config"] = self.deduplication_grouped_memory_limiter_config
+
+        if self.small_blobs_quota_config:
+            normalized_config["small_blobs_quota_config"] = self.small_blobs_quota_config
 
         if self.statistics_config:
             normalized_config["statistics_config"] = self.statistics_config

@@ -8,6 +8,8 @@
 #include <library/cpp/yt/error/error.h>
 #include <util/generic/scope.h>
 
+#include <chrono>
+
 namespace NYdb::NWasm {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -59,6 +61,42 @@ struct TMakeIntrinsic<TResult(TArgs...)> {
 FOREACH_WEB_ASSEMBLY_SYSCALL(DEFINE_WEB_ASSEMBLY_SYSCALL_STUB);
 
 ////////////////////////////////////////////////////////////////////////////////
+
+// WASI preview1 clock IDs and errno values, independent of the host's errno ABI.
+// Reads are immediate and also work while module constructors run. Precision is
+// a tolerance hint: returning the full available precision satisfies it.
+i32 clock_time_get(i32 clockId, ui64 /*precision*/, ui64 output)
+{
+    constexpr i32 Fault = 21;
+    constexpr i32 Invalid = 28;
+    constexpr i32 NotSupported = 58;
+    constexpr i32 Overflow = 61;
+    if (clockId != 0 && clockId != 1) {
+        return clockId == 2 || clockId == 3 ? NotSupported : Invalid;
+    }
+    auto* compartment = GetCurrentCompartment();
+    if (!compartment) {
+        return Fault;
+    }
+    const auto size = compartment->GetLinearMemorySize();
+    if (output > size || size - output < sizeof(ui64)) {
+        return Fault;
+    }
+    using namespace std::chrono;
+    const auto timestamp = clockId == 0 ? duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count()
+                                        : duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
+    if (timestamp < 0) {
+        return Overflow;
+    }
+    // WASM memory is little-endian and the guest address need not be aligned.
+    auto* bytes = static_cast<unsigned char*>(compartment->GetHostPointer(output, sizeof(ui64)));
+    for (unsigned i = 0; i < sizeof(ui64); ++i) {
+        bytes[i] = static_cast<ui64>(timestamp) >> (8 * i);
+    }
+    return 0;
+}
+
+REGISTER_WEB_ASSEMBLY_INTRINSIC(clock_time_get);
 
 void emscripten_notify_memory_growth(i64)   // NOLINT
 {

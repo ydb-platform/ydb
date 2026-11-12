@@ -48,6 +48,10 @@ private:
         return result;
     }
 
+    virtual bool DoLimitsPortionOverlaps() const override {
+        return false;
+    }
+
     virtual bool DoIsOverloaded() const override {
         for (auto&& i : Levels) {
             if (i->IsOverloaded()) {

@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/grpc_streaming)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 SRCS(

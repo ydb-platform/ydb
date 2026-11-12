@@ -482,6 +482,8 @@ enum EServiceKikimr {
     BLOB_CHECKER_WORKER = 4301;
 
     DBS_CONTROLLER = 4400;
+
+    CDC_AGGREGATOR = 4500;
 };
 
 message TActivity {
@@ -1191,5 +1193,6 @@ message TActivity {
         IAM_OPERATION_SERVICE_ACTOR = 700;
         WASM_COMPILE_CONTROLLER_TABLET = 701;
         INTERCONNECT_CONFIGURATOR = 702;
+        CDC_AGGREGATOR_TABLET = 703;
     };
 };

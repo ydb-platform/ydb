@@ -1,0 +1,2 @@
+SELECT unit_left * unit_right AS units
+FROM Input;

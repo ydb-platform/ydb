@@ -5,7 +5,7 @@ re-checks the condition when it fires.
 
 | kind         | condition                                         | effect                         |
 | promote      | promoted != primary, promoted stored SYNCHRONIZED | commit: primary = promoted     |
-| suspend      | pile stored SUSPENDED                             | commit: pile -> DISCONNECTED   |
+| suspend      | pile stored SUSPENDED, static quorum connected    | commit: pile -> DISCONNECTED   |
 | connect      | pile stored NOT_SYNCHRONIZED_1 and connected      | commit: pile -> _2             |
 | sync_step    | pile _2, connected, stage < SYNCED                | local tracker only, no commit  |
 | bsc_done     | pile _2, connected, stage SYNCED, BSC not cleared | local tracker only, no commit  |
@@ -63,7 +63,8 @@ def due_followups(
     for i in range(state.num_piles()):
         stored = state.stored(i)
         if stored == Stored.SUSPENDED:
-            out.append(Due(SUSPEND, i))
+            if connected(i):
+                out.append(Due(SUSPEND, i))
         elif stored == Stored.NOT_SYNCHRONIZED_1:
             if connected(i):
                 out.append(Due(CONNECT, i))

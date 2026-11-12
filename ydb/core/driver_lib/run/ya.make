@@ -114,6 +114,7 @@ PEERDIR(
     ydb/core/tracing
     ydb/core/transfer
     ydb/core/tx
+    ydb/core/tx/cdc_aggregator/tablet
     ydb/core/tx/columnshard
     ydb/core/tx/columnshard/column_fetching
     ydb/core/tx/columnshard/data_accessor/cache_policy

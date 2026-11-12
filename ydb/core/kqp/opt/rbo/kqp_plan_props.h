@@ -213,6 +213,8 @@ struct TPlanProps {
     // Public result order is independent of the read/effect transaction order.
     std::optional<ui32> ResultIndex;
     TExprNode::TPtr ReturningRowsLimit;
+    // The result has no top-level ORDER BY, so the order of its rows is not defined.
+    bool UnorderedResult = false;
 };
 
 }

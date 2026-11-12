@@ -10,15 +10,15 @@ SELECT
     Avg(ss_coupon_amt) AS agg3,
     Avg(ss_sales_price) AS agg4
 FROM
-    `/Root/test/ds/store_sales` as store_sales
+    `store_sales` as store_sales
 ,
-    `/Root/test/ds/customer_demographics` as customer_demographics
+    `customer_demographics` as customer_demographics
 ,
-    `/Root/test/ds/date_dim` as date_dim
+    `date_dim` as date_dim
 ,
-    `/Root/test/ds/item` as item
+    `item` as item
 ,
-    `/Root/test/ds/promotion` as promotion
+    `promotion` as promotion
 WHERE
     ss_sold_date_sk == d_date_sk
     AND ss_item_sk == i_item_sk

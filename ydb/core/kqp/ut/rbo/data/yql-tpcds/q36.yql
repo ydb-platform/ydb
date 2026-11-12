@@ -20,13 +20,13 @@ SELECT
             Sum(ss_net_profit) / Sum(ss_ext_sales_price) ASC
     ) AS rank_within_parent
 FROM
-    `/Root/test/ds/store_sales`
+    `store_sales`
 ,
-    `/Root/test/ds/date_dim` AS d1
+    `date_dim` AS d1
 ,
-    `/Root/test/ds/item`
+    `item`
 ,
-    `/Root/test/ds/store`
+    `store`
 WHERE
     d1.d_year == 2000
     AND d1.d_date_sk == ss_sold_date_sk

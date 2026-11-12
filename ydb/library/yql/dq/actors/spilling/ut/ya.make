@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/library/yql/dq/actors/spilling)
 
-FORK_SUBTESTS()
-
 SIZE(MEDIUM)
 
 SRCS(

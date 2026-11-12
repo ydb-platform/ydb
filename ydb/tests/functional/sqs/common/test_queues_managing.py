@@ -4,7 +4,7 @@ import time
 import logging
 
 import pytest
-from hamcrest import assert_that, equal_to, greater_than, not_none, none, has_item, has_items, raises, empty, instance_of
+from hamcrest import assert_that, equal_to, not_none, none, has_item, has_items, raises, empty, instance_of
 
 from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
@@ -71,29 +71,6 @@ class QueuesManagingTest(KikimrSqsTestBase):
                 pattern='failed with status 400.*\n.*FIFO queue should end with &quot;\\.fifo&quot;'
             )
         )
-
-    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
-    def test_create_queue_generates_event(self, tables_format):
-        self._init_with_params(tables_format=tables_format)
-        pytest.skip("Outdated")
-        self._create_queue_and_assert(self.queue_name, is_fifo=False)
-        table_path = '{}/.Queues'.format(self.sqs_root)
-        assert_that(self._get_table_lines_count(table_path), equal_to(1))
-
-        table_path = '{}/.Events'.format(self.sqs_root)
-        assert_that(self._get_table_lines_count(table_path), equal_to(1))
-
-    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
-    def test_remove_queue_generates_event(self, tables_format):
-        self._init_with_params(tables_format=tables_format)
-        pytest.skip("Outdated")
-        queue_url = self._create_queue_and_assert(self.queue_name)
-        table_path = '{}/.Events'.format(self.sqs_root)
-        lines_count = self._get_table_lines_count(table_path)
-        assert_that(lines_count, greater_than(0))
-
-        self._sqs_api.delete_queue(queue_url)
-        assert_that(self._get_table_lines_count(table_path), greater_than(lines_count))
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_create_queue_with_invalid_name(self, tables_format):

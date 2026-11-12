@@ -24,6 +24,10 @@
 
 #include <string_view>
 
+#include <util/generic/hash_set.h>
+#include <util/generic/scope.h>
+#include <util/string/builder.h>
+
 namespace NKikimr::NReplication::NService {
 
 Y_UNIT_TEST_SUITE(RemoteTopicReader) {

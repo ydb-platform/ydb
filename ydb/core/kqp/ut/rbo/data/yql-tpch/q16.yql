@@ -7,9 +7,9 @@ SELECT
     p_size,
     Count(DISTINCT ps_suppkey) AS supplier_cnt
 FROM
-    `/Root/partsupp` as partsupp
+    `partsupp` as partsupp
 ,
-    `/Root/part` as part
+    `part` as part
 WHERE
     p_partkey == ps_partkey
     AND p_brand != 'Brand#45'
@@ -19,7 +19,7 @@ WHERE
         SELECT
             s_suppkey
         FROM
-            `/Root/supplier` as supplier
+            `supplier` as supplier
         WHERE
             s_comment LIKE '%Customer%Complaints%'
     )

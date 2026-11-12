@@ -34,10 +34,55 @@ Independently verify that all configured nodes belong to the intended cluster.
 `VERIFIED` means the SelfCheck pile matches its configured name; it is not a
 remote cluster identity check. `cluster_id` is a configured local label binding
 the state directory to this configuration, not an identifier read from YDB.
-Fresh views can influence selection and the durable high-water mark before
-SelfCheck verifies the pile. A wrong-cluster endpoint with matching pile names
+Configured seed views can influence selection and the durable high-water mark
+before SelfCheck verifies the pile. Learned endpoint views cannot. A wrong-cluster endpoint with matching pile names
 can also pass that check; correcting the endpoint does not lower a persisted
 high-water mark. Trusted endpoint inventory is a deployment requirement.
+
+Configured addresses are bootstrap seeds. Without changing the file or restarting,
+Skipper refreshes discovery every five seconds through a verified current node:
+ConfigService/FetchConfig supplies raw YAML without requiring a v1 downgrade;
+root selection follows YDB's main-first top-level config merge and domain-name defaults, then Discovery/ListEndpoints supplies gRPC addresses and pile names.
+The credential must be allowed to fetch cluster configuration and list root-domain
+endpoints. A failed refresh leaves existing observations and failure detection
+running; its status appears on the source endpoint under `last_error`.
+
+New addresses must be reachable single-node endpoints using the configured TLS
+scheme and driver credentials. Advertisements requiring `ssl_target_name_override`
+are skipped because pinned clients do not support that override. Each learned
+address must pass SelfCheck with its advertised pile and node ID before its views,
+health or mutation routes count. At most `health_endpoints_per_pile` learned
+health addresses per pile are kept, plus at most one extra client for finding
+and retaining a port that successfully serves both Config and Discovery.
+Discovery is not a storage inventory or a quorum:
+omissions do not prove health/failure and do not discard fresh endpoint evidence.
+Candidate addresses rotate within each pile, so an unchanged Discovery ordering
+does not keep retrying only unreachable nodes. Only current verified endpoints
+deduplicate configured node IDs. Pending learned health addresses also reserve
+their expected node ID, so aliases cannot consume another health slot; a learned
+address advertising a changed identity is drained
+and checked again before reuse. The first verification budget covers read/SelfCheck
+deadlines and polling rounds; Bridge-only ports cannot keep a slot indefinitely.
+After verification, address retention includes the complete per-pile sampling
+rotation and RPC renewal deadline. This grace does not extend evidence or routing
+freshness. The last complete advertisement list is cached in memory, so failure
+of Config or Discovery can trigger another bounded probe even after all seeds
+have been removed. Probing uses the last accepted pile membership even after all
+fresh views expire; it never extends evidence freshness or authorizes mutations.
+An extra inventory port may be on a node whose health port
+was already learned; it does not consume another health slot.
+For `grpc://`, published IPv4/IPv6 addresses are also candidates and pass the same
+node ID and pile checks; TLS discovery retains certificate verification by hostname.
+`GetClusterState` supplies pile states, including Add/Remove progress; Auto never
+calls AddPile or RemovePile. Inactive, disconnected and removed piles disappear
+from the endpoint list. Their configured seeds retain low-frequency bootstrap
+probes; learned clients are removed once outstanding calls settle.
+
+Learned addresses are process-local. Keep at least one reachable seed in the
+configuration before restarting Skipper, especially after removing every pile
+that originally supplied seeds. This does not require a restart during live
+membership changes. Configuration, CA, certificate and key changes still require
+one; evidence, pending mutations and history keep their existing persistence rules.
 
 The YAML parser rejects unknown/duplicate keys and files above 1 MiB. Credential
 files are bounded to 16 MiB each, read at startup (the token file again on every

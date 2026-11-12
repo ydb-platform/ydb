@@ -20,14 +20,15 @@ public:
     using TLevelNodeCounts = std::array<std::atomic<i64>, TILING_PRIORITY_LEVEL_COUNT>;
 
     const std::shared_ptr<TLevelNodeCounts> LevelNodeCounts = std::make_shared<TLevelNodeCounts>();
-    const NMonitoring::TDynamicCounters::TCounterPtr MaxOverload;
+    // Only the tiling++ root category reports it
+    const std::shared_ptr<NColumnShard::TLazyValue> MaxOverload;
     const NColumnShard::TIncrementalHistogram OverloadHistogram;
     const NColumnShard::TIncrementalHistogram WidthHistogram;
     const NColumnShard::TIncrementalHistogram HeightHistogram;
 
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
-        , MaxOverload(TBase::GetValue("Overload/Max"))
+        , MaxOverload(TBase::GetLazyValue("Overload/Max"))
         , OverloadHistogram(base.GetModuleId(), "ByLevel/Overload", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
         , WidthHistogram(base.GetModuleId(), "ByLevel/Width", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
         , HeightHistogram(base.GetModuleId(), "ByLevel/Height", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
@@ -40,7 +41,7 @@ private:
     using TBase = NColumnShard::TPortionCategoryCounters;
     using TLevelNodeCounts = TPortionCategoryCounterAgents::TLevelNodeCounts;
     std::shared_ptr<TLevelNodeCounts> LevelNodeCounts;
-    NMonitoring::TDynamicCounters::TCounterPtr MaxOverload;
+    std::shared_ptr<NColumnShard::TLazyValue> MaxOverload;
     std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> OverloadHistogram;
     std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> WidthHistogram;
     std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> HeightHistogram;

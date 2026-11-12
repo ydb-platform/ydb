@@ -14,16 +14,12 @@ using TPortionCategoryCounters = NColumnShard::TPortionCategoryCounters;
 class TGlobalCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
-    NMonitoring::THistogramPtr HistogramDiffSnapshots;
 
     std::shared_ptr<TPortionCategoryCounterAgents> PortionsForMerge;
     std::shared_ptr<TPortionCategoryCounterAgents> PortionsAlone;
     std::shared_ptr<TPortionCategoryCounterAgents> SmallPortions;
     std::shared_ptr<TPortionCategoryCounterAgents> ActualPortions;
     std::shared_ptr<TPortionCategoryCounterAgents> FuturePortions;
-
-    std::shared_ptr<NColumnShard::TValueAggregationAgent> OldestCriticalActuality;
-    std::shared_ptr<NColumnShard::TValueAggregationAgent> MergeCoefficient;
 
 public:
     NMonitoring::TDynamicCounters::TCounterPtr FinalBucketTaskCounter;
@@ -52,27 +48,12 @@ public:
         HistogramFinalBucketTaskSnapshotsDiff = TBase::GetHistogram("FinalBucketTasksDiff/Count", NMonitoring::ExponentialHistogram(15, 2, 1));
         HistogramMiddleBucketTaskSnapshotsDiff = TBase::GetHistogram("MiddleBucketTasksDiff/Count", NMonitoring::ExponentialHistogram(15, 2, 1));
 
-        HistogramDiffSnapshots = TBase::GetHistogram("DiffSnapshots", NMonitoring::ExponentialHistogram(15, 2, 1000));
-        OldestCriticalActuality = TBase::GetValueAutoAggregations("Granule/ActualityMs");
-        MergeCoefficient = TBase::GetValueAutoAggregations("Granule/MergeCoefficient");
         BucketsForMerge = TBase::GetValueAutoAggregations("BucketsForMerge/Count");
         OptimizersCount = TBase::GetValue("Optimizers/Count");
     }
 
-    static std::shared_ptr<NColumnShard::TValueAggregationClient> BuildOldestCriticalActualityAggregation() {
-        return Singleton<TGlobalCounters>()->OldestCriticalActuality->GetClient();
-    }
-
-    static std::shared_ptr<NColumnShard::TValueAggregationClient> BuildMergeCoefficientAggregation() {
-        return Singleton<TGlobalCounters>()->MergeCoefficient->GetClient();
-    }
-
     static std::shared_ptr<TPortionCategoryCounters> BuildPortionsForMergeAggregation() {
         return std::make_shared<TPortionCategoryCounters>(*Singleton<TGlobalCounters>()->PortionsForMerge);
-    }
-
-    static NMonitoring::THistogramPtr BuildHistogramDiffSnapshots() {
-        return Singleton<TGlobalCounters>()->HistogramDiffSnapshots;
     }
 
     static std::shared_ptr<TPortionCategoryCounters> BuildSmallPortionsAggregation() {
@@ -93,17 +74,12 @@ public:
 };
 
 class TCounters {
-private:
-    std::shared_ptr<NColumnShard::TValueAggregationClient> OldestCriticalActuality;
-
 public:
     const std::shared_ptr<TPortionCategoryCounters> PortionsForMerge;
     const std::shared_ptr<TPortionCategoryCounters> PortionsAlone;
     const std::shared_ptr<TPortionCategoryCounters> SmallPortions;
     const std::shared_ptr<TPortionCategoryCounters> ActualPortions;
     const std::shared_ptr<TPortionCategoryCounters> FuturePortions;
-    const std::shared_ptr<NColumnShard::TValueAggregationClient> MergeCoefficient;
-    const NMonitoring::THistogramPtr HistogramDiffSnapshots;
     const std::shared_ptr<NColumnShard::TValueAggregationClient> BucketsForMerge;
     const std::shared_ptr<NColumnShard::TValueGuard> OptimizersCount;
 
@@ -127,16 +103,9 @@ public:
         , SmallPortions(TGlobalCounters::BuildSmallPortionsAggregation())
         , ActualPortions(TGlobalCounters::BuildActualPortionsAggregation())
         , FuturePortions(TGlobalCounters::BuildFuturePortionsAggregation())
-        , MergeCoefficient(TGlobalCounters::BuildMergeCoefficientAggregation())
-        , HistogramDiffSnapshots(TGlobalCounters::BuildHistogramDiffSnapshots())
         , BucketsForMerge(Singleton<TGlobalCounters>()->BucketsForMerge->GetClient())
         , OptimizersCount(std::make_shared<NColumnShard::TValueGuard>(Singleton<TGlobalCounters>()->OptimizersCount))
     {
-        OldestCriticalActuality = TGlobalCounters::BuildOldestCriticalActualityAggregation();
-    }
-
-    void OnMinProblemSnapshot(const TDuration d) {
-        OldestCriticalActuality->SetValue(d.MilliSeconds(), TInstant::Now() + TDuration::Seconds(10));
     }
 };
 

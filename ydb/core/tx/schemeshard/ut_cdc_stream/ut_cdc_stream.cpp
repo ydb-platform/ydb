@@ -13,6 +13,7 @@
 
 #include <util/string/cast.h>
 #include <util/string/escape.h>
+#include <util/string/hex.h>
 #include <util/string/printf.h>
 
 using namespace NKikimr;
@@ -1554,9 +1555,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             channelWrites += Sprintf(R"(
                 (UpdateRow 'ChannelsBinding
                     '('('ShardId (Uint64 '%lu)) '('ChannelId (Uint32 '%u)))
-                    '('('PoolName (Utf8 '"%s")) '('Binding (String '"%s"))))
+                    '('('PoolName (Utf8 '"%s")) '('Binding (String 'x"%s"))))
             )", aggregatorShardIdx, channelId, EscapeC(channel.GetStoragePoolName()).c_str(),
-                EscapeC(channel.SerializeAsString()).c_str());
+                HexEncode(channel.SerializeAsString()).c_str());
         }
         LocalMiniKQL(runtime, schemeShard, Sprintf(R"(
             (
@@ -1581,6 +1582,18 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             aggregatorShardIdx, aggregatorTabletId, streamSelf.GetSchemeshardId(), streamSelf.GetPathId(), txId,
             static_cast<ui32>(TTabletTypes::CdcAggregator), Schema::SysParam_NextShardIdx,
             aggregatorShardIdx + 1, channelWrites.c_str()));
+
+        for (ui32 channelId = 0; channelId < channels.size(); ++channelId) {
+            const auto persistedChannel = LocalMiniKQL(runtime, schemeShard, Sprintf(R"(
+                (
+                    (let key '('('ShardId (Uint64 '%lu)) '('ChannelId (Uint32 '%u))))
+                    (return (AsList (SetResult 'Channel
+                        (SelectRow 'ChannelsBinding key '('Binding)))))
+                )
+            )", aggregatorShardIdx, channelId));
+            const TString persistedBinding = NClient::TValue::Create(persistedChannel)["Channel"]["Binding"];
+            UNIT_ASSERT_VALUES_EQUAL(persistedBinding, channels[channelId].SerializeAsString());
+        }
 
         RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
 

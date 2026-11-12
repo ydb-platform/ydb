@@ -39,21 +39,25 @@ TStreamReaderBase::TStreamReaderBase(
     IClientRetryPolicyPtr clientRetryPolicy,
     ITransactionPingerPtr transactionPinger,
     const TClientContext& context,
-    const TTransactionId& transactionId)
+    const TTransactionId& transactionId,
+    bool createTransaction)
     : RawClient_(rawClient)
     , ClientRetryPolicy_(std::move(clientRetryPolicy))
+    , ParentTransactionId_(transactionId)
     , ReadTransaction_()
     , TraceContext_(NTracing::CreateTraceContext("TStreamReaderBase", context.Config))
 {
     NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
 
-    ReadTransaction_ = std::make_unique<TPingableTransaction>(
-        RawClient_,
-        ClientRetryPolicy_,
-        context,
-        transactionId,
-        transactionPinger->GetChildTxPinger(),
-        TStartTransactionOptions());
+    if (createTransaction) {
+        ReadTransaction_ = std::make_unique<TPingableTransaction>(
+            RawClient_,
+            ClientRetryPolicy_,
+            context,
+            transactionId,
+            transactionPinger->GetChildTxPinger(),
+            TStartTransactionOptions());
+    }
 }
 
 void TStreamReaderBase::Abort()
@@ -87,7 +91,7 @@ size_t TStreamReaderBase::DoRead(void* buf, size_t len)
         [this, &buf, len] (TMutationId /*mutationId*/) {
             try {
                 if (!Input_) {
-                    Input_ = Request(ReadTransaction_->GetId(), CurrentOffset_);
+                    Input_ = Request(ReadTransaction_ ? ReadTransaction_->GetId() : ParentTransactionId_, CurrentOffset_);
                 }
                 const size_t read = Input_->Read(buf, len);
                 CurrentOffset_ += read;
@@ -109,13 +113,21 @@ TFileReader::TFileReader(
     const TClientContext& context,
     const TTransactionId& transactionId,
     const TFileReaderOptions& options)
-    : TStreamReaderBase(rawClient, std::move(clientRetryPolicy), std::move(transactionPinger), context, transactionId)
+    : TStreamReaderBase(
+        rawClient,
+        std::move(clientRetryPolicy),
+        std::move(transactionPinger),
+        context,
+        transactionId,
+        options.CreateTransaction_)
     , StartOffset_(options.Offset_)
     , EndOffset_(GetEndOffset(options))
     , Options_(options)
     , Path_(path)
 {
-    Path_.Path_ = TStreamReaderBase::Snapshot(Path_.Path_);
+    if (options.CreateTransaction_) {
+        Path_.Path_ = TStreamReaderBase::Snapshot(Path_.Path_);
+    }
 }
 
 std::unique_ptr<IAbortableInputStream> TFileReader::Request(const TTransactionId& transactionId, ui64 readBytes)

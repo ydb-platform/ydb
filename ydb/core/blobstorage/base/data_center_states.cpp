@@ -1,12 +1,11 @@
 #include "data_center_states.h"
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
 #include <util/string/builder.h>
 
 namespace NKikimr {
 namespace {
 
-using TDataCenter = NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter;
+using TDataCenter = NKikimrBlobStorage::TDataCenterState;
 
 } // namespace
 
@@ -22,6 +21,7 @@ std::expected<TDataCenterStates, TString> ParseDataCenterStates(const NKikimrBlo
         switch (dataCenter.GetState()) {
             case TDataCenter::INCLUDED:
             case TDataCenter::EXCLUDED:
+            case TDataCenter::RECOVERING:
                 result.emplace(dataCenter.GetName(), dataCenter.GetState());
                 break;
             default:
@@ -39,13 +39,6 @@ NKikimrBlobStorage::TDefineDataCenterStates SerializeDataCenterStates(const TDat
         dataCenter->SetState(state);
     }
     return result;
-}
-
-std::expected<void, TString> ValidateFailRealmStateTransition(const TFailRealmStates& before, const TFailRealmStates& after) {
-    if (!IsAllowedMirror3dcFailRealmStateTransition(before, after)) {
-        return std::unexpected<TString>("invalid mirror-3-dc fail realm state transition");
-    }
-    return {};
 }
 
 } // namespace NKikimr

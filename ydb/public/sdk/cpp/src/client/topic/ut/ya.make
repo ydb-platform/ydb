@@ -13,6 +13,7 @@ FORK_SUBTESTS()
 
 PEERDIR(
     ydb/library/persqueue
+    ydb/public/sdk/cpp/adapters/executor
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
     ydb/public/sdk/cpp/src/library/kafka
 )
@@ -32,6 +33,7 @@ SRCS(
     read_session_kafka_timestamps_ut.cpp
     reset_offset_ut.cpp
     topic_deferred_publish_ut.cpp
+    topic_path_ut.cpp
     topic_to_table_ut.cpp
     topic_tx_skip_conflict_ut.cpp
     write_session_connect_ut.cpp

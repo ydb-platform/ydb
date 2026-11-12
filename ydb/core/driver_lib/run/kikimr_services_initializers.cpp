@@ -36,6 +36,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
 #include <ydb/core/blobstorage/ddisk/persistent_buffer_mon.h>
+#include <ydb/core/blobstorage/subsystem/subsystem.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.h>
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
@@ -136,6 +137,7 @@
 
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -224,6 +226,7 @@
 #include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/columnshard/data_accessor/cache_policy/consumers.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/general_cache/service/service.h>
@@ -1354,9 +1357,8 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     ObtainStaticKey(&nodeWardenConfig->StaticKey);
     ObtainPDiskKey(&nodeWardenConfig->PDiskKey, Config.GetPDiskKeyConfig());
 
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeBlobStorageNodeWardenID(NodeId),
-                                                                       TActorSetupCmd(CreateBSNodeWarden(nodeWardenConfig.Release()),
-                                                                                      TMailboxType::ReadAsFilled, appData->SystemPoolId)));
+    InstallBlobStorageSubsystem(*setup, CreateBlobStorageSubsystem(
+        nodeWardenConfig, appData->SystemPoolId, TMailboxType::ReadAsFilled));
 
     setup->LocalServices.emplace_back(MakeUniversalSchedulerActorId(), TActorSetupCmd(CreateUniversalSchedulerActor(),
         TMailboxType::ReadAsFilled, appData->SystemPoolId));
@@ -2470,6 +2472,17 @@ void TPersQueueDirectReadCacheInitializer::InitializeServices(NActors::TActorSys
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
+TWriteSessionsQuoterInitializer::TWriteSessionsQuoterInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TWriteSessionsQuoterInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    IActor* actor = NPQ::CreateWriteSessionsQuoter();
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        NPQ::MakeWriteSessionsQuoterId(),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
 TTopicDeferredPublishRegistryInitializer::TTopicDeferredPublishRegistryInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
 {}
@@ -2779,21 +2792,13 @@ TGeneralCachePortionsMetadataInitializer::TGeneralCachePortionsMetadataInitializ
 }
 
 void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetPortionsMetadataCache());
-    if (serviceConfig.IsFail()) {
-        YDB_LOG_ERROR("",
-            {"error", "cannot parse portions metadata cache config"},
-            {"action", "default_usage"},
-            {"#_dup_error", serviceConfig.GetErrorMessage()},
-            {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
-        serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
-    }
-    AFL_VERIFY(!serviceConfig.IsFail());
+    const auto serviceConfig = NOlap::NGeneralCache::BuildCacheConfig("portions metadata cache", Config.GetPortionsMetadataCache(),
+        appData->FeatureFlags.GetEnableCsGeneralCacheConsumerWeights(), true);
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_PORTIONS_METADATA");
 
-    auto service = NGeneralCache::CreateService<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>(*serviceConfig, conveyorGroup);
+    auto service = NGeneralCache::CreateService<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>(serviceConfig, conveyorGroup);
 
     setup->LocalServices.push_back(
         std::make_pair(NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::MakeServiceId(NodeId),
@@ -2806,21 +2811,13 @@ TGeneralCacheColumnDataInitializer::TGeneralCacheColumnDataInitializer(const TKi
 }
 
 void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetColumnDataCache());
-    if (serviceConfig.IsFail()) {
-        YDB_LOG_ERROR("",
-            {"error", "cannot parse column data cache config"},
-            {"action", "default_usage"},
-            {"#_dup_error", serviceConfig.GetErrorMessage()},
-            {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
-        serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
-    }
-    AFL_VERIFY(!serviceConfig.IsFail());
+    const auto serviceConfig = NOlap::NGeneralCache::BuildCacheConfig("column data cache", Config.GetColumnDataCache(),
+        appData->FeatureFlags.GetEnableCsGeneralCacheConsumerWeights(), false);
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_COLUMN_DATA");
 
-    auto service = NGeneralCache::CreateService<NOlap::NGeneralCache::TColumnDataCachePolicy>(*serviceConfig, conveyorGroup);
+    auto service = NGeneralCache::CreateService<NOlap::NGeneralCache::TColumnDataCachePolicy>(serviceConfig, conveyorGroup);
 
     setup->LocalServices.push_back(
         std::make_pair(NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TColumnDataCachePolicy>::MakeServiceId(NodeId),

@@ -10,8 +10,6 @@
 
 namespace NBridgeSkipper {
 
-enum class EMode { Manual, Auto };
-
 struct TEndpoint {
     TString Uri;
     TString Scheme;
@@ -20,6 +18,19 @@ struct TEndpoint {
 };
 
 TEndpoint ParseEndpoint(TStringBuf uri);
+
+// An HTTP Host authority. Names and IP literals are normalized without DNS;
+// an omitted port remains distinct when matching configured authorities.
+struct THttpAuthority {
+    TString Host;
+    TMaybe<ui16> Port;
+    bool Numeric = false;
+
+    bool operator==(const THttpAuthority&) const = default;
+};
+
+// Throws yexception for malformed host[:port], userinfo, paths or wildcards.
+THttpAuthority ParseHttpAuthority(TStringBuf authority);
 
 struct TYdbAuthConfig {
     TMaybe<TString> CaFile;
@@ -30,18 +41,23 @@ struct TYdbAuthConfig {
 
 struct THttpConfig {
     TString Listen = "127.0.0.1:8080";
+    // Additional exact Host authorities (host or host:port); no DNS lookups.
+    TVector<TString> TrustedAuthorities;
 };
 
+// Keep stale positive evidence and failure confirmation inside the normal
+// 20-second failover budget. Safety blockers and post-role-change BSC warm-up
+// can intentionally take longer; no wall-clock deadline authorizes a mutation.
 struct TTimingConfig {
     TDuration StatePollInterval = TDuration::Seconds(1);
-    TDuration ReadTimeout = TDuration::Seconds(5);
-    TDuration RoundInterval = TDuration::Seconds(10);
-    TDuration SelfCheckOperationTimeout = TDuration::Seconds(12);
+    TDuration ReadTimeout = TDuration::Seconds(1);
+    TDuration RoundInterval = TDuration::Seconds(1);
+    TDuration SelfCheckOperationTimeout = TDuration::Seconds(4);
     // Not configurable: the SelfCheck and update client deadlines are their
     // operation timeouts + 2 s. GetClusterState uses ReadTimeout for both.
-    TDuration SelfCheckClientTimeout = TDuration::Seconds(14);
-    TDuration EvidenceTtl = TDuration::Seconds(30);
-    TDuration Confirm = TDuration::Seconds(20);
+    TDuration SelfCheckClientTimeout = TDuration::Seconds(6);
+    TDuration EvidenceTtl = TDuration::Seconds(8);
+    TDuration Confirm = TDuration::Seconds(2);
     TDuration BscWarmup = TDuration::Seconds(30);
     TDuration MutationOperationTimeout = TDuration::Seconds(25);
     TDuration MutationClientTimeout = TDuration::Seconds(27);
@@ -53,7 +69,6 @@ struct TLoggingConfig {
 
 struct TConfig {
     TString ClusterId;
-    EMode Mode = EMode::Manual;
     // Empty pile names are valid and are verified with SelfCheck like any other.
     std::map<TString, TVector<TEndpoint>> Endpoints;
     TYdbAuthConfig Auth;

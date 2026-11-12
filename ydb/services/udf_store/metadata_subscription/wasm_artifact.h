@@ -5,6 +5,10 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+namespace NKikimrSchemeOp {
+class TColumnDescription;
+}
+
 namespace NKikimr::NUdfStore {
 
 enum class EWasmArtifactKind {

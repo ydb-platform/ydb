@@ -2589,6 +2589,12 @@ message TImmediateControlsConfig {
                 MaxValue: 1,
                 DefaultValue: 1 }];
 
+            optional uint64 EnableKesusExport = 11 [(ControlOptions) = {
+                Description: "Enable Kesus export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 0 }];
+
         }
 
         optional TBackupToS3Controls S3Controls = 1;
@@ -3531,10 +3537,16 @@ message TLabel {
     optional string Value = 2;
 }
 
+message TGeneralCacheConsumer {
+    optional string Name = 1;
+    optional uint32 Weight = 2 [default = 1];
+}
+
 message TGeneralCacheConfig {
     optional uint64 MemoryLimit = 1;
     optional uint64 DirectInflightSourceLimit = 2;
     optional uint64 DirectInflightGlobalLimit = 3;
+    repeated TGeneralCacheConsumer Consumers = 4;
 }
 
 message TStatisticsConfig {

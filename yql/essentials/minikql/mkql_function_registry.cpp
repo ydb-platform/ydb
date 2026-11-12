@@ -19,6 +19,7 @@ using namespace NKikimr;
 using namespace NMiniKQL;
 
 const char MODULE_NAME_DELIMITER = '.';
+TStaticUdfLibrariesGetter StaticUdfLibrariesGetter = nullptr;
 const char* RegisterFuncName = "Register";
 const char* AbiVersionFuncName = "AbiVersion";
 #if defined(_win_) || defined(_darwin_)
@@ -584,10 +585,30 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
     return registry.Release();
 }
 
+void SetStaticUdfLibrariesGetter(TStaticUdfLibrariesGetter getter) {
+    Y_ENSURE(getter, "Static UDFs require a live library getter");
+    Y_ENSURE(!StaticUdfLibrariesGetter || StaticUdfLibrariesGetter == getter,
+             "MiniKQL runtime is already configured with a different static UDF library getter");
+    if (!StaticUdfLibrariesGetter) {
+        StaticUdfLibrariesGetter = getter;
+    }
+}
+
 void FillStaticModules(IMutableFunctionRegistry& registry, bool skipLoaded) {
+    if (StaticUdfLibrariesGetter) {
+        size_t count = 0;
+        const auto* libraries = StaticUdfLibrariesGetter(&count);
+        Y_ENSURE(libraries || !count, "Null static UDF descriptor array");
+        FillStaticModules(registry, {libraries, count}, skipLoaded);
+    } else {
+        FillStaticModules(registry, NUdf::GetStaticUdfLibraryList(), skipLoaded);
+    }
+}
+
+void FillStaticModules(IMutableFunctionRegistry& registry, TArrayRef<const NUdf::TYqlUdfStaticLibrary* const> libraries, bool skipLoaded) {
     TStaticModuleLoader loader(registry, skipLoaded);
 
-    for (const auto& library : NUdf::GetStaticUdfLibraryList()) {
+    for (const auto* library : libraries) {
         const ui32 version = library->AbiVersion;
         Y_ENSURE(NUdf::IsAbiCompatible(version) && version >= NUdf::MakeAbiVersion(2, 8, 0),
                  "Incompatible static UDF ABI version: " << NUdf::AbiVersionToStr(version));

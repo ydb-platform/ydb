@@ -7,6 +7,7 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+import uuid
 
 from library.python.port_manager import PortManager
 from ydb.apps.bridge_skipper.ydbd_mock.lib import model, operations
@@ -17,7 +18,18 @@ from ydb.public.api.protos.draft import ydb_bridge_pb2 as B
 
 BRIDGE_UPDATE = "/Ydb.Bridge.V1.BridgeService/UpdateClusterState"
 MUTATIONS = {"UpdateClusterState", "AddPile", "RemovePile", "ConvertToBridge"}
-STATE_SCHEMA = 2
+STATE_SCHEMA = 3
+
+# Fetch rejects these HTTP(S) ports even when a listener can bind them.
+# https://fetch.spec.whatwg.org/#port-blocking
+FETCH_BAD_PORTS = frozenset({
+    0, 1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53,
+    69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117,
+    119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514,
+    515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989,
+    990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061,
+    6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
+})
 
 
 async def wait(predicate, message, timeout=40):
@@ -33,11 +45,16 @@ async def wait(predicate, message, timeout=40):
     raise AssertionError("timed out waiting for %s; last=%r" % (message, last))
 
 
-def http_request(url, method="GET"):
+def http_request(url, method="GET", body=None, headers=None):
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    request = urllib.request.Request(url, method=method)
+    headers = dict(headers or {})
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode()
+        headers.setdefault("Content-Type", "application/json")
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        response = opener.open(request, timeout=1)
+        response = opener.open(request, timeout=18)
     except urllib.error.HTTPError as error:
         response = error
     with response:
@@ -87,6 +104,56 @@ class Controller:
         (self.root / "snapshot.json").write_text(json.dumps(body, indent=2))
         return body
 
+    async def raw_post(self, path, body):
+        return await asyncio.to_thread(http_request, self.url + path, "POST", body)
+
+    async def post(self, path, body, expected=200):
+        status, result, headers = await self.raw_post(path, body)
+        assert status == expected, (path, body, status, result)
+        assert headers.get("Cache-Control") == "no-store", headers
+        assert not any(name.lower().startswith("access-control-") for name in headers), headers
+        return result
+
+    async def set_mode(self, mode):
+        # An uncertain POST is never repeated automatically. A caller must read
+        # current canonical state before deliberately authorizing another body.
+        state = await self.until(lambda value: value["controller_ready"], "controller ready for mode change")
+        if mode == "auto":
+            # Initial endpoint replies may change eligibility between separate
+            # HTTP reads. Wait for one reviewable semantic state before creating
+            # the single activation body; never retry an uncertain POST.
+            revision = state["snapshot_revision"]
+            stable_since = time.monotonic()
+
+            async def stable_review():
+                nonlocal revision, stable_since
+                current = await self.state()
+                if not current or not current["controller_ready"]:
+                    return None
+                if current["snapshot_revision"] != revision:
+                    revision = current["snapshot_revision"]
+                    stable_since = time.monotonic()
+                return current if time.monotonic() - stable_since >= 0.3 else None
+            state = await wait(stable_review, "stable Auto activation review", timeout=10)
+        body = {"mode": mode, "expected_boot_id": state["controller_boot_id"],
+                "expected_mode_revision": state["mode_revision"], "request_id": uuid.uuid4().hex}
+        if mode == "auto":
+            body["reviewed_snapshot_revision"] = state["snapshot_revision"]
+        result = await self.post("/api/mode", body)
+        await self.until(lambda value: value["mode"] == mode, "acknowledged " + mode)
+        return result
+
+    async def plan(self, action, target=None):
+        state = await self.state()
+        body = {"action": action, "snapshot_revision": state["snapshot_revision"]}
+        if target is not None:
+            body["target_pile"] = target
+        return await self.post("/api/plans", body)
+
+    async def execute(self, plan, request_id=None):
+        return await self.post("/api/operations", {
+            "plan_id": plan["plan_id"], "request_id": request_id or uuid.uuid4().hex}, expected=202)
+
     async def until(self, predicate, message, timeout=40):
         async def check():
             state = await self.state()
@@ -116,14 +183,15 @@ class Controller:
 
 
 class Environment:
-    def __init__(self, binary, root, names=("a", "b"), mode="auto", initial=None, timing=None):
+    def __init__(self, binary, root, names=("a", "b"), mode="auto", initial=None, timing=None, mock_heartbeat_timeout=0.4):
         self.root = Path(root)
         self.ports = PortManager()
         topology = Topology(
-            names, 3, initial=initial, timings=tiny_timings(lifecycle_delay=0.05),
+            names, 3, initial=initial, timings=tiny_timings(lifecycle_delay=0.05, heartbeat_timeout=mock_heartbeat_timeout),
             control_ports=[self.ports.get_port() for _ in names],
             grpc_ports=[[self.ports.get_port() for _ in range(3)] for _ in names])
         self.cluster = LiveCluster(topology=topology)
+        self.initial_mode = mode
         # SelfCheck and Update client deadlines are their operation timeouts + 2 s
         # (GetClusterState uses read_timeout); the validator requires
         # selfcheck operation + 2 + round interval < evidence TTL.
@@ -134,15 +202,25 @@ class Environment:
         values.update(timing or {})
         endpoints = {pile.name: ["grpc://" + node.endpoint for node in pile.nodes]
                      for pile in self.cluster.topo.piles}
+        # Keep rejected candidates reserved until close, like the listener ports.
+        while True:
+            http_port = self.ports.get_port()
+            if http_port not in FETCH_BAD_PORTS:
+                break
         self.controller = Controller(binary, root, {
-            "cluster_id": "acceptance", "mode": mode,
-            "endpoints": endpoints, "http": {"listen": "127.0.0.1:%d" % self.ports.get_port()},
+            "cluster_id": "acceptance",
+            "endpoints": endpoints, "http": {"listen": "127.0.0.1:%d" % http_port},
             "timing": values, "health_endpoints_per_pile": 3})
 
     async def start(self, skipper=True):
         await self.cluster.start()
         if skipper:
             await self.controller.start()
+            state = await self.healthy()
+            assert state["mode"] == "observe", state
+            assert not self.mutations(), self.mutations()
+            if self.initial_mode != "observe":
+                await self.controller.set_mode(self.initial_mode)
         return self
 
     async def close(self):
@@ -188,8 +266,14 @@ class Environment:
         assert response.operation.status == model.SUCCESS, operations.issue_texts(response.operation)
 
     async def healthy(self):
-        return await self.controller.until(lambda state: state["piles"] and all(
-            pile["verdict"] == "HEALTHY" for pile in state["piles"]), "BSC warmup", timeout=30)
+        def healthy(state):
+            if not state["view"]:
+                return False
+            participants = {pile["name"] for pile in state["view"]["piles"]
+                            if pile["state"] in ("PRIMARY", "PROMOTED", "SYNCHRONIZED", "NOT_SYNCHRONIZED")}
+            verdicts = {pile["name"]: pile["verdict"] for pile in state["piles"]}
+            return bool(participants) and all(verdicts.get(name) == "HEALTHY" for name in participants)
+        return await self.controller.until(healthy, "BSC warmup", timeout=30)
 
     async def generation(self):
         state = await self.controller.until(lambda state: state["view"] is not None, "selected view")

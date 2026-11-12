@@ -18,11 +18,14 @@ struct TConfirmation {
     // The verdict's newest evidence at the first Down evaluation.
     TMonotonic FirstEvidenceSentAt;
     TMonotonic NewestEvidenceSentAt;
+    // Each fallback proof has a generation-local confirmation span of its own.
+    EFailureEvidence FailureEvidence = EFailureEvidence::Ordinary;
 };
 
 // Entries belong to Generation. A generation change keeps an entry only when
 // the pile's state and the PRIMARY and PROMOTED roles are unchanged between
-// the two views (a no-op bump); any other change clears it (B9).
+// the two views (a no-op bump); fallback failure never crosses a generation.
+// Switching failure evidence, including fallback transport/storage, restarts the span.
 struct TConfirmations {
     std::optional<ui64> Generation;
     TNamedPileStates States;
@@ -40,6 +43,25 @@ TDecision Decide(
     const std::optional<TPendingMutation>& pending,
     const std::vector<TEndpointState>& endpoints,
     TDuration confirmDuration,
+    const std::set<TString>& excludedEndpoints = {});
+
+// Shared routing exclusions for lifecycle planning and pending-route exhaustion.
+std::set<TString> LifecycleEndpointExclusions(
+    EOperationKind kind,
+    const TExactUpdate& update,
+    const std::vector<TEndpointState>& endpoints,
+    const std::set<TString>& excludedEndpoints = {});
+
+// All inputs are freshly evaluated by the caller; lifecycle never infers participation.
+TDecision PlanLifecycle(
+    EOperationKind kind,
+    const TString& target,
+    const TViewSelection& selection,
+    const THealthEvaluation& health,
+    const TConfirmations& confirmations,
+    const TDecision& failover,
+    const std::optional<TPendingMutation>& pending,
+    const std::vector<TEndpointState>& endpoints,
     const std::set<TString>& excludedEndpoints = {});
 
 TString RenderCliCommand(const TPlan& plan);

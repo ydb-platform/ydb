@@ -1,10 +1,13 @@
+#include "column_families.h"
 #include "table_description.h"
 
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -463,6 +466,124 @@ storage_settings {
 )");
     }
 
+    Y_UNIT_TEST(RowTableZstdCompression) {
+        TActorSystemStub actorSystem;
+        Ydb::Table::CreateTableRequest create;
+        auto& key = *create.add_columns();
+        key.set_name("key");
+        key.mutable_type()->set_type_id(Ydb::Type::UINT32);
+        create.add_primary_key("key");
+        for (const auto* name : {"default", "archive"}) {
+            auto& family = *create.add_column_families();
+            family.set_name(name);
+            family.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+        }
+
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        NKikimrSchemeOp::TModifyScheme scheme;
+        UNIT_ASSERT_C(FillTableDescription(scheme, create, TTableProfiles{}, status, error), error);
+        const auto& table = scheme.GetCreateTable();
+        UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionConfig().ColumnFamiliesSize(), 2);
+        for (const auto& family : table.GetPartitionConfig().GetColumnFamilies()) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(family.GetColumnCodec()),
+                static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
+        }
+
+        Ydb::Table::DescribeTableResult described;
+        FillColumnFamilies(described, table);
+        UNIT_ASSERT_VALUES_EQUAL(described.column_families_size(), 2);
+        for (const auto& family : described.column_families()) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(family.compression()),
+                static_cast<int>(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD));
+            UNIT_ASSERT(!family.has_compression_level());
+        }
+
+        for (const bool addFamily : {false, true}) {
+            Ydb::Table::AlterTableRequest alter;
+            alter.set_path("/Root/Table");
+            auto& family = *(addFamily ? alter.add_add_column_families() : alter.add_alter_column_families());
+            family.set_name("archive");
+            family.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+            family.set_compression_level(7);
+            NKikimrSchemeOp::TModifyScheme altered;
+            UNIT_ASSERT_C(
+                BuildAlterTableModifyScheme(&alter, &altered, TTableProfiles{}, TPathId{}, status, error), error);
+            const auto& families = altered.GetAlterTable().GetPartitionConfig().GetColumnFamilies();
+            UNIT_ASSERT_VALUES_EQUAL(families.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "archive");
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(families[0].GetColumnCodec()),
+                static_cast<int>(NKikimrSchemeOp::ColumnCodecZSTD));
+            UNIT_ASSERT_VALUES_EQUAL(families[0].GetColumnCodecLevel(), 7);
+        }
+    }
+
+    Y_UNIT_TEST(RowTableZstdCompressionLevels) {
+        for (const i32 level : {0, 1, 7, 22}) {
+            NKikimrSchemeOp::TPartitionConfig config;
+            TColumnFamilyManager manager(&config);
+            Ydb::Table::ColumnFamily family;
+            family.set_name("default");
+            family.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+            family.set_compression_level(level);
+            auto code = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT_C(manager.ApplyFamilySettings(family, &code, &error), error);
+            UNIT_ASSERT(config.GetColumnFamilies(0).HasColumnCodecLevel());
+            UNIT_ASSERT_VALUES_EQUAL(config.GetColumnFamilies(0).GetColumnCodecLevel(), level);
+
+            NKikimrSchemeOp::TTableDescription table;
+            table.MutablePartitionConfig()->CopyFrom(config);
+            Ydb::Table::DescribeTableResult described;
+            FillColumnFamilies(described, table);
+            UNIT_ASSERT(described.column_families(0).has_compression_level());
+            UNIT_ASSERT_VALUES_EQUAL(described.column_families(0).compression_level(), level);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(RowTableZstdProfileCompressionOverrides, Legacy) {
+        TActorSystemStub actorSystem;
+        NKikimrConfig::TTableProfilesConfig config;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+            TableProfiles { Name: "default" StoragePolicy: "zstd" }
+            StoragePolicies {
+                Name: "zstd"
+                ColumnFamilies { Id: 0 ColumnCodec: ColumnCodecZSTD ColumnCodecLevel: 5 }
+            }
+        )", &config));
+        const TTableProfiles profiles(config);
+
+        for (const bool compressed : {false, true}) {
+            Ydb::Table::CreateTableRequest create;
+            auto* key = create.add_columns();
+            key->set_name("key");
+            key->mutable_type()->set_type_id(Ydb::Type::UINT32);
+            create.add_primary_key("key");
+            if constexpr (Legacy) {
+                auto* family = create.mutable_profile()->mutable_storage_policy()->add_column_families();
+                family->set_name("default");
+                using TPolicy = Ydb::Table::ColumnFamilyPolicy;
+                family->set_compression(compressed ? TPolicy::COMPRESSED : TPolicy::UNCOMPRESSED);
+            } else {
+                auto* family = create.add_column_families();
+                family->set_name("default");
+                using TFamily = Ydb::Table::ColumnFamily;
+                family->set_compression(compressed ? TFamily::COMPRESSION_LZ4 : TFamily::COMPRESSION_NONE);
+            }
+
+            NKikimrSchemeOp::TModifyScheme scheme;
+            auto status = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT_C(FillTableDescription(scheme, create, profiles, status, error), error);
+            const auto& partition = scheme.GetCreateTable().GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(partition.ColumnFamiliesSize(), 1);
+            const auto& family = partition.GetColumnFamilies(0);
+            UNIT_ASSERT(family.GetColumnCodec() == (compressed
+                ? NKikimrSchemeOp::ColumnCodecLZ4 : NKikimrSchemeOp::ColumnCodecPlain));
+            UNIT_ASSERT_C(!family.HasColumnCodecLevel(), family.DebugString());
+        }
+    }
+
     Y_UNIT_TEST(ColumnFamilies) {
         // default family, explicit id: 0
         Test<NKikimrSchemeOp::TTableDescription, Ydb::Table::DescribeTableResult>(&FillColumnFamilies, R"(
@@ -627,6 +748,81 @@ column_families {
 
     using TFillIndexDescFn = void(*)(Ydb::Table::DescribeTableResult&, const NKikimrSchemeOp::TTableDescription&);
 
+    void CheckVectorIndexDescriptionRoundTrip(bool hnsw) {
+        for (const bool prefixed : {false, true}) {
+            Ydb::Table::CreateTableRequest request;
+            auto* index = request.add_indexes();
+            index->set_name("vidx");
+            if (prefixed) {
+                index->add_index_columns("scope");
+            }
+            index->add_index_columns("embedding");
+            auto* tree = hnsw
+                ? index->mutable_global_hnsw_index()->mutable_vector_settings()
+                : index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+            tree->set_levels(1);
+            tree->set_clusters(hnsw ? 1 : 2);
+            tree->set_overlap_clusters(1);
+            tree->set_overlap_ratio(0.25);
+            tree->set_adaptive_clusters(true);
+            tree->set_autoupdate(false);
+            auto* vector = tree->mutable_settings();
+            vector->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
+            vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            vector->set_vector_dimension(200);
+            if (hnsw) {
+                vector->set_min_rows(0);
+                vector->set_m(24);
+                vector->set_ef_construction(300);
+                vector->set_delta_rows(1ULL << 40);
+            }
+
+            NKikimrSchemeOp::TIndexedTableCreationConfig converted;
+            Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT_C(FillIndexDescription(converted, request, false, status, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(converted.IndexDescriptionSize(), 1);
+            const auto& internal = converted.GetIndexDescription(0);
+            UNIT_ASSERT_VALUES_EQUAL(internal.GetType(), hnsw
+                ? NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                : NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
+            UNIT_ASSERT_VALUES_EQUAL(internal.HasHnswIndexDescription(), hnsw);
+            UNIT_ASSERT_VALUES_EQUAL(internal.HasVectorIndexKmeansTreeDescription(), !hnsw);
+            UNIT_ASSERT_VALUES_EQUAL(internal.IndexImplTableDescriptionsSize(), prefixed ? 3 : 2);
+
+            NKikimrSchemeOp::TTableDescription table;
+            auto* stored = table.AddTableIndexes();
+            stored->SetName(internal.GetName());
+            stored->SetType(internal.GetType());
+            stored->SetState(NKikimrSchemeOp::EIndexStateReady);
+            *stored->MutableKeyColumnNames() = internal.GetKeyColumnNames();
+            if (hnsw) {
+                *stored->MutableHnswIndexDescription() = internal.GetHnswIndexDescription();
+            } else {
+                *stored->MutableVectorIndexKmeansTreeDescription() = internal.GetVectorIndexKmeansTreeDescription();
+            }
+            *stored->MutableIndexImplTableDescriptions() = internal.GetIndexImplTableDescriptions();
+            Ydb::Table::DescribeTableResult described;
+            FillIndexDescription(described, table);
+            UNIT_ASSERT_VALUES_EQUAL(described.indexes_size(), 1);
+            const auto& actual = described.indexes(0);
+            UNIT_ASSERT_VALUES_EQUAL(actual.has_global_hnsw_index(), hnsw);
+            UNIT_ASSERT_VALUES_EQUAL(actual.has_global_vector_kmeans_tree_index(), !hnsw);
+            const auto& actualSettings = hnsw
+                ? actual.global_hnsw_index().vector_settings()
+                : actual.global_vector_kmeans_tree_index().vector_settings();
+            UNIT_ASSERT_VALUES_EQUAL(actualSettings.SerializeAsString(), tree->SerializeAsString());
+        }
+    }
+
+    Y_UNIT_TEST(HnswIndexDescriptionRoundTrip) {
+        CheckVectorIndexDescriptionRoundTrip(true);
+    }
+
+    Y_UNIT_TEST(KMeansIndexDescriptionRoundTrip) {
+        CheckVectorIndexDescriptionRoundTrip(false);
+    }
+
     Y_UNIT_TEST(IndexDescriptionLocalBloomFilter) {
         Test<NKikimrSchemeOp::TTableDescription, Ydb::Table::DescribeTableResult>(
             static_cast<TFillIndexDescFn>(&FillIndexDescription), R"(
@@ -674,6 +870,31 @@ indexes {
     case_sensitive: true
   }
 })");
+    }
+
+    Y_UNIT_TEST(BloomFilterAlterTableReportsInvalidPath) {
+        Ydb::Table::AlterTableRequest request;
+        request.set_path("/Root/Table/");
+        NKikimrSchemeOp::TModifyScheme result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+
+        UNIT_ASSERT(!BuildAlterTableBloomFilterModifyScheme(&request, &result, status, error));
+        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(error, "wrong path format '/Root/Table/'");
+    }
+
+    Y_UNIT_TEST(ColumnTableAlterReportsInvalidPath) {
+        NKikimrKqp::TKqpAlterTableRequest request;
+        request.set_path("/Root/Table/");
+        request.add_add_columns();
+        NKikimrSchemeOp::TModifyScheme result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+
+        UNIT_ASSERT(!BuildAlterColumnTableModifyScheme(&request, &result, {}, status, error));
+        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(error, "wrong path format '/Root/Table/'");
     }
 
 } // ConvertTableDescription

@@ -15,7 +15,8 @@ Exit Status: 0
     "PDiskSpaceColorBorder": "GREEN",
     "DatabaseSpaceBlockColor": "YELLOW",
     "DatabaseSpaceUnblockColor": "LIGHT_YELLOW",
-    "BridgeSyncTotalRateBytesPerSecond": 0
+    "BridgeSyncTotalRateBytesPerSecond": 0,
+    "BridgeSyncMaxSyncers": 64
   }
 ]
 ===== grpc_calls =====

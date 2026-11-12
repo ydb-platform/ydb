@@ -105,6 +105,7 @@ namespace NKikimr::NBsController {
 
             if (StorageConfig) {
                 Self->StorageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(*StorageConfig);
+                Self->UpdatePileOverrides();
                 Self->ApplyStorageConfig(true);
             }
 

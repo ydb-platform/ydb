@@ -101,6 +101,8 @@ enum EEv {
     EvLocalDbBackupCancel,
     EvLocalDbBackupProgress,
 
+    EvFindEmptyHistoryIntervalsScanFinished,
+
     EvEnd
 };
 

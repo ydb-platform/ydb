@@ -21,6 +21,7 @@ constexpr TStringBuf ATTR_DOCUMENT_API_VERSION = "__document_api_version";
 constexpr TStringBuf ATTR_ASYNC_REPLICATION = "__async_replication";
 constexpr TStringBuf ATTR_ASYNC_REPLICA = "__async_replica";
 constexpr TStringBuf ATTR_INCREMENTAL_BACKUP = "__incremental_backup";
+constexpr TStringBuf ATTR_OMIT_BACKUP = "__omit_backup"; // see ydb/core/backup/common/omit_backup.h
 constexpr TStringBuf ATTR_MONITORING_PROJECT_ID = "monitoring_project_id";
 
 enum class EAttribute {
@@ -39,6 +40,7 @@ enum class EAttribute {
     ASYNC_REPLICA,
     INCREMENTAL_BACKUP,
     FILESTORE_SPACE_LIMIT_SSD_SYSTEM,
+    OMIT_BACKUP,
 };
 
 enum class EUserAttributesOp {

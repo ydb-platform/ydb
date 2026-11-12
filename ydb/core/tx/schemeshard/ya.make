@@ -113,6 +113,8 @@ SRCS(
     schemeshard__list_users.cpp
     schemeshard__local_index_migration.cpp
     schemeshard__local_index_migration.h
+    schemeshard__pipe_messages.cpp
+    schemeshard__pipe_messages.h
     schemeshard__login.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
@@ -356,6 +358,7 @@ GENERATE_ENUM_SERIALIZATION_WITH_HEADER(schemeshard__monitoring.h)  # for ESweep
 
 PEERDIR(
     contrib/libs/protobuf
+    contrib/libs/zstd
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
     library/cpp/iterator

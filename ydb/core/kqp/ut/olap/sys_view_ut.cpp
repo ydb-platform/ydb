@@ -667,7 +667,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable_1");
@@ -687,7 +687,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i * 10000, 3000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable_3", 0, 1000000 + i * 10000, 5000);
         }
-        csController->WaitCompactions(TDuration::Seconds(10));
 
         auto tableClient = kikimr.GetTableClient();
 

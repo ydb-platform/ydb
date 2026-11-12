@@ -10,6 +10,8 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <util/generic/yexception.h>
+#include <util/generic/guid.h>
+#include <deque>
 #include <util/string/cast.h>
 
 #include <algorithm>
@@ -51,6 +53,19 @@ using TSlot = std::pair<TString, EYdbMethod>;
 
 struct TEndpointData {
     TEndpointSnapshot Snapshot;
+    bool Discovered = false;
+    // One extra client can search for Config/Discovery without consuming a
+    // health slot. Its node may also have a separate Bridge/Monitoring port.
+    bool InventoryOnly = false;
+    bool Retiring = false;
+    // A fresh Bridge reply alone cannot keep an unverified address forever.
+    std::optional<TMonotonic> VerificationDeadline;
+    // Mismatching replies cannot renew the last successfully verified identity.
+    std::optional<TMonotonic> VerifiedSelfCheckAt;
+    std::optional<ui32> ExpectedNodeId;
+    std::optional<ui32> NodeId;
+    TMonotonic NextBootstrapPoll;
+
     // Request sequence of Snapshot.View; it orders replies sent at one instant.
     ui64 ViewSequence = 0;
     // The last usable connectivity report, binding or not. A successful but unusable
@@ -64,6 +79,12 @@ struct TEndpointData {
     std::set<EYdbMethod> Due;
     std::map<EYdbMethod, TString> Errors;
 };
+
+bool ShouldPollPile(const TClusterView& view, const TString& name) {
+    const auto pile = view.Piles.find(name);
+    return pile != view.Piles.end() && pile->second != EPileState::Inactive
+        && pile->second != EPileState::Disconnected;
+}
 
 void SetEndpointError(TEndpointData& endpoint, EYdbMethod method, TString error) {
     if (error.empty()) {
@@ -131,6 +152,11 @@ public:
     explicit TSkipperActor(TSkipperOptions options)
         : Options(std::move(options))
         , Desired(Options.StateFile->GetState()) {
+        BootId = Options.BootId.empty() ? CreateGuidAsString() : Options.BootId;
+        if (!Options.Diagnostics) {
+            Options.Diagnostics = std::make_shared<TDiagnosticStore>(BootId, Options.Config.Logging.Level);
+        }
+        MayApplyElsewhere = Desired.PendingMutation.has_value();
         for (const auto& [pile, endpoints] : Options.Config.Endpoints) {
             for (const auto& endpoint : endpoints) {
                 auto& data = Endpoints[endpoint.Uri];
@@ -142,6 +168,8 @@ public:
 
     void Bootstrap() {
         Become(&TThis::StateWork);
+        BootAt = NActors::TActivationContext::Monotonic();
+        BootUtc = NActors::TActivationContext::Now();
         Tick();
     }
 
@@ -153,26 +181,31 @@ private:
         }
     }
 
+    bool IsStopping() const {
+        return Stopping || (Options.ShutdownRequested && Options.ShutdownRequested->load());
+    }
+
     void Tick() {
         const auto now = NActors::TActivationContext::Monotonic();
-        if (!Stopping) {
+        if (!IsStopping()) {
             ScheduleCalls(now);
         }
         Evaluate(now);
         Publish(now);
-        if (!Stopping && Options.ScheduleTicks) {
+        if (!IsStopping() && Options.ScheduleTicks) {
             Schedule(TDuration::MilliSeconds(250), new TEvSkipper::TEvTick());
         }
     }
 
     bool Begin(const TRpcRequest& request, EYdbMethod method) {
-        return Outstanding.insert(TSlot{request.Endpoint, method}).second;
+        const TSlot slot{request.Endpoint, method};
+        return Outstanding.emplace(slot, request.Sequence).second;
     }
 
-    // A slot is reused only after it settles, so the slot identifies the call.
+    // Match the invocation sequence before releasing a reused endpoint slot.
     bool Settle(const TRpcResult& rpc) {
         const auto slot = Outstanding.find({rpc.Request.Endpoint, rpc.Method});
-        if (slot == Outstanding.end()) {
+        if (slot == Outstanding.end() || slot->second != rpc.Request.Sequence) {
             return false;
         }
         Outstanding.erase(slot);
@@ -187,7 +220,7 @@ private:
     // Starts a read; false when the endpoint's slot for this method is busy.
     bool Start(TEndpointData& endpoint, EYdbMethod method) {
         TRpcRequest request{endpoint.Snapshot.Uri, endpoint.Snapshot.Pile, ++NextSequence};
-        if (!Begin(request, method)) {
+        if (IsStopping() || endpoint.Retiring || !Begin(request, method)) {
             return false;
         }
         auto* system = NActors::TActivationContext::ActorSystem();
@@ -234,19 +267,277 @@ private:
         rotation = (start + scanned) % endpoints.size();
     }
 
+    bool MayResetNotAppliedEndpoints() const {
+        if (!Desired.PendingMutation || Desired.PendingMutation->Kind == EOperationKind::Failover) {
+            return Decision.Blocker == EBlockerReason::NoMutationEndpoint;
+        }
+        if (Desired.Mode != EMode::Manual || !Selection.View || NotAppliedEndpoints.empty()) {
+            return false;
+        }
+        const auto excluded = LifecycleEndpointExclusions(Desired.PendingMutation->Kind,
+            Desired.PendingMutation->Update, CurrentEndpoints, NotAppliedEndpoints);
+        return !SelectMutationEndpoint(*Selection.View, CurrentEndpoints, Desired.PendingMutation->Update,
+            Health.Connectivity, excluded, Health.Participation);
+    }
+
+    bool HasCalls(const TString& uri) const {
+        const auto it = Outstanding.lower_bound({uri, EYdbMethod::PlainState});
+        return it != Outstanding.end() && it->first.first == uri;
+    }
+
+    void ReapEndpoints() {
+        for (auto it = Endpoints.begin(); it != Endpoints.end();) {
+            auto& endpoint = it->second;
+            if (!endpoint.Retiring || HasCalls(it->first)) {
+                ++it;
+                continue;
+            }
+            const auto uri = it->first;
+            const auto pile = endpoint.Snapshot.Pile;
+            Options.Clients->RemoveEndpoint(uri);
+            auto& configured = Options.Config.Endpoints.at(pile);
+            std::erase_if(configured, [&](const TEndpoint& item) { return item.Uri == uri; });
+            if (configured.empty()) {
+                Options.Config.Endpoints.erase(pile);
+                HealthRotation.erase(pile);
+                ConnectivityRotation.erase(pile);
+            }
+            HealthState.EndpointModes.erase(uri);
+            WarnedAbsent.erase(uri);
+            it = Endpoints.erase(it);
+        }
+    }
+
+    bool IsVerifiedCurrentEndpoint(const TString& uri, const TEndpointData& endpoint) const {
+        return !endpoint.Retiring && !endpoint.Snapshot.Ignored
+            && endpoint.Snapshot.Identity == EEndpointIdentity::Verified
+            && Selection.CurrentEndpoints.contains(uri);
+    }
+
+    TDuration HealthSamplingPeriod(const TString& pile, size_t extra = 0) const {
+        const auto count = Options.Config.Endpoints.at(pile).size() + extra;
+        const auto limit = Options.Config.HealthEndpointsPerPile;
+        return Options.Config.Timing.RoundInterval * ((count + limit - 1) / limit);
+    }
+
+    void ScheduleInventory(TMonotonic now) {
+        if (now < NextInventory || InventoryInFlight || !Selection.View) {
+            return;
+        }
+        std::vector<TString> eligible;
+        std::optional<TString> probe;
+        for (const auto& [uri, endpoint] : Endpoints) {
+            if (IsVerifiedCurrentEndpoint(uri, endpoint)) {
+                eligible.push_back(uri);
+                if (endpoint.InventoryOnly) {
+                    probe = uri;
+                }
+            }
+        }
+        if (eligible.empty()) {
+            return;
+        }
+        // The independent probe must get a turn even when many usable health
+        // ports do not serve either Config or Discovery.
+        const TString uri = probe ? *probe : eligible[InventoryRotation++ % eligible.size()];
+        TRpcRequest request{uri, Endpoints.at(uri).Snapshot.Pile, ++NextSequence};
+        if (!Begin(request, EYdbMethod::Inventory)) {
+            return;
+        }
+        NextInventory = now + TDuration::Seconds(5);
+        InventoryInFlight = true;
+        auto* system = NActors::TActivationContext::ActorSystem();
+        const auto recipient = SelfId();
+        Options.Clients->Discover(std::move(request), [system, recipient](TInventoryResult result) {
+            system->Send(new NActors::IEventHandle(recipient, {}, new TEvSkipper::TEvInventoryReply(std::move(result))));
+        });
+    }
+
+    void AddDiscoveredEndpoint(const TDiscoveredEndpoint& item, bool inventoryOnly, TMonotonic now) {
+        Options.Clients->AddEndpoint(item.Endpoint, item.Pile);
+        auto& endpoint = Endpoints[item.Endpoint.Uri];
+        endpoint.Snapshot.Uri = item.Endpoint.Uri;
+        endpoint.Snapshot.Pile = item.Pile;
+        endpoint.Discovered = true;
+        endpoint.InventoryOnly = inventoryOnly;
+        endpoint.ExpectedNodeId = item.NodeId;
+        Options.Config.Endpoints[item.Pile].push_back(item.Endpoint);
+        const auto& timing = Options.Config.Timing;
+        // Reserve scheduling room for the independent inventory probe too;
+        // adding it later must not shorten this client's first attempt.
+        endpoint.VerificationDeadline = now + std::max(
+            timing.ReadTimeout + timing.StatePollInterval,
+            timing.SelfCheckClientTimeout + HealthSamplingPeriod(item.Pile, inventoryOnly ? 0 : 1));
+        NextStatePoll = TMonotonic::Zero();
+        NextHealthRound = TMonotonic::Zero();
+        YDB_LOG_INFO_CTX_COMP(*NActors::TlsActivationContext, SkipperLogComponent, "Endpoint discovered",
+            {"event", "endpoint_discovered"}, {"pile", item.Pile}, {"endpoint", item.Endpoint.Uri});
+    }
+
+    void RefreshEndpoints(TMonotonic now) {
+        if (now < NextEndpointRefresh || !PreviousView) {
+            return;
+        }
+        // Last accepted membership only scopes bootstrap probes. Requiring a
+        // fresh view here would prevent cached locators from restoring one.
+        // Evidence and mutation authorization still use Selection and its TTL.
+        const auto& view = *PreviousView;
+        NextEndpointRefresh = now + TDuration::Seconds(5);
+        // Keep clients through their complete sampling/renewal period. This
+        // owns addresses only: observation and routing TTLs remain unchanged.
+        for (auto& [uri, endpoint] : Endpoints) {
+            (void)uri;
+            if (!endpoint.Discovered) {
+                continue;
+            }
+            const auto& snapshot = endpoint.Snapshot;
+            const auto& timing = Options.Config.Timing;
+            const auto healthBudget = std::max(timing.EvidenceTtl, HealthSamplingPeriod(snapshot.Pile))
+                + timing.SelfCheckClientTimeout;
+            const bool responsive = snapshot.View
+                && now - snapshot.View->SentAt < timing.EvidenceTtl + timing.ReadTimeout + timing.StatePollInterval
+                && endpoint.VerifiedSelfCheckAt && now - *endpoint.VerifiedSelfCheckAt < healthBudget;
+            if (responsive) {
+                endpoint.VerificationDeadline.reset();
+            } else if (!endpoint.VerificationDeadline || now >= *endpoint.VerificationDeadline) {
+                endpoint.Retiring = true;
+            }
+        }
+        // A URI can be reused by a new node or pile. Discovery supplies the
+        // proposed identity; drain old calls, then verify it through SelfCheck.
+        for (const auto& item : InventoryCandidates) {
+            const auto it = Endpoints.find(item.Endpoint.Uri);
+            if (it == Endpoints.end() || !ShouldPollPile(view, item.Pile)) {
+                continue;
+            }
+            auto& endpoint = it->second;
+            const bool reusedSeed = endpoint.Snapshot.Ignored && endpoint.Snapshot.Pile != item.Pile;
+            const bool replacedLearned = endpoint.Discovered && endpoint.Snapshot.Identity == EEndpointIdentity::Mismatch
+                && (endpoint.Snapshot.Pile != item.Pile || endpoint.ExpectedNodeId != item.NodeId);
+            if (reusedSeed || replacedLearned) {
+                endpoint.Retiring = true;
+            }
+        }
+        ReapEndpoints();
+        if (InventorySource) {
+            const auto it = Endpoints.find(*InventorySource);
+            if (it == Endpoints.end() || !IsVerifiedCurrentEndpoint(it->first, it->second)) {
+                InventorySource.reset();
+            }
+        }
+        bool hasProbe = false;
+        std::map<TString, size_t> learned;
+        std::set<ui32> nodes;
+        for (auto& [uri, endpoint] : Endpoints) {
+            if (endpoint.InventoryOnly) {
+                hasProbe = true; // a retiring invocation still owns the extra slot
+                if (InventorySource && *InventorySource != uri) {
+                    endpoint.Retiring = true;
+                }
+                continue;
+            }
+            learned[endpoint.Snapshot.Pile] += endpoint.Discovered;
+            if (endpoint.Discovered && !endpoint.Retiring && !endpoint.Snapshot.Ignored) {
+                // Reserve the advertised node across refreshes, including the
+                // first pending verification. A failed locator retires above.
+                nodes.insert(*endpoint.ExpectedNodeId);
+            } else if (endpoint.NodeId && IsVerifiedCurrentEndpoint(uri, endpoint)) {
+                nodes.insert(*endpoint.NodeId);
+            }
+        }
+        std::map<TString, std::vector<const TDiscoveredEndpoint*>> candidates;
+        for (const auto& item : InventoryCandidates) {
+            if (ShouldPollPile(view, item.Pile)) {
+                candidates[item.Pile].push_back(&item);
+            }
+        }
+        std::erase_if(DiscoveryRotation, [&](const auto& entry) { return !view.Piles.contains(entry.first); });
+        for (const auto& [pile, choices] : candidates) {
+            auto& rotation = DiscoveryRotation[pile];
+            const size_t start = rotation % choices.size();
+            for (size_t i = 0; i < choices.size() && learned[pile] < Options.Config.HealthEndpointsPerPile
+                && Endpoints.size() < 16384; ++i)
+            {
+                const auto& item = *choices[(start + i) % choices.size()];
+                if (nodes.contains(item.NodeId) || Endpoints.contains(item.Endpoint.Uri)) {
+                    continue;
+                }
+                AddDiscoveredEndpoint(item, false, now);
+                ++learned[pile];
+                nodes.insert(item.NodeId);
+                rotation = (start + i + 1) % choices.size();
+            }
+        }
+        // Advertisements are bootstrap candidates, not evidence. Keep the last
+        // complete bounded list so a failed inventory API cannot prevent trying
+        // a different advertised port after every configured seed is removed.
+        if (!InventorySource && !hasProbe && !InventoryCandidates.empty() && Endpoints.size() < 16384) {
+            const size_t start = InventoryDiscoveryRotation % InventoryCandidates.size();
+            for (size_t i = 0; i < InventoryCandidates.size(); ++i) {
+                const auto& item = InventoryCandidates[(start + i) % InventoryCandidates.size()];
+                if (!ShouldPollPile(view, item.Pile) || Endpoints.contains(item.Endpoint.Uri)) {
+                    continue;
+                }
+                AddDiscoveredEndpoint(item, true, now);
+                InventoryDiscoveryRotation = (start + i + 1) % InventoryCandidates.size();
+                break;
+            }
+        }
+    }
+
+    void HandleInventory(TEvSkipper::TEvInventoryReply::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        if (!Settle(result.Rpc)) {
+            return;
+        }
+        InventoryInFlight = false;
+        auto& source = Endpoints.at(result.Rpc.Request.Endpoint);
+        SetEndpointError(source, EYdbMethod::Inventory, !result.Rpc.Success
+            ? result.Rpc.Status + ": " + result.Rpc.Issues : result.Error);
+        if (!result.Rpc.Success || !result.Error.empty()) {
+            NextEndpointRefresh = TMonotonic::Zero();
+            if (InventorySource == result.Rpc.Request.Endpoint) {
+                InventorySource.reset();
+            }
+            if (source.InventoryOnly) {
+                source.Retiring = true;
+            }
+            return;
+        }
+        if (IsStopping() || !Selection.View || !IsVerifiedCurrentEndpoint(result.Rpc.Request.Endpoint, source)
+            || NActors::TActivationContext::Monotonic() >= Selection.ValidUntil)
+        {
+            return;
+        }
+        InventorySource = result.Rpc.Request.Endpoint;
+        InventoryCandidates = result.Endpoints;
+        NextEndpointRefresh = TMonotonic::Zero();
+        RefreshEndpoints(NActors::TActivationContext::Monotonic());
+    }
+
     void ScheduleCalls(TMonotonic now) {
+        RefreshEndpoints(now);
+        ScheduleInventory(now);
         if (now >= NextStatePoll) {
             NextStatePoll = now + Options.Config.Timing.StatePollInterval;
             // Keep preferring alternatives across this poll; once none was
             // selectable at the previous evaluation, allow retrying them all.
             // This bounds NotAppliedHere resends to about one per endpoint per poll.
-            if (Decision.Blocker == EBlockerReason::NoMutationEndpoint) {
+            if (MayResetNotAppliedEndpoints()) {
+                // Lifecycle reviews do not replace the failover decision, so
+                // check their pending overlay for eligible alternatives too.
                 NotAppliedEndpoints.clear();
             }
             for (auto& [uri, endpoint] : Endpoints) {
                 (void)uri;
+                if (endpoint.Snapshot.Ignored) {
+                    if (endpoint.Discovered || now < endpoint.NextBootstrapPoll) {
+                        continue;
+                    }
+                    endpoint.NextBootstrapPoll = now + TDuration::Seconds(5);
+                }
                 Start(endpoint, EYdbMethod::PlainState);
-                if (endpoint.RepollConnectivity) {
+                if (!endpoint.Snapshot.Ignored && endpoint.RepollConnectivity) {
                     Start(endpoint, EYdbMethod::ConnectivityState);
                 }
             }
@@ -263,7 +554,7 @@ private:
                     Start(endpoint, EYdbMethod::SelfCheck);
                 }
             }
-            if (PreviousView && !PreviousView->Piles.contains(pile)) {
+            if (PreviousView && !ShouldPollPile(*PreviousView, pile)) {
                 continue;
             }
             // A busy slot for one method must not consume another endpoint's
@@ -279,7 +570,10 @@ private:
             return;
         }
         auto& endpoint = Endpoints.at(result.Rpc.Request.Endpoint);
-        if (endpoint.Due.erase(result.Rpc.Method) && !Stopping) {
+        if (endpoint.Retiring) {
+            return;
+        }
+        if (endpoint.Due.erase(result.Rpc.Method) && !IsStopping()) {
             Start(endpoint, result.Rpc.Method);
         }
         TString error;
@@ -318,7 +612,10 @@ private:
             return;
         }
         auto& endpoint = Endpoints.at(result.Rpc.Request.Endpoint);
-        if (endpoint.Due.erase(EYdbMethod::SelfCheck) && !Stopping) {
+        if (endpoint.Retiring) {
+            return;
+        }
+        if (endpoint.Due.erase(EYdbMethod::SelfCheck) && !IsStopping()) {
             Start(endpoint, EYdbMethod::SelfCheck);
         }
         auto& snapshot = endpoint.Snapshot;
@@ -335,7 +632,14 @@ private:
             if (!pile) {
                 error = "ENDPOINT_PILE_UNVERIFIED";
             } else if (*pile == snapshot.Pile) {
-                snapshot.Identity = EEndpointIdentity::Verified;
+                if (endpoint.ExpectedNodeId && result.ResponderNodeId != endpoint.ExpectedNodeId) {
+                    snapshot.Identity = EEndpointIdentity::Mismatch;
+                    error = "ENDPOINT_NODE_MISMATCH";
+                } else {
+                    snapshot.Identity = EEndpointIdentity::Verified;
+                    endpoint.NodeId = result.ResponderNodeId;
+                    endpoint.VerifiedSelfCheckAt = result.Reply->SentAt;
+                }
             } else {
                 snapshot.Identity = EEndpointIdentity::Mismatch;
                 error = "ENDPOINT_PILE_MISMATCH";
@@ -374,6 +678,11 @@ private:
             return false;
         }
         StateWriteError.clear();
+        if (!Desired.PendingMutation) {
+            PendingAttempts = 0;
+            PendingFirstSendUtc.reset();
+            PendingLastSendUtc.reset();
+        }
         if (before.PendingMutation != Desired.PendingMutation) {
             const auto& pending = Desired.PendingMutation ? Desired.PendingMutation : before.PendingMutation;
             YDB_LOG_INFO_CTX_COMP(*NActors::TlsActivationContext, SkipperLogComponent, "Pending mutation changed",
@@ -393,6 +702,9 @@ private:
 
     void LogViewChange(const TClusterView& view) {
         if (PreviousView && PreviousView->Generation == view.Generation && PreviousView->Piles == view.Piles) {
+            // Refresh sample time and pending/conversion metadata even when no
+            // public transition is recorded. This is the last observed view.
+            PreviousView = view;
             return;
         }
         auto priority = NActors::NLog::PRI_INFO;
@@ -411,14 +723,35 @@ private:
         YDB_LOG_CTX_COMP(*NActors::TlsActivationContext, priority, SkipperLogComponent, "View changed",
             {"event", "view_change"}, {"generation", view.Generation},
             {"states", Compact(UpdateJson(view.Piles))}, {"explanation", explanation});
+        auto event = PlanJson(TPlan{view.Generation, view.Piles, view.Endpoint});
+        event["generation"] = ::ToString(view.Generation);
+        const bool gap = PreviousView && view.Generation > PreviousView->Generation
+            && view.Generation - PreviousView->Generation > 1;
+        event["before_generation"] = PreviousView ? NJson::TJsonValue(::ToString(PreviousView->Generation)) : NJson::TJsonValue();
+        event["coverage_gap"] = gap;
+        event["coverage_gap_text"] = NJson::TJsonValue();
+        if (gap) {
+            const auto first = PreviousView->Generation + 1;
+            const auto last = view.Generation - 1;
+            event["coverage_gap_text"] = first == last ? "Generation " + ::ToString(first) + " not observed."
+                : "Generations " + ::ToString(first) + "–" + ::ToString(last) + " not observed.";
+        }
+        event["before"] = PreviousView ? UpdateJson(PreviousView->Piles) : NJson::TJsonValue();
+        event["after"] = UpdateJson(view.Piles);
+        event["message"] = !PreviousView ? TString("Observation baseline")
+            : PreviousView->Piles == view.Piles ? TString("Generation changed; no public state change")
+            : TString("Observed pile state transition");
+        event["origin"] = explanation == "Initial" ? "baseline" : explanation == "Explained" ? "inferred" : "external";
+        Options.Diagnostics->History("view", std::move(event), NActors::TActivationContext::Now());
         PreviousView = view;
     }
 
-    void Evaluate(TMonotonic now) {
+    void Evaluate(TMonotonic now, bool dispatch = true) {
         if (Dirty) {
             Persist(Desired);
         }
         const auto& timing = Options.Config.Timing;
+        ReapEndpoints();
         std::vector<TClusterView> views;
         for (const auto& [uri, endpoint] : Endpoints) {
             (void)uri;
@@ -426,7 +759,8 @@ private:
             // Exclude known pile mismatches and views missing the configured
             // pile. This attributes piles, not remote cluster identity;
             // independently trusted endpoint inventory is required.
-            if (snapshot.Identity != EEndpointIdentity::Mismatch && snapshot.View
+            if (!endpoint.Retiring && snapshot.Identity != EEndpointIdentity::Mismatch && snapshot.View
+                && (!endpoint.Discovered || snapshot.Identity == EEndpointIdentity::Verified)
                 && snapshot.View->Piles.contains(snapshot.Pile))
             {
                 views.push_back(*snapshot.View);
@@ -443,10 +777,17 @@ private:
                 NextHealthRound = TMonotonic::Zero();
             }
             LogViewChange(view);
+            if (RejectedGeneration && view.Generation > *RejectedGeneration) {
+                RejectedGeneration.reset();
+            }
+            if (LifecycleRejectedGeneration && view.Generation > *LifecycleRejectedGeneration) {
+                LifecycleRejectedGeneration.reset();
+            }
             auto next = Desired;
             next.GenerationHighWater = std::max(next.GenerationHighWater, view.Generation);
             if (next.PendingMutation && ResolvedBy(*next.PendingMutation, view)) {
                 next.PendingMutation.reset();
+                MayApplyElsewhere = false;
                 ResetResends();
             }
             if (next != Desired) {
@@ -456,7 +797,17 @@ private:
             for (auto& [uri, endpoint] : Endpoints) {
                 auto& snapshot = endpoint.Snapshot;
                 replies.Endpoints.push_back({uri, snapshot.Pile, snapshot.Identity, Selection.CurrentEndpoints.contains(uri)});
-                snapshot.Ignored = !view.Piles.contains(snapshot.Pile);
+                const bool ignored = !ShouldPollPile(view, snapshot.Pile);
+                if (ignored && !snapshot.Ignored && (endpoint.InventoryOnly || InventorySource == uri)) {
+                    NextEndpointRefresh = TMonotonic::Zero();
+                }
+                snapshot.Ignored = ignored;
+                if (snapshot.Ignored && endpoint.Discovered) {
+                    endpoint.Retiring = true;
+                }
+                if (endpoint.Retiring) {
+                    continue;
+                }
                 if (snapshot.Ignored && WarnedAbsent.insert(uri).second) {
                     YDB_LOG_WARN_CTX_COMP(*NActors::TlsActivationContext, SkipperLogComponent, "Configured endpoint ignored",
                         {"event", "configured_endpoint_ignored"}, {"endpoint", uri}, {"pile", snapshot.Pile});
@@ -493,16 +844,21 @@ private:
             Decision.Plan = InFlight->second;
             Decision.CliCommand = RenderCliCommand(InFlight->second);
         }
-        if (!Stopping && !Dirty && Options.Config.Mode == EMode::Auto && Decision.Kind == EDecisionKind::Ready) {
+        CurrentEndpoints = endpoints;
+        if (!IsStopping() && !Dirty && Decision.Kind == EDecisionKind::Ready) {
             if (RejectedGeneration == Decision.Plan->ExpectedGeneration) {
-                // B10: the server refused an update at this generation; an operator
-                // must act, or the generation must move, before Auto sends again.
+                // B10: rejection blocks every dispatch at this generation,
+                // including non-sending command evaluations and mode changes.
                 Decision.Reason = "REJECTED_BY_SERVER";
-            } else {
-                MaybeSend(endpoints, now);
+            } else if (Desired.Mode == EMode::Auto) {
+                MaybeSend(endpoints, now, dispatch);
             }
         }
         if (IsTransition(PreviousDecision, Decision)) {
+            NJson::TJsonValue event(NJson::JSON_MAP);
+            event["kind"] = ToString(Decision.Kind);
+            event["reason"] = Decision.Reason;
+            Options.Diagnostics->History("decision", std::move(event), NActors::TActivationContext::Now());
             YDB_LOG_INFO_CTX_COMP(*NActors::TlsActivationContext, SkipperLogComponent, "Decision changed",
                 {"event", "decision"}, {"kind", ToString(Decision.Kind)}, {"reason", Decision.Reason},
                 {"plan", Decision.Plan ? Compact(PlanJson(*Decision.Plan)) : TString("null")});
@@ -510,7 +866,7 @@ private:
         }
     }
 
-    void MaybeSend(const std::vector<TEndpointState>& endpoints, TMonotonic now) {
+    void MaybeSend(const std::vector<TEndpointState>& endpoints, TMonotonic now, bool dispatch) {
         // Decide admits at the pending generation only the identical update or
         // a D2 superset replacement, which replaces the record before it is sent.
         const bool replacing = Desired.PendingMutation && Desired.PendingMutation->Update != Decision.Plan->Update;
@@ -520,34 +876,58 @@ private:
             return;
         }
         auto exclude = NotAppliedEndpoints;
-        for (const auto& slot : Outstanding) {
+        for (const auto& [slot, sequence] : Outstanding) {
             if (slot.second == EYdbMethod::Update) {
                 exclude.insert(slot.first);
             }
         }
         auto plan = *Decision.Plan;
-        const auto endpoint = SelectMutationEndpoint(*Selection.View, endpoints, plan.Update, Health.Connectivity, exclude);
+        const auto endpoint = SelectMutationEndpoint(*Selection.View, endpoints, plan.Update, Health.Connectivity, exclude, Health.Participation);
         if (!endpoint) {
             Decision = Blocked(EBlockerReason::NoMutationEndpoint);
             return;
         }
         plan.Endpoint = *endpoint;
-        if (!Desired.PendingMutation || replacing) {
-            ResetResends();
-            auto next = Desired;
-            next.PendingMutation = TPendingMutation{plan.ExpectedGeneration, plan.Update};
-            if (!Persist(next)) {
-                // Memory follows the file. A record the disk never acknowledged does
-                // not exist, so the next plan at this generation is not blocked by it;
-                // one the rename made visible is kept and rewritten until durable.
-                Desired = Options.StateFile->GetState();
-                if (Desired.PendingMutation != next.PendingMutation) {
-                    Dirty = false;
-                    StateWriteError.clear();
-                }
-                Decision = Blocked(EBlockerReason::StateWriteFailed);
-                return;
+        Decision.Plan = plan;
+        Decision.CliCommand = RenderCliCommand(plan);
+        // Commands evaluate the same route and blocker without handing off.
+        if (dispatch) {
+            Dispatch(plan, EOperationKind::Failover, EDispatchOrigin::Auto);
+        }
+    }
+
+    bool Dispatch(TPlan plan, EOperationKind kind, EDispatchOrigin origin) {
+        if (IsStopping() || Dirty || Outstanding.contains({plan.Endpoint, EYdbMethod::Update})) {
+            return false;
+        }
+        const bool replacing = Desired.PendingMutation && Desired.PendingMutation->Update != plan.Update;
+        const bool overlap = HasInFlightAttempt();
+        auto next = Desired;
+        next.PendingMutation = TPendingMutation{plan.ExpectedGeneration, plan.Update, kind, origin};
+        // Dirty was rejected above; an identical record is already durable.
+        if (next != Desired && !Persist(next)) {
+            // Before rename preserve the old record; after rename follow the visible one.
+            // Keep the error latched and retry the visible record before any dispatch.
+            const auto visible = Options.StateFile->GetState();
+            if (visible.PendingMutation == next.PendingMutation && replacing) {
+                // Rename installed the superset even though it was not sent.
+                // Retire the predecessor's callback authority and retry timing.
+                ResetResends();
+                MayApplyElsewhere = MayApplyElsewhere || overlap;
             }
+            const auto effectiveMode = Desired.Mode;
+            Desired = visible;
+            Desired.Mode = effectiveMode;
+            Dirty = true;
+            Decision = Blocked(EBlockerReason::StateWriteFailed);
+            return false;
+        }
+        if (replacing) {
+            ResetResends();
+        }
+        MayApplyElsewhere = MayApplyElsewhere || overlap;
+        if (IsStopping()) {
+            return false; // keep the durable prepared record; shutdown cannot hand it off
         }
         const TUpdateAuthorization authorization{std::min(Selection.ValidUntil, Health.ValidUntil)};
         const auto expired = [&] {
@@ -556,13 +936,13 @@ private:
             Decision.Reason = "EVIDENCE_EXPIRED";
         };
         // Includes pending writes above and Dirty/high-water writes in Evaluate.
-        if (NActors::TActivationContext::Monotonic() > authorization.ValidUntil) {
+        if (NActors::TActivationContext::Monotonic() >= authorization.ValidUntil) {
             expired();
-            return;
+            return false;
         }
         TRpcRequest request{plan.Endpoint, Endpoints.at(plan.Endpoint).Snapshot.Pile, ++NextSequence};
         if (!Begin(request, EYdbMethod::Update)) {
-            return;
+            return false;
         }
         const auto sequence = request.Sequence;
         auto* system = NActors::TActivationContext::ActorSystem();
@@ -574,7 +954,7 @@ private:
             // arrive and no invocation may be counted or own this slot.
             Outstanding.erase(TSlot{plan.Endpoint, EYdbMethod::Update});
             expired();
-            return;
+            return false;
         }
         const auto sentAt = NActors::TActivationContext::Monotonic();
         if (LastOutcome == EMutationOutcome::Ambiguous) {
@@ -585,11 +965,33 @@ private:
         LastOutcome.reset();
         Decision.Plan = plan;
         Decision.CliCommand = RenderCliCommand(plan);
-        LastMutation = TMutationInvocation{sequence, sentAt, plan, {}, {}, AmbiguousResends};
+        LastMutation = TMutationInvocation{};
+        LastMutation->Id = sequence;
+        LastMutation->SentAt = sentAt;
+        LastMutation->Plan = plan;
+        LastMutation->SentUtc = NActors::TActivationContext::Now();
+        ++PendingAttempts;
+        if (!PendingFirstSendUtc) {
+            PendingFirstSendUtc = LastMutation->SentUtc;
+        }
+        PendingLastSendUtc = LastMutation->SentUtc;
+        LastMutation->Kind = kind;
+        LastMutation->Origin = origin;
+        LastMutation->AmbiguousResends = AmbiguousResends;
+        auto operation = PlanJson(plan);
+        operation["kind"] = ToString(kind);
+        operation["origin"] = ToString(origin);
+        operation["sent_at"] = LastMutation->SentUtc.ToString();
+        operation["status"] = "IN_FLIGHT";
+        operation["may_still_complete"] = true;
+        const auto id = BootId + ":operation:" + ::ToString(sequence);
+        Options.Diagnostics->Operation(id, operation, true);
+        Options.Diagnostics->History("operation_sent", std::move(operation), LastMutation->SentUtc);
         YDB_LOG_INFO_CTX_COMP(*NActors::TlsActivationContext, SkipperLogComponent, "Mutation sent",
             {"event", "mutation_sent"}, {"invocation_id", sequence},
             {"expected_generation", plan.ExpectedGeneration}, {"endpoint", plan.Endpoint},
             {"update", Compact(UpdateJson(plan.Update))});
+        return true;
     }
 
     void HandleUpdate(TEvSkipper::TEvUpdateReply::TPtr& ev) {
@@ -610,8 +1012,18 @@ private:
             {"event", "mutation_outcome"}, {"invocation_id", sequence},
             {"expected_generation", plan.ExpectedGeneration}, {"endpoint", plan.Endpoint},
             {"status", result.Rpc.Status}, {"outcome", ToString(outcome)}, {"issues", result.Rpc.Issues});
+        const auto id = BootId + ":operation:" + ::ToString(sequence);
+        auto operation = Options.Diagnostics->ReadOperation(id).value_or(PlanJson(plan));
+        operation["status"] = result.Rpc.Status;
+        operation["outcome"] = ToString(outcome);
+        operation["finished_at"] = NActors::TActivationContext::Now().ToString();
+        operation["may_still_complete"] = outcome == EMutationOutcome::Ambiguous;
+        Options.Diagnostics->Operation(id, operation, false);
+        Options.Diagnostics->History("operation_outcome", std::move(operation), NActors::TActivationContext::Now());
         // An older invocation, or one whose record was resolved, only reports.
-        if (!InFlight || InFlight->first != sequence || !Desired.PendingMutation) {
+        if (!InFlight || InFlight->first != sequence || !Desired.PendingMutation
+            || Desired.PendingMutation->ExpectedGeneration != plan.ExpectedGeneration
+            || Desired.PendingMutation->Update != plan.Update) {
             return;
         }
         InFlight.reset();
@@ -621,31 +1033,355 @@ private:
             LastSuccess = Desired.PendingMutation;
             Persist(ApplyOutcome(Desired, outcome));
             if (!Desired.PendingMutation) {
+                MayApplyElsewhere = false;
                 ResetResends();
             }
         } else if (outcome == EMutationOutcome::NotAppliedHere) {
             // Not applied before distconf: resend the identical update elsewhere.
             NotAppliedEndpoints.insert(plan.Endpoint);
+        } else if (outcome == EMutationOutcome::Ambiguous) {
+            MayApplyElsewhere = true;
         } else if (outcome == EMutationOutcome::Rejected) {
             YDB_LOG_ERROR_CTX_COMP(*NActors::TlsActivationContext, SkipperLogComponent, "Mutation rejected",
                 {"event", "mutation_rejected"}, {"category", "sdk"}, {"endpoint", plan.Endpoint},
                 {"status", result.Rpc.Status}, {"issues", result.Rpc.Issues});
-            RejectedGeneration = plan.ExpectedGeneration;
-            // A rejection resolves only this invocation; the durable overlay
-            // still constrains earlier attempts and decisions after restart.
+            if (Desired.PendingMutation->Kind == EOperationKind::Failover) {
+                RejectedGeneration = plan.ExpectedGeneration;
+            } else {
+                LifecycleRejectedGeneration = plan.ExpectedGeneration;
+            }
+            // A rejection resolves only this invocation. Retain the durable
+            // overlay across restart because earlier attempts may still commit.
         }
     }
 
+    bool HasInFlightAttempt() const {
+        return std::any_of(Outstanding.begin(), Outstanding.end(), [](const auto& entry) {
+            return entry.first.second == EYdbMethod::Update;
+        });
+    }
+
+    TDecision Available(EOperationKind action, const TString& target) const {
+        auto refuse = [](TString reason) {
+            TDecision result;
+            result.Kind = EDecisionKind::Blocked;
+            result.Reason = std::move(reason);
+            return result;
+        };
+        if (IsStopping()) {
+            return refuse("CONTROLLER_UNAVAILABLE");
+        }
+        if (Desired.Mode != EMode::Manual) {
+            return refuse("MODE_NOT_MANUAL");
+        }
+        if (Dirty) {
+            return refuse("STATE_WRITE_FAILED");
+        }
+        if (HasInFlightAttempt()) {
+            return refuse("ATTEMPT_IN_FLIGHT");
+        }
+        if (Selection.View && (RejectedGeneration == Selection.View->Generation
+            || (action != EOperationKind::Failover && LifecycleRejectedGeneration == Selection.View->Generation)))
+        {
+            return refuse("REJECTED_AT_GENERATION");
+        }
+        if (action == EOperationKind::Failover) {
+            return Decision;
+        }
+        return PlanLifecycle(action, target, Selection, Health, Confirmations, Decision,
+            Desired.PendingMutation, CurrentEndpoints, NotAppliedEndpoints);
+    }
+
+    TPileActionMap BuildActionMap() const {
+        TPileActionMap actions;
+        if (Selection.View) {
+            for (const auto& [name, state] : Selection.View->Piles) {
+                (void)state;
+                for (const auto kind : {EOperationKind::Failover, EOperationKind::Switchover, EOperationKind::TakeOffline, EOperationKind::Rejoin}) {
+                    actions[name][kind] = Available(kind, name);
+                }
+            }
+        }
+        return actions;
+    }
+
+    void RefreshRevision(const TPileActionMap& actions) {
+        NJson::TJsonValue signature(NJson::JSON_MAP);
+        signature["mode"] = ToString(Desired.Mode);
+        signature["mode_revision"] = ::ToString(ModeRevision);
+        signature["decision"] = ToString(Decision.Kind) + ":" + Decision.Reason;
+        signature["plan"] = Decision.Plan ? PlanJson(*Decision.Plan) : NJson::TJsonValue();
+        signature["dirty"] = Dirty;
+        signature["inflight"] = HasInFlightAttempt();
+        signature["uncertain"] = MayApplyElsewhere;
+        signature["stopping"] = Stopping;
+        signature["latch"] = RejectedGeneration ? ::ToString(*RejectedGeneration) : TString();
+        signature["lifecycle_latch"] = LifecycleRejectedGeneration ? ::ToString(*LifecycleRejectedGeneration) : TString();
+        signature["pending"] = Desired.PendingMutation ? UpdateJson(Desired.PendingMutation->Update) : NJson::TJsonValue();
+        if (Selection.View) {
+            signature["generation"] = ::ToString(Selection.View->Generation);
+            signature["states"] = UpdateJson(Selection.View->Piles);
+            signature["conversion"] = Selection.View->ConversionInProgress;
+            if (Selection.View->Pending) {
+                signature["pile_operation"] = Selection.View->Pending->Kind;
+                signature["pile_operation_target"] = Selection.View->Pending->Pile ? NJson::TJsonValue(*Selection.View->Pending->Pile) : NJson::TJsonValue();
+            }
+            for (const auto& [name, pileActions] : actions) {
+                for (const auto& [kind, decision] : pileActions) {
+                    if (kind == EOperationKind::Failover) {
+                        continue; // the common failover decision is already in the signature
+                    }
+                    signature["actions"][name][ToString(kind)]["reason"] = decision.Reason;
+                    signature["actions"][name][ToString(kind)]["plan"] = decision.Plan ? PlanJson(*decision.Plan) : NJson::TJsonValue();
+                }
+            }
+        }
+        for (const auto& [name, verdict] : Health.Piles) {
+            signature["health"][name] = ToString(verdict.Verdict);
+        }
+        for (const auto& [name, participation] : Health.Participation) {
+            signature["participation"][name] = participation.Value ? NJson::TJsonValue(*participation.Value) : NJson::TJsonValue();
+        }
+        const auto bytes = Compact(signature);
+        if (bytes != SemanticSignature) {
+            SemanticSignature = bytes;
+            ++SemanticRevision;
+        }
+        SnapshotRevision = BootId + ":snapshot:" + ::ToString(SemanticRevision);
+    }
+
+    TCommandResult Error(unsigned status, const TString& code, const TString& reason = {}) const {
+        TCommandResult result;
+        result.Status = status;
+        result.Body["error"] = code;
+        result.Body["reason"] = reason.empty() ? code : reason;
+        return result;
+    }
+
+    TCommandResult ChangeMode(const TControllerCommand& command, TMonotonic now) {
+        if (command.ExpectedBootId != BootId || command.ExpectedModeRevision != ModeRevision) {
+            return Error(409, "MODE_REVISION_CHANGED");
+        }
+        ++ModeRevision; // matching requests consume the token, even on refusal or no-op
+        if (command.Mode == EMode::Auto) {
+            if (command.SnapshotRevision != SnapshotRevision) {
+                return Error(409, "SNAPSHOT_CHANGED");
+            }
+            if (Desired.PendingMutation && Desired.PendingMutation->Kind != EOperationKind::Failover) {
+                return Error(409, "PENDING_MUTATION", "Auto cannot retry lifecycle work");
+            }
+        }
+        auto next = Desired;
+        next.Mode = command.Mode;
+        const auto previousMode = Desired.Mode;
+        if (!Persist(next)) {
+            const auto error = StateWriteError;
+            // Observe takes effect immediately even when the old file survives.
+            // A failed activation keeps the previous in-memory mode unless the
+            // rename installed it. The old file may still say Auto after Off.
+            if (command.Mode != EMode::Observe && !Options.StateFile->WasLastWriteRenamed()) {
+                Desired.Mode = previousMode;
+            }
+            Evaluate(now, false);
+            if (Dirty || Desired.Mode != command.Mode) {
+                return Error(503, "STATE_WRITE_FAILED", StateWriteError.empty() ? error : StateWriteError);
+            }
+        }
+        NJson::TJsonValue event(NJson::JSON_MAP);
+        event["from"] = ToString(previousMode);
+        event["mode"] = ToString(Desired.Mode);
+        Options.Diagnostics->History("mode", std::move(event), NActors::TActivationContext::Now());
+        Evaluate(now, true);
+        TCommandResult result;
+        result.Body["mode"] = ToString(Desired.Mode);
+        result.Body["mode_revision"] = ::ToString(ModeRevision);
+        result.Body["may_still_complete"] = Desired.PendingMutation.has_value();
+        return result;
+    }
+
+    TCommandResult CreateReview(const TControllerCommand& command, TMonotonic now) {
+        if (command.Action != EOperationKind::Failover && !command.Target) {
+            return Error(400, "TARGET_REQUIRED");
+        }
+        if (command.SnapshotRevision != SnapshotRevision) {
+            return Error(409, "SNAPSHOT_CHANGED");
+        }
+        const auto decision = Available(command.Action, command.Target.value_or(TString()));
+        if (decision.Kind != EDecisionKind::Ready || !decision.Plan) {
+            const auto code = decision.Reason == "MODE_NOT_MANUAL" || decision.Reason == "ATTEMPT_IN_FLIGHT"
+                || decision.Reason == "REJECTED_AT_GENERATION" ? decision.Reason : TString("PLAN_CHANGED");
+            return Error(Dirty ? 503 : 409, Dirty ? TString("STATE_WRITE_FAILED")
+                : decision.Blocker == EBlockerReason::PendingMutation ? TString("PENDING_MUTATION") : code, decision.Reason);
+        }
+        const TString id = BootId + ":plan:" + ::ToString(++NextPlan);
+        Reviews.emplace(id, TReview{command, *decision.Plan, ModeRevision, now + TDuration::Seconds(120)});
+        ReviewOrder.push_back(id);
+        while (ReviewOrder.size() > 256) {
+            Reviews.erase(ReviewOrder.front());
+            ReviewOrder.pop_front();
+        }
+        TCommandResult result;
+        result.Body["plan"] = PlanJson(*decision.Plan);
+        result.Body["plan_id"] = id;
+        result.Body["action"] = ToString(command.Action);
+        result.Body["target_pile"] = command.Target ? NJson::TJsonValue(*command.Target) : NJson::TJsonValue();
+        result.Body["cluster_id"] = Options.Config.ClusterId;
+        result.Body["mode_revision"] = ::ToString(ModeRevision);
+        result.Body["expires_at"] = (NActors::TActivationContext::Now() + TDuration::Seconds(120)).ToString();
+        result.Body["reason"] = decision.Reason;
+        result.Body["before"] = UpdateJson(Selection.View->Piles);
+        auto after = Selection.View->Piles;
+        for (const auto& [pile, state] : decision.Plan->Update) {
+            after[pile] = state;
+        }
+        result.Body["after"] = UpdateJson(after);
+        std::optional<TString> effectivePrimary;
+        if (command.Action == EOperationKind::Switchover) {
+            effectivePrimary = command.Target;
+        } else {
+            for (const auto& [pile, state] : after) {
+                if (state == EPileState::Primary) {
+                    effectivePrimary = pile;
+                }
+            }
+        }
+        NJson::TJsonValue alternates(NJson::JSON_ARRAY);
+        for (const auto& [pile, state] : after) {
+            if (IsSynchronized(state) && (!effectivePrimary || pile != *effectivePrimary)) {
+                alternates.AppendValue(pile);
+            }
+        }
+        result.Body["alternate_synchronized_piles"] = static_cast<ui64>(alternates.GetArray().size());
+        result.Body["alternate_synchronized_pile_names"] = std::move(alternates);
+        result.Body["cli_command"] = decision.CliCommand;
+        result.Body["pending_mutation"] = Desired.PendingMutation ? PlanJson(TPlan{Desired.PendingMutation->ExpectedGeneration,
+            Desired.PendingMutation->Update, decision.Plan->Endpoint}) : NJson::TJsonValue();
+        result.Body["evidence"] = NJson::TJsonValue(NJson::JSON_MAP);
+        for (const auto& [name, verdict] : Health.Piles) {
+            result.Body["evidence"][name]["verdict"] = ToString(verdict.Verdict);
+            for (const auto& reason : verdict.Reasons) {
+                if (!result.Body["evidence"][name]["reasons"].IsArray()) {
+                    result.Body["evidence"][name]["reasons"].SetType(NJson::JSON_ARRAY);
+                }
+                result.Body["evidence"][name]["reasons"].AppendValue(reason);
+            }
+        }
+        return result;
+    }
+
+    TCommandResult ExecuteReview(const TControllerCommand& command, TMonotonic now) {
+        const auto found = Reviews.find(command.PlanId);
+        if (found == Reviews.end()) {
+            return Error(409, command.PlanId.StartsWith(BootId + ":plan:") ? "PLAN_CONSUMED" : "PLAN_UNKNOWN");
+        }
+        const auto review = found->second;
+        Reviews.erase(found); // refusal also consumes the review
+        const auto decision = Available(review.Command.Action, review.Command.Target.value_or(TString()));
+        if (Desired.Mode != EMode::Manual) {
+            return Error(409, "MODE_NOT_MANUAL");
+        }
+        if (HasInFlightAttempt()) {
+            return Error(409, "ATTEMPT_IN_FLIGHT");
+        }
+        if (Dirty) {
+            return Error(503, "STATE_WRITE_FAILED", StateWriteError);
+        }
+        if (decision.Reason == "REJECTED_AT_GENERATION") {
+            return Error(409, "REJECTED_AT_GENERATION");
+        }
+        if (now >= review.ExpiresAt || ModeRevision != review.ModeRevision
+            || SnapshotRevision != review.Command.SnapshotRevision || !decision.Plan
+            || *decision.Plan != review.Plan || decision.Kind != EDecisionKind::Ready)
+        {
+            return Error(409, "PLAN_CHANGED", decision.Reason);
+        }
+        if (!Dispatch(review.Plan, review.Command.Action, EDispatchOrigin::Manual)) {
+            if (IsStopping()) {
+                return Error(503, "CONTROLLER_UNAVAILABLE");
+            }
+            if (Decision.Reason == "EVIDENCE_EXPIRED") {
+                return Error(409, "EVIDENCE_EXPIRED");
+            }
+            return Error(503, "STATE_WRITE_FAILED", StateWriteError);
+        }
+        TCommandResult result;
+        result.Status = 202;
+        result.Body["operation_id"] = BootId + ":operation:" + ::ToString(LastMutation->Id);
+        return result;
+    }
+
+    void HandleCommand(TEvSkipper::TEvCommand::TPtr& ev) {
+        const auto& command = ev->Get()->Command;
+        TCommandResult result;
+        const auto receipt = Receipts.find(command.RequestId);
+        const bool recorded = command.Kind != ECommandKind::CreatePlan;
+        if (IsStopping()) {
+            result = Error(503, "CONTROLLER_UNAVAILABLE");
+        } else if (recorded && receipt != Receipts.end()) {
+            result = receipt->second.first == command ? receipt->second.second : Error(409, "REQUEST_ID_CONFLICT");
+        } else {
+            const auto now = NActors::TActivationContext::Monotonic();
+            // No Auto dispatch here: Off must be processed before any subsequent sends.
+            Evaluate(now, false);
+            RefreshRevision(BuildActionMap());
+            if (command.Kind == ECommandKind::Mode) {
+                result = ChangeMode(command, now);
+            } else if (command.Kind == ECommandKind::CreatePlan) {
+                result = CreateReview(command, now);
+            } else {
+                result = ExecuteReview(command, now);
+            }
+            if (recorded) {
+                Receipts.emplace(command.RequestId, std::make_pair(command, result));
+                ReceiptOrder.push_back(command.RequestId);
+                while (ReceiptOrder.size() > 1024) {
+                    Receipts.erase(ReceiptOrder.front());
+                    ReceiptOrder.pop_front();
+                }
+            }
+            Publish(now);
+        }
+        Send(ev->Sender, new TEvSkipper::TEvCommandResult(std::move(result)), 0, ev->Cookie);
+    }
+
+    void HandleReady(TEvSkipper::TEvReady::TPtr& ev) {
+        Send(ev->Sender, new TEvSkipper::TEvReadyAck(), 0, ev->Cookie);
+    }
+
     void Publish(TMonotonic now) {
+        auto actions = BuildActionMap();
+        RefreshRevision(actions);
         auto snapshot = std::make_shared<TSkipperSnapshot>();
         snapshot->ClusterId = Options.Config.ClusterId;
-        snapshot->Mode = Options.Config.Mode;
+        snapshot->Mode = Desired.Mode;
+        snapshot->ControllerBootId = BootId;
+        snapshot->ModeRevision = ModeRevision;
+        snapshot->SnapshotRevision = SnapshotRevision;
+        snapshot->ControllerReady = !IsStopping();
+        snapshot->Stopping = IsStopping();
+        snapshot->EvidenceTtl = Options.Config.Timing.EvidenceTtl;
+        snapshot->LastObservedView = PreviousView;
+        snapshot->MayApplyElsewhere = MayApplyElsewhere;
+        snapshot->PendingAttempts = PendingAttempts;
+        snapshot->PendingFirstSendUtc = PendingFirstSendUtc;
+        snapshot->PendingLastSendUtc = PendingLastSendUtc;
+        if (Desired.Mode == EMode::Auto && Desired.PendingMutation && LastOutcome == EMutationOutcome::Ambiguous && LastSendAt) {
+            const ui64 factor = ui64{1} << std::min<ui64>(AmbiguousResends, 20);
+            snapshot->RetryAt = *LastSendAt + std::min(Options.Config.Timing.MutationClientTimeout * factor, TDuration::Minutes(5));
+        }
+        snapshot->RejectedGeneration = RejectedGeneration;
+        snapshot->LifecycleRejectedGeneration = LifecycleRejectedGeneration;
+        snapshot->BootAt = BootAt;
+        snapshot->BootUtc = BootUtc;
+        snapshot->Diagnostics = Options.Diagnostics;
         snapshot->LastTickAt = now;
         snapshot->Selection = Selection;
         snapshot->GenerationHighWater = Desired.GenerationHighWater;
         for (const auto& [uri, endpoint] : Endpoints) {
             (void)uri;
-            snapshot->Endpoints.push_back(endpoint.Snapshot);
+            if (!endpoint.Retiring && !endpoint.Snapshot.Ignored) {
+                snapshot->Endpoints.push_back(endpoint.Snapshot);
+            }
         }
         for (const auto& [pile, verdict] : Health.Piles) {
             auto& item = snapshot->Piles[pile];
@@ -660,6 +1396,17 @@ private:
             }
             item.Confirmed = Confirmations.IsConfirmed(pile, Options.Config.Timing.Confirm);
         }
+        for (const auto& [name, pile] : snapshot->Piles) {
+            if (pile.Verdict.Verdict != EPileVerdict::Unknown) {
+                LastKnownPiles[name] = pile;
+            }
+        }
+        if (Selection.View) {
+            std::erase_if(LastKnownPiles, [&](const auto& entry) { return !Selection.View->Piles.contains(entry.first); });
+        }
+        snapshot->LastKnownPiles = LastKnownPiles;
+        snapshot->Participation = Health.Participation;
+        snapshot->Actions = std::move(actions);
         snapshot->Decision = Decision;
         snapshot->PersistentState = Options.StateFile->GetState();
         snapshot->StateWriteError = StateWriteError;
@@ -679,22 +1426,59 @@ private:
         hFunc(TEvSkipper::TEvStateReply, HandleState);
         hFunc(TEvSkipper::TEvSelfCheckReply, HandleHealth);
         hFunc(TEvSkipper::TEvUpdateReply, HandleUpdate);
+        hFunc(TEvSkipper::TEvInventoryReply, HandleInventory);
         hFunc(TEvSkipper::TEvStop, HandleStop);
+        hFunc(TEvSkipper::TEvCommand, HandleCommand);
+        hFunc(TEvSkipper::TEvReady, HandleReady);
     )
 
+    struct TReview {
+        TControllerCommand Command;
+        TPlan Plan;
+        ui64 ModeRevision = 0;
+        TMonotonic ExpiresAt;
+    };
+
     TSkipperOptions Options;
+    TString BootId;
+    TMonotonic BootAt;
+    TInstant BootUtc;
+    ui64 ModeRevision = 1;
+    ui64 SemanticRevision = 0;
+    ui64 NextPlan = 0;
+    TString SnapshotRevision;
+    TString SemanticSignature;
+    bool MayApplyElsewhere = false;
+    ui64 PendingAttempts = 0;
+    std::optional<TInstant> PendingFirstSendUtc;
+    std::optional<TInstant> PendingLastSendUtc;
+    std::optional<ui64> LifecycleRejectedGeneration;
+    std::vector<TEndpointState> CurrentEndpoints;
+    std::map<TString, TPileSnapshot> LastKnownPiles;
+    std::map<TString, TReview> Reviews;
+    std::deque<TString> ReviewOrder;
+    std::map<TString, std::pair<TControllerCommand, TCommandResult>> Receipts;
+    std::deque<TString> ReceiptOrder;
     TPersistentState Desired;
     bool Dirty = false;
     TString StateWriteError;
     bool Stopping = false;
     TMonotonic NextStatePoll;
     TMonotonic NextHealthRound;
+    TMonotonic NextInventory;
+    size_t InventoryRotation = 0;
+    std::map<TString, size_t> DiscoveryRotation;
+    bool InventoryInFlight = false;
+    std::optional<TString> InventorySource;
+    std::vector<TDiscoveredEndpoint> InventoryCandidates;
+    size_t InventoryDiscoveryRotation = 0;
+    TMonotonic NextEndpointRefresh;
     ui64 NextSequence = 0;
     std::map<TString, TEndpointData> Endpoints;
     std::map<TString, size_t> HealthRotation;
     std::map<TString, size_t> ConnectivityRotation;
     std::set<TString> WarnedAbsent;
-    std::set<TSlot> Outstanding;
+    std::map<TSlot, ui64> Outstanding;
     TViewSelection Selection;
     std::optional<TClusterView> PreviousView;
     std::optional<ui64> ActiveGeneration;

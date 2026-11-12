@@ -9,6 +9,9 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
+#include <contrib/libs/zstd/include/zstd.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -98,6 +101,83 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         CheckTableReplica(tableDesc, replicatedDesc, mode, consistency);
         UNIT_ASSERT(!replicatedDesc.GetReplicationConfig().HasImportState());
+    }
+
+    // The destination of a table with a serial column has to get the sequence as well: the column
+    // default references it, and the sequence position is then advanced by replication.
+    Y_UNIT_TEST(CreateTableWithSerialColumn) {
+        TEnv env;
+
+        NKikimrSchemeOp::TIndexedTableCreationConfig config;
+        auto& tableDesc = *config.MutableTableDescription();
+        tableDesc.SetName("Table");
+        {
+            auto* column = tableDesc.AddColumns();
+            column->SetName("id");
+            column->SetType("Int64");
+            column->SetDefaultFromSequence("_serial_column_id");
+        }
+        {
+            auto* column = tableDesc.AddColumns();
+            column->SetName("value");
+            column->SetType("Utf8");
+        }
+        tableDesc.AddKeyColumnNames("id");
+        {
+            auto* sequence = config.AddSequenceDescription();
+            sequence->SetName("_serial_column_id");
+            sequence->SetMinValue(1);
+            sequence->SetDataType("Int64");
+            sequence->MutableSetVal()->SetNextValue(42);
+            sequence->MutableSetVal()->SetNextUsed(true);
+        }
+
+        env.CreateIndexedTable("/Root", config);
+        UNIT_ASSERT(env.GetDescription("/Root/Table").GetPathDescription().HasTable());
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Table_replica",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
+
+        auto desc = env.GetDescription("/Root/Table_replica");
+        const auto& replicatedDesc = desc.GetPathDescription().GetTable();
+
+        const auto* idColumn = FindIfPtr(replicatedDesc.GetColumns(), [](const auto& column) {
+            return column.GetName() == "id";
+        });
+        UNIT_ASSERT(idColumn);
+        UNIT_ASSERT_VALUES_EQUAL(idColumn->GetDefaultFromSequence(), "_serial_column_id");
+
+        UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.SequencesSize(), 1);
+        const auto& sequence = replicatedDesc.GetSequences(0);
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetName(), "_serial_column_id");
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetDataType(), "Int64");
+
+        // The sequence position is only returned by a table describe asked for it, the scheme
+        // description above never has it.
+        env.RunCall([&] {
+            NYdb::NTable::TTableClient client(env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.DescribeTable("/Root/Table_replica",
+                NYdb::NTable::TDescribeTableSettings().WithSetVal(true)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            const auto columns = result.GetTableDescription().GetTableColumns();
+            const auto* column = FindIfPtr(columns, [](const auto& column) {
+                return column.Name == "id";
+            });
+            UNIT_ASSERT(column);
+            UNIT_ASSERT(column->SequenceDescription);
+            UNIT_ASSERT(column->SequenceDescription->SetVal);
+            UNIT_ASSERT_VALUES_EQUAL(column->SequenceDescription->SetVal->NextValue, 42);
+            UNIT_ASSERT(column->SequenceDescription->SetVal->NextUsed);
+        });
     }
 
     Y_UNIT_TEST(Basic) {
@@ -778,9 +858,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType, bool enableAsyncIndexReplication = false) {
         TFeatureFlags featureFlags;
         featureFlags.SetEnableChangefeedsOnIndexTables(true);
-        if (enableAsyncIndexReplication) {
-            featureFlags.SetEnableAsyncIndexReplication(true);
-        }
+        featureFlags.SetEnableAsyncIndexReplication(enableAsyncIndexReplication);
         TEnv env(featureFlags);
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
@@ -983,8 +1061,13 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     template <typename T>
-    void ExistingDstFamily(const TString& error, T&& modify) {
-        TEnv env;
+    void ExistingDstFamily(const TString& error, T&& modify,
+            NKikimrSchemeOp::EColumnCodec codec = NKikimrSchemeOp::ColumnCodecLZ4,
+            TMaybe<i32> compressionLevel = Nothing())
+    {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableRowTableZstdCompression(codec == NKikimrSchemeOp::ColumnCodecZSTD);
+        TEnv env(flags);
         auto source = MakeTableDescription({
             .Name = "Src",
             .KeyColumns = {"key"},
@@ -997,7 +1080,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         source->MutableColumns(1)->SetFamilyName("archive");
         auto* family = source->MutablePartitionConfig()->AddColumnFamilies();
         family->SetName("archive");
-        family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+        family->SetColumnCodec(codec);
+        if (compressionLevel) {
+            family->SetColumnCodecLevel(*compressionLevel);
+        }
         auto* data = family->MutableStorageConfig()->MutableData();
         data->SetPreferredPoolKind("test");
         data->SetAllowOtherKinds(false);
@@ -1015,8 +1101,39 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
             "/Root/Src", "/Root/Dst"));
         const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusSchemeError);
-        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status,
+            error ? NKikimrScheme::StatusSchemeError : NKikimrScheme::StatusSuccess, result->Get()->Error);
+        if (error) {
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, error);
+        }
+    }
+
+    Y_UNIT_TEST(ZstdColumnFamilyCompressionLevelMismatch) {
+        for (const i32 level : {0, 7, ZSTD_maxCLevel()}) {
+            ExistingDstFamily("Column family compression level mismatch", [](auto& destination) {
+                destination.MutablePartitionConfig()->MutableColumnFamilies(0)->ClearColumnCodecLevel();
+            }, NKikimrSchemeOp::ColumnCodecZSTD, level);
+        }
+    }
+
+    Y_UNIT_TEST(ZstdColumnFamilyDefaultCompressionLevel) {
+        for (const bool explicitSourceLevel : {false, true}) {
+            ExistingDstFamily({}, [explicitSourceLevel](auto& destination) {
+                auto* family = destination.MutablePartitionConfig()->MutableColumnFamilies(0);
+                if (explicitSourceLevel) {
+                    family->ClearColumnCodecLevel();
+                } else {
+                    family->SetColumnCodecLevel(1);
+                }
+            }, NKikimrSchemeOp::ColumnCodecZSTD,
+                explicitSourceLevel ? TMaybe<i32>(1) : Nothing());
+        }
+    }
+
+    Y_UNIT_TEST(ZstdColumnFamilyCompressionLevelMatches) {
+        for (const i32 level : {0, 7, ZSTD_maxCLevel()}) {
+            ExistingDstFamily({}, [](auto&) {}, NKikimrSchemeOp::ColumnCodecZSTD, level);
+        }
     }
 
     Y_UNIT_TEST(ColumnFamilyCodecMismatch) {

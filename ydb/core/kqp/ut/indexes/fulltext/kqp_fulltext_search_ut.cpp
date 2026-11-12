@@ -3418,8 +3418,20 @@ Y_UNIT_TEST(FullTextLegacyMainTableCoverage) {
     }
 }
 
+// Feature flags for a prefixed fulltext index whose doc-id is an auto-provisioned __ydb_row_id.
+static TKikimrRunner KikimrPrefixRowId(bool compact = false) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    featureFlags.SetEnableUniqConstraint(true);
+    featureFlags.SetEnableAddUniqueIndex(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
+    return Kikimr(std::move(featureFlags));
+}
+
 Y_UNIT_TEST(PrefixedNgramScanFallback) {
-    auto kikimr = KikimrPrefix(true);
+    auto kikimr = KikimrPrefixRowId(true);
     auto db = kikimr.GetQueryClient();
     for (const TString primaryKey : {"Key", "Data, Key"}) {
         auto create = db.ExecuteQuery(std::format(R"sql(
@@ -5053,18 +5065,6 @@ void UpdateFulltextPrefixFlag(TKikimrRunner& kikimr, bool enabled) {
         UNIT_ASSERT_C(response, "KQP service must acknowledge fulltext-prefix flag update");
     }
 
-}
-
-// Feature flags for a prefixed fulltext index whose doc-id is an auto-provisioned __ydb_row_id.
-static TKikimrRunner KikimrPrefixRowId(bool compact = false) {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableFulltextIndexPrefix(true);
-    featureFlags.SetEnableUniqConstraint(true);
-    featureFlags.SetEnableAddUniqueIndex(true);
-    featureFlags.SetEnableFulltextIndexRowId(true);
-    featureFlags.SetEnableCompactFulltextIndex(compact);
-    return Kikimr(std::move(featureFlags));
 }
 
 Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixed, KeyPart) {

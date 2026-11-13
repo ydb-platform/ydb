@@ -1,3 +1,4 @@
+* Added `ydb workload scheme init|run` to create and alter row tables and topics using YAML configuration, with optional `initial_count` preparation, mixed CREATE/ALTER traffic in `run`, separate concurrency limits and configurable ALTER batch sizes.
 * Fixed a crash when searching documentation in interactive AI mode.
 * `export s3`, `export nfs` and `export yt` now honor `__omit_backup = "true"`; `tools dump` honors it for tables and changefeeds. S3 export/import now skip async replication changefeeds.
 * Added `ydb admin cluster bridge rollback` to roll a converted cluster back to ordinary mode. `ydb admin cluster bridge list piles` shows its progress.

@@ -1,15 +1,28 @@
 #include "topic_reader.h"
 #include "worker.h"
 
+#include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/write_topic.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/size_literals.h>
+#include <util/generic/scope.h>
+#include <util/string/builder.h>
+
+#include <string_view>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
@@ -911,6 +924,279 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             runtime.Send(response.Release());
         }
         s.AssertFirstMessageAndStatusDelivered(reader);
+    }
+
+    enum class EStatusOrderingMessage {
+        MultipartInOneBlob,
+        MultipartAcrossBlobs,
+        KafkaSingleMessageBatch,
+        KafkaMultiMessageBatch,
+    };
+
+    void AssertMultipartLayout(TEnv<>& env, const TString& topicPath, bool acrossBlobs) {
+        const auto description = env.GetDescription(topicPath);
+        UNIT_ASSERT_VALUES_EQUAL(description.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        const auto& partitions = description.GetPathDescription().GetPersQueueGroup().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+        UNIT_ASSERT(partitions[0].GetTabletId());
+
+        auto& runtime = env.GetRuntime();
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto keys = NPQ::GetTabletKeys(runtime, partitions[0].GetTabletId(), edge);
+        TVector<NPQ::TKey> dataKeys;
+        for (const auto& key : keys) {
+            if (!key.empty() && key.front() == NPQ::TKeyPrefix::TypeData) {
+                dataKeys.push_back(NPQ::TKey::FromString(key));
+            }
+        }
+        Sort(dataKeys);
+        UNIT_ASSERT_C(!dataKeys.empty(), "No persisted message blobs");
+        if (acrossBlobs) {
+            UNIT_ASSERT_C(dataKeys.size() > 1, "Multipart message must span multiple blobs");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(dataKeys.size(), 1, "All message parts must share one blob");
+        }
+
+        ui32 nextPart = 0;
+        ui32 completedMessages = 0;
+        for (const auto& key : dataKeys) {
+            UNIT_ASSERT_VALUES_EQUAL(key.GetOffset(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(key.GetPartNo(), nextPart);
+            nextPart += key.GetInternalPartsCount() + key.GetCount();
+            completedMessages += key.GetCount();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(completedMessages, 1);
+        UNIT_ASSERT_C(nextPart > 1, "The native message was not split into parts");
+    }
+
+    void CheckInFlightStatusOrdering(EStatusOrderingMessage messageType, bool decompress = true) {
+        TEnv<> env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        runtime.SetFastSimulatedTime(false);
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableTopicMessagesBatching(true);
+        flags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+        flags.SetTransferInternalDataDecompression(false);
+
+        const TString topicPath = "/Root/status-ordering";
+        const TString consumerName = "consumer";
+        const auto create = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(env.GetYdbProxy(),
+            new TEvYdbProxy::TEvCreateTopicRequest(topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .RetentionPeriod(TDuration::Days(1))
+                .BeginAddConsumer().ConsumerName(consumerName).EndAddConsumer()));
+        UNIT_ASSERT_C(create->Get()->Result.IsSuccess(), create->Get()->Result.GetIssues().ToString());
+
+        const bool kafka = messageType == EStatusOrderingMessage::KafkaSingleMessageBatch
+            || messageType == EStatusOrderingMessage::KafkaMultiMessageBatch;
+        const ui32 messageCount = messageType == EStatusOrderingMessage::KafkaMultiMessageBatch ? 3 : 1;
+        TVector<TString> expected;
+        if (kafka) {
+            constexpr size_t messageSize = 32;
+            expected.assign(messageCount, TString(messageSize, 'k'));
+            if (messageCount == 1) {
+                // SDK batching deliberately sends a single record as RAW. Submit
+                // an encoded batch to exercise the single-record Kafka format.
+                NKafka::TKafkaRecordBatch batch;
+                batch.Magic = 2;
+                batch.Attributes = static_cast<i16>(NKafka::ECompressionType::NONE);
+                batch.LastOffsetDelta = 0;
+                batch.BaseTimestamp = 1000;
+                batch.MaxTimestamp = 1000;
+                batch.ProducerId = 0;
+                batch.ProducerEpoch = 0;
+                batch.BaseSequence = 1;
+                NKafka::TKafkaRecord record;
+                record.TimestampDelta = 0;
+                record.OffsetDelta = 0;
+                record.SetValue(TString(expected.front()));
+                record.Length = record.Size(2)
+                    - NKafka::NPrivate::SizeOfVarint<NKafka::TKafkaRecord::LengthMeta::Type>(0);
+                batch.Records.push_back(std::move(record));
+                const TString payload = NKafka::WriteKafkaRecordBatch(batch);
+                UNIT_ASSERT(env.RunCall([&] {
+                    auto message = NYdb::NTopic::TWriteMessage::CompressedMessage(
+                        std::string_view(payload.data(), payload.size()), NYdb::NTopic::ECodec::KAFKA_BATCH, messageSize);
+                    message.SeqNo(1);
+                    message.CreateTimestamp(TInstant::MilliSeconds(1000));
+                    return WriteTopic(env, topicPath, std::move(message), NYdb::NTopic::ECodec::RAW);
+                }));
+            } else {
+                NYdb::NTopic::TTopicClient client(env.GetDriver(), NYdb::NTopic::TTopicClientSettings()
+                    .DiscoveryEndpoint(env.GetEndpoint()).Database(env.GetDatabase()));
+                env.RunCall([&] {
+                    NPQ::NTest::WriteKafkaBatchMessages(client, topicPath, "status-producer", messageSize,
+                        messageCount, {{1, messageCount, 'k'}});
+                });
+            }
+        } else {
+            const bool acrossBlobs = messageType == EStatusOrderingMessage::MultipartAcrossBlobs;
+            // Exceed the configured blob size to force a physical blob boundary.
+            // RAW prevents the payload from shrinking below the multipart threshold.
+            const size_t messageSize = acrossBlobs
+                ? runtime.GetAppData().PQConfig.GetMaxBlobSize() + 1_MB
+                : 600_KB;
+            TString payload(messageSize, '\0');
+            for (size_t i = 0; i < payload.size(); ++i) {
+                payload[i] = static_cast<char>('a' + (i / 1_KB) % 26);
+            }
+            expected.push_back(std::move(payload));
+            UNIT_ASSERT(env.RunCall([&] {
+                return WriteTopic(env, topicPath, expected.front(), NYdb::NTopic::ECodec::RAW);
+            }));
+            AssertMultipartLayout(env, topicPath, acrossBlobs);
+        }
+
+        TActorId sdkReader;
+        auto readerObserver = runtime.AddObserver<TEvYdbProxy::TEvCreateTopicReaderResponse>(
+            [&](TEvYdbProxy::TEvCreateTopicReaderResponse::TPtr& ev) {
+                sdkReader = ev->Get()->Result;
+            });
+        TVector<TAutoPtr<IEventHandle>> statusTimers;
+        auto timerObserver = runtime.AddObserver<TEvents::TEvWakeup>(
+            [&](TEvents::TEvWakeup::TPtr& ev) {
+                if (ev->Recipient == sdkReader) {
+                    statusTimers.emplace_back(ev.Release());
+                }
+            });
+        TVector<TAutoPtr<IEventHandle>> heldResponses;
+        auto readObserver = runtime.AddObserver<NGRpcProxy::V1::TEvPQProxy::TEvReadResponse>(
+            [&](NGRpcProxy::V1::TEvPQProxy::TEvReadResponse::TPtr& ev) {
+                if (ev->Get()->NextReadOffset == messageCount) {
+                    heldResponses.emplace_back(ev.Release());
+                }
+            });
+        ui64 serverStatusOffset = 0;
+        auto serverStatusObserver = runtime.AddObserver<NGRpcProxy::V1::TEvPQProxy::TEvPartitionStatus>(
+            [&](NGRpcProxy::V1::TEvPQProxy::TEvPartitionStatus::TPtr& ev) {
+                if (!ev->Get()->Init) {
+                    serverStatusOffset = ev->Get()->ReadOffset;
+                }
+            });
+
+        const auto settings = TEvYdbProxy::TTopicReaderSettings()
+            .AutoCommit(false).FailOnDataLoss(true).CheckStatusForDataLoss(true)
+            .Decompress(decompress).ConsumerName(consumerName)
+            .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path(topicPath).AppendPartitionIds(0));
+        const auto reader = CreateReader(env, settings);
+        const auto started = runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(env.GetSender(), TDuration::Seconds(30));
+        UNIT_ASSERT(started);
+        UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
+        UNIT_ASSERT_VALUES_EQUAL(started->Get()->CommittedOffset, 0);
+
+        // Hold the first timer until the server has read the entire message/batch.
+        // Otherwise a status with read_offset=0 could get stuck in the SDK before Poll.
+        TDispatchOptions readOptions;
+        readOptions.CustomFinalCondition = [&] { return !heldResponses.empty() && !statusTimers.empty(); };
+        runtime.DispatchEvents(readOptions, TDuration::Seconds(30));
+        UNIT_ASSERT(!heldResponses.empty());
+        UNIT_ASSERT_VALUES_EQUAL(statusTimers.size(), 1);
+
+        ui32 wireMessages = 0;
+        for (const auto& response : heldResponses) {
+            const auto& readResponse = response->Get<NGRpcProxy::V1::TEvPQProxy::TEvReadResponse>()->Response.read_response();
+            for (const auto& partition : readResponse.partition_data()) {
+                for (const auto& batch : partition.batches()) {
+                    UNIT_ASSERT_VALUES_EQUAL(batch.codec(), kafka ? Ydb::Topic::CODEC_KAFKA_BATCH : Ydb::Topic::CODEC_RAW);
+                    for (const auto& message : batch.message_data()) {
+                        ++wireMessages;
+                        if (kafka) {
+                            const auto header = NKafka::ReadKafkaBatchHeader(message.data());
+                            UNIT_ASSERT(header);
+                            UNIT_ASSERT_VALUES_EQUAL(header->RecordsCount, messageCount);
+                        }
+                    }
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(wireMessages, 1, "Expected one complete native message or Kafka batch on the wire");
+
+        ui64 deliveredOffset = 0;
+        bool statusReceived = false;
+        auto statusObserver = runtime.AddObserver<TEvYdbProxy::TEvTopicReaderStatus>(
+            [&](TEvYdbProxy::TEvTopicReaderStatus::TPtr& ev) {
+                if (ev->Recipient == reader) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(deliveredOffset, messageCount, "Status overtook valid data");
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.ReadOffset, messageCount);
+                    statusReceived = true;
+                }
+            });
+
+        // Keep a Poll pending so an incorrectly unbuffered status would reach the
+        // reader before the withheld data, reproducing the old server behaviour.
+        env.SendAsync(reader, new TEvWorker::TEvPoll());
+        timerObserver.Remove();
+        runtime.Send(statusTimers.front().Release());
+        statusTimers.clear();
+        TDispatchOptions statusOptions;
+        statusOptions.CustomFinalCondition = [&] { return serverStatusOffset == messageCount; };
+        runtime.DispatchEvents(statusOptions, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(serverStatusOffset, messageCount);
+        UNIT_ASSERT(!statusReceived);
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(env.GetSender().Hint(), env.GetSender().NodeId()).empty());
+
+        readObserver.Remove();
+        for (auto& response : heldResponses) {
+            runtime.Send(response.Release());
+        }
+        while (deliveredOffset < messageCount) {
+            TAutoPtr<IEventHandle> result;
+            runtime.GrabEdgeEvents<TEvWorker::TEvData, TEvWorker::TEvGone>(result, TDuration::Seconds(30));
+            UNIT_ASSERT_C(result, "Reader did not deliver valid data");
+            UNIT_ASSERT_VALUES_EQUAL(result->Sender, reader);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->GetTypeRewrite(), TEvWorker::EvData,
+                "Reader reported an error instead of delivering valid data");
+            const auto& records = result->Get<TEvWorker::TEvData>()->Records;
+            UNIT_ASSERT(!records.empty());
+            for (const auto& record : records) {
+                UNIT_ASSERT_VALUES_EQUAL(record.GetOffset(), deliveredOffset);
+                if (kafka && !decompress) {
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetCodec(), NYdb::NTopic::ECodec::KAFKA_BATCH);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetLogicalMessageCount(), messageCount);
+                    const auto batch = NKafka::ReadKafkaRecordBatch(record.GetData());
+                    UNIT_ASSERT_VALUES_EQUAL(batch.BaseOffset, 0);
+                    UNIT_ASSERT_VALUES_EQUAL(batch.Records.size(), expected.size());
+                    for (size_t i = 0; i < batch.Records.size(); ++i) {
+                        UNIT_ASSERT_VALUES_EQUAL(batch.Records[i].OffsetDelta, i);
+                        const auto& value = batch.Records[i].Value;
+                        UNIT_ASSERT(value);
+                        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(value->data(), value->size()), expected[i]);
+                    }
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetLogicalMessageCount(), 1);
+                    UNIT_ASSERT_C(deliveredOffset < expected.size(), "Unexpected extra message");
+                    UNIT_ASSERT_C(record.GetData() == expected[deliveredOffset], "Message payload was not fully preserved");
+                }
+                deliveredOffset += record.GetLogicalMessageCount();
+            }
+            UNIT_ASSERT(!statusReceived);
+            env.SendAsync(reader, new TEvWorker::TEvPoll());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(deliveredOffset, messageCount);
+
+        TDispatchOptions deliveredOptions;
+        deliveredOptions.CustomFinalCondition = [&] { return statusReceived; };
+        runtime.DispatchEvents(deliveredOptions, TDuration::Seconds(30));
+        UNIT_ASSERT(statusReceived);
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(env.GetSender().Hint(), env.GetSender().NodeId()).empty());
+
+        env.SendAsync(reader, new TEvents::TEvPoison());
+        runtime.DispatchEvents(TDispatchOptions{}, TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(MultipartInOneBlobBeforeStatusDoesNotReportDataLoss) {
+        CheckInFlightStatusOrdering(EStatusOrderingMessage::MultipartInOneBlob);
+    }
+
+    Y_UNIT_TEST(MultipartAcrossBlobsBeforeStatusDoesNotReportDataLoss) {
+        CheckInFlightStatusOrdering(EStatusOrderingMessage::MultipartAcrossBlobs);
+    }
+
+    Y_UNIT_TEST_TWIN(KafkaSingleMessageBatchBeforeStatusDoesNotReportDataLoss, Decompress) {
+        CheckInFlightStatusOrdering(EStatusOrderingMessage::KafkaSingleMessageBatch, Decompress);
+    }
+
+    Y_UNIT_TEST_TWIN(KafkaMultiMessageBatchBeforeStatusDoesNotReportDataLoss, Decompress) {
+        CheckInFlightStatusOrdering(EStatusOrderingMessage::KafkaMultiMessageBatch, Decompress);
     }
 }
 

@@ -453,4 +453,7 @@ message TFeatureFlags {
     // Enable only after the rollback version supports resuming these imports.
     optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
     optional bool EnableColumnshardCutHistorySending = 385 [default = false];
+    // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
+    // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
+    optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
 }

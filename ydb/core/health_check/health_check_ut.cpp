@@ -117,6 +117,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         return vdisk;
     }
 
+    // the way BS_CONTROLLER reports such VDisk when ReportPhantomsOnlyVDisksAsReady feature flag is set
+    TTestVSlotInfo PhantomOnlyVDiskReportedAsReady() {
+        TTestVSlotInfo vdisk{std::optional<NKikimrBlobStorage::EVDiskStatus>(NKikimrBlobStorage::READY)};
+        vdisk.PhantomOnly = true;
+        return vdisk;
+    }
+
     void ChangeDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size = 20000000, ui64 quota = 90000000) {
         auto record = (*ev)->Get()->MutableRecord();
         auto pool = record->mutable_pathdescription()->mutable_domaindescription()->add_storagepools();
@@ -1151,6 +1158,21 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             false, 0, false, true);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1, TLocationFilter().Pool("/Root:test"));
         CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::BLUE, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "HINT-PHANTOM-ONLY-VDISK", Ydb::Monitoring::StatusFlag::UNSPECIFIED, 0, TLocationFilter().Pool("/Root:test"));
+    }
+
+    Y_UNIT_TEST(PhantomOnlyVDiskReportedAsReadyIsGreenWithHint) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::FULL,
+            TVDisks{PhantomOnlyVDiskReportedAsReady()}, false, 0, true, true);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::BLUE, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "HINT-PHANTOM-ONLY-VDISK", Ydb::Monitoring::StatusFlag::UNSPECIFIED, 1, TLocationFilter().Pool("/Root:test"));
+    }
+
+    Y_UNIT_TEST(PhantomOnlyVDiskReportedAsReadyHintRequiresReturnHints) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::FULL,
+            TVDisks{PhantomOnlyVDiskReportedAsReady()}, false, 0, true);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::BLUE, 0, TLocationFilter().Pool("/Root:test"));
         CheckHcResultHasIssuesWithStatus(result, "HINT-PHANTOM-ONLY-VDISK", Ydb::Monitoring::StatusFlag::UNSPECIFIED, 0, TLocationFilter().Pool("/Root:test"));
     }
 

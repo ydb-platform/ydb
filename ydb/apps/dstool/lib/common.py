@@ -851,6 +851,8 @@ def create_bsc_request(args):
         request.AllowUnusableDisks = True
     if hasattr(args, 'ignore_degraded_group_check') and args.ignore_degraded_group_check:
         request.IgnoreDegradedGroupsChecks = True
+    if hasattr(args, 'treat_phantoms_only_vdisks_as_working') and args.treat_phantoms_only_vdisks_as_working:
+        request.TreatPhantomsOnlyVDisksAsWorking = True
     if hasattr(args, 'ignore_disintegrated_group_check') and args.ignore_disintegrated_group_check:
         request.IgnoreDisintegratedGroupsChecks = args.ignore_disintegrated_group_check
     if hasattr(args, 'ignore_failure_model_group_check') and args.ignore_failure_model_group_check:
@@ -1486,6 +1488,9 @@ def add_allow_unusable_pdisks_option(p):
 
 def add_ignore_degraded_group_check_option(p):
     p.add_argument('--ignore-degraded-group-check', action='store_true', help='Ignore results of DEGRADED group checks')
+    p.add_argument('--treat-phantoms-only-vdisks-as-working', action='store_true',
+                   help='Treat REPLICATING VDisks with only phantom-like blobs remaining as working ones in group checks; '
+                        'use only when these blobs are known to be phantoms')
 
 
 def add_ignore_disintegrated_group_check_option(p):

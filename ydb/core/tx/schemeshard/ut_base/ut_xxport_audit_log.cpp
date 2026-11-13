@@ -29,7 +29,7 @@ public:
     }
 
     void Check(const TString& operation, Ydb::StatusIds::StatusCode status, const TString& reason) {
-        const std::string marker = "id=" + std::to_string(Id) + ",";
+        const std::string marker = ", id=" + std::to_string(Id);
         Runtime.WaitFor("import/export audit record", [&] {
             return AnyOf(AuditLines, [&](const auto& line) { return line.find(marker) != std::string::npos; });
         }, TDuration::Seconds(10));

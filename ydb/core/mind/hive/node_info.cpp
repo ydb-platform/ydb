@@ -350,10 +350,10 @@ void TNodeInfo::DeregisterInDomains() {
     LastSeenServicedDomains = std::move(ServicedDomains); // clear ServicedDomains
 }
 
-void TNodeInfo::Ping() {
+void TNodeInfo::Ping(bool sendSettings, bool sendCapabilities) {
     Y_ABORT_UNLESS((bool)Local);
-    BLOG_D("Node(" << Id << ") Ping(" << Local << ")");
-    Hive.QueuePing(Local);
+    BLOG_D("Node(" << Id << ") Ping(" << Local << "). sendSettings: " << sendSettings << ", sendCapabilities: " << sendCapabilities);
+    Hive.QueuePing({.Local = Local, .SendSettings = sendSettings, .SendCapabilities = sendCapabilities});
 }
 
 void TNodeInfo::SendReconnect(const TActorId& local) {

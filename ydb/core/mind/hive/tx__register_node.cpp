@@ -25,6 +25,8 @@ public:
         const bool localChanged = node.Local != Local;
         const TActorId previousLocal = node.Local;
         const auto previousState = node.GetVolatileState();
+        // An absent field from an old Local clears capabilities from its predecessor.
+        node.Capabilities.CopyFrom(Record.GetCapabilities());
         if (localChanged) {
             TInstant now = TActivationContext::Now();
             node.Statistics.AddRestartTimestamp(now.MilliSeconds());
@@ -106,7 +108,7 @@ public:
         TNodeInfo* node = Self->FindNode(Local.NodeId());
         if (node != nullptr && node->Local) { // we send ping on every RegisterNode because we want to re-sync tablets upon every reconnection
             Self->NodePingsInProgress.erase(node->Id);
-            node->Ping();
+            node->Ping(true, true);
             Self->ProcessNodePingQueue();
         }
     }

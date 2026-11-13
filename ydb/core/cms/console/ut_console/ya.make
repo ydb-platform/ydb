@@ -12,6 +12,7 @@ PEERDIR(
     library/cpp/protobuf/util
     library/cpp/regex/pcre
     library/cpp/svnversion
+    ydb/core/testlib/audit_helpers
     ydb/core/testlib/default
 )
 
@@ -30,6 +31,7 @@ SRCS(
     modifications_validator_ut.cpp
     net_classifier_updater_ut.cpp
     jaeger_tracing_configurator_ut.cpp
+    console_audit_remove_database_ut.cpp
 )
 
 END()

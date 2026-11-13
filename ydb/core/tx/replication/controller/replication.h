@@ -213,4 +213,13 @@ private:
 
 }; // TReplication
 
+// Whether the replication takes over its destination tables as they are: they already exist and
+// already hold the data, so the controller demotes them in place instead of creating anything.
+bool IsSwitchover(const NKikimrReplication::TReplicationConfig& config);
+
+// The state a replication is created in. One without an initial scan waits paused until its
+// destination tables have been filled and handed over; a switchover has nothing to wait for,
+// because its tables already hold the data, so it starts working once they are demoted.
+TReplication::EState InitialReplicationState(const NKikimrReplication::TReplicationConfig& config);
+
 }

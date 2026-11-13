@@ -749,6 +749,67 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 22\n");
     }
 
+
+    Y_UNIT_TEST(AttachReplicationClearsLegacySplitOffsets) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false);
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1");
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+
+        // Emulate an old version disabling replication without removing metadata.
+        // Source 1 has a nonzero split key, as after merging replication shards.
+        const ui32 splitKey = 10;
+        const auto cell = TCell::Make(splitKey);
+        const auto serialized = TSerializedCellVec::Serialize({&cell, 1});
+        TString escaped;
+        constexpr char hex[] = "0123456789abcdef";
+        for (unsigned char byte : serialized) {
+            escaped += "\\x";
+            escaped += hex[byte >> 4];
+            escaped += hex[byte & 15];
+        }
+        auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+        const TString query = TStringBuilder() << R"((
+            (let owner (Uint64 ')" << tableId.PathId.OwnerId << R"())
+            (let table (Uint64 ')" << tableId.PathId.LocalPathId << R"())
+            (let sourceKey '('('PathOwnerId owner) '('TablePathId table) '('SourceId (Uint64 '1))))
+            (let firstKey '('('PathOwnerId owner) '('TablePathId table) '('SourceId (Uint64 '1)) '('SplitKeyId (Uint64 '0))))
+            (let splitKey '('('PathOwnerId owner) '('TablePathId table) '('SourceId (Uint64 '1)) '('SplitKeyId (Uint64 '1))))
+            (return (AsList
+                (UpdateRow 'ReplicationSources sourceKey '('('SourceName (String 'old-source))))
+                (UpdateRow 'ReplicationSourceOffsets firstKey '('('SplitKey (String '"")) '('MaxOffset (Int64 '100))))
+                (UpdateRow 'ReplicationSourceOffsets splitKey '('('SplitKey (String '")"
+                    << escaped << R"(")) '('MaxOffset (Int64 '200))))
+            ))
+        ))";
+        request->Record.MutableProgram()->MutableProgram()->SetText(query);
+        runtime.SendToPipe(shard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+        auto response = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), 0, response->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(CountPersistedReplicationMetadata(runtime, shard, false), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPersistedReplicationMetadata(runtime, shard, true), 2);
+        RebootTablet(runtime, shard, sender);
+
+        EnableReplication(server);
+        tableId = ResolveTableId(server, sender, "/Root/table-1");
+        ApplyChanges(server, shard, tableId, "new-source", {
+            TChange{.Offset = 0, .WriteTxId = 0, .Key = 20, .Value = 11},
+        });
+        RebootTablet(runtime, shard, sender);
+        ApplyChanges(server, shard, tableId, "new-source", {
+            TChange{.Offset = 1, .WriteTxId = 0, .Key = 20, .Value = 22},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 20, value = 22\n");
+        UNIT_ASSERT_VALUES_EQUAL(CountPersistedReplicationMetadata(runtime, shard, false), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPersistedReplicationMetadata(runtime, shard, true), 1);
+    }
+
     Y_UNIT_TEST(ApplyChangesToReplicatedTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

@@ -242,7 +242,8 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     auto oldInfo = DataShard.FindUserTable(tableId);
     using TReplicationConfig = NKikimrSchemeOp::TTableReplicationConfig;
     if (alterTableTx.HasReplicationConfig()
-        && alterTableTx.GetReplicationConfig().GetMode() == TReplicationConfig::REPLICATION_MODE_NONE
+        && (alterTableTx.GetReplicationConfig().GetMode() == TReplicationConfig::REPLICATION_MODE_NONE
+            || !oldInfo->IsReplicated())
         && !oldInfo->IsIncrementalRestore()) {
         if (oldInfo->IsReplicated()) {
             // Persist NONE before deleting offsets, so delayed replication writes
@@ -261,6 +262,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
             return EExecutionStatus::Reschedule;
         }
 
+        // Clean offsets left by older versions before enabling replication.
         if (Cleanup.TxId != op->GetTxId()) {
             Cleanup = {.TxId = op->GetTxId()};
         }

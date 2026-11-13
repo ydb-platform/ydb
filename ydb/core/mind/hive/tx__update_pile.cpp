@@ -105,6 +105,8 @@ public:
         YDB_LOG_DEBUG("THive::TTxUpdatePiles::Complete",
             {"logPrefix", GetLogPrefix()});
         Self->ProcessPileDrains();
+        // the tablets waiting for a node may fit in the piles that became allowed
+        Self->ProcessWaitQueue();
     }
 
 };

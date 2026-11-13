@@ -76,7 +76,7 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
     if (kqpCtx.Config->GetEnableIndexStreamWrite()) {
         if (auto maybeList = returning.Update().Maybe<TExprList>()) {
             const auto list = maybeList.Cast();
-            AFL_ENSURE(list.Size() > 0);
+            YDB_LOG_ENSURE(list.Size() > 0);
             const auto tablePath = returning.Table().Path().Value();
             for (auto&& effect : list) {
                 if (auto upsert = effect.Maybe<TKqlUpsertRows>()) {

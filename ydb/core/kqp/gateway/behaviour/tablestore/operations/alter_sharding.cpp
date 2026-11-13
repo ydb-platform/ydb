@@ -21,15 +21,15 @@ TConclusionStatus TAlterShardingOperation::DoDeserialize(NYql::TObjectSettingsIm
 }
 
 void TAlterShardingOperation::DoSerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme, const bool isStandalone) const {
-    AFL_VERIFY(!isStandalone);
-    AFL_VERIFY(!!Increase);
+    YDB_LOG_VERIFY(!isStandalone);
+    YDB_LOG_VERIFY(!!Increase);
     scheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
     scheme.MutableAlterColumnTable()->SetName(GetStoreName());
     scheme.MutableAlterColumnTable()->MutableReshardColumnTable()->SetIncrease(*Increase);
 }
 
 void TAlterShardingOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& /*scheme*/) const {
-    AFL_VERIFY(false);
+    YDB_LOG_VERIFY(false);
 }
 
 }

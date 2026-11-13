@@ -32,12 +32,12 @@ public:
     }
 
     TTestHelper& GetTestHelper() {
-        AFL_VERIFY(TestHelper);
+        YDB_LOG_VERIFY(TestHelper);
         return *TestHelper;
     }
 
     TLocalHelper& GetOlapHelper() {
-        AFL_VERIFY(OlapHelper);
+        YDB_LOG_VERIFY(OlapHelper);
         return *OlapHelper;
     }
 

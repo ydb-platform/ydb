@@ -1900,7 +1900,7 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             }
 
             if (lockTxId && GetMeta().LockMode && !isTableImmutable) {
-                AFL_ENSURE(input.Meta.StreamLookupSettings->GetLookupStrategy() != NKqpProto::EStreamLookupStrategy::UNIQUE
+                YDB_LOG_ENSURE(input.Meta.StreamLookupSettings->GetLookupStrategy() != NKqpProto::EStreamLookupStrategy::UNIQUE
                     || GetMeta().LockMode != NKikimrDataEvents::PESSIMISTIC_NONE);
                 if (input.Meta.StreamLookupSettings->GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::UNIQUE
                         && GetMeta().RequestIsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW) {
@@ -3549,7 +3549,7 @@ void TKqpTasksGraph::FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings&
         internalSinksOrder.begin(),
         internalSinksOrder.end(),
         std::make_pair(task.StageId.TxId, settings.GetPriority()));
-    AFL_ENSURE(sinkPosition != internalSinksOrder.end()
+    YDB_LOG_ENSURE(sinkPosition != internalSinksOrder.end()
             && sinkPosition->first == task.StageId.TxId
             && sinkPosition->second == settings.GetPriority());
 
@@ -3591,7 +3591,7 @@ void TKqpTasksGraph::BuildInternalOutputTransform(const NKqpProto::TKqpOutputTra
     auto& output = task.Outputs[transform.GetOutputIndex()];
     output.Type = TTaskOutputType::Map;
 
-    AFL_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+    YDB_LOG_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
 
     NKikimrKqp::TKqpTableSinkSettings settings;
     if (!stageInfo.Meta.ResolvedSinkSettings) {
@@ -3761,7 +3761,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
                     CountScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination());
                 } break;
                 case TStageInfoMeta::UNKNOWN_TASKS: {
-                    AFL_ENSURE(false);
+                    YDB_LOG_ENSURE(false);
                 } break;
             }
         }
@@ -3819,7 +3819,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
                     BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), CollectProfileStats(GetMeta().StatsMode) ? stats : nullptr);
                 } break;
                 case TStageInfoMeta::UNKNOWN_TASKS: {
-                    AFL_ENSURE(false);
+                    YDB_LOG_ENSURE(false);
                 } break;
             }
 
@@ -3970,7 +3970,7 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
             const auto& stageInfo = GetStageInfo(MakeStageId(txIdx, stageIdx));
 
             auto addSink = [&stageInfo, &order, txIdx](const NKqpProto::TKqpInternalSink& intSink) {
-                AFL_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                YDB_LOG_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                 if (!stageInfo.Meta.ResolvedSinkSettings) {
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
@@ -3981,7 +3981,7 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
             };
 
             if (stage.SinksSize() > 0) {
-                AFL_ENSURE(stage.OutputTransformsSize() == 0);
+                YDB_LOG_ENSURE(stage.OutputTransformsSize() == 0);
 
                 for (const auto& sink : stage.GetSinks()) {
                     if (!sink.HasInternalSink()) {
@@ -3993,8 +3993,8 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
                 }
             }
             if (stage.OutputTransformsSize() > 0) {
-                AFL_ENSURE(stage.OutputTransformsSize() == 1);
-                AFL_ENSURE(stage.SinksSize() == 0);
+                YDB_LOG_ENSURE(stage.OutputTransformsSize() == 1);
+                YDB_LOG_ENSURE(stage.SinksSize() == 0);
 
                 const auto& transform = stage.GetOutputTransforms(0);
 

@@ -134,6 +134,11 @@ namespace NKikimr {
         }
 
         TSjOutcome TSyncerJobTask::ReplyAndDie(ESyncStatus status) {
+            // Full-sync fragments are unordered: an incomplete snapshot must not
+            // advance the durable cursor past metadata that was never imported.
+            if (Type == EFullRecover && status != TSyncStatusVal::SyncDone && status != TSyncStatusVal::FullRecover) {
+                Current.SyncState = OldSyncState;
+            }
             // Phase
             Phase = EFinished;
 

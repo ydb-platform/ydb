@@ -302,7 +302,7 @@ public:
                 NYql::NUdf::TUnboxedValue* resultValues;
                 resultValue = HolderFactory->CreateDirectArrayHolder(membersCount, resultValues);
                 for (auto elt : jsonValue.get_object()) {
-                    std::string_view name; // fragile; don't use after any other simdjson call
+                    std::string_view name;   // fragile; don't use after any other simdjson call
                     {
                         CHECK_JSON_ERROR(ExtractJsonKey(elt, name)) {
                             SetParsingError(error, jsonValue, "parse as object", status);
@@ -370,7 +370,7 @@ public:
                 status = TStatus::Success();
                 resultValue = HolderFactory->CreateDirectHashedDictHolder([&, this](auto& map) {
                     for (auto elt : jsonObject) {
-                        std::string_view name; // fragile; don't use after any other simdjson call
+                        std::string_view name;   // fragile; don't use after any other simdjson call
                         {
                             CHECK_JSON_ERROR(ExtractJsonKey(elt, name)) {
                                 SetParsingError(error, jsonValue, "parse as object", status);
@@ -1173,7 +1173,7 @@ private:
             return false;
         }
         for (auto item : document.get_object()) {
-            std::string_view name; // fragile; don't use after any other simdjson call
+            std::string_view name;   // fragile; don't use after any other simdjson call
             CHECK_JSON_ERROR(ExtractJsonKey(item, name)) {
                 return false;
             }
@@ -1283,7 +1283,7 @@ private:
 
             ui16 parsedNonOptional = 0;
             for (auto item : document.get_object()) {
-                std::string_view name; // fragile; don't use after any other simdjson call
+                std::string_view name;   // fragile; don't use after any other simdjson call
                 CHECK_JSON_ERROR(ExtractJsonKey(item, name)) {
                     auto status = TStatus::Fail(EStatusId::BAD_REQUEST,
                         TStringBuilder() << "Failed to parse json message for offset " << offset

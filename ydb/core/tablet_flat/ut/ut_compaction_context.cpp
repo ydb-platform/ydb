@@ -347,6 +347,8 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
         auto lower = f.Part(5);
         auto selected = f.Part(10);
         auto upper = f.Part(30);
+        // The memtable is intentionally empty and the tx-status page is null:
+        // this test uses source epochs and identities, not their contents.
         TIntrusivePtr<TMemTable> mem = new TMemTable(f.Layout.RowScheme(), TEpoch::FromIndex(5), 0);
         TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
         subset.Flatten = {selected};
@@ -438,6 +440,30 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
         UNIT_ASSERT_EXCEPTION(context->ValidateSubset(subset), yexception);
     }
 
+    Y_UNIT_TEST(RejectsInitialPartEpochMismatch) {
+        TFixture f;
+        const auto loaded = f.Part(10);
+        const auto unloaded = f.Cold(20);
+        TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
+        subset.Flatten = {loaded};
+        subset.ColdParts = {unloaded};
+        TVector<TCompactionPartInfo> inventory{{loaded, 1, 0}, {unloaded, 255, 0}};
+        auto context = TCompactionContext::Build(inventory, subset);
+        context->ValidateSubset(subset);
+
+        for (i64 epoch : {9, 11}) {
+            inventory[0].Part = loaded.CloneWithEpoch(TEpoch::FromIndex(epoch));
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TCompactionContext::Build(inventory, subset),
+                yexception, "Initial compaction part epoch has changed");
+        }
+        inventory[0].Part = loaded;
+        for (i64 epoch : {19, 21}) {
+            inventory[1].ColdPart = new TColdPart(unloaded->Label, TEpoch::FromIndex(epoch));
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TCompactionContext::Build(inventory, subset),
+                yexception, "Initial compaction part epoch has changed");
+        }
+    }
+
     Y_UNIT_TEST(ValidatesInputViewsAndActualEpoch) {
         TFixture f;
         auto part = f.Part(10);
@@ -486,6 +512,25 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
 }
 
 Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
+
+    Y_UNIT_TEST(RejectsEmptyAndIncompleteKeys) {
+        NTest::TLayoutCook layout;
+        layout.Col(0, 0, NScheme::NTypeIds::Uint32)
+            .Col(0, 1, NScheme::NTypeIds::Uint32)
+            .Col(0, 8, NScheme::NTypeIds::Uint32)
+            .Key({0, 1});
+        const auto part = NTest::TPartCook(layout, {})
+            .AddN(ui32(10), ui32(20), ui32(1)).Finish().ToPartView();
+        const TVector<TCompactionPartInfo> remaining{{part, 1, 0}};
+        auto mask = MakeCompactionKeySpace(layout.RowScheme()->Keys, remaining);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(mask->HasKey({}), yexception,
+            "Compaction key space requires a complete key");
+        const TCell key[] = {TCell::Make(ui32(10)), TCell::Make(ui32(20))};
+        UNIT_ASSERT_EXCEPTION_CONTAINS(mask->HasKey({key, 1}), yexception,
+            "Compaction key space requires a complete key");
+        UNIT_ASSERT(mask->HasKey(key));
+    }
 
     Y_UNIT_TEST(RespectsInclusiveAndExclusiveSliceBounds) {
         TFixture f;

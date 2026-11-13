@@ -36,14 +36,11 @@ namespace {
         }
 
         bool HasKey(TCellsRef key) override {
-            // A prefix query cannot prove the absence of a complete key using
+            // TKeyCellDefaults is nonempty, so this also rejects empty keys.
+            // Prefix queries cannot prove the absence of a complete key using
             // full-key bloom filters or the search-key bounds convention.
             Y_ENSURE(key.size() == Keys->Size(),
                 "Compaction key space requires a complete key");
-            if (key.empty()) {
-                // Bounds helpers interpret an empty search key as +inf.
-                return !Parts.empty();
-            }
             std::optional<NBloom::TPrefix> prefix;
             for (auto& cursor : Parts) {
                 if (cursor.Info.ColdPart) {
@@ -85,6 +82,8 @@ namespace {
             { }
 
             TCompactionPartInfo Info;
+            // Only advances: IKeySpace requires HasKey queries in increasing
+            // key order. Reset() rewinds the cursors owned by this mask only.
             size_t SliceIndex = 0;
         };
 

@@ -24,16 +24,20 @@ namespace NKikimr::NTable {
 
         TPartView Part;
         TIntrusiveConstPtr<TColdPart> ColdPart;
+        // Runtime placement; DescribeCompactionParts may normalize unloaded parts.
+        // Use TCompactionState::PartLevels for the original persisted binding.
         ui32 Level;
         ui32 TierId;
     };
 
-    // Preserve unloaded parts' existing default-generation placement, but move
-    // references to non-default generations to the final default level (255).
+    // Resolve unloaded parts' runtime placement in the default tier, preserving
+    // default-generation levels and normalizing non-default generations to 255.
     ui32 ResolveColdPartLevel(ui32 level, const NLocalDb::TCompactionPolicy& policy);
 
-    // Resolve placement using the existing part -> level -> generation binding.
+    // Build a runtime placement view without modifying state.PartLevels.
     // Missing levels, FinalParts (level 255), and unloaded parts belong to default.
+    // Normalized levels are not a snapshot of persisted bindings; do not write
+    // them back to state.PartLevels when saving compaction state.
     TVector<TCompactionPartInfo> DescribeCompactionParts(
         TConstArrayRef<TPartView> parts,
         TConstArrayRef<TIntrusiveConstPtr<TColdPart>> coldParts,
@@ -102,6 +106,8 @@ namespace NKikimr::NTable {
     };
 
     // Each call creates an independent cursor, pinning the selected metadata.
+    // Queries must use complete keys in increasing order; Reset() restarts traversal.
+    // Prefixes, including empty keys, are rejected.
     // Missing bounds/bloom and unloaded parts conservatively mean "maybe".
     // Bloom prefixes containing PG columns are ignored because equal PG values
     // may have different binary encodings.

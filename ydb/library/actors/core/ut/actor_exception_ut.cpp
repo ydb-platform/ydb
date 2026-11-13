@@ -68,19 +68,24 @@ Y_UNIT_TEST_SUITE(ActorException) {
         }
 
         void Handle(TEvents::TEvWakeup::TPtr&) {
-            throw std::runtime_error("test");
+            if (ExceptionsHandled < 2) {
+                throw std::runtime_error("test");
+            }
+            Done.Signal();
+            PassAway();
         }
 
     private:
-        bool OnUnhandledException(const std::exception& e) {
+        bool OnUnhandledException(const std::exception& e) override {
             Y_ABORT_UNLESS(TypeName(e) == "std::runtime_error");
-            Done.Signal();
-            PassAway();
+            ++ExceptionsHandled;
+            Send(SelfId(), new TEvents::TEvWakeup);
             return true;
         }
 
     private:
         TManualEvent& Done;
+        ui32 ExceptionsHandled = 0;
     };
 
     Y_UNIT_TEST(ActorBootstrapExceptionCaught) {
@@ -125,13 +130,21 @@ Y_UNIT_TEST_SUITE(ActorException) {
         };
 
         class TUnhandledExceptionActor : public TActor<TUnhandledExceptionActor> {
+            ui32 WarmupEvents;
+
         public:
-            TUnhandledExceptionActor()
+            explicit TUnhandledExceptionActor(ui32 warmupEvents)
                 : TActor(&TThis::StateWork)
+                , WarmupEvents(warmupEvents)
             {}
 
             STFUNC(StateWork) {
                 Y_UNUSED(ev);
+                if (WarmupEvents) {
+                    --WarmupEvents;
+                    Send(SelfId(), new TEvents::TEvWakeup);
+                    return;
+                }
                 TUnwindProbe probe;
                 ThrowStarted = true;
                 throw std::runtime_error("unhandled actor exception");
@@ -142,13 +155,19 @@ Y_UNIT_TEST_SUITE(ActorException) {
             : public TUnhandledExceptionActor
             , public IActorExceptionHandler
         {
+        public:
+            explicit TDecliningExceptionActor(ui32 warmupEvents)
+                : TUnhandledExceptionActor(warmupEvents)
+            {}
+
+        private:
             bool OnUnhandledException(const std::exception&) override {
                 ExceptionHandlerCalled = true;
                 return false;
             }
         };
 
-        void CheckFatalException(bool withHandler) {
+        void CheckFatalException(bool withHandler, ui32 warmupEvents = 0) {
             // Start the actor system after fork: the worker must have no test
             // framework catch above Receive. A custom terminate handler lets us
             // inspect unwinding without relying on symbol names or core files.
@@ -168,8 +187,8 @@ Y_UNIT_TEST_SUITE(ActorException) {
                 TActorSystem actorSystem(setup);
                 actorSystem.Start();
                 IActor* actor = withHandler
-                    ? static_cast<IActor*>(new TDecliningExceptionActor)
-                    : static_cast<IActor*>(new TUnhandledExceptionActor);
+                    ? static_cast<IActor*>(new TDecliningExceptionActor(warmupEvents))
+                    : static_cast<IActor*>(new TUnhandledExceptionActor(warmupEvents));
                 const TActorId actorId = actorSystem.Register(actor);
                 actorSystem.Send(actorId, new TEvents::TEvWakeup);
 
@@ -195,6 +214,14 @@ Y_UNIT_TEST_SUITE(ActorException) {
 
     Y_UNIT_TEST(DeclinedExceptionStillTerminates) {
         CheckFatalException(true);
+    }
+
+    Y_UNIT_TEST(UnhandledExceptionKeepsActorFrameAfterEarlierEvents) {
+        CheckFatalException(false, 2);
+    }
+
+    Y_UNIT_TEST(DeclinedExceptionStillTerminatesAfterEarlierEvents) {
+        CheckFatalException(true, 2);
     }
 #endif
 

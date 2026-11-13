@@ -392,8 +392,13 @@ namespace NActors {
 
         TActorRunnableQueue queue(this);
 
-        IActorExceptionHandler* handler = dynamic_cast<IActorExceptionHandler*>(this);
-        if (!handler) {
+        if (!ExceptionHandlerChecked) {
+            // Receive runs on the serialized mailbox after construction. The
+            // dynamic type stays fixed, so normal dispatch needs RTTI only once.
+            HasExceptionHandler = dynamic_cast<IActorExceptionHandler*>(this) != nullptr;
+            ExceptionHandlerChecked = true;
+        }
+        if (!HasExceptionHandler) {
             // Do not catch and rethrow fatal exceptions: unwinding to this catch
             // would remove the original actor frames before terminate captures them.
             DispatchEvent(ev);
@@ -403,6 +408,7 @@ namespace NActors {
         try {
             DispatchEvent(ev);
         } catch (...) {
+            IActorExceptionHandler* handler = dynamic_cast<IActorExceptionHandler*>(this);
             if (!OnUnhandledExceptionSafe(*handler, std::current_exception())) {
                 throw;
             }

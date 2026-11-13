@@ -4142,11 +4142,23 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     if (results) {
         auto *snap = proto.MutableIntroducedParts();
+        const auto& levels = logicResult.Changes.NewPartLevels;
+        Y_ENSURE(levels.empty() || levels.size() == results.size(),
+            "Compaction levels do not cover all output parts");
 
         for (const auto &result : results) {
             const auto &newPart = result.Part;
 
-            TPageCollectionProtoHelper::Snap(snap, newPart, tableId, logicResult.Changes.NewPartsLevel);
+            ui32 level = logicResult.Changes.NewPartsLevel;
+            if (!levels.empty()) {
+                const auto* partLevel = levels.FindPtr(newPart->Label);
+                Y_ENSURE(partLevel, "Compaction levels do not cover all output parts: missing level for part " << newPart->Label);
+                level = *partLevel;
+            }
+            TPageCollectionProtoHelper::Snap(snap, newPart, tableId, level);
+            if (!levels.empty()) {
+                snap->MutableBundles(snap->BundlesSize() - 1)->SetCompactionLevel(level);
+            }
             TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), newPart);
         }
     }

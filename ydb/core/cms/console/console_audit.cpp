@@ -135,7 +135,7 @@ void AuditLogEndRemoveDatabase(
         AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EMPTY_VALUE))
         AUDIT_PART("database", database)
         AUDIT_PART("status", success ? "SUCCESS" : "ERROR")
-        AUDIT_PART("reason", (!reason.empty() ? reason : "Database removal failed"), !success || !reason.empty())
+        AUDIT_PART("reason", (!reason.empty() ? reason : "Database removal failed: reason not provided"), !success || !reason.empty())
         AUDIT_PART("operation", "END REMOVE DATABASE")
     );
 }

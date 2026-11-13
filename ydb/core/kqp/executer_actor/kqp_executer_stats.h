@@ -1,5 +1,8 @@
 #pragma once
 
+#include <ydb/core/protos/columnshard_scan_stats.pb.h>
+#include <map>
+
 #include <array>
 #include <optional>
 
@@ -225,6 +228,7 @@ struct TStageNodeStats {
 };
 
 struct TStageExecutionStats {
+    std::map<ui64, google::protobuf::RepeatedPtrField<NColumnShardStats::TReport>> ColumnShardStats;
 
     NYql::NDq::TStageId StageId;
 

@@ -45,6 +45,7 @@ struct TEvScanExchange {
         YDB_ACCESSOR_DEF(std::vector<ui32>, DataIndexes);
         YDB_READONLY_DEF(TLocksInfo, LocksInfo);
         YDB_ACCESSOR_DEF(bool, Finished);
+        YDB_ACCESSOR_DEF(std::shared_ptr<const NColumnShardStats::TReport>, ColumnShardStats);
         YDB_ACCESSOR_DEF(ui64, CpuTimeUs);
         YDB_ACCESSOR_DEF(ui64, WaitTimeUs);
         YDB_ACCESSOR_DEF(ui64, WaitOutputTimeUs);

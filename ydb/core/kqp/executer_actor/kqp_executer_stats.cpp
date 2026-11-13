@@ -553,6 +553,10 @@ void TStageExecutionStats::SetTaskNode(ui32 index, ui32 nodeId) {
 }
 
 ui64 TStageExecutionStats::UpdateStats(ui32 nodeId, const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs) {
+    NKqpProto::TKqpTaskExtraStats taskExtra;
+    if (taskStats.HasExtra() && taskStats.GetExtra().UnpackTo(&taskExtra) && taskExtra.ColumnShardStatsSize()) {
+        ColumnShardStats[taskStats.GetTaskId()] = taskExtra.GetColumnShardStats();
+    }
     auto taskId = taskStats.GetTaskId();
     auto it = Task2Index.find(taskId);
     ui64 baseTimeMs = 0;
@@ -1747,14 +1751,22 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 }
 
                 if (CollectProfileStats(StatsMode)) {
+                    NKqpProto::TKqpStageExtraStats extraStats;
                     auto it = ShardsCountByNode.find(stageId.StageId);
                     if (it != ShardsCountByNode.end()) {
-                        NKqpProto::TKqpStageExtraStats extraStats;
                         for (auto&& n : it->second) {
                             auto& nodeStat = *extraStats.AddNodeStats();
                             nodeStat.SetNodeId(n.first);
                             nodeStat.SetShardsCount(n.second);
                         }
+                    }
+                    for (const auto& [taskId, reports] : stageStat.ColumnShardStats) {
+                        Y_UNUSED(taskId);
+                        for (const auto& report : reports) {
+                            *extraStats.AddColumnShardStats() = report;
+                        }
+                    }
+                    if (extraStats.NodeStatsSize() || extraStats.ColumnShardStatsSize()) {
                         stageStats.MutableExtra()->PackFrom(extraStats);
                     }
                 }

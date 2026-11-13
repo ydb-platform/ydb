@@ -5,6 +5,7 @@ package NKqpProto;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
+import "ydb/core/protos/columnshard_scan_stats.proto";
 
 message TKqpStatsCompile {
     bool FromCache = 1;
@@ -42,6 +43,7 @@ message TKqpComputeActorExtraStats {
 message TKqpStageExtraStats {
     repeated NYql.NDqProto.TDqTaskStats DatashardTasks = 1;
     repeated TNodeExecutionStats NodeStats = 4;
+    repeated NKikimr.NColumnShardStats.TReport ColumnShardStats = 5;
 }
 
 message TKqpScanTaskExtraStats {
@@ -61,6 +63,7 @@ message TKqpTaskExtraStats {
     TKqpScanTaskExtraStats ScanTaskExtraStats = 1;
     TKqpLockStats LockStats = 2;
     uint32 ReadRetriesCount = 3;
+    repeated NKikimr.NColumnShardStats.TReport ColumnShardStats = 4;
 }
 
 message TNodeExecutionStats {

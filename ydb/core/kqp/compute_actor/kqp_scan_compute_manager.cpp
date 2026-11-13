@@ -47,6 +47,9 @@ std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(
         {"event", "receive_data"},
         {"actorId", ActorId},
         {"countChunks", result.size()});
+    if (data.ColumnShardStats && !result.empty()) {
+        result.front()->SetColumnShardStats(std::move(data.ColumnShardStats));
+    }
     DataChunksInFlightCount = result.size();
     return result;
 }

@@ -222,6 +222,10 @@ public:
         return Event->GetRowsCount();
     }
 
+    void SetColumnShardStats(std::shared_ptr<const NColumnShardStats::TReport> report) {
+        Event->SetColumnShardStats(std::move(report));
+    }
+
     std::unique_ptr<TEvScanExchange::TEvSendData> ExtractEvent() {
         Event->SetWaitOutputTimeUs(Info->GetPendingTimeUs());
         return std::move(Event);

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/protos/columnshard_scan_stats.pb.h>
+
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -64,6 +66,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     bool PageFault = false; // page fault was the reason for sending this message
     mutable THolder<TEvRemoteScanData> Remote;
     std::shared_ptr<IShardScanStats> StatsOnFinished;
+    std::shared_ptr<const NColumnShardStats::TReport> ColumnShardStats;
     TLocksInfo LocksInfo;
 
     template <class T>
@@ -121,6 +124,9 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
         ev->PageFault = pbEv->Record.GetPageFault();
         ev->PageFaults = pbEv->Record.GetPageFaults();
         ev->Finished = pbEv->Record.GetFinished();
+        if (pbEv->Record.HasColumnShardStats()) {
+            ev->ColumnShardStats = std::make_shared<const NColumnShardStats::TReport>(pbEv->Record.GetColumnShardStats());
+        }
         ev->RequestedBytesLimitReached = pbEv->Record.GetRequestedBytesLimitReached();
         ev->LastKey = TOwnedCellVec(TSerializedCellVec(pbEv->Record.GetLastKey()).GetCells());
         ev->LastCursorProto = pbEv->Record.GetLastCursor();
@@ -153,6 +159,9 @@ private:
             Remote->Record.SetWaitTimeMs(WaitTime.MilliSeconds());
             Remote->Record.SetPageFaults(PageFaults);
             Remote->Record.SetFinished(Finished);
+            if (ColumnShardStats) {
+                *Remote->Record.MutableColumnShardStats() = *ColumnShardStats;
+            }
             Remote->Record.SetRequestedBytesLimitReached(RequestedBytesLimitReached);
             Remote->Record.SetPageFaults(PageFaults);
             Remote->Record.SetPageFault(PageFault);

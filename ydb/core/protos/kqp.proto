@@ -10,6 +10,7 @@ import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/kqp_tablemetadata.proto";
 import "ydb/core/protos/kqp_physical.proto";
 import "ydb/core/protos/kqp_stats.proto";
+import "ydb/core/protos/columnshard_scan_stats.proto";
 import "ydb/core/protos/data_events.proto";
 import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_formats.proto";
@@ -904,6 +905,7 @@ message TEvKqpScanCursor {
 }
 
 message TEvRemoteScanData {
+    optional NKikimr.NColumnShardStats.TReport ColumnShardStats = 100;
     optional uint32 ScanId = 1;
     optional uint64 CpuTimeUs = 2;
     optional uint64 WaitTimeMs = 3;

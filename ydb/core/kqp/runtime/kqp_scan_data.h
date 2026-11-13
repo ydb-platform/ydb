@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/protos/columnshard_scan_stats.pb.h>
+
 #include "kqp_arrow_memory_pool.h"
 #include "kqp_compute.h"
 #include "kqp_scan_data_meta.h"
@@ -233,6 +235,7 @@ public:
         };
 
         struct TProfileStats {
+            std::vector<NColumnShardStats::TReport> ColumnShardStats;
             size_t PageFaults = 0;
             size_t Messages = 0;
             size_t MessagesByPageFault = 0;

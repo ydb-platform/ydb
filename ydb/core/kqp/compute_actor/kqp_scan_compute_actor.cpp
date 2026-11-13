@@ -151,6 +151,11 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
 
         if (ScanData->ProfileStats) {
             NKqpProto::TKqpTaskExtraStats taskExtraStats;
+            if (last) {
+                for (const auto& report : ScanData->ProfileStats->ColumnShardStats) {
+                    *taskExtraStats.AddColumnShardStats() = report;
+                }
+            }
             //                auto scanTaskExtraStats = taskExtraStats.MutableScanTaskExtraStats();
             //                scanTaskExtraStats->SetRetriesCount(TotalRetries);
             taskStats->MutableExtra()->PackFrom(taskExtraStats);
@@ -206,6 +211,10 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
         {"sender", ev->Sender},
         {"selfId", SelfId()});
     auto& msg = *ev->Get();
+
+    if (msg.GetColumnShardStats() && ScanData->ProfileStats) {
+        ScanData->ProfileStats->ColumnShardStats.push_back(*msg.GetColumnShardStats());
+    }
 
     for (const auto& lock : msg.GetLocksInfo().Locks) {
         Locks.insert(lock);

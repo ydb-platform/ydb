@@ -1007,13 +1007,13 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
     }
 
     Y_UNIT_TEST(PersQueueClosedReadSessionDoesNotBlockDriverStop) {
-        CheckClosedReadSessions<NPersQueue::TPersQueueClient>(NPersQueue::TReadSessionSettings()
-            .DisableClusterDiscovery(true).ConsumerName("c").AppendTopics(NPersQueue::TTopicReadSettings("/Root/topic")));
+        CheckClosedReadSessions<NYdb::NPersQueue::TPersQueueClient>(NYdb::NPersQueue::TReadSessionSettings()
+            .DisableClusterDiscovery(true).ConsumerName("c").AppendTopics(NYdb::NPersQueue::TTopicReadSettings("/Root/topic")));
     }
 
     Y_UNIT_TEST(ReconnectAfterAbort) {
         NTopic::TSingleClusterReadSessionImpl<false> topic(NTopic::TReadSessionSettings{}, "", "", "", TLog{}, nullptr, nullptr, nullptr, 1, 1);
-        NTopic::TSingleClusterReadSessionImpl<true> pq(NPersQueue::TReadSessionSettings{}, "", "", "", TLog{}, nullptr, nullptr, nullptr, 1, 1);
+        NTopic::TSingleClusterReadSessionImpl<true> pq(NYdb::NPersQueue::TReadSessionSettings{}, "", "", "", TLog{}, nullptr, nullptr, nullptr, 1, 1);
         topic.Abort();
         pq.Abort();
         UNIT_ASSERT(!topic.Reconnect(TPlainStatus{}));

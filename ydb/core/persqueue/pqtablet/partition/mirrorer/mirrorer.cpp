@@ -1,10 +1,8 @@
 #include "mirrorer.h"
 
-#include <compare>
-#include <utility>
-
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -52,13 +50,6 @@ TString FormatOffsetsByConsumers(const auto& offsetsByConsumers) {
         out << consumer << ": " << offset;
     }
     return out;
-}
-
-std::strong_ordering CompareVersions(const NKikimrPQ::TVersionedConsumerOffset& left,
-                                     const NKikimrPQ::TVersionedConsumerOffset& right) {
-    const auto leftVersion = std::make_pair(left.GetReadRuleGeneration(), left.GetOffsetRevision());
-    const auto rightVersion = std::make_pair(right.GetReadRuleGeneration(), right.GetOffsetRevision());
-    return leftVersion <=> rightVersion;
 }
 
 struct TBatchInfo {
@@ -827,7 +818,7 @@ void TMirrorer::AddMessagesToQueue(
                         if (inserted) {
                             continue;
                         }
-                        const auto comparison = CompareVersions(offset, it->second);
+                        const auto comparison = CompareConsumerOffsetVersions(offset, it->second);
                         if (comparison > 0) {
                             it->second = offset;
                         } else if (comparison == 0 && offset.GetOffset() != it->second.GetOffset()) {

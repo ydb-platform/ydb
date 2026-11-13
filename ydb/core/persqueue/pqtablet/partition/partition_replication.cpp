@@ -1,20 +1,8 @@
 #include "partition.h"
 
-#include <compare>
-#include <utility>
+#include <ydb/core/persqueue/public/utils.h>
 
 namespace NKikimr::NPQ {
-
-namespace {
-
-std::strong_ordering CompareVersions(const NKikimrPQ::TVersionedConsumerOffset& left,
-                                     const NKikimrPQ::TVersionedConsumerOffset& right) {
-    const auto leftVersion = std::make_pair(left.GetReadRuleGeneration(), left.GetOffsetRevision());
-    const auto rightVersion = std::make_pair(right.GetReadRuleGeneration(), right.GetOffsetRevision());
-    return leftVersion <=> rightVersion;
-}
-
-} // namespace
 
 void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
     if (AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
@@ -45,7 +33,7 @@ void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext
                 pending.VersionedOffsetsByConsumers.emplace(consumer, offset);
                 continue;
             }
-            const auto comparison = CompareVersions(offset, it->second);
+            const auto comparison = CompareConsumerOffsetVersions(offset, it->second);
             if (comparison > 0) {
                 it->second = offset;
             } else if (comparison == 0 && offset.GetOffset() != it->second.GetOffset()) {
@@ -147,7 +135,7 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
             : committed ? &committed->ReplicatedOffset : nullptr;
         if (accepted && *accepted) {
             const auto& replicated = **accepted;
-            const auto comparison = CompareVersions(offset, replicated);
+            const auto comparison = CompareConsumerOffsetVersions(offset, replicated);
             if (comparison < 0) {
                 continue;
             }

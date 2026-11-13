@@ -7,6 +7,7 @@
 #include <util/datetime/base.h>
 #include <util/string/builder.h>
 
+#include <compare>
 #include <functional>
 #include <memory>
 #include <set>
@@ -27,6 +28,8 @@ ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config);
 bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config);
 bool ReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config);
 bool VersionedReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config);
+std::strong_ordering CompareConsumerOffsetVersions(const NKikimrPQ::TVersionedConsumerOffset& left,
+                                                   const NKikimrPQ::TVersionedConsumerOffset& right);
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config);
 
 size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions);

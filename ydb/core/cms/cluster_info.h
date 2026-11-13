@@ -27,6 +27,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
@@ -596,11 +597,11 @@ public:
         IsDisabled = true;
     }
 
-    RingState CountState(TInstant now, TDuration retryTime, TDuration duration, const TString &requestId) const;
+    RingState CountState(TInstant now, TDuration retryTime, TDuration duration, const TString &requestId,
+                         TDuration restartCooldown) const;
 
     ui32 RingId = 0;
     bool IsDisabled = false;
-    const TDuration Timeout = TDuration::Minutes(2);
 
     TVector<TNodeInfoPtr> Replicas;
 };
@@ -745,17 +746,18 @@ public:
     void GenerateSysTabletsNodesCheckers();
     void GenerateClusterNodesCheckers();
 
+    using TStateStorageReplicaRings = TMap<ui32, ui32>;
+
     bool IsStateStorageReplicaNode(ui32 nodeId) const {
-        return StateStorageReplicas.contains(nodeId);
+        return StateStorageNodeToRings.contains(nodeId);
     }
 
     bool IsStateStorageinfoReceived() {
         return StateStorageInfoReceived;
     }
 
-    ui32 GetRingId(ui32 nodeId) {
-        Y_ABORT_UNLESS(IsStateStorageReplicaNode(nodeId));
-        return StateStorageNodeToRingId[nodeId];
+    const TStateStorageReplicaRings* FindStateStorageReplicaRings(ui32 nodeId) const {
+        return StateStorageNodeToRings.FindPtr(nodeId);
     }
 
     void CheckNodeExistenceWithVerify(ui32 nodeId) const {
@@ -1149,8 +1151,7 @@ private:
     TMultiMap<TString, ui32> HostNameToNodeId;
     TMultiMap<TString, ui32> TenantToNodeId;
     THashMap<TString, TLockableItemPtr> LockableItems;
-    THashSet<ui32> StateStorageReplicas;
-    THashMap<ui32, ui32> StateStorageNodeToRingId;
+    THashMap<ui32, TStateStorageReplicaRings> StateStorageNodeToRings;
 
 public:
     using TSysNodesCheckers = THashMap<NKikimrConfig::TBootstrap::ETabletType, TSimpleSharedPtr<TSysTabletsNodesCounter>>;

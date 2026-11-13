@@ -1,7 +1,9 @@
 #pragma once
 #include <bitset>
+#include <deque>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/reassign_tablets.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/bridge.h>
@@ -162,6 +164,12 @@ class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveShar
 public:
     using IActorOps::Register;
 
+    struct TNodePing {
+        TActorId Local;
+        bool SendSettings = false;
+        bool SendCapabilities = false;
+    };
+
 protected:
     friend class THiveBalancer;
     friend class THiveDrain;
@@ -179,6 +187,7 @@ protected:
     friend struct TNodeInfo;
     friend struct TTabletInfo;
     friend struct TLeaderTabletInfo;
+    friend struct TTabletInfo;
     friend class TReassignTabletsActor;
     friend class TMoveDataActor;
 
@@ -224,7 +233,7 @@ protected:
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;
     friend class TTxLockTabletExecution;
-    friend class TTxMonEvent_ReassignTablet;
+    friend class TTxReassignTablets;
     friend class TTxRegisterNode;
     friend class TTxSyncTablets;
     friend class TTxRequestTabletSequence;
@@ -248,7 +257,7 @@ protected:
     friend class TTxUpdateTabletsObject;
     friend class TTxUpdateTabletGroups;
     friend class TTxMonEvent_TabletAvailability;
-    friend class TLoggedMonTransaction;
+    friend class TLoggedTransaction;
     friend class TTxProcessUpdateFollowers;
     friend class TTxMonEvent_StopDomain;
     friend class TTxUpdatePiles;
@@ -279,9 +288,11 @@ protected:
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     bool StartHiveStorageBalancer(TStorageBalancerSettings settings);
     // starts a new reassign for every tablet in the list
-    void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
+    TSubActorId StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
     // continues reassigns of tablets that were left in the middle of it (e.g. by a Hive restart)
     void ContinueInterruptedReassigns(std::vector<TReassignOperation> operations);
+    NKikimrReassignTablets::TEvGetResponse GetReassignTabletsResult(TSubActorId id);
+    void PruneReassignResults();
     void StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IMoveDataCallback> callback, bool fastFail);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
@@ -382,6 +393,8 @@ protected:
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetrics;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetricsDefaults; // built from CurrentConfig
+    TNamedResourceRegistry NamedResourceRegistry; // configured from CurrentConfig
+    size_t NextNamedResourceToCheck = 0; // round robin over named resources in balancer triggers
     std::unordered_map<TString, TStoragePoolInfo> StoragePools;
     std::unordered_map<TSubDomainKey, TDomainInfo> Domains;
     std::unordered_set<TOwnerId> BlockedOwners;
@@ -483,7 +496,7 @@ protected:
     TEventPriorityQueue<THive> EventQueue{*this};
     ui64 OperationsLogIndex = 0;
     std::vector<TActorId> ActorsWaitingToMoveTablets;
-    std::queue<TActorId> NodePingQueue;
+    std::queue<TNodePing> NodePingQueue;
     std::unordered_set<TNodeId> NodePingsInProgress;
     TFollowerUpdates PendingFollowerUpdates;
     std::queue<TTabletId> StopTenantTabletsQueue;
@@ -528,6 +541,12 @@ protected:
     std::unordered_set<TNodeId> ConnectedNodes;
     TString LastReassignStatus;
     ui32 ReassignsRunning = 0;
+    struct TReassignResult {
+        TSubActorId Id;
+        TInstant ExpiresAt;
+        NKikimrReassignTablets::TEvGetResponse Record;
+    };
+    std::deque<TReassignResult> ReassignResults;
     TRequests Requests;
 
     // normalized to be sorted list of unique values
@@ -603,6 +622,9 @@ protected:
     void Handle(TEvents::TEvUndelivered::TPtr&);
     void Handle(TEvHive::TEvTabletMetrics::TPtr&);
     void Handle(TEvHive::TEvReassignTablet::TPtr&);
+    void Handle(TEvReassignTablets::TEvCreateRequest::TPtr&);
+    void Handle(TEvReassignTablets::TEvCancelRequest::TPtr&);
+    void Handle(TEvReassignTablets::TEvGetRequest::TPtr&);
     void Handle(TEvHive::TEvInitiateBlockStorage::TPtr&);
     void Handle(TEvLocal::TEvSyncTablets::TPtr&);
     void Handle(TEvTabletBase::TEvBlockBlobStorageResult::TPtr&);
@@ -809,8 +831,11 @@ public:
     ui32 GetDataCenters();
     void AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
-    void QueuePing(const TActorId& local);
-    void SendPing(const TActorId& local, TNodeId id);
+    void QueuePing(TNodePing ping);
+    void SendPing(const TNodePing& nodePing);
+    void FillLocalSettings(NKikimrLocal::THiveSettings* settings) const;
+    // Call when the HiveConfig settings relevant to Local change.
+    void UpdateLocalSettings();
     void RemoveFromPingInProgress(TNodeId node);
     void ProcessNodePingQueue();
     void SendReconnect(const TActorId& local);
@@ -1171,10 +1196,44 @@ protected:
     struct TMoveExpediency {
         bool Expedient = false;
         EHiveEventReason Reason = EHiveEventReason::ResourceStDevImproved; // meaningful only when Expedient
-        double StDevBefore = 0; // set only when the decision was made by resource stdev
+        // max stdev of the built-in resources, set whenever the move was evaluated by resources
+        // (i.e. not decided by one of the early checks)
+        double StDevBefore = 0;
         double StDevAfter = 0;
+        // the named resource which the move worsens (the first one), or if none, the first one it improves,
+        // with its imbalance before and after the move, see CheckNamedResourcesMoveEffect
+        TString NamedResource;
+        double NamedBefore = 0;
+        double NamedAfter = 0;
     };
+    // The move has to improve at least one of the built-in resources (as a whole) and the balanced
+    // named resources of the tablet, and must not worsen any of them. The built-in resources may worsen
+    // by up to BUILTIN_STDEV_WORSENING_TOLERANCE, any worsening of a named resource vetoes the move.
     TMoveExpediency CheckTabletMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node) const;
+    struct TNamedResourcesMoveEffect {
+        bool Improved = false;
+        bool Worsened = false;
+        TString Resource;
+        double Before = 0;
+        double After = 0;
+    };
+    // How moving the tablet to the node changes the imbalance of each balanced named resource of the tablet:
+    // the total amount over capacity for SATURATION, the usage stdev for SCATTER
+    TNamedResourcesMoveEffect CheckNamedResourcesMoveEffect(const TTabletInfo& tablet, const TNodeInfo& node) const;
+    // growth of the built-in resources stdev that a move is allowed to cause when it improves something else
+    static constexpr double BUILTIN_STDEV_WORSENING_TOLERANCE = 0.01;
+    void ScheduleNamedResourceEstimatesCheck(TFullTabletId tabletId, TInstant deadline);
+    void Handle(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev);
+    void HandleInit(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev);
+    void RegisterNamedResource(const TString& name) {
+        NamedResourceRegistry.Register(name);
+    }
+    const TNamedResourceSettings& GetNamedResourceSettings(const TString& name) const {
+        return NamedResourceRegistry.GetSettings(name);
+    }
+    // Returns settings of the balancer for a named resource which needs balancing among the nodes, if any
+    template<std::forward_iterator TIter>
+    std::optional<TBalancerSettings> CheckNamedResources(TIter begin, TIter end);
     bool IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const {
         return CheckTabletMoveExpediency(tablet, node).Expedient;
     }

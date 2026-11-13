@@ -8,6 +8,8 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/vector.h>
+
 namespace NKikimr::NWrappers::NExternalStorage {
 class TFakeBucketStorage {
 private:
@@ -38,6 +40,18 @@ public:
     ui32 GetSize() const {
         return Data.size();
     }
+
+    TVector<TString> GetObjectKeys() const {
+        TGuard<TMutex> g(Mutex);
+        TVector<TString> keys;
+        keys.reserve(Data.size());
+        for (const auto& [key, _] : Data) {
+            keys.push_back(key);
+        }
+
+        return keys;
+    }
+
     void PutObject(const TString& objectId, const TString& data) {
         WritesCount.Inc();
         TGuard<TMutex> g(Mutex);

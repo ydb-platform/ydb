@@ -844,7 +844,8 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         return false;
     }
 
-    if (!ClusterInfo->IsStateStorageReplicaNode(node.NodeId)) {
+    const auto* replicaRings = ClusterInfo->FindStateStorageReplicaRings(node.NodeId);
+    if (!replicaRings) {
         return true;
     }
 
@@ -855,19 +856,36 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         return false;
     }
 
-    const ui32 ringGroupId = node.PileId.GetOrElse(0);
-    Y_ABORT_UNLESS(ringGroupId < ClusterInfo->StateStorageInfo->RingGroups.size());
+    const auto now = AppData(ctx)->TimeProvider->Now();
+    const TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
+    for (const auto& [ringGroupId, ringId] : *replicaRings) {
+        if (ClusterInfo->StateStorageInfo->RingGroups[ringGroupId].WriteOnly) {
+            continue;
+        }
+        if (!CheckStateStorageRingGroup(ringGroupId, ringId, opts, now, duration, defaultDeadline, error)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TCms::CheckStateStorageRingGroup(ui32 ringGroupId,
+    ui32 currentRing,
+    const TActionOptions& opts,
+    TInstant now,
+    TDuration duration,
+    TInstant defaultDeadline,
+    TErrorInfo& error) const
+{
     const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[ringGroupId].NToSelect;
-    const ui32 currentRing = ClusterInfo->GetRingId(node.NodeId);
     ui8 currentRingState = TStateStorageRingInfo::Unknown;
     bool hasRestartRingsByThisRequest = false;
     ui32 restartRings = 0;
     ui32 lockedRings = 0;
     ui32 disabledRings = 0;
-    auto now = AppData(ctx)->TimeProvider->Now();
-    TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
     for (auto ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
-        auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
+        auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId,
+                                          State->Config.StateStorageRestartCooldown);
         YDB_LOG_DEBUG("Dump ring",
             {"ring", ringInfo->RingId},
             {"state", TStateStorageRingInfo::RingStateToString(state)});
@@ -919,7 +937,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
                     TStringBuilder() << "Too many unavailable state storage rings"
                     << ". Restarting rings: "
                     << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
-                    << ". Temporary (for a 2 minutes) locked rings: "
+                    << ". Temporarily locked rings (restart cooldown: " << State->Config.StateStorageRestartCooldown << "): "
                     << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
                     << ". Maximum allowed number of unavailable rings for this mode: " << maxAvailabilityLimit,
                     TReason::EType::TooManyUnavailableStateStorageRings
@@ -935,7 +953,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
                     TStringBuilder() << "Too many unavailable state storage rings"
                     << ". Restarting rings: "
                     << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
-                    << ". Temporary (for a 2 minutes) locked rings: "
+                    << ". Temporarily locked rings (restart cooldown: " << State->Config.StateStorageRestartCooldown << "): "
                     << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
                     << ". Disabled rings: " << disabledRings
                     << ". Maximum allowed number of unavailable rings for this mode: " << keepAvailableLimit,
@@ -965,7 +983,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
                 TStringBuilder() << "Too many unavailable state storage rings"
                 << ". Restarting rings: "
                 << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
-                << ". Temporary (for a 2 minutes) locked rings: "
+                << ". Temporarily locked rings (restart cooldown: " << State->Config.StateStorageRestartCooldown << "): "
                 << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
                 << ". Maximum allowed number of unavailable rings for this mode: " << limit,
                 TReason::EType::TooManyUnavailableStateStorageRings

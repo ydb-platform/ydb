@@ -519,7 +519,11 @@ public:
         TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes = tableInfo->KeyColumnTypes;
 
         auto* replTable = Self->EnsureReplicatedTable(msg->PathId);
-        Y_ENSURE(replTable);
+        if (!replTable) {
+            // An older source may send offsets after replication was disabled.
+            // Keep the receipt bookkeeping without recreating replication state.
+            return true;
+        }
 
         if (Self->SrcTabletToRange.empty()) {
             for (const auto& srcRange : Self->DstSplitDescription->GetSourceRanges()) {

@@ -17,6 +17,7 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
+const TStatKey Hop_InputEventsCount("MultiHop_InputEventsCount", /*deriv=*/true);
 const TStatKey Hop_NewHopsCount("MultiHop_NewHopsCount", /*deriv=*/true);
 const TStatKey Hop_FutureEventsCount("MultiHop_FarFutureEventsCount", /*deriv=*/true);
 const TStatKey Hop_InvalidEventsCount("MultiHop_InvalidEventsCount", /*deriv=*/true);
@@ -275,6 +276,7 @@ public:
                 Ready_.pop_front();
                 return NUdf::EFetchStatus::Ok;
             }
+            i64 inputEventsCount = 0;
             i64 farFutureEventsCount = 0;
             i64 invalidEventsThrown = 0;
             i64 lateEventsThrown = 0;
@@ -283,6 +285,7 @@ public:
             i64 farFutureStateSizeChange = 0;
 
             Y_DEFER {
+                MKQL_ADD_STAT(Ctx_.Stats, Hop_InputEventsCount, inputEventsCount);
                 MKQL_ADD_STAT(Ctx_.Stats, Hop_FutureEventsCount, farFutureEventsCount);
                 MKQL_ADD_STAT(Ctx_.Stats, Hop_InvalidEventsCount, invalidEventsThrown);
                 MKQL_ADD_STAT(Ctx_.Stats, Hop_LateThrownEventsCount, lateEventsThrown);
@@ -333,6 +336,7 @@ public:
                     return status;
                 }
 
+                ++inputEventsCount;
                 Self_->Item_->SetValue(Ctx_, std::move(item));
                 auto key = Self_->KeyExtract_->GetValue(Ctx_);
                 const auto& time = Self_->OutTime_->GetValue(Ctx_);

@@ -1048,6 +1048,12 @@ namespace NKikimr::NBsController {
             }
             for (const auto& [prev, cur] : Diff(&StoragePools, &state.StoragePools.Get())) {
                 SysViewChangedStoragePools.insert(cur ? cur->first : prev->first);
+                if (prev && cur && prev->second.BridgeMode != cur->second.BridgeMode) {
+                    for (auto it = StoragePoolGroups.lower_bound({cur->first, TGroupId::Zero()});
+                            it != StoragePoolGroups.end() && it->first == cur->first; ++it) {
+                        SysViewChangedGroups.insert(it->second);
+                    }
+                }
             }
         }
 

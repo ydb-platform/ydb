@@ -35,6 +35,8 @@ void TGranuleActualizationIndex::RefreshTiering(const std::optional<TTiering>& i
 void TGranuleActualizationIndex::RefreshScheme(const TAddExternalContext& context) {
     AFL_VERIFY(SchemeActualizer);
     SchemeActualizer->Refresh(context);
+    AFL_VERIFY(TieringActualizer);
+    TieringActualizer->RefreshScheme(context);
     NYDBTest::TControllers::GetColumnShardController()->OnActualizationRefreshScheme();
 }
 

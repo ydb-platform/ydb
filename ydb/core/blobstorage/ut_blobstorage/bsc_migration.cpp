@@ -103,7 +103,8 @@ Y_UNIT_TEST_SUITE(BSCMigration) {
         UNIT_ASSERT_VALUES_EQUAL_C(updateResponse->Get()->Record.GetStatus(), NKikimrProto::OK,
             updateResponse->Get()->Record.DebugString());
 
-        env.RebootTablet(env.TabletId, TDuration::Seconds(5));
+        env.RestartNode(env.Settings.ControllerNodeId);
+        env.Sim(TDuration::Seconds(5));
         const auto response = ValidateBridgeConversion(env);
         UNIT_ASSERT_C(response.GetStatus() ==
             NKikimrBlobStorage::TEvControllerDistconfResponse::Error, response.DebugString());

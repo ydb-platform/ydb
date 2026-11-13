@@ -463,6 +463,56 @@ Y_UNIT_TEST_SUITE(BridgeSkipperPolicy) {
         UNIT_ASSERT(!confirmations.IsConfirmed("missing", TDuration::Seconds(20)));
     }
 
+    Y_UNIT_TEST(ChangingFailureEvidenceRestartsConfirmationInBothDirections) {
+        for (const auto from : {EFailureEvidence::Ordinary, EFailureEvidence::Fallback, EFailureEvidence::Storage}) {
+            for (const auto to : {EFailureEvidence::Ordinary, EFailureEvidence::Fallback, EFailureEvidence::Storage}) {
+                if (from == to) {
+                    continue;
+                }
+                TConfirmations confirmations;
+                std::map<TString, TPileVerdict> verdicts = {{"a", Verdict(EPileVerdict::Failed, 100)}};
+                verdicts.at("a").FailureEvidence = from;
+                confirmations.Update(ViewAt(7), verdicts, At(100));
+                verdicts.at("a").NewestEvidenceSentAt = At(120);
+                confirmations.Update(ViewAt(7), verdicts, At(120));
+                UNIT_ASSERT(confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+                verdicts.at("a").FailureEvidence = to;
+                verdicts.at("a").NewestEvidenceSentAt = At(121);
+                confirmations.Update(ViewAt(7), verdicts, At(121));
+                UNIT_ASSERT(!confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+                UNIT_ASSERT_VALUES_EQUAL(confirmations.Piles.at("a").FirstEvidenceSentAt, At(121));
+                verdicts.at("a").NewestEvidenceSentAt = At(140);
+                confirmations.Update(ViewAt(7), verdicts, At(140));
+                UNIT_ASSERT(!confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+                verdicts.at("a").NewestEvidenceSentAt = At(141);
+                confirmations.Update(ViewAt(7), verdicts, At(141));
+                UNIT_ASSERT(confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(FallbackProofKindsCannotCarryConfirmationAcrossGenerationOrRoleChanges) {
+        for (const auto kind : {EFailureEvidence::Ordinary, EFailureEvidence::Fallback, EFailureEvidence::Storage}) {
+            TConfirmations confirmations;
+            std::map<TString, TPileVerdict> verdicts = {{"a", Verdict(EPileVerdict::Failed, 100)}};
+            verdicts.at("a").FailureEvidence = kind;
+            confirmations.Update(ViewAt(7), verdicts, At(100));
+            verdicts.at("a").NewestEvidenceSentAt = At(120);
+            confirmations.Update(ViewAt(7), verdicts, At(120));
+            UNIT_ASSERT(confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+            confirmations.Update(ViewAt(8), verdicts, At(121));
+            UNIT_ASSERT_VALUES_EQUAL(confirmations.IsConfirmed("a", TDuration::Seconds(20)),
+                kind == EFailureEvidence::Ordinary);
+            verdicts.at("a").NewestEvidenceSentAt = At(140);
+            confirmations.Update(ViewAt(8), verdicts, At(140));
+            UNIT_ASSERT(confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+            const auto changedRoles = ViewAt(9, {{"a", EPileState::Synchronized}, {"b", EPileState::Primary}});
+            verdicts.at("a").NewestEvidenceSentAt = At(141);
+            confirmations.Update(changedRoles, verdicts, At(141));
+            UNIT_ASSERT(!confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+        }
+    }
+
     // RED replies sent at 100 and 110, then only failed attempts: the cached
     // replies span 10 s of evidence and must not confirm a 20 s window.
     Y_UNIT_TEST(CachedEvidenceAloneNeverConfirms) {

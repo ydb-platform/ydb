@@ -49,6 +49,11 @@ message TBundle {
     // An optional epoch used for ordering bundles in logical time
 
     optional int64 Epoch = 5;
+
+    // Overrides the common TLogTableSnap.CompactionLevel for this bundle.
+    // When absent, the bundle inherits the common level.
+    // Allows one atomic part switch to introduce outputs in different generations.
+    optional uint32 CompactionLevel = 6;
 }
 
 message TBundleChange {
@@ -92,6 +97,8 @@ message TLogTableSnap {
     optional uint32 Legacy2_ = 5;
     optional uint32 Legacy3_ = 6;
 
+    // Common level for bundles without their own CompactionLevel,
+    // and for legacy DbPartMetaInfoBody entries.
     optional uint32 CompactionLevel = 7;
 
     repeated TBundle Bundles = 8;

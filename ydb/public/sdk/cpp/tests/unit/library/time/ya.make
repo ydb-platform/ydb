@@ -1,7 +1,5 @@
 GTEST()
 
-FORK_SUBTESTS()
-
 SRCS(
     time_ut.cpp
 )

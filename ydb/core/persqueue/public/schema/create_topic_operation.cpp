@@ -85,7 +85,7 @@ private:
         // extract DC/producer metadata. ResolveName is only for FCC (literal modern path).
         TString path;
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            auto resolved = NNameResolver::ResolveName(database, Settings.Strategy->GetTopicName());
+            auto resolved = NNameResolver::ResolveName(database, Settings.Strategy->GetTopicName(), {}, {}, Settings.EnableRelativePaths);
             if (!resolved) {
                 return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, TString{resolved.error()});
             }

@@ -1422,7 +1422,7 @@ class TestViewer(object):
     def test_pqrb_tablet(cls):
         response_create_topic = cls.call_viewer("/viewer/query", {
             'database': cls.dedicated_db,
-            'query': 'CREATE TOPIC topic1(CONSUMER consumer1)',
+            'query': 'CREATE TOPIC IF NOT EXISTS topic1(CONSUMER consumer1)',
             'schema': 'multi'
         })
 
@@ -2317,18 +2317,27 @@ class TestViewer(object):
 
     @classmethod
     def test_storage_stats(cls):
-        result = {}
-        tries = 15
-        while tries > 0:
-            result = cls.get_viewer_normalized("/viewer/storage_stats", {
+        response_create_topic = cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'query': 'CREATE TOPIC IF NOT EXISTS topic1(CONSUMER consumer1)',
+            'schema': 'multi'
+        })
+        assert response_create_topic.get('status') == 'SUCCESS', response_create_topic
+
+        def get_paths_with_storage_stats():
+            result = cls.get_viewer("/viewer/storage_stats", {
                 'database': cls.dedicated_db,
                 'path': '.,table1,topic1',
             })
-            if result['Paths'][2]['Groups'] != 0:
-                break
-            tries -= 1
-            time.sleep(1)
-        return result
+            paths = result.get('Paths', [])
+            assert len(paths) == 3, result
+            for path in paths:
+                for field in ('Groups', 'Media', 'Tablets', 'StorageCount', 'StorageSize'):
+                    assert path.get(field, 0) > 0, path
+            assert paths[1].get('DataSize', 0) > 0, paths[1]
+            return cls.normalize_result(result)
+
+        return retry_assertions(get_paths_with_storage_stats)
 
     @classmethod
     def test_viewer_peers(cls):

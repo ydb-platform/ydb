@@ -78,12 +78,18 @@ public:
     virtual TVector<TChange>&& GetCollected() = 0;
 };
 
+enum class EAsyncIndexKeySizePolicy {
+    Reject,
+    SkipOversizedIntermediateKeys,
+};
+
 IDataShardChangeCollector* CreateChangeCollector(
         TDataShard& dataShard,
         IDataShardUserDb& userDb,
         IDataShardChangeGroupProvider& groupProvider,
         NTable::TDatabase& db,
-        const TUserTable& table);
+        const TUserTable& table,
+        EAsyncIndexKeySizePolicy indexKeySizePolicy = EAsyncIndexKeySizePolicy::Reject);
 IDataShardChangeCollector* CreateChangeCollector(
         TDataShard& dataShard,
         IDataShardUserDb& userDb,

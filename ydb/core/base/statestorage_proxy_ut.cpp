@@ -32,11 +32,14 @@ public:
     ui32 SignatureUpdateCount = 0;
     NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
     TActorId ReplyLeader;
+    ui64 ReplyClusterStateGeneration = Max<ui64>();
+    ui64 ReplyClusterStateGuid = Max<ui64>();
     TEvStateStorage::TSignature Signatures;
     TVector<TEvStateStorage::TEvInfo::TFollowerInfo> Followers;
 
     explicit TLookupFixture(TOptions::ESigWaitMode mode = TOptions::SigNone, ui32 ringGroupCount = 1,
-            const TVector<ERingGroupState>& ringGroupStates = {}, bool waitForAllRingGroups = false) {
+            const TVector<ERingGroupState>& ringGroupStates = {}, bool waitForAllRingGroups = false,
+            ui64 clusterStateGeneration = 0, ui64 clusterStateGuid = 0) {
         Runtime.Initialize();
         Runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
             NKikimrServices::EServiceKikimr_MAX,
@@ -49,6 +52,8 @@ public:
         OtherLeader = Runtime.AllocateEdgeActor();
 
         auto info = MakeIntrusive<TStateStorageInfo>();
+        info->ClusterStateGeneration = clusterStateGeneration;
+        info->ClusterStateGuid = clusterStateGuid;
         info->RingGroups.resize(ringGroupCount);
         for (ui32 ringGroupIndex = 0; ringGroupIndex < info->RingGroups.size(); ++ringGroupIndex) {
             auto& group = info->RingGroups[ringGroupIndex];
@@ -81,6 +86,8 @@ public:
                     ++ReplyCount;
                     Status = reply->Status;
                     ReplyLeader = reply->CurrentLeader;
+                    ReplyClusterStateGeneration = reply->ClusterStateGeneration;
+                    ReplyClusterStateGuid = reply->ClusterStateGuid;
                     Signatures = reply->Signature;
                     Followers = reply->Followers;
                     return TTestActorRuntimeBase::EEventAction::DROP;
@@ -106,6 +113,8 @@ public:
         for (const auto& replica : Replicas) {
             auto request = Runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaLookup>(replica);
             UNIT_ASSERT(request);
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.GetClusterStateGeneration(), clusterStateGeneration);
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.GetClusterStateGuid(), clusterStateGuid);
             Requests.push_back(request->Sender);
             ReplicaCookies.push_back(request->Get()->Record.GetCookie());
         }
@@ -362,9 +371,41 @@ void CheckIncompleteLockShutdown(bool safetyTimeout, bool partialSuccess, bool r
     UNIT_ASSERT_VALUES_EQUAL(f.Status, race ? NKikimrProto::RACE : NKikimrProto::TIMEOUT);
 }
 
+void CheckLookupReplyClusterStateVersion(ui32 ringGroupCount) {
+    for (ui64 generation : {0ull, 2ull}) {
+        const ui64 guid = generation ? 22 : 0;
+        for (bool hasLeader : {false, true}) {
+            TLookupFixture f(TEvStateStorage::TProxyOptions::SigNone, ringGroupCount, {}, false, generation, guid);
+            for (ui32 group = 0; group < ringGroupCount; ++group) {
+                for (ui32 replica = 0; replica < 3; ++replica) {
+                    if (hasLeader) {
+                        f.KnownLeader(group * 5 + replica);
+                    } else {
+                        f.Empty(group * 5 + replica);
+                    }
+                }
+            }
+            f.ExpectReply(hasLeader ? NKikimrProto::OK : NKikimrProto::NODATA);
+            // Check the real proxy result, not an injected TEvInfo. The input
+            // replicas use legacy (0,0) tags, so the result must carry the
+            // immutable request configuration rather than a replica's tags.
+            UNIT_ASSERT_VALUES_EQUAL(f.ReplyClusterStateGeneration, generation);
+            UNIT_ASSERT_VALUES_EQUAL(f.ReplyClusterStateGuid, guid);
+        }
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TStateStorageProxyLookup) {
+    Y_UNIT_TEST(LookupReplyCarriesClusterStateVersionSingleRingGroup) {
+        CheckLookupReplyClusterStateVersion(1);
+    }
+
+    Y_UNIT_TEST(LookupReplyCarriesClusterStateVersionMultipleRingGroups) {
+        CheckLookupReplyClusterStateVersion(2);
+    }
+
     Y_UNIT_TEST(NodataQuorumSigNone) {
         CheckEmptyQuorum(TEvStateStorage::TProxyOptions::SigNone);
     }

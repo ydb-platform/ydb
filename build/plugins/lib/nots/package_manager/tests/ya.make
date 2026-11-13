@@ -6,6 +6,7 @@ TEST_SRCS(
     test_common_config.py
     test_lockfile.py
     test_package_json.py
+    test_platform.py
     test_utils.py
 )
 

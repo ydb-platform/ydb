@@ -23,7 +23,9 @@ public:
     explicit TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages({});
+        IgnoreMessages({
+            TEvHive::TEvCreateTabletReply::EventType,
+        });
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -83,6 +85,10 @@ class TNewCdcStream: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
+        case TTxState::CreateParts:
+            return TTxState::ConfigureParts;
+        case TTxState::ConfigureParts:
+            return TTxState::Propose;
         case TTxState::Propose:
             return TTxState::Done;
         default:
@@ -92,6 +98,10 @@ class TNewCdcStream: public TSubOperation {
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
+        case TTxState::CreateParts:
+            return MakeHolder<TCreateParts>(OperationId);
+        case TTxState::ConfigureParts:
+            return MakeHolder<TConfigureParts>(OperationId);
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
@@ -258,6 +268,12 @@ public:
         default:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
                 << "Invalid compression codec: " << static_cast<ui32>(streamDesc.GetCompression()));
+            return result;
+        }
+
+        if (streamDesc.HasHeartbeatMode() || streamDesc.HasAggregatorTabletId()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "HeartbeatMode and AggregatorTabletId are assigned by SchemeShard and cannot be set in a request");
             return result;
         }
 
@@ -972,6 +988,26 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
 }
 
 } // anonymous
+
+TConfigureParts::TConfigureParts(TOperationId id)
+    : OperationId(id)
+{
+    IgnoreMessages({
+        TEvHive::TEvCreateTabletReply::EventType,
+    });
+}
+
+bool TConfigureParts::ProgressState(TOperationContext& context) {
+    YDB_LOG_INFO_CTX(context.Ctx, "");
+
+    const auto* txState = context.SS->FindTx(OperationId);
+    Y_ABORT_UNLESS(txState);
+    Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateCdcStream || txState->TxType == TTxState::TxRotateCdcStream);
+
+    NIceDb::TNiceDb db(context.GetDB());
+    context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
+    return true;
+}
 
 std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TOperationContext& context,

@@ -79,7 +79,7 @@ TEST(Login, TokenIsNotExpired) {
         FAIL() << "Create user failed with status: " << ToString(static_cast<TStatus>(status)) << std::endl;
     }
 
-    status = client.ExecuteQuery(std::format("GRANT ALL ON `/{}` TO `test`", database), TTxControl::NoTx()).GetValueSync();
+    status = client.ExecuteQuery(std::format("GRANT ALL ON `{}` TO `test`", database), TTxControl::NoTx()).GetValueSync();
     if (!status.IsSuccess()) {
         FAIL() << "Grant all failed with status: " << ToString(static_cast<TStatus>(status)) << std::endl;
     }

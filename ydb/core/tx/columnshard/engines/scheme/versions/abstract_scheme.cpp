@@ -115,19 +115,18 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
                                                features.GetArrowField()->type()->ToString() + " vs " + incomingColumn->type()->ToString());
             }
         }
-        if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
-            return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
-        }
-        if (hasNull) {
+        if (hasNull && !GetIndexInfo().IsNullableVerifiedByIndex(targetIdx)) {
+            if (pkFieldIdx) {
+                return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
+            }
             switch (mType) {
                 case NEvWrite::EModificationType::Replace:
                 case NEvWrite::EModificationType::Insert:
-                case NEvWrite::EModificationType::Upsert: {
-                    if (!GetIndexInfo().IsNullableVerifiedByIndex(targetIdx) &&
-                        !GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
+                case NEvWrite::EModificationType::Upsert:
+                    if (!GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
                         return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema.field(targetIdx)->name() + "'");
                     }
-                }
+                    break;
                 case NEvWrite::EModificationType::Delete:
                 case NEvWrite::EModificationType::Update:
                 case NEvWrite::EModificationType::Increment:

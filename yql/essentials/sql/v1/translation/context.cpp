@@ -108,6 +108,8 @@ const THashSet<TStringBuf> KNOWN_SIMPLE_FLAGS = {
     "AnsiOrderByLimitInUnionAll",
 };
 
+} // namespace
+
 bool IsKnownSimpleFlag(TStringBuf flag) {
     if (CTX_PRAGMA_FIELDS.contains(flag) || CTX_PRAGMA_MAYBE_FIELDS.contains(flag)) {
         return true;
@@ -123,8 +125,6 @@ bool IsKnownSimpleFlag(TStringBuf flag) {
     }
     return false;
 }
-
-} // namespace
 
 TContext::TContext(TLexers lexers, TParsers parsers,
                    const NSQLTranslation::TTranslationSettings& settings,
@@ -445,11 +445,18 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
 
 void TContext::SetRelativePathPrefix(const TString& value) {
     PathPrefix_ = BuildTablePath(Settings.PathPrefix, value);
+    ProviderPathPrefixes_.clear();
+    ClusterPathPrefixes_ = Settings.ClusterPathPrefixes;
     for (auto& [cluster, prefix] : ClusterPathPrefixes_) {
         if (prefix) {
             prefix = BuildTablePath(prefix, value);
         }
     }
+}
+
+void TContext::ResetRelativePathPrefix() {
+    PathPrefix_ = Settings.PathPrefix;
+    ClusterPathPrefixes_ = Settings.ClusterPathPrefixes;
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {

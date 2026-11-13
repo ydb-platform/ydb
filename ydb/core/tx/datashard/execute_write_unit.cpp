@@ -556,9 +556,18 @@ public:
                 }
             };
 
+            const bool requireReadOnlyLocks = op->IsReadOnly() || op->HasFlag(TTxFlags::ReadOnlyPrepare);
+
             auto [validated, brokenLocks] = op->HasVolatilePrepareFlag()
+<<<<<<< HEAD
                                                 ? KqpValidateVolatileTx(tabletId, sysLocks, kqpLocks, useGenericReadSets, txId, op->DelayedInReadSets(), awaitingDecisions, outReadSets)
                                                 : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
+=======
+                ? KqpValidateVolatileTx(sysLocks, kqpLocks, useGenericReadSets, txId,
+                    op->DelayedInReadSets(), awaitingDecisions, outReadSets, allowAncestorLocks, requireReadOnlyLocks)
+                : KqpValidateLocks(sysLocks, kqpLocks, useGenericReadSets, inReadSets,
+                    allowAncestorLocks, requireReadOnlyLocks);
+>>>>>>> 850659aae81 (feat datashard : allow read-only prepares on CDC overflow (#58063))
 
             if (!validated) {
                 YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: aborting because locks are not valid",

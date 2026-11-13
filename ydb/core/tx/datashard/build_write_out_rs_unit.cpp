@@ -68,7 +68,15 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
 
     try {
         const auto& kqpLocks = writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{};
+<<<<<<< HEAD
         KqpFillOutReadSets(op->OutReadSets(), kqpLocks, true, DataShard.SysLocksTable(), tabletId);
+=======
+        const bool allowAncestorLocks =
+            AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+        KqpFillOutReadSets(
+            op->OutReadSets(), kqpLocks, true, DataShard.SysLocksTable(), allowAncestorLocks,
+            op->IsReadOnly() || op->HasFlag(TTxFlags::ReadOnlyPrepare));
+>>>>>>> 850659aae81 (feat datashard : allow read-only prepares on CDC overflow (#58063))
     } catch (const TNotReadyTabletException&) {
         YDB_LOG_CRIT_CTX(ctx, "TBuildWriteOutRSUnit::Execute: unexpected TNotReadyTabletException while building out readset");
         return OnTabletNotReady(*writeOp, txc, ctx);

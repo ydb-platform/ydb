@@ -1214,3 +1214,5 @@ class TestSqsGenericMessagingWithTenant(get_test_with_sqs_tenant_installation(Sq
 
 class TestSqsGenericMessagingWithPath(get_test_with_sqs_installation_by_path(SqsGenericMessagingTest)):
     pass
+
+# CI baseline for #59292: keep the original waits.

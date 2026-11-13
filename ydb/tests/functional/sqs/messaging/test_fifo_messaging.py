@@ -498,3 +498,5 @@ class TestSqsFifoMessagingWithTenant(get_test_with_sqs_tenant_installation(SqsFi
 
 class TestSqsFifoMessagingWithPath(get_test_with_sqs_installation_by_path(SqsFifoMessagingTest)):
     pass
+
+# CI baseline for #59292: keep the original waits.

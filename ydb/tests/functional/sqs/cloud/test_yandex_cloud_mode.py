@@ -882,3 +882,5 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
 
         received_queue_url = self._sqs_api.get_queue_url(custom_queue_name)
         assert received_queue_url == queue_url
+
+# CI baseline for #59292: keep the original waits.

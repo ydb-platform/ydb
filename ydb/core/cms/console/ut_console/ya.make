@@ -12,6 +12,7 @@ PEERDIR(
     library/cpp/protobuf/util
     library/cpp/regex/pcre
     library/cpp/svnversion
+    ydb/core/testlib/audit_helpers
     ydb/core/testlib/default
 )
 
@@ -20,6 +21,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     console_ut_tenants.cpp
     console_ut_configs.cpp
+    console_audit_dynconfig_ut.cpp
     console_configs_provider_ut.cpp
     console_configs_delivery_ut.cpp
     ut_configs_subscriber.cpp

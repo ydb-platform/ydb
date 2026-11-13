@@ -10,8 +10,8 @@ namespace NSysView {
 
 inline TDuration QueryStatsInterval(const NKikimrConfig::TSysViewConfig& config) {
     const auto seconds = config.GetQueryStatsIntervalSeconds();
-    Y_ENSURE(seconds >= 5 && seconds <= 60 && 60 % seconds == 0,
-        "SysViewConfig.QueryStatsIntervalSeconds must divide 60 and be at least 5");
+    Y_ENSURE(seconds > 0 && seconds <= 60 && 60 % seconds == 0,
+        "SysViewConfig.QueryStatsIntervalSeconds must be a positive divisor of 60");
     return TDuration::Seconds(seconds);
 }
 

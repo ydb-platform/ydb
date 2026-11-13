@@ -86,7 +86,7 @@ public:
 
     void NextInterval() {
         IntervalEnd += CollectionInterval;
-        const auto collectTime = IntervalEnd + TDuration::Seconds(1);
+        const auto collectTime = IntervalEnd + CollectionInterval / 5;
         UNIT_ASSERT_LT(Runtime.GetCurrentTime(), collectTime);
         Runtime.SimulateSleep(collectTime - Runtime.GetCurrentTime());
         for (auto& metrics : NodeMetrics) {
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TQueryMetricsProcessorTest) {
 
     Y_UNIT_TEST(ConfiguredIntervalsSurviveReboot) {
         // An unset field exercises the production default, not a test factory.
-        for (ui32 seconds : {0, 5, 10}) {
+        for (ui32 seconds : {0, 1, 5, 10}) {
             NKikimrConfig::TSysViewConfig config;
             if (seconds) {
                 config.SetQueryStatsIntervalSeconds(seconds);

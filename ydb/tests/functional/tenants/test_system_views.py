@@ -100,7 +100,7 @@ class BaseSystemViews(object):
             metrics = self.read_query_metrics(driver, self.database, interval, query_text)
             if metrics and (expected_count is None or metrics[0].Count == expected_count):
                 return metrics
-            time.sleep(2)
+            time.sleep(min(2, self.query_stats_interval_seconds / 5))
         return metrics
 
     def read_query_stats(self, driver, database, table_name):
@@ -215,21 +215,21 @@ class TestPartitionStats(BaseSystemViews):
 
 
 class TestQueryMetrics(BaseSystemViews):
-    query_stats_interval_seconds = 5
+    query_stats_interval_seconds = 1
 
     def test_case(self):
         self.check_query_metrics_and_stats(1)
 
 
 class TestQueryMetricsUniqueQueries(BaseSystemViews):
-    query_stats_interval_seconds = 5
+    query_stats_interval_seconds = 1
 
     def test_case(self):
         self.check_query_metrics_and_stats(10)
 
 
 class TestQueryMetricsOneHourRestart(BaseSystemViews):
-    query_stats_interval_seconds = 5
+    query_stats_interval_seconds = 1
 
     def test_case(self):
         table = os.path.join(self.database, 'table')
@@ -274,7 +274,7 @@ class TestQueryMetricsOneHourRestart(BaseSystemViews):
                     driver, self.database, 'one_hour', query)
                 if sum(metric.Count for metric in metrics) >= 2:
                     break
-                time.sleep(2)
+                time.sleep(min(2, self.query_stats_interval_seconds / 5))
 
             assert_that(metrics, has_length(greater_than(0)))
             assert_that(sum(metric.Count for metric in metrics), greater_than(1))

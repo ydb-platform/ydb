@@ -129,8 +129,9 @@ public:
         : Config(std::move(config))
         , HasExternalCounters(hasExternalCounters)
         , TotalInterval(QueryStatsInterval(sysViewConfig))
-        , CollectInterval(TDuration::Seconds((TotalInterval.Seconds() + 1) / 2))
-        , SendInterval(TDuration::Seconds((TotalInterval.Seconds() + 2) / 3))
+        , CollectInterval(TotalInterval / 2)
+        , SendInterval(TotalInterval / 3)
+        , SummaryRetryInterval(Min(TDuration::Seconds(2), TotalInterval / 10))
         , ProcessLabeledCountersInterval(TDuration::Seconds(sysViewConfig.GetLabeledCountersIntervalSeconds()))
     {
         Y_ENSURE(ProcessLabeledCountersInterval > TDuration::Zero(),
@@ -1018,6 +1019,7 @@ private:
     const TDuration TotalInterval;
     const TDuration CollectInterval;
     const TDuration SendInterval;
+    const TDuration SummaryRetryInterval;
     const TDuration ProcessLabeledCountersInterval;
 
     template <typename TInterval>
@@ -1163,7 +1165,6 @@ private:
     static constexpr i64 ConcurrentScansLimit = 5;
     TIntrusivePtr<TScanLimiter> ScanLimiter;
 
-    static constexpr TDuration SummaryRetryInterval = TDuration::Seconds(2);
     static constexpr size_t SummaryRetryAttempts = 5;
 
     static constexpr TDuration ProcessCountersInterval = TDuration::Seconds(5);

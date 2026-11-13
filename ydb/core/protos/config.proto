@@ -3720,7 +3720,7 @@ message TSysViewConfig {
     // Shorter intervals change the buckets exposed by the one_minute views and
     // their retained history. Use them only for fresh isolated test clusters;
     // do not change this interval on databases with existing stats history.
-    // Must divide 60 seconds and be at least 5 seconds.
+    // Must be a positive divisor of 60 seconds.
     optional uint32 QueryStatsIntervalSeconds = 1 [default = 60];
     optional uint32 LabeledCountersIntervalSeconds = 2 [default = 60];
 }

@@ -3,8 +3,12 @@
 #include <ydb/core/grpc_streaming/ut/grpc/streaming_service.grpc.pb.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/library/grpc/server/grpc_request.h>
+#include <ydb/library/testlib/common/test_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <thread>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
@@ -30,6 +34,9 @@ namespace {
         response.SetResponseCookie(cookie);
         return response;
     }
+
+    // Unary requests are held until the test replies to them
+    NThreading::TPromise<NYdbGrpc::IRequestContextBase*> UnaryRequestReceived;
 }
 
 template<class TImplActor>
@@ -48,7 +55,7 @@ public:
         , Counters(std::move(counters))
     { }
 
-    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr) override {
+    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override {
         CQ = cq;
 
         auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, &ActorSystem);
@@ -64,6 +71,14 @@ public:
             ActorSystem,
             "Session",
             getCounterBlock("streaming", "Session"));
+
+        MakeIntrusive<NYdbGrpc::TGRpcRequest<NStreamingTest::TSessionRequest, NStreamingTest::TSessionResponse, TSelf>>(
+            this, this->GetService(), CQ,
+            [](NYdbGrpc::IRequestContextBase* ctx) {
+                UnaryRequestReceived.SetValue(ctx);
+            },
+            &NStreamingTest::TStreamingService::AsyncService::RequestUnary,
+            "Unary", logger, getCounterBlock("unary", "Unary"))->Run();
     }
 
     void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter*) override {
@@ -89,6 +104,22 @@ template<class TImplActor>
 class TGRpcTestServer {
 public:
     TGRpcTestServer() {
+        NYdbGrpc::TServerOptions options;
+        Init(std::move(options));
+    }
+
+    explicit TGRpcTestServer(NYdbGrpc::TServerOptions options) {
+        Init(std::move(options));
+    }
+
+    ~TGRpcTestServer() {
+        if (GRpcServer) {
+            GRpcServer->Stop();
+        }
+    }
+
+private:
+    void Init(NYdbGrpc::TServerOptions options) {
         ui64 port = PortManager.GetPort(2134);
         ui64 grpc = PortManager.GetPort(2135);
         ServerSettings = new TServerSettings(port);
@@ -99,7 +130,6 @@ public:
 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(MakeIntrusive<::NMonitoring::TDynamicCounters>());
 
-        NYdbGrpc::TServerOptions options;
         options.SetPort(grpc);
         GRpcServer.Reset(new NYdbGrpc::TGRpcServer(options));
 
@@ -110,17 +140,15 @@ public:
 
         GRpcEndpoint = TStringBuilder() << "localhost:" << grpc;
     }
-
-    ~TGRpcTestServer() {
-        if (GRpcServer) {
-            GRpcServer->Stop();
-        }
-    }
-
 public:
     TServerSettings::TPtr ServerSettings;
-    TServer::TPtr Server;
+    // GRpcServer must be declared before Server so that it is destroyed AFTER
+    // Server. The TServer destructor stops the actor system, which destroys actors that hold
+    // TFacade objects. The TFacade destructor calls TGRpcStreamingRequest::FinishInternal(), which
+    // accesses Server->IsShuttingDown(). If GRpcServer were destroyed first,
+    // this would be a use-after-free.
     THolder<NYdbGrpc::TGRpcServer> GRpcServer;
+    TServer::TPtr Server;
     TString GRpcEndpoint;
 
 private:
@@ -369,6 +397,54 @@ private:
     ui64 Counter = 0;
 };
 
+// Actor that attaches and reads but never finishes/closes the stream.
+// It keeps the IStreamCtx (TFacade) alive until the actor is destroyed,
+// which reproduces the LOGBROKER-10618 crash: when the gRPC server is
+// stopped (CQ shutdown) before the actor system is destroyed, the facade
+// destructor calls Detach() -> FinishInternal() -> Stream.Finish() on a
+// dead completion queue.
+class THangActor : public TActorBootstrapped<THangActor> {
+public:
+    THangActor(TIntrusivePtr<IContext> context)
+        : Context(std::move(context))
+    { }
+
+    void Bootstrap(const TActorContext& ctx) {
+        Y_UNUSED(ctx);
+        Context->Attach(SelfId());
+        Context->Read();
+        // Intentionally do NOT write: a pending write would set FlagWriteActive,
+        // which makes FinishInternal() skip Stream.Finish() (finish == false).
+        // The LOGBROKER-10618 crash is Stream.Finish() on a dead CQ, which only
+        // happens when FlagWriteActive is clear (e.g. a deferred StreamWrite that
+        // never started writing). So keep the write side idle to reproduce it.
+        if (Attached) {
+            Attached->Signal();
+        }
+        Become(&THangActor::StateWork);
+    }
+
+    void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
+        Y_UNUSED(ev);
+        Y_UNUSED(ctx);
+        // Intentionally do nothing: keep the stream open and the context alive.
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(IContext::TEvReadFinished, Handle);
+        }
+    }
+
+public:
+    static TManualEvent* Attached;
+
+private:
+    TIntrusivePtr<IContext> Context;
+};
+
+TManualEvent* THangActor::Attached = nullptr;
+
 Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
     Y_UNIT_TEST(SimpleEcho) {
         auto server = MakeHolder<TGRpcTestServer<TSimpleEchoActor>>();
@@ -483,6 +559,84 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
 
         auto status = stream->Finish();
         UNIT_ASSERT(status.ok());
+    }
+
+    // Regression test for LOGBROKER-10618.
+    // A streaming RPC is left hanging (the server actor holds the IStreamCtx
+    // and never finishes). When the gRPC server is stopped, its completion
+    // queues are shut down. Then the actor system is destroyed, which destroys
+    // the hanging actor and its IStreamCtx (TFacade). The facade destructor
+    // calls Detach() -> FinishInternal() -> Stream.Finish() on the already
+    // dead completion queue, which used to hit the Y_VERIFY
+    // "grpc_cq_begin_op(cq_, notify_tag) failed".
+    Y_UNIT_TEST(FinishAfterServerShutdownDoesNotCrash) {
+        NYdbGrpc::TServerOptions options;
+        // Short deadline so Stop() does not block for the default 30s while
+        // the hanging RPC keeps the server from draining.
+        options.SetGRpcShutdownDeadline(TDuration::MilliSeconds(100));
+
+        // Per-test event: a fresh event for each test run, so a failure in a
+        // previous run cannot make WaitI() return early on a stale signal.
+        TManualEvent attached;
+        THangActor::Attached = &attached;
+
+        auto server = MakeHolder<TGRpcTestServer<THangActor>>(std::move(options));
+
+        auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
+        auto stub = NStreamingTest::TStreamingService::NewStub(channel);
+
+        // The server actor (THangActor) now holds the IStreamCtx and never
+        // finishes the stream. Keep the client stream alive across server.Reset()
+        // so the RPC stays in flight on the server side (with no in-flight write:
+        // THangActor never writes, so FlagWriteActive stays clear) when the
+        // completion queues are shut down, matching LOGBROKER-10618.
+        grpc::ClientContext context;
+        auto stream = stub->Session(&context);
+        Y_UNUSED(stream);
+
+        // Wait until the server-side THangActor has been created and attached
+        // to the stream. This guarantees the IStreamCtx (TFacade) is held by
+        // the actor before we shut the server down, so the facade destructor
+        // will run after the completion queue is dead.
+        attached.WaitI();
+
+        // Destroy the server: GRpcServer->Stop() shuts down the CQs, then the
+        // actor system is destroyed, destroying THangActor and its IStreamCtx.
+        // Without the fix this crashes with the LOGBROKER-10618 Y_VERIFY.
+        server.Reset();
+
+        THangActor::Attached = nullptr;
+    }
+
+    // A reply that comes after the shutdown deadline, like a query that outlived a bridge pile takedown,
+    // must complete on the stopped server instead of hitting its dead completion queue.
+    Y_UNIT_TEST(LateUnaryReplyAfterStopAcceptingRequests) {
+        NYdbGrpc::TServerOptions options;
+        options.SetGRpcShutdownDeadline(TDuration::MilliSeconds(100));
+        auto server = MakeHolder<TGRpcTestServer<TSimpleEchoActor>>(std::move(options));
+        UnaryRequestReceived = NThreading::NewPromise<NYdbGrpc::IRequestContextBase*>();
+
+        auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
+        auto stub = NStreamingTest::TStreamingService::NewStub(channel);
+        grpc::ClientContext context;
+        NStreamingTest::TSessionResponse response;
+        std::jthread client([&] {
+            // The server cancels the call on shutdown, so the status does not matter
+            stub->Unary(&context, MakeRequest(1), &response);
+        });
+
+        auto* ctx = UnaryRequestReceived.GetFuture().GetValueSync();
+        server->GRpcServer->StopAcceptingRequests();
+        UNIT_ASSERT_VALUES_EQUAL(server->GRpcServer->RequestsInProgress(), 1);
+
+        auto reply = MakeResponse(1);
+        ctx->Reply(&reply);
+
+        NTestUtils::WaitFor(TDuration::Seconds(10), "server drained", [&] {
+            return server->GRpcServer->RequestsInProgress() == 0;
+        });
+        server->GRpcServer->Stop();
+        client.join();
     }
 }
 

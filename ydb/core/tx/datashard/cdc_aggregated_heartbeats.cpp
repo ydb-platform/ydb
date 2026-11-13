@@ -31,38 +31,20 @@ public:
 
 } // anonymous
 
-TCdcAggregatedHeartbeats::TCdcAggregatedHeartbeats(THolder<IChangeRecordSerializer> serializer, ui64 sourceDataShardId)
+TCdcAggregatedHeartbeats::TCdcAggregatedHeartbeats(THolder<IChangeRecordSerializer> serializer, const TDataShardId& dataShard)
     : Serializer(std::move(serializer))
-    , SourceDataShardId(sourceDataShardId)
+    , DataShard(dataShard)
 {
 }
 
 void TCdcAggregatedHeartbeats::OnRecordsEnqueued(const TVector<TRecordInfo>& records) {
-    if (!Serializer) {
-        return;
-    }
-
     for (const auto& record : records) {
         Undelivered.insert(record.Order);
     }
 }
 
-void TCdcAggregatedHeartbeats::OnRecordsRemoved(const TVector<ui64>& orders) {
-    if (!Serializer) {
-        return;
-    }
-
-    for (const auto order : orders) {
-        Undelivered.erase(order);
-    }
-}
-
-TVector<ui64> TCdcAggregatedHeartbeats::ExtractHeartbeats(TVector<NChangeExchange::IChangeRecord::TPtr>& records) {
+TVector<ui64> TCdcAggregatedHeartbeats::OnRecordsReceived(TVector<NChangeExchange::IChangeRecord::TPtr>& records) {
     TVector<ui64> heartbeats;
-    if (!Serializer) {
-        return heartbeats;
-    }
-
     TVector<NChangeExchange::IChangeRecord::TPtr> rest(Reserve(records.size()));
     for (auto& record : records) {
         if (record->GetKind() != NChangeExchange::IChangeRecord::EKind::CdcHeartbeat) {
@@ -80,42 +62,31 @@ TVector<ui64> TCdcAggregatedHeartbeats::ExtractHeartbeats(TVector<NChangeExchang
     }
 
     records = std::move(rest);
+    if (heartbeats) {
+        SendIfReady();
+    }
+
     return heartbeats;
 }
 
-TVector<ui64> TCdcAggregatedHeartbeats::SendIfNeeded(const TActorId& owner, ui64 aggregatorTabletId) {
-    TVector<ui64> covered;
-    if (!aggregatorTabletId) {
-        return covered;
+void TCdcAggregatedHeartbeats::OnRecordsRemoved(const TVector<ui64>& orders) {
+    for (const auto order : orders) {
+        Undelivered.erase(order);
     }
 
-    const auto ready = Undelivered ? Held.lower_bound(*Undelivered.begin()) : Held.end();
-    if (ready == Held.begin()) {
-        return covered;
-    }
-
-    const auto newest = std::prev(ready);
-    if (Sent == newest->first) {
-        return covered;
-    }
-
-    for (auto it = Held.begin(); it != newest; it = Held.erase(it)) {
-        covered.push_back(it->first);
-    }
-
-    Owner = owner;
-    AggregatorTabletId = aggregatorTabletId;
-    Sent = newest->first;
-    Send(TDuration::Zero());
-
-    return covered;
+    SendIfReady();
 }
 
-TVector<ui64> TCdcAggregatedHeartbeats::OnWriteResult(const TEvWriteHeartbeatResult& result, ui64 cookie) {
+void TCdcAggregatedHeartbeats::OnStreamResolved(ui64 aggregatorTabletId) {
+    AggregatorTabletId = aggregatorTabletId;
+    SendIfReady();
+}
+
+void TCdcAggregatedHeartbeats::OnWriteResult(const TEvWriteHeartbeatResult& result, ui64 cookie) {
     using EStatus = TEvWriteHeartbeatResult::EStatus;
 
     if (!Sent || cookie != Cookie) {
-        return {};
+        return;
     }
 
     if (result.Status == EStatus::Written && result.WrittenVersion >= Held.at(*Sent).Version) {
@@ -131,8 +102,6 @@ TVector<ui64> TCdcAggregatedHeartbeats::OnWriteResult(const TEvWriteHeartbeatRes
     YDB_LOG_WARN("CdcAggregatorService has not written the heartbeat, retrying",
         {"eventDetails", result.ToString()});
     Send(Backoff.Next());
-
-    return {};
 }
 
 void TCdcAggregatedHeartbeats::OnUndelivered(ui64 cookie) {
@@ -141,24 +110,51 @@ void TCdcAggregatedHeartbeats::OnUndelivered(ui64 cookie) {
     }
 }
 
-TVector<ui64> TCdcAggregatedHeartbeats::Reset() {
-    TVector<ui64> remove(Reserve(Held.size()));
+void TCdcAggregatedHeartbeats::RemoveAll() {
+    TVector<ui64> orders(Reserve(Held.size()));
     for (const auto& [order, _] : Held) {
-        remove.push_back(order);
+        orders.push_back(order);
     }
 
     Held.clear();
     Sent.reset();
-    return remove;
+    Remove(std::move(orders));
+}
+
+void TCdcAggregatedHeartbeats::SendIfReady() {
+    if (!AggregatorTabletId) {
+        return;
+    }
+
+    const auto ready = Undelivered ? Held.lower_bound(*Undelivered.begin()) : Held.end();
+    if (ready == Held.begin()) {
+        return;
+    }
+
+    const auto newest = std::prev(ready);
+    if (Sent == newest->first) {
+        return;
+    }
+
+    TVector<ui64> covered;
+    for (auto it = Held.begin(); it != newest; it = Held.erase(it)) {
+        covered.push_back(it->first);
+    }
+
+    Sent = newest->first;
+    Remove(std::move(covered));
+    Send(TDuration::Zero());
 }
 
 void TCdcAggregatedHeartbeats::Send(TDuration delay) {
+    const auto& ctx = TActivationContext::AsActorContext();
+
     auto ev = MakeHolder<NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeat>();
     ev->RecipientTabletId = AggregatorTabletId;
-    ev->SourceDataShardId = SourceDataShardId;
+    ev->SourceDataShardId = DataShard.TabletId;
     ev->Heartbeat = Held.at(*Sent);
 
-    auto* handle = new IEventHandle(NCdcAggregator::MakeCdcAggregatorServiceId(Owner.NodeId()), Owner,
+    auto* handle = new IEventHandle(NCdcAggregator::MakeCdcAggregatorServiceId(ctx.SelfID.NodeId()), ctx.SelfID,
         ev.Release(), IEventHandle::FlagTrackDelivery, ++Cookie);
     if (delay) {
         TActivationContext::Schedule(delay, handle);
@@ -167,16 +163,23 @@ void TCdcAggregatedHeartbeats::Send(TDuration delay) {
     }
 }
 
-TVector<ui64> TCdcAggregatedHeartbeats::CompleteSent() {
-    TVector<ui64> remove;
+void TCdcAggregatedHeartbeats::CompleteSent() {
+    TVector<ui64> orders;
     const auto end = Held.upper_bound(*Sent);
     for (auto it = Held.begin(); it != end; it = Held.erase(it)) {
-        remove.push_back(it->first);
+        orders.push_back(it->first);
     }
 
     Sent.reset();
     Backoff.Reset();
-    return remove;
+    Remove(std::move(orders));
+}
+
+void TCdcAggregatedHeartbeats::Remove(TVector<ui64>&& orders) {
+    if (orders) {
+        TActivationContext::AsActorContext().Send(DataShard.ActorId,
+            new NChangeExchange::TEvChangeExchange::TEvRemoveRecords(std::move(orders)));
+    }
 }
 
 } // namespace NKikimr::NDataShard

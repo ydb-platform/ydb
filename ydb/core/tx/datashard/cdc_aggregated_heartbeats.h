@@ -1,5 +1,6 @@
 #pragma once
 
+#include "change_exchange_helpers.h"
 #include "change_record_cdc_serializer.h"
 
 #include <ydb/core/change_exchange/change_exchange.h>
@@ -7,7 +8,6 @@
 #include <ydb/core/persqueue/common/heartbeat.h>
 #include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/util/backoff.h>
-#include <ydb/library/actors/core/actorid.h>
 
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
@@ -23,29 +23,29 @@ public:
     using TRecordInfo = NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo;
     using TEvWriteHeartbeatResult = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult;
 
-    explicit TCdcAggregatedHeartbeats(THolder<IChangeRecordSerializer> serializer, ui64 sourceDataShardId);
+    explicit TCdcAggregatedHeartbeats(THolder<IChangeRecordSerializer> serializer, const TDataShardId& dataShard);
 
     void OnRecordsEnqueued(const TVector<TRecordInfo>& records);
+    TVector<ui64> OnRecordsReceived(TVector<NChangeExchange::IChangeRecord::TPtr>& records);
     void OnRecordsRemoved(const TVector<ui64>& orders);
-    TVector<ui64> ExtractHeartbeats(TVector<NChangeExchange::IChangeRecord::TPtr>& records);
-
-    TVector<ui64> SendIfNeeded(const TActorId& owner, ui64 aggregatorTabletId);
-    TVector<ui64> OnWriteResult(const TEvWriteHeartbeatResult& result, ui64 cookie);
+    void OnStreamResolved(ui64 aggregatorTabletId);
+    void OnWriteResult(const TEvWriteHeartbeatResult& result, ui64 cookie);
     void OnUndelivered(ui64 cookie);
-    TVector<ui64> Reset();
+    void RemoveAll();
 
 private:
+    void SendIfReady();
     void Send(TDuration delay);
-    TVector<ui64> CompleteSent();
+    void CompleteSent();
+    void Remove(TVector<ui64>&& orders);
 
     THolder<IChangeRecordSerializer> Serializer;
-    const ui64 SourceDataShardId;
+    const TDataShardId DataShard;
 
     TSet<ui64> Undelivered;
     TMap<ui64, NPQ::THeartbeat> Held;
     std::optional<ui64> Sent;
 
-    TActorId Owner;
     ui64 AggregatorTabletId = 0;
     ui64 Cookie = 0;
     TBackoff Backoff = TBackoff(TDuration::MilliSeconds(100), TDuration::Seconds(10));

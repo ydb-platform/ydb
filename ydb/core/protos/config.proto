@@ -1772,7 +1772,7 @@ message TImmediateControlsConfig {
             Description: "Page Cache Release Rate. A smaller request is served by the huge page cache alone.",
             MinValue: 0,
             MaxValue: 1073741824,
-            DefaultValue: 134217728 }];
+            DefaultValue: 8388608 }];
         optional uint64 UseDwarfBacktracePrinting = 6 [(ControlOptions) = {
             Description: "Use DWARF symbolization for TCMalloc heap/profile dump backtraces.",
             MinValue: 0,

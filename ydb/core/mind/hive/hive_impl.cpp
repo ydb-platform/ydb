@@ -662,15 +662,23 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     RequestPoolsInformation();
     Schedule(TDuration::Minutes(5), new TEvPrivate::TEvLogHangingRequests);
     std::vector<TNodeInfo*> unimportantNodes; // ping nodes with tablets first
+    std::vector<std::pair<TNodeId, TActorId>> nodesToKill;
     unimportantNodes.reserve(Nodes.size());
     for (auto& [id, node] : Nodes) {
         if (node.IsUnknown() && node.Local) {
-            if (node.GetTabletsTotal() > 0) {
+            const auto* pile = BridgeInfo ? BridgeInfo->FindPile(node.BridgePileId) : nullptr;
+            if (pile && !NBridge::PileStateTraits(pile->State).AllowsConnection) {
+                nodesToKill.emplace_back(id, node.Local);
+            } else if (node.GetTabletsTotal() > 0) {
                 node.Ping();
             } else {
                 unimportantNodes.push_back(&node);
             }
         }
+    }
+    // KillNode may erase the node, so finish collecting nodes before calling it.
+    for (const auto& [nodeId, local] : nodesToKill) {
+        KillNode(nodeId, local, EHiveEventReason::PileUpdate);
     }
     for (auto* node : unimportantNodes) {
         node->Ping();
@@ -1222,11 +1230,9 @@ void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
         {"eventType", ev->Get()->SourceType});
     switch (ev->Get()->SourceType) {
     case TEvLocal::EvBootTablet: {
-        // restart boot of the tablet (on different node)
-        TTabletId tabletId = ev->Cookie;
-        TLeaderTabletInfo* tablet = FindTablet(tabletId);
-        if (tablet != nullptr && tablet->IsStarting()) {
-            Execute(CreateRestartTablet(tablet->GetFullTabletId()));
+        auto it = BootAttempts.find(ev->Cookie);
+        if (it != BootAttempts.end() && it->second.Local == ev->Sender) {
+            Execute(CreateRestartTabletAfterBootUndelivered(it->second.TabletId, ev->Cookie));
         }
         break;
     }
@@ -3412,8 +3418,38 @@ THolder<TGroupFilter> THive::BuildGroupParametersForChannel(const TLeaderTabletI
     return filter;
 }
 
-void THive::ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external) {
-    Execute(CreateStartTablet(tabletId, local, cookie, external));
+ui64 THive::TrackBootAttempt(TTabletInfo& tablet, const TActorId& local) {
+    ClearBootAttempt(tablet);
+    tablet.BootAttemptId = ++LastBootAttemptId;
+    BootAttempts.emplace(tablet.BootAttemptId, TBootAttempt{tablet.GetFullTabletId(), local});
+    return tablet.BootAttemptId;
+}
+
+void THive::ClearBootAttempt(TTabletInfo& tablet) {
+    if (tablet.BootAttemptId) {
+        BootAttempts.erase(tablet.BootAttemptId);
+        tablet.BootAttemptId = 0;
+    }
+}
+
+TTabletInfo* THive::FindStartingBootAttempt(ui64 bootAttemptId) {
+    auto it = BootAttempts.find(bootAttemptId);
+    if (it == BootAttempts.end()) {
+        return nullptr;
+    }
+    TTabletInfo* tablet = FindTablet(it->second.TabletId);
+    if (tablet
+            && tablet->BootAttemptId == bootAttemptId
+            && tablet->IsStarting()
+            && tablet->IsPresentOnLocal(it->second.Local))
+    {
+        return tablet;
+    }
+    return nullptr;
+}
+
+void THive::ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local) {
+    Execute(CreateStartTablet(tabletId, local, 0));
 }
 
 void THive::QueuePing(const TActorId& local) {
@@ -3822,6 +3858,9 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvTabletBase::TEvBlockBlobStorageResult, Handle);
         hFunc(TEvTabletBase::TEvDeleteTabletResult, Handle);
         hFunc(TEvHive::TEvReassignTablet, Handle);
+        hFunc(TEvReassignTablets::TEvCreateRequest, Handle);
+        hFunc(TEvReassignTablets::TEvCancelRequest, Handle);
+        hFunc(TEvReassignTablets::TEvGetRequest, Handle);
         hFunc(TEvHive::TEvInitiateBlockStorage, Handle);
         hFunc(TEvHive::TEvDeleteTablet, Handle);
         hFunc(TEvHive::TEvDeleteOwnerTablets, Handle);
@@ -3944,6 +3983,9 @@ STFUNC(THive::StateWork) {
         fFunc(TEvTabletBase::TEvBlockBlobStorageResult::EventType, EnqueueIncomingEvent);
         fFunc(TEvTabletBase::TEvDeleteTabletResult::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvReassignTablet::EventType, EnqueueIncomingEvent);
+        fFunc(TEvReassignTablets::TEvCreateRequest::EventType, EnqueueIncomingEvent);
+        fFunc(TEvReassignTablets::TEvCancelRequest::EventType, EnqueueIncomingEvent);
+        fFunc(TEvReassignTablets::TEvGetRequest::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvInitiateBlockStorage::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvDeleteTablet::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvDeleteOwnerTablets::EventType, EnqueueIncomingEvent);

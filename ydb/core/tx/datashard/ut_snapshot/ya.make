@@ -28,6 +28,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     datashard_ut_snapshot.cpp
+    datashard_ut_snapshot_retention.cpp
 )
 
 END()

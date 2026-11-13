@@ -135,6 +135,7 @@ namespace NKikimr::NTabletFlatExecutor {
                 Y_ENSURE(room, "Cannot find room " << family.Room << " in table " << table.Id);
                 auto& pageGroup = output.Layout.Groups[group];
                 pageGroup.Codec = family.Codec;
+                pageGroup.CodecLevel = family.CodecLevel;
                 pageGroup.PageSize = policy.MinDataPageSize;
                 pageGroup.BTreeIndexNodeTargetSize = policy.MinBTreeIndexNodeSize;
                 pageGroup.BTreeIndexNodeKeysMin = policy.MinBTreeIndexNodeKeys;

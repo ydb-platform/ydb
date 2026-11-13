@@ -6,6 +6,7 @@ SRCS(
     rpc_change_schema_ut.cpp
     rpc_execute_mkql_ut.cpp
     rpc_restart_tablet_ut.cpp
+    rpc_reassign_tablets_ut.cpp
 )
 
 PEERDIR(

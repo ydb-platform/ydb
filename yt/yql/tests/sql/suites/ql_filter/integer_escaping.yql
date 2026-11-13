@@ -1,7 +1,39 @@
-pragma yt.UseQLFilter;
+PRAGMA yt.UseQLFilter;
 
-select 
+SELECT
     `escaping []\``,
-    `escaping []\`` as renamed
-from plato.Input
-where `escaping []\`` > 5;
+    `escaping []\`` AS renamed
+FROM
+    plato.Input
+WHERE
+    `escaping []\`` > 5
+;
+
+SELECT
+    `a\\q`,
+    `aq`,
+    `a\\\`q`,
+    `a\`q`,
+    `a\\b`
+FROM
+    plato.Input2
+WHERE
+    `a\\q` == 1
+;
+
+SELECT
+    `a\\\`q`,
+    `a\`q`
+FROM
+    plato.Input2
+WHERE
+    `a\\\`q` == 1
+;
+
+SELECT
+    `a\\b`
+FROM
+    plato.Input2
+WHERE
+    `a\\b` == 1
+;

@@ -6,6 +6,8 @@
 #include <util/generic/ylimits.h>
 #include <util/generic/array_ref.h>
 
+#include <variant>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -112,10 +114,7 @@ namespace NTable {
         }
     };
 
-    struct TRowSource {
-        const TMemTable* MemTable = nullptr;
-        const TPart* Part = nullptr;
-    };
+    using TRowSource = std::variant<const TMemTable*, const TPart*>;
 
     struct TSelectRowVersionResult {
         EReady Ready;

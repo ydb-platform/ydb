@@ -50,6 +50,8 @@ struct TCompactionPolicy : public TThrRefBase {
         ui64 ExtraCompactionExpMaxSize;
         ui64 UpliftPartSize;
         // Family id of the storage tier; an absent value means the default tier (family 0).
+        // Preserve protobuf presence on serialization: unset stays omitted,
+        // while an explicitly specified 0 stays present.
         std::optional<ui32> TierId;
 
         TGenerationPolicy(ui64 sizeToCompact, ui32 countToCompact, ui32 forceCountToCompact,

@@ -322,11 +322,18 @@ bool TExpression::MaybeConstantCondition() const {
 }
 
 bool TExpression::IsLiteralOne() const {
-    auto body = Node->ChildPtr(1);
-    if (TCoUint32::Match(body.Get())) {
-        return TString(body->Content()) == "1";
+    return GetUnsignedLiteral() == std::optional<ui64>{1};
+}
+
+std::optional<ui64> TExpression::GetUnsignedLiteral() const {
+    const auto body = GetExpressionBody();
+    if (TCoUint64::Match(body.Get()) || TCoUint32::Match(body.Get())) {
+        ui64 value;
+        if (TryFromString(body->Head().Content(), value)) {
+            return value;
+        }
     }
-    return false;
+    return std::nullopt;
 }
 
 TExprNode::TPtr TExpression::GetLambda() const {

@@ -10,6 +10,7 @@
 #include <functional>
 #include <optional>
 #include <utility>
+#include <variant>
 
 namespace NKikimr::NTable {
 namespace {
@@ -81,7 +82,7 @@ namespace {
         void SetSource(const TVersionScanSource& source) override {
             UNIT_ASSERT(KeyActive);
             UNIT_ASSERT(!HasSource);
-            UNIT_ASSERT(bool(source.MemTable) != bool(source.Part));
+            UNIT_ASSERT(std::visit([](const auto* pointer) { return pointer != nullptr; }, source));
             Source = source;
             HasSource = true;
             ++Sources;
@@ -318,8 +319,7 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
         for (size_t i = 0; i < rows.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(rows[i]->Key, keys[i]);
             UNIT_ASSERT_VALUES_EQUAL(rows[i]->Version, TRowVersion(versions[i], 1));
-            UNIT_ASSERT(rows[i]->Source.Part == sources[i]);
-            UNIT_ASSERT(!rows[i]->Source.MemTable);
+            UNIT_ASSERT(std::get<const TPart*>(rows[i]->Source) == sources[i]);
         }
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::BeginKey).size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndKey).size(), 3);
@@ -343,16 +343,13 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(rows[0]->Version, TRowVersion(30, 1));
         UNIT_ASSERT_VALUES_EQUAL(rows[0]->Value.value(), 30);
-        UNIT_ASSERT(rows[0]->Source.Part == newest.Part.Get());
-        UNIT_ASSERT(!rows[0]->Source.MemTable);
+        UNIT_ASSERT(std::get<const TPart*>(rows[0]->Source) == newest.Part.Get());
         UNIT_ASSERT_VALUES_EQUAL(rows[1]->Version, TRowVersion(20, 1));
         UNIT_ASSERT_VALUES_EQUAL(rows[1]->Value.value(), 20);
-        UNIT_ASSERT(rows[1]->Source.Part == middle.Part.Get());
-        UNIT_ASSERT(!rows[1]->Source.MemTable);
+        UNIT_ASSERT(std::get<const TPart*>(rows[1]->Source) == middle.Part.Get());
         UNIT_ASSERT_VALUES_EQUAL(rows[2]->Version, TRowVersion(10, 1));
         UNIT_ASSERT_VALUES_EQUAL(rows[2]->Value.value(), 10);
-        UNIT_ASSERT(rows[2]->Source.Part == oldest.Part.Get());
-        UNIT_ASSERT(!rows[2]->Source.MemTable);
+        UNIT_ASSERT(std::get<const TPart*>(rows[2]->Source) == oldest.Part.Get());
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::BeginKey).size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndKey).size(), 1);
     }
@@ -415,8 +412,7 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
             UNIT_ASSERT_VALUES_EQUAL(rows[i]->Version, TRowVersion(versions[i], 1));
             UNIT_ASSERT_VALUES_EQUAL(rows[i]->Value.value(), versions[i]);
             UNIT_ASSERT_VALUES_EQUAL(rows[i]->Base.value(), versions[i] * 10);
-            UNIT_ASSERT(rows[i]->Source.Part == sources[i]);
-            UNIT_ASSERT(!rows[i]->Source.MemTable);
+            UNIT_ASSERT(std::get<const TPart*>(rows[i]->Source) == sources[i]);
         }
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::BeginKey).size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndKey).size(), 3);
@@ -457,8 +453,7 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
             UNIT_ASSERT_VALUES_EQUAL(rows[i]->Version, TRowVersion(versions[i], 1));
             UNIT_ASSERT_VALUES_EQUAL(rows[i]->Value.value(), values[i]);
             UNIT_ASSERT_VALUES_EQUAL(rows[i]->Base.value(), bases[i]);
-            UNIT_ASSERT(rows[i]->Source.Part == sources[i]);
-            UNIT_ASSERT(!rows[i]->Source.MemTable);
+            UNIT_ASSERT(std::get<const TPart*>(rows[i]->Source) == sources[i]);
         }
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::BeginKey).size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndKey).size(), 2);
@@ -476,10 +471,10 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
 
         const auto rows = Events(scan, EEvent::Row);
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
-        UNIT_ASSERT(rows[0]->Source.Part == partial.Part.Get());
+        UNIT_ASSERT(std::get<const TPart*>(rows[0]->Source) == partial.Part.Get());
         UNIT_ASSERT_VALUES_EQUAL(rows[0]->Value.value(), 20);
         UNIT_ASSERT_VALUES_EQUAL(rows[0]->Base.value(), 100);
-        UNIT_ASSERT(rows[1]->Source.Part == base.Part.Get());
+        UNIT_ASSERT(std::get<const TPart*>(rows[1]->Source) == base.Part.Get());
     }
 
     Y_UNIT_TEST(UncommittedMemoryDeltaAndCommittedPartHaveDistinctSources) {
@@ -497,12 +492,10 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
         const auto deltas = Events(scan, EEvent::Delta);
         UNIT_ASSERT_VALUES_EQUAL(deltas.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(deltas[0]->TxId, 123);
-        UNIT_ASSERT(deltas[0]->Source.MemTable == memory.Get());
-        UNIT_ASSERT(!deltas[0]->Source.Part);
+        UNIT_ASSERT(std::get<const TMemTable*>(deltas[0]->Source) == memory.Get());
         const auto rows = Events(scan, EEvent::Row);
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-        UNIT_ASSERT(rows[0]->Source.Part == base.Part.Get());
-        UNIT_ASSERT(!rows[0]->Source.MemTable);
+        UNIT_ASSERT(std::get<const TPart*>(rows[0]->Source) == base.Part.Get());
         const auto deltaPos = std::find_if(scan.Events.begin(), scan.Events.end(),
             [](const auto& event) { return event.Kind == EEvent::Delta; });
         const auto rowPos = std::find_if(scan.Events.begin(), scan.Events.end(),
@@ -529,13 +522,11 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
         UNIT_ASSERT_VALUES_EQUAL(deltas[0]->Key, 1);
         UNIT_ASSERT_VALUES_EQUAL(deltas[0]->TxId, 123);
         UNIT_ASSERT_VALUES_EQUAL(deltas[0]->Value.value(), 20);
-        UNIT_ASSERT(deltas[0]->Source.MemTable == memory.Get());
-        UNIT_ASSERT(!deltas[0]->Source.Part);
+        UNIT_ASSERT(std::get<const TMemTable*>(deltas[0]->Source) == memory.Get());
         UNIT_ASSERT_VALUES_EQUAL(deltas[1]->Key, 2);
         UNIT_ASSERT_VALUES_EQUAL(deltas[1]->TxId, 124);
         UNIT_ASSERT_VALUES_EQUAL(deltas[1]->Value.value(), 30);
-        UNIT_ASSERT(deltas[1]->Source.Part == part.Part.Get());
-        UNIT_ASSERT(!deltas[1]->Source.MemTable);
+        UNIT_ASSERT(std::get<const TPart*>(deltas[1]->Source) == part.Part.Get());
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::BeginKey).size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndKey).size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::BeginDeltas).size(), 2);
@@ -558,10 +549,10 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
         const auto rows = Events(scan, EEvent::Row);
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(rows[0]->Version, TRowVersion(30, 1));
-        UNIT_ASSERT(rows[0]->Source.Part == delta.Part.Get());
+        UNIT_ASSERT(std::get<const TPart*>(rows[0]->Source) == delta.Part.Get());
         UNIT_ASSERT_VALUES_EQUAL(rows[1]->Version, TRowVersion(20, 1));
-        UNIT_ASSERT(rows[1]->Source.Part == delta.Part.Get());
-        UNIT_ASSERT(rows[2]->Source.Part == base.Part.Get());
+        UNIT_ASSERT(std::get<const TPart*>(rows[1]->Source) == delta.Part.Get());
+        UNIT_ASSERT(std::get<const TPart*>(rows[2]->Source) == base.Part.Get());
     }
 
     Y_UNIT_TEST(LocksAndLockOnlyKeysReportTheirMemorySource) {
@@ -581,13 +572,12 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
         UNIT_ASSERT_VALUES_EQUAL(locks[0]->TxId, 123);
         UNIT_ASSERT_VALUES_EQUAL(locks[1]->TxId, 124);
         for (const auto* event : locks) {
-            UNIT_ASSERT(event->Source.MemTable == memory.Get());
-            UNIT_ASSERT(!event->Source.Part);
+            UNIT_ASSERT(std::get<const TMemTable*>(event->Source) == memory.Get());
         }
         const auto rows = Events(scan, EEvent::Row);
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(rows[0]->Key, 1);
-        UNIT_ASSERT(rows[0]->Source.MemTable == memory.Get());
+        UNIT_ASSERT(std::get<const TMemTable*>(rows[0]->Source) == memory.Get());
         UNIT_ASSERT_VALUES_EQUAL(Events(scan, EEvent::EndKey).size(), 2);
     }
 
@@ -605,8 +595,8 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
         UNIT_ASSERT_VALUES_EQUAL(scan.PageFaults, 1);
         const auto rows = Events(scan, EEvent::Row);
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
-        UNIT_ASSERT(rows[0]->Source.Part == newer.Part.Get());
-        UNIT_ASSERT(rows[1]->Source.Part == base.Part.Get());
+        UNIT_ASSERT(std::get<const TPart*>(rows[0]->Source) == newer.Part.Get());
+        UNIT_ASSERT(std::get<const TPart*>(rows[1]->Source) == base.Part.Get());
     }
 
     Y_UNIT_TEST(ConsumerCanLowerTheVersionWithoutReorderingLaterRows) {
@@ -625,8 +615,8 @@ Y_UNIT_TEST_SUITE(TVersionScanSourceTest) {
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(rows[0]->Version, TRowVersion(30, 1));
         UNIT_ASSERT_VALUES_EQUAL(rows[1]->Version, TRowVersion(10, 1));
-        UNIT_ASSERT(rows[0]->Source.Part == part.Part.Get());
-        UNIT_ASSERT(rows[1]->Source.Part == part.Part.Get());
+        UNIT_ASSERT(std::get<const TPart*>(rows[0]->Source) == part.Part.Get());
+        UNIT_ASSERT(std::get<const TPart*>(rows[1]->Source) == part.Part.Get());
     }
 
 }

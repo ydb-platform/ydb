@@ -6,6 +6,12 @@ SPLIT_FACTOR(16)
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
+# This executable's debug information exceeds DWARF32 relocation limits in
+# relwithdebinfo builds. Keep stripping local to this test executable.
+IF (OS_LINUX)
+    LDFLAGS(-Wl,--strip-debug)
+ENDIF()
+
 SRCS(
     kqp_rbo_yql_explain_ut.cpp
 )

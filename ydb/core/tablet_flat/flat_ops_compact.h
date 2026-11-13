@@ -27,6 +27,7 @@
 #include <ydb/library/actors/core/actor.h>
 
 #include <bitset>
+#include <variant>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -608,9 +609,10 @@ namespace NTabletFlatExecutor {
             Y_ENSURE(PendingKeyActive, "Compaction source outside a key");
             ui32 tier = Conf->Params->TierId;
             if (Conf->Params->Context) {
-                Y_ENSURE(bool(source.Part) != bool(source.MemTable), "Unknown compaction row source");
-                if (source.Part) {
-                    const auto it = SourceTiers.find(source.Part->Label);
+                Y_ENSURE(std::visit([](const auto* pointer) { return pointer != nullptr; }, source),
+                    "Unknown compaction row source");
+                if (const auto* part = std::get_if<const NTable::TPart*>(&source)) {
+                    const auto it = SourceTiers.find((*part)->Label);
                     Y_ENSURE(it != SourceTiers.end(), "Compaction row source is outside the prepared inputs");
                     tier = it->second;
                 } else {

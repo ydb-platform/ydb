@@ -45,17 +45,24 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
     TVector<TStageGraph> queryGraphs;
     TVector<THashMap<ui32, TExprNode::TPtr>> allStages;
     TVector<THashMap<ui32, TVector<TExprNode::TPtr>>> allStageArgs;
-    TVector<THashMap<ui32, TPositionHandle>> allStagePos; 
+    TVector<THashMap<ui32, TExprNode::TPtr>> allStageSources;
+    TVector<THashMap<ui32, TPositionHandle>> allStagePos;
 
     // As in the old optimizer, PRAGMA OptForceOlapPushdownDistinct marks a
-    // DISTINCT key in the read program unless aggregates are pushed down.
+    // DISTINCT key in the read program unless PRAGMA OptEnableOlapPushdownAggregate
+    // is set. The server setting alone does not turn it off.
     const auto& config = *rboCtx.KqpCtx.Config;
     std::optional<TString> forcedDistinctKey;
     if (const auto key = config.OptForceOlapPushdownDistinct.Get();
-        key && !key->empty() && config.HasOptEnableOlapPushdown() && !config.GetEnableOlapPushdownAggregate()) {
+        key && !key->empty() && config.HasOptEnableOlapPushdown() && !config.OptEnableOlapPushdownAggregate.Get().GetOrElse(false)) {
         forcedDistinctKey = *key;
     }
     const ui64 forcedDistinctLimit = config.OptForceOlapPushdownDistinctLimit.Get().GetOrElse(0);
+    // As in the old optimizer, PRAGMA OptEnableOlapProvideComputeSharding passes the keys
+    // of an aggregate to the column table read under it, see MatchOlapComputeSharding.
+    const bool provideComputeSharding = config.HasOptEnableOlapPushdown() &&
+                                        config.HasOptEnableOlapProvideComputeSharding() &&
+                                        config.GetEnableOlapPushdownAggregate();
 
     TVector<TPhysicalNames> allNames;
     allNames.reserve(roots.size());
@@ -66,6 +73,8 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
         // once every operator has been emitted.
         THashMap<ui32, NPhysicalConvertionUtils::TStageBody> stageBodies;
         THashMap<ui32, TVector<TExprNode::TPtr>> stageArgs;
+        // By row read stage, its source input. The first argument of the stage reads it.
+        THashMap<ui32, TExprNode::TPtr> stageSources;
         THashMap<ui32, TPositionHandle> stagePos;
         // Types of the left rows passed through lookups in join mode; a lookup by keys of the input lookup reuses them.
         THashMap<const IOperator*, const TStructExprType*> lookupJoinLeftRowTypes;
@@ -90,12 +99,19 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
         THashSet<const IOperator*> olapAggregateInputs;
         // By read, the trivial DISTINCT whose key the read program marks.
         THashMap<const IOperator*, TOlapDistinct> olapDistincts;
+        // By read, the keys of the aggregate over it that column shards send rows to compute tasks by.
+        THashMap<const IOperator*, TOlapComputeSharding> olapComputeShardings;
         for (const auto& iter : *root) {
             const auto* op = iter.Current;
             if (op->Kind != EOperator::Aggregate) {
                 continue;
             }
             const auto& aggregate = CastOperator<TOpAggregate>(*op);
+            if (provideComputeSharding) {
+                if (auto computeSharding = MatchOlapComputeSharding(aggregate, root->PlanProps.InfoUnitRegistry)) {
+                    olapComputeShardings.emplace(computeSharding->Read, std::move(*computeSharding));
+                }
+            }
             if (!aggregate.IsPushedToOlap()) {
                 if (forcedDistinctKey) {
                     if (auto olapDistinct = MatchOlapDistinct(aggregate, *forcedDistinctKey, root->PlanProps.InfoUnitRegistry)) {
@@ -106,6 +122,7 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
             }
             auto olapAggregate = MatchOlapAggregate(aggregate, ctx);
             Y_ENSURE(olapAggregate, "An aggregate pushed to column shards no longer matches its read");
+            olapAggregate->CastAverageInput = config.GetEnableOlapScalarApply();
             olapAggregateInputs.insert(olapAggregate->Read);
             if (olapAggregate->Map) {
                 olapAggregateInputs.insert(olapAggregate->Map);
@@ -123,14 +140,22 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
                 carrierColumn = table.Metadata->KeyColumnNames.front();
             }
             TPhysicalSourceBuilder builder(opRead, ctx, opRead.Pos, names, root->PlanProps.InfoUnitRegistry,
-                root->PlanProps.GetStage(opRead).Guid(), table.Metadata->Kind == NYql::EKikimrTableKind::SysView,
-                std::move(carrierColumn));
+                table.Metadata->Kind == NYql::EKikimrTableKind::SysView, std::move(carrierColumn));
             if (olapAggregate) {
                 builder.WithOlapAggregate(*olapAggregate);
             } else if (const auto* olapDistinct = olapDistincts.FindPtr(&opRead)) {
                 builder.WithOlapDistinct(*olapDistinct, forcedDistinctLimit);
             }
-            return builder.BuildPhysicalOp();
+            if (const auto* computeSharding = olapComputeShardings.FindPtr(&opRead)) {
+                builder.WithOlapComputeSharding(*computeSharding);
+            }
+            auto body = builder.BuildPhysicalOp();
+            if (const auto& stageSource = builder.GetStageSource()) {
+                const auto stageId = *opRead.Props.StageId;
+                Y_ENSURE(stageSources.emplace(stageId, stageSource->Source).second, "A stage reads at most one row source");
+                stageArgs[stageId].push_back(stageSource->Argument);
+            }
+            return body;
         };
 
         for (const auto& iter : *root) {
@@ -445,11 +470,13 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
         queryGraphs.push_back(std::move(graph));
         allStages.push_back(std::move(stages));
         allStageArgs.push_back(std::move(stageArgs));
+        allStageSources.push_back(std::move(stageSources));
         allStagePos.push_back(std::move(stagePos));
     }
     convertOperatorsTraceScope.reset();
 
-    return TPhysicalQueryBuilder(roots, std::move(queryGraphs), std::move(allStages), std::move(allStageArgs), std::move(allStagePos), std::move(allNames), rboCtx).BuildPhysicalQuery();
+    return TPhysicalQueryBuilder(roots, std::move(queryGraphs), std::move(allStages), std::move(allStageArgs), std::move(allStageSources),
+        std::move(allStagePos), std::move(allNames), rboCtx).BuildPhysicalQuery();
 
 }
 

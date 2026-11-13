@@ -26,6 +26,7 @@ PEERDIR(
 SRCS(
     aggregation.cpp
     builtin.cpp
+    checksum.cpp
     context.cpp
     ddl_backup.cpp
     ddl_identity.cpp
@@ -50,6 +51,7 @@ SRCS(
     source.cpp
     sql.cpp
     sql_call_expr.cpp
+    sql_checksum.cpp
     sql_ddl_backup.cpp
     sql_ddl_identity.cpp
     sql_ddl_resource_pool.cpp
@@ -71,6 +73,8 @@ SRCS(
     sql_values.cpp
     query.cpp
     object_processing.cpp
+    antlr_token.cpp
+    sql_call_param.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(match_recognize.h)

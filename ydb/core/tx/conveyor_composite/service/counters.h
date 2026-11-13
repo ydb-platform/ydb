@@ -35,9 +35,9 @@ private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
 
 public:
-    const ::NMonitoring::THistogramPtr WaitingHistogram;
+    NColumnShard::TLazyHistogram WaitingHistogram;
     const ::NMonitoring::TDynamicCounters::TCounterPtr NoTasks;
-    const ::NMonitoring::THistogramPtr TaskExecuteHistogram;
+    NColumnShard::TLazyHistogram TaskExecuteHistogram;
     const ::NMonitoring::TDynamicCounters::TCounterPtr ValueWeight;
 
     const ::NMonitoring::TDynamicCounters::TCounterPtr ExecuteDuration;
@@ -59,10 +59,10 @@ private:
     THashMap<ESpecialTaskCategory, std::shared_ptr<TWPCategorySignals>> CategorySignals;
 
 public:
-    const ::NMonitoring::THistogramPtr PackSizeHistogram;
-    const ::NMonitoring::THistogramPtr PackExecuteHistogram;
-    const ::NMonitoring::THistogramPtr SendBackHistogram;
-    const ::NMonitoring::THistogramPtr SendFwdHistogram;
+    NColumnShard::TLazyHistogram PackSizeHistogram;
+    NColumnShard::TLazyHistogram PackExecuteHistogram;
+    NColumnShard::TLazyHistogram SendBackHistogram;
+    NColumnShard::TLazyHistogram SendFwdHistogram;
 
     const ::NMonitoring::TDynamicCounters::TCounterPtr SendBackDuration;
     const ::NMonitoring::TDynamicCounters::TCounterPtr SendFwdDuration;
@@ -96,13 +96,13 @@ private:
     THashMap<TString, std::shared_ptr<TWorkersPoolCounters>> WorkersPoolSignals;
 
 public:
-    const ::NMonitoring::THistogramPtr ReceiveTaskHistogram;
+    NColumnShard::TLazyHistogram ReceiveTaskHistogram;
     const ::NMonitoring::TDynamicCounters::TCounterPtr ReceiveTaskDuration;
     const ::NMonitoring::TDynamicCounters::TCounterPtr BadConfigNotifications;
 
     TCounters(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
         : TBase(module, baseSignals)
-        , ReceiveTaskHistogram(TBase::GetHistogram("ReceiveTask/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+        , ReceiveTaskHistogram(TBase::GetLazyHistogram("ReceiveTask/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
         , ReceiveTaskDuration(TBase::GetDeriviative("ReceiveTask/Duration/Us"))
         , BadConfigNotifications(TBase::GetDeriviative("BadConfigNotifications"))
     {

@@ -5328,6 +5328,7 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
         auto& writeGroup = cfg.Writer.Groups.at(group);
 
         pageGroup.Codec = family.Codec;
+        pageGroup.CodecLevel = family.CodecLevel;
         pageGroup.PageSize = policy->MinDataPageSize;
         pageGroup.BTreeIndexNodeTargetSize = policy->MinBTreeIndexNodeSize;
         pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;

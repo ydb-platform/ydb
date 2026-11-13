@@ -391,14 +391,9 @@ namespace NKikimr::NBsController {
             }
         };
 
-        bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
-                TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
-
-            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking, parameters.SuppressDegradedGroupsChecking); !result) {
-                *errorDescription = result.error();
-                return false;
-            }
-
+        // Completes the set of groups getting new generation when the changes made so far are committed. It only adds the
+        // groups which would be added at commit anyway, so it may be called at any point of the transaction.
+        void TBlobStorageController::PropagateGroupContentChanged(TConfigState& state) {
             // virtual group state reported to node wardens may change without explicit group content change (for
             // instance, when decommission starts or BlobDepot creation fails), deliver it with new generation
             for (const auto& [base, overlay] : state.Groups.Diff()) {
@@ -433,6 +428,17 @@ namespace NKikimr::NBsController {
                 }
             }
             state.GroupContentChanged.insert(updates.begin(), updates.end());
+        }
+
+        bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
+                TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
+
+            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking, parameters.SuppressDegradedGroupsChecking); !result) {
+                *errorDescription = result.error();
+                return false;
+            }
+
+            PropagateGroupContentChanged(state);
 
             // spin generation for every changed group
             THashSet<TGroupId> bridgeProxyGroupIds;
@@ -675,13 +681,35 @@ namespace NKikimr::NBsController {
             // while converting to bridged cluster, watch for groups that have to be converted or stop blocking conversion
             if (StorageConfig && StorageConfig->GetClusterStateDetails().GetBscConversionPending()) {
                 for (const auto& [base, overlay] : state.Groups.Diff()) {
-                    const TGroupInfo *prev = base ? base->second.Get() : nullptr;
+                    const TGroupInfo *prev = base ? &*base->second : nullptr;
                     const TGroupInfo *cur = overlay->second.Get();
                     if ((cur && cur->IsBridgeConversionCandidate()) ||
                             (prev && prev->BlocksBridgeConversion() && !(cur && cur->BlocksBridgeConversion()))) {
                         state.Callbacks.push_back([this] { CheckBridgeConversion(); });
                         break;
                     }
+                }
+            }
+
+            // the groups that didn't let BSC adopt storage pool pile overrides of StorageConfig may be gone now; only
+            // the changes able to make them fit are of interest (see CheckGroupsAgainstPileOverrides), as groups change
+            // all the time for other reasons (e.g. sync stages)
+            if (PileOverridesError) {
+                bool recheck = state.StoragePools.Changed();
+                if (!recheck) {
+                    for (const auto& [base, overlay] : state.Groups.Diff()) {
+                        const TGroupInfo *prev = base ? &*base->second : nullptr;
+                        const TGroupInfo *cur = overlay->second ? &*overlay->second : nullptr;
+                        if (prev && (!cur || cur->StoragePoolId != prev->StoragePoolId ||
+                                cur->BridgePileId != prev->BridgePileId ||
+                                cur->VDisksInGroup.empty() != prev->VDisksInGroup.empty())) {
+                            recheck = true;
+                            break;
+                        }
+                    }
+                }
+                if (recheck) {
+                    state.Callbacks.push_back([this] { UpdatePileOverrides(); });
                 }
             }
 
@@ -968,14 +996,22 @@ namespace NKikimr::NBsController {
         void TBlobStorageController::CommitDatabaseSpaceUpdates(TConfigState& state, NIceDb::TNiceDb& db) {
             {
                 TDatabaseSpaceTracker::TBatch batch(DatabaseSpace);
+                const TGroupInfo::TGroupFinder finder = [&state](TGroupId groupId) {
+                    return state.Groups.Find(groupId);
+                };
 
                 // created/changed/deleted groups (group may change its storage pool or stop being a physical one);
                 // done first, so that deleted pools have no groups left
                 for (const auto& [base, overlay] : state.Groups.Diff()) {
                     if (overlay->second) {
-                        UpdateDatabaseSpaceGroup(*overlay->second);
+                        UpdateDatabaseSpaceGroup(*overlay->second, finder, state.BridgeInfo.get());
                     } else {
                         DatabaseSpace.RemoveGroup(overlay->first);
+                        if (base && base->second->BridgeProxyGroupId) {
+                            if (const TGroupInfo *proxy = finder(*base->second->BridgeProxyGroupId)) {
+                                UpdateDatabaseSpaceGroup(*proxy, finder, state.BridgeInfo.get());
+                            }
+                        }
                     }
                 }
 
@@ -1012,6 +1048,12 @@ namespace NKikimr::NBsController {
             }
             for (const auto& [prev, cur] : Diff(&StoragePools, &state.StoragePools.Get())) {
                 SysViewChangedStoragePools.insert(cur ? cur->first : prev->first);
+                if (prev && cur && prev->second.BridgeMode != cur->second.BridgeMode) {
+                    for (auto it = StoragePoolGroups.lower_bound({cur->first, TGroupId::Zero()});
+                            it != StoragePoolGroups.end() && it->first == cur->first; ++it) {
+                        SysViewChangedGroups.insert(it->second);
+                    }
+                }
             }
         }
 

@@ -46,6 +46,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
+#include <ydb/core/tx/columnshard/local_db_backup/events.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tracing/startup_probes.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
@@ -1162,6 +1163,12 @@ void TColumnShard::SetupCleanupSchemas() {
             {"skipReason", "in_progress"});
         return;
     }
+    if (!TablesManager.GetPrimaryIndexSafe().AreAllPortionsLoaded(std::nullopt)) {
+        YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
+            {"background", "cleanup_schemas"},
+            {"skipReason", "portions_not_loaded"});
+        return;
+    }
 
     std::vector<TTablesManager::TSchemasChain> chainsToClean = TablesManager.ExtractSchemasToClean();
     if (chainsToClean.empty()) {
@@ -2008,6 +2015,8 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
         HFunc(NActors::TEvents::TEvWakeup, Handle);
         HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
+        HFunc(NLocalDbBackup::TEvStartBackup, Handle);
+        HFunc(NLocalDbBackup::TEvCancelBackup, Handle);
         hFunc(TEvPrivate::TEvPrefetchPortionsMetadata, Handle);
         hFunc(TEvPrivate::TEvSetLoadedKeyRanges, Handle);
         hFunc(TEvPrivate::TEvReportBaseStatistics, Handle);

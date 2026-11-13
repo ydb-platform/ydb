@@ -163,6 +163,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
     friend TInitFieldsStep;
+    friend TNotifyWriteSessionsQuoterStep;
 
     friend TPartitionSourceManager;
 
@@ -171,6 +172,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
 
 public:
     const TString& TopicName() const;
+    void PassAway() override;
 
     ui64 GetUsedStorage(const TInstant& ctx);
 
@@ -206,6 +208,7 @@ private:
 
     bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
     void SendInfoToAutopartitioningManager(const TWriteMsg& p);
+    static ECumulativeCounters UserActCounter(TEvPQ::TEvSetClientInfo::ESetClientInfoType type, bool ok);
 
     TActorId ReplyTo(const ui64 destination, const TActorId& replyTo) const;
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo = {});
@@ -231,6 +234,8 @@ private:
                                const TWriteMsg& p,
                                NPersQueue::NErrorCode::EErrorCode errorCode);
     void CreateMirrorerActor();
+    void DestroyMirrorer();
+    void NotifyMirrorerPersistDone();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);
@@ -272,6 +277,9 @@ private:
     void Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext& ctx);
+    void UpdatePendingUsersFromReplicationData();
+    void CompleteReplicationDataWrite(const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(NBatching::TEvProcessBatchKeysResult::TPtr& ev, const TActorContext& ctx);
@@ -655,6 +663,7 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, HandleOnInit);
             HFuncTraced(TEvPQ::TEvTxRollback, HandleOnInit);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+            HFuncTraced(TEvPQ::TEvReplicationData, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaCountersUpdated, Handle);
@@ -671,6 +680,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPPurgeRequest, Handle);
+            IgnoreFunc(TEvPQ::TEvMLPPurgeResponse); // Replies to purges initiated by offset replication.
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
@@ -742,6 +752,7 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+            HFuncTraced(TEvPQ::TEvReplicationData, Handle);
             hFuncTraced(TEvPQ::TEvExclusiveLockAcquired, Handle);
             HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
@@ -757,6 +768,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPPurgeRequest, Handle);
+            IgnoreFunc(TEvPQ::TEvMLPPurgeResponse); // Replies to purges initiated by offset replication.
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
@@ -802,6 +814,7 @@ private:
 
 private:
     ui32 TabletGeneration;
+    bool WriteSessionsQuoterNotified = false;
     const TPartitionId Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;
@@ -1030,6 +1043,8 @@ private:
     bool InitDone;
     bool NewPartition;
     ui64 PQRBCookie = 0;
+    std::optional<TEvPQ::TEvReplicationData::TPtr> PendingReplicationData;
+    bool ReplicationDataNeedsApply = false;
 
     THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
     THashSet<TActorId> OwnerPipes;
@@ -1108,6 +1123,8 @@ private:
     TInstant WriteTimestampEstimate;
     bool ManageWriteTimestampEstimate = true;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteInitThrottledMs;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> WriteInitSessions;
     //ToDo - counters.
     THolder<TPercentileCounter> InputTimeLag;
     THolder<TMultiBucketCounter> SupportivePartitionTimeLag;
@@ -1204,6 +1221,10 @@ private:
     void ScheduleNegativeReply(const TTransaction& tx);
     void ScheduleNegativeReply(const TMessage& msg);
 
+    void SendOffsetsToReplicationConsumer(const TActorContext& ctx, TConstArrayRef<const TUserInfo*> userInfos = {});
+    void RestoreReadSessionActor(TUserInfo& userInfo, const TString& sessionId,
+                                const TActorId& readSessionActor, const TActorContext& ctx);
+
     void OnHandleWriteResponse(const TActorContext& ctx);
 
     void ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx);
@@ -1276,6 +1297,7 @@ private:
 
     ui64 GetStartOffset() const;
     ui64 GetEndOffset() const;
+    ui64 GetMirroredOffset() const;
     // EndOffset is the last persisted offset. Accepted writes can sit in NewHead
     // before persist; ResetOffset must be able to commit up to that exclusive end.
     ui64 GetAcceptedEndOffset() const;
@@ -1430,6 +1452,10 @@ inline ui64 TPartition::GetStartOffset() const {
 
 inline ui64 TPartition::GetEndOffset() const {
     return BlobEncoder.EndOffset;
+}
+
+inline ui64 TPartition::GetMirroredOffset() const {
+    return BlobEncoder.MirroredOffset;
 }
 
 bool IsImportant(const NKikimrPQ::TPQTabletConfig::TConsumer& consumer);

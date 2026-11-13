@@ -25,6 +25,7 @@ import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/formats/arrow/protos/accessor.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
+import "ydb/public/api/protos/ydb_rate_limiter.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_topic.proto";
@@ -51,6 +52,7 @@ message TDrop {
     optional string Name = 1;
     optional EDropWaitPolicy WaitPolicy = 2;
     optional uint64 Id = 3;
+    optional NKikimrReplication.ESourceCleanupPolicy ReplicationSourceCleanup = 4 [default = SOURCE_CLEANUP_POLICY_DROP];
 }
 
 enum EColumnCodec {
@@ -306,8 +308,16 @@ message TTableReplicationConfig {
         CONSISTENCY_LEVEL_ROW = 2;
     }
 
+    enum EImportState {
+        IMPORT_STATE_NONE = 0;
+        WAITING_IMPORT = 1;
+        IMPORTING = 2;
+        IMPORTED = 3;
+    }
+
     optional EReplicationMode Mode = 1;
     optional EConsistencyLevel ConsistencyLevel = 2;
+    optional EImportState ImportState = 3;
 }
 
 message TTableIncrementalBackupConfig {
@@ -1169,6 +1179,16 @@ enum ECdcStreamFormat {
     ECdcStreamFormatDebeziumJson = 4;
 }
 
+enum ECdcStreamCompression {
+    ECdcStreamCompressionNone = 0;
+    ECdcStreamCompressionZstd = 1;
+}
+
+enum ECdcStreamHeartbeatMode {
+    ECdcStreamHeartbeatModeDirect = 0;
+    ECdcStreamHeartbeatModeAggregated = 1;
+}
+
 message TCdcStreamScanProgress {
     optional uint32 ShardsTotal = 1;
     optional uint32 ShardsCompleted = 2;
@@ -1191,6 +1211,10 @@ message TCdcStreamDescription {
     optional bool SchemaChanges = 12;
     optional bool UserSIDs = 13;
     optional bool TraceIds = 14;
+    optional ECdcStreamCompression Compression = 15 [default = ECdcStreamCompressionNone];
+    optional int32 CompressionLevel = 16;
+    optional ECdcStreamHeartbeatMode HeartbeatMode = 17;
+    optional fixed64 AggregatorTabletId = 18;
 }
 
 message TCreateCdcStream {
@@ -1339,6 +1363,7 @@ enum EIndexType {
     EIndexTypeGlobalFulltextCompactRelevance = 12;
     EIndexTypeGlobalJsonCompact = 13;
     EIndexTypeLocalCountMinSketch = 14;
+    EIndexTypeGlobalHnsw = 15;
 }
 
 enum EIndexState {
@@ -1350,6 +1375,20 @@ enum EIndexState {
 
 message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
+}
+
+message THnswIndexDescription {
+    // Includes the routing tree settings as well as the local graph parameters.
+    optional Ydb.Table.KMeansTreeSettings Settings = 1;
+
+    // Set by SchemeShard from the posting-table schema for DataShard graph builds.
+    // This is the posting-table column ID, which may differ from the base table's.
+    optional uint32 EmbeddingColumnId = 2;
+
+    // Fully qualified paths of the base table and logical index for HNSW counter
+    // labels. These identify the graph's owners, rather than the posting table.
+    optional string TablePath = 3;
+    optional string IndexPath = 4;
 }
 
 message TFulltextIndexDescription {
@@ -1384,6 +1423,7 @@ message TIndexDescription {
         TFulltextIndexDescription FulltextIndexDescription = 12;
         TBloomFilter BloomFilterDescription = 13;
         TBloomNGrammFilter BloomNGrammFilterDescription = 14;
+        THnswIndexDescription HnswIndexDescription = 15;
     }
 }
 
@@ -1399,6 +1439,7 @@ message TIndexCreationConfig {
         TFulltextIndexDescription FulltextIndexDescription = 8;
         TBloomFilter BloomFilterDescription = 9;
         TBloomNGrammFilter BloomNGrammFilterDescription = 10;
+        THnswIndexDescription HnswIndexDescription = 11;
     }
 }
 
@@ -1421,6 +1462,7 @@ message TIndexAlteringConfig {
     oneof SpecializedIndexDescription {
         TBloomFilter BloomFilterDescription = 8;
         TBloomNGrammFilter BloomNGrammFilterDescription = 9;
+        THnswIndexDescription HnswIndexDescription = 11;
     }
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
     repeated string DataColumnNames = 10;
@@ -1532,6 +1574,7 @@ message TBackupTask {
     }
 
     optional TPathDescription Table = 10; // for further restore
+    optional string SourceDatabase = 21; // for restoring absolute references in table settings
     repeated TPathDescription ChangefeedUnderlyingTopics = 17; // for further restore
 
     message TScanSettings {
@@ -2585,6 +2628,13 @@ message TBackupBackupCollection {
     optional string Name = 1;
     optional NKikimrProto.TPathID PathId = 2;
     optional string TargetDir = 3; // must be set on Rewrite
+}
+
+// Persisted, fully downloaded coordination node import. Not a backup file format.
+message TImportKesus {
+    optional Ydb.Coordination.CreateNodeRequest node = 1;
+    repeated Ydb.RateLimiter.Resource resources = 2;
+    repeated Ydb.Coordination.SessionRequest.CreateSemaphore semaphores = 3;
 }
 
 message TImportTableChangefeeds {

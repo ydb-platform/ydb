@@ -130,10 +130,10 @@ Y_UNIT_TEST_SUITE(ResourcePoolTest) {
             UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "query_memory_limit_percent_per_node is not supported");
         }
 
-        {   // TotalMemoryLimitPercentPerNode not supported
+        {   // TotalMemoryLimitPercentPerNode is supported by default - see FeatureFlags.EnableComputeSchedulerMemory
             TPoolSettings settings;
             settings.TotalMemoryLimitPercentPerNode = 50;
-            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "total_memory_limit_percent_per_node is not supported");
+            UNIT_ASSERT(!settings.Validate());
         }
 
         {   // QueryCpuLimitPercentPerNode not supported

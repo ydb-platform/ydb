@@ -754,7 +754,13 @@ func semacreate(mp *m) {
 //
 //go:nowritebarrierrec
 func newosproc(mp *m) {
-	thandle, err := createThread(0, unsafe.Pointer(abi.FuncPCABI0(tstart_stdcall)), unsafe.Pointer(mp))
+	// LockOSThread can reach newosproc on a goroutine stack when starting
+	// the template thread. createThread does not switch stacks itself.
+	var thandle uintptr
+	var err uint32
+	systemstack(func() {
+		thandle, err = createThread(0, unsafe.Pointer(abi.FuncPCABI0(tstart_stdcall)), unsafe.Pointer(mp))
+	})
 	if thandle == 0 {
 		if atomic.Load(&exiting) != 0 {
 			// CreateThread may fail if called
@@ -1176,6 +1182,23 @@ const preemptMSupported = true
 // suspending each other.
 var suspendLock mutex
 
+// threadPausedLockRank warns the runtime against acquiring new locks on this
+// thread while it has another thread paused. The holder of this lock rank is
+// effectively a signal handler for a paused thread, which may be holding
+// arbitrary locks.
+//
+// The warning takes two concrete forms: First, unlock2 will see that this
+// thread is holding other locks, so won't try to flush the mutex contention
+// buffer (which can involve acquiring another lock). Second, builds with
+// GOEXPERIMENT=staticlockranking (currently broken, https://go.dev/issue/76058)
+// will report a rank violation.
+//
+// suspendLock serializes the transition into "suspended", but it's fine for
+// multiple threads to be in the suspended state concurrently, with each of
+// their sponsors independently using threadPausedLockRank to discourage
+// themselves from acquiring new locks.
+const threadPausedLockRank = lockRankLeafRank
+
 func preemptM(mp *m) {
 	if mp == getg().m {
 		throw("self-preempt")
@@ -1218,6 +1241,9 @@ func preemptM(mp *m) {
 	// actually suspended.
 	lock(&suspendLock)
 
+	// Signal handler rules are in effect; don't acquire new locks.
+	acquireLockRankAndM(threadPausedLockRank)
+
 	// Suspend the thread.
 	if int32(stdcall(_SuspendThread, thread)) == -1 {
 		unlock(&suspendLock)
@@ -1226,6 +1252,7 @@ func preemptM(mp *m) {
 		// The thread no longer exists. This shouldn't be
 		// possible, but just acknowledge the request.
 		mp.preemptGen.Add(1)
+		releaseLockRankAndM(threadPausedLockRank)
 		return
 	}
 
@@ -1260,6 +1287,8 @@ func preemptM(mp *m) {
 
 	stdcall(_ResumeThread, thread)
 	stdcall(_CloseHandle, thread)
+
+	releaseLockRankAndM(threadPausedLockRank)
 }
 
 // osPreemptExtEnter is called before entering external code that may

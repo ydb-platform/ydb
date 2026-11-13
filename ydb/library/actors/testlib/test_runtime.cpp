@@ -1755,6 +1755,10 @@ namespace NActors {
     }
 
     IActor* TTestActorRuntimeBase::FindActor(const TActorId& actorId, TNodeDataBase* node) const {
+        if (actorId.IsService()) {
+            const auto it = node->LocalServicesActors.find(actorId);
+            return it != node->LocalServicesActors.end() ? it->second : nullptr;
+        }
         ui32 mailboxHint = actorId.Hint();
         ui64 localId = actorId.LocalId();
         TMailbox* mailbox = node->MailboxTable->Get(mailboxHint);
@@ -1819,6 +1823,10 @@ namespace NActors {
 
         const auto& interconnectCounters = GetCountersForComponent(node->DynamicCounters, "interconnect");
 
+        for (const auto& service : setup->LocalServices) {
+            Y_ABORT_UNLESS(!service.first || !node->LocalServicesActors.contains(service.first),
+                "setup service conflicts with a runtime local service");
+        }
         for (const auto& cmd : node->LocalServices) {
             setup->LocalServices.emplace_back(cmd.first, TActorSetupCmd(cmd.second.Actor, cmd.second.MailboxType, cmd.second.PoolId));
         }
@@ -1859,8 +1867,15 @@ namespace NActors {
             setup->Interconnect.ProxyActors[peerNodeId] = {proxyActor, TMailboxType::ReadAsFilled, InterconnectPoolId()};
         }
 
-        setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId(),
-            UseRealInterconnect ? nullptr : &InterconnectMock);
+        if (UseRealInterconnect) {
+            setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId());
+        } else {
+            auto proxyCreator = [this](const ui32 nodeId, TInterconnectProxyCommon::TPtr common, IActor** self) {
+                *self = InterconnectMock.CreateProxyMock(TActivationContext::ActorSystem()->NodeId, nodeId, common);
+                return *self;
+            };
+            setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId(), std::move(proxyCreator));
+        }
 
         setup->LocalServices.emplace_back(MakePollerActorId(), NActors::TActorSetupCmd(CreatePollerActor(),
             NActors::TMailboxType::Simple, InterconnectPoolId()));
@@ -1875,6 +1890,12 @@ namespace NActors {
             NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, node->GetLoggerPoolId());
             std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(node->LogSettings->LoggerActorId, std::move(loggerActorCmd));
             setup->LocalServices.push_back(std::move(loggerActorPair));
+        }
+
+        for (const auto& service : setup->LocalServices) {
+            if (service.first) {
+                node->LocalServicesActors[service.first] = service.second.Actor.get();
+            }
         }
 
         auto actorSystem = THolder<TActorSystem>(new TActorSystem(setup, node->GetAppData(), node->LogSettings));
@@ -1897,7 +1918,7 @@ namespace NActors {
         node->ActorSystem->Start();
 
         if (!UseRealThreads) {
-            for (const auto& cmd : node->LocalServices) {
+            for (const auto& cmd : node->LocalServicesActors) {
                 auto it = ScheduleWhiteList.find(cmd.first);
                 if (it != ScheduleWhiteList.end()) {
                     if (TActorId actorId = node->ActorSystem->LookupLocalService(cmd.first)) {

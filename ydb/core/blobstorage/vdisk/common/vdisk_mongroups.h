@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_disk_color.pb.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/protos/whiteboard_disk_states.pb.h>
 
@@ -32,6 +33,7 @@ namespace NKikimr {
         };
 
         bool IsExtendedVDiskCounters();
+        NMonitoring::TCountableBase::EVisibility GetVDiskCounterVisibility();
 
 #define COUNTER_DEF(name)                                                                   \
 protected:                                                                                  \
@@ -50,7 +52,20 @@ public:                                                                         
 
 #define COUNTER_INIT_IF_EXTENDED(name, derivative)                                          \
     name##_ = GroupCounters->GetCounter(#name, derivative,                                  \
-        IsExtendedVDiskCounters() ? NMonitoring::TCountableBase::EVisibility::Public : NMonitoring::TCountableBase::EVisibility::Private)
+        GetVDiskCounterVisibility())
+
+// COUNTER_DEF with COUNTER_INIT_IF_EXTENDED visibility that registers the counter on its first access, so a VDisk that
+// never writes it exports nothing. The accessor is not thread-safe: use it for counters of a single actor.
+#define COUNTER_DEF_LAZY_IF_EXTENDED(name, derivative)                                      \
+protected:                                                                                  \
+    ::NMonitoring::TDynamicCounters::TCounterPtr name##_;                                     \
+public:                                                                                     \
+    NMonitoring::TDeprecatedCounter &name() {                                               \
+        if (!name##_) {                                                                     \
+            name##_ = GroupCounters->GetCounter(#name, derivative, GetVDiskCounterVisibility()); \
+        }                                                                                   \
+        return *name##_;                                                                    \
+    }
 
 #define GROUP_CONSTRUCTOR(name)                                                             \
     name(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,                    \
@@ -154,26 +169,12 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(EmergencyPutQueueBytes, false);
                 COUNTER_INIT_IF_EXTENDED(EmergencyMultiPutQueueBytes, false);
 
-                COUNTER_INIT_IF_EXTENDED(FreshSatisfactionRankPercent, false);
-                COUNTER_INIT_IF_EXTENDED(LevelSatisfactionRankPercent, false);
+                COUNTER_INIT(FreshSatisfactionRankPercent, false);
+                COUNTER_INIT(LevelSatisfactionRankPercent, false);
 
-                COUNTER_INIT_IF_EXTENDED(ThrottlingCurrentSpeedLimit, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingIsActive, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingDryRun, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingLevel0SstCount, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMinLevel0SstCount, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxLevel0SstCount, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingInplacedSize, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMinInplacedSizeHDD, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxInplacedSizeHDD, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMinInplacedSizeSSD, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxInplacedSizeSSD, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingOccupancyPerMille, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMinOccupancyPerMille, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxOccupancyPerMille, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingLogChunkCount, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMinLogChunkCount, false);
-                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxLogChunkCount, false);
+                COUNTER_INIT(ThrottlingCurrentSpeedLimit, false);
+                COUNTER_INIT(ThrottlingIsActive, false);
+                // The other Throttling* register on the first UpdateState, which runs only with EnableVDiskThrottling.
             }
 
             COUNTER_DEF(EmergencyMovedPatchQueueItems);
@@ -191,21 +192,21 @@ public:                                                                         
 
             COUNTER_DEF(ThrottlingCurrentSpeedLimit);
             COUNTER_DEF(ThrottlingIsActive);
-            COUNTER_DEF(ThrottlingDryRun);
-            COUNTER_DEF(ThrottlingLevel0SstCount);
-            COUNTER_DEF(ThrottlingMinLevel0SstCount);
-            COUNTER_DEF(ThrottlingMaxLevel0SstCount);
-            COUNTER_DEF(ThrottlingInplacedSize);
-            COUNTER_DEF(ThrottlingMinInplacedSizeHDD);
-            COUNTER_DEF(ThrottlingMaxInplacedSizeHDD);
-            COUNTER_DEF(ThrottlingMinInplacedSizeSSD);
-            COUNTER_DEF(ThrottlingMaxInplacedSizeSSD);
-            COUNTER_DEF(ThrottlingOccupancyPerMille);
-            COUNTER_DEF(ThrottlingMinOccupancyPerMille);
-            COUNTER_DEF(ThrottlingMaxOccupancyPerMille);
-            COUNTER_DEF(ThrottlingLogChunkCount);
-            COUNTER_DEF(ThrottlingMinLogChunkCount);
-            COUNTER_DEF(ThrottlingMaxLogChunkCount);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingDryRun, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingLevel0SstCount, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMinLevel0SstCount, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMaxLevel0SstCount, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingInplacedSize, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMinInplacedSizeHDD, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMaxInplacedSizeHDD, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMinInplacedSizeSSD, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMaxInplacedSizeSSD, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingOccupancyPerMille, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMinOccupancyPerMille, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMaxOccupancyPerMille, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingLogChunkCount, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMinLogChunkCount, false);
+            COUNTER_DEF_LAZY_IF_EXTENDED(ThrottlingMaxLogChunkCount, false);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -220,20 +221,11 @@ public:                                                                         
                 COUNTER_INIT(DskFreeBytes, false);
                 COUNTER_INIT(DskUsedBytes, false);
                 COUNTER_INIT(HugeUsedChunks, false);
-                COUNTER_INIT_IF_EXTENDED(HugeCanBeFreedChunks, false);
+                COUNTER_INIT(HugeCanBeFreedChunks, false);
                 COUNTER_INIT_IF_EXTENDED(HugeLockedChunks, false);
                 COUNTER_INIT(NormalizedOccupancyPerMille, false);
                 COUNTER_INIT(VDiskSlotUsagePerMille, false);
                 COUNTER_INIT(VDiskRawUsagePerMille, false);
-                COUNTER_INIT(CapacityAlertGreen, false);
-                COUNTER_INIT(CapacityAlertCyan, false);
-                COUNTER_INIT(CapacityAlertLightYellow, false);
-                COUNTER_INIT(CapacityAlertYellow, false);
-                COUNTER_INIT(CapacityAlertLightOrange, false);
-                COUNTER_INIT(CapacityAlertPreOrange, false);
-                COUNTER_INIT(CapacityAlertOrange, false);
-                COUNTER_INIT(CapacityAlertRed, false);
-                COUNTER_INIT(CapacityAlertBlack, false);
             }
 
             COUNTER_DEF(DskOutOfSpace);
@@ -247,15 +239,31 @@ public:                                                                         
             COUNTER_DEF(NormalizedOccupancyPerMille);
             COUNTER_DEF(VDiskSlotUsagePerMille);
             COUNTER_DEF(VDiskRawUsagePerMille);
-            COUNTER_DEF(CapacityAlertGreen);
-            COUNTER_DEF(CapacityAlertCyan);
-            COUNTER_DEF(CapacityAlertLightYellow);
-            COUNTER_DEF(CapacityAlertYellow);
-            COUNTER_DEF(CapacityAlertLightOrange);
-            COUNTER_DEF(CapacityAlertPreOrange);
-            COUNTER_DEF(CapacityAlertOrange);
-            COUNTER_DEF(CapacityAlertRed);
-            COUNTER_DEF(CapacityAlertBlack);
+
+            // One-hot CapacityAlert<Color>: the entered color registers on first entry, the other existing colors drop to 0.
+            // A donor and its acceptor on one PDisk may share these counters, so the state lives in the counters.
+            void CapacityAlert(NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+                for (const auto& [c, name] : CapacityAlertColors) {
+                    if (c == color) {
+                        *GroupCounters->GetCounter(name, false) = 1;
+                    } else if (const auto gauge = GroupCounters->FindCounter(name)) {
+                        *gauge = 0;
+                    }
+                }
+            }
+
+        private:
+            static constexpr std::pair<NKikimrBlobStorage::TPDiskSpaceColor::E, const char*> CapacityAlertColors[] = {
+                {NKikimrBlobStorage::TPDiskSpaceColor::GREEN, "CapacityAlertGreen"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::CYAN, "CapacityAlertCyan"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW, "CapacityAlertLightYellow"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::YELLOW, "CapacityAlertYellow"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE, "CapacityAlertLightOrange"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE, "CapacityAlertPreOrange"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::ORANGE, "CapacityAlertOrange"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::RED, "CapacityAlertRed"},
+                {NKikimrBlobStorage::TPDiskSpaceColor::BLACK, "CapacityAlertBlack"},
+            };
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -271,7 +279,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(SyncerVSyncFullMessagesSent, true);
                 COUNTER_INIT_IF_EXTENDED(SyncerVSyncFullBytesSent, true);
                 COUNTER_INIT_IF_EXTENDED(SyncerVSyncFullBytesReceived, true);
-                COUNTER_INIT_IF_EXTENDED(SyncerUnsyncedDisks, false);
+                COUNTER_INIT(SyncerUnsyncedDisks, false);
                 COUNTER_INIT_IF_EXTENDED(SyncerLoggerRecords, true);
                 COUNTER_INIT_IF_EXTENDED(SyncerLoggedBytes, true);
             }
@@ -300,7 +308,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(ReplHugeBlobsRecovered, true);
                 COUNTER_INIT_IF_EXTENDED(ReplHugeBlobBytesRecovered, true);
                 COUNTER_INIT_IF_EXTENDED(ReplChunksWritten, true);
-                COUNTER_INIT_IF_EXTENDED(ReplUnreplicatedVDisks, false);
+                COUNTER_INIT(ReplUnreplicatedVDisks, false);
                 COUNTER_INIT_IF_EXTENDED(ReplVGetBytesReceived, true);
                 COUNTER_INIT(ReplPhantomLikeDiscovered, false);
                 COUNTER_INIT(ReplPhantomLikeRecovered, false);
@@ -313,9 +321,9 @@ public:                                                                         
                 COUNTER_INIT(ReplUnreplicatedPhantoms, false);
                 COUNTER_INIT(ReplUnreplicatedNonPhantoms, false);
                 COUNTER_INIT_IF_EXTENDED(ReplSecondsRemaining, false);
-                COUNTER_INIT_IF_EXTENDED(ReplTotalBlobsWithProblems, false);
+                COUNTER_INIT(ReplTotalBlobsWithProblems, false);
                 COUNTER_INIT_IF_EXTENDED(ReplPhantomBlobsWithProblems, false);
-                COUNTER_INIT_IF_EXTENDED(ReplMadeNoProgress, false);
+                COUNTER_INIT(ReplMadeNoProgress, false);
                 COUNTER_INIT_IF_EXTENDED(ReplPDiskWriteThrottledMicroseconds, false);
                 COUNTER_INIT_IF_EXTENDED(ReplNodeRequestThrottledMicroseconds, false);
                 COUNTER_INIT_IF_EXTENDED(ReplNodeResponseThrottledMicroseconds, false);
@@ -367,7 +375,6 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(LocalRecovBytesDispatched, true);
                 COUNTER_INIT_IF_EXTENDED(LocalRecovRecsApplied, true);
                 COUNTER_INIT_IF_EXTENDED(LocalRecovBytesApplied, true);
-                COUNTER_INIT_IF_EXTENDED(BulkLogoBlobs, true);
             }
 
             COUNTER_DEF(LogoBlobsDbEmpty);
@@ -377,7 +384,6 @@ public:                                                                         
             COUNTER_DEF(LocalRecovBytesDispatched);
             COUNTER_DEF(LocalRecovRecsApplied);
             COUNTER_DEF(LocalRecovBytesApplied);
-            COUNTER_DEF(BulkLogoBlobs);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -455,29 +461,30 @@ public:                                                                         
         // TVDiskStateGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TVDiskStateGroup: public TBase {
-            std::array<::NMonitoring::TDynamicCounters::TCounterPtr, NKikimrWhiteboard::EVDiskState_MAX + 1> VDiskStates;
             ::NMonitoring::TDynamicCounters::TCounterPtr CurrentState;
 
         public:
             GROUP_CONSTRUCTOR(TVDiskStateGroup)
             {
                 // depracated, only for compatibility
-                TString name = "VDiskState";
-                CurrentState = GroupCounters->GetCounter(name, false);
+                CurrentState = GroupCounters->GetCounter("VDiskState", false, GetVDiskCounterVisibility());
                 *CurrentState = NKikimrWhiteboard::Initial;
-
-                for (size_t i = NKikimrWhiteboard::EVDiskState_MIN; i <= NKikimrWhiteboard::EVDiskState_MAX; ++i) {
-                    VDiskStates[i] = GroupCounters->GetCounter(name + "_" + NKikimrWhiteboard::EVDiskState_Name(i), false);
-                }
                 COUNTER_INIT_IF_EXTENDED(VDiskLocalRecoveryState, false);
                 COUNTER_INIT(HeapAllocatorSizeClass, false);
                 COUNTER_INIT(HeapAllocatorStripe, false);
             }
 
+            // One-hot VDiskState_<State>: the entered state registers on first entry. SkeletonFront, Skeleton and
+            // LocalRecovery keep separate groups on the same counters, so the previous state comes from CurrentState.
             void VDiskState(NKikimrWhiteboard::EVDiskState s) {
-                *VDiskStates[*CurrentState] = 0;
+                const auto prev = VDiskState();
+                if (prev != s) {
+                    if (const auto gauge = GroupCounters->FindCounter("VDiskState_" + NKikimrWhiteboard::EVDiskState_Name(prev))) {
+                        *gauge = 0;
+                    }
+                }
                 *CurrentState = s;
-                *VDiskStates[s] = 1;
+                *GroupCounters->GetCounter("VDiskState_" + NKikimrWhiteboard::EVDiskState_Name(s), false) = 1;
             }
 
             NKikimrWhiteboard::EVDiskState VDiskState() const {
@@ -502,16 +509,49 @@ public:                                                                         
         ///////////////////////////////////////////////////////////////////////////////////
         // TLsmLevelGroup
         ///////////////////////////////////////////////////////////////////////////////////
+        struct TLsmLevelStats {
+            ui64 SstNum = 0;
+            ui64 NumItems = 0;
+            ui64 NumItemsInplaced = 0;
+            ui64 NumItemsHuge = 0;
+            ui64 DataInplaced = 0;
+            ui64 DataHuge = 0;
+
+            TLsmLevelStats& operator+=(const TLsmLevelStats& other) {
+                SstNum += other.SstNum;
+                NumItems += other.NumItems;
+                NumItemsInplaced += other.NumItemsInplaced;
+                NumItemsHuge += other.NumItemsHuge;
+                DataInplaced += other.DataInplaced;
+                DataHuge += other.DataHuge;
+                return *this;
+            }
+        };
+
         class TLsmLevelGroup : public TBase {
         public:
-            GROUP_CONSTRUCTOR(TLsmLevelGroup)
+            TLsmLevelGroup(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+                    const TString& name, const TString& value, bool extended = false,
+                    const TString& counterPrefix = {})
+                : TBase(counters, name, value)
             {
-                COUNTER_INIT(SstNum, false);
-                COUNTER_INIT(NumItems, false);
-                COUNTER_INIT(NumItemsInplaced, false);
-                COUNTER_INIT(NumItemsHuge, false);
-                COUNTER_INIT(DataInplaced, false);
-                COUNTER_INIT(DataHuge, false);
+                const auto visibility = extended ? GetVDiskCounterVisibility()
+                    : NMonitoring::TCountableBase::EVisibility::Public;
+                SstNum_ = GroupCounters->GetCounter(counterPrefix + "SstNum", false, visibility);
+                NumItems_ = GroupCounters->GetCounter(counterPrefix + "NumItems", false, visibility);
+                NumItemsInplaced_ = GroupCounters->GetCounter(counterPrefix + "NumItemsInplaced", false, visibility);
+                NumItemsHuge_ = GroupCounters->GetCounter(counterPrefix + "NumItemsHuge", false, visibility);
+                DataInplaced_ = GroupCounters->GetCounter(counterPrefix + "DataInplaced", false, visibility);
+                DataHuge_ = GroupCounters->GetCounter(counterPrefix + "DataHuge", false, visibility);
+            }
+
+            void Set(const TLsmLevelStats& stats) {
+                SstNum() = stats.SstNum;
+                NumItems() = stats.NumItems;
+                NumItemsInplaced() = stats.NumItemsInplaced;
+                NumItemsHuge() = stats.NumItemsHuge;
+                DataInplaced() = stats.DataInplaced;
+                DataHuge() = stats.DataHuge;
             }
 
             COUNTER_DEF(SstNum);
@@ -532,13 +572,23 @@ public:                                                                         
             TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
             // per-level information
             std::unique_ptr<TLsmLevelGroup> Levels[MaxCounterLevels];
+            TLsmLevelGroup SortedLevels;
 
             TLsmAllLevelsStat(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
                 : Group(counters->GetSubgroup("subsystem", "levels"))
+                , SortedLevels(Group, "level", "sorted", false, "Sorted")
             {
                 for (ui32 level = 0; level < MaxCounterLevels; ++level) {
-                    Levels[level].reset(new TLsmLevelGroup(Group, "level", Sprintf("%u", level)));
+                    Levels[level].reset(new TLsmLevelGroup(Group, "level", Sprintf("%u", level), level != 0));
                 }
+            }
+
+            void Update(const std::array<TLsmLevelStats, MaxCounterLevels>& levels,
+                    const TLsmLevelStats& sorted) {
+                for (ui32 level = 0; level < MaxCounterLevels; ++level) {
+                    Levels[level]->Set(levels[level]);
+                }
+                SortedLevels.Set(sorted);
             }
         };
 
@@ -561,7 +611,6 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(BlockAndGetMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(GCMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(GetBarrierMsgs, true);
-                COUNTER_INIT_IF_EXTENDED(SyncMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(SyncFullMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(RecoveredHugeBlobMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(StatusMsgs, true);
@@ -590,11 +639,14 @@ public:                                                                         
 
                 COUNTER_INIT_IF_EXTENDED(PutTotalBytes, true);
                 COUNTER_INIT_IF_EXTENDED(GetTotalBytes, true);
+                MinHugeBlobInBytesGauge = GroupCounters->GetCounter("MinHugeBlobInBytes");
             }
 
             void MinHugeBlobInBytes(ui32 size) {
+                *MinHugeBlobInBytesGauge = size;
                 auto getCounter = [&](ui32 size) {
-                    return GroupCounters->GetSubgroup("MinHugeBlobInBytes", ToString(size))->GetCounter("count", 1);
+                    return GroupCounters->GetSubgroup("MinHugeBlobInBytes", ToString(size))->GetCounter(
+                        "count", true, GetVDiskCounterVisibility());
                 };
                 if (PrevMinHugeBlobInBytes) {
                     *getCounter(PrevMinHugeBlobInBytes) = 0;
@@ -615,7 +667,6 @@ public:                                                                         
             COUNTER_DEF(BlockAndGetMsgs);
             COUNTER_DEF(GCMsgs);
             COUNTER_DEF(GetBarrierMsgs);
-            COUNTER_DEF(SyncMsgs);
             COUNTER_DEF(SyncFullMsgs);
             COUNTER_DEF(RecoveredHugeBlobMsgs);
             COUNTER_DEF(StatusMsgs);
@@ -646,6 +697,7 @@ public:                                                                         
             COUNTER_DEF(GetTotalBytes);
         private:
             ui32 PrevMinHugeBlobInBytes = 0;
+            NMonitoring::TDynamicCounters::TCounterPtr MinHugeBlobInBytesGauge;
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -752,6 +804,7 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(THandleClassGroup)
             {
+                COUNTER_INIT(TotalResponses, true);
                 COUNTER_INIT_IF_EXTENDED(Undefined, true);
                 COUNTER_INIT_IF_EXTENDED(GetDiscover, true);
                 COUNTER_INIT_IF_EXTENDED(GetFast, true);
@@ -762,6 +815,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(PutAsyncBlob, true);
             }
 
+            COUNTER_DEF(TotalResponses);
             COUNTER_DEF(Undefined);
             COUNTER_DEF(GetDiscover);
             COUNTER_DEF(GetFast);
@@ -837,25 +891,46 @@ public:                                                                         
                 , ResponsesWithStatusVdiskErrorState(Group, "status", "VDISK_STATUS_ERROR")
             {}
 
-            template <typename THandleClassType>
-            ::NMonitoring::TDeprecatedCounter &GetCounterByHandleClass(NKikimrProto::EReplyStatus status, const std::optional<THandleClassType>& handleClass = std::nullopt) {
+            THandleClassGroup& GetStatusGroup(NKikimrProto::EReplyStatus status) {
                 switch (status) {
                     case NKikimrProto::ERROR:
-                        return ResponsesWithStatusError.GetCounter(handleClass);
+                        return ResponsesWithStatusError;
                     case NKikimrProto::RACE:
-                        return ResponsesWithStatusRace.GetCounter(handleClass);
+                        return ResponsesWithStatusRace;
                     case NKikimrProto::BLOCKED:
-                        return ResponsesWithStatusBlocked.GetCounter(handleClass);
+                        return ResponsesWithStatusBlocked;
                     case NKikimrProto::OUT_OF_SPACE:
-                        return ResponsesWithStatusOutOfSpace.GetCounter(handleClass);
+                        return ResponsesWithStatusOutOfSpace;
                     case NKikimrProto::DEADLINE:
-                        return ResponsesWithStatusDeadline.GetCounter(handleClass);
+                        return ResponsesWithStatusDeadline;
                     case NKikimrProto::NOTREADY:
-                        return ResponsesWithStatusNotReady.GetCounter(handleClass);
+                        return ResponsesWithStatusNotReady;
                     case NKikimrProto::VDISK_ERROR_STATE:
-                        return ResponsesWithStatusVdiskErrorState.GetCounter(handleClass);
-                    default: return Undefined.GetCounter(handleClass);
+                        return ResponsesWithStatusVdiskErrorState;
+                    default: return Undefined;
                 }
+            }
+
+            template <typename THandleClassType>
+            ::NMonitoring::TDeprecatedCounter &GetCounterByHandleClass(NKikimrProto::EReplyStatus status, const std::optional<THandleClassType>& handleClass) {
+                return GetStatusGroup(status).GetCounter(handleClass);
+            }
+
+            template <typename THandleClassType>
+            void CountByHandleClass(NKikimrProto::EReplyStatus status, const std::optional<THandleClassType>& handleClass) {
+                auto& group = GetStatusGroup(status);
+                ++group.TotalResponses();
+                ++group.GetCounter(handleClass);
+            }
+
+            void Count(NKikimrProto::EReplyStatus status) {
+                CountByHandleClass(status, std::optional<NKikimrBlobStorage::EPutHandleClass>{});
+            }
+            void Count(NKikimrProto::EReplyStatus status, NKikimrBlobStorage::EPutHandleClass handleClass) {
+                CountByHandleClass(status, std::optional{handleClass});
+            }
+            void Count(NKikimrProto::EReplyStatus status, NKikimrBlobStorage::EGetHandleClass handleClass) {
+                CountByHandleClass(status, std::optional{handleClass});
             }
 
             ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status) {
@@ -878,11 +953,10 @@ public:                                                                         
             public:
                 GROUP_CONSTRUCTOR(TDiskCostGroup)
                 {
-                    COUNTER_INIT_IF_EXTENDED(UserDiskCost, true);
-                    COUNTER_INIT_IF_EXTENDED(CompactionDiskCost, true);
-                    COUNTER_INIT_IF_EXTENDED(ScrubDiskCost, true);
-                    COUNTER_INIT_IF_EXTENDED(DefragDiskCost, true);
-                    COUNTER_INIT_IF_EXTENDED(InternalDiskCost, true);
+                    COUNTER_INIT(UserDiskCost, true);
+                    COUNTER_INIT(CompactionDiskCost, true);
+                    COUNTER_INIT(ScrubDiskCost, true);
+                    COUNTER_INIT(InternalDiskCost, true);
                 }
 
                 COUNTER_DEF(UserDiskCost);
@@ -890,6 +964,11 @@ public:                                                                         
                 COUNTER_DEF(ScrubDiskCost);
                 COUNTER_DEF(DefragDiskCost);
                 COUNTER_DEF(InternalDiskCost);
+
+                // Only the read group calls this: CountDefragRequest takes read operations only.
+                void InitDefragDiskCost() {
+                    COUNTER_INIT(DefragDiskCost, true);
+                }
             };
 
             TCostTrackerGroup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
@@ -910,8 +989,9 @@ public:                                                                         
             }
 
             void InitCounters() {
-                COUNTER_INIT_IF_EXTENDED(DiskTimeAvailableCtr, false);
-                COUNTER_INIT_IF_EXTENDED(DiskTimeFairShareNs, false);
+                COUNTER_INIT(DiskTimeAvailableCtr, false);
+                COUNTER_INIT(DiskTimeFairShareNs, false);
+                ReadDiskCost.InitDefragDiskCost();
             }
 
             TDiskCostGroup ReadDiskCost;
@@ -1023,7 +1103,7 @@ public:                                                                         
             GROUP_CONSTRUCTOR(TDeepScrubbingGroup)
             {
                 COUNTER_INIT(BlobsChecked, true);
-                COUNTER_INIT(CheckIntegritySuccesses, true);
+                COUNTER_INIT_IF_EXTENDED(CheckIntegritySuccesses, true);
                 COUNTER_INIT(CheckIntegrityErrors, true);
                 COUNTER_INIT(UnknownDataStatus, true);
                 COUNTER_INIT(UnknownPlacementStatus, true);
@@ -1042,33 +1122,29 @@ public:                                                                         
 
         class TDeepScrubbingSubgroups {
         public:
-            TDeepScrubbingSubgroups(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
-                for (bool isHuge : {true, false}) {
-                    for (TErasureType::EErasureSpecies erasure :
-                            {TErasureType::ErasureNone, TErasureType::Erasure4Plus2Block,
-                            TErasureType::ErasureMirror3of4, TErasureType::ErasureMirror3dc}) {
-                        ::NMonitoring::TDynamicCounterPtr subgroup = counters
-                                ->GetSubgroup("blobSize", isHuge ? "huge" : "small")
-                                ->GetSubgroup("erasure", TErasureType::ErasureSpeciesName(erasure));
-                        Subgroups.insert({GetKey(isHuge, erasure), TDeepScrubbingGroup(subgroup)});
+            TDeepScrubbingSubgroups(TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+                    TErasureType::EErasureSpecies erasure)
+                : Counters(std::move(counters))
+                , Erasure(erasure)
+            {}
+
+            TDeepScrubbingGroup& GetCounters(bool isHuge) {
+                // Register on the first integrity check, so disabled deep scrubbing emits nothing.
+                if (!Subgroups[0]) {
+                    auto group = Counters->GetSubgroup("subsystem", "deepScrubbing");
+                    for (bool huge : {false, true}) {
+                        auto subgroup = group->GetSubgroup("blobSize", huge ? "huge" : "small")
+                            ->GetSubgroup("erasure", TErasureType::ErasureSpeciesName(Erasure));
+                        Subgroups[huge] = std::make_unique<TDeepScrubbingGroup>(subgroup);
                     }
                 }
-            }
-
-            TDeepScrubbingGroup* GetCounters(bool isHuge, TErasureType::EErasureSpecies erasure) {
-                auto it = Subgroups.find(GetKey(isHuge, erasure));
-                if (it == Subgroups.end()) {
-                    return nullptr;
-                }
-                return &it->second;
+                return *Subgroups[isHuge];
             }
 
         private:
-            std::unordered_map<ui64, TDeepScrubbingGroup> Subgroups;
-
-            ui64 GetKey(bool isHuge, TErasureType::EErasureSpecies erasure) {
-                return ((ui64)isHuge << 32) + (ui64)erasure;
-            }
+            const TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+            const TErasureType::EErasureSpecies Erasure;
+            std::array<std::unique_ptr<TDeepScrubbingGroup>, 2> Subgroups;
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

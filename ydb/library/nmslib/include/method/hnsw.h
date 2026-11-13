@@ -29,6 +29,8 @@
 #include "params.h"
 
 #include <condition_variable>
+#include <atomic>
+#include <stdexcept>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -458,6 +460,12 @@ namespace similarity {
         virtual void LoadIndex(const string &location) override;
 
         Hnsw(bool PrintProgress, const Space<dist_t> &space, const ObjectVector &data);
+        void SetBuildCancellation(const std::atomic<bool>* cancelled) { BuildCancellation_ = cancelled; }
+        void CheckBuildCancellation() const {
+            if (BuildCancellation_ && BuildCancellation_->load(std::memory_order_relaxed)) {
+                throw std::runtime_error("HNSW build cancelled");
+            }
+        }
         void CreateIndex(const AnyParams &IndexParams) override;
 
         ~Hnsw();
@@ -548,6 +556,7 @@ namespace similarity {
 
         mutable mutex ElListGuard_;
         mutable mutex MaxLevelGuard_;
+        const std::atomic<bool>* BuildCancellation_ = nullptr;
         ElementList ElList_;
 
         int vectorlength_ = 0;

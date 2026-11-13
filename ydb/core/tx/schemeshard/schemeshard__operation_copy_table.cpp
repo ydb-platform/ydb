@@ -364,6 +364,7 @@ public:
                         streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                         streamPath->DropTxId == OperationId.GetTxId()) {
 
+                        context.OnComplete.DeleteShard(context.SS->CdcStreams.at(id)->AggregatorShardIdx);
                         context.SS->PersistRemoveCdcStream(db, id);
                         context.SS->CdcStreams.erase(id);
 
@@ -563,7 +564,7 @@ public:
             if (checks && Transaction.HasCreateCdcStream()) {
                 NCdcStreamAtTable::CheckSrcDirOnPropose(
                     checks,
-                    srcPath.IsInsideTableIndexPath(false));
+                    srcPath);
             }
 
             if (!checks) {

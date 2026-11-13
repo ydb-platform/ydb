@@ -21,6 +21,9 @@
 #include "datashard_trans_queue.h"
 #include "datashard_user_table.h"
 #include "datashard_write.h"
+#include "hnsw_index/hnsw_index.h"
+#include "hnsw_index/hnsw_index_build_actor.h"
+#include "hnsw_index/hnsw_memory_tracker.h"
 #include "incr_restore_scan.h"
 #include "datashard_tli.h"
 #include "multi_txids.h"
@@ -54,6 +57,7 @@
 #include <ydb/core/tablet_flat/flat_page_iface.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
@@ -73,6 +77,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/string/join.h>
+
 
 namespace NACLib {
     class TUserContext;
@@ -284,6 +289,7 @@ class TDataShard
     friend class TScanTransactionProcessor;
     friend class TDataShardEngineHost;
     friend class TExecuteKqpScanTxUnit;
+    friend class TAlterTableUnit;
     friend class TTableScan;
     friend class TKqpScan;
 
@@ -308,6 +314,7 @@ class TDataShard
     friend class TMultiTxIdManager;
 
     friend class TTableStatsCoroBuilder;
+    friend class THnswIndexBuildActor;
     friend class TReadTableScan;
     friend class TWaitForStreamClearanceUnit;
     friend class TBuildIndexScan;
@@ -382,6 +389,11 @@ class TDataShard
             EvTableStatsError,
             EvRemoveSchemaSnapshots,
             EvBlockFailPointUnblock,
+            EvAdvanceSequencesTimeout,
+            EvHnswIndexBuildResult,
+            EvRebuildHnswIndex,
+            EvStartHnswSnapshotScan,
+            EvHnswSnapshotFinished,
             EvEnd
         };
 
@@ -406,6 +418,16 @@ class TDataShard
 
         struct TEvPeriodicWakeup : public TEventLocal<TEvPeriodicWakeup, EvPeriodicWakeup> {};
 
+        struct TEvAdvanceSequencesTimeout
+            : public TEventLocal<TEvAdvanceSequencesTimeout, EvAdvanceSequencesTimeout>
+        {
+            explicit TEvAdvanceSequencesTimeout(ui64 pendingId)
+                : PendingId(pendingId)
+            {}
+
+            const ui64 PendingId;
+        };
+
         struct TEvBuildTableStatsResult : public TEventLocal<TEvBuildTableStatsResult, EvAsyncTableStats> {
             ui64 TableId = -1;
             TInstant StatsUpdateTime;
@@ -416,6 +438,47 @@ class TDataShard
             ui64 MemDataSize = 0;
             ui64 SearchHeight = 0;
             bool HasSchemaChanges = false;
+        };
+
+        struct TEvRebuildHnswIndex : public TEventLocal<TEvRebuildHnswIndex, EvRebuildHnswIndex> {
+            explicit TEvRebuildHnswIndex(ui32 localTid, bool initialBuild = false, TPathId indexId = {}, std::optional<TRowVersion> waitingBase = {})
+                : LocalTid(localTid), IndexId(indexId), InitialBuild(initialBuild), WaitingBase(waitingBase) {}
+            ui32 LocalTid;
+            TPathId IndexId;
+            bool InitialBuild;
+            std::optional<TRowVersion> WaitingBase;
+        };
+
+        struct TEvStartHnswSnapshotScan : public TEventLocal<TEvStartHnswSnapshotScan, EvStartHnswSnapshotScan> {
+            ui32 LocalTid = 0;
+            TPathId IndexId;
+            TUserTable::TCPtr Table;
+            TRowVersion BaseVersion;
+            ui64 BuildToken = 0;
+            THnswSnapshotScanCallback Finish;
+        };
+
+        struct TEvHnswSnapshotFinished : public TEventLocal<TEvHnswSnapshotFinished, EvHnswSnapshotFinished> {
+            ui32 LocalTid = 0;
+            TPathId IndexId;
+            ui64 BuildToken = 0;
+            ui64 MemoryOwner = 0;
+            THnswSnapshotScanResult Result;
+        };
+
+        struct TEvHnswIndexBuildResult : public TEventLocal<TEvHnswIndexBuildResult, EvHnswIndexBuildResult> {
+            ui32 LocalTid = 0;
+            TPathId IndexId;
+            ui32 VectorColumnTag = 0;
+            ui64 RowCountAtBuild = 0;
+            ui64 BuildToken = 0;
+            ui64 MemoryOwner = 0;
+            TRowVersion BaseVersion = TRowVersion::Min();
+            Ydb::Table::VectorIndexSettings Settings;
+            std::shared_ptr<void> MemoryReservation;
+            std::shared_ptr<NDataShard::THnswIndex> Index;
+            TString Error;
+            bool BelowMinRows = false;
         };
 
         struct TEvBuildTableStatsError : public TEventLocal<TEvBuildTableStatsError, EvTableStatsError> {
@@ -1264,6 +1327,7 @@ class TDataShard
             Sys_VacuumCompletedGeneration = 47,
 
             Sys_SubDomainTablesMetricsLevel = 48,
+            Sys_DatabaseFreeze = 49,
 
             // reserved
             SysPipeline_Flags = 1000,
@@ -1395,6 +1459,8 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvBuildTableStatsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvBuildTableStatsError::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvHnswSnapshotFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
@@ -1430,6 +1496,9 @@ class TDataShard
     void Handle(TEvDataShard::TEvS3DirectWriteBegin::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteAbort::TPtr& ev, const TActorContext& ctx);
+    bool IsActiveDirectImport(ui64 txId, ui64 tableId, const TActorId& sender);
+    TString CheckDirectImportSpace();
+    void AbortDirectImportsForSpace();
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
@@ -1486,6 +1555,9 @@ class TDataShard
     // change sending
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx);
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx);
+    void WaitChangeRecordsVisibility(const TActorId& recipient, ui64 order, ui64 step);
+    void ActivateChangeRecordsWaitingVisibility(const TActorContext& ctx);
+    void PromoteCdcReadVisibility(const TRowVersion& version);
     void ScheduleRequestChangeRecords(const TActorContext& ctx);
     void ScheduleRemoveChangeRecords(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestChangeRecords::TPtr& ev, const TActorContext& ctx);
@@ -1507,6 +1579,8 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequenceResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvAdvanceSequencesTimeout::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
 
@@ -1613,6 +1687,7 @@ public:
     TDataShard(const TActorId &tablet, TTabletStorageInfo *info);
     ~TDataShard();
 
+    void CancelS3DirectWrite(ui64 txId);
 
     void PrepareAndSaveOutReadSets(ui64 step,
                                    ui64 txId,
@@ -1706,9 +1781,40 @@ public:
         return State == TShardState::Frozen;
     }
 
+    bool IsDatabaseFrozen() const {
+        return DatabaseFreeze.GetStage() != NKikimrTxDataShard::TDatabaseFreezeState::OPEN;
+    }
+
+    bool IsUserTableWriteBlocked() const {
+        return IsStateFrozen() || IsDatabaseFrozen();
+    }
+
+    bool CanReceiveChangeRecords() const {
+        return State == TShardState::Ready
+            && DatabaseFreeze.GetStage() < NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC;
+    }
+
+    bool IsDatabaseWriteBlocked(const TOperation* op) const;
+    bool HasDatabaseFreezeWrites() const;
+    bool HasDatabaseFreezeIndexRecords() const;
+    bool HasDatabaseFreezeCdcScans() const;
+    void Handle(TEvDataShard::TEvDatabaseFreeze::TPtr& ev, const TActorContext& ctx);
+    class TTxDatabaseFreeze;
+
     bool IsReplicated() const {
         for (const auto& [_, info] : TableInfos) {
             if (info->IsReplicated()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool IsImportingReplica() const {
+        for (const auto& [_, info] : TableInfos) {
+            if (info->IsReplicated() &&
+                info->ReplicationConfig.ImportState == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING)
+            {
                 return true;
             }
         }
@@ -1807,13 +1913,24 @@ public:
 
         SysLocks.RemoveSchema(tableId, locksDb);
         Pipeline.GetDepTracker().RemoveSchema(tableId);
+        if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end()) {
+            InvalidateHnswTable(it->second->LocalTid);
+            HnswIndexCache.erase(it->second->LocalTid);
+        }
         TableInfos.erase(tableId.LocalPathId);
     }
 
     void SetUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
+        const bool replacing = TableInfos.contains(tableId.LocalPathId);
+        if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end()) {
+            ReconcileHnswIndexes(*it->second, *tableInfo);
+        }
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
+        if (replacing && !tableInfo->HnswIndexes.empty()) {
+            ScheduleHnswInitialBuilds();
+        }
     }
 
     void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
@@ -1824,6 +1941,166 @@ public:
         SysLocks.RemoveSchema(tableId, &locksDb);
         SetUserTable(tableId, tableInfo);
     }
+
+    // An omitted identity is supported only for a table with one local index.
+    std::shared_ptr<NDataShard::THnswIndex> GetHnswIndex(ui32 localTid, ui32 vectorColumnTag,
+        const Ydb::Table::VectorIndexSettings& settings, bool useCachedHnswParameters,
+        TRowVersion readVersion = TRowVersion::Max(), TPathId indexId = {}) const;
+
+    void RegisterHnswCacheLookup(ui32 localTid, bool hit, TPathId indexId = {}) {
+        if (auto* entry = GetOrCreateHnswIndexEntry(localTid, indexId)) {
+            if (hit) { ++entry->CacheHits; } else { ++entry->CacheMisses; }
+        }
+    }
+
+    enum class EHnswFallback { UnsupportedRead, PartialRange, Candidates };
+    void RegisterHnswFallback(ui32 localTid, EHnswFallback reason, TPathId indexId = {}) {
+        if (auto* entry = GetOrCreateHnswIndexEntry(localTid, indexId)) {
+            switch (reason) {
+                case EHnswFallback::UnsupportedRead: ++entry->UnsupportedReads; break;
+                case EHnswFallback::PartialRange: ++entry->RangeFallbacks; break;
+                case EHnswFallback::Candidates: ++entry->CandidateFallbacks; break;
+            }
+        }
+    }
+
+    void RequestHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
+        const Ydb::Table::VectorIndexSettings& settings, TPathId indexId);
+    bool TryStartHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
+        const Ydb::Table::VectorIndexSettings& settings,
+        TRowVersion baseVersion = TRowVersion::Min(), TPathId indexId = {});
+    ui64 GetHnswBuildToken(ui32 localTid, TPathId indexId = {}) const;
+    bool IsHnswBuildCurrent(ui32 localTid, ui64 token, TPathId indexId = {}) const;
+
+    struct THnswIndexStats {
+        bool Ready = false;
+        bool Building = false;
+        ui64 MemoryBytes = 0;
+        ui64 CacheHits = 0;
+        ui64 CacheMisses = 0;
+        ui64 Rebuilds = 0;
+        ui64 Builds = 0;
+        ui64 UnsupportedReads = 0;
+        ui64 RangeFallbacks = 0;
+        ui64 CandidateFallbacks = 0;
+    };
+    std::optional<THnswIndexStats> GetHnswIndexStats(ui32 localTid, TPathId indexId) const;
+
+    void InvalidateHnswIndex(ui32 localTid, TPathId indexId = {});
+    void InvalidateHnswTable(ui32 localTid);
+    void ReconcileHnswIndexes(const TUserTable& before, const TUserTable& after);
+    void InvalidateHnswIndexes();
+    void PruneHnswIndexes();
+    void UpdateHnswSnapshotPin(const TSnapshotKey& snapshot, bool add);
+    std::vector<TRowVersion> GetHnswReadVersions(ui32 localTid) const;
+    void ScheduleHnswRebuild(ui32 localTid, TPathId indexId = {});
+    void ScheduleHnswInitialBuilds();
+    void TrackHnswOpenTransactions(ui32 localTid, const NTable::TDatabase& db, TPathId indexId = {});
+    TRowVersion GetHnswBuildVersion() const;
+    void StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table, TRowVersion base,
+        TTransactionContext& txc, THnswSnapshotScanCallback finish = {}, TPathId indexId = {});
+    void Handle(TEvPrivate::TEvRebuildHnswIndex::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvStartHnswSnapshotScan::TPtr& ev, const TActorContext& ctx);
+    class TTxRebuildHnswIndex;
+
+    void DeferHnswIndexBuild(ui32 localTid, TDuration delay, TPathId indexId = {}) {
+        if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
+            entry->Building = false;
+            entry->BuildReadPin.reset();
+            const ui64 desired = HnswCacheMemoryTracker ? HnswCacheMemoryTracker->GetDemand(entry->MemoryOwner) : 0;
+            entry->RetryMemoryBytes = Max(entry->RetryMemoryBytes, desired > Max<ui64>() / 2 ? Max<ui64>() : desired * 2);
+            if (HnswCacheMemoryTracker) { HnswCacheMemoryTracker->ResetDemand(entry->MemoryOwner); }
+            entry->NextScanAttemptAt = AppData()->TimeProvider->Now() + delay;
+        }
+    }
+
+    void DisableHnswIndexBuild(ui32 localTid, TPathId indexId = {}) {
+        indexId = ResolveHnswIndexId(localTid, indexId);
+        EraseIf(HnswBuildQueue, [&](const auto& queued) { return queued.first == localTid && queued.second == indexId; });
+        if (auto* entry = FindHnswIndexEntry(localTid, indexId)) {
+            entry->Building = false;
+            entry->BuildReadPin.reset();
+            entry->NextScanAttemptAt = TInstant::Max();
+            if (HnswCacheMemoryTracker) { HnswCacheMemoryTracker->ResetDemand(entry->MemoryOwner); }
+        }
+    }
+
+    ui64 GetHnswCacheMemoryLimit() {
+        if (!HnswCacheMemoryTracker) {
+            HnswCacheMemoryTracker = std::make_shared<THnswCacheMemoryTracker>(true);
+            // Graphs, build buffers and MVCC journals share the node-wide
+            // SharedCache quota with the shared table-page cache.
+            Send(NMemory::MakeMemoryControllerId(),
+                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache, true),
+                NActors::IEventHandle::FlagTrackDelivery);
+        }
+        return HnswCacheMemoryTracker->GetLimit();
+    }
+
+    bool IsHnswCacheMemoryLimitKnown() const {
+        return HnswCacheMemoryTracker && HnswCacheMemoryTracker->HasLimit();
+    }
+
+    std::shared_ptr<void> TryReserveHnswCacheMemory(ui64 bytes, ui64 owner = 0) {
+        struct TReservation {
+            std::shared_ptr<THnswCacheMemoryTracker> Tracker;
+            ui64 Size = 0;
+            ui64 Owner = 0;
+
+            ~TReservation() {
+                if (Size) {
+                    Tracker->Release(Size, Owner);
+                }
+            }
+        };
+
+        GetHnswCacheMemoryLimit();
+        auto reservation = std::make_shared<TReservation>();
+        reservation->Tracker = HnswCacheMemoryTracker;
+        reservation->Owner = owner;
+        if (!reservation->Tracker->TryAcquire(bytes, owner)) {
+            return nullptr;
+        }
+        reservation->Size = bytes;
+        return reservation;
+    }
+
+    void Handle(NMemory::TEvConsumerRegistered::TPtr& ev, const TActorContext&) {
+        Y_ENSURE(HnswCacheMemoryTracker);
+        HnswCacheMemoryTracker->SetConsumer(std::move(ev->Get()->Consumer));
+    }
+
+    void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext&) {
+        Y_ENSURE(HnswCacheMemoryTracker);
+        const ui64 limit = ev->Get()->LimitBytes;
+        const ui64 previousLimit = HnswCacheMemoryTracker->GetLimit();
+        HnswCacheMemoryTracker->SetLimit(limit);
+        if (limit > previousLimit) {
+            ForEachHnswIndexEntry([&](ui32 localTid, const TPathId& indexId, auto& entry) {
+                if (entry.EvictedMemoryBytes && entry.NextScanAttemptAt == TInstant::Max()) {
+                    entry.NextScanAttemptAt = TInstant::Zero();
+                    entry.InitialBuildAttemptsLeft = 30;
+                }
+                if (entry.NextScanAttemptAt != TInstant::Max()) {
+                    if (entry.InitialBuildAttemptsLeft) { ScheduleHnswRebuild(localTid, indexId); }
+                }
+            });
+        }
+        EvictHnswIndexesToLimit(limit);
+    }
+
+    void EvictHnswIndexesToLimit(ui64 limit);
+
+    void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index,
+        std::shared_ptr<void> memoryReservation, ui64 rowCountAtBuild = 0,
+        ui32 vectorColumnTag = 0, const Ydb::Table::VectorIndexSettings& settings = {},
+        TRowVersion baseVersion = TRowVersion::Min(), ui64 buildToken = 0, TPathId indexId = {});
+    void UpdateHnswIndex(ui32 localTid, NTable::ERowOp rowOp,
+        TConstArrayRef<TCell> keyCells, TArrayRef<const NIceDb::TUpdateOp> ops,
+        NTable::TDatabase& db, TRowVersion version, ui64 writeTxId = 0, TPathId indexId = {});
+    void CommitHnswIndexChanges(ui32 localTid, ui64 txId, TRowVersion version, NTable::TDatabase& db, TPathId indexId = {});
+    void AbortHnswIndexChanges(ui32 localTid, ui64 txId, NTable::TDatabase& db, TPathId indexId = {});
+    void ApplyHnswIndexChange(ui32 localTid, TString key, THnswIndexChanges::TVersion change, TPathId indexId = {});
 
     bool IsUserTable(const TTableId& tableId) const {
         return (TableInfos.find(tableId.PathId.LocalPathId) != TableInfos.end())
@@ -2952,9 +3229,129 @@ private:
     TInstant StopKeyAccessSamplingAt;
 
     TUserTable::TTableInfos TableInfos;  // tableId -> local table info
+    NKikimrTxDataShard::TDatabaseFreezeState DatabaseFreeze;
+    THashSet<ui64> DatabaseFreezeAcceptedTxIds;
+    // Local write transactions from construction through Complete(), including
+    // queued requests and requests that finish with an error.
+    ui64 DatabaseFreezeLocalWrites = 0;
+
+    // Independent graphs, journals and build state keyed by local table and
+    // logical index path id. Multiple indexes may use the same embedding column.
+    //
+    // Committed leader writes maintain versioned per-key deltas. Followers
+    // retain the scan path until graph replication and readiness are implemented.
+    struct THnswIndexCacheEntry {
+        static constexpr ui64 PendingTransactionBytes = 256;
+        ui32 LocalTid = 0;
+        std::shared_ptr<NDataShard::THnswIndex> Index;
+        ui64 RowCountAtBuild = 0;
+        ui64 IndexSchemaVersion = 0;
+        ui64 MemoryOwner = 0;
+        ui32 VectorColumnTag = 0;
+        Ydb::Table::VectorIndexSettings Settings;
+        std::shared_ptr<THnswIndexChanges> Changes = std::make_shared<THnswIndexChanges>();
+        TMap<TRowVersion, std::shared_ptr<void>> SnapshotReadPins;
+        std::shared_ptr<void> BuildReadPin;
+        std::vector<std::shared_ptr<THnswIndex>> Retained;
+        std::vector<std::weak_ptr<THnswIndex>> Generations;
+        THashMap<ui64, THashMap<TString, THnswIndexChanges::TVersion>> Pending;
+        THashMap<ui64, std::shared_ptr<void>> PendingReservations;
+        THashSet<ui64> UntrackedTransactions;
+        TRowVersion BuildVersion = TRowVersion::Min();
+        ui64 BuildToken = 0;
+        ui64 ScanId = 0;
+        TActorId BuildActor;
+        std::shared_ptr<std::atomic<bool>> CancelBuild;
+        bool OpenTransactionsTracked = false;
+        ui64 RetryMemoryBytes = 4 * 1024 * 1024;
+        ui64 EvictedMemoryBytes = 0;
+        ui32 InitialBuildAttemptsLeft = 0;
+        bool RebuildScheduled = false;
+        bool Building = false;
+        TInstant NextScanAttemptAt;
+        ui64 CacheHits = 0;
+        ui64 CacheMisses = 0;
+        ui64 Rebuilds = 0;
+        ui64 Builds = 0;
+        ui64 UnsupportedReads = 0;
+        ui64 RangeFallbacks = 0;
+        ui64 CandidateFallbacks = 0;
+    };
+    ui64 NextHnswBuildToken = 0;
+    ui64 NextHnswMemoryOwner = 0;
+    static constexpr size_t MaxConcurrentHnswBuilds = 2;
+    THashSet<ui64> HnswBuildsInFlight;
+    TVector<std::pair<ui32, TPathId>> HnswBuildQueue;
+    // Reservations remain charged while readers and the deletion pool own them.
+    THashSet<ui64> HnswRetiringMemoryOwners;
+    using THnswTableIndexes = THashMap<TPathId, THnswIndexCacheEntry>;
+    THashMap<ui32, THnswTableIndexes> HnswIndexCache;
+
+    TPathId ResolveHnswIndexId(ui32 localTid, TPathId indexId) const {
+        if (indexId) { return indexId; }
+        for (const auto& [_, table] : TableInfos) {
+            if (table->LocalTid == localTid && table->HnswIndexes.size() == 1) {
+                return table->HnswIndexes.begin()->first;
+            }
+        }
+        return {};
+    }
+
+    const TUserTable::THnswIndexInfo* FindHnswIndexInfo(ui32 localTid, TPathId indexId) const {
+        indexId = ResolveHnswIndexId(localTid, indexId);
+        for (const auto& [_, table] : TableInfos) {
+            if (table->LocalTid == localTid) { return table->HnswIndexes.FindPtr(indexId); }
+        }
+        return nullptr;
+    }
+
+    THnswIndexCacheEntry* GetOrCreateHnswIndexEntry(ui32 localTid, TPathId indexId) {
+        indexId = ResolveHnswIndexId(localTid, indexId);
+        if (!FindHnswIndexInfo(localTid, indexId)) { return nullptr; }
+        auto& entry = HnswIndexCache[localTid][indexId];
+        entry.LocalTid = localTid;
+        if (!entry.MemoryOwner) {
+            entry.MemoryOwner = ++NextHnswMemoryOwner;
+            RefreshHnswSnapshotPins(entry);
+        }
+        return &entry;
+    }
+
+    THnswIndexCacheEntry* FindHnswIndexEntry(ui32 localTid, TPathId indexId) {
+        auto table = HnswIndexCache.find(localTid);
+        return table == HnswIndexCache.end() ? nullptr : table->second.FindPtr(ResolveHnswIndexId(localTid, indexId));
+    }
+
+    const THnswIndexCacheEntry* FindHnswIndexEntry(ui32 localTid, TPathId indexId) const {
+        auto table = HnswIndexCache.find(localTid);
+        return table == HnswIndexCache.end() ? nullptr : table->second.FindPtr(ResolveHnswIndexId(localTid, indexId));
+    }
+
+    template <class TCallback>
+    void ForEachHnswIndexEntry(TCallback&& callback) {
+        for (auto& [localTid, indexes] : HnswIndexCache) {
+            for (auto& [indexId, entry] : indexes) { callback(localTid, indexId, entry); }
+        }
+    }
+
+    void InvalidateHnswIndexEntry(THnswIndexCacheEntry& entry);
+    void ResetHnswIndexChanges(THnswIndexCacheEntry& entry);
+    void RefreshHnswSnapshotPins(THnswIndexCacheEntry& entry);
+    std::shared_ptr<THnswCacheMemoryTracker> HnswCacheMemoryTracker;
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;
+
+    // Replication batches waiting for their sequences to be advanced: applying data before the
+    // sequence has moved past it could hand out values which are already in the table.
+    struct TPendingApplyReplicationChanges {
+        TEvDataShard::TEvApplyReplicationChanges::TPtr Ev;
+        THashSet<ui64> Cookies;
+    };
+    THashMap<ui64, TPendingApplyReplicationChanges> PendingApplyReplicationChanges; // by pending id
+    THashMap<ui64, ui64> AdvanceSequenceCookies; // advance cookie -> pending id
+    ui64 NextApplyReplicationChangesId = 1;
+    ui64 NextAdvanceSequenceCookie = 1;
     TSysLocks SysLocks;
 
     TSnapshotManager SnapshotManager;
@@ -2973,6 +3370,14 @@ private:
 
     TS3UploadsManager S3Uploads;
     TS3DownloadsManager S3Downloads;
+
+    // The shard owns the reservation even while the begin reply is in flight.
+    struct TDirectImportSession {
+        TActorId Actor;
+        ui64 TableId;
+        ui32 Step;
+    };
+    THashMap<ui64, TDirectImportSession> DirectImports;
 
     // Initial state
     struct TInitialState {
@@ -3141,6 +3546,7 @@ private:
 
     struct TEnqueuedRecordTag {};
     struct TEnqueuedRecord: public TIntrusiveListItem<TEnqueuedRecord, TEnqueuedRecordTag> {
+        TPathId PathId;
         ui64 BodySize;
         TPathId TableId;
         ui64 SchemaVersion;
@@ -3169,12 +3575,14 @@ private:
             : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion,
                 record.CreatedAt(), record.LockId, record.LockOffset)
         {
+            PathId = record.PathId;
         }
 
         explicit TEnqueuedRecord(const TChangeRecord& record)
             : TEnqueuedRecord(record.GetBodySize(), record.GetTableId(), record.GetSchemaVersion(),
                 record.GetApproximateCreationDateTime(), record.GetLockId(), record.GetLockOffset())
         {
+            PathId = record.GetPathId();
         }
     };
 
@@ -3186,7 +3594,14 @@ private:
     THashSet<ui64> ReceiveActivationsFrom;
 
     // out
+    struct TChangeRecordsVisibilityWait {
+        ui64 Order;
+        ui64 Step;
+    };
+
     THashMap<TActorId, TSet<TRequestedRecord>> ChangeRecordsRequested;
+    // One barrier for the first blocked record; later records remain requested.
+    THashMap<TActorId, TChangeRecordsVisibilityWait> ChangeRecordsWaitingVisibility;
     TSet<ui64> ChangeRecordsToRemove; // ui64 is order
     bool RequestChangeRecordsInFly = false;
     bool RemoveChangeRecordsInFly = false;
@@ -3417,6 +3832,13 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
+            HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
+            HFunc(TEvPrivate::TEvHnswSnapshotFinished, Handle);
+            HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
+            HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
+            HFunc(NMemory::TEvConsumerRegistered, Handle);
+            HFunc(NMemory::TEvConsumerLimit, Handle);
+            HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvLongTxService::TEvLockStatus, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3434,6 +3856,7 @@ protected:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
             HFuncTraced(TEvDataShard::TEvGetShardState, Handle);
+            HFuncTraced(TEvDataShard::TEvDatabaseFreeze, Handle);
             HFuncTraced(TEvDataShard::TEvSchemaChangedResult, Handle);
             HFuncTraced(TEvDataShard::TEvStateChangedResult, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransaction, Handle);
@@ -3488,6 +3911,12 @@ protected:
             HFunc(TEvDataShard::TEvGetTableStats, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
+            HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
+            HFunc(TEvPrivate::TEvHnswSnapshotFinished, Handle);
+            HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
+            HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
+            HFunc(NMemory::TEvConsumerRegistered, Handle);
+            HFunc(NMemory::TEvConsumerLimit, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvDataShard::TEvUploadRowsRequest, Handle);
             HFunc(TEvDataShard::TEvEraseRowsRequest, Handle);
@@ -3558,6 +3987,8 @@ protected:
             HFunc(TEvDataShard::TEvCompactTable, Handle);
             HFunc(TEvDataShard::TEvGetCompactTableStats, Handle);
             HFunc(TEvDataShard::TEvApplyReplicationChanges, Handle);
+            HFunc(NSequenceProxy::TEvSequenceProxy::TEvAdvanceSequenceResult, Handle);
+            HFunc(TEvPrivate::TEvAdvanceSequencesTimeout, Handle);
             fFunc(TEvDataShard::EvGetReplicationSourceOffsets, HandleByReplicationSourceOffsetsServer);
             fFunc(TEvDataShard::EvReplicationSourceOffsetsAck, HandleByReplicationSourceOffsetsServer);
             fFunc(TEvDataShard::EvReplicationSourceOffsetsCancel, HandleByReplicationSourceOffsetsServer);
@@ -3599,8 +4030,16 @@ protected:
             hFunc(TEvDataShard::TEvGetInfoRequest, Handle);
             HFunc(TEvDataShard::TEvGetTableStats, Handle);
             HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
+            HFunc(TEvPrivate::TEvAdvanceSequencesTimeout, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
+            HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
+            HFunc(TEvPrivate::TEvHnswSnapshotFinished, Handle);
+            HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
+            HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
+            HFunc(NMemory::TEvConsumerRegistered, Handle);
+            HFunc(NMemory::TEvConsumerLimit, Handle);
+            HFunc(TEvents::TEvUndelivered, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event",

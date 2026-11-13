@@ -11,8 +11,49 @@ from ydb.public.api.protos.ydb_keyvalue_pb2 import ReadResult
 
 from hamcrest import assert_that, is_, has_entries
 
+import copy
 import logging
 import time
+import yaml
+
+import ydb.public.api.protos.ydb_config_pb2 as config_pb2
+from ydb.tests.library.common.wait_for import wait_for
+
+
+def fetch_main_config(cluster):
+    """The main YAML config of the cluster (with its metadata section), as parsed dict."""
+    response = cluster.config_client.fetch_all_configs()
+    assert_that(response.operation.status == StatusIds.SUCCESS)
+    result = config_pb2.FetchConfigResult()
+    response.operation.result.Unpack(result)
+    assert_that(len(result.config) == 1)
+    return yaml.safe_load(result.config[0].config)
+
+
+def try_replace_main_config(cluster, change):
+    """Apply change() to the config section of the main YAML config and replace it; returns the operation."""
+    cfg = fetch_main_config(cluster)
+    cfg["metadata"]["version"] += 1
+    change(cfg["config"])
+    response = cluster.config_client.replace_config(yaml.dump(cfg))
+    return response.operation, cfg["metadata"]["version"]
+
+
+def replace_main_config(cluster, change, logger=logging.getLogger(__name__)):
+    """Replace the main YAML config and wait until every node has stored it; nodes pick it up when restarted."""
+    operation, expected_version = try_replace_main_config(cluster, change)
+    logger.debug("replace_config operation: %s", operation)
+    assert_that(operation.status == StatusIds.SUCCESS, str(operation))
+
+    def config_is_applied():
+        for node in cluster.nodes.values():
+            try:
+                if node.read_node_config()["metadata"]["version"] != expected_version:
+                    return False
+            except (KeyError, OSError, TypeError, yaml.YAMLError):
+                return False
+        return True
+    assert_that(wait_for(config_is_applied, timeout_seconds=60))
 
 
 def value_for(key, tablet_id):
@@ -45,8 +86,13 @@ class BridgeKiKiMRTest(object):
     use_config_store = True
     separate_node_configs = True
     nodes_count = 16
+    use_in_memory_pdisks = False
     pile_names = ("r1", "r2")
     bridge_rpc_timeout = 10
+    cms_config = None
+    self_management_options = None
+    additional_log_configs = None
+    node_location_overrides = None
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -55,10 +101,15 @@ class BridgeKiKiMRTest(object):
     logger = logging.getLogger(__name__)
 
     def setup_method(self):
+        for name in ("self_management_options", "additional_log_configs", "node_location_overrides"):
+            setattr(self, name, copy.deepcopy(getattr(self, name) or {}))
+        self.cms_config = copy.deepcopy(self.cms_config)
+        self.metadata_section = copy.deepcopy(self.metadata_section)
         log_configs = {
             'GRPC_SERVER': LogLevels.DEBUG,
             'GRPC_PROXY': LogLevels.DEBUG,
         }
+        log_configs.update(self.additional_log_configs)
 
         bridge_config = {
             "piles": [{"name": name} for name in self.pile_names]
@@ -67,7 +118,7 @@ class BridgeKiKiMRTest(object):
         self.configurator = KikimrConfigGenerator(
             self.erasure,
             nodes=self.nodes_count,
-            use_in_memory_pdisks=False,
+            use_in_memory_pdisks=self.use_in_memory_pdisks,
             use_config_store=self.use_config_store,
             metadata_section=self.metadata_section,
             separate_node_configs=self.separate_node_configs,
@@ -75,15 +126,27 @@ class BridgeKiKiMRTest(object):
             use_self_management=True,
             extra_grpc_services=['bridge'],
             additional_log_configs=log_configs,
-            bridge_config=bridge_config
+            bridge_config=bridge_config,
+            cms_config=self.cms_config,
         )
+        self.configurator.yaml_config["self_management_config"].update(self.self_management_options)
+        hosts = self.configurator.yaml_config["hosts"]
+        hosts_by_port = {host["port"]: host for host in hosts}
+        assert len(hosts_by_port) == len(hosts), hosts
+        for node_id, location in self.node_location_overrides.items():
+            port = self.configurator.port_allocator.get_node_port_allocator(node_id).ic_port
+            hosts_by_port[port].setdefault("location", {}).update(location)
+
+        self.configure_cluster()
 
         self.cluster = KiKiMR(configurator=self.configurator)
         self.cluster.start()
 
         self.pile_nodes = {name: [] for name in self.pile_names}
-        for node_id, host in enumerate(self.configurator.yaml_config["hosts"], 1):
-            self.pile_nodes[host["location"]["bridge_pile_name"]].append(self.cluster.nodes[node_id])
+        for node_id, node in self.cluster.nodes.items():
+            port = self.configurator.port_allocator.get_node_port_allocator(node_id).ic_port
+            host = hosts_by_port[port]
+            self.pile_nodes[host["location"]["bridge_pile_name"]].append(node)
         self.bridge_clients = {}
         for name, nodes in self.pile_nodes.items():
             client = BridgeClient(nodes[0].host, nodes[0].port, timeout=self.bridge_rpc_timeout)
@@ -91,6 +154,9 @@ class BridgeKiKiMRTest(object):
             self.bridge_clients[name] = client
         self.bridge_client = self.bridge_clients[self.pile_names[0]]
         self.secondary_bridge_client = self.bridge_clients[self.pile_names[1]]
+
+    def configure_cluster(self):
+        pass
 
     def teardown_method(self):
         for client in self.bridge_clients.values():
@@ -123,11 +189,13 @@ class BridgeKiKiMRTest(object):
         while True:
             response = client.update_cluster_state(updates, quorum_piles=quorum_piles)
             self.logger.debug("Update cluster state response: %s", response)
-            transient = response.operation.status == StatusIds.INTERNAL_ERROR and any(
-                issue in str(response.operation.issues) for issue in (
-                    "No quorum to start propose/commit configuration", "Hop node disconnected",
-                    # nodes are still rebinding after another pile has been disconnected
-                    "No quorum for bridge configuration collection",
+            transient = response.operation.status in (StatusIds.ABORTED, StatusIds.UNAVAILABLE) or (
+                response.operation.status == StatusIds.INTERNAL_ERROR and any(
+                    issue in str(response.operation.issues) for issue in (
+                        "No quorum to start propose/commit configuration", "Hop node disconnected",
+                        # nodes are still rebinding after another pile has been disconnected
+                        "No quorum for bridge configuration collection",
+                    )
                 )
             )
             if expected_status != StatusIds.SUCCESS or not transient or time.monotonic() >= deadline:

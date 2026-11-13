@@ -115,7 +115,8 @@ TString ComputeIndexItemSuffix(
     const NKikimrSchemeOp::TBackupTask* snapshot,
     const NKikimrSchemeOp::TPathDescription& sourceDescription,
     const TString& indexImplTablePath,
-    bool encrypted)
+    bool encrypted,
+    bool exportChangefeeds)
 {
     if (!encrypted) {
         return indexImplTablePath;
@@ -129,9 +130,15 @@ TString ComputeIndexItemSuffix(
     TStringBuf indexName;
     TStringBuf implTableName;
     if (parentDescription.HasTable() && TStringBuf(indexImplTablePath).TrySplit('/', indexName, implTableName)) {
-        idx = parentDescription.GetTable().CdcStreamsSize() + 1;
+        // Reserve all feed slots, including omitted feeds, just as the uploader
+        // does when assigning index prefixes in the table metadata.
+        idx = exportChangefeeds
+            ? parentDescription.GetTable().CdcStreamsSize() + 1 : 1;
 
         for (const auto& index : parentDescription.GetTable().GetTableIndexes()) {
+            if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                continue;
+            }
             const TVector<TString> indexColumns(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end());
 
             const auto implTables = NTableIndex::GetImplTables(index.GetType(), indexColumns);
@@ -185,7 +192,8 @@ static TString ComputeIndexItemSuffix(
             GetDescription(ss, parentPath.Base()->PathId, sourceDescription, error);
         }
     }
-    return ComputeIndexItemSuffix(snapshot, sourceDescription, item.SourcePathName, encrypted);
+    return ComputeIndexItemSuffix(snapshot, sourceDescription, item.SourcePathName, encrypted,
+        AppData()->FeatureFlags.GetEnableChangefeedsExport());
 }
 
 template <typename TSettings>

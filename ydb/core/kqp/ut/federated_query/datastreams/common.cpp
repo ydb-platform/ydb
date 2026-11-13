@@ -1,7 +1,7 @@
 #include "common.h"
 
 #include <ydb/core/base/counters.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
@@ -193,6 +193,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         }
 
         auto& featureFlags = *AppConfig->MutableFeatureFlags();
+        featureFlags.SetDisableOldSecretCreation(false);
         featureFlags.SetEnableStreamingQueries(true);
         featureFlags.SetEnableSchemaSecrets(true);
 
@@ -231,7 +232,8 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
 
         LogSettings.AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
             .AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG)
-            .AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG)
+            .AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_INFO)
+            .AddLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_INFO)
             .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_INFO);
 
         Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(),
@@ -570,8 +572,11 @@ void TStreamingTestFixture::ExecSchemeQuery(const std::string& query, NYdb::ESta
 // Query client SDK
 
 std::vector<TResultSet> TStreamingTestFixture::ExecQuery(const std::string& query, NYdb::EStatus expectedStatus,
-    const std::string& expectedError, std::function<void(const std::string&)> astValidator) {
+    const std::string& expectedError, std::function<void(const std::string&)> astValidator, TDuration timeout) {
     auto settings = TExecuteQuerySettings();
+    if (timeout > TDuration::Zero()) {
+        settings.ClientTimeout(timeout);
+    }
     if (astValidator) {
         settings.StatsMode(EStatsMode::Full);
     }
@@ -1374,8 +1379,8 @@ void TTabletKiller::KillTablet() const {
     Schedule(KillerInterval, new TEvents::TEvWakeup());
 }
 
-void TStreamingTestFixture::WaitForClassifierPropagation() {
-    NWorkloadManager::WaitForClassifierPropagation(GetRuntime());
+void TStreamingTestFixture::WaitForClassifierPropagation(const TString& poolId) {
+    NWorkloadManager::WaitForClassifierPropagation(GetRuntime(), 0, poolId);
 }
 
 }   // namespace NKikimr::NKqp

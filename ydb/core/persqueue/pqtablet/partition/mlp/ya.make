@@ -14,14 +14,18 @@ SRCS(
 
 PEERDIR(
     library/cpp/iterator
+    ydb/core/base
     ydb/core/persqueue/common
     ydb/core/persqueue/common/proxy
     ydb/core/persqueue/events
     ydb/core/persqueue/pqtablet/common
+    ydb/core/persqueue/public
+    ydb/core/persqueue/public/metrics
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/write_meta
     ydb/core/util
     ydb/core/ymq/proto
+    ydb/library/persqueue/topic_parser
 )
 
 GENERATE_ENUM_SERIALIZATION(mlp_consumer_order.h)

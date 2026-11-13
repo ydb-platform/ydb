@@ -97,6 +97,13 @@ bool TPqState::IsYtflowEngine() const {
     return Types->EngineType == EEngineType::Ytflow;
 }
 
+bool TPqState::AllowYdbSysColumns() const {
+    if (IsYtflowEngine()) {
+        return false;
+    }
+    return true;
+}
+
 bool TPqState::ShouldAddTransparentPrefixToTransparentSystemColumns() const {
     if (IsYtflowEngine()) {
         return false;

@@ -134,13 +134,6 @@ struct TEvKqpExecuter {
         TDuration CpuTime;
     };
 
-    struct TEvPqTopicResolveStatus : public TEventLocal<TEvPqTopicResolveStatus,
-        TKqpExecuterEvents::EvPqTopicResolveStatus>
-    {
-        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
-        NYql::TIssues Issues;
-    };
-
     struct TEvTxDelayedExecution : public TEventLocal<TEvTxDelayedExecution,
         TKqpExecuterEvents::EvDelayedExecution>
     {
@@ -208,6 +201,11 @@ IActor* CreateKqpSchemeExecuter(
     bool expectsResult = false, TTxAllocatorState::TPtr txAlloc = nullptr,
     const TActorId& kqpTempTablesAgentActor = TActorId(), NWilson::TTraceId traceId = {},
     TInstant deadline = TInstant::Max());
+
+IActor* CreateKqpUnsafeTruncateExecuter(
+    TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, ui64 userLockTxId,
+    const TString& traceId, TTxAllocatorState::TPtr txAlloc);
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
     IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner, const TIntrusivePtr<TUserRequestContext>& userRequestContext);

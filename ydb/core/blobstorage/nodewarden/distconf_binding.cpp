@@ -1,5 +1,6 @@
 #include "distconf.h"
 #include "distconf_quorum.h"
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/protos/node_broker.pb.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -112,7 +113,16 @@ namespace NKikimr::NStorage {
     };
 
     void TDistributedConfigKeeper::CheckBindingLiveness() {
-        if (Binding && Binding->RootNodeId && Binding->SessionId && !BindingLivenessActorId) {
+        // Keep ordinary V1 clusters independent of keeper liveness. The startup flag applies only
+        // before bootstrap, so a committed disable also stops an already running watchdog.
+        const bool bootstrapping = BaseConfig->GetSelfManagementConfig().GetEnabled()
+            && (!StorageConfig || !StorageConfig->GetGeneration());
+        if (!SelfManagementEnabled && !bootstrapping) {
+            CancelBindingLiveness();
+            return;
+        }
+        if (Binding && Binding->RootNodeId && Binding->SessionId && Binding->SupportsDirectRootQueries
+            && !BindingLivenessActorId) {
             BindingLivenessActorId = RegisterWithSameMailbox(new TBindingLivenessActor(this, *Binding));
         }
     }
@@ -469,7 +479,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::IssueNextBindRequest() {
         Y_DEBUG_ABORT_UNLESS(IsSelfStatic);
 
-        if (Binding || RootProbe || RootState == ERootState::ERROR_TIMEOUT) {
+        if (Binding || RootProbe || RootState == ERootState::ERROR_TIMEOUT || Halted) {
             return;
         }
 
@@ -781,6 +791,11 @@ namespace NKikimr::NStorage {
             return;
         }
         if (const auto it = SubscribedSessions.find(nodeId); it != SubscribedSessions.end()) {
+            // Dynamic peers are not listed in AllNodeIds. Dropping their distconf
+            // subscription must not close the session used by other actors.
+            const auto& dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
+            const bool isRemovedStaticNode = !AllNodeIds.contains(nodeId)
+                && (!dynamicNameserviceConfig || nodeId <= dynamicNameserviceConfig->MaxStaticNodeId);
             TSessionSubscription& subs = it->second;
             YDB_LOG_DEBUG("UnsubscribeInterconnect",
                 {"marker", "NWDC55"},
@@ -793,16 +808,16 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(jt != SubscriptionCookieMap.end());
                 Y_ABORT_UNLESS(jt->second == nodeId);
                 SubscriptionCookieMap.erase(jt);
-                if (!AllNodeIds.contains(nodeId)) {
+                if (isRemovedStaticNode) {
                     TActivationContext::Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0,
                         TActivationContext::InterconnectProxy(nodeId), {}, nullptr, 0));
                 }
             } else {
                 // we already had TEvNodeConnected, so we have to unsubscribe
                 Y_ABORT_UNLESS(subs.SessionId);
-                ui32 event = AllNodeIds.contains(nodeId)
-                    ? TEvents::TSystem::Unsubscribe
-                    : TEvents::TSystem::Poison;
+                const ui32 event = isRemovedStaticNode
+                    ? TEvents::TSystem::Poison
+                    : TEvents::TSystem::Unsubscribe;
                 TActivationContext::Send(new IEventHandle(event, 0, subs.SessionId, SelfId(), nullptr, 0));
             }
             SubscribedSessions.erase(it);
@@ -929,6 +944,10 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(!Binding || Binding->RootNodeId != SelfId().NodeId());
 
             if (Binding) {
+                Binding->SupportsDirectRootQueries = record.GetSupportsDirectRootQueries();
+                if (!Binding->SupportsDirectRootQueries) {
+                    CancelBindingLiveness();
+                }
                 BindFailuresStreak = 0;
                 LastUnboundWarnAt = TInstant::Zero();
             }
@@ -1107,6 +1126,9 @@ namespace NKikimr::NStorage {
 
         if (!knownNode) {
             // node has been already deleted from the config, but new subscription is coming through -- ignoring it
+            SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
+            return;
+        } else if (Halted) {
             SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
             return;
         }

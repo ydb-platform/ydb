@@ -9,6 +9,7 @@
 
 #include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/regexp/regexp.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 
 #include <ydb/library/actors/core/hfunc.h>
@@ -96,6 +97,7 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             ev->Record.SetSanitizedToken(this->UserToken->GetSanitizedToken());
         }
         ev->Record.SetPeerName(this->Request->GetPeerName());
+        ev->Record.SetCanRestoreRateLimiterMetering(IsAdministrator(AppData(), this->UserToken.Get()));
 
         auto& createImport = *ev->Record.MutableRequest();
         createImport.MutableOperationParams()->CopyFrom(request.operation_params());
@@ -103,10 +105,10 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             auto* s3Settings = createImport.MutableImportFromS3Settings();
             s3Settings->CopyFrom(request.settings());
             s3Settings->set_destination_path(
-                this->Request->NormalizePath(s3Settings->destination_path()));
+                this->Request->NormalizePath(s3Settings->destination_path(), {}));
             for (auto& item : *s3Settings->mutable_items()) {
                 item.set_destination_path(
-                    this->Request->NormalizePath(item.destination_path()));
+                    this->Request->NormalizePath(item.destination_path(), request.settings().destination_path()));
             }
         }
         if constexpr (IsFsImport) {
@@ -114,10 +116,10 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             fsSettings->CopyFrom(request.settings());
             fsSettings->set_base_path(StripTrailingSlashes(fsSettings->base_path()));
             fsSettings->set_destination_path(
-                this->Request->NormalizePath(fsSettings->destination_path()));
+                this->Request->NormalizePath(fsSettings->destination_path(), {}));
             for (auto& item : *fsSettings->mutable_items()) {
                 item.set_destination_path(
-                    this->Request->NormalizePath(item.destination_path()));
+                    this->Request->NormalizePath(item.destination_path(), request.settings().destination_path()));
             }
         }
 

@@ -11,7 +11,7 @@ namespace {
 using namespace NNodes;
 
 TExprNode::TPtr EquiJoinPushAny(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    // Add any to EquiJoin tree
+    // Propagate Any eligibility through the EquiJoin tree for PruneKeys.
     if (!IsEmitPruneKeysEnabled(optCtx.Types)) {
         return node;
     }

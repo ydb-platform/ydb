@@ -13,6 +13,7 @@
 
 #include <yql/essentials/core/sql_types/yql_atom_enums.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_module_helpers.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_callable_transform.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -8718,6 +8719,33 @@ IGraphTransformer::TStatus SourceOfWrapper(const TExprNode::TPtr& input, TExprNo
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus LazyBindWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+    bool moduleIsUniversal = false;
+    bool symbolIsUniversal = false;
+    if (!EnsureArgsCount(*input, 2, ctx.Expr) ||
+        !EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, moduleIsUniversal) ||
+        !EnsureAtomOrUniversal(*input->Child(1), ctx.Expr, symbolIsUniversal)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (moduleIsUniversal || symbolIsUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    if (!ctx.Types.Modules) {
+        output = ctx.Expr.NewCallable(input->Pos(), "InstanceOf",
+            {ctx.Expr.NewCallable(input->Pos(), "UniversalType", {})});
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    output = ImportCached(ctx.Expr.GetPosition(input->Pos()), TString(input->Child(0)->Content()),
+        TString(input->Child(1)->Content()), ctx.Expr, ctx.Types);
+    if (!output) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    return IGraphTransformer::TStatus::Repeat;
+}
+
 IGraphTransformer::TStatus MatchTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     if (!EnsureMinArgsCount(*input, 4, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -10372,9 +10400,22 @@ IGraphTransformer::TStatus ScriptUdfWrapper(const TExprNode::TPtr& input, TExprN
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus ExpandLambdaApplication(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+    ctx.Expr.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+    const auto status = ExpandApplyNoRepeat(input, output, ctx.Expr, ctx.Types);
+    if (status.Level == IGraphTransformer::TStatus::Error) {
+        return status;
+    }
+    YQL_ENSURE(output != input);
+    return IGraphTransformer::TStatus::Repeat;
+}
+
 IGraphTransformer::TStatus ApplyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+    if (input->Head().IsLambda()) {
+        return ExpandLambdaApplication(input, output, ctx);
     }
 
     if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
@@ -10495,6 +10536,9 @@ IGraphTransformer::TStatus ApplyWrapper(const TExprNode::TPtr& input, TExprNode:
 }
 
 IGraphTransformer::TStatus NamedApplyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+    if (input->ChildrenSize() && input->Head().IsLambda()) {
+        return ExpandLambdaApplication(input, output, ctx);
+    }
     bool isUniversal;
     auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 3, 0, isUniversal);
     if (status != IGraphTransformer::TStatus::Ok) {
@@ -14571,11 +14615,12 @@ IGraphTransformer::TStatus SecureParamWrapper(const TExprNode::TPtr& input, TExp
             }
         }
 
-        if (cred == nullptr) {
+        const bool isMetaReplay = ctx.Types.QContext.CanRead() && ctx.Types.QContext.CaptureMode() == EQPlayerCaptureMode::MetaOnly;
+        if (cred == nullptr && !isMetaReplay) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "unknown token id: " << p1 << ", prefix: " << p0));
             return IGraphTransformer::TStatus::Error;
         }
-        if (cred->Content.empty()) {
+        if (cred && cred->Content.empty()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "got empty credential content for id: " << p1));
             return IGraphTransformer::TStatus::Error;
         }
@@ -16419,6 +16464,7 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     Functions["WithIssue"] = &WithIssueWrapper;
     Functions["SourceOf"] = &SourceOfWrapper;
     Functions["MatchType"] = &MatchTypeWrapper;
+    ExtFunctions["LazyBind"] = &LazyBindWrapper;
     Functions["IfType"] = &IfTypeWrapper;
     ExtFunctions["EnsureType"] = &TypeAssertWrapper<true>;
     Functions["EnsurePersistable"] = &PersistableAssertWrapper;
@@ -16546,7 +16592,7 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     Functions["SqlProjectStarItem"] = &SqlProjectItemWrapper;
     Functions["PgSelf"] = &SqlSelfWrapper;
     Functions["PgStar"] = &SqlStarWrapper;
-    Functions["PgQualifiedStar"] = &PgQualifiedStarWrapper;
+    Functions["PgQualifiedStar"] = &SqlQualifiedStarWrapper;
     Functions["PgColumnRef"] = &SqlColumnRefWrapper;
     Functions["PgResultItem"] = &SqlResultItemWrapper;
     Functions["PgReplaceUnknown"] = &SqlReplaceUnknownWrapper;
@@ -16877,6 +16923,7 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     ExtFunctions["JsonVariables"] = &JsonVariablesWrapper;
     ExtFunctions["AssumeColumnOrder"] = &AssumeColumnOrderWrapper;
     ExtFunctions["AssumeColumnOrderPartial"] = &AssumeColumnOrderWrapper;
+    ExtFunctions["ColumnOrderOf"] = &ColumnOrderOfWrapper;
     ExtFunctions["UnionAllPositional"] = &SelectOpPositionalWrapper;
     ExtFunctions["UnionPositional"] = &SelectOpPositionalWrapper;
     ExtFunctions["UnionMergePositional"] = &SelectOpPositionalWrapper;
@@ -16923,6 +16970,8 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     ColumnOrderFunctions["AssumeSorted"] = ColumnOrderFunctions["Unordered"] =
         ColumnOrderFunctions["UnorderedSubquery"] = ColumnOrderFunctions["AssumeUniq"] = &OrderFromFirst;
 
+    ExtFunctions["YqlFlattenBy"] = &YqlFlattenWrapper;
+    ExtFunctions["YqlFlattenColumns"] = &YqlFlattenWrapper;
     ExtFunctions["YqlSelect"] = &SqlSelectWrapper;
     ExtFunctions["YqlSetItem"] = &SqlSetItemWrapper;
     ExtFunctions["YqlResultItem"] = &SqlResultItemWrapper;
@@ -16933,6 +16982,7 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     Functions["YqlSubLink"] = &SqlSubLinkWrapper;
     Functions["YqlSelf"] = &SqlSelfWrapper;
     Functions["YqlStar"] = &SqlStarWrapper;
+    Functions["YqlQualifiedStar"] = &SqlQualifiedStarWrapper;
     Functions["YqlWhere"] = &SqlWhereWrapper;
     Functions["YqlSort"] = &SqlSortWrapper;
     Functions["YqlGroup"] = &SqlWhereWrapper;

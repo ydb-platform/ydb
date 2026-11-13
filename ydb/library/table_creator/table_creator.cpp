@@ -521,6 +521,13 @@ private:
                         return false;
                     }
                     break;
+                case NKikimrSchemeOp::TIndexDescription::kHnswIndexDescription:
+                    if (required.GetHnswIndexDescription().SerializeAsString()
+                        != existing.GetHnswIndexDescription().SerializeAsString())
+                    {
+                        return false;
+                    }
+                    break;
                 case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription:
                     if (required.GetFulltextIndexDescription().SerializeAsString()
                         != existing.GetFulltextIndexDescription().SerializeAsString())
@@ -609,6 +616,9 @@ private:
             case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription:
                 *config.MutableVectorIndexKmeansTreeDescription() =
                     index.GetVectorIndexKmeansTreeDescription();
+                break;
+            case NKikimrSchemeOp::TIndexDescription::kHnswIndexDescription:
+                *config.MutableHnswIndexDescription() = index.GetHnswIndexDescription();
                 break;
             case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription:
                 *config.MutableFulltextIndexDescription() = index.GetFulltextIndexDescription();

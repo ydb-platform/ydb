@@ -364,8 +364,8 @@ bool TDataShardUserDb::PrechargeRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected PrechargeRow for an unknown table");
 
-    // Finite versions enable history for row-state reads. Conflict checks only
-    // inspect the latest version and can use Max().
+    // Finite version enables precharging history pages that we may need for
+    // reading from a snapshot.
     const auto version = needsMvccRead ? MvccVersion : TRowVersion::Max();
     return Db.Precharge(localTableId, key, key, {}, 0, Max<ui64>(), Max<ui64>(),
         NTable::EDirection::Forward, version).Ready;
@@ -436,11 +436,13 @@ void TDataShardUserDb::UpsertRowInt(
             throw TNotReadyTabletException();
 
         Db.Update(localTableId, rowOp, key, ops, MvccVersion);
+        Self.UpdateHnswIndex(localTableId, rowOp, keyCells, ops, Db, MvccVersion, writeTxId);
     } else {
         if (collector && !collector->OnUpdateTx(tableId, localTableId, rowOp, key, ops, writeTxId, userCtx))
             throw TNotReadyTabletException();
 
         Db.UpdateTx(localTableId, rowOp, key, ops, writeTxId);
+        Self.UpdateHnswIndex(localTableId, rowOp, keyCells, ops, Db, MvccVersion, writeTxId);
     }
 
     if (VolatileTxId) {
@@ -574,10 +576,11 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
     }
 
     if (auto lock = Self.SysLocksTable().GetRawLock(lockId); lock && !VolatileCommitOrdered) {
-        lock->ForAllVolatileDependencies([this](ui64 txId) {
-            auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId);
+        lock->ForAllVolatileDependencies([this](ui64 dependencyTxId) {
+            auto& manager = Self.GetVolatileTxManager();
+            auto* info = manager.FindByTxId(dependencyTxId);
             if (info && info->State != EVolatileTxState::Aborting) {
-                if (VolatileDependencies.insert(txId).second) {
+                if (VolatileDependencies.insert(info->TxId).second) {
                     EnsureVolatileTxId();
                 }
             }
@@ -606,6 +609,7 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
         {"localTid", localTid},
         {"shard", Self.TabletID()});
     Db.CommitTx(localTid, lockId, MvccVersion);
+    Self.CommitHnswIndexChanges(localTid, lockId, MvccVersion, Db);
     Self.GetConflictsCache().GetTableCache(localTid).RemoveUncommittedWrites(lockId, Db);
     CommittedTxIds.insert(lockId);
 

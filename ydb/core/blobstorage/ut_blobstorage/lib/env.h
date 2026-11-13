@@ -8,6 +8,7 @@
 
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
 #include <ydb/core/tablet/resource_broker.h>
 
@@ -498,10 +499,12 @@ struct TEnvironmentSetup {
                                 if (!IsNodeConfigured(nodeId)) {
                                     continue;
                                 }
-                                res << "  - {host: host_" << nodeId << ", location: {data_center: my_dc, rack: rack_"
-                                    << nodeId << ", unit: unit_" << nodeId;
-                                if (Settings.NumPiles) {
-                                    res << ", bridge_pile_name: pile_" << (nodeId - 1) / 8 + 1;
+                                NActorsInterconnect::TNodeLocation location;
+                                Settings.LocationGenerator(nodeId).Serialize(&location, false);
+                                res << "  - {host: host_" << nodeId << ", location: {data_center: " << location.GetDataCenter()
+                                    << ", rack: " << location.GetRack() << ", unit: " << location.GetUnit();
+                                if (location.HasBridgePileName()) {
+                                    res << ", bridge_pile_name: " << location.GetBridgePileName();
                                 }
                                 res << "}}\n";
                             }
@@ -513,6 +516,9 @@ struct TEnvironmentSetup {
                             if (Settings.NumPiles) {
                                 // the test may change the set of piles, then nodes started after that get new one
                                 res << "  bridge_config:\n";
+                                if (Runtime->GetAppDataBridgeConfig().GetEnableNonUniformStorage()) {
+                                    res << "    enable_non_uniform_storage: true\n";
+                                }
                                 res << "    piles:\n";
                                 for (const auto& pile : Runtime->GetAppDataBridgeConfig().GetPiles()) {
                                     res << "    - name: " << pile.GetName() << "\n";
@@ -528,7 +534,7 @@ metadata:
   cluster: \"\"
   version: 0
 config:
-  erasure: block-4-2
+  erasure: )" << TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()) << R"(
   default_disk_type: NVME
   self_management_config:
     enabled: true
@@ -981,6 +987,23 @@ config:
     void Sim(TDuration delta = TDuration::Zero()) {
         TInstant barrier = Runtime->GetClock() + delta;
         Runtime->Sim([&] { return Runtime->GetClock() <= barrier; });
+    }
+
+    // Stops the tablet and makes the resolver forget it, so that it starts anew. The time runs on for settlingTime then.
+    void RebootTablet(ui64 tabletId, TDuration settlingTime = TDuration::Zero()) {
+        const TActorId sender = Runtime->AllocateEdgeActor(Settings.ControllerNodeId, __FILE__, __LINE__);
+        Runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvForward(tabletId,
+            new IEventHandle(TActorId(), sender, new TEvents::TEvPoison), {}, TEvTabletResolver::TEvForward::EActor::Tablet)),
+            sender.NodeId());
+        const auto res = WaitForEdgeActorEvent<TEvTabletResolver::TEvForwardResult>(sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        Sim(TDuration::Seconds(5));
+        Runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId,
+            TActorId())), sender.NodeId());
+        if (settlingTime) {
+            Sim(settlingTime);
+        }
+        Runtime->DestroyActor(sender);
     }
 
     TString Dump(const TActorId& vdiskActorId, const TVDiskID& vdiskId) {

@@ -553,9 +553,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
         t.Forget(exportId);
     }
 
-    Y_UNIT_TEST(EncryptedIndexNamesUseTableSchemeSnapshot) {
+    Y_UNIT_TEST_TWIN(EncryptedIndexNamesUseTableSchemeSnapshot, ExportChangefeeds) {
         NKikimrSchemeOp::TBackupTask snapshot;
         auto& table = *snapshot.MutableTable()->MutableTable();
+        auto& asyncIndex = *table.AddTableIndexes();
+        asyncIndex.SetName("async-index");
+        asyncIndex.SetType(NKikimrSchemeOp::EIndexTypeGlobalAsync);
+        asyncIndex.AddKeyColumnNames("value");
+
         auto& index = *table.AddTableIndexes();
         index.SetName("index");
         index.SetType(NKikimrSchemeOp::EIndexTypeGlobal);
@@ -564,9 +569,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
         NKikimrSchemeOp::TPathDescription changedSource(snapshot.GetTable());
         changedSource.MutableTable()->AddCdcStreams()->SetName("new-feed");
 
-        UNIT_ASSERT_VALUES_EQUAL(NSchemeShard::ComputeIndexItemSuffix(&snapshot, changedSource, "index/indexImplTable", true), "001");
-        UNIT_ASSERT_VALUES_EQUAL(NSchemeShard::ComputeIndexItemSuffix(nullptr, changedSource, "index/indexImplTable", true), "002");
-        UNIT_ASSERT_VALUES_EQUAL(NSchemeShard::ComputeIndexItemSuffix(&snapshot, changedSource, "index/indexImplTable", false), "index/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(NSchemeShard::ComputeIndexItemSuffix(&snapshot, changedSource, "index/indexImplTable", true, ExportChangefeeds), "001");
+        UNIT_ASSERT_VALUES_EQUAL(NSchemeShard::ComputeIndexItemSuffix(nullptr, changedSource, "index/indexImplTable", true, ExportChangefeeds), ExportChangefeeds ? "002" : "001");
+        UNIT_ASSERT_VALUES_EQUAL(NSchemeShard::ComputeIndexItemSuffix(&snapshot, changedSource, "index/indexImplTable", false, ExportChangefeeds), "index/indexImplTable");
     }
 
     Y_UNIT_TEST_TWIN(SchemeFailureWaitsForProposedSibling, RejectProposal) {

@@ -121,6 +121,8 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::SelfHealNodesStateUpdate(const TQuery::TSelfHealNodesStateUpdate& cmd) {
         RunCommonChecks();
+        // A regular Sentinel push also satisfies the current root's refresh.
+        Self->CancelStateStorageSelfHealRefresh();
         Self->SelfHealNodesState.clear();
         for (auto node : cmd.GetNodesState()) {
             Self->SelfHealNodesState[node.GetNodeId()] = node.GetState();
@@ -147,7 +149,21 @@ namespace NKikimr::NStorage {
             {"overrideRingsCount", overrideRingsCount},
             {"replicasSpecificVolume", replicasSpecificVolume});
         NKikimrBlobStorage::TStateStorageConfig targetConfig;
-        if (!GetRecommendedStateStorageConfig(&targetConfig, pileupReplicas, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume) && !forceHeal) {
+        const bool goodConfig = GetRecommendedStateStorageConfig(&targetConfig, pileupReplicas,
+            overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        const auto ensureGenerated = [&](bool automaticManagement, const auto& config, const char *name) {
+            if (automaticManagement && !config.HasRing() && config.RingGroupsSize() == 0) {
+                throw TExError() << "Failed to generate a nonempty " << name << " configuration";
+            }
+        };
+        const auto *selfManagement = Self->Cfg->SelfManagementConfig.get();
+        ensureGenerated(!selfManagement || selfManagement->GetAutomaticStateStorageManagement(),
+            targetConfig.GetStateStorageConfig(), "StateStorage");
+        ensureGenerated(!selfManagement || selfManagement->GetAutomaticStateStorageBoardManagement(),
+            targetConfig.GetStateStorageBoardConfig(), "StateStorageBoard");
+        ensureGenerated(!selfManagement || selfManagement->GetAutomaticSchemeBoardManagement(),
+            targetConfig.GetSchemeBoardConfig(), "SchemeBoard");
+        if (!goodConfig && !forceHeal) {
             throw TExError() << "Recommended configuration has faulty nodes and can not be applyed";
         }
 
@@ -230,7 +246,8 @@ namespace NKikimr::NStorage {
                 return noReconfig(); // Current config is optimal and all nodes are good
             }
 
-            // Check can be node replacement applyed
+            // Check can be node replacement applyed; the replacements of this subsystem only decide how it changes
+            std::unordered_map<ui32, std::tuple<ui32, ui32, ui32>> localNodesToReplace;
             for (ui32 ringGroupIdx : xrange(oldSSInfo->RingGroups.size())) {
                 auto& oldRg = oldSSInfo->RingGroups[ringGroupIdx];
                 auto& newRg = newSSInfo->RingGroups[ringGroupIdx];
@@ -278,22 +295,38 @@ namespace NKikimr::NStorage {
                             continue;
                         }
                         std::tuple<ui32, ui32, ui32> placement{ ringGroupIdx, ringIdx, newRep };
-                        if (auto it = nodesToReplace.find(oldRep); it != nodesToReplace.end() && it->second != placement) {
+                        if (auto it = localNodesToReplace.find(oldRep); it != localNodesToReplace.end() && it->second != placement) {
                             return ReconfigType::FULL;
                         }
-                        nodesToReplace[oldRep] = placement;
+                        localNodesToReplace[oldRep] = placement;
                     }
                 }
             }
-            if (nodesToReplace.size() == 1) {
-                auto placement = nodesToReplace.begin();
+            if (localNodesToReplace.empty()) {
+                return noReconfig(); // the rings only got reordered
+            }
+            // all the subsystems replacing a node have to replace it the same way
+            for (const auto& [oldRep, placement] : localNodesToReplace) {
+                if (auto it = nodesToReplace.find(oldRep); it != nodesToReplace.end() && it->second != placement) {
+                    return ReconfigType::FULL;
+                }
+                nodesToReplace[oldRep] = placement;
+            }
+            if (localNodesToReplace.size() == 1) {
+                auto placement = localNodesToReplace.begin();
                 auto oldRg = oldSSInfo->RingGroups[std::get<0>(placement->second)];
+                // the rings unavailable while the node is replaced: the ring of the node itself, as its first step
+                // disables it, and the disabled rings, as well as rings with nodes not known to be good
                 std::unordered_set<ui32> badRings;
                 for (ui32 ringIdx : xrange(oldRg.Rings.size())) {
                     auto& oldRing = oldRg.Rings[ringIdx];
+                    if (oldRing.IsDisabled) {
+                        badRings.insert(ringIdx);
+                    }
                     for (auto& rep : oldRing.Replicas) {
                         auto oldRep = rep.NodeId();
-                        if (Self->SelfHealNodesState[oldRep]) {
+                        const auto it = Self->SelfHealNodesState.find(oldRep);
+                        if (oldRep == placement->first || it == Self->SelfHealNodesState.end() || it->second) {
                             badRings.insert(ringIdx);
                         }
                     }
@@ -301,7 +334,7 @@ namespace NKikimr::NStorage {
                 ui32 majority = oldRg.NToSelect / 2 + 1;
                 return badRings.size() <= oldRg.NToSelect - majority ? ReconfigType::ONE_NODE : ReconfigType::FULL;
             }
-            return nodesToReplace.empty() ? noReconfig() : ReconfigType::FULL;
+            return ReconfigType::FULL;
         };
         #define NEED_RECONFIG(NAME) needReconfig( \
             !Self->Cfg->SelfManagementConfig || Self->Cfg->SelfManagementConfig->GetAutomatic##NAME##Management(), \
@@ -333,6 +366,56 @@ namespace NKikimr::NStorage {
 
         AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(&targetConfig);
 
+        // A lost root may have left both old and new groups readable. Keep one
+        // readable version per pile before introducing a fresh target, otherwise
+        // restarting the protocol would create a third version. Retire the other
+        // versions through WriteOnly first, keeping the healthier readable group.
+        bool prepareCurrentConfig = false;
+        auto prepareReadableGroups = [&](auto *cfg, const auto& target) {
+            if (!target.RingGroupsSize()) {
+                return; // Automatic management is disabled for this subsystem.
+            }
+            if (!cfg->RingGroupsSize()) {
+                return;
+            }
+            const auto current = cfg->GetRingGroups();
+            std::unordered_map<ui32, ui32> selected;
+            for (ui32 i : xrange(current.size())) {
+                const auto& group = current.Get(i);
+                if (group.GetWriteOnly() || selected.contains(group.GetBridgePileId())) {
+                    continue;
+                }
+                const auto source = ChooseStateStorageSelfHealSource(*cfg, group.GetBridgePileId(), Self->SelfHealNodesState);
+                if (!source) {
+                    throw TExError() << "Node states are not ready for choosing a readable State Storage group";
+                }
+                selected.emplace(group.GetBridgePileId(), *source);
+            }
+            std::vector<ui32> readable;
+            for (const auto& [pileId, index] : selected) {
+                readable.push_back(index);
+            }
+            std::ranges::sort(readable, [&](ui32 x, ui32 y) {
+                return current.Get(x).GetBridgePileId() < current.Get(y).GetBridgePileId();
+            });
+            cfg->ClearRingGroups();
+            for (ui32 i : readable) {
+                cfg->AddRingGroups()->CopyFrom(current.Get(i));
+            }
+            for (ui32 i : xrange(current.size())) {
+                const auto& group = current.Get(i);
+                if (const auto it = selected.find(group.GetBridgePileId()); it != selected.end() && it->second != i) {
+                    auto *obsolete = cfg->AddRingGroups();
+                    obsolete->CopyFrom(group);
+                    obsolete->SetWriteOnly(true);
+                    prepareCurrentConfig = true;
+                }
+            }
+        };
+        prepareReadableGroups(currentConfig.MutableStateStorageConfig(), targetConfig.GetStateStorageConfig());
+        prepareReadableGroups(currentConfig.MutableStateStorageBoardConfig(), targetConfig.GetStateStorageBoardConfig());
+        prepareReadableGroups(currentConfig.MutableSchemeBoardConfig(), targetConfig.GetSchemeBoardConfig());
+
         YDB_LOG_DEBUG("Need to reconfig, starting StateStorageSelfHealActor",
             {"marker", "NW101"},
             {"currentConfig", currentConfig},
@@ -340,14 +423,8 @@ namespace NKikimr::NStorage {
 
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
-        // every pile has its ring group, except for INACTIVE ones
-        const ui32 pilesCnt = Self->BridgeInfo
-            ? static_cast<ui32>(std::ranges::count_if(Self->BridgeInfo->Piles, [](const auto& pile) {
-                return pile.State != NKikimrBridge::TClusterState::INACTIVE;
-            }))
-            : 1;
         Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
-            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), pilesCnt));
+            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), prepareCurrentConfig));
         Finish(TResult::OK, std::nullopt);
     }
 
@@ -421,6 +498,37 @@ namespace NKikimr::NStorage {
                     throw TExError() << name << " incorrect configuration: both Ring and Node fields are set";
                 }
 
+                if (ring->NodeSize() && cmd.GetDisableRing()) {
+                    std::optional<int> nodeIndex;
+                    for (size_t i = 0; i < ring->NodeSize(); ++i) {
+                        if (ring->GetNode(i) == cmd.GetFrom()) {
+                            if (found || nodeIndex) {
+                                throw TExError() << name << " ambiguous From node";
+                            }
+                            nodeIndex = i;
+                        }
+                    }
+                    if (nodeIndex) {
+                        if (ring->GetRingGroupActorIdOffset()) {
+                            throw TExError() << name
+                                << " flat Node configuration with RingGroupActorIdOffset requires full migration";
+                        }
+                        const auto nodes = ring->GetNode();
+                        ring->ClearNode();
+                        ring->ClearIsDisabled();
+                        for (int i = 0; i < nodes.size(); ++i) {
+                            auto *nestedRing = ring->AddRing();
+                            nestedRing->AddNode(nodes[i]);
+                            nestedRing->SetUseSingleNodeActorId(true);
+                            if (i == *nodeIndex) {
+                                nestedRing->SetIsDisabled(true);
+                            }
+                        }
+                        found = true;
+                    }
+                    return;
+                }
+
                 const size_t numItems = Max(ring->RingSize(), ring->NodeSize());
 
                 auto replace = [&](auto *ring, size_t i) {
@@ -460,6 +568,7 @@ namespace NKikimr::NStorage {
 
             };
             auto *m = (config.*mutableFunc)();
+            const auto oldConfig = *m;
 
             if (m->RingGroupsSize() && m->HasRing()) {
                 throw TExError() << name << " incorrect configuration: both Ring and RingGroups fields are set";
@@ -473,6 +582,9 @@ namespace NKikimr::NStorage {
             }
             if (!found) {
                 throw TExError() << name << " From node not found";
+            }
+            if (const auto error = NKikimr::NConfig::ValidateStateStorageConfig(name, oldConfig, *m, true)) {
+                throw TExError() << error;
             }
         };
 

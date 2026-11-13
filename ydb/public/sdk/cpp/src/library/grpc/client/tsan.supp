@@ -1,0 +1,3 @@
+# gRPC may join its process-global executor threads asynchronously at process exit.
+# https://st.yandex-team.ru/YDBBUGS-477
+thread:grpc_core::Executor::SetThreading

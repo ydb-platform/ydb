@@ -35,4 +35,5 @@ enum ETxTypes {
     TXTYPE_RESTORE_SEQUENCE = 8                           [(TxTypeOpts) = {Name: "TxRestoreSequence"}];
     TXTYPE_REDIRECT_SEQUENCE = 9                          [(TxTypeOpts) = {Name: "TxRedirectSequence"}];
     TXTYPE_GET_SEQUENCE = 10                            [(TxTypeOpts) = {Name: "TxGetSequence"}];
+    TXTYPE_ADVANCE_SEQUENCE = 11                        [(TxTypeOpts) = {Name: "TxAdvanceSequence"}];
 }

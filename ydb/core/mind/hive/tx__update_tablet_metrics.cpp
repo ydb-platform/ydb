@@ -23,34 +23,57 @@ public:
         auto& record = Event->Get()->Record;
         TNodeId nodeId = Event->Sender.NodeId();
         NIceDb::TNiceDb db(txc.DB);
+        TNodeInfo* node = Self->FindNode(nodeId);
+        if (node != nullptr) {
+            // Validate tablet metrics against the limits advertised in this batch.
+            node->UpdateResourceMaximum(record.GetResourceMaximum());
+        }
         for (const auto& metrics : record.GetTabletMetrics()) {
             TTabletId tabletId = metrics.GetTabletID();
             TFollowerId followerId = metrics.GetFollowerID();
             //LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletMetrics::Execute Tablet: " << tabletId);
             TTabletInfo* tablet = Self->FindTablet(tabletId, followerId);
             if (tablet != nullptr && metrics.HasResourceUsage()) {
-                tablet->UpdateResourceUsage(metrics.GetResourceUsage());
+                const NKikimrTabletBase::TMetrics* resourceUsage = &metrics.GetResourceUsage();
+                NKikimrTabletBase::TMetrics withoutNamed;
+                if (resourceUsage->NamedResourcesSize() > 0) {
+                    withoutNamed = *resourceUsage;
+                    withoutNamed.ClearNamedResources();
+                    if (tablet->Node == nullptr || tablet->Node->Id != nodeId) {
+                        // e.g. a late report from the previous node of a moved tablet: it would replace
+                        // the estimate on the new node with a value which nobody would ever change
+                        YDB_LOG_DEBUG("THive::TTxUpdateTabletMetrics::Execute ignoring named resources from another node",
+                            {"logPrefix", GetLogPrefix()},
+                            {"tablet", tablet->ToString()},
+                            {"nodeId", nodeId});
+                        resourceUsage = &withoutNamed;
+                    }
+                }
+                const bool onlyNamed = resourceUsage->NamedResourcesSize() > 0 && withoutNamed.ByteSizeLong() == 0;
+                const auto namedBefore = tablet->GetResourceValues().NamedResources;
+                tablet->UpdateResourceUsage(*resourceUsage);
+                // a periodic resend of named resources by local, which changed nothing, is not persisted
+                const bool unchangedResend = onlyNamed && tablet->GetResourceValues().NamedResources == namedBefore;
+                if (!unchangedResend) {
+                    tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
+                    tablet->ActualizeTabletStatistics(now);
+                    Self->EnqueueUpdateMetrics(tablet);
 
-                tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
-                tablet->ActualizeTabletStatistics(now);
-                Self->EnqueueUpdateMetrics(tablet);
-                    
-                if (tablet->IsLeader()) {
-                    db.Table<Schema::Tablet>()
-                        .Key(tabletId)
-                        .Update<Schema::Tablet::Statistics>(tablet->Statistics);
-                } else {
-                    db.Table<Schema::TabletFollowerTablet>()
-                        .Key(tabletId, followerId)
-                        .Update<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics);
+                    if (tablet->IsLeader()) {
+                        db.Table<Schema::Tablet>()
+                            .Key(tabletId)
+                            .Update<Schema::Tablet::Statistics>(tablet->Statistics);
+                    } else {
+                        db.Table<Schema::TabletFollowerTablet>()
+                            .Key(tabletId, followerId)
+                            .Update<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics);
+                    }
                 }
             }
             Reply->Record.AddTabletId(tabletId);
             Reply->Record.AddFollowerId(followerId);
         }
-        TNodeInfo* node = Self->FindNode(nodeId);
         if (node != nullptr) {
-            node->UpdateResourceMaximum(record.GetResourceMaximum());
             node->UpdateResourceTotalUsage(record, db);
             node->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
             node->ActualizeNodeStatistics(now);
@@ -69,7 +92,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        ctx.Send(Event->Sender, Reply.Release());
+        ctx.Send(Event->Sender, Reply.Release(), 0, Event->Cookie);
         Self->UpdateTabletMetricsInProgress--;
     }
 };

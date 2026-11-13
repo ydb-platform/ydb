@@ -97,7 +97,7 @@ Y_UNIT_TEST(AutoFallbackPreservesMode) {
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'auto';
-        SELECT EnsureType(Percentile(CAST(key AS Interval64), 0.5), Interval64?)
+        SELECT AggList(key)
         FROM (SELECT Interval64('P1D') AS key);
         SELECT 1;
     )sql", settings);
@@ -119,7 +119,9 @@ Y_UNIT_TEST(AutoFallbackPreservesHints) {
             FROM plato.x
             GROUP /*+ COMPACT() */ BY k
         ) AS grouped
-        SELECT grouped.*;
+        SELECT
+            grouped.*,
+            ROW_NUMBER() OVER (ORDER BY random(TableRow())) AS row_number;
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
@@ -128,6 +130,31 @@ Y_UNIT_TEST(AutoFallbackPreservesHints) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
     UNIT_ASSERT_VALUES_EQUAL(stat["Aggregate"], 1);
     UNIT_ASSERT_VALUES_EQUAL(stat["compact"], 1);
+}
+
+Y_UNIT_TEST(WindowUnsupportedExpressions) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    for (const TString query : {
+             "SELECT ROW_NUMBER() OVER (ORDER BY random(TableRow())) FROM AS_TABLE([<|key: 1|>]);",
+             "SELECT ROW_NUMBER() OVER w FROM AS_TABLE([<|key: 1|>]) WINDOW w AS (PARTITION BY random(TableRow()));",
+             "SELECT ROW_NUMBER() OVER (ROWS CAST(1 IN COMPACT (1, 2) AS Int32) PRECEDING) FROM AS_TABLE([<|key: 1|>]);",
+         }) {
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Auto;
+        const auto res = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TWordCountHive stat = {"YqlSelect", "CalcOverWindow"};
+        VerifyProgram(res, stat);
+        UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+        UNIT_ASSERT_GT(stat["CalcOverWindow"], 0);
+
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto forced = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(!forced.IsOk(), query);
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(forced), "YqlSelect unsupported");
+    }
 }
 
 Y_UNIT_TEST(Minimal) {
@@ -650,6 +677,47 @@ Y_UNIT_TEST(FromSubquery) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
 }
 
+Y_UNIT_TEST(FlattenColumns) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    const TString query = "PRAGMA OrderedColumns; SELECT * FROM plato.Input FLATTEN COLUMNS;";
+    const auto result = SqlToYqlWithSettings(query, settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+
+    TWordCountHive stat = {"YqlSelect", "YqlFlattenColumns", "FlattenStructs", "OrderedFlatMap"};
+    VerifyProgram(result, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlFlattenColumns"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["FlattenStructs"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["OrderedFlatMap"], 0);
+}
+
+Y_UNIT_TEST(FlattenByModes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+    const TVector<TString> queries = {
+        "PRAGMA OrderedColumns; SELECT * FROM plato.Input FLATTEN BY value;",
+        "PRAGMA OrderedColumns; SELECT * FROM plato.Input FLATTEN LIST BY value;",
+        "PRAGMA OrderedColumns; SELECT * FROM plato.Input FLATTEN DICT BY value;",
+        "PRAGMA OrderedColumns; SELECT * FROM plato.Input FLATTEN OPTIONAL BY value;",
+    };
+    for (const auto& query : queries) {
+        const auto result = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(result.IsOk(), query << Endl << Err2Str(result));
+
+        TWordCountHive stat = {"YqlSelect", "YqlFlattenBy", "FlattenByColumns", "flatten_by", "OrderedFlatMap"};
+        VerifyProgram(result, stat);
+        UNIT_ASSERT_VALUES_EQUAL_C(stat["YqlSelect"], 1, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(stat["YqlFlattenBy"], 1, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(stat["FlattenByColumns"], 1, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(stat["flatten_by"], 1, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(stat["OrderedFlatMap"], 0, query);
+    }
+}
+
 Y_UNIT_TEST(Join2) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
@@ -671,10 +739,11 @@ Y_UNIT_TEST(QualifiedAsteriskJoin) {
         USE plato;
         SELECT xx.* FROM xx JOIN yy ON xx.id = yy.id;
     )sql", settings);
-    UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(
-        Err2Str(res),
-        "YqlSelect unsupported: an_id DOT ASTERISK");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {{TString("YqlQualifiedStar"), 0}};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlQualifiedStar"], 1);
 }
 
 Y_UNIT_TEST(Join2Alias) {
@@ -1594,8 +1663,8 @@ Y_UNIT_TEST(LegacySourceBindTriggersFallbackInAutoMode) {
         PRAGMA YqlSelect = 'auto';
         $x = (
             SELECT *
-            FROM AsTable([<|a: [1], b: 2|>])
-            FLATTEN BY a
+            FROM AsTable([<|a: 1|>])
+            ASSUME ORDER BY a
         );
         SELECT * FROM $x;
     )sql", settings);

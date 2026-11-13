@@ -81,10 +81,11 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
             totalSize = Min(totalSize.value_or(Max<ui64>()), slotSize);
         }
     }
-    const ui64 a = totalSize.value_or(0) * disks.size() * type.DataParts() / type.TotalPartCount();
-    const ui64 b = allocatedSize * disks.size() * type.DataParts() / type.TotalPartCount();
-    info->SetAllocatedSize(b);
-    info->SetAvailableSize(b < a ? a - b : 0);
+    const unsigned __int128 scaledTotalSize = TBlobStorageController::TGroupInfo::ScaleGroupResource(totalSize.value_or(0), disks.size(), type);
+    const unsigned __int128 scaledAllocatedSize = TBlobStorageController::TGroupInfo::ScaleGroupResource(allocatedSize, disks.size(), type);
+    const unsigned __int128 scaledAvailableSize = scaledAllocatedSize < scaledTotalSize ? scaledTotalSize - scaledAllocatedSize : 0;
+    info->SetAllocatedSize(static_cast<ui64>(Min<unsigned __int128>(scaledAllocatedSize, Max<ui64>())));
+    info->SetAvailableSize(static_cast<ui64>(Min<unsigned __int128>(scaledAvailableSize, Max<ui64>())));
 }
 
 class TSystemViewsCollector : public TActorBootstrapped<TSystemViewsCollector> {
@@ -379,7 +380,9 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
         pb->SetAvailableSize(m.GetAvailableSize());
     }
     if (status) {
-        pb->SetStatusV2(NKikimrBlobStorage::EVDiskStatus_Name(*status));
+        // PhantomOnly is still reported, so the real state of the VDisk is visible anyway
+        const bool reportAsReady = phantomOnly && AppData()->FeatureFlags.GetReportPhantomsOnlyVDisksAsReady();
+        pb->SetStatusV2(NKikimrBlobStorage::EVDiskStatus_Name(reportAsReady ? NKikimrBlobStorage::READY : *status));
     }
     if (m.HasState()) {
         pb->SetState(NKikimrWhiteboard::EVDiskState_Name(m.GetState()));
@@ -731,41 +734,29 @@ void TBlobStorageController::UpdateSystemViews() {
         }
 
         for (auto& [groupId, g] : state.Groups) {
-            if (const auto it = BridgeSyncState.find(groupId); it != BridgeSyncState.end()) {
+            g.SetBridgeSyncStatus(GetBridgeSyncStatus(groupId));
+            if (const auto timestamp = GetBridgeSyncLastProgressTimestamp(groupId)) {
+                g.SetBridgeSyncLastProgressTimestamp(timestamp->GetValue());
+            }
+            if (const auto it = BridgeSyncState.find(groupId); it != BridgeSyncState.end() && it->second.ErrorCount) {
                 TBridgeSyncState& state = it->second;
                 g.SetBridgeSyncLastError(state.LastError);
                 g.SetBridgeSyncLastErrorTimestamp(state.LastErrorTimestamp.GetValue());
                 g.SetBridgeSyncFirstErrorTimestamp(state.FirstErrorTimestamp.GetValue());
                 g.SetBridgeSyncErrorCount(state.ErrorCount);
             }
-            if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeProxyGroupId && group->BridgePileId) {
-                if (const TGroupInfo *proxyGroup = FindGroup(*group->BridgeProxyGroupId); proxyGroup && proxyGroup->BridgeGroupInfo) {
-                    const auto& bridgeGroupState = proxyGroup->BridgeGroupInfo->GetBridgeGroupState();
-                    if (const auto *pile = NBridge::GetGroupPile(bridgeGroupState, group->BridgePileId)) {
-                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile->GetStage()));
-                    }
-                }
-            } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end() &&
-                    it->second.Info &&
-                    it->second.Info->Group &&
-                    it->second.Info->Group->HasBridgeProxyGroupId() &&
-                    it->second.Info->Group->HasBridgePileId()) {
-                if (const auto proxyIt = StaticGroups.find(TGroupId::FromProto(&it->second.Info->Group.value(),
-                            &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId));
-                        proxyIt != StaticGroups.end() &&
-                        proxyIt->second.Info &&
-                        proxyIt->second.Info->Group &&
-                        proxyIt->second.Info->Group->HasBridgeGroupState()) {
-                    const auto& bridgeGroupState = proxyIt->second.Info->Group->GetBridgeGroupState();
-                    const auto bridgePileId = TBridgePileId::FromProto(&it->second.Info->Group.value(),
-                        &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
-                    if (const auto *pile = NBridge::GetGroupPile(bridgeGroupState, bridgePileId)) {
-                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile->GetStage()));
+            if (const auto stage = GetBridgeSyncStage(groupId)) {
+                g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(*stage));
+                if (*stage != NKikimrBridge::TGroupState::SYNCED) {
+                    if (const auto remaining = GetBridgeSyncRemaining(groupId, *stage)) {
+                        g.SetBridgeSyncRemainingBytes(remaining->Bytes);
+                        g.SetBridgeSyncRemainingBytesComplete(remaining->Complete);
                     }
                 }
             }
             if (const auto it = TargetGroupToSyncerState.find(groupId); it != TargetGroupToSyncerState.end()) {
                 TSyncerState& syncerState = it->second;
+                g.SetBridgeSyncCopyBytesPerSecond(syncerState.CopyRate);
                 for (const auto& perNodeInfo : syncerState.NodeIds | std::views::values) {
                     if (perNodeInfo.Progress.BytesTotal) {
                         const double progress = intmax_t(perNodeInfo.Progress.BytesDone) * 1'000'000 /

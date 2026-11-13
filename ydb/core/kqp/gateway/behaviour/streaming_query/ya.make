@@ -14,7 +14,7 @@ PEERDIR(
     library/cpp/protobuf/json
     library/cpp/retry
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/fq/libs/checkpoint_storage
     ydb/core/kqp/common
     ydb/core/kqp/common/events

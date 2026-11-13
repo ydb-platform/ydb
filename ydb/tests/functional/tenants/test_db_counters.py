@@ -98,7 +98,7 @@ class BaseDbCounters(object):
                     query = "select * from `{}`".format(table)
                     session.transaction().execute(query, commit_tx=True)
 
-            for i in range(30):
+            for i in range(150):
                 checked = 0
 
                 counters = get_db_counters(self.cluster.slots[1].mon_port, 'db')
@@ -119,7 +119,7 @@ class BaseDbCounters(object):
                 if checked > 0:
                     break
 
-                time.sleep(5)
+                time.sleep(1)
 
 
 class TestKqpCounters(BaseDbCounters):
@@ -246,7 +246,7 @@ def describe(client, path):
     return client.describe(path, token="")
 
 
-def check_disk_quota_exceedance(client, database, retries=10, sleep_duration=5):
+def check_disk_quota_exceedance(client, database, retries=50, sleep_duration=1):
     for attempt in range(retries):
         path_description = describe(client, database)
         domain_description = path_description.PathDescription.DomainDescription
@@ -264,7 +264,7 @@ def check_disk_quota_exceedance(client, database, retries=10, sleep_duration=5):
     assert False, "database did not move into DiskQuotaExceeded state"
 
 
-def wait_for_stats(client, table, retries=10, sleep_duration=5):
+def wait_for_stats(client, table, retries=50, sleep_duration=1):
     for attempt in range(retries):
         usage = describe(client, table).PathDescription.TableStats.StoragePools.PoolsUsage
         if len(usage) > 0:
@@ -275,7 +275,7 @@ def wait_for_stats(client, table, retries=10, sleep_duration=5):
 
 
 # Note: the default total sleep time is 300 seconds, because 200 seconds can sometimes be not enough
-def check_counters(mon_port, sensors_to_check, service="ydb", retries=60, sleep_duration=5):
+def check_counters(mon_port, sensors_to_check, service="ydb", retries=300, sleep_duration=1):
     sensor_count = 0
     for _, expected_value in sensors_to_check.items():
         if isinstance(expected_value, list):

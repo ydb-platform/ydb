@@ -1926,13 +1926,14 @@ bool TSchemeShard::CheckInFlightLimit(NKikimrSchemeOp::EOperationType opType, TS
     return true;
 }
 
-bool TSchemeShard::CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKikimrScheme::EStatus& status, TString& errStr) const {
+bool TSchemeShard::CanCreateSingleSnapshot(const TPathId& tablePathId, TTxId txId, NKikimrScheme::EStatus& status, TString& errStr) const {
     auto it = TablesWithSnapshots.find(tablePathId);
-    if (it == TablesWithSnapshots.end()) {
+    if (it == TablesWithSnapshots.end() || it->second.empty()) {
         return true;
     }
 
-    const auto& snapshotTxId = it->second;
+    const auto& snapshots = it->second;
+    TTxId snapshotTxId = snapshots.contains(txId) ? txId : *snapshots.begin();
     TStepId snapshotStepId;
 
     if (auto sit = SnapshotsStepIds.find(snapshotTxId); sit != SnapshotsStepIds.end()) {
@@ -1944,8 +1945,7 @@ bool TSchemeShard::CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKi
         errStr = TStringBuilder()
             << "Snapshot with the same txId already presents for table"
             << ", tableId:" << tablePathId
-            << ", txId: " << txId
-            << ", snapshotTxId: " << snapshotTxId
+            << ", snapshotTxId: " << txId
             << ", snapshotStepId: " << snapshotStepId;
     } else {
         status = NKikimrScheme::StatusSchemeError;
@@ -1958,6 +1958,47 @@ bool TSchemeShard::CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKi
     }
 
     return false;
+}
+
+bool TSchemeShard::HasTableSnapshot(const TPathId& tablePathId) const {
+    auto it = TablesWithSnapshots.find(tablePathId);
+    return it != TablesWithSnapshots.end() && !it->second.empty();
+}
+
+bool TSchemeShard::HasTableSnapshot(const TPathId& tablePathId, TTxId txId) const {
+    auto it = TablesWithSnapshots.find(tablePathId);
+    return it != TablesWithSnapshots.end() && it->second.find(txId) != it->second.end();
+}
+
+TTxId TSchemeShard::GetSingleTableSnapshot(const TPathId& tablePathId) const {
+    auto it = TablesWithSnapshots.find(tablePathId);
+    Y_ABORT_UNLESS(it != TablesWithSnapshots.end() && it->second.size() == 1,
+        "Table %s should have exactly 1 snapshot", tablePathId.ToString().data());
+    return *it->second.begin();
+}
+
+void TSchemeShard::AddTableSnapshot(const TPathId& tablePathId, TTxId txId) {
+    TablesWithSnapshots[tablePathId].insert(txId);
+    SnapshotTables[txId].insert(tablePathId);
+}
+
+void TSchemeShard::RemoveTableSnapshot(const TPathId& tablePathId, TTxId txId) {
+    if (auto it = TablesWithSnapshots.find(tablePathId); it != TablesWithSnapshots.end()) {
+        it->second.erase(txId);
+        if (it->second.empty()) {
+            TablesWithSnapshots.erase(it);
+        }
+    }
+
+    if (auto it = SnapshotTables.find(txId); it != SnapshotTables.end()) {
+        it->second.erase(tablePathId);
+        if (it->second.empty()) {
+            SnapshotTables.erase(it);
+            SnapshotsStepIds.erase(txId);
+        }
+    } else {
+        SnapshotsStepIds.erase(txId);
+    }
 }
 
 TShardIdx TSchemeShard::ReserveShardIdxs(ui64 count) {
@@ -2316,7 +2357,10 @@ void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) 
         NIceDb::TUpdate<Schema::CdcStream::AwsRegion>(alterData->AwsRegion),
         NIceDb::TUpdate<Schema::CdcStream::State>(alterData->State),
         NIceDb::TUpdate<Schema::CdcStream::UserSIDs>(alterData->UserSIDs),
-        NIceDb::TUpdate<Schema::CdcStream::TraceIds>(alterData->TraceIds)
+        NIceDb::TUpdate<Schema::CdcStream::TraceIds>(alterData->TraceIds),
+        NIceDb::TUpdate<Schema::CdcStream::Compression>(alterData->Compression),
+        NIceDb::TUpdate<Schema::CdcStream::CompressionLevel>(alterData->CompressionLevel),
+        NIceDb::TUpdate<Schema::CdcStream::HeartbeatMode>(alterData->HeartbeatMode)
     );
 
     db.Table<Schema::CdcStreamAlterData>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
@@ -2345,7 +2389,10 @@ void TSchemeShard::PersistCdcStreamAlterData(NIceDb::TNiceDb& db, const TPathId&
         NIceDb::TUpdate<Schema::CdcStreamAlterData::AwsRegion>(alterData->AwsRegion),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::State>(alterData->State),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::UserSIDs>(alterData->UserSIDs),
-        NIceDb::TUpdate<Schema::CdcStreamAlterData::TraceIds>(alterData->TraceIds)
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::TraceIds>(alterData->TraceIds),
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::Compression>(alterData->Compression),
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::CompressionLevel>(alterData->CompressionLevel),
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::HeartbeatMode>(alterData->HeartbeatMode)
     );
 }
 
@@ -2992,7 +3039,13 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
     Y_ABORT_UNLESS(txState.TxType != TTxState::TxInvalid);
     Y_ABORT_UNLESS(txState.State != TTxState::Invalid);
     TString extraData;
-    if (txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition) {
+    if (txState.TxType == TTxState::TxDropReplication || txState.TxType == TTxState::TxDropReplicationCascade) {
+        if (txState.ReplicationSourceCleanup != NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP) {
+            NKikimrSchemeOp::TDrop drop;
+            drop.SetReplicationSourceCleanup(txState.ReplicationSourceCleanup);
+            Y_ABORT_UNLESS(drop.SerializeToString(&extraData));
+        }
+    } else if (txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition) {
         Y_ABORT_UNLESS(txState.SplitDescription, "Split Tx must have non-empty split description");
         bool serializeRes = txState.SplitDescription->SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
@@ -3740,8 +3793,7 @@ void TSchemeShard::PersistAddPersQueueGroupAlter(NIceDb::TNiceDb& db, TPathId pa
         NIceDb::TUpdate<Schema::PersQueueGroupAlters::MaxPQPerShard>(alterData->MaxPartsPerTablet),
         NIceDb::TUpdate<Schema::PersQueueGroupAlters::AlterVersion>(alterData->AlterVersion),
         NIceDb::TUpdate<Schema::PersQueueGroupAlters::TotalGroupCount>(alterData->TotalGroupCount),
-        NIceDb::TUpdate<Schema::PersQueueGroupAlters::NextPartitionId>(alterData->NextPartitionId),
-        NIceDb::TUpdate<Schema::PersQueueGroupAlters::BootstrapConfig>(alterData->BootstrapConfig));
+        NIceDb::TUpdate<Schema::PersQueueGroupAlters::NextPartitionId>(alterData->NextPartitionId));
 }
 
 void TSchemeShard::PersistRemovePersQueueGroupAlter(NIceDb::TNiceDb& db, TPathId pathId) {
@@ -5248,16 +5300,12 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
         TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Sub(1);
     }
 
-    if (TablesWithSnapshots.contains(pathId)) {
-        const TTxId snapshotId = TablesWithSnapshots.at(pathId);
-        PersistDropSnapshot(db, snapshotId, pathId);
-
-        TablesWithSnapshots.erase(pathId);
-        SnapshotTables.at(snapshotId).erase(pathId);
-        if (SnapshotTables.at(snapshotId).empty()) {
-            SnapshotTables.erase(snapshotId);
+    if (auto it = TablesWithSnapshots.find(pathId); it != TablesWithSnapshots.end()) {
+        const TVector<TTxId> snapshotIds(it->second.begin(), it->second.end());
+        for (const TTxId snapshotId : snapshotIds) {
+            PersistDropSnapshot(db, snapshotId, pathId);
+            RemoveTableSnapshot(pathId, snapshotId);
         }
-        SnapshotsStepIds.erase(snapshotId);
     }
 
     if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
@@ -5857,6 +5905,9 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     for (TActorId schemeQueryExecutor : RunningImportSchemeQueryExecutors) {
         ctx.Send(schemeQueryExecutor, new TEvents::TEvPoisonPill());
     }
+    for (TActorId restorer : RunningImportKesusRestorers) {
+        ctx.Send(restorer, new TEvents::TEvPoisonPill());
+    }
     for (TActorId continuousBackupCleaner : RunningContinuousBackupCleaners) {
         ctx.Send(continuousBackupCleaner, new TEvents::TEvPoisonPill());
     }
@@ -6200,6 +6251,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvImportSchemeReady, Handle);
         HFuncTraced(TEvPrivate::TEvImportSchemaMappingReady, Handle);
         HFuncTraced(TEvPrivate::TEvImportSchemeQueryResult, Handle);
+        HFuncTraced(TEvPrivate::TEvImportKesusResult, Handle);
         // } // NImport
 
         // namespace NBackup {
@@ -7955,7 +8007,8 @@ void TSchemeShard::RestartPipeTx(TTabletId tabletId, const TActorContext& ctx) {
                 {"schemeshard", TabletID()},
             );
 
-            PipeClientCache->Send(ctx, ui64(tabletId),  msg.Type, msg.Data, msgCookie.second);
+            // msg.Materialize() is idempotent
+            PipeClientCache->Send(ctx, ui64(tabletId),  msg.Type, msg.Materialize(), msgCookie.second);
         }
     }
 }
@@ -8414,6 +8467,9 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             descr->SetFamily(colInfo.Family);
             descr->SetNotNull(colInfo.NotNull);
             descr->SetSetNotNullInProgress(colInfo.SetNotNullInProgress);
+            if (colInfo.DefaultKind == ETableColumnDefaultKind::FromSequence) {
+                descr->SetDefaultFromSequence(colInfo.DefaultValue);
+            }
         }
     }
 

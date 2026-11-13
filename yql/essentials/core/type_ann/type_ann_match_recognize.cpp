@@ -249,6 +249,13 @@ IGraphTransformer::TStatus MatchRecognizeParamsWrapper(const TExprNode::TPtr& in
         return IGraphTransformer::TStatus::Error;
     }
     const auto measures = input->Child(0);
+    if (!measures->GetTypeAnn()) {
+        YQL_ENSURE(measures->Type() == TExprNode::Lambda);
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(measures->Pos()),
+            "Expected MatchRecognizeMeasures, but got lambda"));
+        return IGraphTransformer::TStatus::Error;
+    }
     input->SetTypeAnn(measures->GetTypeAnn());
     return IGraphTransformer::TStatus::Ok;
 }

@@ -11,7 +11,8 @@ TString ComputeIndexItemSuffix(
     const NKikimrSchemeOp::TBackupTask* snapshot,
     const NKikimrSchemeOp::TPathDescription& sourceDescription,
     const TString& indexImplTablePath,
-    bool encrypted
+    bool encrypted,
+    bool exportChangefeeds
 );
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(

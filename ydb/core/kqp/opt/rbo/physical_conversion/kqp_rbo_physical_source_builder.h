@@ -1,6 +1,9 @@
 #pragma once
 #include "kqp_rbo_physical_op_builder.h"
+#include <ydb/core/kqp/opt/rbo/kqp_olap_aggregate.h>
 #include <yql/essentials/utils/log/log.h>
+
+#include <optional>
 
 using namespace NYql::NNodes;
 using namespace NKikimr;
@@ -8,21 +11,80 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalSourceBuilder: public TPhysicalNullaryOpBuilder {
 public:
+    // A row read is a source input of its stage, which the stage program reads through an argument.
+    struct TStageSource {
+        TExprNode::TPtr Source;
+        TExprNode::TPtr Argument;
+    };
+
     TPhysicalSourceBuilder(TOpRead& read, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names,
-        const TInfoUnitRegistry& registry, const TString& stageGUID, bool isSysView = false, TString carrierColumn = {})
+        const TInfoUnitRegistry& registry, bool isSysView = false, TString carrierColumn = {})
         : TPhysicalNullaryOpBuilder(ctx, pos, names)
         , Read(read)
         , Registry(registry)
-        , StageGUID(stageGUID)
         , IsSysView(isSysView)
         , CarrierColumn(std::move(carrierColumn)) {}
 
-    TExprNode::TPtr BuildPhysicalOp() override;
+    // Compute an aggregate pushed to column shards in the read program. The
+    // source then yields the rows of the aggregate instead of the read.
+    TPhysicalSourceBuilder& WithOlapAggregate(const TOlapAggregate& aggregate) {
+        Y_ENSURE(aggregate.Read == &Read, "A pushed aggregate must compute over this read");
+        OlapAggregate = &aggregate;
+        return *this;
+    }
+
+    // Mark the key of the trivial DISTINCT over this read in the read program,
+    // which then yields only the key column. A nonzero `itemsLimit` stops
+    // column shards after that many distinct keys.
+    TPhysicalSourceBuilder& WithOlapDistinct(const TOlapDistinct& distinct, ui64 itemsLimit) {
+        Y_ENSURE(distinct.Read == &Read, "A pushed distinct must mark this read");
+        OlapDistinct = &distinct;
+        OlapDistinctLimit = itemsLimit;
+        return *this;
+    }
+
+    // Tell column shards to send all rows of a key of the aggregate over this read
+    // to one compute task, as PRAGMA OptEnableOlapProvideComputeSharding asks.
+    TPhysicalSourceBuilder& WithOlapComputeSharding(const TOlapComputeSharding& computeSharding) {
+        Y_ENSURE(computeSharding.Read == &Read, "Compute sharding keys must belong to this read");
+        OlapComputeSharding = &computeSharding;
+        return *this;
+    }
+
+    NPhysicalConvertionUtils::TStageBody BuildPhysicalOp() override;
+
+    // The source input of a row read stage, set by BuildPhysicalOp. The body it returns reads the argument,
+    // so the other operators of the stage build on it.
+    const std::optional<TStageSource>& GetStageSource() const { return StageSource; }
 
 private:
+    // Program row fields by name.
+    using TProgramFields = THashMap<TString, TExprNode::TPtr>;
+
+    // The program row field holding `function` of the aggregation into `output`.
+    TString GetOlapAggregateField(TInfoUnitId output, TStringBuf function) const;
+    // Replace the program output with the aggregate rows and list their fields.
+    TExprNode::TPtr AddOlapAggregate(TExprNode::TPtr processLambda, TVector<TString>& outputFields) const;
+    // Mark the DISTINCT key in the program and list its only output field.
+    TExprNode::TPtr AddOlapDistinct(TExprNode::TPtr processLambda, TVector<TString>& outputFields) const;
+    // Make the program output only `outputFields`.
+    TExprNode::TPtr AddOlapExtractMembers(TExprNode::TPtr processLambda, const TVector<TString>& outputFields) const;
+    // A program projection that casts `column` to Double into `field`.
+    TExprBase BuildOlapDoubleCast(const TString& column, const TTypeAnnotationNode& columnType, const TString& field) const;
+    // Rebuild the aggregate's outputs, its keys and partial states, from the program row.
+    TExprNode::TPtr BuildOlapAggregateRow(const TProgramFields& fields) const;
+    // The intermediate AVG state built from the sum and count in the program row.
+    TExprNode::TPtr BuildOlapAverageState(const TOlapAggregation& aggregation, const TProgramFields& fields) const;
+    // Add the compute sharding keys to the read settings.
+    TExprNode::TPtr AddOlapComputeSharding(TExprNode::TPtr settings) const;
+
     TOpRead& Read;
     const TInfoUnitRegistry& Registry;
-    TString StageGUID;
     bool IsSysView;
     TString CarrierColumn;
+    const TOlapAggregate* OlapAggregate = nullptr;
+    const TOlapDistinct* OlapDistinct = nullptr;
+    ui64 OlapDistinctLimit = 0;
+    const TOlapComputeSharding* OlapComputeSharding = nullptr;
+    std::optional<TStageSource> StageSource;
 };

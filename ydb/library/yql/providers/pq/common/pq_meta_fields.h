@@ -38,7 +38,7 @@ std::optional<TMetaFieldDescriptor> GetPqMetaFieldDescriptorByYdbSysColumn(const
 std::vector<TString> GetAllowedPqMetaSysColumns(bool addTransparentPrefix, bool includeUserAttributes);
 
 // Returns the list of allowed __ydb_-prefixed system column names.
-std::vector<TString> GetAllowedYdbSysColumns(bool includeUserAttributes);
+std::vector<TString> GetAllowedYdbSysColumns(bool includeUserAttributes, bool allowYdbSysColumns = true);
 
 // Map a __ydb_-prefixed column name to the corresponding _yql_sys_-prefixed column name.
 // Returns std::nullopt if the input is not a recognized __ydb_ column.

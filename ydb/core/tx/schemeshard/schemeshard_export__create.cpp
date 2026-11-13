@@ -7,6 +7,7 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/tx/datashard/export_data_format.h>
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
@@ -44,6 +45,7 @@ bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& ite
     switch (item.SourcePathType) {
     case NKikimrSchemeOp::EPathTypeView:
     case NKikimrSchemeOp::EPathTypePersQueueGroup:
+    case NKikimrSchemeOp::EPathTypeKesus:
     case NKikimrSchemeOp::EPathTypeReplication:
     case NKikimrSchemeOp::EPathTypeTransfer:
     case NKikimrSchemeOp::EPathTypeExternalDataSource:
@@ -352,6 +354,21 @@ private:
                     explain = checks.GetError();
                     return false;
                 }
+
+                // The gRPC layer drops omitted paths it expanded itself; an
+                // item that still arrives here was named explicitly.
+                if (::NKikimr::NBackup::IsOmittedFromBackup(path.Base()->UserAttrs->Attrs)) {
+                    explain = TStringBuilder() << "path '" << item.source_path()
+                        << "' is marked with " << ::NKikimr::NBackup::OMIT_BACKUP_ATTRIBUTE << " and cannot be exported";
+                    return false;
+                }
+            }
+
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToYtSettings>) {
+                if (path.Base()->IsKesus()) {
+                    explain = "Coordination node export to YT is not supported";
+                    return false;
+                }
             }
 
             exportInfo.Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
@@ -364,6 +381,11 @@ private:
 
                     auto childPath = path.Child(childName);
                     if (childPath.IsDeleted() || !childPath.IsTableIndex()) {
+                        continue;
+                    }
+                    // An async index may lag behind the base table snapshot. Restore it by building
+                    // from the exported table data instead of exporting its impl table.
+                    if (childPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync)) {
                         continue;
                     }
                     for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
@@ -578,7 +600,7 @@ private:
 
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
                 Self->SelfId(), exportInfo.Id, itemIdx, item.SourcePathId,
-                exportSettings, databaseRoot, metadata.Serialize(),
+                exportSettings, databaseRoot, std::move(metadata),
                 exportInfo.EnablePermissions, exportInfo.EnableChecksums,
                 iv
             ));

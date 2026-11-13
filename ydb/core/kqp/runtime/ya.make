@@ -36,6 +36,7 @@ SRCS(
     kqp_write_table.cpp
     scheduler/kqp_compute_scheduler_service.cpp
     scheduler/kqp_schedulable_base.cpp
+    scheduler/kqp_schedulable_memory.cpp
     scheduler/kqp_schedulable_read.cpp
     scheduler/kqp_schedulable_task.cpp
     scheduler/kqp_schedulable_work_factory.cpp
@@ -50,6 +51,7 @@ PEERDIR(
     library/cpp/threading/hot_swap
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/cms/console/events
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats

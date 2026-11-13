@@ -518,7 +518,7 @@ class TestStreamingAggregation(StreamingTestBase):
 
     # The read actor's TRACE cell formatter does not support parameterized Decimal types.
     # Remove this workaround after https://github.com/ydb-platform/ydb/issues/54964 is fixed.
-    # Keep DEBUG for KQP_COMPUTE and preserve the default TRACE level for other components.
+    # Limit KQP_COMPUTE to DEBUG even if the global log level is set to TRACE.
     @pytest.mark.parametrize("kikimr", [{"log_levels": {"KQP_COMPUTE": 7}}], indirect=True)
     @pytest.mark.parametrize("nullable", [False, True])
     def test_standard_aggregates_use_defaults(self, kikimr, entity_name, nullable):

@@ -432,18 +432,19 @@ public:
     TProgressFile(const TString& sourceFilePath)
         : SourceFilePath(sourceFilePath)
     {
-        TString progressFileName;
         if (SourceFilePath.empty()) {
-            progressFileName = "std_input";
-        } else {
-            std::vector<TString> pathParts;
-            StringSplitter(SourceFilePath).Split('/').Collect(&pathParts);
-            for (ui32 i = 0; i < pathParts.size(); ++i) {
-                if (i > 0) {
-                    progressFileName += '_';
-                }
-                progressFileName += pathParts[i];
+            // Stdin cannot be resumed and has no stable identity. Keep its
+            // progress in memory so concurrent imports do not share a file.
+            return;
+        }
+        TString progressFileName;
+        std::vector<TString> pathParts;
+        StringSplitter(SourceFilePath).Split('/').Collect(&pathParts);
+        for (ui32 i = 0; i < pathParts.size(); ++i) {
+            if (i > 0) {
+                progressFileName += '_';
             }
+            progressFileName += pathParts[i];
         }
         ProgressFilePath = TFsPath(pathToProgressFiles).Child(progressFileName);
         ProgressFilePath.Fix();
@@ -475,6 +476,9 @@ public:
     }
 
     bool Save() {
+        if (!ProgressFilePath.IsDefined()) {
+            return true;
+        }
         if (FailedToSave) {
             // Failed to save once, do not try to save again
             return false;

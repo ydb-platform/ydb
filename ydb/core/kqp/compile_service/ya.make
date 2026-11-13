@@ -11,10 +11,12 @@ PEERDIR(
     ydb/core/kqp/tracing
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/cms/console/events
     ydb/core/kqp/common
     ydb/core/kqp/common/simple
     ydb/core/kqp/counters
     ydb/core/kqp/federated_query
+    ydb/core/path_aliasing
     ydb/core/kqp/host
     ydb/core/ydb_convert
     ydb/core/kqp/compile_service/helpers

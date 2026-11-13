@@ -25,6 +25,7 @@
 #include <library/cpp/protobuf/util/pb_io.h>
 
 #include <util/generic/guid.h>
+#include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 
 #include <util/string/builder.h>
@@ -121,30 +122,33 @@ public:
         const TString storageFileName = md5 + ".file.stripped";
         const TString bandwidthLimit = Config_.GetStripBandwidthLimit();
         TFileLinkPtr result = Storage_.Put(storageFileName, "", "", [file, bandwidthLimit, this](const TFsPath& dstPath) {
+            const auto runCommand = [](TShellCommand& command) {
+                command.Run().Wait();
+                if (command.GetStatus() != TShellCommand::SHELL_FINISHED) {
+                    ythrow yexception() << "'" << command.GetQuotedCommand() << "' failed. Exit code: " << command.GetExitCode() << ". Error: "
+                                        << (command.GetStatus() == TShellCommand::SHELL_INTERNAL_ERROR ? command.GetInternalError() : command.GetError());
+                }
+            };
             ui64 size;
             TString md5;
             if (bandwidthLimit.empty()) {
                 TShellCommand cmd("strip", {file, "-o", dstPath.GetPath()});
-                cmd.Run().Wait();
-                if (*cmd.GetExitCode() != 0) {
-                    ythrow yexception() << "'" << cmd.GetQuotedCommand() << "' exited with code " << *cmd.GetExitCode() << ". Stderr: " << cmd.GetError();
-                }
+                runCommand(cmd);
             } else {
                 const TString tmpFilePath = TStringBuilder() << "/dev/shm/strip_tmp." << getpid() << "." << (uint64_t)this;
-                TShellCommand cmd(TStringBuilder() << "strip " << '"' << file << '"'
-                                                   << " -o " << tmpFilePath << " && pv -L " << '"' << bandwidthLimit << '"'
-                                                   << " < " << tmpFilePath << " > " << '"' << dstPath.GetPath() << '"');
-                cmd.Run().Wait();
-                auto cleanupError = 0;
-                if (!NFs::Remove(tmpFilePath)) {
-                    cleanupError = LastSystemError();
-                }
-                if (*cmd.GetExitCode() != 0) {
-                    ythrow yexception() << "'" << cmd.GetQuotedCommand() << "' exited with code " << *cmd.GetExitCode() << ". Stderr: " << cmd.GetError();
-                }
-                if (cleanupError != 0 && cleanupError != ENOENT) {
-                    ythrow TSystemError(cleanupError) << "cannot remove temporary stripped file '" << tmpFilePath << "'";
-                }
+                Y_DEFER {
+                    if (!NFs::Remove(tmpFilePath)) {
+                        const auto cleanupError = LastSystemError();
+                        if (cleanupError != ENOENT) {
+                            YQL_LOG(WARN) << "Cannot remove temporary stripped file '" << tmpFilePath << "': " << LastSystemErrorText(cleanupError);
+                        }
+                    }
+                };
+                TUnbufferedFileOutput output(dstPath.GetPath());
+                TShellCommand strip("strip", {file, "-o", tmpFilePath}, TShellCommandOptions().SetUseShell(false));
+                TShellCommand pv("pv", {"-L", bandwidthLimit, tmpFilePath}, TShellCommandOptions().SetUseShell(false).SetOutputStream(&output));
+                runCommand(strip);
+                runCommand(pv);
             }
             md5 = MD5::File(dstPath.GetPath());
             size = TFile(dstPath.GetPath(), OpenExisting | RdOnly).GetLength();

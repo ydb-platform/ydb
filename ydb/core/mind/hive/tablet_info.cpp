@@ -5,10 +5,46 @@
 #include "leader_tablet_info.h"
 #include "follower_tablet_info.h"
 
+#include <algorithm>
+#include <google/protobuf/unknown_field_set.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
+
+namespace {
+
+bool SameThroughputRecord(const NKikimrTabletBase::TThroughputRecord& lhs,
+                          const NKikimrTabletBase::TThroughputRecord& rhs) {
+    if (lhs.GetThroughput() != rhs.GetThroughput()
+            || lhs.GetGroupID() != rhs.GetGroupID()
+            || lhs.GetChannel() != rhs.GetChannel()
+            || lhs.HasThroughput() != rhs.HasThroughput()
+            || lhs.HasGroupID() != rhs.HasGroupID()
+            || lhs.HasChannel() != rhs.HasChannel()) {
+        return false;
+    }
+    static const auto* reflection = lhs.GetReflection();
+    if (reflection->GetUnknownFields(lhs).field_count() == 0
+            && reflection->GetUnknownFields(rhs).field_count() == 0) {
+        return true;
+    }
+    return lhs.SerializeAsString() == rhs.SerializeAsString();
+}
+
+template <class TRecords>
+bool SameThroughputRecords(const TVector<NKikimrTabletBase::TThroughputRecord>& stored,
+                           const TRecords& incoming) {
+    return stored.size() == size_t(incoming.size())
+        && std::equal(stored.begin(), stored.end(), incoming.begin(), SameThroughputRecord);
+}
+
+} // anonymous namespace
+
+void TTabletInfo::MarkProtoMetricsDirty() {
+    ProtoMetricsRevision = Hive.AllocateProtoMetricsRevision();
+}
 
 TTabletInfo::TTabletInfo(ETabletRole role, THive& hive)
     : VolatileState(EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN)
@@ -114,6 +150,9 @@ TString TTabletInfo::FamilyString() const {
 }
 
 void TTabletInfo::ChangeVolatileState(EVolatileState state) {
+    if (BootAttemptId && state != EVolatileState::TABLET_VOLATILE_STATE_STARTING) {
+        Hive.ClearBootAttempt(*this);
+    }
     if (VolatileState == state) {
         if (Node != nullptr) {
             YDB_LOG_DEBUG("TTabletInfo::ChangeVolatileState volatile state unchanged",
@@ -213,10 +252,13 @@ bool TTabletInfo::IsStopped() const {
     return VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
 }
 
-bool TTabletInfo::IsGoodForBalancer(TInstant now) const {
+bool TTabletInfo::IsAllowedByBalancerPolicy() const {
     return (BalancerPolicy == EBalancerPolicy::POLICY_BALANCE)
-            && !Hive.IsInBalancerIgnoreList(GetTabletType())
-            && (now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod());
+            && !Hive.IsInBalancerIgnoreList(GetTabletType());
+}
+
+bool TTabletInfo::IsInBalancerCooldown(TInstant now) const {
+    return now - LastBalancerDecisionTime <= Hive.GetTabletKickCooldownPeriod();
 }
 
 void TTabletInfo::SetUsageImpact(double usageImpact) {
@@ -405,8 +447,25 @@ bool TTabletInfo::HasMetric(EResourceToBalance resource) const {
 void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics) {
     TInstant now = TActivationContext::Now();
     const TVector<i64>& allowedMetricIds(GetTabletAllowedMetricIds());
-    auto before = ResourceValues;
+    // Resource accounting only needs scalars and named resources, so keep group vectors empty.
+    const TMetrics before = {
+        .CPU = ResourceValues.CPU,
+        .Memory = ResourceValues.Memory,
+        .Network = ResourceValues.Network,
+        .Counter = ResourceValues.Counter,
+        .Storage = ResourceValues.Storage,
+        .GroupReadThroughput = {},
+        .GroupWriteThroughput = {},
+        .ReadThroughput = ResourceValues.ReadThroughput,
+        .WriteThroughput = ResourceValues.WriteThroughput,
+        .GroupReadIops = {},
+        .GroupWriteIops = {},
+        .ReadIops = ResourceValues.ReadIops,
+        .WriteIops = ResourceValues.WriteIops,
+        .NamedResources = ResourceValues.NamedResources,
+    };
     auto maximum = GetResourceMaximumValues();
+    bool groupsChanged = false;
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU)) {
         if (metrics.HasCPU()) {
             if (metrics.GetCPU() > static_cast<ui64>(std::get<NMetrics::EResource::CPU>(maximum))) {
@@ -466,16 +525,47 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     }
     if (metrics.GroupReadThroughputSize() > 0) {
         const auto& records = metrics.GetGroupReadThroughput();
-        ResourceValues.GroupReadThroughput.assign(records.begin(), records.end());
+        if (IsProtoMetricsDirty() || !SameThroughputRecords(ResourceValues.GroupReadThroughput, records)) {
+            ResourceValues.GroupReadThroughput.assign(records.begin(), records.end());
+            groupsChanged = true;
+        }
     }
     if (metrics.GroupWriteThroughputSize() > 0) {
         const auto& records = metrics.GetGroupWriteThroughput();
-        ResourceValues.GroupWriteThroughput.assign(records.begin(), records.end());
+        if (IsProtoMetricsDirty() || !SameThroughputRecords(ResourceValues.GroupWriteThroughput, records)) {
+            ResourceValues.GroupWriteThroughput.assign(records.begin(), records.end());
+            groupsChanged = true;
+        }
+    }
+    bool namedEstimatesLoaded = false;
+    for (const auto& resource : metrics.GetNamedResources()) {
+        // instantaneous values, no windowed maximum: e.g. queue usage must disappear as soon as the work is done.
+        // Estimate deadline is present only in metrics persisted by Hive itself.
+        ResourceValues.NamedResources.Set(resource.GetName(), resource.GetValue(), resource.GetTransferable(),
+            TInstant::MilliSeconds(resource.GetEstimateDeadline()));
+        namedEstimatesLoaded |= resource.HasEstimateDeadline();
+        if (resource.GetValue() != 0) {
+            Hive.RegisterNamedResource(resource.GetName());
+        }
+    }
+    ResourceValues.NamedResources.DropExpiredEstimates(now);
+    if (namedEstimatesLoaded) {
+        if (TInstant deadline = ResourceValues.NamedResources.GetEarliestEstimateDeadline()) {
+            Hive.ScheduleNamedResourceEstimatesCheck(GetFullTabletId(), deadline);
+        }
     }
     i64 counterBefore = ResourceValues.Counter;
     ActualizeCounter();
     i64 counterAfter = ResourceValues.Counter;
     const auto& after = ResourceValues;
+    if (groupsChanged || before.CPU != after.CPU || before.Memory != after.Memory
+            || before.Network != after.Network || before.Storage != after.Storage
+            || before.ReadThroughput != after.ReadThroughput
+            || before.WriteThroughput != after.WriteThroughput
+            || before.ReadIops != after.ReadIops || before.WriteIops != after.WriteIops
+            || before.NamedResources != after.NamedResources) {
+        MarkProtoMetricsDirty();
+    }
     if (Node != nullptr) {
         if (IsResourceDrainingState(VolatileState)) {
             Node->UpdateResourceValues(this, before, after);
@@ -487,6 +577,37 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
             }
         }
     }
+}
+
+void TTabletInfo::CarryOverNamedResources() {
+    if (ResourceValues.NamedResources.Empty()) {
+        return;
+    }
+    auto before = ResourceValues;
+    const TInstant deadline = TActivationContext::Now() + NAMED_RESOURCE_ESTIMATE_TIMEOUT;
+    if (!ResourceValues.NamedResources.CarryOverAsEstimate(deadline)) {
+        return;
+    }
+    MarkProtoMetricsDirty();
+    if (Node != nullptr && IsResourceDrainingState(VolatileState)) {
+        Node->UpdateResourceValues(this, before, ResourceValues);
+    }
+    Hive.EnqueueUpdateMetrics(this);
+    if (!ResourceValues.NamedResources.Empty()) {
+        Hive.ScheduleNamedResourceEstimatesCheck(GetFullTabletId(), deadline);
+    }
+}
+
+void TTabletInfo::DropExpiredNamedResourceEstimates() {
+    auto before = ResourceValues;
+    if (!ResourceValues.NamedResources.DropExpiredEstimates(TActivationContext::Now())) {
+        return;
+    }
+    MarkProtoMetricsDirty();
+    if (Node != nullptr && IsResourceDrainingState(VolatileState)) {
+        Node->UpdateResourceValues(this, before, ResourceValues);
+    }
+    Hive.EnqueueUpdateMetrics(this);
 }
 
 TResourceRawValues TTabletInfo::GetResourceCurrentValues() const {
@@ -556,6 +677,7 @@ void TTabletInfo::FilterRawValues(TResourceNormalizedValues& values) const {
 }
 
 void TTabletInfo::ActualizeCounter() {
+    // Counter is recomputed on load and does not require its own checkpoint.
     ResourceValues.Counter = GetCounterValue();
 }
 
@@ -565,9 +687,9 @@ const TNodeFilter& TTabletInfo::GetNodeFilter() const {
 
 bool TTabletInfo::InitiateStart(TNodeInfo* node) {
     if (BecomeStarting(node->Id, EHiveEventReason::BootQueue)) {
+        CarryOverNamedResources();
         PostponedStart = {};
-        TFullTabletId tabletId = GetFullTabletId();
-        Hive.ExecuteStartTablet(tabletId, node->Local, tabletId.first, false);
+        Hive.ExecuteStartTablet(GetFullTabletId(), node->Local);
         return true;
     }
     return false;

@@ -1,0 +1,33 @@
+from .message_pb2 import (
+    BatchOperationCancelActivities,
+    BatchOperationCancellation,
+    BatchOperationDeleteActivities,
+    BatchOperationDeletion,
+    BatchOperationInfo,
+    BatchOperationReset,
+    BatchOperationResetActivities,
+    BatchOperationSignal,
+    BatchOperationTerminateActivities,
+    BatchOperationTermination,
+    BatchOperationTriggerWorkflowRule,
+    BatchOperationUnpauseActivities,
+    BatchOperationUpdateActivityOptions,
+    BatchOperationUpdateWorkflowExecutionOptions,
+)
+
+__all__ = [
+    "BatchOperationCancelActivities",
+    "BatchOperationCancellation",
+    "BatchOperationDeleteActivities",
+    "BatchOperationDeletion",
+    "BatchOperationInfo",
+    "BatchOperationReset",
+    "BatchOperationResetActivities",
+    "BatchOperationSignal",
+    "BatchOperationTerminateActivities",
+    "BatchOperationTermination",
+    "BatchOperationTriggerWorkflowRule",
+    "BatchOperationUnpauseActivities",
+    "BatchOperationUpdateActivityOptions",
+    "BatchOperationUpdateWorkflowExecutionOptions",
+]

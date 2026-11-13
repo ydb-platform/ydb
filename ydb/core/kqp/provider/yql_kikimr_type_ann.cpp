@@ -521,11 +521,11 @@ namespace {
         const TExprBase& defaultExpr, TPositionHandle pos, const TString& name, const TKikimrTableDescription* table, TExprContext& ctx,
         const TTypeAnnotationContext& typesCtx, std::function<void(TExprNode::TPtr)> onRepeat, const bool columnNotNull)
     {
-        if (!defaultType) {
+        if (!defaultType || defaultExpr.Maybe<TCoNull>().IsValid()) {
             return std::nullopt;
         }
 
-        if (defaultType->HasNull() || IsPgNullExprNode(defaultExpr)) {
+        if (!IsYqlNullExprNode(defaultExpr) && (defaultType->HasNull() || IsPgNullExprNode(defaultExpr))) {
             if (columnNotNull) {
                 if (table) {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
@@ -535,19 +535,6 @@ namespace {
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Default expr " << name
                         << " is nullable or optional, but column has not null constraint."));
-                }
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (defaultExpr.Maybe<TCoNull>().IsValid()) {
-                if (table) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                        << " Column: \"" << name
-                        << "\". Default expr with null is not supported. Use DROP DEFAULT to replace the default value by null."));
-                } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                        << "Default expr " << name << " is null, but default expr with null is not supported. Try to set the column without DEFAULT clause instead."));
                 }
                 return IGraphTransformer::TStatus::Error;
             }
@@ -873,6 +860,12 @@ namespace {
                     << " column is already set: "
                     << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
                 return false;
+            }
+
+            if (IsYqlNullExprNode(constrValue)) {
+                columnMeta.DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL;
+                columnMeta.DefaultFromLiteral.Clear();
+                return true;
             }
 
             columnMeta.SetDefaultFromLiteral();
@@ -1597,6 +1590,10 @@ private:
                         return TStatus(TStatus::Repeat, true);
                     }
                 }
+            }
+
+            if (columnMeta.DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL) {
+                columnMeta.DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
             }
 
             if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
@@ -2496,13 +2493,6 @@ private:
                         }
 
                         if (column) {
-                            if (!column->IsDefaultKindDefined()) {
-                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                    << " Column: \"" << name
-                                    << "\" has no default to drop"));
-                                return TStatus::Error;
-                            }
                             if (column->IsDefaultFromSequence()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
                                     << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
@@ -2935,6 +2925,7 @@ private:
                 "consistency_level",
                 "commit_interval",
                 "initial_scan",
+                "availability_period",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
             return settings;
@@ -3076,11 +3067,41 @@ private:
     }
 
     virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext& ctx) override {
-        // there is will be checking on feature flag
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
 
         if (!node.TablePath().Value()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.TablePath().Pos()), "TablePath can't be empty."));
+            return TStatus::Error;
+        }
+
+        bool unsafe = false;
+        for (const auto& setting : node.Settings()) {
+            const auto name = setting.Name().Value();
+            if (name != "UNSAFE") {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown TRUNCATE TABLE setting: " << name));
+                return TStatus::Error;
+            }
+
+            // The grammar only admits a bool literal here, so this cannot be anything else.
+            unsafe = setting.Value().Cast<TCoBool>().Literal().Value() == "true";
+        }
+
+        if (unsafe && !SessionCtx->Config().FeatureFlags.GetEnableUnsafeTruncateTable()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                "TRUNCATE TABLE ... WITH (unsafe = true) is disabled. Please contact your system administrator to enable it"));
+            return TStatus::Error;
+        }
+
+        if (unsafe && !SessionCtx->Config().EnableUnsafeTruncateTable.Get().GetOrElse(false)) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                "TRUNCATE TABLE ... WITH (unsafe = true) requires PRAGMA kikimr.EnableUnsafeTruncateTable=\"true\" in the query"));
+            return TStatus::Error;
+        }
+
+        if (unsafe && !SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()),
+            TString(node.TablePath().Value()), node.Pos(), ctx))
+        {
             return TStatus::Error;
         }
 

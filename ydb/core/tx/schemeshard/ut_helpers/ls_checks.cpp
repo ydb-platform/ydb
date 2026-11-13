@@ -963,8 +963,12 @@ TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
 TCheckFunc SpecializedIndexDescription(const TString& proto) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         switch (record.GetPathDescription().GetTableIndex().GetSpecializedIndexDescriptionCase()) {
-            case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription: {
-                auto actual = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
+            case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription:
+            case NKikimrSchemeOp::TIndexDescription::kHnswIndexDescription: {
+                const auto& index = record.GetPathDescription().GetTableIndex();
+                auto actual = index.HasHnswIndexDescription()
+                    ? index.GetHnswIndexDescription().GetSettings()
+                    : index.GetVectorIndexKmeansTreeDescription().GetSettings();
                 Ydb::Table::KMeansTreeSettings expected;
                 UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(proto, &expected));
                 UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
@@ -1100,6 +1104,18 @@ TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed) {
         const auto& scanProgress = record.GetPathDescription().GetCdcStreamDescription().GetScanProgress();
         UNIT_ASSERT_VALUES_EQUAL(total, scanProgress.GetShardsTotal());
         UNIT_ASSERT_VALUES_EQUAL(completed, scanProgress.GetShardsCompleted());
+    };
+}
+
+TCheckFunc StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatMode mode) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetHeartbeatMode(), mode);
+    };
+}
+
+TCheckFunc StreamHasAggregatorTabletId(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().HasAggregatorTabletId(), value);
     };
 }
 

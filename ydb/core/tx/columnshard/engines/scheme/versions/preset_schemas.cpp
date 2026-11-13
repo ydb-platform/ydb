@@ -20,7 +20,7 @@ TVersionedPresetSchemas::TVersionedPresetSchemas(const ui64 defaultPresetId, con
         AFL_VERIFY(!!obj);
         RegisterPreset(obj->GetPresetId());
         MutableVersionedIndex(obj->GetPresetId()).AddIndex(TSnapshot::Zero(),
-            SchemaObjectsCache->UpsertIndexInfo(obj->GetIndexInfo(storagesManager, SchemaObjectsCache)));
+            SchemaObjectsCache->GetOrInsertIndexInfo(obj->GetIndexInfo(storagesManager, SchemaObjectsCache)));
     }
 }
 

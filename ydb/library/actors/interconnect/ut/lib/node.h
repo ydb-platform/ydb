@@ -19,6 +19,7 @@
 
 #include <util/string/cast.h>
 #include <util/system/env.h>
+#include <util/system/sanitizers.h>
 
 #include "tls/tls.h"
 
@@ -64,7 +65,8 @@ public:
         common->ClusterUUID = "cluster";
         common->AcceptUUID = {common->ClusterUUID};
         common->TechnicalSelfHostName = address;
-        common->Settings.Handshake = TDuration::Seconds(1);
+        common->Settings.Handshake = NSan::PlainOrUnderSanitizer(
+            TDuration::Seconds(1), TDuration::Seconds(15));
         common->Settings.DeadPeer = deadPeerTimeout;
         common->Settings.CloseOnIdle = TDuration::Minutes(1);
         common->Settings.SendBufferDieLimitInMB = 512;
@@ -138,7 +140,7 @@ public:
             TMailboxType::ReadAsFilled, 0));
         setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
             TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
-                CreateRdmaRuntimeParams(1024, common->Settings.EnableRdmaSendReceive), rdmaCqMode, nullptr),
+                CreateRdmaRuntimeParams(1024, common->Settings.EnableRdmaSendReceive, 8, 0), rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");

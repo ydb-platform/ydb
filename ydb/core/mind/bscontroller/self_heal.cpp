@@ -1115,6 +1115,9 @@ namespace NKikimr::NBsController {
             }
         }
         FillInSelfHealGroups(*ev, nullptr);
+        // the snapshot is as fresh as the last config transaction; with a smaller number self-heal would take the groups
+        // it has just changed for not updated yet, and would not touch them until their next change
+        ev->ConfigTxSeqNo = NextConfigTxSeqNo - 1;
         ev->GroupLayoutSanitizerEnabled = GroupLayoutSanitizerEnabled;
         ev->AllowMultipleRealmsOccupation = AllowMultipleRealmsOccupation;
         ev->DonorMode = DonorMode;
@@ -1124,7 +1127,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::FillInSelfHealGroups(TEvControllerUpdateSelfHealInfo& msg, TConfigState *state) {
-        THashMap<TBoxStoragePoolId, std::shared_ptr<TGroupGeometryInfo>> geomCache;
+        std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, std::shared_ptr<TGroupGeometryInfo>> geomCache;
 
         for (auto& [groupId, group] : msg.GroupsToUpdate) {
             if (!group) {
@@ -1137,7 +1140,8 @@ namespace NKikimr::NBsController {
             group->Generation = groupInfo->Generation;
             group->Type = TBlobStorageGroupType(groupInfo->ErasureSpecies);
 
-            if (auto it = geomCache.find(groupInfo->StoragePoolId); it != geomCache.end()) {
+            const auto geometryKey = std::make_pair(groupInfo->StoragePoolId, groupInfo->BridgePileId);
+            if (auto it = geomCache.find(geometryKey); it != geomCache.end()) {
                 group->Geometry = it->second;
             } else {
                 const TMap<TBoxStoragePoolId, TStoragePoolInfo>& storagePools = state
@@ -1145,8 +1149,11 @@ namespace NKikimr::NBsController {
                     : StoragePools;
                 const auto spIt = storagePools.find(groupInfo->StoragePoolId);
                 Y_ABORT_UNLESS(spIt != storagePools.end());
-                group->Geometry = std::make_unique<TGroupGeometryInfo>(group->Type, spIt->second.GetGroupGeometry());
-                geomCache.emplace(groupInfo->StoragePoolId, group->Geometry);
+                group->Geometry = std::make_unique<TGroupGeometryInfo>(
+                    TGroupGeometryInfo::FromStoragePool(group->Type, state
+                        ? state->GetStoragePoolForPile(groupInfo->StoragePoolId, groupInfo->BridgePileId)
+                        : GetStoragePoolForPile(groupInfo->StoragePoolId, groupInfo->BridgePileId)));
+                geomCache.emplace(geometryKey, group->Geometry);
             }
 
             for (const TVSlotInfo *slot : groupInfo->VDisksInGroup) {
@@ -1175,7 +1182,6 @@ namespace NKikimr::NBsController {
 
         if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
             const auto& ss = bsConfig.GetServiceSet();
-            const auto& smConfig = StorageConfig->GetSelfManagementConfig();
             for (const auto& group : ss.GetGroups()) {
                 if (!group.RingsSize()) {
                     continue; // bridged group probably
@@ -1185,10 +1191,11 @@ namespace NKikimr::NBsController {
                 prevStaticGroups.erase(groupId);
                 auto& content = sh->GroupsToUpdate[groupId];
                 const TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies()));
+                const auto pileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
                 content = TEvControllerUpdateSelfHealInfo::TGroupContent{
                     .Generation = group.GetGroupGeneration(),
                     .Type = gtype,
-                    .Geometry = std::make_shared<TGroupGeometryInfo>(gtype, smConfig.GetGeometry()),
+                    .Geometry = std::make_shared<TGroupGeometryInfo>(GetStaticGroupGeometry(gtype, pileId)),
                 };
 
                 const TVDiskID vdiskId(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), group.GetGroupGeneration(), 0, 0, 0);

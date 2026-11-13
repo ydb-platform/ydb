@@ -13,7 +13,6 @@
 #include <ydb/core/kqp/compute_actor/kqp_pure_compute_actor.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/common/control.h>
-#include <ydb/core/fq/libs/checkpointing/events/events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
@@ -145,9 +144,9 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , ArrayBufferMinFillPercentage(args.ArrayBufferMinFillPercentage)
     , BufferPageAllocSize(args.BufferPageAllocSize)
     , Query(args.Query)
-    , CheckpointCoordinatorId(args.CheckpointCoordinator)
+    , EnableCheckpoints(args.EnableCheckpoints)
     , EnableWatermarks(args.EnableWatermarks)
-    , StreamingQueryNodesManagerId(args.StreamingQueryNodesManager)
+    , StreamingQuery(args.StreamingQuery)
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -326,6 +325,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetUseBatchPool(UserRequestContext->UseBatchPool);
 
     if (UserRequestContext->PoolConfig.has_value()) {
+        // Only for the nodes without FeatureFlags.EnableComputeSchedulerMemory (or of the older versions) - otherwise the
+        // memory limit of the pool is taken by the compute scheduler from the pool config
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode);
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
@@ -571,6 +572,19 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
     auto& task = TasksGraph.GetTask(taskId);
     auto* taskDesc = SerializeTaskForExecution(task);
 
+    if (!QueryQuotaManager && NScheduler::IsMemoryScheduled()) {
+        // the pool limits the memory in the scheduler, not in the resource manager
+        QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(
+            ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, /* memoryPoolPercent */ 100.0, Database,
+            CaFactory_->GetVerboseMemoryLimitException()),
+            NScheduler::CreateSchedulableMemory(
+                Query,
+                UserRequestContext->DatabaseId,
+                UserRequestContext->PoolId,
+                CaFactory_->ElasticMemoryPercent),
+            CaFactory_->TaskMemory.load());
+    }
+
     if (!QueryQuotaManager) {
         double memoryPoolPercent = 100;
         if (UserRequestContext->PoolConfig.has_value()) {
@@ -593,9 +607,11 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
     taskDesc->SetDqChannelVersion(TasksGraph.GetMeta().DqChannelVersion);
 
     auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
+    const auto elasticMemory = EstimateTaskElasticMemory(*taskDesc, initialMemoryLimit,
+        CaFactory_->MkqlLightProgramMemoryLimit.load(), CaFactory_->MkqlHeavyProgramMemoryLimit.load());
 
     // the task starts with it and returns it when its compute actor terminates
-    auto rmResult = QueryQuotaManager->AllocateTasks(1, initialMemoryLimit);
+    auto rmResult = QueryQuotaManager->AllocateTasks(1, initialMemoryLimit, elasticMemory);
 
     if (!rmResult) {
         return MakeActorStartFailureError(ExecuterId, rmResult.GetFailReason(), NYql::NDqProto::StatusIds::OVERLOADED);
@@ -631,6 +647,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
             .BlockTrackingMode = BlockTrackingMode,
             .QueryQuotaManager = QueryQuotaManager,
             .InitialMemoryLimit = initialMemoryLimit,
+            .ElasticMemory = elasticMemory,
             .UserToken = UserToken,
             .Database = Database,
             .Query = Query,
@@ -644,7 +661,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
             {"ctx", *UserRequestContext},
             {"taskId", taskId},
             {"message", message});
-        QueryQuotaManager->FreeTasks(1, initialMemoryLimit);
+        QueryQuotaManager->FreeTasks(1, initialMemoryLimit, elasticMemory);
         return MakeActorStartFailureError(ExecuterId, message, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
     }
 
@@ -741,7 +758,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 
 void TKqpPlanner::PrepareCheckpoints() {
     const auto isStreamingQuery = UserRequestContext && UserRequestContext->IsStreamingQuery;
-    const auto enableCheckpoints = isStreamingQuery && static_cast<bool>(CheckpointCoordinatorId);
+    const auto enableCheckpoints = isStreamingQuery && EnableCheckpoints;
     TasksGraph.BuildCheckpointingAndWatermarksMode(enableCheckpoints, EnableWatermarks);
 
     if (!enableCheckpoints) {
@@ -749,7 +766,6 @@ void TKqpPlanner::PrepareCheckpoints() {
     }
 
     bool hasStreamingIngress = false;
-    auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
@@ -767,7 +783,7 @@ void TKqpPlanner::PrepareCheckpoints() {
         {"hasStreamingIngress", hasStreamingIngress});
 
     if (!hasStreamingIngress) {
-        CheckpointCoordinatorId = TActorId{};
+        EnableCheckpoints = false;
         return;
     }
 
@@ -804,7 +820,7 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
             it->second.Set(state->GetStats());
         }
 
-        if (PendingComputeTasks.empty() && (CheckpointCoordinatorId || StreamingQueryNodesManagerId)) {
+        if (PendingComputeTasks.empty() && StreamingQuery) {
             SendReadyState();
         }
         return true;
@@ -1024,7 +1040,7 @@ void TKqpPlanner::SendReadyState() {
         return;
     }
 
-    auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+    TVector<IKqpStreamingQueryController::TTaskInfo> tasks;
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         if (!dqTask.ComputeActorId) {
             YDB_LOG_WARN("Skip sending TEvReadyState: task has no compute actor id (node disconnected or task not started)",
@@ -1036,30 +1052,21 @@ void TKqpPlanner::SendReadyState() {
 
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-        auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
+        tasks.push_back({
             .Id = dqTask.Id,
             .IsCheckpointingEnabled = NDq::GetTaskCheckpointingMode(settings) != NDqProto::CHECKPOINTING_MODE_DISABLED,
             .IsIngress = NDq::IsIngress(settings),
             .IsEgress = NDq::IsEgress(settings),
             .HasState = NDq::HasState(settings),
             .ActorId = dqTask.ComputeActorId,
-        };
-        event->Tasks.emplace_back(std::move(task));
+        });
     }
 
-    YDB_LOG_INFO("Sending TEvReadyState",
+    YDB_LOG_INFO("All compute actors started, notifying streaming query",
         {"txId", TxId},
         {"ctx", *UserRequestContext},
-        {"checkpointCoordinatorId", CheckpointCoordinatorId},
-        {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId});
-    if (StreamingQueryNodesManagerId) {
-        auto managerEvent = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
-        managerEvent->Tasks = event->Tasks;
-        TlsActivationContext->Send(std::make_unique<IEventHandle>(StreamingQueryNodesManagerId, ExecuterId, managerEvent.release()));
-    }
-    if (CheckpointCoordinatorId) {
-        TlsActivationContext->Send(std::make_unique<IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
-    }
+        {"enableCheckpoints", EnableCheckpoints});
+    StreamingQuery->OnComputeActorsStarted(std::move(tasks), EnableCheckpoints);
     ReadyStateSent = true;
 }
 

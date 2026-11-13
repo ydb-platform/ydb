@@ -45,6 +45,7 @@ TTaskWorkPool::TTaskWorkPool(ui32 maxQueryConcurrency, TWakeup wakeup, NMonitori
         WorkerCpuUs = group->GetCounter("WorkerCpuUs", true);
         QuotaRejected = group->GetCounter("QuotaRejected", true);
         LeaseRetries = group->GetCounter("LeaseRetries", true);
+        InlineCompletions = group->GetCounter("InlineCompletions", true);
         SelectionsCount = group->GetCounter("Selections", true);
         SelectionCpuUs = group->GetCounter("SelectionCpuUs", true);
         SelectionLockWaitUs = group->GetCounter("SelectionLockWaitUs", true);
@@ -468,6 +469,9 @@ private:
             if (result.RetryAfter) {
                 Schedule(*result.RetryAfter, new TEvWorkerRetry(claim->Task, claim->Task->Query));
             }
+            if (result.CompleteInline) {
+                Pool->RecordInlineCompletion();
+            }
             claim->Execution->OnSliceFinished(std::move(result));
         } while (TMonotonic::Now() < deadline);
         Send(SelfId(), new TEvWorkerWakeup());
@@ -480,6 +484,14 @@ private:
 void StartDqComputeWorkers(NActors::TActorSystem* actorSystem, ui32 poolId,
     const std::shared_ptr<TTaskWorkPool>& pool, const TTaskSchedulerSettings& settings)
 {
+    // Workers run in a dedicated executor pool named "DqWorkers" when the actor system has one,
+    // so their activations do not queue behind compute-actor mailboxes; otherwise in `poolId`.
+    for (auto* executorPool : actorSystem->GetBasicExecutorPools()) {
+        if (executorPool && executorPool->GetName() == "DqWorkers") {
+            poolId = executorPool->PoolId;
+            break;
+        }
+    }
     for (ui32 i = 0; i < settings.Shards * settings.MaxInFlightPerShard; ++i) {
         actorSystem->Register(new TComputeWorker(pool, settings), NActors::TMailboxType::HTSwap, poolId);
     }

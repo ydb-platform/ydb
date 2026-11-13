@@ -70,10 +70,40 @@ TTaskSliceResult TDqTaskExecution::RunSlice(const TTaskSliceBudget& budget) {
         result.Error = std::current_exception();
     }
     result.Progress = Runner->LastRunProgress;
+    // Still under the lease: decide whether the endpoint has anything to do for this slice.
+    // Finish, errors, quota and changed output/peer state (the endpoint clears the flag on
+    // every incoming event) keep going through the endpoint; so does every N-th slice, for
+    // periodic stats and memory shrinking.
+    constexpr ui32 maxStreak = 64;
+    if (InlineAllowed.load(std::memory_order_acquire) && !result.Error
+        && !result.Progress.QuotaRejected && !result.RetryAfter
+        && (result.Status == static_cast<ui32>(ERunStatus::PendingInput) || result.Status == static_cast<ui32>(ERunStatus::PendingOutput))
+        && InlineEpoch && InlineEpoch->load(std::memory_order_acquire) == InlineCheckedEpoch
+        && InlineStreak < maxStreak)
+    {
+        ++InlineStreak;
+        result.CompleteInline = true;
+    } else {
+        InlineStreak = 0;
+        InlineAllowed.store(false, std::memory_order_release);
+    }
     return result;
 }
 
+void TDqTaskExecution::AllowInlineCompletion(std::shared_ptr<const std::atomic<ui64>> epoch, ui64 checkedEpoch) {
+    InlineEpoch = std::move(epoch);
+    InlineCheckedEpoch = checkedEpoch;
+    InlineAllowed.store(true, std::memory_order_release);
+}
+
 void TDqTaskExecution::OnSliceFinished(TTaskSliceResult result) {
+    if (result.CompleteInline) {
+        // Same as the endpoint's CompleteWorkerSlice for a non-final slice with nothing
+        // to drain: only the scheduling handle has to learn the outcome. A concurrent
+        // retirement cancels the handle first, which makes Complete a no-op.
+        Task->Complete(result.Progress);
+        return;
+    }
     ActorSystem->Send(Endpoint, new TEvTaskSliceFinished(shared_from_this(), std::move(result)));
 }
 

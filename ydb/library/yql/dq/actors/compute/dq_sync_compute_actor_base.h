@@ -59,6 +59,7 @@ protected:
             this->MemoryQuota->TryShrinkMemory();
         }
         TBase::ReportStats();
+        this->MaybeAllowInlineCompletion();
     }
 
     void DoExecuteImpl() override{

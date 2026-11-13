@@ -22,6 +22,10 @@ public:
     void Retire(bool completed); // endpoint lease must be held
     TTaskSliceResult RunSlice(const TTaskSliceBudget& budget) override;
     void OnSliceFinished(TTaskSliceResult result) override;
+    // Endpoint lease must be held. Allows workers to complete the following slices
+    // without the endpoint while the output finish epoch stays at `checkedEpoch`.
+    void AllowInlineCompletion(std::shared_ptr<const std::atomic<ui64>> epoch, ui64 checkedEpoch);
+    void DisallowInlineCompletion() { InlineAllowed.store(false, std::memory_order_release); }
 
 private:
     TIntrusivePtr<IDqTaskRunner> Runner;
@@ -34,6 +38,10 @@ private:
     const NActors::TActorId Endpoint;
     const std::shared_ptr<std::atomic<bool>> Available = std::make_shared<std::atomic<bool>>(true);
     std::atomic<bool> EndpointWaiting = false;
+    std::atomic<bool> InlineAllowed = false;
+    std::shared_ptr<const std::atomic<ui64>> InlineEpoch; // written by the endpoint under the lease
+    ui64 InlineCheckedEpoch = 0;
+    ui32 InlineStreak = 0; // touched under the lease only
 };
 
 } // namespace NYql::NDq

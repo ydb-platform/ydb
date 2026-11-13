@@ -2206,6 +2206,10 @@ public:
         RewriteExecutionPlan(plan);
     }
 
+    bool HasKeysInfo() const override {
+        return ValidationInfo.Loaded;
+    }
+
     const NMiniKQL::IEngineFlat::TValidationInfo& GetKeysInfo() const override {
         return ValidationInfo;
     }
@@ -3514,6 +3518,7 @@ class TDataShard::TTxReadViaPipeline : public NTabletFlatExecutor::TTransactionB
 
     TOperation::TPtr Op;
     TVector<EExecutionUnitKind> CompleteList;
+    bool KeyedOperation = false;
     bool WaitComplete = false;
 
 public:
@@ -3523,6 +3528,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_READ; }
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_TRACE_CTX(ctx, "TTxReadViaPipeline execute",
@@ -3769,6 +3775,7 @@ public:
         Y_ENSURE(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
+        KeyedOperation = KeyedOperation || Op->HasUserTableKeys();
 
         YDB_LOG_TRACE_CTX(ctx, "TTxReadViaPipeline Execute",
             {"txType", GetTxType()},
@@ -3867,6 +3874,7 @@ class TDataShard::TTxReadContinue : public NTabletFlatExecutor::TTransactionBase
     TShortTableInfo TableInfo;
     std::unique_ptr<TReader> Reader;
     bool DelayedResult = false;
+    bool KeyedOperation = false;
 
 public:
     TTxReadContinue(TDataShard* ds, ui64 localReadId, NWilson::TTraceId &&traceId)
@@ -3876,6 +3884,8 @@ public:
 
     // note that intentionally the same as TEvRead
     TTxType GetTxType() const override { return TXTYPE_READ; }
+
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         // note that we don't need to check shard state here:
@@ -3903,6 +3913,9 @@ public:
         }
 
         auto& state = *it->second;
+
+        // Same as in TReadOperation: reads of system tables have no keys
+        KeyedOperation = state.PathId.OwnerId != Self->TabletID();
 
         if (state.IsExhausted()) {
             // iterator quota reduced and exhausted while ReadContinue was inflight

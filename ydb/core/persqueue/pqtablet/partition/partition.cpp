@@ -752,8 +752,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
     meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
     if (!LastEmittedHeartbeat.IsMin()) {
-        meta.SetLastEmittedHeartbeatStep(LastEmittedHeartbeat.Step);
-        meta.SetLastEmittedHeartbeatTxId(LastEmittedHeartbeat.TxId);
+        LastEmittedHeartbeat.ToProto(meta.MutableLastEmittedHeartbeat());
     }
 
     if (IsSupportive()) {

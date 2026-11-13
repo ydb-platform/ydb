@@ -907,9 +907,9 @@ void TPartitionFixture::WaitCmdWriteWithLastEmittedHeartbeat(TMaybe<TRowVersion>
         } else if (key[0] == TKeyPrefix::TypeMeta) {
             NKikimrPQ::TPartitionMeta meta;
             UNIT_ASSERT(meta.ParseFromString(cmd.GetValue()));
-            UNIT_ASSERT_VALUES_EQUAL(meta.HasLastEmittedHeartbeatStep(), version.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(meta.HasLastEmittedHeartbeat(), version.Defined());
             if (version) {
-                UNIT_ASSERT_VALUES_EQUAL(TRowVersion(meta.GetLastEmittedHeartbeatStep(), meta.GetLastEmittedHeartbeatTxId()), *version);
+                UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(meta.GetLastEmittedHeartbeat()), *version);
             }
             metaFound = true;
         }
@@ -1096,8 +1096,7 @@ void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> 
             meta.SetMirroredOffset(*mirroredOffset);
         }
         if (lastEmittedHeartbeat.Defined()) {
-            meta.SetLastEmittedHeartbeatStep(lastEmittedHeartbeat->Step);
-            meta.SetLastEmittedHeartbeatTxId(lastEmittedHeartbeat->TxId);
+            lastEmittedHeartbeat->ToProto(meta.MutableLastEmittedHeartbeat());
         }
 
         TString out;
@@ -3403,7 +3402,7 @@ Y_UNIT_TEST_F(EmitHeartbeatAfterRestart, TPartitionFixture)
         .LastEmittedHeartbeat = TRowVersion(100, 0)});
 
     SendEmitHeartbeat(1, TRowVersion(90, 0));
-    WaitEmitHeartbeatResult(1, TRowVersion(90, 0));
+    WaitEmitHeartbeatResult(1, TRowVersion(100, 0));
     SendEmitHeartbeat(2, TRowVersion(100, 0));
     WaitEmitHeartbeatResult(2, TRowVersion(100, 0));
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 10);

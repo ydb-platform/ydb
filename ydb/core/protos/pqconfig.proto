@@ -2,6 +2,7 @@ import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 
 import "ydb/public/api/protos/annotations/sensitive.proto";
 
+import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_limits.proto";
@@ -33,8 +34,7 @@ message TPartitionMeta {
     optional uint64 EndWriteTimestamp = 5;
     optional uint64 FirstUncompactedOffset = 6; //deprecated
     optional uint64 NextMessageIdDeduplicatorWAL = 7 [default = 1];
-    optional uint64 LastEmittedHeartbeatStep = 9;
-    optional uint64 LastEmittedHeartbeatTxId = 10;
+    optional NKikimrProto.TRowVersion LastEmittedHeartbeat = 9;
 }
 
 message TPartitionTxMeta {

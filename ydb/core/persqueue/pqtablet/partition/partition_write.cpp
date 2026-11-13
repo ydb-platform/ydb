@@ -519,7 +519,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             ReplyOk(ctx, response.GetCookie(), response.Span);
         } else if (response.IsEmitHeartbeat()) {
-            const auto& version = response.GetEmitHeartbeat().Heartbeat.Version;
+            const auto& version = response.GetEmitHeartbeat().EmittedVersion;
             auto reply = MakeReplyOk(response.GetCookie(), false);
             auto* result = reply->Response->MutablePartitionResponse()->MutableCmdEmitHeartbeatResult();
             result->SetStep(version.Step);
@@ -1181,9 +1181,12 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TEmitHeartbeatMsg& msg,
 }
 
 void TPartition::ExecRequest(TEmitHeartbeatMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
-    if (msg.Heartbeat.Version > LastEmittedHeartbeat) {
+    const auto& partitionedBlob = BlobEncoder.PartitionedBlob;
+    const bool partitionedBlobInProgress = partitionedBlob.IsInited() && !partitionedBlob.IsComplete();
+    if (msg.Heartbeat.Version > LastEmittedHeartbeat && !partitionedBlobInProgress) {
         EmitHeartbeat(msg.Heartbeat, parameters, request);
     }
+    msg.EmittedVersion = LastEmittedHeartbeat;
 }
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,

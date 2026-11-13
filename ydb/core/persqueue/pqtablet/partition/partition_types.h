@@ -66,6 +66,7 @@ struct TSplitMessageGroupMsg {
 struct TEmitHeartbeatMsg {
     ui64 Cookie;
     THeartbeat Heartbeat;
+    TRowVersion EmittedVersion;
 
     explicit TEmitHeartbeatMsg(TEvPQ::TEvEmitHeartbeat& ev)
         : Cookie(ev.Cookie)

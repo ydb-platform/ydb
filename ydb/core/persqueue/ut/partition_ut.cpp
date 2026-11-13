@@ -172,6 +172,10 @@ public:
         return partition.PendingReplicationData.has_value();
     }
 
+    static bool IsKVWriteInProgress(const TPartition& partition) {
+        return partition.KVWriteInProgress;
+    }
+
 private:
     TInitMetaStep* MetaStep;
 };
@@ -4126,8 +4130,14 @@ Y_UNIT_TEST_F(VersionedReplicationDataDeferredWatermarkRejectsOffsetBeforeFinalR
     WaitForReplicationDataPersisted(*partition);
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetMirrorerActor(*partition), mirrorer);
 
-    PersistReplicationData(*partition, MakeVersionedReplicationData("first", 0, 1, 0), mirrorer, {
-        .MetaStartOffset = 10, .MetaEndOffset = 10, .MetaMirroredOffset = 10, .UserInfoCount = 0});
+    // The held watermark must advance the empty range without another replication payload.
+    WaitOffsetCmdWrite({.MetaStartOffset = 10, .MetaEndOffset = 10,
+        .MetaMirroredOffset = 10, .UserInfoCount = 0});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    Ctx->Runtime->WaitFor("autonomous watermark KV completion", [&] {
+        return !TPartitionTestWrapper::IsKVWriteInProgress(*partition);
+    }, TDuration::Seconds(5));
+    IgnoreReplicationData(*partition, MakeVersionedReplicationData("first", 0, 1, 0), mirrorer);
     ExpectConsumerState(*partition, 0, 0);
 }
 

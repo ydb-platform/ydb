@@ -540,7 +540,7 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
 
 void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
     const bool versioned = Config.GetMirrorVersionedConsumerOffsets();
-    const ui64 availableOffset = Max(EndOffset, ConfirmedEndOffset);
+    const ui64 availableOffset = versioned ? ConfirmedEndOffset : Max(EndOffset, ConfirmedEndOffset);
     if (!MirroredOffsetToSend
         && (versioned ? VersionedOffsetsByConsumers.empty() : OffsetsByConsumers.empty())) {
         return;

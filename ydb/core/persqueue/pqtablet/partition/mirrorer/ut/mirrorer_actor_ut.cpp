@@ -868,6 +868,7 @@ Y_UNIT_TEST(VersionedReplicationDataWaitsForFullOffsetAndOrdersByRevision) {
     env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 10));
     env.Dispatch();
     env.AckWrite(10);
+    env.SendPersistDone(11);
     env.ExpectVersionedReplicationData(2, {MakeVersionedOffsetEntry("consumer", 11, 7, 4)});
 
     // Ready tuples can be replayed; the destination owns durable deduplication.
@@ -877,9 +878,10 @@ Y_UNIT_TEST(VersionedReplicationDataWaitsForFullOffsetAndOrdersByRevision) {
 }
 
 Y_UNIT_TEST(VersionedReplicationDataSafelySendsMultiplePendingConsumers) {
-    TMirrorerEnv env({.EndOffset = 10, .MirrorVersionedConsumerOffsets = true});
+    TMirrorerEnv env({.EndOffset = 10, .RewindCommitDelaySeconds = 0,
+        .MirrorVersionedConsumerOffsets = true});
     env.Advance(TDuration::Seconds(1));
-    env.StartSession(0, 10, 10);
+    env.StartSession(0, 10, 100);
 
     env.PushVersionedReplicationData(5, 7, 0);
     env.ExpectVersionedReplicationData(1, {MakeVersionedOffsetEntry("consumer", 5, 7, 0)});
@@ -891,8 +893,18 @@ Y_UNIT_TEST(VersionedReplicationDataSafelySendsMultiplePendingConsumers) {
     env.ExpectVersionedReplicationData(2, {
         MakeVersionedOffsetEntry("consumer", 5, 7, 0), MakeVersionedOffsetEntry("eligible", 10, 8, 0)});
 
+    // Committing the source's empty tail does not advance the destination's retained range.
+    env.Factory.Session(0).PushEvent(TReadSessionEvent::TPartitionSessionStatusEvent(
+        env.Factory.Session(0).Partition, 10, 100, 100, TInstant::MilliSeconds(2000)));
+    env.Dispatch();
+    UNIT_ASSERT_VALUES_EQUAL(env.Factory.CommitPromises.size(), 1u);
+    env.Factory.CommitPromises[0].SetValue(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}));
+    env.Dispatch();
+    env.ExpectVersionedReplicationData(3, {});
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->MirroredOffset.GetOrElse(0), 100u);
+
     env.SendPersistDone(11);
-    env.ExpectVersionedReplicationData(3, {MakeVersionedOffsetEntry("future", 11, 9, 0)});
+    env.ExpectVersionedReplicationData(4, {MakeVersionedOffsetEntry("future", 11, 9, 0)});
 }
 
 Y_UNIT_TEST(VersionedReplicationDataKeepsOnlyConfiguredConsumers) {

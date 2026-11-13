@@ -3273,6 +3273,8 @@ void TPartition::RunPersist() {
         if (mirroredOffset.Defined()) {
             BlobEncoder.MirroredOffset = Max(BlobEncoder.MirroredOffset, *mirroredOffset);
         }
+    }
+    if (!KVWriteInProgress && InitDone) {
         haveChanges |= advanceEmptyPartitionToMirroredOffset();
     }
 

@@ -72,6 +72,10 @@ Y_UNIT_TEST_SUITE(WriteSessionsQuoterWithSDK) {
         CheckConcurrentWriteSessions(3, true, 12);
     }
 
+    Y_UNIT_TEST(ConcurrentDirectSessionsWithFiveInitializationsPerSecond) {
+        CheckConcurrentWriteSessions(5, true, 50);
+    }
+
     Y_UNIT_TEST(NonDirectSessionsBypassZeroQuota) {
         CheckConcurrentWriteSessions(0, false, 12);
     }

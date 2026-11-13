@@ -1,6 +1,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/common/common.h>
 #include <ydb/core/sys_view/common/query_metrics_limits.h>
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/sys_view/service/query_interval.h>
@@ -21,7 +22,7 @@ public:
     using TRequest = TEvSysView::TEvGetIntervalMetricsRequest::TPtr;
     using TEntries = TVector<NKikimrSysView::TQueryMetricsEntry>;
 
-    static constexpr TDuration CollectionInterval = TDuration::Seconds(5);
+    const TDuration CollectionInterval;
     const ui64 TabletId = MakeTabletID(false, 1);
     const TString Database = "/Root/Test";
     TTestBasicRuntime Runtime;
@@ -33,8 +34,10 @@ public:
 
     explicit TQueryMetricsEnv(ui32 nodes = 1,
         TInstant start = TInstant::Seconds(1'800'001'800),
-        bool collectHourMetric = true)
-        : Runtime(nodes)
+        bool collectHourMetric = true,
+        const NKikimrConfig::TSysViewConfig& config = SysViewConfigForTests())
+        : CollectionInterval(QueryStatsInterval(config))
+        , Runtime(nodes)
         , NodeMetrics(nodes)
         , IntervalEnd(start)
     {
@@ -48,6 +51,7 @@ public:
         Runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_DEBUG);
         Edge = Runtime.AllocateEdgeActor();
         for (ui32 node = 0; node < nodes; ++node) {
+            Runtime.GetAppData(node).SysViewConfig = config;
             const auto serviceId = MakeSysViewServiceID(Runtime.GetNodeId(node));
             Runtime.Send(new IEventHandle(Runtime.GetLocalServiceId(serviceId, node),
                 Edge, new TEvents::TEvPoison), node, /* viaActorSystem */ true);
@@ -57,7 +61,7 @@ public:
 
         const auto bootstrapper = CreateTestBootstrapper(Runtime,
             CreateTestTabletInfo(TabletId, TTabletTypes::SysViewProcessor),
-            &CreateSysViewProcessorForTests);
+            &CreateSysViewProcessor);
         Runtime.EnableScheduleForActor(bootstrapper);
         TDispatchOptions boot;
         boot.FinalEvents.emplace_back(TEvTablet::EvBoot, 1);
@@ -288,6 +292,33 @@ Y_UNIT_TEST_SUITE(TQueryMetricsProcessorTest) {
             UNIT_ASSERT_VALUES_EQUAL(entries.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(entries[0].GetQueryText(), "surviving candidate");
             UNIT_ASSERT_VALUES_EQUAL(entries[0].GetMetrics().GetCpuTimeUs().GetSum(), 10);
+        }
+    }
+
+    Y_UNIT_TEST(ConfiguredIntervalsSurviveReboot) {
+        // An unset field exercises the production default, not a test factory.
+        for (ui32 seconds : {0, 5, 10}) {
+            NKikimrConfig::TSysViewConfig config;
+            if (seconds) {
+                config.SetQueryStatsIntervalSeconds(seconds);
+            }
+            TQueryMetricsEnv env(1, TInstant::Seconds(1'800'001'800), true, config);
+            env.Add(0, 42, 10, "recurring");
+            env.Collect();
+            env.Reboot();
+            env.NextInterval();
+            env.Add(0, 42, 20, "recurring");
+            env.Collect();
+
+            const auto minutes = env.Read(NKikimrSysView::METRICS_ONE_MINUTE);
+            UNIT_ASSERT_VALUES_EQUAL(minutes.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(
+                minutes[1].GetKey().GetIntervalEndUs() - minutes[0].GetKey().GetIntervalEndUs(),
+                env.CollectionInterval.MicroSeconds());
+            const auto hour = env.Read();
+            UNIT_ASSERT_VALUES_EQUAL(hour.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(hour[0].GetMetrics().GetCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(hour[0].GetMetrics().GetCpuTimeUs().GetSum(), 30);
         }
     }
 

@@ -24,10 +24,10 @@ NMonitoring::TDynamicCounterPtr CreateDetailedCounterGroup(
 
 } // namespace
 
-TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode)
+TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletStorageInfo* info, const NKikimrConfig::TSysViewConfig& config)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-    , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 5 : 60))
+    , TotalInterval(QueryStatsInterval(config))
     , CollectInterval(TotalInterval / 2)
     , ExternalGroup(new ::NMonitoring::TDynamicCounters)
     , LabeledGroup(new ::NMonitoring::TDynamicCounters)

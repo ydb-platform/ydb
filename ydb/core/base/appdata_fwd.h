@@ -93,6 +93,7 @@ namespace NKikimrConfig {
     class TQueryServiceConfig;
     class TBridgeConfig;
     class TStatisticsConfig;
+    class TSysViewConfig;
     class TSystemTabletBackupConfig;
     class TRecoveryShardConfig;
     class TClusterDiagnosticsConfig;
@@ -312,6 +313,7 @@ struct TAppData {
     NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
     NKikimrConfig::TBridgeConfig& BridgeConfig;
     NKikimrConfig::TStatisticsConfig& StatisticsConfig;
+    NKikimrConfig::TSysViewConfig& SysViewConfig;
     TMetricsConfig& MetricsConfig;
     NKikimrConfig::TSystemTabletBackupConfig& SystemTabletBackupConfig;
     NKikimrConfig::TRecoveryShardConfig& RecoveryShardConfig;

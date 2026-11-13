@@ -3243,7 +3243,7 @@ void TSysViewServiceInitializer::InitializeServices(NActors::TActorSystemSetup* 
     // external counters only for dynamic nodes
     bool hasExternalCounters = Config.GetDynamicNodeConfig().HasNodeInfo();
 
-    auto actor = NSysView::CreateSysViewService(std::move(config), hasExternalCounters);
+    auto actor = NSysView::CreateSysViewService(std::move(config), hasExternalCounters, appData->SysViewConfig);
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         NSysView::MakeSysViewServiceID(NodeId),

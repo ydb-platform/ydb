@@ -607,6 +607,7 @@ namespace Tests {
             MERGE_CFG_FROM_APP_CFG(BridgeConfig);
             MERGE_CFG_FROM_SETTINGS(BridgeConfig);
             MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
+            MERGE_CFG_FROM_APP_CFG(SysViewConfig);
             MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
             appData.AuditConfig = Settings->AppConfig->GetAuditConfig();
 #undef MERGE_APP_CFG_FROM

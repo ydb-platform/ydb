@@ -30,7 +30,7 @@ public:
         return NKikimrServices::TActivity::SYSTEM_VIEW_PROCESSOR;
     }
 
-    TSysViewProcessor(const NActors::TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode);
+    TSysViewProcessor(const NActors::TActorId& tablet, TTabletStorageInfo* info, const NKikimrConfig::TSysViewConfig& config);
 
 private:
     using Schema = TProcessorSchema;

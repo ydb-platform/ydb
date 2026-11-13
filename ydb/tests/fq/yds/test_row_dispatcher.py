@@ -305,6 +305,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert_row_dispatcher_predicate(io, query_id, '')
         io.stop(query_id)
 
+    @pytest.mark.parametrize('ydb_cluster', [{'enable_shared_reading_structured_json_parsing': True}], indirect=True)
     def test_nested_structured_types(self, ydb_topics):
         io = ydb_topics("test_nested_structured_types", shared=True)
         create_input_consumer(io)

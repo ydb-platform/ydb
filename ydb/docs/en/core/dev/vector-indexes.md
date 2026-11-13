@@ -213,7 +213,22 @@ Tables with vector indexes currently do not support [TTL](../concepts/ttl.md). C
 
 ## Updating Vector Indexes {#update}
 
-After the index is built, `INSERT`, `UPSERT`, `UPDATE`, and `DELETE` update it synchronously with the main table. A vector search in the same transaction sees earlier writes in that transaction. The following limitations still apply:
+By default, after the index is built, `INSERT`, `UPSERT`, `UPDATE`, and `DELETE` update it synchronously with the main table. A vector search in the same transaction sees earlier writes in that transaction. You can disable this maintenance with `autoupdate=false`.
+
+### Disabling automatic updates {#autoupdate}
+
+Set `autoupdate=false` in `WITH` when creating or rebuilding an index to reduce the load from table writes. This is useful for batch loading when the data can become searchable later, after an [index rebuild](#rebuild). Automatic updates are enabled by default (`true`).
+
+Until the index is rebuilt, searches can miss new rows and return outdated data.
+
+`REBUILD INDEX` refreshes the index and preserves this setting. To also restore automatic updates, use:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_index`
+WITH (autoupdate=true);
+```
+
+Rebuilding still has the [consistency limitation during index construction](#build-consistency).
 
 ### Clusters are not recalculated during update
 
@@ -267,7 +282,7 @@ ALTER TABLE `my_table` REBUILD INDEX `my_index`
 WITH (clusters = 128, levels = 2);
 ```
 
-The existing index continues to serve queries and receive table updates during the build. Once the replacement is ready, {{ ydb-short-name }} atomically replaces the old index. Applications continue to use the same index name. The operation temporarily requires storage for both index versions and resources to build the replacement.
+The existing index continues to serve queries during the build and receives table updates if its `autoupdate` setting is enabled. Once the replacement is ready, {{ ydb-short-name }} atomically replaces the old index. Applications continue to use the same index name. The operation temporarily requires storage for both index versions and resources to build the replacement.
 
 To limit the number of parallel partition handlers during the rebuild, set the [`parallel` parameter](../yql/reference/syntax/alter_table/indexes.md#rebuild-index). For example, to run no more than eight handlers at a time:
 

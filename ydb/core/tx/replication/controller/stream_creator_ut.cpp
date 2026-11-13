@@ -13,6 +13,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <memory>
 #include <util/generic/size_literals.h>
 
 namespace NKikimr::NReplication::NController {
@@ -322,8 +323,17 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         SessionAcquisitionFailure(Ydb::StatusIds::UNAUTHORIZED);
     }
 
-    void Basic(const std::optional<TDuration>& resolvedTimestamps = {}, bool enableOmitBackupAttribute = false) {
-        TEnv env;
+    void Basic(const std::optional<TDuration>& resolvedTimestamps = {}, bool enableOmitBackupAttribute = false,
+            bool binaryFormat = false, bool zstdCompression = false) {
+        std::unique_ptr<TEnv> envHolder;
+        if (binaryFormat) {
+            TFeatureFlags flags;
+            flags.FeatureFlags.SetEnableBinaryChangefeedForAsyncReplication(true);
+            envHolder = std::make_unique<TEnv>(flags);
+        } else {
+            envHolder = std::make_unique<TEnv>();
+        }
+        TEnv& env = *envHolder;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         const auto tableDesc = TTestTableDescription{
@@ -352,7 +362,8 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
             "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps,
-            false, true, false, true, false, TDuration::Seconds(1), TDuration::Days(1), false, enableOmitBackupAttribute
+            false, true, false, true, false, TDuration::Seconds(1), TDuration::Days(1), false,
+            enableOmitBackupAttribute, binaryFormat, zstdCompression
         ));
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
@@ -371,7 +382,12 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
         const auto& stream = streams.at(0);
         UNIT_ASSERT_VALUES_EQUAL(stream.GetMode(), NKikimrSchemeOp::ECdcStreamModeUpdate);
-        UNIT_ASSERT_VALUES_EQUAL(stream.GetFormat(), NKikimrSchemeOp::ECdcStreamFormatJson);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetFormat(), binaryFormat
+            ? NKikimrSchemeOp::ECdcStreamFormatBinary
+            : NKikimrSchemeOp::ECdcStreamFormatJson);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCompression(), zstdCompression
+            ? NKikimrSchemeOp::ECdcStreamCompressionZstd
+            : NKikimrSchemeOp::ECdcStreamCompressionNone);
         UNIT_ASSERT(!stream.GetSchemaChanges());
         UNIT_ASSERT_VALUES_EQUAL(stream.GetVirtualTimestamps(), resolvedTimestamps.has_value());
         UNIT_ASSERT_VALUES_EQUAL(stream.GetResolvedTimestampsIntervalMs(), resolvedTimestamps.value_or(TDuration::Zero()).MilliSeconds());
@@ -402,6 +418,33 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     Y_UNIT_TEST(OmitBackupAttributeEnabled) {
         Basic({}, true);
+    }
+
+    Y_UNIT_TEST(BinaryFormatWhenEnabled) {
+        Basic({}, false, true);
+    }
+
+    Y_UNIT_TEST(ZstdCompression) {
+        Basic({}, false, false, true);
+    }
+
+    Y_UNIT_TEST(BinaryFormatRejectedWhenDisabled) {
+        TEnv env;
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+        env.GetRuntime().Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
+            false, true, false, true, false, TDuration::Seconds(1), TDuration::Days(1), false,
+            false, true));
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
+        UNIT_ASSERT(!result->Get()->IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Status.GetIssues().ToString(), "BINARY format is not supported yet");
     }
 
     Y_UNIT_TEST(WithResolvedTimestamps) {

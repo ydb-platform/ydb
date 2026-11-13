@@ -458,9 +458,9 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     library/cpp/monlib/service/pages
+    library/cpp/streams/zstd
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
-    library/cpp/streams/zstd
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
@@ -538,6 +538,7 @@ RECURSE_FOR_TESTS(
     snapshot_retention
     ut_bloom_filter
     ut_borrowed_compaction
+    ut_cdc_binary
     ut_change_collector
     ut_change_exchange
     ut_compaction

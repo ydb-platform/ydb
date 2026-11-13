@@ -1515,6 +1515,12 @@ public:
         return PreFilterDone() && FilterStorageStage == EFilterStorageStage::None && !NeedFilter;
     }
 
+    // The storage pools were not resolved to groups, so there is no pool filter. The VSlots are still needed:
+    // for the disks of the nodes that do not answer themselves and for an explicit group filter.
+    EFilterStorageStage GetStorageStageWithoutPools() const {
+        return VSlotsResponse ? EFilterStorageStage::VSlots : EFilterStorageStage::None;
+    }
+
     void ApplyFilter() {
         // Access restrictions must precede filters that can wait for asynchronous responses.
         // Otherwise a timeout could render nodes outside the authorized database.
@@ -2457,7 +2463,7 @@ public:
             // The pools were to be taken from the database (all navigate requests are processed by now),
             // and it gave none: no domain description, or no storage pools of its own.
             // There is nothing to filter by, so go on without the pool filter instead of waiting forever.
-            FilterStorageStage = VSlotsResponse ? EFilterStorageStage::VSlots : EFilterStorageStage::None;
+            FilterStorageStage = GetStorageStageWithoutPools();
         }
         if (FilterStorageStage == EFilterStorageStage::Pools && StoragePoolsResponse && StoragePoolsResponse->IsDone()) {
             if (StoragePoolsResponse->IsOk()) {
@@ -2474,7 +2480,7 @@ public:
                 FilterStorageStage = EFilterStorageStage::Groups;
             } else {
                 AddProblem("bsc-storage-pools-no-data");
-                FilterStorageStage = EFilterStorageStage::None;
+                FilterStorageStage = GetStorageStageWithoutPools();
             }
             StoragePoolsResponse.reset();
         }
@@ -2491,7 +2497,7 @@ public:
                 FilterStorageStage = EFilterStorageStage::VSlots;
             } else {
                 AddProblem("bsc-storage-groups-no-data");
-                FilterStorageStage = EFilterStorageStage::None;
+                FilterStorageStage = GetStorageStageWithoutPools();
             }
         }
         if (FilterStorageStage == EFilterStorageStage::VSlots && VSlotsResponse && VSlotsResponse->IsDone()) {

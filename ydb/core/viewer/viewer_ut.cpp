@@ -3271,6 +3271,55 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
+    // What BSC does not answer about while the pools of a database are resolved to nodes
+    enum class ENodesLostPoolData {
+        None,
+        Pools,
+        Groups,
+    };
+
+    // The pools of the database could not be resolved to groups, but the VSlots were received: the pool filter
+    // is dropped, and the VSlots still give the disks of a node that does not answer itself.
+    void CheckNodesKeepBscVDisksWithoutPoolFilterCase(TTestActorRuntime& runtime, const TString& problem,
+                                                      const std::vector<TNodeId>& allNodeIds, TNodeId silentNodeId) {
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /viewer/json/nodes?type=static&sort=NodeId&offload_merge=false"
+                // SystemState: a node is known as disconnected by its missing system state
+                << "&use_cache=false&timeout=1000&limit=20&offset=0&with=all&fields_required=NodeId,VDisks,SystemState"
+                << "&database=/Root&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
+        const TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        const TString context = TStringBuilder() << problem << ": " << result->Response->Body;
+        NJson::TJsonValue json;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(result->Response->Body, &json), context);
+        bool hasProblem = false;
+        bool hasVSlotsError = false;
+        for (const auto& item : json["Problems"].GetArray()) {
+            hasProblem |= item.GetString() == problem;
+            hasVSlotsError |= item.GetString() == "bsc-storage-slots-no-data";
+        }
+        UNIT_ASSERT_C(hasProblem, context);
+        UNIT_ASSERT_C(!hasVSlotsError, context);
+        // without the pools there is nothing to filter by
+        const auto& nodes = json["Nodes"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL_C(nodes.size(), allNodeIds.size(), context);
+        const NJson::TJsonValue* silentNode = nullptr;
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(nodes[i]["NodeId"].GetUInteger(), allNodeIds[i], context);
+            if (nodes[i]["NodeId"].GetUInteger() == silentNodeId) {
+                silentNode = &nodes[i];
+            }
+        }
+        UNIT_ASSERT_C(silentNode, context);
+        // the only source of the disks of this node is the VSlots response
+        const auto& vdisks = (*silentNode)["VDisks"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL_C(vdisks.size(), 1, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(vdisks[0]["VDiskSlotId"].GetUIntegerRobust(), 1000, context);
+    }
+
     void CheckNodesStorageFilter(bool vslotsAvailable) {
         TPortManager tp;
         auto settings = TServerSettings(tp.GetPort())
@@ -3286,8 +3335,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const TNodeId nodeWithoutVSlotsId = runtime.GetNodeId(2);
         size_t vslotsResponses = 0;
         ENodesDatabasePools databasePools = ENodesDatabasePools::TestPool;
+        ENodesLostPoolData lostPoolData = ENodesLostPoolData::None;
+        TNodeId silentNodeId = 0; // the whiteboard of this node does not answer
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (silentNodeId && ev->Cookie == silentNodeId
+                    && (ev->GetTypeRewrite() == TEvWhiteboard::EvSystemStateResponse
+                        || ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse
+                        || ev->GetTypeRewrite() == TEvWhiteboard::EvPDiskStateResponse)) {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
             if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse) {
                 ++vslotsResponses;
                 if (!vslotsAvailable) {
@@ -3301,6 +3358,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     record.MutableEntries(i)->MutableInfo()->SetGroupId(10 + i);
                 }
             } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
+                if (lostPoolData == ENodesLostPoolData::Pools) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
                 auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
                 record.ClearEntries();
                 auto* entry = record.AddEntries();
@@ -3308,6 +3368,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 entry->MutableKey()->SetStoragePoolId(7);
                 entry->MutableInfo()->SetName("test-pool");
             } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse) {
+                if (lostPoolData == ENodesLostPoolData::Groups) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
                 auto& record = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
                 record.ClearEntries();
                 for (ui32 i = 0; i < 2; ++i) {
@@ -3395,6 +3458,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     CheckNodesDatabaseWithoutPoolsCase(runtime, fieldCase.first, allNodeIdsDescending, page);
                 }
             }
+        }
+
+        if (vslotsAvailable) {
+            // BSC answers about the VSlots, but not about the pools or the groups of the database
+            databasePools = ENodesDatabasePools::TestPool;
+            silentNodeId = secondNodeId;
+            lostPoolData = ENodesLostPoolData::Pools;
+            CheckNodesKeepBscVDisksWithoutPoolFilterCase(runtime, "bsc-storage-pools-no-data", allNodeIds, silentNodeId);
+            lostPoolData = ENodesLostPoolData::Groups;
+            CheckNodesKeepBscVDisksWithoutPoolFilterCase(runtime, "bsc-storage-groups-no-data", allNodeIds, silentNodeId);
         }
     }
 

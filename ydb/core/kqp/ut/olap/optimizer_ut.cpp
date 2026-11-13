@@ -736,7 +736,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
     // Switch lc-buckets -> tiling++ on a table that already holds data. Verifies that:
     //   1. The ALTER succeeds while the table contains portions produced by another planner.
     //   2. Row count and aggregate are preserved across the switch (no portion is lost or
-    //      misrouted by InitialAddPortions() during the fresh load triggered by the switch).
+    //      misrouted by AddLoadedPortions() during the fresh load triggered by the switch).
     //   3. Further compaction proceeds under the new planner (portions show up at the
     //      tiling++ levels and the row count is still preserved).
     Y_UNIT_TEST(SwitchLcBucketsToTilingPlusPlus) {
@@ -772,7 +772,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         UNIT_ASSERT_C(portionsBefore > 0, "expected at least one portion before switch");
 
         // Phase 2: switch to tiling++. This forces a fresh load that re-routes existing
-        // lc-buckets portions through InitialAddPortions() in the tiling++ planner.
+        // lc-buckets portions through AddLoadedPortions() in the tiling++ planner.
         RunAlter(tableClient, TilingPpAlter("/Root/olapStore", "TABLESTORE"));
 
         // Give the planner time to ingest the existing portions and (potentially) start

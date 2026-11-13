@@ -7,6 +7,8 @@
 #include "rpc_operation_request_base.h"
 #include "rpc_restore_base.h"
 
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/reassign_tablets.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -24,6 +26,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/api/protos/draft/ydb_tablet.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -75,6 +78,8 @@ class TGetOperationRPC
             return "[GetAnalyze]";
         case TOperationId::SET_NOT_NULL:
             return "[GetSetNotNull]";
+        case TOperationId::REASSIGN_TABLETS:
+            return "[GetReassignTablets]";
         default:
             return "[Untagged]";
         }
@@ -98,6 +103,8 @@ class TGetOperationRPC
             return new NSchemeShard::TEvBackup::TEvGetFullBackupRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::SET_NOT_NULL:
             return new NSchemeShard::TEvSetColumnConstraint::TEvGetRequest(GetDatabaseName(), RawOperationId_);
+        case TOperationId::REASSIGN_TABLETS:
+            return new NHive::TEvReassignTablets::TEvGetRequest(RawOperationId_, HiveGeneration_);
         default:
             Y_ABORT("unreachable");
         }
@@ -239,6 +246,9 @@ public:
             case TOperationId::SCRIPT_EXECUTION:
                 SendGetScriptExecutionOperation();
                 break;
+            case TOperationId::REASSIGN_TABLETS:
+                SendGetReassignTabletsOperation();
+                break;
             default:
                 SendNotifyTxCompletion(ctx);
                 break;
@@ -260,6 +270,7 @@ public:
             HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
             HFunc(NSchemeShard::TEvForcedCompaction::TEvGetResponse, Handle);
             HFunc(NSchemeShard::TEvSetColumnConstraint::TEvGetResponse, Handle);
+            HFunc(NHive::TEvReassignTablets::TEvGetResponse, Handle);
             HFunc(NKqp::TEvGetScriptExecutionOperationResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse, Handle);
@@ -349,6 +360,18 @@ private:
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(GetDatabaseName(), OperationId_, GetUserSID(*Request)));
     }
 
+    void SendGetReassignTabletsOperation() {
+        if (!IsAdministrator(AppData(), Request->GetInternalToken().Get())) {
+            Request->RaiseIssue(NYql::TIssue("Cluster administrator access is required"));
+            return ReplyWithStatus(StatusIds::UNAUTHORIZED);
+        }
+        ui64 hiveId = 0;
+        if (!TryGetReassignTabletsId(OperationId_, hiveId, HiveGeneration_, RawOperationId_)) {
+            return ReplyWithStatus(StatusIds::BAD_REQUEST);
+        }
+        SendRequest(hiveId);
+    }
+
     void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record.GetResponse();
 
@@ -432,6 +455,18 @@ private:
             ::NKikimr::NGRpcService::ToOperation(record.GetSetColumnConstraint(), resp.mutable_operation());
             Reply(resp, ctx);
         }
+    }
+
+    void Handle(NHive::TEvReassignTablets::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetStatus() != StatusIds::SUCCESS) {
+            return ReplyWithError(record.GetStatus(), record.GetIssues(), ctx);
+        }
+        Ydb::Tablet::ReassignTabletsMetadata metadata;
+        metadata.set_selected_tablets(record.GetSelectedTablets());
+        metadata.set_completed_tablets(record.GetCompletedTablets());
+        const auto status = record.GetCancelled() ? StatusIds::CANCELLED : StatusIds::SUCCESS;
+        ReplyGetOperationResponse(record.GetReady(), ctx, metadata, status);
     }
 
     void Handle(NKqp::TEvGetScriptExecutionOperationResponse::TPtr& ev, const TActorContext& ctx) {
@@ -548,6 +583,7 @@ private:
 
     TOperationId OperationId_;
     ui64 RawOperationId_ = 0;
+    ui64 HiveGeneration_ = 0;
     TString AnalyzeOperationId_;   // 16-byte binary ULID for ANALYZE ops
     TActorId PipeActorId_;
     TActorId SAPipeClient_;

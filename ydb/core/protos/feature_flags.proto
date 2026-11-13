@@ -474,15 +474,17 @@ message TFeatureFlags {
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
     optional bool EnableCsPortionsCacheAcrossRestarts = 381 [default = false];
     optional bool EnableCsGeneralCacheConsumerWeights = 382 [default = false];
-    
+
     // Enables policy-driven data tiering for row-oriented tables.
     // When disabled, no new migrations to colder tiers are scheduled.
     // Existing data in all tiers remains readable.
-    optional bool EnableDataTiering = 383 [default = false];   
+    optional bool EnableDataTiering = 383 [default = false];
     // Gate for HNSW creation and acceleration once the implementation is included.
     optional bool EnableHnswIndex = 384 [default = false];
     optional bool EnableColumnshardCutHistorySending = 385 [default = false];
     optional bool EnableCdcAggregator = 386 [default = false];
     // Requires EnableSnapshotsLocking to publish the registry consumed by DataShard.
     optional bool EnableDataShardSnapshotLocking = 387 [default = false];
+    optional bool EnableRowTableZstdCompression = 388 [default = false];
+    optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
 }

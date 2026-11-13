@@ -58,6 +58,11 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
         forcedDistinctKey = *key;
     }
     const ui64 forcedDistinctLimit = config.OptForceOlapPushdownDistinctLimit.Get().GetOrElse(0);
+    // As in the old optimizer, PRAGMA OptEnableOlapProvideComputeSharding passes the keys
+    // of an aggregate to the column table read under it, see MatchOlapComputeSharding.
+    const bool provideComputeSharding = config.HasOptEnableOlapPushdown() &&
+                                        config.HasOptEnableOlapProvideComputeSharding() &&
+                                        config.GetEnableOlapPushdownAggregate();
 
     TVector<TPhysicalNames> allNames;
     allNames.reserve(roots.size());
@@ -94,12 +99,19 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
         THashSet<const IOperator*> olapAggregateInputs;
         // By read, the trivial DISTINCT whose key the read program marks.
         THashMap<const IOperator*, TOlapDistinct> olapDistincts;
+        // By read, the keys of the aggregate over it that column shards send rows to compute tasks by.
+        THashMap<const IOperator*, TOlapComputeSharding> olapComputeShardings;
         for (const auto& iter : *root) {
             const auto* op = iter.Current;
             if (op->Kind != EOperator::Aggregate) {
                 continue;
             }
             const auto& aggregate = CastOperator<TOpAggregate>(*op);
+            if (provideComputeSharding) {
+                if (auto computeSharding = MatchOlapComputeSharding(aggregate, root->PlanProps.InfoUnitRegistry)) {
+                    olapComputeShardings.emplace(computeSharding->Read, std::move(*computeSharding));
+                }
+            }
             if (!aggregate.IsPushedToOlap()) {
                 if (forcedDistinctKey) {
                     if (auto olapDistinct = MatchOlapDistinct(aggregate, *forcedDistinctKey, root->PlanProps.InfoUnitRegistry)) {
@@ -110,6 +122,7 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
             }
             auto olapAggregate = MatchOlapAggregate(aggregate, ctx);
             Y_ENSURE(olapAggregate, "An aggregate pushed to column shards no longer matches its read");
+            olapAggregate->CastAverageInput = config.GetEnableOlapScalarApply();
             olapAggregateInputs.insert(olapAggregate->Read);
             if (olapAggregate->Map) {
                 olapAggregateInputs.insert(olapAggregate->Map);
@@ -132,6 +145,9 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
                 builder.WithOlapAggregate(*olapAggregate);
             } else if (const auto* olapDistinct = olapDistincts.FindPtr(&opRead)) {
                 builder.WithOlapDistinct(*olapDistinct, forcedDistinctLimit);
+            }
+            if (const auto* computeSharding = olapComputeShardings.FindPtr(&opRead)) {
+                builder.WithOlapComputeSharding(*computeSharding);
             }
             auto body = builder.BuildPhysicalOp();
             if (const auto& stageSource = builder.GetStageSource()) {

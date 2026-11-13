@@ -2144,6 +2144,10 @@ public:
                                         "Column addition with a GENERATED ALWAYS AS expression is not supported"));
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
+                                    if (IsYqlNullExprNode(constraint.Value().Cast())) {
+                                        continue;
+                                    }
+
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
                                         ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                             "Default values are not supported in column tables"));
@@ -2203,6 +2207,12 @@ public:
                                 YqlIssue(ctx.GetPosition(columnTuple.Pos()),
                                     TIssuesIds::KIKIMR_BAD_REQUEST,
                                     "Cannot add not null column without default value"));
+                            return SyncError();
+                        }
+
+                        if (hasNotNull && hasDefaultValue && columnBuild->default_from_literal().value().has_null_flag_value()) {
+                            ctx.AddError(YqlIssue(ctx.GetPosition(columnTuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                                "Cannot add not null column with NULL default value"));
                             return SyncError();
                         }
 
@@ -2391,16 +2401,16 @@ public:
 
                             auto defaultExpr = TExprBase(alterColumnList.Item(1));
 
-                            if (auto maybeJust = defaultExpr.Maybe<TCoJust>()) {
-                                defaultExpr = maybeJust.Cast().Input();
-                            }
-
-                            bool isNull = defaultExpr.Maybe<TCoNull>().IsValid() || IsPgNullExprNode(defaultExpr);
-                            if (isNull) {
+                            if (IsYqlNullExprNode(defaultExpr)) {
                                 alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL);
+                                alter_columns->ClearDefaultFromLiteral();
                             } else {
+                                if (auto maybeJust = defaultExpr.Maybe<TCoJust>()) {
+                                    defaultExpr = maybeJust.Cast().Input();
+                                }
+
                                 alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
-                                auto err = FillLiteralProto(defaultExpr, nullptr, *alter_columns->MutableDefaultFromLiteral());
+                                auto err = FillLiteralProto(defaultExpr, &RemoveOptionality(*defaultExpr.Ref().GetTypeAnn()), *alter_columns->MutableDefaultFromLiteral());
                                 if (err) {
                                     ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
                                     return SyncError();

@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/sys_view/common/events.h>
 
 #include <util/string/printf.h>
 
@@ -382,6 +383,24 @@ namespace NBridgeTest {
             }
         }
         UNIT_FAIL("group not found GroupId# " << groupId);
+        Y_UNREACHABLE();
+    }
+
+    inline NKikimrSysView::TGroupInfo QueryGroupSystemView(TEnvironmentSetup& env, ui32 groupId,
+            TDuration timeout = TDuration::Minutes(1)) {
+        env.Sim(TDuration::Seconds(6)); // BSC publishes the system views every 5 s.
+        const auto edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        env.Runtime->SendToPipe(env.TabletId, edge, new NSysView::TEvSysView::TEvGetGroupsRequest, 0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        const auto response = env.WaitForEdgeActorEvent<NSysView::TEvSysView::TEvGetGroupsResponse>(edge, false,
+            env.Runtime->GetClock() + timeout);
+        UNIT_ASSERT_C(response, "No group system view response GroupId# " << groupId << " timeout# " << timeout);
+        for (const auto& entry : response->Get()->Record.GetEntries()) {
+            if (entry.GetKey().GetGroupId() == groupId) {
+                return entry.GetInfo();
+            }
+        }
+        UNIT_FAIL("Group is missing from system views GroupId# " << groupId);
         Y_UNREACHABLE();
     }
 

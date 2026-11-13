@@ -75,6 +75,8 @@ struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TAccessRights AccessRights;
     bool ForceSyncVersion = false;
+    // Legacy callers opt out; the resolver still checks the global feature flag.
+    bool EnableRelativePaths = true;
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,

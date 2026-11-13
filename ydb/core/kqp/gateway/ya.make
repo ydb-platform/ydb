@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/kqp/tracing
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/cms/console/events
     ydb/core/kqp/common
     ydb/core/kqp/federated_query
     ydb/core/kqp/federated_query/actors

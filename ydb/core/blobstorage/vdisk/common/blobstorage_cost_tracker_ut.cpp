@@ -65,9 +65,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageCostTrackerTest) {
             })
         {
             UNIT_ASSERT_C(read->FindCounter(TString(name)), name);
-            UNIT_ASSERT_C(write->FindCounter(TString(name)), name);
+            if (name != "DefragDiskCost") {
+                UNIT_ASSERT_C(write->FindCounter(TString(name)), name);
+            }
             UNIT_ASSERT_C(!advancedCost->FindCounter(TString(name)), name);
         }
+        // Defrag only reads, so its write-side counter is never registered.
+        UNIT_ASSERT(!write->FindCounter("DefragDiskCost"));
 
         UNIT_ASSERT(advancedCost->FindCounter("DiskTimeAvailableCtr"));
         UNIT_ASSERT(advancedCost->FindCounter("DiskTimeFairShareNs"));

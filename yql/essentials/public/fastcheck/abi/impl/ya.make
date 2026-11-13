@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     fastcheck.cpp
     linter.cpp
+    result.cpp
 )
 
 PEERDIR(

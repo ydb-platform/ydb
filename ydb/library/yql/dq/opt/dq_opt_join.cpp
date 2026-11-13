@@ -1577,7 +1577,7 @@ TExprBase DqBuildHashJoin(
     const auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
     YQL_ENSURE(joinType != "Cross"sv);
 
-    useBlockHashJoin = useBlockHashJoin
+    bool useHashJoin = useBlockHashJoin
         && (joinType == "Inner"sv || joinType == "Left"sv || joinType == "LeftSemi"sv || joinType == "LeftOnly"sv);
 
     auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
@@ -1586,11 +1586,16 @@ TExprBase DqBuildHashJoin(
     const auto leftStructType = GetSequenceItemType(leftIn, false, ctx)->Cast<TStructExprType>();
     const auto rightStructType = GetSequenceItemType(rightIn, false, ctx)->Cast<TStructExprType>();
 
+    bool blockTypesSupported = true;
     for (const auto* item : leftStructType->GetItems()) {
-        useBlockHashJoin = useBlockHashJoin && !BlocksBlockHashJoin(item->GetItemType());
+        blockTypesSupported = blockTypesSupported && !BlocksBlockHashJoin(item->GetItemType());
     }
     for (const auto* item : rightStructType->GetItems()) {
-        useBlockHashJoin = useBlockHashJoin && !BlocksBlockHashJoin(item->GetItemType());
+        blockTypesSupported = blockTypesSupported && !BlocksBlockHashJoin(item->GetItemType());
+    }
+    if (useHashJoin && !blockTypesSupported) {
+        useHashJoin = (mode == EHashJoinMode::Grace || mode == EHashJoinMode::GraceAndSelf)
+            && DqCanUseScalarHashJoin(join, ctx);
     }
 
     const auto& leftItems = leftStructType->GetItems();
@@ -1633,7 +1638,7 @@ TExprBase DqBuildHashJoin(
             }
 
             if (commonType) {
-                if (!useBlockHashJoin) {
+                if (!useHashJoin) {
                     if (!IsSameAnnotation(*keyType1, *commonType)) {
                         TString rename = (TString("_yql_dq_key_left_") + ToString(i));
                         leftColumnRemap[leftJoinKeys[i].StringValue()] = rename;
@@ -1812,13 +1817,13 @@ TExprBase DqBuildHashJoin(
     std::transform(leftJoinKeys.cbegin(), leftJoinKeys.cend(), std::back_inserter(leftKeys), [&](const std::string_view& name) { return leftNames[name]; });
     std::transform(rightJoinKeys.cbegin(), rightJoinKeys.cend(), std::back_inserter(rightKeys), [&](const std::string_view& name) { return rightNames[name]; });
 
-    const auto buildShuffle = [&ctx, &join, useBlockHashJoin](const TDqOutput& input, const TVector<TCoAtom>& keys) {
+    const auto buildShuffle = [&ctx, &join, useHashJoin](const TDqOutput& input, const TVector<TCoAtom>& keys) {
         return Build<TDqCnHashShuffle>(ctx, join.Pos())
                 .Output(input)
                 .KeyColumns()
                     .Add(keys)
                     .Build()
-                .UseSpilling().Build(!useBlockHashJoin)
+                .UseSpilling().Build(!useHashJoin)
                 .Done().Ptr();
     };
 
@@ -1915,7 +1920,7 @@ TExprBase DqBuildHashJoin(
     TString callableName = "GraceJoinCore";
     int shift = 2;
     bool selfJoin = false;
-    if (mode == EHashJoinMode::GraceAndSelf && leftIn.Stage().Ptr() == rightIn.Stage().Ptr()) {
+    if (!useHashJoin && mode == EHashJoinMode::GraceAndSelf && leftIn.Stage().Ptr() == rightIn.Stage().Ptr()) {
         callableName = "GraceSelfJoinCore";
         shift = 1;
         selfJoin = true;
@@ -1946,7 +1951,7 @@ TExprBase DqBuildHashJoin(
     switch (mode) {
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
-            if (useBlockHashJoin) {
+            if (useHashJoin) {
                 const auto joinSettings = BuildBlockHashJoinSettings(join.Pos(), joinAlgo, ctx);
 
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
@@ -1962,7 +1967,9 @@ TExprBase DqBuildHashJoin(
                         .Add(joinSettings)
                         .Build()
                     .Done().Ptr();
-                if (useScalarHashJoin && DqCanUseScalarHashJoin(join, ctx)) {
+                if (!blockTypesSupported) {
+                    hashJoin = ctx.RenameNode(*hashJoin, TDqPhyScalarHashJoin::CallableName());
+                } else if (useScalarHashJoin && DqCanUseScalarHashJoin(join, ctx)) {
                     hashJoin = ctx.RenameNode(*hashJoin, TDqPhyHashJoin::CallableName());
                 }
                 break;
@@ -2199,7 +2206,7 @@ TExprBase DqBuildHashJoin(
             ythrow yexception() << "Invalid hash join mode: " << mode;
     }
 
-    if (!useBlockHashJoin) {
+    if (!useHashJoin) {
         std::vector<TString> fullColNames;
         for (const auto& v: leftNames) {
             if (leftTableName.empty()) {

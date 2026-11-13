@@ -205,6 +205,36 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         }
     }
 
+    Y_UNIT_TEST(ComplexTypesFallback) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        CreateSampleTables(client);
+
+        const auto makeQuery = [](bool blocks) {
+            return TStringBuilder() << R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.OptimizerHints='JoinType(L R Shuffle)';
+                PRAGMA ydb.UseScalarHashJoin='false';
+                PRAGMA ydb.UseBlockHashJoin=')" << (blocks ? "true" : "false") << R"(';
+                $l = SELECT id, SOME(AsList(k, k)) AS key, SOME(AsDict(AsTuple(id, v))) AS p
+                    FROM L GROUP BY id;
+                $r = SELECT id, SOME(AsList(CAST(k AS Int32), CAST(k AS Int32))) AS key,
+                    SOME(AsDict(AsTuple(id, w))) AS p FROM R GROUP BY id;
+                SELECT L.id AS lid, R.id AS rid, L.p AS lp, R.p AS rp
+                FROM $l AS L INNER JOIN $r AS R ON L.key = R.key;
+            )";
+        };
+        const TString scalarQuery = makeQuery(true);
+        const TString graceQuery = makeQuery(false);
+        CheckPlan(client, scalarQuery, true);
+        CheckPlan(client, graceQuery, false);
+        const auto expected = RunQuerySortedRows(client, graceQuery);
+        UNIT_ASSERT(!expected.empty());
+        UNIT_ASSERT_VALUES_EQUAL(RunQuerySortedRows(client, scalarQuery), expected);
+    }
+
     Y_UNIT_TEST(ComplexKeys) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetQueryClient();

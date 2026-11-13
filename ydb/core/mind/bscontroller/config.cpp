@@ -271,7 +271,12 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyVSlotCreated(const TVSlotId &vslotId, const TVSlotInfo &vslotInfo) {
-                AddVSlotToProtobuf(vslotId, vslotInfo, TMood::Normal, NKikimrBlobStorage::CREATE);
+                if (vslotInfo.IsBeingDeleted()) {
+                    // the slot has moved along with its PDisk before its node confirmed the deletion
+                    AddVSlotToProtobuf(vslotId, vslotInfo, TMood::Delete);
+                } else {
+                    AddVSlotToProtobuf(vslotId, vslotInfo, TMood::Normal, NKikimrBlobStorage::CREATE);
+                }
             }
 
             void ApplyVSlotDeleted(const TVSlotId& vslotId, const TVSlotInfo& vslotInfo) {
@@ -292,6 +297,10 @@ namespace NKikimr::NBsController {
                 } else if (prev.GroupGeneration != cur.GroupGeneration) {
                     // the slot generation has changed
                     AddVSlotToProtobuf(vslotId, cur, TMood::Normal);
+                } else if (cur.Mood != TMood::Wipe && std::any_of(cur.Donors.begin(), cur.Donors.end(),
+                        [&](const TVSlotId& donorId) { return !prev.Donors.contains(donorId); })) {
+                    // a donor has moved along with its PDisk; a slot being wiped gets its donors with the mood change
+                    AddVSlotToProtobuf(vslotId, cur, static_cast<TMood::EValue>(cur.Mood));
                 }
             }
 
@@ -940,8 +949,10 @@ namespace NKikimr::NBsController {
                 if (!overlay->second) {
                     ScrubState.OnDeleteVSlot(overlay->first, txc);
                 } else if (!base) {
-                    Y_DEBUG_ABORT_UNLESS(!overlay->second->IsBeingDeleted());
-                    ScrubState.UpdateVDiskState(&*overlay->second);
+                    // a new slot is being deleted only when it has moved along with its PDisk; scrub doesn't track it
+                    if (!overlay->second->IsBeingDeleted()) {
+                        ScrubState.UpdateVDiskState(&*overlay->second);
+                    }
                 } else if (overlay->second->IsBeingDeleted() && !base->second->IsBeingDeleted()) {
                     ScrubState.OnDeleteVSlot(overlay->first, txc);
                 }

@@ -438,15 +438,23 @@ namespace NKikimr::NBsController {
             }
         }
 
+        if (const auto& vslots = destinationPDisk->VSlotsOnPDisk; !vslots.empty()) {
+            // the destination PDisk gets the drive of the source one: its VDisks would lose their data, and a slot being
+            // deleted would be slain over the new drive, which may hold the VDisk of the same group position
+            const TVSlotInfo& vslot = *vslots.begin()->second;
+            throw TExError() << "Destination PDisk has VSlots: " << destinationPDiskId << " VSlotId# " << vslot.VSlotId
+                << (vslot.IsBeingDeleted() ? " is being deleted" : "");
+        }
+
         // Destination PDisk's GUID is not the same as source PDisk's GUID yet,
         // set it to the source PDisk's GUID, so that it can start.
         destinationPDisk->Guid = sourcePDisk->Guid;
 
         for (const auto& [id, srcSlot] : sourcePDisk->VSlotsOnPDisk) {
+            TVSlotId newSlotId(destinationPDiskId, srcSlot->VSlotId.VSlotId);
+
             if (srcSlot->Group) {
                 TVDiskIdShort diskId = srcSlot->GetShortVDiskId();
-
-                TVSlotId newSlotId(destinationPDiskId, srcSlot->VSlotId.VSlotId);
 
                 auto* group = Groups.FindForUpdate(srcSlot->Group->ID);
 
@@ -463,24 +471,56 @@ namespace NKikimr::NBsController {
 
                 dstSlot->VDiskStatusTimestamp = Mono;
 
-                UncommittedVSlots.insert(newSlotId);
+                // The VDisk keeps replicating from its donors.
+                dstSlot->Donors = srcSlot->Donors;
 
-                // Remove old slot from the source PDisk.
-                VSlots.DeleteExistingEntry(srcSlot->VSlotId);
+                UncommittedVSlots.insert(newSlotId);
+            } else {
+                // The slot is out of its group: it is either a donor or a slot being deleted that its node hasn't
+                // confirmed yet. Its data is on the drive, so it moves along: the donor keeps serving its acceptor from
+                // the new place, and the node of the destination PDisk destroys the slot being deleted.
+                TGroupInfo *group = Groups.FindForUpdate(srcSlot->GroupId);
+                if (srcSlot->Mood == TMood::Donor) {
+                    Y_ABORT_UNLESS(group);
+                    const ui32 orderNumber = group->Topology->GetOrderNumber(srcSlot->GetShortVDiskId());
+                    TVSlotInfo *acceptor = VSlots.FindForUpdate(group->VDisksInGroup[orderNumber]->VSlotId);
+                    Y_ABORT_UNLESS(acceptor);
+                    const size_t numErased = acceptor->Donors.erase(srcSlot->VSlotId);
+                    Y_ABORT_UNLESS(numErased);
+                    acceptor->Donors.insert(newSlotId);
+                } else {
+                    Y_ABORT_UNLESS(srcSlot->IsBeingDeleted());
+                    if (group) {
+                        const size_t numErased = group->VSlotsBeingDeleted.erase(srcSlot->VSlotId);
+                        Y_ABORT_UNLESS(numErased);
+                        group->VSlotsBeingDeleted.insert(newSlotId);
+                    }
+                }
+
+                TVSlotInfo *dstSlot = VSlots.ConstructInplaceNewEntry(newSlotId, newSlotId, destinationPDisk,
+                    srcSlot->GroupId, srcSlot->GroupPrevGeneration, srcSlot->GroupGeneration, srcSlot->Kind,
+                    srcSlot->RingIdx, srcSlot->FailDomainIdx, srcSlot->VDiskIdx, srcSlot->Mood, group,
+                    &Self.VSlotReadyTimestampQ, srcSlot->LastSeenReady, srcSlot->ReplicationTime,
+                    srcSlot->DDiskNumVChunksClaimed, srcSlot->PersistentBufferRefs);
+
+                dstSlot->VDiskStatusTimestamp = Mono;
             }
+
+            // Remove old slot from the source PDisk.
+            VSlots.DeleteExistingEntry(srcSlot->VSlotId);
         }
 
         // "Move" all slots from source PDisk to destination PDisk.
         //destinationPDisk->VSlotsOnPDisk.insert(sourcePDisk->VSlotsOnPDisk.begin(), sourcePDisk->VSlotsOnPDisk.end());
 
         for (const auto& [id, slot] : destinationPDisk->VSlotsOnPDisk) {
-            TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
-            GroupFailureModelChanged.insert(slot->Group->ID);
-            group->CalculateGroupStatus();
+            if (slot->Group) {
+                TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
+                GroupFailureModelChanged.insert(slot->Group->ID);
+                group->CalculateGroupStatus();
+            }
         }
 
-        // Adjust active slots on destination PDisk.
-        destinationPDisk->NumActiveDynamicSlots = sourcePDisk->NumActiveDynamicSlots;
         destinationPDisk->Mood = TPDiskMood::Restarting;
 
         // And remove old pdisk altogether.

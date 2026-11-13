@@ -3319,14 +3319,32 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         const auto response = SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction");
         UNIT_ASSERT_C(response.StartsWith("HTTP/1.1 500"), response);
         UNIT_ASSERT_C(response.Contains("Evict vdisks is disabled in Sentinel"), response);
+        env.CheckWalleListTasks("eviction", "in-process", nodeId);
+        env.RestartCms();
+        const auto retry = SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction");
+        UNIT_ASSERT_C(retry.StartsWith("HTTP/1.1 500"), retry);
+        UNIT_ASSERT_C(retry.Contains("Evict vdisks is disabled in Sentinel"), retry);
 
         config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
         env.SetCmsConfig(config);
         env.CheckBSCUpdateRequests({nodeId}, NKikimrBlobStorage::FAULTY);
         CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction"),
             "in-process", nodeId);
-        env.CheckWalleRemoveTask("eviction");
+
+        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::DISABLED);
+        env.SetCmsConfig(config);
+        const auto failedCheck = SendWalleHttpRequest(env, HTTP_METHOD_GET, "/api/walle/v11/tasks/eviction");
+        UNIT_ASSERT_C(failedCheck.StartsWith("HTTP/1.1 500"), failedCheck);
+        const auto removed = SendWalleHttpRequest(env, HTTP_METHOD_DELETE, "/api/walle/v11/tasks/eviction");
+        UNIT_ASSERT_C(removed.StartsWith("HTTP/1.1 204"), removed);
         env.CheckWalleListTasks(0);
+
+        // Deletion after a failed check must also clear the host marker.
+        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        env.SetCmsConfig(config);
+        CheckWalleHttpTask(SendWalleHttpRequest(env, HTTP_METHOD_POST, "/api/walle/v11/tasks",
+            MakeWalleDataMigrationJson(nodeId)), "in-process", nodeId);
+        env.CheckWalleRemoveTask("eviction");
 
         config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::DISABLED);
         env.SetCmsConfig(config);
@@ -3533,6 +3551,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Check that FAULTY BSC request is sent again
         env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::FAULTY);
+        env.CheckRequest("user", request.GetRequestId(), false, TStatus::DISALLOW_TEMP, 0);
+        env.CheckRejectRequest("user", request.GetRequestId());
     }
 
     Y_UNIT_TEST(EmergencyDuringRollingRestart)

@@ -24,7 +24,7 @@ namespace NSysView {
 
 static constexpr char MemoryLabelResults[] = "SysViewProcessor/Results";
 
-class TSysViewProcessor : public TActor<TSysViewProcessor>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TSysViewProcessor : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TSysViewProcessor>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SYSTEM_VIEW_PROCESSOR;

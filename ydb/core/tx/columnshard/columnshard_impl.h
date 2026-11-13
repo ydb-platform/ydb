@@ -194,7 +194,7 @@ using ITransaction = NTabletFlatExecutor::ITransaction;
 template <typename T>
 using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
 
-class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TColumnShard: public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TColumnShard>>, public NTabletFlatExecutor::TTabletExecutedFlat {
     friend class TEvWriteCommitSyncTransactionOperator;
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;

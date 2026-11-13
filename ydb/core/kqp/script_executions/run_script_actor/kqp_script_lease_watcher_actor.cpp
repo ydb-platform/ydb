@@ -30,8 +30,8 @@ namespace {
 
 using namespace NActors;
 
-class TScriptLeaseWatcherActor final: public TActorBootstrapped<TScriptLeaseWatcherActor>, IActorExceptionHandler {
-    using TBase = TActorBootstrapped<TScriptLeaseWatcherActor>;
+class TScriptLeaseWatcherActor final: public NActors::TActorWithExceptionHandler<TActorBootstrapped<TScriptLeaseWatcherActor>> {
+    using TBase = NActors::TActorWithExceptionHandler<TActorBootstrapped<TScriptLeaseWatcherActor>>;
 
     static constexpr ui32 LEASE_UPDATE_FREQUENCY = 2;
 

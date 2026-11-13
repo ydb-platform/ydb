@@ -28,8 +28,8 @@ using TStatus = TEvTxUserProxy::TResultStatus;
 
 struct TInvokeExceptionHandler final: TActorRunnableItem::TImpl<TInvokeExceptionHandler> {
     void DoRun(IActor* actor) noexcept {
-        auto* handler = dynamic_cast<IActorExceptionHandler*>(actor);
-        Y_ABORT_UNLESS(handler && handler->OnUnhandledException(std::runtime_error("injected failure")));
+        Y_ABORT_UNLESS(actor->HasExceptionHandler()
+            && actor->OnUnhandledException(std::runtime_error("injected failure")));
         delete this;
     }
 };

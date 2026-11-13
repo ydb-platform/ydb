@@ -37,7 +37,7 @@ namespace {
 
 using namespace NPrivate;
 
-class TRunScriptActor final: public TActorBootstrapped<TRunScriptActor>, IActorExceptionHandler {
+class TRunScriptActor final: public NActors::TActorWithExceptionHandler<TActorBootstrapped<TRunScriptActor>> {
     struct TSessionState {
         bool WaitCreation = false;
         bool SessionOpen = false;

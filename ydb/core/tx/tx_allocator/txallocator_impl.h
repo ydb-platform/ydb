@@ -21,7 +21,7 @@ struct TTxAllocatorMonCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr AllocationsPresence;
 };
 
-class TTxAllocator : public TActor<TTxAllocator>, public TTabletExecutedFlat {
+class TTxAllocator : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TTxAllocator>>, public TTabletExecutedFlat {
 public:
     static constexpr ui64 MaxCapacity = 0xFFFFFFFFFFFFull; //48bit
 

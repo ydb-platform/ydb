@@ -59,7 +59,7 @@ using namespace NKMeans;
  *   - Selected rows are copied to the output table
  */
 
-class TFilterKMeansScan: public TActor<TFilterKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TFilterKMeansScan: public NActors::TActorWithExceptionHandler<TActor<TFilterKMeansScan>>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -116,7 +116,7 @@ public:
     TFilterKMeansScan(ui64 tabletId, const TUserTable& table,
         const NKikimrTxDataShard::TEvFilterKMeansRequest& request,
         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvFilterKMeansResponse>&& response)
-        : TActor(&TThis::StateWork)
+        : TActorWithExceptionHandler(&TThis::StateWork)
         , UploadState(request.GetUpload())
         , TabletId(tabletId)
         , BuildId(request.GetId())

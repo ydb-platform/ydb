@@ -25,7 +25,7 @@ struct TSchemeObject {
 
 ui64 CreateTestExtSubdomain(NActors::TTestActorRuntime& runtime, TTestEnv& env, ui64* txId, const TString& name, const TSchemeObject& createSchemeObject = {});
 
-class TFakeBSController : public NActors::TActor<TFakeBSController>, public NKikimr::NTabletFlatExecutor::TTabletExecutedFlat {
+class TFakeBSController : public NKikimr::NTabletFlatExecutor::TTabletActor<NActors::TActor<TFakeBSController>>, public NKikimr::NTabletFlatExecutor::TTabletExecutedFlat {
     void DefaultSignalTabletActive(const NActors::TActorContext&) override;
     void OnActivateExecutor(const NActors::TActorContext&) override;
     void OnDetach(const NActors::TActorContext& ctx) override;

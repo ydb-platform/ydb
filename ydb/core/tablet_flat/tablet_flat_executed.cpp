@@ -20,24 +20,18 @@ TTabletExecutedFlat::TTabletExecutedFlat(TTabletStorageInfo *info, const TActorI
     , StartTime0(TAppData::TimeProvider->Now())
 {}
 
-bool TTabletExecutedFlat::OnUnhandledException(const std::exception& e) {
+bool TTabletExecutedFlat::HandleActorException(const std::exception& e, const TActorContext& ctx) {
     if (AppData()->FeatureFlags.GetEnableTabletRestartOnUnhandledExceptions()) {
-        // Tablets have a weird inheritence where subclass is always an actor,
-        // but we don't know the exact type at compile time. This dynamic_cast
-        // is expected to always succeed.
-        if (auto* actor = dynamic_cast<IActor*>(this)) {
-            auto ctx = TActivationContext::ActorContextFor(actor->SelfId());
-            YDB_LOG_CRIT("Tablet unhandled exception",
-                {"tabletId", TabletID()},
-                {"typeName", TypeName(e)},
-                {"exception", e.what()},
-                {"backtrace", TBackTrace::FromCurrentException().PrintToString()});
+        YDB_LOG_CRIT("Tablet unhandled exception",
+            {"tabletId", TabletID()},
+            {"typeName", TypeName(e)},
+            {"exception", e.what()},
+            {"backtrace", TBackTrace::FromCurrentException().PrintToString()});
 
-            GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_exception", true)->Inc();
+        GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_exception", true)->Inc();
 
-            HandlePoison(ctx);
-            return true;
-        }
+        HandlePoison(ctx);
+        return true;
     }
 
     // Exception will propagate and cause the process to crash

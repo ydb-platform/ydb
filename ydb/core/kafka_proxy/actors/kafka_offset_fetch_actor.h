@@ -51,8 +51,9 @@ struct TTopicGroupRequest {
 };
 
 
-class TKafkaOffsetFetchActor: public NActors::TActorBootstrapped<TKafkaOffsetFetchActor>
-                            , public TKafkaExceptionHandler<TKafkaOffsetFetchActor> {
+class TKafkaOffsetFetchActor: public TKafkaExceptionHandler<TKafkaOffsetFetchActor, NActors::TActorBootstrapped<TKafkaOffsetFetchActor>>
+
+{
 
     using TBase = NActors::TActor<TKafkaOffsetFetchActor>;
     using TOffsetFetchResponsePartitions = NKafka::TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions;

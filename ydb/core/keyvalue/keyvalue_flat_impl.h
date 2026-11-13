@@ -36,7 +36,7 @@ constexpr ui64 CollectorErrorMaxBackoffMs = 5000;
 constexpr ui64 CollectorMaxErrors = 20;
 constexpr ui64 PeriodicRefreshMs = 15000;
 
-class TKeyValueFlat : public TActor<TKeyValueFlat>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TKeyValueFlat : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TKeyValueFlat>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 protected:
     struct TTxInit : public NTabletFlatExecutor::ITransaction {
         TActorId KeyValueActorId;
@@ -797,7 +797,7 @@ public:
     }
 
     TKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     {
         State.SetupTabletCounters(MakeTabletCounters());

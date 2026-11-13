@@ -18,8 +18,10 @@ struct IMiniKQLFactory {
 
 class TTabletExecutedFlat
     : public NFlatExecutorSetup::ITablet
-    , public IActorExceptionHandler
 {
+    template <typename TBase>
+    friend class TTabletActor;
+
 protected:
     using IExecutor = NFlatExecutorSetup::IExecutor;
 
@@ -27,7 +29,7 @@ protected:
     IExecutor* Executor() const { return Executor0; }
     const TInstant StartTime() const { return StartTime0; }
 
-    bool OnUnhandledException(const std::exception& exc) override;
+    bool HandleActorException(const std::exception& exc, const TActorContext& ctx);
 
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
     void Execute(TAutoPtr<ITransaction> transaction);
@@ -126,6 +128,24 @@ private:
     IExecutor *Executor0;
     TInstant StartTime0;
     TSharedQuotaPtr TxCacheQuota;
+};
+
+// Keep the tablet's exception policy on the actor inheritance chain. The
+// existing tablet interface remains a separate application-level base, but
+// dispatch no longer needs a cross-cast to discover or invoke its handler.
+template <typename TBase>
+class TTabletActor : public NActors::TActorWithExceptionHandler<TBase> {
+protected:
+    template <typename... TArgs>
+    explicit TTabletActor(TArgs&&... args)
+        : NActors::TActorWithExceptionHandler<TBase>(std::forward<TArgs>(args)...)
+    {}
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        using TDerived = typename TBase::TThis;
+        TTabletExecutedFlat& tablet = *static_cast<TDerived*>(this);
+        return tablet.HandleActorException(exc, this->ActorContext());
+    }
 };
 
 }}

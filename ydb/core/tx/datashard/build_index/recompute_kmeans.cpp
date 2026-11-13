@@ -41,7 +41,7 @@ using namespace NKMeans;
  * - Mean value is calculated for each centroid and returned in the response
  */
 
-class TRecomputeKMeansScan: public TActor<TRecomputeKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TRecomputeKMeansScan: public NActors::TActorWithExceptionHandler<TActor<TRecomputeKMeansScan>>, public NTable::IScan {
 protected:
     const ui64 TabletId = 0;
     const ui64 BuildId = 0;
@@ -75,7 +75,7 @@ public:
         const NKikimrTxDataShard::TEvRecomputeKMeansRequest& request,
         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvRecomputeKMeansResponse>&& response,
         std::unique_ptr<IClusters>&& clusters)
-        : TActor(&TThis::StateWork)
+        : TActorWithExceptionHandler(&TThis::StateWork)
         , TabletId(tabletId)
         , BuildId(request.GetId())
         , Response(std::move(response))

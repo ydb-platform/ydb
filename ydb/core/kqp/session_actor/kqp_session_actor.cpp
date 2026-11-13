@@ -211,7 +211,7 @@ private:
     const bool IsCommitAction;
 };
 
-class TKqpSessionActor : public TActorBootstrapped<TKqpSessionActor>, IActorExceptionHandler {
+class TKqpSessionActor : public NActors::TActorWithExceptionHandler<TActorBootstrapped<TKqpSessionActor>> {
 
     class TTimerGuard {
     public:

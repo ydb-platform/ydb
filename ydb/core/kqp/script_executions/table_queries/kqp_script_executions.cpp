@@ -743,7 +743,7 @@ private:
     const TCompressor Compressor;
 };
 
-class TCreateScriptExecutionActor final: public TActorBootstrapped<TCreateScriptExecutionActor>, IActorExceptionHandler {
+class TCreateScriptExecutionActor final: public NActors::TActorWithExceptionHandler<TActorBootstrapped<TCreateScriptExecutionActor>> {
 public:
     TCreateScriptExecutionActor(TEvKqp::TEvScriptRequest::TPtr&& ev, NKikimrConfig::TQueryServiceConfig queryServiceConfig,
         TIntrusivePtr<TKqpCounters> counters, const TDuration maxRunTime, const TDuration leaseDuration)

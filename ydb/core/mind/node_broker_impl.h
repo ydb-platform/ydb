@@ -45,7 +45,7 @@ enum class ENodeState : ui8 {
     Removed = 2,
 };
 
-class TNodeBroker : public TActor<TNodeBroker>
+class TNodeBroker : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TNodeBroker>>
                   , public TTabletExecutedFlat {
 public:
     struct TEvPrivate {
@@ -88,7 +88,7 @@ public:
     };
 
 private:
-    using TActorBase = TActor<TNodeBroker>;
+    using TActorBase = NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TNodeBroker>>;
 
     static constexpr TDuration MIN_LEASE_DURATION = TDuration::Minutes(5);
 

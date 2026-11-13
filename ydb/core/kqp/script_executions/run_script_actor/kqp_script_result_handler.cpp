@@ -39,8 +39,8 @@ namespace {
 
 using namespace NActors;
 
-class TScriptResultHandlerActor final: public TActorBootstrapped<TScriptResultHandlerActor>, IActorExceptionHandler {
-    using TBase = TActorBootstrapped<TScriptResultHandlerActor>;
+class TScriptResultHandlerActor final: public NActors::TActorWithExceptionHandler<TActorBootstrapped<TScriptResultHandlerActor>> {
+    using TBase = NActors::TActorWithExceptionHandler<TActorBootstrapped<TScriptResultHandlerActor>>;
 
     static constexpr ui64 RUN_SCRIPT_ACTOR_BUFFER_SIZE = 40_MB;
     static constexpr ui64 MIN_SAVE_RESULT_BATCH_SIZE = 5_MB;

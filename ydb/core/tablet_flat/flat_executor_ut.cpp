@@ -436,7 +436,7 @@ protected:
     NFlatExecutorSetup::IExecutor* Executor = nullptr;
 };
 
-class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFlat {
+class TTestFlatTablet : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TTestFlatTablet>>, public TTabletExecutedFlat {
     TDummyScan *Scan;
     ui64 ScanTaskId;
     ui64 ScanCookie;
@@ -552,7 +552,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
 
 public:
     TTestFlatTablet(const TActorId &sender, const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
         , Scan(nullptr)
         , ScanTaskId(0)

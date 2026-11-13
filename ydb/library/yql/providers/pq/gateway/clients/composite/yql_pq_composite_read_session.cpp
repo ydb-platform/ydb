@@ -51,7 +51,7 @@ public:
     virtual NThreading::TFuture<void> SubscribeOnUpdate() = 0;
 };
 
-class TDqPqReadBalancerActor final: public TActorBootstrapped<TDqPqReadBalancerActor>, public IActorExceptionHandler {
+class TDqPqReadBalancerActor final: public NActors::TActorWithExceptionHandler<TActorBootstrapped<TDqPqReadBalancerActor>> {
     static constexpr TDuration WAKEUP_PERIOD = TDuration::Seconds(1);
     static constexpr TDuration REPORT_MIN_DELTA = TDuration::Seconds(1);
     static constexpr TDuration HANGING_CHECK_PERIOD = TDuration::Minutes(1);

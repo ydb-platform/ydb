@@ -392,13 +392,7 @@ namespace NActors {
 
         TActorRunnableQueue queue(this);
 
-        if (!ExceptionHandlerChecked) {
-            // Receive runs on the serialized mailbox after construction. The
-            // dynamic type stays fixed, so normal dispatch needs RTTI only once.
-            HasExceptionHandler = dynamic_cast<IActorExceptionHandler*>(this) != nullptr;
-            ExceptionHandlerChecked = true;
-        }
-        if (!HasExceptionHandler) {
+        if (!HasExceptionHandler()) {
             // Do not catch and rethrow fatal exceptions: unwinding to this catch
             // would remove the original actor frames before terminate captures them.
             DispatchEvent(ev);
@@ -408,11 +402,14 @@ namespace NActors {
         try {
             DispatchEvent(ev);
         } catch (...) {
-            IActorExceptionHandler* handler = dynamic_cast<IActorExceptionHandler*>(this);
-            if (!OnUnhandledExceptionSafe(*handler, std::current_exception())) {
-                throw;
+            if (!OnUnhandledExceptionSafe(std::current_exception())) {
+                RethrowUnhandledException();
             }
         }
+    }
+
+    void IActor::RethrowUnhandledException() {
+        throw;
     }
 
     void IActor::DispatchEvent(TAutoPtr<IEventHandle>& ev) {
@@ -440,9 +437,9 @@ namespace NActors {
         }
     }
 
-    bool IActor::OnUnhandledExceptionSafe(IActorExceptionHandler& handler, const std::exception_ptr& excPtr) {
+    bool IActor::OnUnhandledExceptionSafe(const std::exception_ptr& excPtr) {
         try {
-            return handler.OnUnhandledException(excPtr);
+            return OnUnhandledException(excPtr);
         } catch (const std::exception& handleExc) {
             Cerr << "OnUnhandledException throws unhandled exception "
                 << TypeName(handleExc) << ": " << handleExc.what() << Endl

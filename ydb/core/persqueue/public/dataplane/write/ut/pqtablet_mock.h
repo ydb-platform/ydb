@@ -15,7 +15,7 @@
 
 namespace NKikimr::NPersQueueTests {
 
-class TPQTabletMock : public TActor<TPQTabletMock>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TPQTabletMock : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TPQTabletMock>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     TPQTabletMock(const TActorId& tablet, TTabletStorageInfo* info);
 

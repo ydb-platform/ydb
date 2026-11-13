@@ -54,8 +54,8 @@ namespace NKafka {
      *           <----------------
      */
 
-class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor>
-                            , public TKafkaExceptionHandler<TKafkaReadSessionActor> {
+class TKafkaReadSessionActor: public TKafkaExceptionHandler<TKafkaReadSessionActor, NActors::TActorBootstrapped<TKafkaReadSessionActor>>
+{
 
 enum EReadSessionSteps {
     WAIT_JOIN_GROUP,
@@ -80,7 +80,7 @@ struct TNextRequestError {
 };
 
 public:
-    using TBase = NActors::TActorBootstrapped<TKafkaReadSessionActor>;
+    using TBase = TKafkaExceptionHandler<TKafkaReadSessionActor, NActors::TActorBootstrapped<TKafkaReadSessionActor>>;
     TKafkaReadSessionActor(const TContext::TPtr context, ui64 cookie)
         : Context(context),
           Cookie(cookie)

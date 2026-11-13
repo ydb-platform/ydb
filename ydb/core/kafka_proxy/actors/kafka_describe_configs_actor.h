@@ -27,8 +27,8 @@ public:
 
 };
 
-class TKafkaDescribeConfigsActor: public NActors::TActorBootstrapped<TKafkaDescribeConfigsActor>
-                                , public TKafkaExceptionHandler<TKafkaDescribeConfigsActor> {
+class TKafkaDescribeConfigsActor: public TKafkaExceptionHandler<TKafkaDescribeConfigsActor, NActors::TActorBootstrapped<TKafkaDescribeConfigsActor>>
+{
 public:
     TKafkaDescribeConfigsActor(
             const TContext::TPtr context,

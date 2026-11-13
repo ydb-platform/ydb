@@ -1285,7 +1285,7 @@ void TBlobStorageController::PassAway() {
 }
 
 TBlobStorageController::TBlobStorageController(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , ResponsivenessPinger(nullptr)
         , ScrubState(this)

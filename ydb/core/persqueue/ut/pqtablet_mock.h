@@ -9,7 +9,7 @@
 
 namespace NKikimr::NPQ::NHelpers {
 
-class TPQTabletMock : public TActor<TPQTabletMock>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TPQTabletMock : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TPQTabletMock>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     struct TSendReadSetParams {
         ui64 Step;

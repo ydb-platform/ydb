@@ -68,7 +68,7 @@ struct TTokenStateLess {
     }
 };
 
-class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IActorExceptionHandler, public NTable::IScan {
+class TBuildFulltextIndexScan: public NActors::TActorWithExceptionHandler<TActor<TBuildFulltextIndexScan>>, public NTable::IScan {
     IDriver* Driver = nullptr;
 
     ui64 TabletId = 0;
@@ -134,7 +134,7 @@ public:
 
     TBuildFulltextIndexScan(ui64 tabletId, const TUserTable& table, NKikimrTxDataShard::TEvBuildFulltextIndexRequest request,
         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvBuildFulltextIndexResponse>&& response)
-        : TActor{&TThis::StateWork}
+        : TActorWithExceptionHandler{&TThis::StateWork}
         , TabletId(tabletId)
         , BuildId{request.GetId()}
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())

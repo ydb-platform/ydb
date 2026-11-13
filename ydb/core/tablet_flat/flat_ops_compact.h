@@ -463,7 +463,7 @@ namespace NTabletFlatExecutor {
         }
     };
 
-    class TOpsCompact: private ::NActors::IActorCallback, public IActorExceptionHandler, public NTable::IVersionScan {
+    class TOpsCompact: private NActors::TActorWithExceptionHandler<::NActors::IActorCallback>, public NTable::IVersionScan {
         using TEvPut = TEvBlobStorage::TEvPut;
         using TEvPutResult = TEvBlobStorage::TEvPutResult;
         using ELockMode = NTable::ELockMode;
@@ -477,7 +477,7 @@ namespace NTabletFlatExecutor {
 
         TOpsCompact(TActorId owner, TLogoBlobID mask, TAutoPtr<TCompactCfg> conf,
                 THolder<ICompactionRouter> router)
-            : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TOpsCompact::Inbox), NKikimrServices::TActivity::OPS_COMPACT_A)
+            : TActorWithExceptionHandler(static_cast<TReceiveFunc>(&TOpsCompact::Inbox), NKikimrServices::TActivity::OPS_COMPACT_A)
             , Mask(mask)
             , Owner(owner)
             , Conf(std::move(conf))

@@ -165,7 +165,7 @@ class IDataShardInMemoryStateActor;
 
 ///
 class TDataShard
-    : public TActor<TDataShard>
+    : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TDataShard>>
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
     class TTxStopGuard;

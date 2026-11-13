@@ -26,7 +26,7 @@ struct TBackupControllerSchema : NIceDb::Schema {
 };
 
 class TBackupController
-    : public TActor<TBackupController>
+    : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TBackupController>>
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
 public:

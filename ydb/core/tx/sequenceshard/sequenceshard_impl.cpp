@@ -8,7 +8,7 @@ namespace NKikimr {
 namespace NSequenceShard {
 
     TSequenceShard::TSequenceShard(const TActorId& tablet, TTabletStorageInfo* info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , LogPrefix(this)
     {

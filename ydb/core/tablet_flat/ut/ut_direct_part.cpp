@@ -209,10 +209,10 @@ private:
 
 // A test tablet that owns a TDirectPartWriter, feeds it rows, routes blob put
 // results to it, and commits (or aborts) the built part.
-class TDirectWriteTablet : public TActor<TDirectWriteTablet>, public TTabletExecutedFlat {
+class TDirectWriteTablet : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TDirectWriteTablet>>, public TTabletExecutedFlat {
 public:
     TDirectWriteTablet(const TActorId& tablet, TTabletStorageInfo* info, const TActorId& owner)
-        : TActor(&TDirectWriteTablet::Inbox)
+        : TTabletActor(&TDirectWriteTablet::Inbox)
         , TTabletExecutedFlat(info, tablet, nullptr)
         , Owner(owner)
     { }

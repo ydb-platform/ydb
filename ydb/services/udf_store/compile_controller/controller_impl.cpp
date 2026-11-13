@@ -62,7 +62,7 @@ void FillProtoKey(NKikimrUdfStore::TArtifactKey& proto, const TGapKey& key) {
 }   // namespace
 
 TWasmCompileController::TWasmCompileController(const NActors::TActorId& tablet, TTabletStorageInfo* info)
-    : NActors::TActor<TWasmCompileController>(&TThis::StateInit)
+    : TTabletActor(&TThis::StateInit)
     , NTabletFlatExecutor::TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<ESimpleCounters_descriptor, ECumulativeCounters_descriptor,

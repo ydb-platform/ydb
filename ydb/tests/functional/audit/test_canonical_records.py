@@ -223,16 +223,17 @@ def test_dml(ydb_cluster):
          Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=OTHER_TOKEN)) as wrong_driver:
 
         with QuerySessionPool(right_driver) as right_pool, \
-             QuerySessionPool(wrong_driver) as wrong_pool, capture_audit:
-            right_pool.execute_with_retries(create_table_sql)
-            right_pool.execute_with_retries(insert_sql)
-            right_pool.retry_operation_sync(select)
+             QuerySessionPool(wrong_driver) as wrong_pool:
+            with capture_audit:
+                right_pool.execute_with_retries(create_table_sql)
+                right_pool.execute_with_retries(insert_sql)
+                right_pool.retry_operation_sync(select)
 
-            # Request with error
-            try:
-                wrong_pool.execute_with_retries(insert_sql)
-            except SchemeError:
-                pass
+                # Request with error
+                try:
+                    wrong_pool.execute_with_retries(insert_sql)
+                except SchemeError:
+                    pass
 
     return capture_audit.canonize()
 

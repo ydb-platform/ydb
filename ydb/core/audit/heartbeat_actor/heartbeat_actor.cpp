@@ -32,12 +32,12 @@ public:
 
     void Bootstrap() {
         Y_VERIFY(HeartbeatInterval);
-        if (!EnableLogging) {
-            return PassAway();
+        if (EnableLogging) {
+            Become(&THeartbeatActor::StateFunc);
+            PerformHeartbeat();
+        } else {
+            PassAway();
         }
-
-        Become(&THeartbeatActor::StateFunc);
-        PerformHeartbeat();
     }
 
     TString GetNodeAddress() const {

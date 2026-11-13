@@ -2,6 +2,7 @@
 
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/config_metrics.h>
 #include <ydb/core/base/feature_flags_service.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
@@ -609,6 +610,7 @@ namespace Tests {
             MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
             MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
             appData.AuditConfig = Settings->AppConfig->GetAuditConfig();
+            appData.MetricsConfig.InitializeFromProto(Settings->AppConfig->GetMetricsConfig());
 #undef MERGE_APP_CFG_FROM
 #undef MERGE_CFG_FROM_APP_CFG
 

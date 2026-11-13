@@ -187,6 +187,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
             ->SetStatsReportIntervalSeconds(*settings.DataShardStatsReportIntervalSeconds);
     }
 
+    if (settings.TabletCountersUpdateIntervalSeconds) {
+        Settings->AppConfig->MutableMetricsConfig()
+            ->SetTabletCountersUpdateIntervalSeconds(*settings.TabletCountersUpdateIntervalSeconds);
+    }
+
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);
 

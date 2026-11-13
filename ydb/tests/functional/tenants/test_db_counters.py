@@ -13,6 +13,7 @@ from ydb.core.protos import config_pb2
 from ydb.tests.library.common.msgbus_types import MessageBusStatus
 from ydb.tests.library.common.protobuf_ss import AlterTableRequest
 from ydb.tests.library.fixtures import ydb_database_ctx
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.matchers.response_matchers import ProtobufWithStatusMatcher
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -57,6 +58,13 @@ def ydb_cluster_configuration(request):
         # These tests wait for table storage statistics and quota updates.
         datashard_config={'stats_report_interval_seconds': 1},
     )
+
+
+@pytest.fixture(scope="module")
+def ydb_configurator(ydb_cluster_configuration):
+    configurator = KikimrConfigGenerator(**ydb_cluster_configuration)
+    configurator.yaml_config['metrics_config'] = {'tablet_counters_update_interval_seconds': 1}
+    return configurator
 
 
 @pytest.fixture(scope="function")

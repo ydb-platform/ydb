@@ -148,6 +148,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     config = KikimrConfigGenerator(
         erasure=Erasure.NONE,
         additional_log_configs=param.get("log_levels"),
+        enable_pq=True,  # streaming/FQ needs PQ+topic gRPC
         pq_client_service_types=["yandex-query"],
         extra_feature_flags=extra_feature_flags,
         disabled_feature_flags=disabled_feature_flags,

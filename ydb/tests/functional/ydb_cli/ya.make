@@ -26,6 +26,7 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_CLI_EXPERIMENTAL_BINARY="ydb/apps/ydb/experimental/ydb/ydb")
 ENV(YDB_CLI_WITH_ENABLED_AI_BINARY="ydb/tests/functional/ydb_cli/ai_interactive/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
+ENV(YDB_ENABLE_PQ="true")
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

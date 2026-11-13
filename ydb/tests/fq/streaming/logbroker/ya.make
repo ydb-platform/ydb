@@ -1,4 +1,5 @@
 PY3TEST()
+ENV(YDB_ENABLE_PQ="true")
 
 STYLE_PYTHON()
 

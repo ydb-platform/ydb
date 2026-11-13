@@ -130,7 +130,7 @@ class KikimrConfigGenerator(object):
             port_allocator=None,
             udfs_path=None,
             output_path=None,
-            enable_pq=True,
+            enable_pq=False,
             pq_client_service_types=None,
             pdisk_store_path=None,
             enable_sqs=False,
@@ -400,7 +400,18 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"][disabled_feature_flag] = False
         if enable_alter_database_create_hive_first:
             self.yaml_config["feature_flags"]["enable_alter_database_create_hive_first"] = enable_alter_database_create_hive_first
+        env_pq = os.getenv("YDB_ENABLE_PQ")
+        if env_pq is not None:
+            enable_pq = env_pq == "true"
+        if enable_sqs:
+            enable_pq = True
         self.yaml_config['pqconfig']['enabled'] = enable_pq
+        if not enable_pq:
+            # Drop topic/PQ gRPC services when PQ is off (stock list always started them).
+            drop = {"pq", "pqcd", "pqv1", "topic", "datastreams"}
+            services = self.yaml_config.get("grpc_config", {}).get("services")
+            if services:
+                self.yaml_config["grpc_config"]["services"] = [s for s in services if s not in drop]
         self.yaml_config['pqconfig']['enable_proto_source_id_info'] = True
         self.yaml_config['pqconfig']['max_storage_node_port'] = 65535
         # NOTE(shmel1k@): KIKIMR-14221

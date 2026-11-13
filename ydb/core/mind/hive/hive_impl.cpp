@@ -3028,9 +3028,14 @@ void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev)
 }
 
 void THive::OnBridgeTabletPlacementChanged(NKikimrConfig::THiveConfig::EBridgeTabletPlacement previous) {
-    // switching to a wider placement needs no action: tablets spread out lazily
-    if (BridgeInfo && previous != GetBridgeTabletPlacement()
-            && GetBridgeTabletPlacement() == NKikimrConfig::THiveConfig::PRIMARY_PILE_ONLY) {
+    if (!BridgeInfo || previous == GetBridgeTabletPlacement()) {
+        return;
+    }
+    // the tablets waiting for a node may fit in the piles that became allowed
+    ProcessWaitQueue();
+    // the tablets in the piles that are not allowed anymore are moved away by the pile drain;
+    // switching to a wider placement needs nothing more: running tablets spread out lazily
+    if (GetBridgeTabletPlacement() == NKikimrConfig::THiveConfig::PRIMARY_PILE_ONLY) {
         UpdatePiles();
     }
 }

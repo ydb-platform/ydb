@@ -10969,6 +10969,76 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         }
     }
 
+    Y_UNIT_TEST_FLAG(KesusCommitSizeLimit, ExceedsLimit) {
+        TKesusImportEnv t;
+        TControlBoard::SetValue(8, t.Runtime.GetAppData().Icb->TabletControls.MaxCommitRedoMB);
+        auto contents = MakeContents();
+        contents.clear_semaphores();
+        for (ui32 i = 0; i < (ExceedsLimit ? 9 : 6); ++i) {
+            auto* semaphore = contents.add_semaphores();
+            semaphore->set_name(ToString(i));
+            semaphore->set_limit(i + 1);
+            semaphore->set_data(TString(1024 * 1024, 'a' + i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(contents.ByteSizeLong() > 8 * 1024 * 1024, ExceedsLimit);
+        t.WriteBackup(contents, true);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> creates(t.Runtime, IsKesusCreation);
+        const ui64 id = t.StartImport(t.MakeImport());
+        if (ExceedsLimit) {
+            t.Finish(id, Ydb::StatusIds::CANCELLED, "Kesus backup exceeds the maximum commit size");
+            UNIT_ASSERT(creates.empty());
+            t.AssertNotCreated();
+            t.RebootSchemeShard();
+            t.Finish(id, Ydb::StatusIds::CANCELLED, "Kesus backup exceeds the maximum commit size");
+            t.AssertNotCreated();
+            TestForgetImport(t.Runtime, ++t.TxId, "/MyRoot", id);
+
+            // A rejected backup must not prevent another import to the same path.
+            creates.Stop();
+            const auto small = MakeContents();
+            t.WriteBackup(small);
+            t.Finish(t.StartImport(t.MakeImport()));
+            t.AssertContents(small);
+        } else {
+            t.Runtime.WaitFor("snapshot committed before creating the node", [&] { return !creates.empty(); });
+            t.AssertNotCreated();
+            t.S3.GetData().clear();
+            creates.Stop();
+            t.RebootSchemeShard();
+            t.Finish(id);
+            t.AssertContents(contents);
+            TestDescribeResult(DescribePath(t.Runtime, "/MyRoot/Restored"),
+                {NLs::HasOwner("backup-owner"), NLs::HasRight("+R:reader")});
+            creates.Unblock();
+        }
+    }
+
+    Y_UNIT_TEST(KesusCommitSizeIncludesMetadata) {
+        TKesusImportEnv t;
+        TControlBoard::SetValue(8, t.Runtime.GetAppData().Icb->TabletControls.MaxCommitRedoMB);
+        constexpr size_t limitBytes = 7 * 1024 * 1024; // 1 MB reserved for other commit data.
+        NKikimrSchemeOp::TImportKesus contents;
+        for (ui32 i = 0; i < 7; ++i) {
+            auto* semaphore = contents.add_semaphores();
+            semaphore->set_name(ToString(i) + TString(900, 's'));
+            semaphore->set_limit(i + 1);
+            semaphore->set_data(TString(1024 * 1024, 'a' + i));
+        }
+        // The payload alone fits, but names are also stored in the metadata.
+        auto* data = contents.mutable_semaphores(6)->mutable_data();
+        data->resize(data->size() - (contents.ByteSizeLong() - limitBytes + 1024));
+        t.WriteBackup(contents);
+        UNIT_ASSERT(contents.ByteSizeLong() < limitBytes);
+        UNIT_ASSERT(contents.ByteSizeLong() + t.S3.GetData().at(MetadataKey).size() > limitBytes);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> creates(t.Runtime, IsKesusCreation);
+        t.Finish(t.StartImport(t.MakeImport()), Ydb::StatusIds::CANCELLED,
+            "Kesus backup exceeds the maximum commit size");
+        UNIT_ASSERT(creates.empty());
+        t.AssertNotCreated();
+    }
+
     Y_UNIT_TEST(RebootBeforeSchemeReadyPreservesMeteringPermission) {
         TKesusImportEnv t;
         const auto resources = MakeResources(true);

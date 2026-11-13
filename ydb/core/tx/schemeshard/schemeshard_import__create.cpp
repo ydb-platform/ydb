@@ -1607,6 +1607,19 @@ private:
                 return CancelAndPersist(db, importInfo, msg.ItemIdx,
                     error ? error : TString("Missing coordination node contents"), "invalid coordination node scheme");
             }
+
+            // Include permissions and metadata in the size check, before sending
+            // any creation requests. Reserve 1 MB, as in IsCommitRedoSizeOverLimit.
+            Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
+            const ui64 limitBytes = (ui64(Self->MaxCommitRedoMB) - 1) << 20;
+            const ui64 commitRedoBytes = txc.DB.GetCommitRedoBytes();
+            if (commitRedoBytes >= limitBytes) {
+                txc.DB.RollbackChanges();
+                return CancelAndPersist(db, importInfo, msg.ItemIdx,
+                    TStringBuilder() << "Kesus backup exceeds the maximum commit size: "
+                        << commitRedoBytes << " bytes, limit " << limitBytes << " bytes",
+                    "coordination node backup is too large");
+            }
         } else if (item.Table) {
             const auto path = TPath::Resolve(item.DstPathName, Self);
             if (path.IsResolved() && !path.IsDeleted()) {
@@ -1672,7 +1685,9 @@ private:
             }
         }
 
-        Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
+        if (!item.Kesus) {
+            Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
+        }
 
         if (item.State != EState::Done) {
             item.State = item.ReplicationConfig ? EState::DropPlaceholder : EState::CreateSchemeObject;

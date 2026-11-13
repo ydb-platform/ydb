@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/replication/service/service.h>
 
 #include <ydb/library/aws_init/aws.h>
 #include <ydb/services/keyvalue/grpc_service_v1.h>
@@ -591,6 +592,11 @@ private:
                                                true), node, GetRuntime()->GetAppData(node).UserPoolId);
                 }
             }
+
+            const auto replicationServiceId = GetRuntime()->Register(NKikimr::NReplication::CreateReplicationService(), node,
+                GetRuntime()->GetAppData(node).UserPoolId, NActors::TMailboxType::HTSwap);
+            GetRuntime()->RegisterService(NKikimr::NReplication::MakeReplicationServiceId(GetRuntime()->GetNodeId(node)),
+                replicationServiceId, node);
 
             if (systemStateInfo) {
                 GetRuntime()->Send(NKikimr::NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetRuntime()->GetNodeId(node)), edgeActor,

@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/grpc_services
     ydb/services/workload_manager/actors
     ydb/core/testlib
+    ydb/core/tx/replication/service
     ydb/core/util
     ydb/library/aclib
     ydb/library/actors/wilson

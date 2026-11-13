@@ -1652,7 +1652,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     // A sys log record whose group size in units info declares more bytes than the record holds makes the start of
     // the PDisk fail with a parse error instead of terminating the process
-    Y_UNIT_TEST(SysLogRecordWithTruncatedGroupSizeInUnitsInfo) {
+    // Makes the PDisk write a sys log record whose group size in units info declares sizeDelta more bytes than it has,
+    // and checks that the next start of the PDisk fails without terminating the process
+    void TestSysLogRecordWithBadGroupSizeInUnitsInfoSize(i32 sizeDelta) {
         TActorTestContext testCtx({});
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
@@ -1661,8 +1663,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         testCtx.RestartPDiskSync();
         vdisk.InitFull();
 
-        testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* pdisk) {
-            pdisk->GroupSizeInUnitsInfoSizeExcessForTest = 1000;
+        testCtx.SafeRunOnPDisk([sizeDelta](NPDisk::TPDisk* pdisk) {
+            pdisk->GroupSizeInUnitsInfoSizeDeltaForTest = sizeDelta;
         });
         TVDiskMock anotherVDisk(&testCtx);
         anotherVDisk.InitFull(); // the new owner makes the PDisk write a sys log record
@@ -1673,6 +1675,15 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         testCtx.TestResponse<NPDisk::TEvYardControlResult>(
                 new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, (void*)(&testCtx.MainKey)),
                 NKikimrProto::CORRUPTED);
+    }
+
+    Y_UNIT_TEST(SysLogRecordWithTruncatedGroupSizeInUnitsInfo) {
+        TestSysLogRecordWithBadGroupSizeInUnitsInfoSize(1000);
+    }
+
+    Y_UNIT_TEST(SysLogRecordWithOddGroupSizeInUnitsInfoSize) {
+        // the declared size stays within the record, but the last pair is cut in half
+        TestSysLogRecordWithBadGroupSizeInUnitsInfoSize(-1);
     }
 
     Y_UNIT_TEST(TestFakeErrorPDiskManyChunkRead) {

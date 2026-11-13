@@ -600,6 +600,16 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         if (!checkRecordSize(minSize, "group size in units info")) {
             return false;
         }
+        if (protoSize % 2 != 0) {
+            errorReason = TStringBuilder() << "Error while parsing sys log at booting state:"
+                << " odd size of group size in units info, size# " << protoSize
+                << " version# " << sysLogRecord->Version
+                << " writePosition# " << writePosition
+                << " lastLsn# " << lastLsn;
+            YDB_LOG_P_LOG(PRI_ERROR, errorReason,
+                {"marker", "BPD01"});
+            return false;
+        }
 
         for (ui32 i = 0; i < protoSize/2; ++i) {
             TOwner owner = ownersSizeInUnitsInfo[i*2 + 0];
@@ -887,7 +897,7 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
     SysLogger->LogDataPart(&FirstLogChunkToParseCommits, sizeof(FirstLogChunkToParseCommits), reqId, traceId);
     SysLogger->LogDataPart(&compatibilityInfoSize, sizeof(compatibilityInfoSize), reqId, traceId);
     SysLogger->LogDataPart(SerializedCompatibilityInfo->data(), compatibilityInfoSize, reqId, traceId);
-    const ui32 writtenOwnersSizeInUnitsInfoSize = ownersSizeInUnitsInfoSize + GroupSizeInUnitsInfoSizeExcessForTest;
+    const ui32 writtenOwnersSizeInUnitsInfoSize = ownersSizeInUnitsInfoSize + GroupSizeInUnitsInfoSizeDeltaForTest;
     SysLogger->LogDataPart(&writtenOwnersSizeInUnitsInfoSize, sizeof(writtenOwnersSizeInUnitsInfoSize), reqId, traceId);
     if (ownersSizeInUnitsInfoSize > 0) {
         SysLogger->LogDataPart(&ownersSizeInUnitsInfo[0], ownersSizeInUnitsInfoSize, reqId, traceId);

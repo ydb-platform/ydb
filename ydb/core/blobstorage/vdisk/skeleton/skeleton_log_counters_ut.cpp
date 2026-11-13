@@ -72,6 +72,7 @@ Y_UNIT_TEST_SUITE(TVDiskRecoveryLogCounters) {
             const ui64 detailedBytes = logrecs->FindCounter("LogBlockBytes")->Val()
                 + logrecs->FindCounter("LogGCBytes")->Val();
             UNIT_ASSERT_VALUES_EQUAL(detailedBytes, expectedBytes);
+            UNIT_ASSERT(!logrecs->FindCounter("LogLogoBlobMsgs"));
             auto bytes = counters->FindSubgroup("subsystem", "lsmhull")->FindCounter("LsmLogBytesWritten");
             UNIT_ASSERT_VALUES_EQUAL(bytes->Val(), expectedBytes);
             UNIT_ASSERT(bytes->ForDerivative());
@@ -83,7 +84,7 @@ Y_UNIT_TEST_SUITE(TVDiskRecoveryLogCounters) {
             for (TStringBuf line : StringSplitter(output.Str()).Split('\n').SkipEmpty()) {
                 samples += !line.StartsWith('#');
             }
-            UNIT_ASSERT_VALUES_EQUAL(samples, extended ? 54 : 2);
+            UNIT_ASSERT_VALUES_EQUAL(samples, extended ? 6 : 2);
         }
     }
 }

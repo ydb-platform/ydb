@@ -64,6 +64,7 @@ public:
         }
 
         if (Ev->Get()->IsSuccess()) {
+            target->SetIssue({});
             const bool wasAltering = dstState == TReplication::EDstState::Alter;
             target->SetDstPathId(Ev->Get()->DstPathId);
             if (Replication->GetDesiredState() == TReplication::EState::Done) {

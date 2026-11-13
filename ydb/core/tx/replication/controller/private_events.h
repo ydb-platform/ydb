@@ -48,6 +48,7 @@ struct TEvPrivate {
         EvCancelCreateStream,
         EvCancelDropStream,
         EvExpireWorkerLag,
+        EvSourceStatus,
 
         EvEnd,
     };
@@ -155,6 +156,19 @@ struct TEvPrivate {
         bool IsSuccess() const {
             return Status == NKikimrScheme::StatusSuccess;
         }
+    };
+
+    struct TEvSourceStatus: public TEventLocal<TEvSourceStatus, EvSourceStatus> {
+        const ui64 ReplicationId;
+        // Discovery reports replication-wide status before target IDs exist.
+        const std::optional<ui64> TargetId;
+        const TString Issue;
+
+        TEvSourceStatus(ui64 rid, std::optional<ui64> tid, const TString& issue)
+            : ReplicationId(rid)
+            , TargetId(tid)
+            , Issue(issue)
+        {}
     };
 
     struct TEvCreateDstResult: public TGenericSchemeResult<TEvCreateDstResult, EvCreateDstResult> {

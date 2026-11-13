@@ -143,6 +143,7 @@ private:
     void Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSourceStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);

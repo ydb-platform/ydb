@@ -102,10 +102,12 @@ TExprNode::TPtr ConvertQLComparison(const TExprNode::TPtr& node, const TExprNode
 }
 
 TExprNode::TPtr ConvertQLSubTree(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx, bool allowOptional = false) {
-    if (node->IsCallable({"And", "Or", "Not", "Exists"})) {
+    if (node->IsCallable("Exists")) {
+        auto converted = ConvertQLMember(node->HeadPtr(), rowArg, newRowArg, ctx, /*allowOptional*/ true);
+        return converted ? ctx.ChangeChild(*node, 0, std::move(converted)) : nullptr;
+    }
+    if (node->IsCallable({"And", "Or", "Not"})) {
         TExprNode::TListType convertedChildren;
-        // TODO: Allow optional inside Exists.
-        // const bool allowOptionalForChildren = allowOptional || node->IsCallable("Exists");
         for (const auto& child : node->ChildrenList()) {
             const auto converted = ConvertQLSubTree(child, rowArg, newRowArg, ctx, allowOptional);
             if (!converted) {

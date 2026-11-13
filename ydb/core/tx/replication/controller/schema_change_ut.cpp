@@ -4415,11 +4415,23 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
             }
         }
         UNIT_ASSERT(newIndexId && newIndexId != oldIndexId);
+        // Check backfill and writes made before and after old target removal,
+        // including recovery when the controller was restarted.
         UNIT_ASSERT_C(WaitFor([&] {
             const auto rows = execute(
-                "SELECT key FROM `/Root/replica1` VIEW by_value WHERE other='witness';");
-            return rows.IsSuccess() && rows.GetResultSet(0).RowsCount() == 1;
-        }, 600), "Recreated index missed a row already visible in the replicated base table");
+                "SELECT key FROM `/Root/replica1` VIEW by_value "
+                "WHERE other IN ('old','while-held','witness') ORDER BY key;");
+            if (!rows.IsSuccess() || rows.GetResultSet(0).RowsCount() != 3) {
+                return false;
+            }
+            NYdb::TResultSetParser parser(rows.GetResultSet(0));
+            for (const ui32 key : {2u, 3u, 4u}) {
+                if (!parser.TryNextRow() || parser.ColumnParser("key").GetOptionalUint32() != key) {
+                    return false;
+                }
+            }
+            return true;
+        }, 600), "Recreated index did not return keys 2, 3 and 4 from backfill and writes around old target removal");
         UNIT_ASSERT_VALUES_EQUAL(
             env.GetDescription("/Root/replica1").GetPathDescription().GetTable().GetTableIndexes(0).GetState(),
             NKikimrSchemeOp::EIndexStateReady);

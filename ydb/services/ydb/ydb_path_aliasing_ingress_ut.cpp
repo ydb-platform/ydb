@@ -399,6 +399,12 @@ namespace NKikimr::NGRpcService {
         Y_UNIT_TEST_TWIN(TopicRewritesNestedDlqPathsOnly, enableRelativePaths) {
             TFixture fixture(false, true, true, false, enableRelativePaths);
             auto stub = Ydb::Topic::V1::TopicService::NewStub(fixture.Channel);
+            auto scheme = Ydb::Scheme::V1::SchemeService::NewStub(fixture.Channel);
+            for (const auto* path : {"/alias/Root", "/alias/Root/kfront", "/alias/Root/other"}) {
+                Ydb::Scheme::MakeDirectoryRequest request;
+                request.set_path(path);
+                Success(Call(*scheme, &TScheme::MakeDirectory, request, "/alias"));
+            }
 
             auto createTopic = [&](const TString& path) {
                 Ydb::Topic::CreateTopicRequest request;
@@ -407,6 +413,24 @@ namespace NKikimr::NGRpcService {
                 Success(Call(*stub, &TTopic::CreateTopic, request, "/alias"));
             };
             createTopic("/alias/dlq");
+            createTopic("/alias/Root/kfront/dlq");
+            createTopic("/alias/Root/other/dlq");
+            const char* relativeDlq = "Root/kfront/dlq/";
+            const char* expectedRelativeDlq = enableRelativePaths ? "/Root/kfront/Root/kfront/dlq" : relativeDlq;
+            auto checkDlq = [&](const char* name, const char* expected) {
+                Ydb::Topic::DescribeTopicRequest describe;
+                describe.set_path("/alias/source");
+                const auto result = Result<Ydb::Topic::DescribeTopicResult>(
+                    Call(*stub, &TTopic::DescribeTopic, describe, "/alias"));
+                for (const auto& consumer : result.consumers()) {
+                    if (consumer.name() == name) {
+                        UNIT_ASSERT_VALUES_EQUAL(consumer.shared_consumer_type()
+                            .dead_letter_policy().move_action().dead_letter_queue(), expected);
+                        return;
+                    }
+                }
+                UNIT_FAIL(TStringBuilder() << "Missing consumer " << name);
+            };
 
             Ydb::Topic::CreateTopicRequest create;
             create.set_path("/alias/source");
@@ -416,12 +440,25 @@ namespace NKikimr::NGRpcService {
             auto* aliasPolicy = aliasConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
             aliasPolicy->set_enabled(true);
             aliasPolicy->mutable_move_action()->set_dead_letter_queue("/alias/dlq");
+            auto* relativeConsumer = create.add_consumers();
+            relativeConsumer->set_name("relative_consumer");
+            auto* relativePolicy = relativeConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
+            relativePolicy->set_enabled(true);
+            relativePolicy->mutable_move_action()->set_dead_letter_queue(relativeDlq);
             auto* sqsConsumer = create.add_consumers();
             sqsConsumer->set_name("sqs_consumer");
             auto* sqsPolicy = sqsConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
             sqsPolicy->set_enabled(true);
             sqsPolicy->mutable_move_action()->set_dead_letter_queue("sqs://account/queue");
+            if (enableRelativePaths) {
+                for (const auto* path : {"/Root/other/dlq", "/dlq"}) {
+                    aliasPolicy->mutable_move_action()->set_dead_letter_queue(path);
+                    UNIT_ASSERT_VALUES_EQUAL(Status(Call(*stub, &TTopic::CreateTopic, create, "/alias")), Ydb::StatusIds::BAD_REQUEST);
+                }
+                aliasPolicy->mutable_move_action()->set_dead_letter_queue("/alias/dlq");
+            }
             Success(Call(*stub, &TTopic::CreateTopic, create, "/alias"));
+            checkDlq("relative_consumer", expectedRelativeDlq);
 
             Ydb::Topic::AlterTopicRequest alter;
             alter.set_path("/alias/source");
@@ -430,6 +467,11 @@ namespace NKikimr::NGRpcService {
             auto* addedPolicy = added->mutable_shared_consumer_type()->mutable_dead_letter_policy();
             addedPolicy->set_enabled(true);
             addedPolicy->mutable_move_action()->set_dead_letter_queue("sqs://account/queue");
+            auto* addedRelative = alter.add_add_consumers();
+            addedRelative->set_name("added_relative_consumer");
+            auto* addedRelativePolicy = addedRelative->mutable_shared_consumer_type()->mutable_dead_letter_policy();
+            addedRelativePolicy->set_enabled(true);
+            addedRelativePolicy->mutable_move_action()->set_dead_letter_queue(relativeDlq);
             auto* changed = alter.add_alter_consumers();
             changed->set_name("alias_consumer");
             changed->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
@@ -438,7 +480,23 @@ namespace NKikimr::NGRpcService {
             changedSqs->set_name("sqs_consumer");
             changedSqs->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
                 ->mutable_alter_move_action()->set_set_dead_letter_queue("sqs://account/updated");
+            auto* changedRelative = alter.add_alter_consumers();
+            changedRelative->set_name("relative_consumer");
+            changedRelative->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+                ->mutable_alter_move_action()->set_set_dead_letter_queue("dlq");
+            if (enableRelativePaths) {
+                addedPolicy->mutable_move_action()->set_dead_letter_queue("/Root/other/dlq");
+                UNIT_ASSERT_VALUES_EQUAL(Status(Call(*stub, &TTopic::AlterTopic, alter, "/alias")), Ydb::StatusIds::BAD_REQUEST);
+                addedPolicy->mutable_move_action()->set_dead_letter_queue("sqs://account/queue");
+                changed->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+                    ->mutable_alter_move_action()->set_set_dead_letter_queue("/Root/other/dlq");
+                UNIT_ASSERT_VALUES_EQUAL(Status(Call(*stub, &TTopic::AlterTopic, alter, "/alias")), Ydb::StatusIds::BAD_REQUEST);
+                changed->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+                    ->mutable_alter_move_action()->set_set_dead_letter_queue("/alias/dlq");
+            }
             Success(Call(*stub, &TTopic::AlterTopic, alter, "/alias"));
+            checkDlq("relative_consumer", enableRelativePaths ? "/Root/kfront/dlq" : "dlq");
+            checkDlq("added_relative_consumer", expectedRelativeDlq);
 
             Ydb::Topic::AlterTopicRequest setMove;
             setMove.set_path("/alias/source");
@@ -450,7 +508,19 @@ namespace NKikimr::NGRpcService {
             changedSqsMove->set_name("sqs_consumer");
             changedSqsMove->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
                 ->mutable_set_move_action()->set_dead_letter_queue("sqs://account/final");
+            auto* changedRelativeMove = setMove.add_alter_consumers();
+            changedRelativeMove->set_name("relative_consumer");
+            changedRelativeMove->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+                ->mutable_set_move_action()->set_dead_letter_queue("Root/other/dlq");
+            if (enableRelativePaths) {
+                changedMove->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+                    ->mutable_set_move_action()->set_dead_letter_queue("/Root/other/dlq");
+                UNIT_ASSERT_VALUES_EQUAL(Status(Call(*stub, &TTopic::AlterTopic, setMove, "/alias")), Ydb::StatusIds::BAD_REQUEST);
+                changedMove->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+                    ->mutable_set_move_action()->set_dead_letter_queue("/alias/dlq");
+            }
             Success(Call(*stub, &TTopic::AlterTopic, setMove, "/alias"));
+            checkDlq("relative_consumer", enableRelativePaths ? "/Root/kfront/Root/other/dlq" : "Root/other/dlq");
 
             Ydb::Topic::DescribeTopicRequest describe;
             describe.set_path("/alias/source");
@@ -510,12 +580,12 @@ namespace NKikimr::NGRpcService {
             stream->Finish();
         }
 
-        Y_UNIT_TEST(CdcReadSessionReturnsSubscribedAlias) {
-            TFixture fixture;
+        Y_UNIT_TEST_QUAD(CdcReadSessionReturnsSubscribedAlias, enableRelativePaths, relativeSubscription) {
+            TFixture fixture(false, true, true, /*nestedAliasParent=*/false, enableRelativePaths);
             auto table = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
             auto topic = Ydb::Topic::V1::TopicService::NewStub(fixture.Channel);
             const char* tablePath = "/alias/test";
-            const char* feedPath = "/alias/test/feed";
+            const char* feedPath = relativeSubscription ? "test/feed" : "/alias/test/feed";
 
             Ydb::Table::CreateTableRequest create;
             create.set_path(tablePath);
@@ -554,7 +624,7 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT_C(response.server_message_case() ==
                 Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, response.DebugString());
             UNIT_ASSERT_VALUES_EQUAL_C(response.start_partition_session_request().partition_session().path(),
-                feedPath, response.DebugString());
+                relativeSubscription ? "/Root/kfront/test/feed" : "/alias/test/feed", response.DebugString());
 
             context.TryCancel();
             stream->Finish();

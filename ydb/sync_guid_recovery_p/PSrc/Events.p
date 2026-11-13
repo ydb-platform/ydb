@@ -18,8 +18,9 @@ type TSyncState = (Guid: int, SyncedLsn: int);
 type TDecision = (Decision: EDecision, Guid: int, Step: EFirstRunStep);
 type TVDisk = (Online: bool, Ready: bool, Local: TLocalGuidInfo,
   Incarnation: int, HullBlock: int, LogBlock: int, LogLsn: int,
-  LogStartLsn: int, PeerGuidInfo: seq[TSyncGuidInfo], Cursors: seq[TSyncState]);
-type TGuidReply = (VDiskId: int, Info: TSyncGuidInfo);
+  LogStartLsn: int, PeerGuidInfo: seq[TSyncGuidInfo], Cursors: seq[TSyncState],
+  KnownGuids: seq[int]);
+type TGuidReply = (VDiskId: int, Info: TSyncGuidInfo, RecoveredGuid: int);
 type TGuidEnvelope = (Target: machine, Owner: int, Reply: TGuidReply);
 type TGuidRecovered = (Owner: int, Outcome: TDecision);
 type TVSyncRequest = (Job: machine, Owner: int, Peer: int, SyncState: TSyncState);

@@ -1,5 +1,31 @@
 # Recovery model and C++ correspondence
 
+## Protocol repairs
+
+The model includes three proposed changes to the original C++ behavior:
+
+- `TSyncerJobTask` takes the existing full-sync path for both `RESTART` and
+  `NODATA`. The snapshot is imported and acknowledged before `TEvSyncerJobDone`
+  persists its cursor.
+- Each VDisk durably stores `KnownGuids`, separately from `PeerGuidInfo`.
+  Final publications and propagations record immutable identities. Lost-data
+  recovery merges saved identities, direct Final observations and committed
+  source identities from its ready, nonself full-sync sources before `Ready`.
+  Conflicts are errors. GUID replies carry the queried owner's `RecoveredGuid`;
+  `ReachAVerdict` also trusts intact local `Final`/`Lost` identity. These facts
+  contribute no responder IDs to `finalDisks`: missing current Final quorum
+  requires republication. A known identity with local `Empty` takes `LostData`.
+- `Good` settles identity without setting `Ready`. Catch-up sets `Ready` only
+  after all selected jobs finish. `LostData` requires metadata and GUID-record
+  import, abstract Osiris and durable local Final first. Genuine `FirstRun`
+  initialization remains valid for an empty group.
+
+`KnownGuids` starts empty, is erased by wipe, and is learned only from stored
+protocol records; it never reads monitor history. No scenarios, monitors,
+topologies or realm-state transitions were added. These repairs are not a port
+of PR #57055. [Fixed-model results](Evidence/fixed-results.json) are separate
+from the original counterexamples.
+
 ## Topologies and quorums
 
 The same implementation and driver run with two configurations:
@@ -33,20 +59,21 @@ VDisk 0 returns; `Good` alone is not treated as metadata freshness.
 
 | Test | Scenario | Expected checker result |
 | --- | --- | --- |
-| `tcStaleMetadata` | Preserve disk 0, wipe/recover peers 1–7, include self in the first GUID quorum, then finish ordinary synchronization with every available peer. | `MetadataIsCompleteWhenSynced` fails: all seven peers report `DisksSynced`, but local Hull lacks generation 42. |
-| `tcDelayedSelfGuid` | Same rolling wipes, but finitely delay disk 0's actual self-witness until a peer quorum arrives. | `PreservedIdentityRemainsRecoverable` fails: local `Final` becomes `Inconsistency` after an all-`Empty` first quorum. |
-| `tcFalseFirstRun` | Also wipe disk 0 before its unavailable interval; rolling wipes erase the remaining identity witnesses. | `NeverReinitializeExistingVDisk` fails after the real `FirstRun` publication/local-commit sequence. |
+| `tcStaleMetadata` | Preserve disk 0, wipe/recover peers 1–7, include self in the first GUID quorum, then finish ordinary synchronization with every available peer. | Pass: `RESTART` forces full metadata import; local Hull contains generation 42. |
+| `tcDelayedSelfGuid` | Same rolling wipes, but finitely delay disk 0's actual self-witness until a peer quorum arrives. | Pass: durable identity evidence retains the original GUID despite empty direct witnesses. |
+| `tcFalseFirstRun` | Also wipe disk 0 before its unavailable interval; rolling wipes erase the direct identity witnesses. | Pass: recovered identity selects `LostData`, retains the GUID and imports generation 42. |
 | `tcNoWipes` | Preserve disk 0 and the original peer logs. | Pass: ordinary synchronization imports generation 42. |
-| `tcRetainedSource` | Wipe peers 1–6, leaving peer 7's original log. | Pass: the remaining original source repairs the metadata gap. |
+| `tcRetainedSource` | Wipe peers 1–6, leaving peer 7's original log. | Pass: synchronization imports metadata from both recovered and original peers. |
 | `tcWipedWithWitnesses` | Wipe disk 0 but preserve its peer witnesses. | Pass: `LostData` retains the eternal GUID, imports metadata, completes abstract Osiris and persists recovery state. |
 | `tcFreshGroup` | All GUID records are initially empty and no slot has historical identity. | Pass: `FirstRun` is legitimate. Other VDisks can answer GUID reads while not yet ready for data synchronization. |
 
 Each testcase also has a `tcMirror3dc…` counterpart using the same driver and
 monitors. It wipes peers 1–8; `tcMirror3dcRetainedSource` leaves peer 8 unwiped.
-The stale-metadata failure waits for successful synchronization with all eight
+The stale-metadata case waits for successful synchronization with all eight
 peers. For the self-included branch, the first GUID quorum is `{0,1,2,3,4}`;
 for `DelayedSelfGuid` it is `{3,4,5,6,7}`. Both have realm counts `(3,2,0)`
-up to realm order. The latter consists entirely of erased witnesses.
+up to realm order. The latter has erased direct witnesses but restored
+`KnownGuids` evidence.
 
 The transport holds genuine read replies, releases them after the delivered
 responder set forms a quorum, and never invents `Empty` answers. Independent proxy/job machines provide
@@ -74,7 +101,10 @@ monitor to change the implementation.
 - **`ScenarioCompletes`** is a hot-state liveness monitor. A passing control must
   reach the end of its finite scenario rather than silently abandon its checks.
 
-## C++ correspondence
+## Original C++ correspondence
+
+The table describes the original port. Current P behavior intentionally differs
+in the protocol repairs listed above; production C++ is unchanged.
 
 The source snapshot is
 [`6e3629b18daf4a2441d2b129fa3b1ae84564610f`](https://github.com/ydb-platform/ydb/commit/6e3629b18daf4a2441d2b129fa3b1ae84564610f),
@@ -120,12 +150,21 @@ identities instead of random 64-bit integers.
 - Failures are stops/wipes at scenario boundaries. Group generation changes,
   read-only peers, retry timers, mixed-version history exchange, and interrupted
   recovery are outside scope. The `NODATA` branch is included, but the current
-  controls reach ordinary OK and RESTART/ALREADY rather than forcing log trimming.
+  cases reach ordinary OK and RESTART/full-sync rather than forcing log trimming.
+
+GUID preservation relies on the existing sequential-wipe recovery discipline:
+each replacement restores identity records before the next wipe. Total loss of
+all identity records cannot be distinguished from fresh initialization without
+external creation authority. Concurrent recovery/startup and crash consistency of the
+atomic imports are not established by these checks. The unchanged monitors
+check identity, metadata after synchronization and scenario completion; they do
+not directly assert the new `Ready` ordering.
 
 ## Erasure scope
 
-The three failures are reproduced in this P model for both 4+2 and normal
-mirror-3-dc. The original C++ regressions cover the first two failures in 4+2.
+The original model reproduced three failures for both 4+2 and normal
+mirror-3-dc; the repaired model passes all 14 existing cases. The original C++
+regressions cover the first two failures in 4+2.
 No end-to-end mirror-3-dc C++ reproduction is claimed.
 
 `TDecisionMaker`, GUID propagation, and `TSyncerJobTask::HandleRestart` are shared

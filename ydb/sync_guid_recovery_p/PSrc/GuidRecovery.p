@@ -1,9 +1,10 @@
-// Port of TDecisionMaker::{VDiskQuorumDecision,HandleQuorum*,CheckLocalAndRemoteGuid}.
+// TDecisionMaker with durable identity evidence separate from current quorum votes.
 // See MODEL.md for pinned C++ sources and abstraction boundaries.
 fun ReachAVerdict(topology: ETopology, local: TLocalGuidInfo, votes: seq[TGuidReply]): TDecision {
   var reply: TGuidReply;
   var vote: TSyncGuidInfo;
   var finalGuid: int;
+  var knownGuid: int;
   var finalDisks: set[int];
   var progress: map[int, int];
   var guid: int;
@@ -12,7 +13,14 @@ fun ReachAVerdict(topology: ETopology, local: TLocalGuidInfo, votes: seq[TGuidRe
   var step: EFirstRunStep;
   var decision: EDecision;
 
+  if (local.State == LocalFinal || local.State == Lost) { knownGuid = local.Guid; }
   foreach (reply in votes) {
+    if (reply.RecoveredGuid != 0) {
+      if (knownGuid != 0 && knownGuid != reply.RecoveredGuid) {
+        return (Decision = Inconsistency, Guid = 0, Step = STATE__Terminated);
+      }
+      knownGuid = reply.RecoveredGuid;
+    }
     vote = reply.Info;
     if (vote.State == RemoteFinal) {
       if (sizeof(finalDisks) > 0 && finalGuid != vote.Guid) {
@@ -25,7 +33,15 @@ fun ReachAVerdict(topology: ETopology, local: TLocalGuidInfo, votes: seq[TGuidRe
       progress[vote.Guid] = progress[vote.Guid] + 1;
     }
   }
-  if (sizeof(finalDisks) > 0) {
+  if (knownGuid != 0) {
+    // Only incompatible Final evidence conflicts with an immutable identity.
+    if (finalGuid != 0 && finalGuid != knownGuid) {
+      return (Decision = Inconsistency, Guid = 0, Step = STATE__Terminated);
+    }
+    finalGuid = knownGuid;
+  }
+  if (sizeof(finalDisks) > 0 || knownGuid != 0) {
+    // A fact selects the old GUID but adds no Final responder IDs.
     step = STATE__Terminated;
     if (!HasGroupQuorum(topology, finalDisks)) { step = ACTION_WriteFinalToQuorum; }
     if (local.State == LocalEmpty) { decision = LostData; }
@@ -34,7 +50,6 @@ fun ReachAVerdict(topology: ETopology, local: TLocalGuidInfo, votes: seq[TGuidRe
       if (HasGroupQuorum(topology, finalDisks)) { step = ACTION_WriteFinalLocally; }
     } else if (local.State == Lost) { decision = LostData; }
     else { decision = Good; }
-    // HandleQuorumFinal(Lost) deliberately has no local/remote GUID check.
     if (local.State == Selected || local.State == LocalFinal ||
         (local.State == Lost && !HasGroupQuorum(topology, finalDisks))) {
       if (local.Guid != finalGuid) { decision = Inconsistency; }

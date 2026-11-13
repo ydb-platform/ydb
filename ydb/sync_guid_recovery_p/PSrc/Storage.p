@@ -35,6 +35,7 @@ machine TRecoveryStorage {
             disk.PeerGuidInfo += (j, (State = RemoteFinal, Guid = j + 1));
           }
           disk.Cursors += (j, (Guid = j + 1, SyncedLsn = 0));
+          disk.KnownGuids += (j, 0);
           j = j + 1;
         }
         disks += (i, disk);
@@ -59,6 +60,7 @@ machine TRecoveryStorage {
       while (i < diskCount) {
         disks[owner].PeerGuidInfo[i] = default(TSyncGuidInfo);
         disks[owner].Cursors[i] = default(TSyncState);
+        disks[owner].KnownGuids[i] = 0;
         i = i + 1;
       }
       send driver, eAck;
@@ -91,6 +93,7 @@ machine TRecoveryStorage {
             if (disks[peer].Online) {
               disks[peer].PeerGuidInfo[source] =
                 (State = RemoteFinal, Guid = disks[source].Local.Guid);
+              RememberGuid(peer, source, disks[source].Local.Guid);
             }
             peer = peer + 1;
           }
@@ -112,7 +115,8 @@ machine TRecoveryStorage {
         if (disks[i].Online) {
           new TVDiskGuidProxy((Transport = transport,
             Envelope = (Target = req.Source, Owner = req.Owner,
-              Reply = (VDiskId = i, Info = disks[i].PeerGuidInfo[req.Owner]))));
+              Reply = (VDiskId = i, Info = disks[i].PeerGuidInfo[req.Owner],
+                RecoveredGuid = disks[i].KnownGuids[req.Owner]))));
         }
         i = i + 1;
       }
@@ -122,8 +126,13 @@ machine TRecoveryStorage {
       var acks: set[int];
       while (i < diskCount) {
         if (disks[i].Online) {
-          // TSyncer::Handle(TEvVSyncGuid) does not veto a different old Final.
+          // Previously committed identity cannot be replaced by publication.
+          assert disks[i].KnownGuids[req.Owner] == 0 || disks[i].KnownGuids[req.Owner] == req.Info.Guid;
+          if (disks[i].PeerGuidInfo[req.Owner].State == RemoteFinal) {
+            assert disks[i].PeerGuidInfo[req.Owner].Guid == req.Info.Guid;
+          }
           disks[i].PeerGuidInfo[req.Owner] = req.Info;
+          if (req.Info.State == RemoteFinal) { RememberGuid(i, req.Owner, req.Info.Guid); }
           acks += (i);
         }
         i = i + 1;
@@ -138,6 +147,8 @@ machine TRecoveryStorage {
     }
     on TEvVDiskGuidRecovered do (result: TGuidRecovered) {
       var i: int;
+      var source: int;
+      var subject: int;
       var sources: set[int];
       var generation: int;
       var owner: int;
@@ -154,6 +165,19 @@ machine TRecoveryStorage {
           i = i + 1;
         }
         assert HasFullSyncQuorum(topology, sources);
+        // Restore every immutable GUID fact before this disk can be a source.
+        // Do not populate PeerGuidInfo: imported facts are not publication votes.
+        foreach (source in sources) {
+          subject = 0;
+          while (subject < diskCount) {
+            RememberGuid(owner, subject, disks[source].KnownGuids[subject]);
+            if (disks[source].PeerGuidInfo[subject].State == RemoteFinal) {
+              RememberGuid(owner, subject, disks[source].PeerGuidInfo[subject].Guid);
+            }
+            subject = subject + 1;
+          }
+          RememberGuid(owner, source, disks[source].Local.Guid);
+        }
         disks[owner].HullBlock = generation;
         disks[owner].LogLsn = disks[owner].LogLsn + 1;
         announce eCallOsiris, owner;
@@ -163,12 +187,14 @@ machine TRecoveryStorage {
         // Imported Hull metadata is NOT appended to the outgoing SyncLog.
         announce eLocalCommitted, (Owner = owner, Local = disks[owner].Local);
       }
-      if (result.Outcome.Decision != Inconsistency) { disks[owner].Ready = true; }
+      // Good settles identity only; the following synchronization round gates Ready.
+      disks[owner].Ready = result.Outcome.Decision == LostData || result.Outcome.Decision == FirstRun;
       send driver, eRecoveryReady, result;
     }
     on eStartRound do (owner: int) {
       var i: int;
-      assert disks[owner].Online && disks[owner].Ready;
+      assert disks[owner].Online && disks[owner].Local.State == LocalFinal;
+      disks[owner].Ready = false;
       roundOwner = owner;
       roundPeers = default(set[int]);
       roundDone = default(set[int]);
@@ -217,10 +243,17 @@ machine TRecoveryStorage {
       roundDone += (result.Peer);
       announce eSyncPeerDone, (Owner = result.Owner, Peer = result.Peer, Status = result.Status);
       if (sizeof(roundDone) == sizeof(roundPeers)) {
+        disks[roundOwner].Ready = true;
         send driver, eRoundFinished,
           (Owner = roundOwner, HullBlock = disks[roundOwner].HullBlock, Peers = sizeof(roundDone));
       }
     }
+  }
+  fun RememberGuid(owner: int, subject: int, guid: int) {
+    if (guid == 0) { return; }
+    assert disks[owner].KnownGuids[subject] == 0 || disks[owner].KnownGuids[subject] == guid,
+      "Conflicting immutable GUID records";
+    disks[owner].KnownGuids[subject] = guid;
   }
 }
 
@@ -238,12 +271,9 @@ machine TSyncerJobTask {
       NextRequest();
     }
     on TEvVSyncResult do (result: TVSyncResult) {
-      if (result.Status == RESTART) {
-        // HandleRestart: EJustSync remains EJustSync; no metadata imported.
-        current = result.SyncState;
-        NextRequest();
-      } else if (result.Status == NODATA) {
-        // PrepareToFullRecovery/ContinueInFullRecoveryMode, unlike RESTART.
+      if (result.Status == RESTART || result.Status == NODATA) {
+        // A new incarnation cannot certify coverage of the old metadata history.
+        // The new cursor is persisted only after the snapshot's local apply ack.
         send storage, eFullSyncRequest, (Job = this, Owner = owner, Peer = peer, SyncState = result.SyncState);
       } else if (result.Status == ALREADY) {
         current = result.SyncState;

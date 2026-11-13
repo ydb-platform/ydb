@@ -1,5 +1,20 @@
 # Checked model results
 
+## Repaired model — 2026-11-13
+
+All **14 existing cases passed 50 schedules each: 700 schedules, zero bugs**.
+Seed: 1; maximum steps: 10,000; `--fail-on-maxsteps` enabled.
+`PSpec/Invariants.p`, `PTst/Scenarios.p`, and `PTst/Tests.p` are unchanged.
+The protocol repairs, source hashes, base Git SHA/date and per-case checker
+statistics are recorded in [fixed-results.json](fixed-results.json).
+
+The counterexamples and `results.json` below preserve the original behavior.
+Their schedules require the baseline model at
+`5a1fd318a65b085dc6360af581c4f7c4db51ba5a` (2026-11-12T20:55:25+03:00),
+rather than the repaired assembly.
+
+## Original model — 2026-11-12
+
 Validated on **2026-11-12**, using installed P **3.1.0**,
 .NET SDK **8.0.428**, and runtime **8.0.34**, using `p` directly.
 

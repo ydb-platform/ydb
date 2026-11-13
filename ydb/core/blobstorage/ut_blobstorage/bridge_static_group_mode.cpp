@@ -138,6 +138,95 @@ Y_UNIT_TEST_SUITE(BridgeStaticGroupMode) {
         checker.CheckAll();
     }
 
+    Y_UNIT_TEST(AuthorityPileOutWhileMakingBridged) {
+        TEnvironmentSetup env(MakeStaticModeSettings());
+        const ui32 dynamicGroupId = CreatePoolAndGetGroup(env);
+        env.Sim(TDuration::Seconds(30));
+        CheckPartCount(env, 2);
+        TDataChecker checker(env);
+        checker.Write(0);
+        checker.Write(dynamicGroupId);
+
+        ChangeMode(env, false, "pile_2");
+        ChangeMode(env, true);
+
+        // Let the new part reach the stage when it receives every write, then hold its next stage transition.
+        NKikimrBlobStorage::TGroupInfo latestInfo;
+        bool hold = true;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> held;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                if (record.HasUpdateBridgeGroupInfo() && record.GetUpdateBridgeGroupInfo().GetGroupId() == 0) {
+                    latestInfo.CopyFrom(record.GetUpdateBridgeGroupInfo().GetBridgeGroupInfo());
+                }
+            }
+            if (hold && ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                if (msg->BridgeProxyGroupId.GetRawId() == 0) {
+                    const auto *pile = NBridge::FindGroupPileByGroupId(latestInfo.GetBridgeGroupState(),
+                        msg->TargetGroupId);
+                    if (pile && pile->GetStage() == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA) {
+                        held.emplace_back(nodeId, std::move(ev));
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+        WaitUntil(env, [&] { return !held.empty(); }, "static part synced up to data stage", TDuration::Seconds(1), 120);
+        checker.Write(0);
+        checker.CheckAll();
+
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        const TString data = "static write while authority pile is out";
+        const TLogoBlobID id(100501, 1, 1, 0, data.size(), 0);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, 0, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        const auto putResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+        UNIT_ASSERT_UNEQUAL(putResult->Get()->Status, NKikimrProto::OK);
+        checker.Write(dynamicGroupId); // bridged dynamic storage keeps working
+        ExpectError(RemovePile(env, "pile_2"), "relies on its part in the pile solely");
+        {
+            const auto info = GetGroupInfo(env, 0);
+            const auto *authority = NBridge::GetGroupPile(info.GetBridgeGroupState(), TBridgePileId::FromPileIndex(1));
+            UNIT_ASSERT_C(authority && authority->GetStage() == NKikimrBridge::TGroupState::SYNCED,
+                info.ShortDebugString());
+        }
+
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        {
+            const auto info = GetGroupInfo(env, 0);
+            const auto& state = info.GetBridgeGroupState();
+            const auto *authority = NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(1));
+            UNIT_ASSERT_C(authority && authority->GetStage() == NKikimrBridge::TGroupState::SYNCED,
+                info.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(TBridgePileId::FromProto(&state,
+                &NKikimrBridge::TGroupState::GetAuthorityPileId), TBridgePileId::FromPileIndex(1));
+        }
+        checker.Write(0);
+        checker.CheckAll();
+
+        hold = false;
+        for (auto& [nodeId, ev] : held) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        WaitForPartCount(env, 2);
+        for (ui32 pileIndex : {0, 1}) {
+            CheckPileData(env, checker, pileIndex, pileIndex ? 9 : 1);
+        }
+
+        ChangeMode(env, false, "pile_2");
+        WaitForPartCount(env, 1);
+        checker.Write(0);
+        checker.CheckAll();
+        env.Runtime->FilterFunction = {};
+    }
+
     Y_UNIT_TEST(ConversionCanSkipStaticGroups) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
         const ui32 groupId = CreatePoolAndGetGroup(env);

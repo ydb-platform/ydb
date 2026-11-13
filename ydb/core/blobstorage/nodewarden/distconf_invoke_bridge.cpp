@@ -840,8 +840,7 @@ namespace NKikimr::NStorage {
         for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
             groupPiles.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
                 TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId));
-            if (!NBridge::IsStaticGroupBridged(config.GetClusterStateDetails()) && group.HasBridgeGroupState() &&
-                    NBridge::GetGroupPile(group.GetBridgeGroupState(), pileId) &&
+            if (group.HasBridgeGroupState() && NBridge::GetGroupPile(group.GetBridgeGroupState(), pileId) &&
                     NBridge::GetAuthorityPileId(group.GetBridgeGroupState()) == pileId) {
                 throw TExError() << "Static GroupId# " << group.GetGroupID()
                     << " relies on its part in the pile solely, its data would be lost";

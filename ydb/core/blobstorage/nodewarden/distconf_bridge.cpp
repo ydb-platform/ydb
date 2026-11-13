@@ -949,15 +949,13 @@ namespace NKikimr::NStorage {
         if (NBridge::GetPileState(*clusterState, pileId) != NKikimrBridge::TClusterState::DISCONNECTED) {
             return "pile is not DISCONNECTED";
         }
-        if (!NBridge::IsStaticGroupBridged(config->GetClusterStateDetails())) {
-            for (const auto& group : config->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
-                if (!group.HasBridgeGroupState() || !NBridge::GetGroupPile(group.GetBridgeGroupState(), pileId)) {
-                    continue;
-                }
-                if (NBridge::GetAuthorityPileId(group.GetBridgeGroupState()) == pileId) {
-                    return TStringBuilder() << "static GroupId# " << group.GetGroupID()
-                        << " relies on its part in the pile solely, its data would be lost";
-                }
+        for (const auto& group : config->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            if (!group.HasBridgeGroupState() || !NBridge::GetGroupPile(group.GetBridgeGroupState(), pileId)) {
+                continue;
+            }
+            if (NBridge::GetAuthorityPileId(group.GetBridgeGroupState()) == pileId) {
+                return TStringBuilder() << "static GroupId# " << group.GetGroupID()
+                    << " relies on its part in the pile solely, its data would be lost";
             }
         }
         clusterState->SetPerPileState(pileId.GetPileIndex(), NKikimrBridge::TClusterState::INACTIVE);
@@ -1033,36 +1031,34 @@ namespace NKikimr::NStorage {
         if (!NBridge::IsStaticGroupBridged(config->GetClusterStateDetails())) {
             return; // ordinary static groups keep their retained copies and don't join pile resynchronization
         }
-        // bump each static group once per configuration, even when parts in several piles are reset
         auto *ss = config->MutableBlobStorageConfig()->MutableServiceSet();
         THashMap<TGroupId, NKikimrBlobStorage::TGroupInfo*> groupMap;
         for (auto& group : *ss->MutableGroups()) {
             groupMap.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), &group);
         }
-        THashMap<TGroupId, ui32> changedGroupIds;
-        for (const auto& [groupId, group] : groupMap) {
-            if (!group->HasBridgeGroupState()) {
+        for (auto& group : *ss->MutableGroups()) {
+            if (!group.HasBridgeGroupState()) {
                 continue;
             }
-            auto *state = group->MutableBridgeGroupState();
+            auto *state = group.MutableBridgeGroupState();
+            const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(*state);
             for (const TBridgePileId pileId : pileIds) {
+                if (pileId == authorityPileId) {
+                    continue; // the authoritative part is never reset; its generation is fenced below like every other
+                }
                 auto *pile = NBridge::GetGroupPile(state, pileId);
                 Y_ABORT_UNLESS(pile); // the pile is not INACTIVE, so the group has its part there
                 pile->ClearStage();
                 pile->SetBecameUnsyncedGeneration(becameUnsyncedGeneration);
             }
-            NBridge::ForEachGroupPile(state, [&](TBridgePileId, NKikimrBridge::TGroupState::TPile& pile) {
+            NBridge::ForEachGroupPile(*state, [&](TBridgePileId, const NKikimrBridge::TGroupState::TPile& pile) {
                 const auto refGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-                auto *refGroup = groupMap[refGroupId];
-                Y_ABORT_UNLESS(refGroup);
+                const auto *refGroup = groupMap.at(refGroupId);
                 Y_ABORT_UNLESS(refGroup->GetGroupGeneration() == pile.GetGroupGeneration());
-                refGroup->SetGroupGeneration(refGroup->GetGroupGeneration() + 1);
-                pile.SetGroupGeneration(refGroup->GetGroupGeneration());
-                changedGroupIds.emplace(refGroupId, refGroup->GetGroupGeneration());
             });
-            BumpBridgeProxyGeneration(group, [&](TGroupId id) { return changedGroupIds.contains(id); });
         }
-        UpdateStaticVDiskGenerations(ss, changedGroupIds);
+        // bump each static group once per configuration, even when parts in several piles are reset
+        BumpStaticBridgeGroupGenerations(ss);
     }
 
     void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState) {

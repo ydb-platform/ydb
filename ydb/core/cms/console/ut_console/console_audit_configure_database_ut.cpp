@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TConsoleAuditEndConfigureDatabase) {
                 if (!reason.empty()) {
                     UNIT_ASSERT_STRING_CONTAINS(line, "reason=Original diagnostic");
                 } else if (!success) {
-                    UNIT_ASSERT_STRING_CONTAINS(line, "reason=Database configuration failed");
+                    UNIT_ASSERT_STRING_CONTAINS(line, "reason=Database configuration failed: reason not provided");
                 } else {
                     UNIT_ASSERT(line.find("reason=") == std::string::npos);
                 }

@@ -4,6 +4,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -134,6 +136,12 @@ bool IsKqpPureExpr(const TExprBase& expr, bool checkDqSources, bool checkIndexRe
 
 bool IsKqpPureLambda(const TCoLambda& lambda) {
     return IsKqpPureExpr(lambda.Body());
+}
+
+bool IsKqpCompletePureExpr(const TExprBase& expr) {
+    return NYql::NDq::IsDqCompletePureExpr(expr, /* isPrecomputePure */ false)
+        && IsPureIsolatedLambda(expr.Ref())
+        && IsKqpPureExpr(expr, /* checkDqSources */ true, /* checkIndexReads */ true);
 }
 
 bool IsKqpPureInputs(const TExprList& inputs) {

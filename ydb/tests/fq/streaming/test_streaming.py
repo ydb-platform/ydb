@@ -2487,7 +2487,7 @@ FROM `{table_name}`"""
             # Errors: invalid escaped unicode in Struct field name
             '{"top":{"bar\\ud800":42},"note":"skip-struct-broken-escape"}',
             # Errors: invalid escaped unicode in Dict field name
-            '{"top":{"c":{"bar\\ud800":42}},"note":"skip-struct-broken-escape"}',
+            '{"top":{"c":{"bar\\ud800":42}},"note":"skip-dict-broken-escape"}',
             # Valid: tuple has extra elements, extra tuple elements are ignored (also validates toplevel key unescape, \u006f is 'o').
             '{"t\\u006fp":{"b":[5,"t","extra"]},"req":{"id":1},"note":"ok-extra"}',
             # Valid: explicit nulls for optional top-level structs.

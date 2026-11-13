@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
 import logging
-import pytest
 import random
 import re
 import string
@@ -32,8 +31,11 @@ class NbsTestBase:
 
     ddisk_pool_name = "ddp1"
 
-    @pytest.fixture(autouse=True)
-    def setup(self):
+    _ddisk_pool_ready = False
+
+    @classmethod
+    def setup_class(cls):
+        # One MIRROR_3_DC cluster per test class (was per-test autouse fixture).
         nbs_database_name = "/Root/NBS"
         configurator = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
@@ -48,13 +50,20 @@ class NbsTestBase:
         )
         # These load-actor/vhost tests are not limited to a single disk.
         configurator.yaml_config['nbs_config']['nbs_frontend_config'] = {'enabled': False}
-        self.cluster = KiKiMR(configurator)
-        self.cluster.start()
-        self.start_nbs(nbs_database_name)
+        cls.cluster = KiKiMR(configurator)
+        cls.cluster.start()
+        # start_nbs is instance method; call via unbound with a shim
+        shim = cls.__new__(cls)
+        shim.cluster = cls.cluster
+        shim.start_nbs(nbs_database_name)
+        shim.create_ddisk_pool()
 
-        yield
-
-        self.cluster.stop()
+    @classmethod
+    def teardown_class(cls):
+        if getattr(cls, 'cluster', None) is not None:
+            cls.cluster.stop()
+            cls.cluster = None
+            cls._ddisk_pool_ready = False
 
     def start_nbs(self, nbs_database_name):
         logger.info("Creating NBS database: %s", nbs_database_name)
@@ -74,11 +83,16 @@ class NbsTestBase:
         return slots
 
     def create_ddisk_pool(self):
+        # Class-scoped cluster already applied BS config (generation > 0). Max<ui64>
+        # skips CheckGeneration (same sentinel as kikimr_runner._ITEM_CONFIG_GENERATION_ANY).
+        if self.__class__._ddisk_pool_ready:
+            return
         define_ddisk_pool = '''
             Command {{
                 DefineDDiskPool {{
                     BoxId: 1
                     Name: "{ddisk_pool_name}"
+                    ItemConfigGeneration: 18446744073709551615
                     Geometry {{
                         NumFailRealms: 1
                         NumFailDomainsPerFailRealm: 5
@@ -101,6 +115,7 @@ class NbsTestBase:
         )
 
         execute_ydbd(self.cluster, "token", ['admin', 'bs', 'config', 'invoke', '--proto', define_ddisk_pool])
+        self.__class__._ddisk_pool_ready = True
 
     def _dstool_nbs_partition_json(self, args, operation_name, disk_id):
         """

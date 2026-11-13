@@ -588,7 +588,7 @@ message ChangefeedCompression {
         COMPRESSION_UNSPECIFIED = 0;
         // Store the change record as-is
         COMPRESSION_NONE = 1;
-        // Store zstd when the compressed bytes are shorter than the record
+        // Store the change record with zstd
         COMPRESSION_ZSTD = 2;
     }
 }

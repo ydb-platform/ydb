@@ -9,11 +9,11 @@
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <contrib/libs/zstd/include/zstd.h>
-
 #include <util/generic/ptr.h>
+#include <util/stream/str.h>
 
 namespace NKikimr::NDataShard {
 namespace {
@@ -99,19 +99,14 @@ NKikimrPQClient::TDataChunk ParseChunk(const TString& bytes) {
     return chunk;
 }
 
-TString MaybeDecompress(const NKikimrPQClient::TDataChunk& chunk, const TCmdWrite& cmd) {
+TString MaybeDecompress(const NKikimrPQClient::TDataChunk& chunk) {
     if (chunk.GetCodec() == 0) {
-        UNIT_ASSERT(!cmd.HasUncompressedSize());
         return chunk.GetData();
     }
     UNIT_ASSERT_VALUES_EQUAL(chunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
-    UNIT_ASSERT(cmd.HasUncompressedSize());
-    UNIT_ASSERT(cmd.GetUncompressedSize() > 0);
-    TString raw = TString::Uninitialized(cmd.GetUncompressedSize());
-    const size_t written = ZSTD_decompress(raw.begin(), raw.size(), chunk.GetData().data(), chunk.GetData().size());
-    UNIT_ASSERT(!ZSTD_isError(written));
-    UNIT_ASSERT_VALUES_EQUAL(written, static_cast<size_t>(cmd.GetUncompressedSize()));
-    return raw;
+    TStringInput input(chunk.GetData());
+    TZstdDecompress decompressor(&input);
+    return decompressor.ReadAll();
 }
 
 void ExpectRewrittenUpsert(const NKikimrChangeExchange::TDataChange& change, const TString& valueBytes, bool withTimestamps) {
@@ -186,7 +181,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         serializer->Serialize(schemaCmd, *schema);
         UNIT_ASSERT(schemaCmd.HasSchemaChange());
         const auto schemaChunk = ParseChunk(schemaCmd.GetSchemaChange().GetData());
-        const auto schemaJson = MaybeDecompress(schemaChunk, schemaCmd);
+        const auto schemaJson = MaybeDecompress(schemaChunk);
         UNIT_ASSERT(schemaJson.StartsWith("{"));
         UNIT_ASSERT_STRING_CONTAINS(schemaJson, "\"key\"");
         UNIT_ASSERT_STRING_CONTAINS(schemaJson, TString(800, 'n'));
@@ -196,7 +191,6 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         TCmdWrite heartbeatCmd;
         serializer->Serialize(heartbeatCmd, *heartbeat);
         UNIT_ASSERT(heartbeatCmd.HasHeartbeat());
-        UNIT_ASSERT(!heartbeatCmd.HasUncompressedSize());
         const auto heartbeatChunk = ParseChunk(heartbeatCmd.GetHeartbeat().GetData());
         UNIT_ASSERT_VALUES_EQUAL(heartbeatChunk.GetCodec(), 0);
         NKikimrChangeExchange::TChangeRecord proto;
@@ -217,19 +211,22 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         TCmdWrite binaryCmd;
         binary->Serialize(binaryCmd, *record);
         const auto binaryChunk = ParseChunk(binaryCmd.GetData());
-        const auto binaryRaw = MaybeDecompress(binaryChunk, binaryCmd);
-        UNIT_ASSERT(binaryRaw.size() >= CdcZstdMinPayloadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(binaryChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
+        const auto binaryRaw = MaybeDecompress(binaryChunk);
         NKikimrChangeExchange::TChangeRecord proto;
         UNIT_ASSERT(proto.ParseFromString(binaryRaw));
         ExpectRewrittenUpsert(proto.GetCdcDataChange(), valueBytes, false);
 
+        const auto smallValue = MakeValueBytes();
         const auto small = MakeRecord(
-            TChangeRecord::EKind::CdcDataChange, table, MakeUpsert(MakeValueBytes(), 3, 7).SerializeAsString());
+            TChangeRecord::EKind::CdcDataChange, table, MakeUpsert(smallValue, 3, 7).SerializeAsString());
         TCmdWrite smallCmd;
         binary->Serialize(smallCmd, *small);
         const auto smallChunk = ParseChunk(smallCmd.GetData());
-        UNIT_ASSERT_VALUES_EQUAL(smallChunk.GetCodec(), 0);
-        UNIT_ASSERT(smallChunk.GetData().size() < CdcZstdMinPayloadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(smallChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
+        NKikimrChangeExchange::TChangeRecord smallProto;
+        UNIT_ASSERT(smallProto.ParseFromString(MaybeDecompress(smallChunk)));
+        ExpectRewrittenUpsert(smallProto.GetCdcDataChange(), smallValue, false);
 
         TChangeRecordSerializerOpts jsonOpts;
         jsonOpts.StreamFormat = NKikimrSchemeOp::ECdcStreamFormatJson;
@@ -239,7 +236,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         TCmdWrite jsonCmd;
         json->Serialize(jsonCmd, *record);
         const auto jsonChunk = ParseChunk(jsonCmd.GetData());
-        const auto jsonRaw = MaybeDecompress(jsonChunk, jsonCmd);
+        const auto jsonRaw = MaybeDecompress(jsonChunk);
         UNIT_ASSERT(jsonRaw.StartsWith("{"));
         UNIT_ASSERT_VALUES_EQUAL(jsonChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
 

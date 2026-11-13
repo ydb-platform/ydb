@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/random/random.h>

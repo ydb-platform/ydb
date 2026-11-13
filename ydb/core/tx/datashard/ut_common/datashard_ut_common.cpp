@@ -1217,6 +1217,7 @@ std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
         if (family.Name) fam->SetName(family.Name);
         if (family.Id) fam->SetId(*family.Id);
         if (family.ColumnCodec) fam->SetColumnCodec(*family.ColumnCodec);
+        if (family.ColumnCodecLevel) fam->SetColumnCodecLevel(*family.ColumnCodecLevel);
         if (family.ColumnCacheMode) fam->SetColumnCacheMode(*family.ColumnCacheMode);
         if (family.LogPoolKind) fam->MutableStorageConfig()->MutableLog()->SetPreferredPoolKind(family.LogPoolKind);
         if (family.SysLogPoolKind) fam->MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind(family.SysLogPoolKind);
@@ -1764,6 +1765,7 @@ ui64 AsyncSetColumnFamily(
     auto fam = desc.MutablePartitionConfig()->AddColumnFamilies();
     if (family.Name) fam->SetName(family.Name);
     if (family.ColumnCodec) fam->SetColumnCodec(*family.ColumnCodec);
+    if (family.ColumnCodecLevel) fam->SetColumnCodecLevel(*family.ColumnCodecLevel);
     if (family.ColumnCacheMode) fam->SetColumnCacheMode(*family.ColumnCacheMode);
     if (family.LogPoolKind) fam->MutableStorageConfig()->MutableLog()->SetPreferredPoolKind(family.LogPoolKind);
     if (family.SysLogPoolKind) fam->MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind(family.SysLogPoolKind);
@@ -1789,6 +1791,7 @@ ui64 AsyncAlterColumnFamily(
     if (family.Name) fam->SetName(family.Name);
     if (family.Id) fam->SetId(*family.Id);
     if (family.ColumnCodec) fam->SetColumnCodec(*family.ColumnCodec);
+    if (family.ColumnCodecLevel) fam->SetColumnCodecLevel(*family.ColumnCodecLevel);
     if (family.ColumnCacheMode) fam->SetColumnCacheMode(*family.ColumnCacheMode);
     if (family.DataPoolKind) {
         auto* data = fam->MutableStorageConfig()->MutableData();

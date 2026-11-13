@@ -7,6 +7,8 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -34,6 +36,7 @@ namespace {
         switch (codec) {
             case NPage::ECodec::Plain:
             case NPage::ECodec::LZ4:
+            case NPage::ECodec::ZSTD:
                 return true;
         }
         return false;
@@ -189,6 +192,15 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         auto &family = tableInfo.Families[delta.GetFamilyId()];
 
         auto codec = delta.HasCodec() ? CodecFromProto(delta.GetCodec()) : family.Codec;
+        ui32 codecLevel = family.CodecLevel;
+        if (delta.HasCodecLevel()) {
+            codecLevel = delta.GetCodecLevel();
+        } else if (delta.HasCodec()) {
+            codecLevel = 1;
+        }
+        Y_ENSURE(codecLevel <= static_cast<ui32>(ZSTD_maxCLevel()), "Invalid page compression level " << codecLevel);
+        Y_ENSURE(codec == NPage::ECodec::ZSTD || codecLevel == 1,
+            "Compression level is only supported for ZSTD");
 
         // FIXME: for now these changes will affect old parts on boot only (see RequestInMemPagesForPartStore)
         bool ever = delta.HasInMemory() && delta.GetInMemory();
@@ -210,6 +222,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         }
         changes |= ChangeTableSetting(table, family.Cache, cache);
         changes |= ChangeTableSetting(table, family.Codec, codec);
+        changes |= ChangeTableSetting(table, family.CodecLevel, codecLevel);
         changes |= ChangeTableSetting(table, family.Small, small);
         changes |= ChangeTableSetting(table, family.Large, large);
         changes |= ChangeTableSetting(table, family.CacheMode, cacheMode);

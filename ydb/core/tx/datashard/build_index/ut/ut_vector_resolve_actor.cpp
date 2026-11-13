@@ -1,4 +1,4 @@
-#include "ut_helpers.h"
+#include <ydb/core/tx/datashard/build_index/ut/ut_helpers.h>
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/events/events.h>

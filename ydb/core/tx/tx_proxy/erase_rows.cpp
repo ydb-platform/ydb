@@ -1,5 +1,5 @@
-#include "erase_rows.h"
-#include "proxy.h"
+#include <ydb/core/tx/tx_proxy/erase_rows.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>

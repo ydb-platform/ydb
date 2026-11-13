@@ -1,4 +1,4 @@
-#include "vector_resolve_actor.h"
+#include <ydb/core/tx/datashard/build_index/vector_resolve_actor.h>
 
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>

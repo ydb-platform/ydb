@@ -1,12 +1,12 @@
-#include "common_helper.h"
-#include "kmeans_helper.h"
-#include "vector_resolve_actor.h"
+#include <ydb/core/tx/datashard/build_index/common_helper.h>
+#include <ydb/core/tx/datashard/build_index/kmeans_helper.h>
+#include <ydb/core/tx/datashard/build_index/vector_resolve_actor.h>
 
-#include "../buffer_data.h"
-#include "../datashard_impl.h"
-#include "../range_ops.h"
-#include "../scan_common.h"
-#include "../upload_stats.h"
+#include <ydb/core/tx/datashard/buffer_data.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
+#include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/tx/datashard/scan_common.h>
+#include <ydb/core/tx/datashard/upload_stats.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/kmeans_clusters.h>

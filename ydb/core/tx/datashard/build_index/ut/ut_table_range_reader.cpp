@@ -1,5 +1,5 @@
-#include "defs.h"
-#include "ut_helpers.h"
+#include <ydb/core/tx/datashard/defs.h>
+#include <ydb/core/tx/datashard/build_index/ut/ut_helpers.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/datashard/build_index/table_range_reader.h>

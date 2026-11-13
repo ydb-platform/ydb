@@ -1,4 +1,4 @@
-#include "table_range_reader.h"
+#include <ydb/core/tx/datashard/build_index/table_range_reader.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>

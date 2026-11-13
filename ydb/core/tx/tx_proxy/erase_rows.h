@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defs.h"
+#include <ydb/core/tx/tx_proxy/defs.h>
 
 #include <ydb/core/util/backoff.h>
 

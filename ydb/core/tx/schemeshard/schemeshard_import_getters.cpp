@@ -729,19 +729,9 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         item.MaterializedIndexes.emplace_back(indexImplTablePrefix, std::move(request));
 
         auto nextStep = [this]() {
-<<<<<<< HEAD
-            if (++IndexCheckedMaterializedIndexImplTable >= IndexImplTablePrefixes.size()) {
-                StartDownloadingChangefeeds();
-            } else {
-                Become(&TThis::StateCheckIndexes);
-                HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
-                    IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
-            }
-=======
             ++IndexCheckedMaterializedIndexImplTable;
             Become(&TThis::StateCheckIndexes);
             DownloadMaterializedIndexes();
->>>>>>> a617606a4e1 (fix: rebuild async indexes on import (#59102))
         };
 
         if (NeedValidateChecksums) {
@@ -991,12 +981,6 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     }
 
     void DownloadMaterializedIndexes() {
-<<<<<<< HEAD
-        if (!IndexImplTablePrefixes.empty()) {
-            Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
-            HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
-                IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
-=======
         // Preserve metadata positions: encrypted index schemes use them to derive their IVs.
         while (IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size()) {
             const auto& prefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ImplTablePrefix;
@@ -1006,8 +990,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             ++IndexCheckedMaterializedIndexImplTable;
         }
         if (IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size()) {
-            HeadObject(CurrentMaterializedIndexSchemeKey());
->>>>>>> a617606a4e1 (fix: rebuild async indexes on import (#59102))
+            HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
+                IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
         } else {
             StartDownloadingChangefeeds();
         }

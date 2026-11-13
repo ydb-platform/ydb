@@ -8152,13 +8152,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     void MaterializedIndex(
             Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode,
-<<<<<<< HEAD
             const TString& metadata = R"({"version": 1})", bool replica = false,
-            bool enableDataShardDirectPartImport = false)
-=======
-            bool enableDataShardDirectPartImport,
-            const TString& metadata = R"({"version": 1})", bool replica = false, bool asyncIndex = false)
->>>>>>> a617606a4e1 (fix: rebuild async indexes on import (#59102))
+            bool enableDataShardDirectPartImport = false, bool asyncIndex = false)
     {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
@@ -8253,10 +8248,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             R"({"version": 1})", true, EnableDataShardDirectPartImport);
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(MaterializedIndexBuild) {
-        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD);
-=======
     Y_UNIT_TEST_QUAD(AsyncIndexAlwaysBuilt, Replica, EnableDataShardDirectPartImport) {
         for (const auto mode : {
                 Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD,
@@ -8268,14 +8259,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             for (const auto& metadata : {
                     R"({"version": 1})",
                     R"({"version": 1, "indexes": [{"export_prefix": "by_value/indexImplTable", "impl_table_prefix": "by_value/indexImplTable"}]})"}) {
-                MaterializedIndex(mode, EnableDataShardDirectPartImport, metadata, Replica, true);
+                MaterializedIndex(mode, metadata, Replica, EnableDataShardDirectPartImport, true);
             }
         }
     }
 
-    Y_UNIT_TEST_FLAG(MaterializedIndexBuild, EnableDataShardDirectPartImport) {
-        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD, EnableDataShardDirectPartImport);
->>>>>>> a617606a4e1 (fix: rebuild async indexes on import (#59102))
+    Y_UNIT_TEST(MaterializedIndexBuild) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD);
     }
 
     Y_UNIT_TEST(MaterializedIndexImport) {
@@ -8290,13 +8280,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT, R"({"version": 0})");
     }
 
-<<<<<<< HEAD
-    void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool shouldFail) {
-=======
-    void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool shouldFail, bool enableDataShardDirectPartImport, bool asyncIndex = false) {
->>>>>>> a617606a4e1 (fix: rebuild async indexes on import (#59102))
+    void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool shouldFail, bool enableDataShardDirectPartImport = false, bool asyncIndex = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
 
         const auto a = GenerateTestData(Sprintf(R"(
             columns {

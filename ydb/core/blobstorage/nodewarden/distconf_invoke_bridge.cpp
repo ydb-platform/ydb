@@ -338,12 +338,18 @@ namespace NKikimr::NStorage {
         }
         const bool skipStoragePoolConversion = cmd.GetSkipStoragePoolConversion();
         RequireBridgeCapability(BridgeFeatureLevel, std::move(requiredNodeIds), {}, [this, skipStoragePoolConversion] {
-            NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-            if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig,
+            ProposedStorageConfig = *Self->StorageConfig;
+            if (auto error = ConvertStorageConfigToBridge(&ProposedStorageConfig, *Self->Cfg->BridgeConfig,
                     skipStoragePoolConversion)) {
                 throw TExError() << *error;
             }
-            StartProposition(&config);
+            if (skipStoragePoolConversion) {
+                StartProposition(&ProposedStorageConfig);
+            } else {
+                // BSC refuses legacy states which would keep BscConversionPending set forever.
+                ControllerOp = EControllerOp::BRIDGE_CONVERSION;
+                ConnectToController();
+            }
         });
     }
 

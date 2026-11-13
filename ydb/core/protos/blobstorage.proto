@@ -1611,6 +1611,9 @@ message TEvControllerDistconfRequest {
         // check that pools and groups can be made ordinary ones without committing, when the bridged cluster is being
         // rolled back
         ValidateBridgeRollback = 5;
+        // check that BSC has no group in a persistent state which would block conversion to bridge mode forever,
+        // before distconf commits the converted StorageConfig
+        ValidateBridgeConversion = 6;
     }
 
     optional EOperation Operation = 1;

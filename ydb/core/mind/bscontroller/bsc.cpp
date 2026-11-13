@@ -935,6 +935,18 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
             return;
         }
 
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateBridgeConversion:
+            for (const auto& [groupId, group] : GroupMap) {
+                if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING) {
+                    rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                    rr.SetErrorReason(TStringBuilder()
+                        << "GroupId# " << groupId
+                        << " is in unsupported RECOMMISSIONING state and blocks bridge conversion");
+                    break;
+                }
+            }
+            break;
+
         case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateConfig: {
             if (!mainYaml) {
                 rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);

@@ -251,6 +251,119 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         TestImpl(values, codec);
     }
 
+    const ICodec* VarLenCodec(TTypeCodecs* codecs) {
+        return codecs->GetCodec(TCodecSig(TCodecType::VarLen, false));
+    }
+
+    // YDBBUGS-1116: a corrupted trailing data size word used to produce a wild
+    // offsets pointer and a SEGV on the first iterator step.
+    Y_UNIT_TEST(TestVarLenDecoderRejectsInvalidDataSize) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        auto codec = VarLenCodec(codecs.Get());
+
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        chunk->AddData("aaa", 3);
+        chunk->AddData("bb", 2);
+        chunk->Seal();
+
+        WriteUnaligned<ui32>(output.Data() + output.Size() - sizeof(ui32), Max<ui32>() - 7);
+        UNIT_ASSERT_EXCEPTION(codec->ReadChunk(output), yexception);
+    }
+
+    // YDBBUGS-1116: reading more values than encoded used to read past the
+    // end of the offsets table.
+    Y_UNIT_TEST(TestVarLenDecoderRejectsIterationPastOffsets) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        auto codec = VarLenCodec(codecs.Get());
+
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        chunk->AddData("aaa", 3);
+        chunk->AddData("bb", 2);
+        chunk->Seal();
+
+        auto iter = codec->ReadChunk(output)->MakeIterator();
+        UNIT_ASSERT_VALUES_EQUAL(iter->Next().Size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(iter->Next().Size(), 2u);
+        UNIT_ASSERT_EXCEPTION(iter->Next(), yexception);
+    }
+
+    // YDBBUGS-1116: decreasing cumulative offsets used to underflow the value
+    // size and produce wild pointer arithmetic in
+    // TVarLenDecoder::TChunkIterator::Next.
+    Y_UNIT_TEST(TestVarLenDecoderRejectsNonMonotonicOffsets) {
+        TBuffer output;
+        TCodecSig sig(TCodecType::VarLen, false);
+        output.Append((const char*)&sig, sizeof(sig));
+        output.Append("aaaab", 5);
+        const ui32 offsets[] = {4u, 3u, 5u};
+        output.Append((const char*)offsets, sizeof(offsets));
+
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        auto codec = VarLenCodec(codecs.Get());
+        auto reading = codec->ReadChunk(output);
+
+        auto iter = reading->MakeIterator();
+        UNIT_ASSERT_VALUES_EQUAL(iter->Next().Size(), 4u);
+        UNIT_ASSERT_EXCEPTION(iter->Next(), yexception);
+
+        UNIT_ASSERT_EXCEPTION(reading->GetValue(1), yexception);
+    }
+
+    Y_UNIT_TEST(TestVarLenDecoderRejectsValueIndexPastOffsets) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        auto codec = VarLenCodec(codecs.Get());
+
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        chunk->AddData("aaa", 3);
+        chunk->AddData("bb", 2);
+        chunk->Seal();
+
+        auto reading = codec->ReadChunk(output);
+        UNIT_ASSERT_VALUES_EQUAL(reading->GetValue(0).Size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(reading->GetValue(1).Size(), 2u);
+        UNIT_ASSERT_EXCEPTION(reading->GetValue(2), yexception);
+    }
+
+    // YDBBUGS-1116: reading more values than encoded used to run in_long past
+    // the end of the chunk buffer.
+    Y_UNIT_TEST(TestVarIntDecoderRejectsIterationPastValues) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
+        auto codec = codecs->GetCodec(TCodecSig(TCodecType::VarInt, false));
+
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        ui32 value = 100;
+        chunk->AddData((const char*)&value, sizeof(value));
+        value = 200;
+        chunk->AddData((const char*)&value, sizeof(value));
+        chunk->Seal();
+
+        auto iter = codec->ReadChunk(output)->MakeIterator();
+        UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<ui32>(iter->Next().Data()), 100u);
+        UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<ui32>(iter->Next().Data()), 200u);
+        UNIT_ASSERT_EXCEPTION(iter->Next(), yexception);
+    }
+
+    // YDBBUGS-1116: a corrupted mask size word used to produce a wild mask
+    // pointer.
+    Y_UNIT_TEST(TestVarLenNullableRejectsInvalidMaskSize) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        auto codec = codecs->GetCodec(TCodecSig(TCodecType::VarLen, true));
+
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        chunk->AddData("aaa", 3);
+        chunk->AddNull();
+        chunk->AddData("bb", 2);
+        chunk->Seal();
+
+        WriteUnaligned<ui32>(output.Data() + output.Size() - sizeof(ui32), Max<ui32>() - 5);
+        UNIT_ASSERT_EXCEPTION(codec->ReadChunk(output), yexception);
+    }
+
 }
 
 } // namespace NKikimr::NPQ

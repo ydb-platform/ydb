@@ -1,5 +1,14 @@
 PROGRAM(ydbd)
 
+IF (OS_LINUX)
+    # Force a fresh link and retain a trace for the comparison.
+    LDFLAGS(
+        -Wl,--no-gdb-index
+        -Wl,--time-trace=${BINDIR}/ydbd.time_trace.json
+        -Wl,--time-trace-granularity=500
+    )
+ENDIF()
+
 IF (NOT SANITIZER_TYPE)  # for some reasons some tests with asan are failed, see comment in CPPCOM-32
     # Disabling export of dynamic symbols allows to significantly reduce size of the stripped binary,
     # however, to be able to use dynamic UDFs (the --udfs-dir flag of ydbd server),

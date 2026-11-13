@@ -214,6 +214,56 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT(!FindSpan(*uploader, "Session.query.QUERY_ACTION_EXECUTE"));
     }
 
+    Y_UNIT_TEST(ReadResultHandoffFollowsDatashardReplies) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        ExecSQL(runtime, sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1u, 100u), (2u, 200u), (3u, 300u);", 0);
+        auto* uploader = RegisterUploader(runtime);
+
+        // Force several replies from the same DataShard iterator.
+        const auto reads = runtime.AddObserver<TEvDataShard::TEvRead>([](auto& ev) {
+            ev->Get()->Record.SetMaxRows(1);
+        });
+        const auto acks = runtime.AddObserver<TEvDataShard::TEvReadAck>([](auto& ev) {
+            ev->Get()->Record.SetMaxRows(1);
+        });
+        using TReply = std::tuple<TString, i64, i64>;
+        std::set<TReply> replies;
+        const auto results = runtime.AddObserver<TEvDataShard::TEvReadResult>([&](auto& ev) {
+            if (ev->Get()->GetRowsCount() > 0 && ev->TraceId) {
+                const auto& record = ev->Get()->Record;
+                replies.emplace(TString(static_cast<const char*>(ev->TraceId.GetSpanIdPtr()),
+                    ev->TraceId.GetSpanIdSize()), record.GetReadId(), record.GetSeqNo());
+            }
+        });
+
+        ExecSQL(runtime, sender, "SELECT SUM(value) FROM `/Root/table-1` WHERE key > 0u;");
+        UNIT_ASSERT(uploader->BuildTraceTrees());
+        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 3u);
+
+        for (const auto& handoff : uploader->Spans) {
+            if (handoff.name() != "Read table: hand off shard result") {
+                continue;
+            }
+            const auto* send = FindParent(*uploader, handoff);
+            UNIT_ASSERT(send);
+            UNIT_ASSERT_VALUES_EQUAL(send->name(), "Datashard.SendWithConfirmedReadOnlyLease");
+            const auto* datashard = FindParent(*uploader, *send);
+            UNIT_ASSERT(datashard);
+            UNIT_ASSERT_VALUES_EQUAL(datashard->name(), "Datashard.Read");
+            const auto* readId = FindAttribute(handoff, "ydb.read_id");
+            const auto* seqNo = FindAttribute(handoff, "ydb.read_seq_no");
+            UNIT_ASSERT(readId && seqNo);
+            UNIT_ASSERT_VALUES_EQUAL(replies.erase({send->span_id(), readId->value().int_value(),
+                seqNo->value().int_value()}), 1u);
+            UNIT_ASSERT(send->start_time_unix_nano() <= handoff.start_time_unix_nano());
+            UNIT_ASSERT(handoff.start_time_unix_nano() <= handoff.end_time_unix_nano());
+            UNIT_ASSERT_VALUES_EQUAL(handoff.status().code(), NTraceProto::Status::STATUS_CODE_OK);
+        }
+        UNIT_ASSERT(replies.empty());
+    }
+
     Y_UNIT_TEST(CommonLevelsAndDisabledTracing) {
         auto [runtime, server, sender] = CreateServer();
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);

@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_shard_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_task_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_trace_settings.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -61,12 +62,15 @@ public:
         size_t PackedRows = 0;
         ui64 ReadId;
         ui64 SeqNo;
+        NWilson::TSpan HandoffSpan;
 
-        TResult(ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult, ui64 readId, ui64 seqNo)
+        TResult(ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult, ui64 readId, ui64 seqNo,
+                NWilson::TSpan handoffSpan)
             : ShardId(shardId)
             , ReadResult(std::move(readResult))
             , ReadId(readId)
             , SeqNo(seqNo)
+            , HandoffSpan(std::move(handoffSpan))
         {
         }
     };
@@ -1080,6 +1084,21 @@ public:
             return;
         }
 
+        // DataShard carries the reply's send span in the event handle.
+        NWilson::TSpan handoffSpan;
+        constexpr ui8 traceLevel = TComponentTracingLevels::TQueryProcessor::Detailed;
+        if (ReadActorSpan && ReadResultSpans < NQueryTraceSettings::MAX_READ_RESULT_SPANS
+                && ev->TraceId && !ev->TraceId.IsRoot() && ev->TraceId.GetTimeToLive()
+                && ev->TraceId.GetVerbosity() >= traceLevel && ev->TraceId.IsWilsonTrace()
+                && ev->TraceId.IsSameTrace(ReadActorSpan.GetTraceId())
+                && record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS && msg.GetRowsCount() > 0) {
+            handoffSpan = NWilson::TSpan(traceLevel, ev->TraceId.Clone(), "Read table: hand off shard result");
+            handoffSpan.Attribute("ydb.shard_id", static_cast<i64>(Reads[id].Shard->TabletId));
+            handoffSpan.Attribute("ydb.read_id", static_cast<i64>(id));
+            handoffSpan.Attribute("ydb.read_seq_no", static_cast<i64>(record.GetSeqNo()));
+            ++ReadResultSpans;
+        }
+
         ShardReadTrace.ReadResult(ReadActorSpan, Reads[id].Shard->TabletId,
             ev->Sender.NodeId(), id, msg.GetRowsCount(), record.GetStatus().GetCode(), record.GetFinished());
 
@@ -1266,7 +1285,8 @@ public:
             {"cells", DebugPrintCells(&msg)},
             {"continuationToken", DebugPrintContinuationToken(record.GetContinuationToken())});
 
-        Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), id, seqNo});
+        Results.emplace(Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()),
+            id, seqNo, std::move(handoffSpan));
         NotifyCA();
     }
 
@@ -1336,7 +1356,7 @@ public:
     }
 
     NMiniKQL::TBytesStatistics PackArrow(TResult& handle, i64& freeSpace) {
-        auto& [shardId, result, batch, _, packed, readId, seqNo] = handle;
+        auto& [shardId, result, batch, _, packed, readId, seqNo, handoffSpan] = handle;
         NMiniKQL::TBytesStatistics stats;
         bool hasResultColumns = false;
         if (result->Get()->GetRowsCount() == 0) {
@@ -1418,7 +1438,7 @@ public:
     }
 
     NMiniKQL::TBytesStatistics PackCells(TResult& handle, i64& freeSpace) {
-        auto& [shardId, result, batch, processedRows, packed, readId, seqNo] = handle;
+        auto& [shardId, result, batch, processedRows, packed, readId, seqNo, handoffSpan] = handle;
         NMiniKQL::TBytesStatistics stats;
         batch->reserve(batch->size());
         YDB_LOG_DEBUG("Entering PackCells for read result",
@@ -1533,6 +1553,10 @@ public:
                 ProcessedRowCount += 1;
                 bytes += rowSize.AllocatedBytes;
                 if (ProcessedRowCount == Settings->GetItemsLimit()) {
+                    if (result.HandoffSpan) {
+                        result.HandoffSpan.Attribute("ydb.result_truncated", result.ProcessedRows + 1 < msg.GetRowsCount());
+                        result.HandoffSpan.EndOk();
+                    }
                     finished = true;
                     YDB_LOG_DEBUG("Returned async data because limit reached",
                         {"logPrefix", this->LogPrefix});
@@ -1546,6 +1570,9 @@ public:
 
             size_t rowCount = result.ReadResult.Get()->Get()->GetRowsCount();
             if (rowCount == result.ProcessedRows) {
+                if (result.HandoffSpan) {
+                    result.HandoffSpan.EndOk();
+                }
                 auto& record = msg.Record;
                 if (!Reads[id].Finished && (!Settings->HasSampling() || !Reads[id].SamplingCheckpoint)) {
                     TMaybe<ui64> limit;
@@ -1668,6 +1695,11 @@ public:
         Counters->ReadActorsCount->Dec();
         {
             auto guard = BindAllocator();
+            for (auto& result : Results.Container()) {
+                if (result.HandoffSpan) {
+                    result.HandoffSpan.EndError("Read result handoff interrupted");
+                }
+            }
             Results.clear();
             for (size_t i = 0; i < Reads.size(); ++i) {
                 ResetRead(i);
@@ -1808,6 +1840,7 @@ private:
     bool FirstShardStarted = false;
 
     TShardReadTrace ShardReadTrace;
+    size_t ReadResultSpans = 0;
     NWilson::TSpan ReadActorSpan;
     NWilson::TSpan ReadActorStateSpan;
 

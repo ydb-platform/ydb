@@ -920,7 +920,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
                     TStringBuilder() << "Too many unavailable state storage rings"
                     << ". Restarting rings: "
                     << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
-                    << ". Temporarily locked rings: "
+                    << ". Temporarily locked rings (restart cooldown: " << State->Config.StateStorageRestartCooldown << "): "
                     << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
                     << ". Maximum allowed number of unavailable rings for this mode: " << maxAvailabilityLimit,
                     TReason::EType::TooManyUnavailableStateStorageRings
@@ -936,7 +936,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
                     TStringBuilder() << "Too many unavailable state storage rings"
                     << ". Restarting rings: "
                     << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
-                    << ". Temporarily locked rings: "
+                    << ". Temporarily locked rings (restart cooldown: " << State->Config.StateStorageRestartCooldown << "): "
                     << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
                     << ". Disabled rings: " << disabledRings
                     << ". Maximum allowed number of unavailable rings for this mode: " << keepAvailableLimit,
@@ -966,7 +966,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
                 TStringBuilder() << "Too many unavailable state storage rings"
                 << ". Restarting rings: "
                 << (currentRingState == TStateStorageRingInfo::Restart ? restartRings : restartRings - 1)
-                << ". Temporarily locked rings: "
+                << ". Temporarily locked rings (restart cooldown: " << State->Config.StateStorageRestartCooldown << "): "
                 << (currentRingState == TStateStorageRingInfo::Locked ? lockedRings + 1 : lockedRings)
                 << ". Maximum allowed number of unavailable rings for this mode: " << limit,
                 TReason::EType::TooManyUnavailableStateStorageRings

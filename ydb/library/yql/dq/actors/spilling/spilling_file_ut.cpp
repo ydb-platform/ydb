@@ -14,7 +14,9 @@
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 
+#if defined(_unix_)
 #include <sys/stat.h>
+#endif
 
 namespace NYql::NDq {
 
@@ -696,6 +698,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         UNIT_ASSERT_C(!NFs::Exists(firstFile.GetPath()), "partially written file was not cleaned up");
     }
 
+#if defined(_unix_)
     constexpr ui32 EvCloseFile = EventSpaceBegin(TEvents::ES_PRIVATE) + 1;
     constexpr ui32 EvWriteFileResponse = EventSpaceBegin(TEvents::ES_PRIVATE) + 3;
     constexpr ui32 EvReadFileResponse = EventSpaceBegin(TEvents::ES_PRIVATE) + 4;
@@ -819,6 +822,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         UNIT_ASSERT(runtime.DispatchEvents(options));
         AssertFileClosed(runtime);
     }
+#endif
 
     Y_UNIT_TEST(ThreadPoolQueueOverflow) {
         TTestActorRuntime runtime;

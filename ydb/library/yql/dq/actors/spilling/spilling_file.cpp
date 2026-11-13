@@ -527,12 +527,12 @@ private:
 
             tc.StoredBlobs->Inc();
             tc.TotalSpaceUsed->Add(blobDesc.Size);
-            ++fd.StoredBlobs;
-            fd.StoredSize += blobDesc.Size;
+            ++fp->StoredBlobs;
+            fp->StoredSize += blobDesc.Size;
 
             if (msg.NewFileHandle) {
                 tc.FileDescriptors->Inc();
-                ++fd.FileDescriptors;
+                fp->Opened = true;
                 fp->FileHandle.Swap(msg.NewFileHandle);
             }
         } else {
@@ -688,12 +688,7 @@ private:
                 fd.TotalSize -= fp->Size;
                 TotalSize_ -= fp->Size;
 
-                tc.TotalSpaceUsed->Sub(fp->Size);
-                tc.StoredBlobs->Sub(fp->Blobs.size());
-                tc.FileDescriptors->Dec();
-                fd.StoredSize -= fp->Size;
-                fd.StoredBlobs -= fp->Blobs.size();
-                --fd.FileDescriptors;
+                fp->SubStored(tc);
 
                 fd.Parts.erase(msg.BlobId);
                 fd.PartsList.remove_if([fp](const auto& x) { return &x == fp; });
@@ -924,11 +919,10 @@ private:
     }
 
     void FinishClose(TFilesIt it) {
-        auto& fd = it->second;
-        auto& tc = Counters_->GetTypeCounters(fd.SpillingType);
-        tc.FileDescriptors->Sub(fd.FileDescriptors);
-        tc.StoredBlobs->Sub(fd.StoredBlobs);
-        tc.TotalSpaceUsed->Sub(fd.StoredSize);
+        auto& tc = Counters_->GetTypeCounters(it->second.SpillingType);
+        for (const auto& fp : it->second.PartsList) {
+            fp.SubStored(tc);
+        }
 
         MoveFileToClosed(it);
     }
@@ -1098,15 +1092,23 @@ private:
             ui64 WriteBytes = 0;
             ui64 ReadBytes = 0;
             ui64 Size = 0; // also it is an offset for the next blob
+            ui64 StoredSize = 0;
+            ui64 StoredBlobs = 0;
+            bool Opened = false;
             TDuration WorkTime;
             TDuration WaitTime;
             bool Last = true;
+
+            void SubStored(TSpillingCounters::TTypeCounters& tc) const {
+                tc.TotalSpaceUsed->Sub(StoredSize);
+                tc.StoredBlobs->Sub(StoredBlobs);
+                if (Opened) {
+                    tc.FileDescriptors->Dec();
+                }
+            }
         };
 
         ui64 TotalSize = 0;
-        ui64 StoredSize = 0;
-        ui64 StoredBlobs = 0;
-        ui64 FileDescriptors = 0;
 
         TDuration TotalWorkTime;
         TDuration TotalWaitTime;

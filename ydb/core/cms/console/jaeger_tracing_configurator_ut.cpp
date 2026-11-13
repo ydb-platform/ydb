@@ -1,4 +1,5 @@
 #include "ut_helpers.h"
+#include "events/configs_dispatcher.h"
 #include "jaeger_tracing_configurator.h"
 
 #include <ydb/core/jaeger_tracing/request_discriminator.h>

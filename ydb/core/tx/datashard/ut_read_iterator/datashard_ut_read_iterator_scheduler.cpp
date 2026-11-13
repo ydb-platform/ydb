@@ -2,6 +2,12 @@
 
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
 #include <ydb/core/kqp/runtime/scheduler/tree/common.h>
+#include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
+
+#include <util/generic/scope.h>
+#include <util/generic/vector.h>
+
+#include <functional>
 
 namespace NKikimr {
 
@@ -180,6 +186,61 @@ struct TSchedulerTestHelper {
     void AddZeroQuotaPool(const TString& poolId) const {
         UpdatePoolQuota(0., poolId);
     }
+
+    NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr ReadQuery(const TString& poolId = TEST_POOL_ID) const {
+        auto query = Server->GetRuntime()->GetAppData().KqpComputeScheduler->GetReadQuery(TEST_DATABASE_ID, poolId);
+        UNIT_ASSERT(query);
+        return query;
+    }
+
+    void WithThrottledRead(
+            std::unique_ptr<TEvDataShard::TEvRead> request,
+            std::function<void()> whileThrottled) const {
+        auto& runtime = *Server->GetRuntime();
+        auto query = ReadQuery();
+        // Block both the no-snapshot and the published-snapshot admission paths.
+        constexpr ui64 blockedUsage = 1'000'000;
+        query->CpuUsage += blockedUsage;
+        query->GetParent()->CpuUsage += blockedUsage;
+        bool blocked = true;
+        auto release = [&] {
+            if (blocked) {
+                query->CpuUsage -= blockedUsage;
+                query->GetParent()->CpuUsage -= blockedUsage;
+                blocked = false;
+            }
+        };
+        Y_DEFER { release(); };
+
+        bool replied = false;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvReadResult>([&](auto&) { replied = true; });
+        // Scheduled quota retries have an empty sender, which TBlockEvents
+        // cannot print through FindActorName. Capture them without that lookup.
+        TVector<TEvDataShard::TEvReadContinue::TPtr> retries;
+        auto retryObserver = runtime.AddObserver<TEvDataShard::TEvReadContinue>(
+            [&](TEvDataShard::TEvReadContinue::TPtr& ev) { retries.push_back(std::move(ev)); });
+        SendReadAsync(request.release());
+        runtime.WaitFor("quota refusal before the first result", [&] { return replied || !retries.empty(); });
+        UNIT_ASSERT_C(!replied, "Read bypassed quota instead of waiting before its first result");
+        UNIT_ASSERT_C(!retries.empty(), "The test must actually exercise a quota refusal");
+        UNIT_ASSERT_VALUES_EQUAL(query->CpuUsage.load(), blockedUsage);
+        if (whileThrottled) {
+            whileThrottled();
+        }
+        release();
+        retryObserver.Remove();
+        for (auto& ev : retries) {
+            const auto nodeIdx = ev->GetRecipientRewrite().NodeId() - runtime.GetFirstNodeId();
+            runtime.Send(ev.Release(), nodeIdx, /* viaActorSystem */ true);
+        }
+    }
+
+    std::unique_ptr<TEvDataShard::TEvReadResult> ThrottleAndResume(
+            std::unique_ptr<TEvDataShard::TEvRead> request,
+            std::function<void()> whileThrottled = {}) const {
+        WithThrottledRead(std::move(request), std::move(whileThrottled));
+        return WaitResult();
+    }
 };
 
 } // namespace
@@ -333,5 +394,201 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler)
+
+Y_UNIT_TEST_SUITE(DataShardReadQuotaRegression) {
+    Y_UNIT_TEST(QuotaWaitDoesNotBlockOtherPools) {
+        TSchedulerTestHelper helper;
+        helper.Upsert(1, 100);
+        helper.UpdatePoolQuota(100., "other_pool");
+        auto request = helper.MakeReadRequest(1);
+        AddKeyQuery(*request, {1, 1, 1});
+        auto unpooled = helper.MakeReadRequest(2, "");
+        AddKeyQuery(*unpooled, {1, 1, 1});
+        auto other = helper.MakeReadRequest(3, "other_pool");
+        AddKeyQuery(*other, {1, 1, 1});
+
+        auto result = helper.ThrottleAndResume(std::move(request), [&] {
+            helper.Upsert(2, 200);
+            auto unpooledResult = helper.SendRead(unpooled.release());
+            UNIT_ASSERT_VALUES_EQUAL(unpooledResult->Record.GetReadId(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(unpooledResult->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            auto otherResult = helper.SendRead(other.release());
+            UNIT_ASSERT_VALUES_EQUAL(otherResult->Record.GetReadId(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(otherResult->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetReadId(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(QuotaWaitDoesNotBlockDropTable) {
+        TSchedulerTestHelper helper;
+        auto request = helper.MakeReadRequest(1);
+        AddKeyQuery(*request, {1, 1, 1});
+        helper.WithThrottledRead(std::move(request), [&] {
+            WaitTxNotification(helper.Server, AsyncDropTable(helper.Server, helper.Sender, "/Root", "table-1"));
+        });
+    }
+
+    Y_UNIT_TEST_TWIN(FirstThrottleAcquiresKeyLock, MissingKey) {
+        TSchedulerTestHelper helper;
+        if (!MissingKey) {
+            helper.Upsert(1, 100);
+        }
+        auto request = helper.MakeReadRequest(1);
+        request->Record.SetLockTxId(12345);
+        request->Record.SetLockNodeId(helper.Server->GetRuntime()->GetNodeId(0));
+        AddKeyQuery(*request, {1, 1, 1});
+        auto snapshot = request->Record.GetSnapshot();
+        auto result = helper.ThrottleAndResume(std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), MissingKey ? 0u : 1u);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.TxLocksSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.BrokenTxLocksSize(), 0);
+
+        helper.Upsert(1, 200);
+        auto next = helper.MakeReadRequest(2);
+        *next->Record.MutableSnapshot() = snapshot;
+        next->Record.SetLockTxId(12345);
+        next->Record.SetLockNodeId(helper.Server->GetRuntime()->GetNodeId(0));
+        AddKeyQuery(*next, {1, 1, 1});
+        auto broken = helper.SendRead(next.release());
+        UNIT_ASSERT_VALUES_EQUAL(broken->Record.BrokenTxLocksSize(), 1);
+    }
+
+    Y_UNIT_TEST(FirstThrottleAcquiresRangeLock) {
+        TSchedulerTestHelper helper;
+        helper.UpsertMany(1, 2);
+        auto request = helper.MakeRangeReadRequest(1, 1, 10, 1);
+        request->Record.SetLockTxId(12345);
+        request->Record.SetLockNodeId(helper.Server->GetRuntime()->GetNodeId(0));
+        request->Record.SetMaxRows(1);
+        auto result = helper.ThrottleAndResume(std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.TxLocksSize(), 1);
+        helper.Upsert(5, 500);
+        helper.SendAck(result->Record, 10, 50_MB);
+        auto next = helper.WaitResult();
+        UNIT_ASSERT_VALUES_EQUAL(next->Record.BrokenTxLocksSize(), 1);
+    }
+
+    Y_UNIT_TEST(FirstThrottleUpgradesHeadToRepeatableRead) {
+        TSchedulerTestHelper helper;
+        helper.UpsertMany(1, 2);
+        auto request = helper.MakeRangeReadRequest(1, 1, 2, 1);
+        request->Record.ClearSnapshot();
+        request->Record.SetMaxRows(1);
+        auto first = helper.ThrottleAndResume(std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL(first->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_C(first->Record.HasSnapshot(), "Multi-part HEAD read must publish its fixed snapshot after throttling");
+        helper.Upsert(2, 999);
+        helper.SendAck(first->Record, 10, 50_MB);
+        auto second = helper.WaitResult();
+        UNIT_ASSERT_VALUES_EQUAL(second->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(second->GetCells(0)[3].AsValue<ui32>(), 200u);
+        UNIT_ASSERT_VALUES_EQUAL(second->Record.GetSnapshot().GetStep(), first->Record.GetSnapshot().GetStep());
+        UNIT_ASSERT_VALUES_EQUAL(second->Record.GetSnapshot().GetTxId(), first->Record.GetSnapshot().GetTxId());
+    }
+
+    Y_UNIT_TEST_TWIN(InvalidFormatReturnsBadRequest, WithLock) {
+        TSchedulerTestHelper helper;
+        helper.Upsert(1, 100);
+        auto request = helper.MakeReadRequest(1);
+        request->Record.SetResultFormat(NKikimrDataEvents::FORMAT_UNSPECIFIED);
+        if (WithLock) {
+            request->Record.SetLockTxId(12345);
+            request->Record.SetLockNodeId(helper.Server->GetRuntime()->GetNodeId(0));
+        }
+        AddKeyQuery(*request, {1, 1, 1});
+        auto result = helper.SendRead(request.release());
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(helper.ReadQuery()->CpuUsage.load(), 0u);
+    }
+
+    Y_UNIT_TEST(SubMillisecondPoolLimitRemainsPositive) {
+        TSchedulerTestHelper helper;
+        helper.Upsert(1, 100);
+        helper.UpdatePoolQuota(0.01);
+        auto request = helper.MakeReadRequest(1);
+        AddKeyQuery(*request, {1, 1, 1});
+        auto result = helper.SendRead(request.release());
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1u);
+    }
+
+    Y_UNIT_TEST(BatchHintHonoursQuota) {
+        TSchedulerTestHelper helper;
+        helper.UpsertMany(1, 2);
+        auto request = helper.MakeRangeReadRequest(1, 1, 2);
+        request->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
+        auto result = helper.ThrottleAndResume(std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 2u);
+    }
+
+    Y_UNIT_TEST_TWIN(ExistingIteratorRejectsZeroQuota, RegisteredPool) {
+        TSchedulerTestHelper helper;
+        helper.UpsertMany(1, 2);
+        const TString pool = RegisteredPool ? TEST_POOL_ID : "late_pool";
+        auto request = helper.MakeRangeReadRequest(1, 1, 2, 1, pool);
+        request->Record.SetMaxRows(1);
+        auto first = helper.SendRead(request.release());
+        UNIT_ASSERT_VALUES_EQUAL(first->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        helper.UpdatePoolQuota(0., pool);
+        helper.SendAck(first->Record, 10, 50_MB);
+        auto second = helper.WaitResult();
+        UNIT_ASSERT_VALUES_EQUAL(second->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(WaitingForAckDoesNotDemandCpu) {
+        TSchedulerTestHelper helper;
+        helper.UpsertMany(1, 2);
+        auto request = helper.MakeRangeReadRequest(1, 1, 2, 1);
+        request->Record.SetMaxRows(1);
+        auto result = helper.SendRead(request.release());
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(!result->Record.GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(helper.ReadQuery()->CpuMaxDemand.load(), 0u);
+    }
+
+    Y_UNIT_TEST(AdmissionPrecedesColumnValidation) {
+        TSchedulerTestHelper helper;
+        auto request = helper.MakeReadRequest(1);
+        request->Record.AddColumns(Max<ui32>());
+        AddKeyQuery(*request, {1, 1, 1});
+        auto result = helper.ThrottleAndResume(std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(ChargesFailedPreparation) {
+        TSchedulerTestHelper helper;
+        auto request = helper.MakeReadRequest(1);
+        request->Record.AddColumns(Max<ui32>());
+        AddKeyQuery(*request, {1, 1, 1});
+        const auto before = helper.ReadQuery()->ReadBurstUsage.load();
+        auto result = helper.SendRead(request.release());
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SCHEME_ERROR);
+        UNIT_ASSERT_GT(helper.ReadQuery()->ReadBurstUsage.load(), before);
+        UNIT_ASSERT_VALUES_EQUAL(helper.ReadQuery()->CpuUsage.load(), 0u);
+    }
+
+    Y_UNIT_TEST(SamplingKeepsCheckpointAcrossInitialThrottle) {
+        TSchedulerTestHelper helper;
+        helper.UpsertMany(1, 2);
+        auto request = helper.MakeRangeReadRequest(1, 1, 2, 1);
+        request->Record.SetMaxRows(1);
+        auto* sampling = request->Record.MutableSampling();
+        sampling->SetRate(1.0);
+        sampling->SetSeed(42);
+        auto first = helper.ThrottleAndResume(std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL(first->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        NKikimrTxDataShard::TReadContinuationToken token;
+        UNIT_ASSERT(token.ParseFromString(first->Record.GetContinuationToken()));
+        UNIT_ASSERT(token.HasSampling());
+        helper.SendAck(first->Record, 10, 50_MB);
+        auto second = helper.WaitResult();
+        UNIT_ASSERT_VALUES_EQUAL(second->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(first->GetRowsCount() + second->GetRowsCount(), 2u);
+    }
+}
 
 } // namespace NKikimr

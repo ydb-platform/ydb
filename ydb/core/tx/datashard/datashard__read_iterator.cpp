@@ -19,6 +19,7 @@
 #include <ydb/library/actors/core/monotonic_provider.h>
 
 #include <util/system/hp_timer.h>
+#include <util/generic/scope.h>
 
 #include <cmath>
 #include <utility>
@@ -2173,10 +2174,6 @@ class TDataShard::TReadOperation : public TOperation, public IReadOperation {
     size_t ExecuteCount = 0;
     bool ResultSent = false;
 
-    // Set when the read quota was exhausted in Execute(): instead of replying
-    // with an error, the iterator is kept and a delayed continue is scheduled.
-    TMaybe<TDuration> ThrottleDelay;
-
     std::unique_ptr<TEvDataShard::TEvReadResult> Result;
 
     std::unique_ptr<IBlockBuilder> BlockBuilder;
@@ -2500,6 +2497,19 @@ public:
             }
         }
 
+        const auto schedulableRead = state.SchedulableRead;
+        if (schedulableRead) {
+            // Admission happened before entering the pipeline. Do not prolong
+            // dependencies with quota waits, including after a page-fault restart.
+            schedulableRead->ConsumeQuotaForAdmittedRead(MaxTimePerIteration);
+        }
+        NHPTimer::STime readCycles = 0;
+        Y_DEFER {
+            if (schedulableRead) {
+                schedulableRead->ReturnQuota(readCycles);
+            }
+        };
+
         TDataShardLocksDb locksDb(*Self, txc);
         TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QuerySpanId, *Self, &locksDb);
 
@@ -2538,28 +2548,27 @@ public:
             }
         }
 
-        const auto& schedulableRead = state.SchedulableRead;
-        if (schedulableRead && !schedulableRead->TryConsumeQuota(MaxTimePerIteration)) {
-            // Read quota for the resource pool is exhausted - keep the iterator alive
-            // and resume it via the cheaper TTxReadContinue path after a delay.
-            // The reschedule itself is done in Complete().
-            ThrottleDelay = schedulableRead->EstimateQuotaDelay(MaxTimePerIteration);
-            return EExecutionStatus::DelayComplete;
-        }
-
         LWTRACK(ReadExecute, state.Request->Orbit);
         if (state.Sampling) {
             state.SamplingStats.SetExecutions(state.SamplingStats.GetExecutions() + 1);
         }
+        // A preparation error must not leave a reader from an earlier attempt.
+        Reader.reset();
         bool readResult = Read(txc, ctx, state);
 
-        if (schedulableRead) {
+        if (schedulableRead && Reader) {
             Reader->UpdateCycles();
-            schedulableRead->ReturnQuota(Reader->ElapsedCycles());
+            readCycles = Reader->ElapsedCycles();
         }
 
         if (!readResult) {
             return EExecutionStatus::Restart;
+        }
+
+        // Preparation may fail before Reader exists. Do not acquire locks or
+        // inspect the reader on this path; the scope above returns the reservation.
+        if (Result && Result->Record.HasStatus()) {
+            return EExecutionStatus::DelayComplete;
         }
 
         // Check if successful result depends on unresolved volatile transactions
@@ -3083,19 +3092,6 @@ public:
             {"iterator", state.ReadId},
             {"executeCount", ExecuteCount});
 
-        if (ThrottleDelay) {
-            // Read quota was exhausted in Execute(): keep the iterator and resume
-            // it via TTxReadContinue after the delay. No result is sent here.
-            // ReadContinuePending prevents ReadAck from scheduling a duplicate.
-            state.ReadContinuePending = true;
-            ctx.Schedule(*ThrottleDelay, new TEvDataShard::TEvReadContinue(LocalReadId));
-            YDB_LOG_TRACE_CTX(ctx, "Read iterator throttled, rescheduling continue after throttle delay",
-                {"tabletId", Self->TabletID()},
-                {"iterator", state.ReadId},
-                {"throttleDelay", *ThrottleDelay});
-            return;
-        }
-
         SendResult(ctx);
 
         it = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
@@ -3572,6 +3568,21 @@ public:
 
             Y_ENSURE(state.State == TReadIteratorState::EState::Init);
             state.EnqueuedLocalTxId = 0;
+            state.ReadContinuePending = false;
+
+            // Wait before building the operation or registering dependencies.
+            // This is admission only: no quota/CPU slot is held while queued or
+            // waiting for pages, dependencies or commit. Once admitted, the first
+            // operation accounts every read attempt without further quota waits.
+            if (const auto& read = state.SchedulableRead) {
+                if (!read->TryConsumeQuota(MaxTimePerIteration)) {
+                    state.ReadContinuePending = true;
+                    ctx.Schedule(read->EstimateQuotaDelay(MaxTimePerIteration),
+                        new TEvDataShard::TEvReadContinue(LocalReadId));
+                    return true;
+                }
+                read->ReturnQuota();
+            }
 
             bool setUsingSnapshotFlag = false;
 
@@ -4516,6 +4527,12 @@ void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorCon
         ctx.Schedule(
             state.SchedulableRead->EstimateQuotaDelay(MaxTimePerIteration),
             new TEvDataShard::TEvReadContinue(localReadId));
+        return;
+    }
+
+    if (state.State == TReadIteratorState::EState::Init) {
+        state.EnqueuedLocalTxId = Executor()->EnqueueLowPriority(
+            new TTxReadViaPipeline(this, localReadId, state.Request->ReadSpan.GetTraceId()));
         return;
     }
 

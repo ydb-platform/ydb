@@ -259,7 +259,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 seqNo->value().int_value()}), 1u);
             UNIT_ASSERT(send->start_time_unix_nano() <= handoff.start_time_unix_nano());
             UNIT_ASSERT(handoff.start_time_unix_nano() <= handoff.end_time_unix_nano());
-            UNIT_ASSERT_VALUES_EQUAL(handoff.status().code(), NTraceProto::Status::STATUS_CODE_OK);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(handoff.status().code()),
+                static_cast<int>(NTraceProto::Status::STATUS_CODE_OK));
         }
         UNIT_ASSERT(replies.empty());
     }

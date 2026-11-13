@@ -318,13 +318,14 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
                 {"issues", issues},
                 {"topicPath", Settings.GetBase().Topics_.at(0).Path_},
                 {"consumerName", Settings.GetBase().ConsumerName_});
-            return Leave(TEvWorker::TEvGone::SCHEME_ERROR, TStringBuilder()
-                << errorPrefix << " for topic '" << Settings.GetBase().Topics_.at(0).Path_
-                << "' with consumer '" << Settings.GetBase().ConsumerName_
-                << "'. Original error: " << issues);
+            return Leave(TEvWorker::TEvGone::SCHEME_ERROR, TStringBuilder() << errorPrefix
+                << " for topic '" << Settings.GetBase().Topics_.at(0).Path_ << "'"
+                << " with consumer '" << Settings.GetBase().ConsumerName_ << "'."
+                << " Original error: " << issues);
         default:
             break;
         }
+
         return Leave(TEvWorker::TEvGone::UNAVAILABLE, issues);
     }
 

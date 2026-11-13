@@ -659,6 +659,64 @@ void TNodeInfo::SetLocation(const TNodeLocation& location, EHiveEventReason reas
     LocationAcquired = true;
 }
 
+void TNodeInfo::CreateCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& hiveGroup) {
+    if (Counters) {
+        return;
+    }
+    Counters = std::make_unique<TCounters>();
+    TCounters& c = *Counters;
+    c.Parent = hiveGroup;
+    auto group = hiveGroup->GetSubgroup("peer_node_id", ToString(Id));
+    auto counter = [&group](const char* name, bool derivative = false) {
+        return group->GetCounter(name, derivative);
+    };
+    c.BalanceUsagePercent = counter("BalanceUsagePercent");
+    c.TabletsUsageCpuPercent = counter("TabletsUsageCpuPercent");
+    c.TabletsUsageMemPercent = counter("TabletsUsageMemPercent");
+    c.TabletsUsageNetPercent = counter("TabletsUsageNetPercent");
+    c.TabletsUsageCtr = counter("TabletsUsageCtr");
+    c.NodeUsageAvgComputeResourcesPercent = counter("NodeUsageAvgComputeResourcesPercent");
+    c.NodeUsageAvgCpuPercent = counter("NodeUsageAvgCpuPercent");
+    c.NodeUsageAvgMemPercent = counter("NodeUsageAvgMemPercent");
+    c.NodeUsageAvgNetPercent = counter("NodeUsageAvgNetPercent");
+    c.NodeUsageAvgCtr = counter("NodeUsageAvgCtr");
+    c.NodeTabletsRunning = counter("NodeTabletsRunning");
+    c.NodeTabletsStarting = counter("NodeTabletsStarting");
+    c.TabletsMovedToNode = counter("TabletsMovedToNode", true);
+    c.TabletsMovedFromNode = counter("TabletsMovedFromNode", true);
+}
+
+void TNodeInfo::DropCounters() {
+    if (Counters) {
+        Counters->Parent->RemoveSubgroup("peer_node_id", ToString(Id));
+        Counters.reset();
+    }
+}
+
+void TNodeInfo::UpdateCounters() {
+    if (!Counters) {
+        return;
+    }
+    using namespace NMetrics;
+    TCounters& c = *Counters;
+    const TResourceRawValues maximum = GetResourceMaximumValues();
+    // as THive::GetStats sees this node
+    const TResourceNormalizedValues normalizedResValues = NormalizeRawValues(ResourceValues, maximum);
+    c.BalanceUsagePercent->Set(GetNodeUsage(normalizedResValues) * 100);
+    c.TabletsUsageCpuPercent->Set(std::get<EResource::CPU>(normalizedResValues) * 100);
+    c.TabletsUsageMemPercent->Set(std::get<EResource::Memory>(normalizedResValues) * 100);
+    c.TabletsUsageNetPercent->Set(std::get<EResource::Network>(normalizedResValues) * 100);
+    c.TabletsUsageCtr->Set(std::get<EResource::Counter>(ResourceValues));
+    // as the balancer sees this node when it orders nodes and checks a move
+    c.NodeUsageAvgComputeResourcesPercent->Set(GetNodeUsage(EResourceToBalance::ComputeResources) * 100);
+    c.NodeUsageAvgCpuPercent->Set(GetNodeUsage(EResourceToBalance::CPU) * 100);
+    c.NodeUsageAvgMemPercent->Set(GetNodeUsage(EResourceToBalance::Memory) * 100);
+    c.NodeUsageAvgNetPercent->Set(GetNodeUsage(EResourceToBalance::Network) * 100);
+    c.NodeUsageAvgCtr->Set(std::get<NMetrics::EResource::Counter>(GetResourceCurrentValues()));
+    c.NodeTabletsRunning->Set(GetTabletsRunning());
+    c.NodeTabletsStarting->Set(GetTabletsScheduled());
+}
+
 TString TNodeInfo::GetLogPrefix() const {
     return Hive.GetLogPrefix();
 }

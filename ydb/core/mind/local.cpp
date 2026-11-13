@@ -83,7 +83,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     };
 
     struct TOnlineTabletEntry : TTabletEntry {
-        NKikimrTabletBase::TMetrics ResourceValues;
+        NKikimrTabletBase::TMetrics ResourceValues; // changes not yet acknowledged by Hive, cleared on ack
+        // the tablet's last reported values as counted in TabletsCpuSum / TabletsMemSum / TabletsNetSum;
+        // kept apart from ResourceValues because that one is cleared once Hive acknowledges the batch
+        ui64 AccountedCpu = 0;
+        ui64 AccountedMem = 0;
+        ui64 AccountedNet = 0;
 
         TOnlineTabletEntry() = default;
         TOnlineTabletEntry(TTabletEntry& tablet)
@@ -132,6 +137,11 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     TDuration LastSendTabletMetricsDuration = {};
     constexpr static TDuration TABLET_METRICS_BATCH_INTERVAL = TDuration::MilliSeconds(5000);
     constexpr static TDuration UPDATE_SYSTEM_USAGE_INTERVAL = TDuration::MilliSeconds(1000);
+    // running sums of the last reported CPU, Memory and Network over the tablets in OnlineTablets, updated
+    // when a tablet reports or leaves so that exporting them costs nothing per send; see SubtractFromTabletMetricsSums
+    ui64 TabletsCpuSum = 0;
+    ui64 TabletsMemSum = 0;
+    ui64 TabletsNetSum = 0;
     ui64 UserPoolUsage = 0; // (usage uS x threads) / sec
     ui64 UserPoolLimit = 0; // PotentialMaxThreadCount of UserPool
     ui64 MemUsage = 0;
@@ -162,6 +172,33 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     TSharedQuotaPtr TxCacheQuota;
     ::NMonitoring::TDynamicCounterPtr Counters;
 
+    // The node-wide values this node reports to Hive.
+    // These metrics are updated just before reporting to Hive.
+    //
+    // Naming conventions:
+    // - Node* - means that this metric is about the whole node, not only about tablets.
+    // - Tablets* - means that this metric includes only the resource usage reported by tablets.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterNodeUsagePercent; // TotalNodeUsage reported to Hive: max{pool usage among monitored pools (System,User,IC by default), node memory usage over memory limit (if the limit is known)}.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterNodeCpuUsagePercent; // TotalNodeCpuUsage reported to Hive: overall CPU usage by all pools of the actor system divided by the number of CPUs on the machine.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterNodeUserPoolUsageUs; // TotalResourceUsage.CPU in μs per second reported to Hive.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterNodeUserPoolLimitUs; // User pool limit in μs per second.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterNodeUsageUserPoolPercent; // Usage of user pool over ResourceMaximum.CPU, consistent with Hive's NodeUsageAvgCpuPercent.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterNodeMemUsageBytes; // TotalResourceUsage.Memory reported to Hive: overall memory usage taken from the allocator.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterNodeMemLimitBytes; // Memory limit.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterNodeUsageMemPercent; // MemUsage over ResourceMaximum.Memory, consistent with Hive's NodeUsageAvgMemPercent.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterNodeResourceMaximumCpuUs; // ResourceMaximum reported to Hive.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterNodeResourceMaximumMemBytes; // ResourceMaximum reported to Hive.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterNodeResourceMaximumNetBytesPerSec; // ResourceMaximum reported to Hive.
+    // Sums of the last reported per-tablet metrics over the tablets online on this node, the raw material Hive sums up.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTabletsUsageCpuUs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTabletsUsageMemBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTabletsUsageNetBytesPerSec;
+    // Percents over ResourceMaximum (0 if there is no maximum), consistent with Hive's metrics.
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTabletsUsageCpuPercent;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTabletsUsageMemPercent;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTabletsUsageNetPercent;
+
+    // Cumulative event counters for the node.
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterStartAttempts;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterFollowerAttempts;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterRestored;
@@ -215,6 +252,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
         OnlineTablets.clear();
         OnlineTabletsByActor.clear();
+        TabletsCpuSum = TabletsMemSum = TabletsNetSum = 0;
 
         for (const auto &xpair : InbootTablets) {
             ctx.Send(xpair.second.Tablet, new TEvents::TEvPoisonPill());
@@ -358,6 +396,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 record->SetMemory(NSystemInfo::TotalMemorySize());
             }
         }
+        CounterNodeResourceMaximumCpuUs->Set(record->GetCPU());
+        CounterNodeResourceMaximumMemBytes->Set(record->GetMemory());
+        CounterNodeResourceMaximumNetBytesPerSec->Set(record->GetNetwork());
+    }
+
+    static ui64 Percent(ui64 value, ui64 maximum) {
+        return maximum ? value * 100 / maximum : 0;
     }
 
     void SendStatusOk(const TActorContext &ctx) {
@@ -423,6 +468,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 OnlineTablets.clear();
                 OnlineTabletsByActor.clear();
                 UpdatedTabletMetrics.clear();
+                TabletsCpuSum = TabletsMemSum = TabletsNetSum = 0;
             }
 
             ResourceProfiles = new TResourceProfiles;
@@ -489,6 +535,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         UpdatedTabletMetrics.erase(promotedTablet);
         auto it = OnlineTablets.find(promotedTablet);
         if (it != OnlineTablets.end()) {
+            SubtractFromTabletMetricsSums(it->second);
             EraseTablet(OnlineTablets, OnlineTabletsByActor, it);
         }
         entry.IsPromoting = false;
@@ -546,6 +593,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 }
                 ctx.Send(it->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
                 UpdatedTabletMetrics.erase(tabletId);
+                SubtractFromTabletMetricsSums(it->second);
                 EraseTablet(OnlineTablets, OnlineTabletsByActor, it);
             }
         }
@@ -631,12 +679,18 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             const auto& metrics(msg->ResourceValues);
             auto before = it->second.ResourceValues.ByteSize();
             if (metrics.HasCPU()) {
+                TabletsCpuSum += metrics.GetCPU() - it->second.AccountedCpu;
+                it->second.AccountedCpu = metrics.GetCPU();
                 it->second.ResourceValues.SetCPU(metrics.GetCPU());
             }
             if (metrics.HasMemory()) {
+                TabletsMemSum += metrics.GetMemory() - it->second.AccountedMem;
+                it->second.AccountedMem = metrics.GetMemory();
                 it->second.ResourceValues.SetMemory(metrics.GetMemory());
             }
             if (metrics.HasNetwork()) {
+                TabletsNetSum += metrics.GetNetwork() - it->second.AccountedNet;
+                it->second.AccountedNet = metrics.GetNetwork();
                 it->second.ResourceValues.SetNetwork(metrics.GetNetwork());
             }
             if (metrics.HasStorage()) {
@@ -717,6 +771,21 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             record.SetTotalNodeUsage(NodeUsage);
             record.SetTotalNodeCpuUsage(CpuUsage);
             FillResourceMaximum(record.MutableResourceMaximum());
+            const NKikimrTabletBase::TMetrics& maximum = record.GetResourceMaximum();
+            CounterNodeUsagePercent->Set(NodeUsage * 100);
+            CounterNodeCpuUsagePercent->Set(CpuUsage * 100);
+            CounterNodeUserPoolUsageUs->Set(UserPoolUsage);
+            CounterNodeUserPoolLimitUs->Set(UserPoolLimit);
+            CounterNodeUsageUserPoolPercent->Set(Percent(UserPoolUsage, maximum.GetCPU()));
+            CounterNodeMemUsageBytes->Set(MemUsage);
+            CounterNodeMemLimitBytes->Set(MemLimit);
+            CounterNodeUsageMemPercent->Set(Percent(MemUsage, maximum.GetMemory()));
+            CounterTabletsUsageCpuUs->Set(TabletsCpuSum);
+            CounterTabletsUsageMemBytes->Set(TabletsMemSum);
+            CounterTabletsUsageNetBytesPerSec->Set(TabletsNetSum);
+            CounterTabletsUsageCpuPercent->Set(Percent(TabletsCpuSum, maximum.GetCPU()));
+            CounterTabletsUsageMemPercent->Set(Percent(TabletsMemSum, maximum.GetMemory()));
+            CounterTabletsUsageNetPercent->Set(Percent(TabletsNetSum, maximum.GetNetwork()));
             TabletMetricsInFlightCookie = ++NextTabletMetricsCookie;
             Y_ABORT_UNLESS(TabletMetricsInFlightCookie != 0);
             NTabletPipe::SendData(ctx, HivePipeClient, event.Release(), TabletMetricsInFlightCookie);
@@ -745,6 +814,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             metrics.SetFollowerID(tabletId.second);
             metrics.MutableResourceUsage()->MergeFrom(tablet.ResourceValues);
         }
+    }
+
+    // a tablet leaves OnlineTablets: its last reported metrics leave the sums
+    void SubtractFromTabletMetricsSums(const TOnlineTabletEntry& tablet) {
+        TabletsCpuSum -= tablet.AccountedCpu;
+        TabletsMemSum -= tablet.AccountedMem;
+        TabletsNetSum -= tablet.AccountedNet;
     }
 
     void Handle(TEvLocal::TEvTabletMetricsAck::TPtr& ev, const TActorContext& ctx) {
@@ -1047,6 +1123,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 RetainedCutHistory.erase(onlineIt->first.first);
             }
             UpdatedTabletMetrics.erase(onlineIt->first);
+            SubtractFromTabletMetricsSums(onlineIt->second);
             EraseTablet(OnlineTablets, OnlineTabletsByActor, onlineIt);
             UpdateEstimate();
             return;
@@ -1180,22 +1257,41 @@ public:
         TxCacheQuota = new TSharedQuota(Counters->GetCounter("UsedTxDataCache"),
                                         Counters->GetCounter("TxDataCacheSize"));
 
-        CounterStartAttempts = Counters->GetCounter("Local_StartAttempts", true);
-        CounterFollowerAttempts = Counters->GetCounter("Local_FollowerAttempts", true);
-        CounterRestored = Counters->GetCounter("Local_Restored", true);
-        CounterCancelLocked = Counters->GetCounter("Local_CancelLocked", true);
-        CounterCancelSSTimeout = Counters->GetCounter("Local_CancelSSTimeout", true);
-        CounterCancelRace = Counters->GetCounter("Local_CancelRace", true);
-        CounterCancelBootBSError = Counters->GetCounter("Local_CancelBootBSError", true);
-        CounterCancelOutdated = Counters->GetCounter("Local_CancelOutdated", true);
-        CounterCancelBootSSError = Counters->GetCounter("Local_CancelBootSSError", true);
-        CounterCancelPoisonPill = Counters->GetCounter("Local_CancelPoisonPill", true);
-        CounterCancelDemotedBySS = Counters->GetCounter("Local_CancelDemotedBySS", true);
-        CounterCancelBSError = Counters->GetCounter("Local_CancelBSError", true);
-        CounterCancelInconsistentCommit = Counters->GetCounter("Local_CancelInconsistentCommit", true);
-        CounterCancelIsolated = Counters->GetCounter("Local_CancelIsolated", true);
-        CounterCancelDemotedByBS = Counters->GetCounter("Local_CancelDemotedByBS", true);
-        CounterCancelUnknownReason = Counters->GetCounter("Local_CancelUnknownReason", true);
+        auto localNodeCounters = Counters->GetSubgroup("node_id", ToString(Owner.NodeId()));
+
+        CounterNodeUsagePercent = localNodeCounters->GetCounter("Local_NodeUsagePercent");
+        CounterNodeCpuUsagePercent = localNodeCounters->GetCounter("Local_NodeCpuUsagePercent");
+        CounterNodeUserPoolUsageUs = localNodeCounters->GetCounter("Local_NodeUserPoolUsageUs");
+        CounterNodeUserPoolLimitUs = localNodeCounters->GetCounter("Local_NodeUserPoolLimitUs");
+        CounterNodeUsageUserPoolPercent = localNodeCounters->GetCounter("Local_NodeUsageUserPoolPercent");
+        CounterNodeMemUsageBytes = localNodeCounters->GetCounter("Local_NodeMemUsageBytes");
+        CounterNodeMemLimitBytes = localNodeCounters->GetCounter("Local_NodeMemLimitBytes");
+        CounterNodeUsageMemPercent = localNodeCounters->GetCounter("Local_NodeUsageMemPercent");
+        CounterNodeResourceMaximumCpuUs = localNodeCounters->GetCounter("Local_NodeResourceMaximumCpuUs");
+        CounterNodeResourceMaximumMemBytes = localNodeCounters->GetCounter("Local_NodeResourceMaximumMemBytes");
+        CounterNodeResourceMaximumNetBytesPerSec = localNodeCounters->GetCounter("Local_NodeResourceMaximumNetBytesPerSec");
+        CounterTabletsUsageCpuUs = localNodeCounters->GetCounter("Local_TabletsUsageCpuUs");
+        CounterTabletsUsageMemBytes = localNodeCounters->GetCounter("Local_TabletsUsageMemBytes");
+        CounterTabletsUsageNetBytesPerSec = localNodeCounters->GetCounter("Local_TabletsUsageNetBytesPerSec");
+        CounterTabletsUsageCpuPercent = localNodeCounters->GetCounter("Local_TabletsUsageCpuPercent");
+        CounterTabletsUsageMemPercent = localNodeCounters->GetCounter("Local_TabletsUsageMemPercent");
+        CounterTabletsUsageNetPercent = localNodeCounters->GetCounter("Local_TabletsUsageNetPercent");
+        CounterStartAttempts = localNodeCounters->GetCounter("Local_StartAttempts", true);
+        CounterFollowerAttempts = localNodeCounters->GetCounter("Local_FollowerAttempts", true);
+        CounterRestored = localNodeCounters->GetCounter("Local_Restored", true);
+        CounterCancelLocked = localNodeCounters->GetCounter("Local_CancelLocked", true);
+        CounterCancelSSTimeout = localNodeCounters->GetCounter("Local_CancelSSTimeout", true);
+        CounterCancelRace = localNodeCounters->GetCounter("Local_CancelRace", true);
+        CounterCancelBootBSError = localNodeCounters->GetCounter("Local_CancelBootBSError", true);
+        CounterCancelOutdated = localNodeCounters->GetCounter("Local_CancelOutdated", true);
+        CounterCancelBootSSError = localNodeCounters->GetCounter("Local_CancelBootSSError", true);
+        CounterCancelPoisonPill = localNodeCounters->GetCounter("Local_CancelPoisonPill", true);
+        CounterCancelDemotedBySS = localNodeCounters->GetCounter("Local_CancelDemotedBySS", true);
+        CounterCancelBSError = localNodeCounters->GetCounter("Local_CancelBSError", true);
+        CounterCancelInconsistentCommit = localNodeCounters->GetCounter("Local_CancelInconsistentCommit", true);
+        CounterCancelIsolated = localNodeCounters->GetCounter("Local_CancelIsolated", true);
+        CounterCancelDemotedByBS = localNodeCounters->GetCounter("Local_CancelDemotedByBS", true);
+        CounterCancelUnknownReason = localNodeCounters->GetCounter("Local_CancelUnknownReason", true);
 
         UpdateCacheQuota();
     }

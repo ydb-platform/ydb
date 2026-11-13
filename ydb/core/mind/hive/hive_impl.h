@@ -453,6 +453,8 @@ protected:
     // last "balancer not started" line written at INFO, repeats of it go to DEBUG
     std::optional<std::pair<TString, EBalancerSuppressReason>> LastBalancerSuppression;
     std::array<TBalancerStats, EBalancerTypeSize> BalancerStats;
+    // group of the per-node counters (service tablets, type=HIVE, subgroup peer_node_id per node), see TNodeInfo::TCounters; present while ExportPerNodeCounters is on.
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> PerNodeCountersGroup;
     NKikimrHive::EMigrationState MigrationState = NKikimrHive::EMigrationState::MIGRATION_UNKNOWN;
     i32 MigrationProgress = 0;
     NKikimrHive::TEvSeizeTablets MigrationFilter;
@@ -790,7 +792,7 @@ public:
     void OnShrinkMoveDataRetried();
     void OnShrinkMoveDataFinished();
     // details are appended to the "from=X to=Y" of the Moved event
-    void RecordTabletMove(const TTabletMoveInfo& info, EHiveEventReason reason, TString details = {});
+    void RecordTabletMove(TInstant timestamp, const TTabletInfo& tablet, const TNodeInfo& from, const TNodeInfo& to, EHiveEventReason reason, TString details = {});
     // details is the variable part of the description, reason covers the constant part
     void RecordNodeEvent(TNodeInfo& node, EHiveEventType type, EHiveEventReason reason, TString details = {});
     // skipIfRepeated drops the event when the tablet's last event has the same type, reason and details
@@ -1218,9 +1220,16 @@ protected:
         TNodeId MaxUsageNodeId;
         double Scatter;
         TResourceNormalizedValues ScatterByResource;
+        // per-resource min and max over the nodes, both raised to MinNodeUsageToBalance, as used for ScatterByResource
         TResourceNormalizedValues MinResourceNormValues;
+        TResourceNormalizedValues MaxResourceNormValues;
         std::vector<TNodeStat> Values;
     };
+
+    // per-node counters export, see TNodeInfo::TCounters: UpdateNodeCounters is called when a node's values change,
+    // UpdatePerNodeCountersExport applies the setting (drops all node counters when it is switched off)
+    void UpdateNodeCounters(TNodeInfo& node);
+    void UpdatePerNodeCountersExport();
 
     THiveStats GetStats() const;
     template<std::forward_iterator TIter>

@@ -139,6 +139,31 @@ protected:
         return Hive->GetLogPrefix();
     }
 
+    // per-type twins of the balancer counters, indexed by EBalancerType; Storage has its own balancer and counters
+    static constexpr size_t TABLET_BALANCER_TYPES = static_cast<size_t>(EBalancerType::Last);
+    static constexpr NHive::ECumulativeCounters EXECUTED_BY_TYPE[TABLET_BALANCER_TYPES] = {
+        NHive::COUNTER_BALANCER_EXECUTED_MANUAL, NHive::COUNTER_BALANCER_EXECUTED_SCATTER, NHive::COUNTER_BALANCER_EXECUTED_COUNTER,
+        NHive::COUNTER_BALANCER_EXECUTED_CPU, NHive::COUNTER_BALANCER_EXECUTED_MEMORY, NHive::COUNTER_BALANCER_EXECUTED_NETWORK,
+        NHive::COUNTER_BALANCER_EXECUTED_EMERGENCY, NHive::COUNTER_BALANCER_EXECUTED_SPREAD,
+    };
+    static constexpr NHive::ECumulativeCounters FAILED_BY_TYPE[TABLET_BALANCER_TYPES] = {
+        NHive::COUNTER_BALANCER_FAILED_MANUAL, NHive::COUNTER_BALANCER_FAILED_SCATTER, NHive::COUNTER_BALANCER_FAILED_COUNTER,
+        NHive::COUNTER_BALANCER_FAILED_CPU, NHive::COUNTER_BALANCER_FAILED_MEMORY, NHive::COUNTER_BALANCER_FAILED_NETWORK,
+        NHive::COUNTER_BALANCER_FAILED_EMERGENCY, NHive::COUNTER_BALANCER_FAILED_SPREAD,
+    };
+    static constexpr NHive::ECumulativeCounters MOVES_BY_TYPE[TABLET_BALANCER_TYPES] = {
+        NHive::COUNTER_TABLETS_MOVED_MANUAL, NHive::COUNTER_TABLETS_MOVED_SCATTER, NHive::COUNTER_TABLETS_MOVED_COUNTER,
+        NHive::COUNTER_TABLETS_MOVED_CPU, NHive::COUNTER_TABLETS_MOVED_MEMORY, NHive::COUNTER_TABLETS_MOVED_NETWORK,
+        NHive::COUNTER_TABLETS_MOVED_EMERGENCY, NHive::COUNTER_TABLETS_MOVED_SPREAD,
+    };
+
+    void IncrementByType(const NHive::ECumulativeCounters (&byType)[TABLET_BALANCER_TYPES], ui64 value = 1) const {
+        const size_t index = static_cast<size_t>(Settings.Type);
+        if (index < TABLET_BALANCER_TYPES && value > 0) {
+            Hive->TabletCounters->Cumulative()[byType[index]].Increment(value);
+        }
+    }
+
     void PassAway() override {
         RunStats.EndTime = TActivationContext::Now();
         RunStats.Movements = Movements;
@@ -190,6 +215,7 @@ protected:
         Hive->RemoveSubActor(this);
         if (Movements == 0) {
             Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_FAILED].Increment(1);
+            IncrementByType(FAILED_BY_TYPE);
             // we failed to balance specific nodes
             for (TNodeId nodeId : Settings.FilterNodeIds) {
                 TNodeInfo* node = Hive->FindNode(nodeId);
@@ -485,7 +511,8 @@ protected:
                     if (Settings.MaxMovements != 0) {
                         details << "/" << Settings.MaxMovements;
                     }
-                    Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id), expediency.Reason, std::move(details));
+                    IncrementByType(MOVES_BY_TYPE);
+                    Hive->RecordTabletMove(now, *tablet, *tablet->Node, *node, expediency.Reason, std::move(details));
                     Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
                     UpdateProgress();
                 }
@@ -534,6 +561,7 @@ public:
         UpdateProgress();
         RunStats.StartTime = TActivationContext::Now();
         Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_EXECUTED].Increment(1);
+        IncrementByType(EXECUTED_BY_TYPE);
         YDB_LOG_INFO("Balancer started",
             {"logPrefix", GetLogPrefix()},
             {"balancerType", EBalancerTypeName(Settings.Type)},

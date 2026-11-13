@@ -1,5 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -839,6 +840,7 @@ void THive::BuildCurrentConfig() {
     CurrentConfig.MergeFrom(DatabaseConfig);
     CurrentConfig.SetTabletEventHistorySize(std::min(CurrentConfig.GetTabletEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
     CurrentConfig.SetNodeEventHistorySize(std::min(CurrentConfig.GetNodeEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
+    UpdatePerNodeCountersExport(); // drops the per-node counters as soon as ExportPerNodeCounters is switched off
     TabletLimit.clear();
     for (const auto& tabletLimit : CurrentConfig.GetDefaultTabletLimit()) {
         TabletLimit.insert_or_assign(tabletLimit.GetType(), tabletLimit);
@@ -2003,6 +2005,9 @@ void THive::DeleteTablet(TTabletId tabletId) {
 void THive::DeleteNode(TNodeId nodeId) {
     TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Sub(1);
     RemoveNodeFromSegments(nodeId);
+    if (TNodeInfo* node = FindNode(nodeId)) {
+        node->DropCounters();
+    }
     Nodes.erase(nodeId);
 }
 
@@ -2207,13 +2212,18 @@ void THive::OnShrinkMoveDataFinished() {
     }
 }
 
-void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo, EHiveEventReason reason, TString details) {
-    if (const TTabletInfo* tablet = FindTablet(moveInfo.Tablet)) {
-        RecordTabletEvent(*tablet, EHiveEventType::Moved, reason,
-            TStringBuilder() << "from=" << moveInfo.From << " to=" << moveInfo.To << (details.empty() ? "" : " ") << details);
-    }
+void THive::RecordTabletMove(TInstant timestamp, const TTabletInfo& tablet, const TNodeInfo& from, const TNodeInfo& to, EHiveEventReason reason, TString details) {
+    const TTabletMoveInfo moveInfo(timestamp, tablet, from.Id, to.Id);
+    RecordTabletEvent(tablet, EHiveEventType::Moved, reason,
+        TStringBuilder() << "from=" << moveInfo.From << " to=" << moveInfo.To << (details.empty() ? "" : " ") << details);
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
+    if (from.Counters) {
+        from.Counters->TabletsMovedFromNode->Inc();
+    }
+    if (to.Counters) {
+        to.Counters->TabletsMovedToNode->Inc();
+    }
     if (TabletMoveSamplesForLog.size() < MOVE_SAMPLES_PER_LOG_ENTRY) {
         TabletMoveSamplesForLog.push_back(moveInfo);
         std::push_heap(TabletMoveSamplesForLog.begin(), TabletMoveSamplesForLog.end(), std::greater<TTabletMoveInfo>{});
@@ -2871,6 +2881,7 @@ THive::THiveStats THive::GetStats(TIter begin, TIter end) const {
     maxValues = piecewise_max(maxValues, minValuesToBalance);
     minValues = piecewise_max(minValues, minValuesToBalance);
     stats.MinResourceNormValues = minValues;
+    stats.MaxResourceNormValues = maxValues;
     auto discrepancy = maxValues - minValues;
     auto& counterDiscrepancy = std::get<NMetrics::EResource::Counter>(discrepancy);
     if (counterDiscrepancy * CurrentConfig.GetMaxResourceCounter() <= 1.5) {
@@ -4449,6 +4460,34 @@ void THive::Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr&) {
     TabletCounters->Simple()[NHive::COUNTER_BALANCE_USAGE_MIN].Set(stats.MinUsage * 100);
     TabletCounters->Simple()[NHive::COUNTER_BALANCE_USAGE_MAX].Set(stats.MaxUsage * 100);
 
+    // the same per resource, straight from the stats the balancer decision is made on: ScatterByResource is what
+    // CheckScatter compares with MinScatterToBalance, Min/MaxResourceNormValues is the range it is computed from
+    // Min/max of Counter are exported as the number of tablets, not in percent: every node's Counter maximum is
+    // MaxResourceCounter (1e8 by default), so the percent would round to 0. Scatter is a ratio and stays in percent.
+    auto setPerResource = [&](NHive::ESimpleCounters counter, NHive::ESimpleCounters minCounter, NHive::ESimpleCounters maxCounter, auto resource) {
+        const double usageScale = resource() == NMetrics::EResource::Counter ? CurrentConfig.GetMaxResourceCounter() : 100;
+        TabletCounters->Simple()[counter].Set(std::get<resource>(stats.ScatterByResource) * 100);
+        TabletCounters->Simple()[minCounter].Set(std::llround(std::get<resource>(stats.MinResourceNormValues) * usageScale));
+        TabletCounters->Simple()[maxCounter].Set(std::llround(std::get<resource>(stats.MaxResourceNormValues) * usageScale));
+    };
+    setPerResource(NHive::COUNTER_BALANCE_SCATTER_COUNTER, NHive::COUNTER_BALANCE_USAGE_MIN_COUNTER, NHive::COUNTER_BALANCE_USAGE_MAX_COUNTER,
+        std::integral_constant<size_t, NMetrics::EResource::Counter>());
+    setPerResource(NHive::COUNTER_BALANCE_SCATTER_CPU, NHive::COUNTER_BALANCE_USAGE_MIN_CPU, NHive::COUNTER_BALANCE_USAGE_MAX_CPU,
+        std::integral_constant<size_t, NMetrics::EResource::CPU>());
+    setPerResource(NHive::COUNTER_BALANCE_SCATTER_MEMORY, NHive::COUNTER_BALANCE_USAGE_MIN_MEMORY, NHive::COUNTER_BALANCE_USAGE_MAX_MEMORY,
+        std::integral_constant<size_t, NMetrics::EResource::Memory>());
+    setPerResource(NHive::COUNTER_BALANCE_SCATTER_NETWORK, NHive::COUNTER_BALANCE_USAGE_MIN_NETWORK, NHive::COUNTER_BALANCE_USAGE_MAX_NETWORK,
+        std::integral_constant<size_t, NMetrics::EResource::Network>());
+
+    // the condition that gates the emergency balancer, counted as Handle(TEvProcessTabletBalancer) counts it
+    ui64 nodesOverloaded = 0;
+    for (const auto& [nodeId, nodeInfo] : Nodes) {
+        if (nodeInfo.IsAlive() && !nodeInfo.Down && nodeInfo.IsOverloaded()) {
+            ++nodesOverloaded;
+        }
+    }
+    TabletCounters->Simple()[NHive::COUNTER_NODES_OVERLOADED].Set(nodesOverloaded);
+
     auto& nodeUsageHistogram = TabletCounters->Percentile()[NHive::COUNTER_NODE_USAGE];
     nodeUsageHistogram.Clear();
     for (const auto& record : stats.Values) {
@@ -4933,6 +4972,28 @@ bool THive::IsItPossibleToStartBalancer(EBalancerType balancerType) {
         }
     }
     return true;
+}
+
+void THive::UpdateNodeCounters(TNodeInfo& node) {
+    if (!CurrentConfig.GetExportPerNodeCounters()) {
+        return;
+    }
+    if (!PerNodeCountersGroup) {
+        PerNodeCountersGroup = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("type", "HIVE");
+    }
+    // nodes get their counters as they report, so switching the export on spreads the work over the metrics messages
+    node.CreateCounters(PerNodeCountersGroup);
+    node.UpdateCounters();
+}
+
+void THive::UpdatePerNodeCountersExport() {
+    if (CurrentConfig.GetExportPerNodeCounters() || !PerNodeCountersGroup) {
+        return;
+    }
+    for (auto& [_, node] : Nodes) {
+        node.DropCounters();
+    }
+    PerNodeCountersGroup.Reset();
 }
 
 void THive::LogBalancerNotStarted(const TString& balancerType, EBalancerSuppressReason reason) {

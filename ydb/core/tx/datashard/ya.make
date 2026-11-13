@@ -40,6 +40,7 @@ SRCS(
     build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
     build_index/secondary_index.cpp
+    cdc_aggregated_heartbeats.cpp
     cdc_stream_heartbeat.cpp
     cdc_stream_scan.cpp
     change_collector_cdc_stream.cpp

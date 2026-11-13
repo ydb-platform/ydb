@@ -12,6 +12,14 @@ TEvChangeExchange::TEvAddSender::TEvAddSender(const TTableId& userTableId, TEvCh
 {
 }
 
+TEvChangeExchange::TEvAddSender::TEvAddSender(const TTableId& userTableId, const TPathId& streamPathId, const TUserTable::TCdcStream& stream)
+    : UserTableId(userTableId)
+    , Type(ESenderType::CdcStream)
+    , PathId(streamPathId)
+    , CdcStream(stream)
+{
+}
+
 TString TEvChangeExchange::TEvAddSender::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
         << " UserTableId: " << UserTableId

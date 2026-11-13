@@ -1,12 +1,15 @@
 #pragma once
 
 #include "defs.h"
+#include "datashard_user_table.h"
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <util/generic/vector.h>
+
+#include <optional>
 
 namespace NKikimr::NDataShard {
 
@@ -55,8 +58,10 @@ struct TEvChangeExchange {
         TTableId UserTableId;
         ESenderType Type;
         TPathId PathId;
+        std::optional<TUserTable::TCdcStream> CdcStream;
 
         explicit TEvAddSender(const TTableId& userTableId, ESenderType type, const TPathId& pathId);
+        explicit TEvAddSender(const TTableId& userTableId, const TPathId& streamPathId, const TUserTable::TCdcStream& stream);
         TString ToString() const override;
     };
 

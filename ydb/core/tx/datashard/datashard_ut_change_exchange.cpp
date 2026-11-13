@@ -6312,6 +6312,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
             }
         });
 
+        auto setAggregatedSender = runtime.AddObserver<TEvChangeExchange::TEvAddSender>([&](auto& ev) {
+            if (auto& stream = ev->Get()->CdcStream) {
+                stream->HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated;
+            }
+        });
+
         // Tracked deliveries need a registered recipient before the observer can intercept them.
         runtime.RegisterService(NCdcAggregator::MakeCdcAggregatorServiceId(runtime.GetNodeId(0)), runtime.AllocateEdgeActor());
         TBlockEvents<TEvWriteHeartbeat> heartbeats(runtime);

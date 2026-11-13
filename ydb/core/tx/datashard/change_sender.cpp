@@ -27,6 +27,7 @@ class TChangeSender: public TActor<TChangeSender> {
     struct TSender {
         TTableId UserTableId;
         ESenderType Type;
+        std::optional<TUserTable::TCdcStream> CdcStream;
         TActorId ActorId;
     };
 
@@ -43,28 +44,34 @@ class TChangeSender: public TActor<TChangeSender> {
             {"isActive", IsActive()});
     }
 
-    TSender& AddChangeSender(const TPathId& pathId, const TTableId& userTableId, ESenderType type) {
+    TSender& AddChangeSender(const TPathId& pathId, const TTableId& userTableId, ESenderType type,
+            const std::optional<TUserTable::TCdcStream>& cdcStream = std::nullopt)
+    {
         Y_DEBUG_ABORT_UNLESS(!Senders.contains(pathId));
 
         auto& sender = Senders[pathId];
         sender.UserTableId = userTableId;
         sender.Type = type;
+        sender.CdcStream = cdcStream;
 
         return sender;
     }
 
-    TActorId RegisterChangeSender(const TPathId& pathId, const TTableId& userTableId, ESenderType type) const {
+    TActorId RegisterChangeSender(const TPathId& pathId, const TTableId& userTableId, ESenderType type,
+            const std::optional<TUserTable::TCdcStream>& cdcStream) const
+    {
         switch (type) {
         case ESenderType::AsyncIndex:
             return Register(CreateAsyncIndexChangeSender(DataShard, userTableId, pathId));
         case ESenderType::CdcStream:
-            return Register(CreateCdcStreamChangeSender(DataShard, pathId));
+            Y_ENSURE(cdcStream);
+            return Register(CreateCdcStreamChangeSender(DataShard, pathId, *cdcStream));
         }
     }
 
     void RegisterChangeSender(const TPathId& pathId, TSender& sender) const {
         Y_DEBUG_ABORT_UNLESS(!sender.ActorId);
-        sender.ActorId = RegisterChangeSender(pathId, sender.UserTableId, sender.Type);
+        sender.ActorId = RegisterChangeSender(pathId, sender.UserTableId, sender.Type, sender.CdcStream);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -122,7 +129,7 @@ class TChangeSender: public TActor<TChangeSender> {
             {"senderType", msg.Type},
             {"pathId", msg.PathId});
 
-        auto& sender = AddChangeSender(msg.PathId, msg.UserTableId, msg.Type);
+        auto& sender = AddChangeSender(msg.PathId, msg.UserTableId, msg.Type, msg.CdcStream);
         if (IsActive()) {
             RegisterChangeSender(msg.PathId, sender);
         }
@@ -283,8 +290,8 @@ public:
                 AddChangeSender(indexPathId, fullTableId, ESenderType::AsyncIndex);
             });
 
-            for (const auto& [streamPathId, _] : tableInfo->CdcStreams) {
-                AddChangeSender(streamPathId, fullTableId, ESenderType::CdcStream);
+            for (const auto& [streamPathId, stream] : tableInfo->CdcStreams) {
+                AddChangeSender(streamPathId, fullTableId, ESenderType::CdcStream, stream);
             }
         }
     }

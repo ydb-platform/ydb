@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(DiscoverBlockedGeneration) {
         env.Sim(TDuration::Seconds(1));
         env.Runtime->FilterFunction = {};
         UNIT_ASSERT(result);
-        const auto *msg = result->Get<TEvBlobStorage::TEvDiscoverResult>();
+        const TEvBlobStorage::TEvDiscoverResult *msg = result->Get<TEvBlobStorage::TEvDiscoverResult>();
         UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(msg->Id, id);
         UNIT_ASSERT_VALUES_EQUAL(msg->BlockedGeneration, blockedGeneration);

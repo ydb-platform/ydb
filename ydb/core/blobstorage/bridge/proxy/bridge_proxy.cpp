@@ -1,6 +1,8 @@
 #include "bridge_proxy.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/util/stlog.h>
 
 #include <ydb/library/actors/async/wait_for_event.h>
@@ -206,6 +208,11 @@ namespace NKikimr {
 
             TDynBitMap Processed; // a set of piles we already got main reply from
             bool RestartNeeded = false; // set while processing a response: the request has to start over by current routing
+
+            // the parts of HOT_STANDBY piles that have missed the background copy of this write, by whether a blob write
+            // was lost; BSC learns of them when the request is finished, as the part is reconciled from a pile having
+            // the write then (the proxy holds its seals meanwhile)
+            THashMap<TGroupId, bool> StandbyLosses;
 
             template<typename TEvRequest>
             TRequest(TActorId sender, ui64 cookie, std::unique_ptr<TEvRequest>&& request, TIntrusivePtr<TBlobStorageGroupInfo> info,
@@ -891,6 +898,44 @@ namespace NKikimr {
         THashMap<ui64, TRequestInFlight> RequestsInFlight;
         ui64 LastRequestCookie = 0;
 
+        // Writes to HOT_STANDBY piles complete no client request, so this proxy owns them: a RACE gets them resent with
+        // the newer generation of the part, and the memory they hold counts against the node-wide budget, beyond which
+        // they are dropped. A write the standby misses is recovered when the pile rejoins.
+        struct TBackgroundWrite {
+            TBridgePileId BridgePileId;
+            TGroupId TargetGroupId; // the part of the pile
+            std::weak_ptr<TRequest> Request; // the client write this one copies, its loss is reported when it finishes
+            std::unique_ptr<IEventBase> Event; // the copy to resend, the one in flight is consumed by the pile's proxy
+            ui64 Bytes = 0;
+            ui32 SentGeneration = 0; // the generation of the part the write was sent with
+            ui32 WaitGeneration = 0; // the generation of the part the parked write waits for
+            ui32 Restarts = 0;
+            bool LossReported = false; // the write is reported lost by a flushed seal, while it may still get there
+        };
+        static constexpr ui32 MaxBackgroundWriteRestarts = 3;
+        THashMap<ui64, TBackgroundWrite> BackgroundWritesInFlight; // by cookie
+        std::vector<TBackgroundWrite> BackgroundWritesParked; // raced with the part of newer generation
+        ui64 BackgroundBytesHeld = 0; // the share of this proxy in StandbyBytesInFlight
+        // the number of unfinished requests holding the loss of a background write by the part it was sent to
+        THashMap<TGroupId, ui32> StandbyLossesHeld;
+
+        // the seals of the parts of the pile promoted from HOT_STANDBY, answered when no background write to the part
+        // made with older group generation can be held here anymore
+        struct TStandbySealRequest {
+            TGroupId TargetGroupId;
+            ui32 Generation;
+            TActorId Sender;
+            ui64 Cookie;
+            bool Flush;
+        };
+        std::vector<TStandbySealRequest> StandbySealRequests;
+        TControlWrapper StandbyMaxBytesInFlight = 256 << 20; // replaced with the ICB control when there is one
+        ::NMonitoring::TDynamicCounters::TCounterPtr StandbyBytesInFlight;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StandbyWritesSent;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StandbyWritesRestarted;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StandbyWritesLost;
+        ::NMonitoring::TDynamicCounters::TCounterPtr StandbyWritesDropped;
+
         std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
         TBridgeInfo::TPtr BridgeInfo;
         bool NotCapableReported = false;
@@ -924,6 +969,21 @@ namespace NKikimr {
         }
 
         void Bootstrap() {
+            // counters and the budget are shared by every bridge proxy of the node
+            auto counters = GetServiceCounters(AppData()->Counters, "dsproxynode")->GetSubgroup("subsystem", "bridge_standby");
+            StandbyBytesInFlight = counters->GetCounter("BytesInFlight");
+            StandbyWritesSent = counters->GetCounter("WritesSent", true);
+            StandbyWritesRestarted = counters->GetCounter("WritesRestarted", true);
+            StandbyWritesLost = counters->GetCounter("WritesLost", true);
+            StandbyWritesDropped = counters->GetCounter("WritesDropped", true);
+            if (const auto& icb = AppData()->Icb) {
+                TControlBoard::RegisterSharedControl(StandbyMaxBytesInFlight, icb->DSProxyControls.BridgeStandbyMaxBytesInFlight);
+            }
+
+            // the proxy is in the registry of Node Warden before it gets the storage config it needs to serve requests,
+            // so that every seal Node Warden handles from now on reaches it
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NStorage::TEvNodeWardenRegisterBridgeProxy(GroupId,
+                true));
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ true));
             Become(&TThis::StateWaitBridgeInfo);
             WaitBridgeInfoSince = TActivationContext::Monotonic();
@@ -1023,6 +1083,29 @@ namespace NKikimr {
 
         void PassAway() override {
             ReplyToAllWithError("bridge proxy is stopped");
+            *StandbyBytesInFlight -= std::exchange(BackgroundBytesHeld, 0);
+
+            // the background writes held are lost, and the proxy holds none anymore; the losses of the requests have
+            // been reported as they were finished above
+            Y_DEBUG_ABORT_UNLESS(StandbyLossesHeld.empty());
+            THashMap<TGroupId, bool> lost;
+            for (const auto& [cookie, write] : BackgroundWritesInFlight) {
+                lost[write.TargetGroupId] |= IsDataWrite(*write.Event);
+            }
+            for (const auto& write : BackgroundWritesParked) {
+                lost[write.TargetGroupId] |= IsDataWrite(*write.Event);
+            }
+            for (const auto& [targetGroupId, data] : lost) {
+                MarkStandbyDirty(targetGroupId, data);
+            }
+            BackgroundWritesInFlight.clear();
+            BackgroundWritesParked.clear();
+            for (const auto& request : std::exchange(StandbySealRequests, {})) {
+                Send(request.Sender, new NStorage::TEvNodeWardenStandbySealed, 0, request.Cookie);
+            }
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NStorage::TEvNodeWardenRegisterBridgeProxy(GroupId,
+                false));
+
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
                 MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), nullptr, 0));
             if (InnerProxyId) {
@@ -1043,6 +1126,7 @@ namespace NKikimr {
             if (pileLeftDataQuorum) {
                 RestartRequestsWaitingForPilesOut();
             }
+            RetryParkedBackgroundWrites();
         }
 
         // does the pile take part in data quorum (and hence gets requests) by the cluster state
@@ -1096,7 +1180,7 @@ namespace NKikimr {
                 STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB12, "request restarted as it waits for pile out of data quorum",
                     (RequestId, request->RequestId), (GroupId, GroupId));
                 ForgetSubrequests(*request);
-                request->Finished = true;
+                FinishRequest(*request);
                 auto [handle, common] = MakeRestartHandle(*request);
                 if (common->RestartCounter >= MaxRestarts) {
                     ReplyWithError(*handle, "too many restarts of the request racing with cluster state");
@@ -1140,11 +1224,11 @@ namespace NKikimr {
             for (auto& [cookie, item] : RequestsInFlight) {
                 TRequest& request = *item.Request;
                 if (!request.Finished) {
-                    request.Finished = true;
                     if (request.Span) {
                         request.Span.EndError(errorReason);
                     }
                     ReplyWithError(*request.OriginalRequest, request.Sender, request.Cookie, errorReason);
+                    FinishRequest(request);
                 }
             }
             RequestsInFlight.clear();
@@ -1238,6 +1322,8 @@ namespace NKikimr {
             // decide which piles get the request with the group state and the cluster state we have now
             const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(state);
             std::vector<std::tuple<TBridgePileId, std::unique_ptr<IEventBase>>> subrequests;
+            std::vector<std::tuple<TBridgePileId, std::unique_ptr<IEventBase>>> backgroundWrites;
+            std::vector<TGroupId> garbageHeldBack; // the parts of HOT_STANDBY piles not getting garbage collection
             bool hasTrustedPile = false;
             NBridge::ForEachGroupPile(state, [&](TBridgePileId bridgePileId,
                     const NKikimrBridge::TGroupState::TPile& groupPileInfo) {
@@ -1245,6 +1331,19 @@ namespace NKikimr {
                     // no data quorum needed from this pile; when it is not known at all, it has left the cluster, as
                     // bridge info is not older than group info (or the group state comes from the version not telling
                     // its cluster state, and then the pile is just added and holds no data)
+                    const TBridgeInfo::TPile *pile = BridgeInfo->FindPile(bridgePileId);
+                    if (pile && pile->State == TClusterState::HOT_STANDBY && bridgePileId != authorityPileId &&
+                            IsFencedWrite(*ev->Get())) {
+                        if (auto event = PrepareEvent(groupPileInfo, *ev->Get(), bridgePileId, true)) {
+                            backgroundWrites.emplace_back(bridgePileId, std::move(event));
+                        }
+                        if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
+                            if (const auto& msg = *ev->Get(); msg.Collect || msg.DoNotKeep) {
+                                // the reconciliation forwards what is held back
+                                garbageHeldBack.push_back(GetPartGroupId(groupPileInfo));
+                            }
+                        }
+                    }
                     return;
                 }
                 const TBridgeInfo::TPile *pile = BridgeInfo->GetPile(bridgePileId);
@@ -1298,6 +1397,12 @@ namespace NKikimr {
             for (auto& [bridgePileId, eventToSend] : subrequests) {
                 SendQuery(request, bridgePileId, std::move(eventToSend));
             }
+            for (auto& [bridgePileId, eventToSend] : backgroundWrites) {
+                IssueBackgroundWrite(request, bridgePileId, std::move(eventToSend));
+            }
+            for (TGroupId targetGroupId : garbageHeldBack) {
+                ReportStandbyLoss(request.get(), targetGroupId, false);
+            }
         }
 
         void SendQuery(std::shared_ptr<TRequest> request, TBridgePileId bridgePileId, std::unique_ptr<IEventBase> ev,
@@ -1323,6 +1428,11 @@ namespace NKikimr {
             const auto [it1, inserted1] = request->CookiesInFlight.insert(cookie);
             Y_DEBUG_ABORT_UNLESS(inserted1);
 
+            DispatchSubrequest(groupId, std::move(ev), cookie, request->Span.GetTraceId());
+            ++request->ResponsesPending;
+        }
+
+        void DispatchSubrequest(TGroupId groupId, std::unique_ptr<IEventBase> ev, ui64 cookie, NWilson::TTraceId traceId) {
             // send event; inline pile is served by inner proxy, as the service id of this group points to us
             if (groupId == GroupId && !InnerProxyId) {
                 // the inline pile has been removed (with its DS proxy) while the request was running against the group
@@ -1330,25 +1440,326 @@ namespace NKikimr {
                 // do the ones issued afterwards (like restore writes)
                 ReplyWithError(*ev, SelfId(), cookie, "inline pile has been removed from the cluster");
             } else if (groupId == GroupId) {
-                Send(InnerProxyId, ev.release(), 0, cookie, request->Span.GetTraceId());
+                Send(InnerProxyId, ev.release(), 0, cookie, std::move(traceId));
             } else {
-                SendToBSProxy(SelfId(), groupId, ev.release(), cookie, request->Span.GetTraceId());
+                SendToBSProxy(SelfId(), groupId, ev.release(), cookie, std::move(traceId));
             }
-            ++request->ResponsesPending;
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Background writes to HOT_STANDBY piles
+
+        // the writes HOT_STANDBY piles get in background, along with their results
+#define BACKGROUND_WRITES(XX) \
+        XX(TEvBlobStorage::TEvPut, TEvBlobStorage::TEvPutResult) \
+        XX(TEvBlobStorage::TEvBlock, TEvBlobStorage::TEvBlockResult) \
+        XX(TEvBlobStorage::TEvPatch, TEvBlobStorage::TEvPatchResult) \
+        XX(TEvBlobStorage::TEvCollectGarbage, TEvBlobStorage::TEvCollectGarbageResult) \
+        // END
+
+        template<typename TEvent>
+        static constexpr bool IsBackgroundWriteResult = false
+#define RESULT_TYPE(REQUEST, RESULT) || std::is_same_v<TEvent, RESULT>
+            BACKGROUND_WRITES(RESULT_TYPE)
+#undef RESULT_TYPE
+            ;
+
+        // call the function with the background write of its actual type
+        template<typename TCallback>
+        static auto VisitBackgroundWrite(const IEventBase& ev, TCallback&& callback) {
+            switch (ev.Type()) {
+#define VISIT_WRITE(REQUEST, RESULT) case REQUEST::EventType: return callback(static_cast<const REQUEST&>(ev));
+                BACKGROUND_WRITES(VISIT_WRITE)
+#undef VISIT_WRITE
+                default:
+                    Y_ABORT("unexpected background write type");
+            }
+        }
+
+        static std::unique_ptr<IEventBase> CloneBackgroundWrite(const IEventBase& ev) {
+            return VisitBackgroundWrite(ev, [](const auto& write) -> std::unique_ptr<IEventBase> {
+                return std::make_unique<std::decay_t<decltype(write)>>(TEvBlobStorage::CloneEventPolicy, write);
+            });
+        }
+
+        // the memory the write holds while this proxy owns it; the message itself is counted as 1 KiB
+        static ui64 GetBackgroundWriteBytes(const IEventBase& ev) {
+            return 1024 + VisitBackgroundWrite(ev, [](const auto& write) -> ui64 {
+                using T = std::decay_t<decltype(write)>;
+                if constexpr (std::is_same_v<T, TEvBlobStorage::TEvPut>) {
+                    return write.Buffer.size();
+                } else if constexpr (std::is_same_v<T, TEvBlobStorage::TEvPatch>) {
+                    ui64 bytes = 0;
+                    for (ui64 i = 0; i < write.DiffCount; ++i) {
+                        bytes += write.Diffs[i].Buffer.size();
+                    }
+                    return bytes;
+                } else if constexpr (std::is_same_v<T, TEvBlobStorage::TEvCollectGarbage>) {
+                    return write.Keep ? write.Keep->size() * sizeof(TLogoBlobID) : 0;
+                } else {
+                    return 0;
+                }
+            });
+        }
+
+        // the part of the group in the pile with the configuration this proxy has now
+        const NKikimrBridge::TGroupState::TPile *FindPart(TBridgePileId bridgePileId) const {
+            return NBridge::GetGroupPile(Info->Group->GetBridgeGroupState(), bridgePileId);
+        }
+
+        static TGroupId GetPartGroupId(const NKikimrBridge::TGroupState::TPile& part) {
+            return TGroupId::FromProto(&part, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+        }
+
+        // the part of the pile still takes background writes with the configuration this proxy has now
+        bool TakesBackgroundWrites(TBridgePileId bridgePileId) const {
+            const auto& state = Info->Group->GetBridgeGroupState();
+            const auto *pile = BridgeInfo->FindPile(bridgePileId);
+            return pile && pile->State == TClusterState::HOT_STANDBY && FindPart(bridgePileId) &&
+                bridgePileId != NBridge::GetAuthorityPileId(state);
+        }
+
+        void IssueBackgroundWrite(const std::shared_ptr<TRequest>& request, TBridgePileId bridgePileId,
+                std::unique_ptr<IEventBase> ev) {
+            const ui64 bytes = GetBackgroundWriteBytes(*ev);
+            if (static_cast<ui64>(Max<i64>(StandbyBytesInFlight->Val(), 0)) + bytes >
+                    static_cast<ui64>(Max<i64>(StandbyMaxBytesInFlight, 0))) {
+                // the standby can't keep up (or is cut off while still in HOT_STANDBY); holding more would only grow
+                // memory of every node, while the rejoin recovers the write anyway
+                STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB11, "background write dropped over budget", (GroupId, GroupId),
+                    (BridgePileId, bridgePileId), (Bytes, bytes), (BytesInFlight, StandbyBytesInFlight->Val()),
+                    (MaxBytesInFlight, static_cast<i64>(StandbyMaxBytesInFlight)));
+                ++*StandbyWritesDropped;
+                if (const auto *part = FindPart(bridgePileId)) {
+                    ReportStandbyLoss(request.get(), GetPartGroupId(*part), IsDataWrite(*ev));
+                }
+                return;
+            }
+            BackgroundBytesHeld += bytes;
+            *StandbyBytesInFlight += bytes;
+            ++*StandbyWritesSent;
+            SendBackgroundWrite(TBackgroundWrite{
+                .BridgePileId = bridgePileId,
+                .Request = request,
+                .Event = std::move(ev),
+                .Bytes = bytes,
+            }, request->Span.GetTraceId());
+        }
+
+        void SendBackgroundWrite(TBackgroundWrite&& write, NWilson::TTraceId traceId = {}) {
+            const auto *part = FindPart(write.BridgePileId);
+            Y_ABORT_UNLESS(part);
+            const auto groupId = GetPartGroupId(*part);
+            write.TargetGroupId = groupId;
+            auto ev = CloneBackgroundWrite(*write.Event);
+            auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(ev.get());
+            Y_ABORT_UNLESS(common);
+            common->ForceGroupGeneration = write.SentGeneration = part->GetGroupGeneration();
+            common->RestartCounter = write.Restarts;
+
+            const ui64 cookie = ++LastRequestCookie;
+            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB12, "new background write", (GroupId, GroupId),
+                (BridgePileId, write.BridgePileId), (Request, ev->ToString()), (Cookie, cookie),
+                (Restarts, write.Restarts), (GroupPileInfo, *part));
+            const auto [it, inserted] = BackgroundWritesInFlight.emplace(cookie, std::move(write));
+            Y_DEBUG_ABORT_UNLESS(inserted);
+            DispatchSubrequest(groupId, std::move(ev), cookie, std::move(traceId));
+        }
+
+        void FinishBackgroundWrite(TBackgroundWrite& write) {
+            Y_DEBUG_ABORT_UNLESS(write.Bytes <= BackgroundBytesHeld);
+            BackgroundBytesHeld -= write.Bytes;
+            *StandbyBytesInFlight -= write.Bytes;
+        }
+
+        template<typename TEvent>
+        void HandleBackgroundWriteResult(TEventHandle<TEvent>& ev) {
+            const auto it = BackgroundWritesInFlight.find(ev.Cookie);
+            if (it == BackgroundWritesInFlight.end()) {
+                return; // the result of a subrequest of already completed request
+            }
+            TBackgroundWrite write = std::move(it->second);
+            BackgroundWritesInFlight.erase(it);
+
+            const auto& msg = *ev.Get();
+            if (msg.Status == NKikimrProto::RACE && write.Restarts < MaxBackgroundWriteRestarts &&
+                    TakesBackgroundWrites(write.BridgePileId)) {
+                ++write.Restarts;
+                ++*StandbyWritesRestarted;
+                if (write.SentGeneration < msg.RacingGeneration) {
+                    // the part has got newer generation than this proxy knows; the configuration comes after it
+                    write.WaitGeneration = msg.RacingGeneration;
+                    BackgroundWritesParked.push_back(std::move(write));
+                    RetryParkedBackgroundWrites(); // it may have come while the write was in flight
+                } else {
+                    // the proxy of the part is the one lagging behind, and it gets the configuration this proxy has
+                    SendBackgroundWrite(std::move(write));
+                }
+            } else {
+                if (msg.Status != NKikimrProto::OK) {
+                    STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB13, "background write lost", (GroupId, GroupId),
+                        (BridgePileId, write.BridgePileId), (Status, msg.Status), (Restarts, write.Restarts),
+                        (Response, msg.ToString()));
+                    ++*StandbyWritesLost;
+                    ReportStandbyLoss(write);
+                }
+                FinishBackgroundWrite(write);
+            }
+            CheckStandbySeals();
+        }
+
+        // the write that may leave the standby part without the data of a blob, not just without its flags or block
+        static bool IsDataWrite(const IEventBase& ev) {
+            return ev.Type() == TEvBlobStorage::EvPut || ev.Type() == TEvBlobStorage::EvPatch;
+        }
+
+        // the part of HOT_STANDBY pile has missed a write, and BSC gets it reconciled
+        void MarkStandbyDirty(TGroupId targetGroupId, bool data) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NStorage::TEvNodeWardenStandbyDirty(targetGroupId,
+                data));
+        }
+
+        // The part has missed a write of the client request. A reconciliation pass started before the request has
+        // finished may not find the write in the source pile either, so the loss is reported when the request is over:
+        // the write is either acknowledged then, and so held by every pile in data quorum, or failed.
+        void ReportStandbyLoss(TRequest *request, TGroupId targetGroupId, bool data) {
+            if (request && !request->Finished) {
+                if (const auto [it, inserted] = request->StandbyLosses.try_emplace(targetGroupId, data); inserted) {
+                    ++StandbyLossesHeld[targetGroupId];
+                } else {
+                    it->second |= data;
+                }
+            } else {
+                MarkStandbyDirty(targetGroupId, data);
+            }
+        }
+
+        void ReportStandbyLoss(const TBackgroundWrite& write) {
+            if (write.LossReported) {
+                return;
+            }
+            const auto request = write.Request.lock();
+            ReportStandbyLoss(request.get(), write.TargetGroupId, IsDataWrite(*write.Event));
+        }
+
+        // the request has been answered, or it is restarted as a new one
+        void FinishRequest(TRequest& request) {
+            Y_DEBUG_ABORT_UNLESS(!request.Finished);
+            request.Finished = true;
+            if (request.StandbyLosses.empty()) {
+                return;
+            }
+            for (const auto& [targetGroupId, data] : std::exchange(request.StandbyLosses, {})) {
+                MarkStandbyDirty(targetGroupId, data);
+                const auto it = StandbyLossesHeld.find(targetGroupId);
+                Y_ABORT_UNLESS(it != StandbyLossesHeld.end());
+                if (!--it->second) {
+                    StandbyLossesHeld.erase(it);
+                }
+            }
+            CheckStandbySeals();
+        }
+
+        void Handle(NStorage::TEvNodeWardenStandbySeal::TPtr ev) {
+            const auto& msg = *ev->Get();
+            if (const auto it = std::ranges::find_if(StandbySealRequests, [&](const auto& request) {
+                    return request.Sender == ev->Sender && request.Cookie == ev->Cookie;
+                }); it != StandbySealRequests.end()) {
+                it->Flush |= msg.Flush; // the seal waited for is flushed
+            } else {
+                StandbySealRequests.push_back({
+                    .TargetGroupId = msg.TargetGroupId,
+                    .Generation = msg.BridgeProxyGroupGeneration,
+                    .Sender = ev->Sender,
+                    .Cookie = ev->Cookie,
+                    .Flush = msg.Flush,
+                });
+            }
+            CheckStandbySeals();
+        }
+
+        // With the group generation of the seal, the proxy writes to the part of the promoted pile as to the one in data
+        // quorum, and the client writes it has made with older generation have their background copies here until they
+        // get to the part or are reported lost, which happens when the client write is finished. The copies are resent
+        // as background ones even with newer generation.
+        //
+        // A background write may hang with no event to tell, and the flushed seal doesn't wait for the ones whose client
+        // writes are over: they are reported lost, and the part is reconciled, finding these writes in the source.
+        void CheckStandbySeals() {
+            std::erase_if(StandbySealRequests, [&](const TStandbySealRequest& request) {
+                if (Info->GroupGeneration < request.Generation || StandbyLossesHeld.contains(request.TargetGroupId)) {
+                    return false;
+                }
+                std::vector<TBackgroundWrite*> unresolved;
+                auto collect = [&](TBackgroundWrite& write) {
+                    if (write.TargetGroupId == request.TargetGroupId && !write.LossReported) {
+                        unresolved.push_back(&write);
+                    }
+                };
+                for (auto& [cookie, write] : BackgroundWritesInFlight) {
+                    collect(write);
+                }
+                for (auto& write : BackgroundWritesParked) {
+                    collect(write);
+                }
+                if (!unresolved.empty() && !request.Flush) {
+                    return false;
+                }
+                bool data = false;
+                for (const TBackgroundWrite *write : unresolved) {
+                    if (const auto clientRequest = write->Request.lock(); clientRequest && !clientRequest->Finished) {
+                        return false; // its loss could not be found in the source yet
+                    }
+                    data |= IsDataWrite(*write->Event);
+                }
+                if (!unresolved.empty()) {
+                    for (TBackgroundWrite *write : unresolved) {
+                        write->LossReported = true;
+                    }
+                    MarkStandbyDirty(request.TargetGroupId, data);
+                }
+                Send(request.Sender, new NStorage::TEvNodeWardenStandbySealed, 0, request.Cookie);
+                return true;
+            });
+        }
+
+        void RetryParkedBackgroundWrites() {
+            for (auto& write : std::exchange(BackgroundWritesParked, {})) {
+                if (!TakesBackgroundWrites(write.BridgePileId)) {
+                    // the pile has left HOT_STANDBY (or the group, its part); the part promoted is reconciled, and the
+                    // sync of the one rejoining otherwise recovers what it lacks
+                    ++*StandbyWritesLost;
+                    ReportStandbyLoss(write);
+                    FinishBackgroundWrite(write);
+                } else if (const auto *part = FindPart(write.BridgePileId);
+                        write.WaitGeneration <= part->GetGroupGeneration()) {
+                    SendBackgroundWrite(std::move(write));
+                } else {
+                    BackgroundWritesParked.push_back(std::move(write));
+                }
+            }
+            CheckStandbySeals(); // the configuration this is called on may give the generation sealed
         }
 
         template<typename TEvent>
         std::unique_ptr<IEventBase> PrepareEvent(const NKikimrBridge::TGroupState::TPile& pile, const TEvent& ev,
-                TBridgePileId bridgePileId) {
+                TBridgePileId bridgePileId, bool background = false) {
             std::unique_ptr<TEvent> res;
 
+            // Standby accepts data before its synchronization starts. Keep flags may arrive asynchronously too, so
+            // forwarding collection barriers could erase data before its keep flags arrive. Defer collection to rejoin.
+            const auto stage = background
+                ? (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>
+                    ? NKikimrBridge::TGroupState::WRITE_KEEP : NKikimrBridge::TGroupState::SYNCED)
+                : pile.GetStage();
+
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
-                if (!NBridge::GroupPartTakesPuts(pile.GetStage())) {
+                if (!NBridge::GroupPartTakesPuts(stage)) {
                     return nullptr; // the rule is shared with BS_CONTROLLER counting the space of the group
                 }
             }
 
-            switch (pile.GetStage()) {
+            switch (stage) {
                 case NKikimrBridge::TGroupState::WRITE_KEEP:
                     if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
                         if (!ev.Keep) {
@@ -1396,6 +1807,14 @@ namespace NKikimr {
                 res = std::make_unique<TEvent>(TEvBlobStorage::CloneEventPolicy, ev);
             }
 
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
+                if (background) {
+                    // Compaction/import writers release their relevance token after foreground completion. Their
+                    // standby copies must still reach storage after the caller has finished.
+                    res->ExternalRelevanceWatcher.reset();
+                }
+            }
+
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate>) {
                 if (Info->DecommitBlocksWrites()) {
                     // pile groups don't carry decommit state of their bridge proxy group, while this proxy blocks writes
@@ -1411,7 +1830,10 @@ namespace NKikimr {
         void HandleProxyResult(TAutoPtr<TEventHandle<TEvent>>& ev) {
             const auto it = RequestsInFlight.find(ev->Cookie);
             if (it == RequestsInFlight.end()) {
-                return; // request has already been completed
+                if constexpr (IsBackgroundWriteResult<TEvent>) {
+                    HandleBackgroundWriteResult(*ev);
+                }
+                return; // request has already been completed, or it is a background write
             }
             auto& item = it->second;
             auto& pile = *item.Pile;
@@ -1451,7 +1873,7 @@ namespace NKikimr {
 
                     // when the group has no part in this pile anymore, our configuration is newer than the one the
                     // request was executed with
-                    const auto *groupPile = NBridge::GetGroupPile(Info->Group->GetBridgeGroupState(), pile.BridgePileId);
+                    const auto *groupPile = FindPart(pile.BridgePileId);
                     const ui32 myGeneration = groupPile ? groupPile->GetGroupGeneration() : Max<ui32>();
 
                     if (common->RestartCounter >= MaxRestarts) {
@@ -1488,7 +1910,7 @@ namespace NKikimr {
                             pile.BridgePileId)->GetGroupGeneration() < myGeneration);
                         redispatch = std::move(handle);
                     }
-                    request->Finished = true;
+                    FinishRequest(*request);
                 } else {
                     std::unique_ptr<TEvent> ptr(ev->Release().Release());
                     request->SubrequestTimings.emplace_back(TypeName<TEvent>(), TDuration::Seconds(item.Timer.Passed()));
@@ -1526,7 +1948,7 @@ namespace NKikimr {
                         Y_ABORT_UNLESS(originalCommon);
                         SetExecutionRelay(*response, std::exchange(originalCommon->ExecutionRelay, {}));
                         Send(request->Sender, response.release(), 0, request->Cookie);
-                        request->Finished = true;
+                        FinishRequest(*request);
                     } else if (request->RestartNeeded) {
                         STLOG(PRI_INFO, BS_PROXY_BRIDGE, BPB13, "request restarted as its restoration source is out of"
                             " data quorum", (RequestId, request->RequestId), (GroupId, GroupId));
@@ -1536,7 +1958,7 @@ namespace NKikimr {
                         } else {
                             redispatch = std::move(handle);
                         }
-                        request->Finished = true;
+                        FinishRequest(*request);
                     }
                 }
             }
@@ -1608,6 +2030,7 @@ namespace NKikimr {
             Y_ABORT_UNLESS(Info);
             if (prevInfo->GroupGeneration < Info->GroupGeneration) {
                 RetryPending(PendingForNextGeneration);
+                RetryParkedBackgroundWrites();
             }
         }
 
@@ -1647,6 +2070,7 @@ namespace NKikimr {
             hFunc(TEvBlobStorage::TEvConfigureProxy, Handle)
             hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle)
             hFunc(TEvNodeWardenStorageConfig, Handle)
+            hFunc(NStorage::TEvNodeWardenStandbySeal, Handle)
             hFunc(TEvCheckPendingRequests, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
             IgnoreFunc(TEvents::TEvWakeup) // the last tick from waiting for initial configuration

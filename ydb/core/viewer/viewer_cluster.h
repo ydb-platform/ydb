@@ -387,6 +387,8 @@ private:
                     return Ydb::Bridge::PileState::SYNCHRONIZED;
                 case NKikimrBridge::TClusterState::INACTIVE:
                     return Ydb::Bridge::PileState::INACTIVE;
+                case NKikimrBridge::TClusterState::HOT_STANDBY:
+                    return Ydb::Bridge::PileState::HOT_STANDBY;
                 default:
                     return Ydb::Bridge::PileState::UNSPECIFIED;
             }

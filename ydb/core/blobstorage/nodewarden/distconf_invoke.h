@@ -232,7 +232,7 @@ namespace NKikimr::NStorage {
         TBridgePileId CheckPileOperation(const TString& pileName, NKikimrBridge::TClusterState::EPileState expectedState,
             bool adding);
         // every node remaining in the cluster has to support pile operations (see RequireBridgeCapability)
-        void RequirePileOperationCapability(TBridgePileId leavingPileId, std::function<void()> callback);
+        void RequireConnectedNodesCapability(ui32 featureLevel, TBridgePileId leavingPileId, std::function<void()> callback);
 
         void AddBridgePile(const TQuery::TAddBridgePile& cmd);
         void AddBridgePileWithBaseConfig();

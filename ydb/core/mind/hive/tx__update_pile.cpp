@@ -61,6 +61,13 @@ public:
                     }
                 }
             }
+            if (pileInfo.State != wardenPileInfo.State &&
+                    wardenPileInfo.State == NKikimrBridge::TClusterState::HOT_STANDBY) {
+                // the pile stays connected, so the tablets running there are not restarted; they read through other
+                // piles and no new one is started there, so they are moved out gracefully
+                pileInfo.Drain = true;
+                db.Table<Schema::BridgePile>().Key(pileInfo.GetId()).Update<Schema::BridgePile::Drain>(true);
+            }
             if (!pileInfo.IsPromoted && wardenPileInfo.IsBeingPromoted) {
                 promotion = true;
             }

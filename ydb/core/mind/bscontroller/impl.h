@@ -2301,12 +2301,27 @@ private:
 
     struct TSyncersRequiringAction;
 
+    enum class EStandbyDirty {
+        None,
+        Garbage, // garbage collection only: barriers and do-not-keep flags are not forwarded, keep flags may be lost
+        Data, // a blob write may have been lost as well, so the data of every blob is checked
+    };
+
+    enum class ESyncerMode {
+        Sync, // the syncer moves the part to its next stage
+        Reconcile, // the pass reconciling the part of HOT_STANDBY pile, its stage stays as it is
+        Promote, // the reconciliation of the part promoted from HOT_STANDBY, synced by the seal following it
+    };
+
     struct TSyncerState
         : TIntrusiveListItem<TSyncerState, TSyncersRequiringAction>
     {
         struct TPerNodeInfo {
             TGroupId SourceGroupId;
             TSyncerProgress Progress;
+            ui64 AssignmentId = 0; // the attempt the node reports the result of, zero for the one adopted from the node
+            ESyncerMode Mode = ESyncerMode::Sync;
+            EStandbyDirty Repairs = EStandbyDirty::None; // what the reconciliation repairs, every blob's data for Data
         };
         const TGroupId BridgeProxyGroupId;
         const TGroupId TargetGroupId;
@@ -2326,6 +2341,32 @@ private:
         ui64 CopiedTotal = 0;
         std::deque<std::tuple<TMonotonic, ui64>> CopiedSamples;
         ui64 CopyRate = 0; // bytes per second
+        // What the part of HOT_STANDBY pile may have missed since the last reconciliation pass started; nothing is
+        // known about the part when the entry gets created (BSC has started, or the part has been reset).
+        EStandbyDirty StandbyDirty = EStandbyDirty::Data;
+        // the passes are this far apart at least, and the failed ones are retried with backoff; the sync of the part of
+        // the pile rejoining doesn't wait for them
+        TMonotonic StandbyNotBefore;
+        TBackoffTimer StandbyRetryBackoff{100, 30000};
+
+        // The writers BSC can't learn the misses of: the nodes lost since the part entered standby (that haven't
+        // registered again), and the ones of the time before BSC started, unless the part has been reset since.
+        THashSet<TNodeId> StandbyLostWriters;
+        bool StandbyWritersUnknown = true;
+
+        // When the pile goes NOT_SYNCHRONIZED_2 right from HOT_STANDBY, the part has to have missed nothing written before
+        // its fence to be taken for synced: every node reports when its bridge proxies have resolved their background
+        // writes to it and the client writes they copy, and every miss with them. Every reconciliation pass of the part
+        // is followed by a seal, and the part is synced when a seal finds nothing missed since the last pass started.
+        ui64 StandbySealId = 0; // zero when the next step of the promotion starts a seal
+        ui32 StandbySealGeneration = 0; // the generation of the bridge proxy group sealed
+        bool StandbySealDone = false;
+        THashSet<TNodeId> StandbySealPendingNodes;
+        THashSet<TNodeId> StandbySealSentNodes; // the pending nodes asked over their current registration
+        THashSet<TNodeId> StandbySealFlushSentNodes; // and asked to flush
+        bool StandbySealFlushing = false; // the background writes of client writes over are not waited for
+        THashSet<TNodeId> StandbySealExcludedNodes; // the unregistered ones given up are not waited for again
+        TMonotonic StandbySealStarted;
 
         TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
             : BridgeProxyGroupId(bridgeProxyGroupId)
@@ -2433,6 +2474,53 @@ private:
     // delete the part of the bridged group in the pile along with its data; the group serves as bridge proxy only when
     // its inline pile goes away
     void DropBridgeGroupPart(TConfigState& state, TGroupId proxyGroupId, TBridgePileId pileId);
+
+    // the parts of HOT_STANDBY piles are reconciled with their sources by this many syncers at most, and a part not more
+    // often than this
+    static constexpr size_t MaxStandbyReconcilers = 16;
+    static constexpr TDuration StandbyReconcileInterval = TDuration::Minutes(1);
+
+    static void MarkStandbyDirty(TSyncerState& syncerState, EStandbyDirty dirty) {
+        syncerState.StandbyDirty = Max(syncerState.StandbyDirty, dirty);
+    }
+
+    // the node has registered anew: the reports of the parts it has found missing a write may have got lost with its
+    // pipe, and its bridge proxies may have restarted with background writes in flight
+    void MarkAllStandbyDirty();
+
+    // the node can't tell BSC what it misses until it registers again
+    void OnStandbyWriterLost(TNodeId nodeId);
+
+    // the node has registered, and it gets the seals in progress in its response
+    void OnStandbyWriterRegistered(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *response);
+
+    // The seal of the part promoted from HOT_STANDBY waits for every registered node, as it answers when its client
+    // writes are over; after this time, the nodes don't wait for the background writes of the client writes that are
+    // over, as one may hang with no event to tell, and report them lost. The node that is not registered is given up when
+    // it is still not there this long after the seal has started and the node has disconnected (or after the seal has
+    // started, for the writers unknown since BSC start), and the part gets thoroughly reconciled after the fence then: a
+    // node may be gone for good, with no event to tell either.
+    static constexpr TDuration StandbySealTimeout = TDuration::Seconds(30);
+    ui64 NextStandbySealId = 0;
+    THashSet<TGroupId> StandbySealingTargets; // the parts with seals in progress, some may have gone
+
+    void StartStandbySeal(TSyncerState& syncerState, const TGroupInfo& proxyGroup, TMonotonic now,
+        THashSet<TNodeId>& nodesToUpdate);
+    // flush the seal and give up the pending nodes that are not registered, when it is time; returns when it is next
+    TMonotonic AdvanceStandbySeal(TSyncerState& syncerState, TMonotonic now, THashSet<TNodeId>& nodesToUpdate);
+    // add the seals the node is to answer and hasn't been asked for
+    void AddStandbySeals(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update);
+
+    // switch the part promoted from HOT_STANDBY to SYNCED, as it has missed nothing
+    void CommitStandbyPromotion(TSyncerState& syncerState, TGroupId groupId, const TGroupInfo& group);
+
+    // commit the new stage of the part in the group state, along with the stage update of its sync state made by caller
+    void CommitBridgeGroupStage(TSyncerState& syncerState, TGroupId groupId, ui32 generation,
+        NKikimrBlobStorage::TGroupInfo bridgeGroupInfo, bool staticGroup);
+
+    // syncer attempts are told apart across BSC restarts
+    ui64 NextSyncerAssignmentId = 0;
+    ui64 MakeSyncerAssignmentId();
 
     // pile with pending operation, which BSC has not finished yet; such pile is not synced in any case
     TBridgePileId GetPendingOperationPileId() const;

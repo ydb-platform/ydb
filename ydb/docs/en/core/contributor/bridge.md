@@ -17,17 +17,17 @@ The configuration of static groups, state storage, and boards uses a storage sch
 
 If one of the piles fails, writing to the corresponding quorum becomes impossible.
 
-Distconf uses both quorums (A and B) to store configuration:
+Distconf determines the required configuration quorums from the pile states. For example:
 
-  - Configuration with mode `PRIMARY/DISCONNECTED` is written only to quorum A;
-  - Configuration with mode `DISCONNECTED/PRIMARY` is written only to quorum B;
-  - All other modes are written to both quorums — A and B.
+  - Modes `PRIMARY/DISCONNECTED` and `PRIMARY/HOT_STANDBY` require only quorum A;
+  - Modes `DISCONNECTED/PRIMARY` and `HOT_STANDBY/PRIMARY` require only quorum B;
+  - Mode `PRIMARY/SYNCHRONIZED` requires both quorums — A and B.
 
 When performing failover, the administrator puts the cluster into mode `PRIMARY/DISCONNECTED` or `DISCONNECTED/PRIMARY`. In this mode, the configuration of shared components is stored only on the quorum of the `PRIMARY` pile.
 
 For clusters with more than two piles, emergency failover can move several unavailable piles to `DISCONNECTED` in a single `UpdateClusterState` request, together with selecting a new `PRIMARY` from an already synchronized pile. Repeated `--pile` options of the [failover command](../reference/ydb-cli/commands/bridge/failover.md) produce this single update. Applying these transitions separately can leave another unavailable pile required by the intermediate configuration, preventing a quorum. Quorum checks use the new configuration: disconnected piles are excluded, while node and storage quorum requirements within the remaining participating piles stay unchanged.
 
-To start recovery, the administrator puts the pair of the live pile and the failed pile into mode `PRIMARY/NOT_SYNCHRONIZED`. This configuration is stored on all quorums.
+To start recovery, the administrator puts the pair of the live pile and the failed pile into mode `PRIMARY/NOT_SYNCHRONIZED`. Internally, the recovering pile first enters `NOT_SYNCHRONIZED_1`, outside the quorums, and then `NOT_SYNCHRONIZED_2`, which requires both data and configuration quorums.
 
 Writing configuration is forbidden if the new configuration is incompatible with the last one stored on the node. For example, a transition from `PRIMARY/DISCONNECTED` to `DISCONNECTED/PRIMARY` is not allowed. This prevents a situation where pile A and pile B simultaneously switch to modes that both claim the `PRIMARY` role.
 
@@ -37,11 +37,11 @@ When operating in bridge mode, Distconf creates a subtree in each pile, and the 
 
 ## Starting static groups
 
-The configuration of all static groups is stored in Distconf. The root of the Distconf subtree in each pile can obtain the configuration and decide which quorum is required to apply it based on that configuration. A `DISCONNECTED` pile does not participate in the quorum; therefore, applying configuration without a `DISCONNECTED` pile requires quorums A and B; applying configuration `PRIMARY/DISCONNECTED` requires only quorum A; applying configuration `DISCONNECTED/PRIMARY` requires only quorum B.
+The configuration of all static groups is stored in Distconf. The root of the Distconf subtree in each pile can obtain the configuration and decide which quorum is required to apply it based on the pile states. In particular, `DISCONNECTED` and `HOT_STANDBY` piles do not participate in configuration quorums.
 
 When the required quorum is formed, Distconf applies the configuration, and the [Node Warden](../concepts/glossary.md#node-warden) starts the [VDisk](../concepts/glossary.md#vdisk) and [PDisk](../concepts/glossary.md#pdisk) of the static groups.
 
-Access to the static group is provided by the `dsproxy-proxy` service, which exposes the [dsproxy](../concepts/glossary.md#ds-proxy) interface to tablets and performs operations synchronously with both groups in the pair.
+Access to the static group is provided by the `dsproxy-proxy` service, which exposes the [dsproxy](../concepts/glossary.md#ds-proxy) interface to tablets and routes operations according to the pile states described below.
 
 The dsproxy-proxy of a static group changes its operating mode according to the configuration received from Distconf. The dsproxy-proxy configuration is stored in the configuration of the shared components.
 
@@ -75,6 +75,28 @@ dsproxy-proxy sends each request to the group of a pile with the generation of t
 
 To transition from mode `PRIMARY/NOT_SYNCHRONIZED` to `PRIMARY/SYNCHRONIZED`, synchronization is performed. During synchronization, missing data is copied from the `PRIMARY` group to the `NOT_SYNCHRONIZED` group, and lock information is copied in both directions.
 
+### HOT_STANDBY prototype {#hot-standby}
+
+`HOT_STANDBY` keeps a pile connected while excluding it from read, write, and configuration quorums. For groups replicated across piles, dsproxy-proxy sends `Put`, `Patch`, `Block`, and `KEEP` flags to the standby in the background. Client completion depends only on the required piles; standby replies, including errors and generation mismatches (`RACE`), neither delay completion nor restart the client request. dsproxy-proxy resends a background write that met `RACE` once it learns the newer generation of the standby part. Background writes in flight on a node are limited by the `DSProxyControls.BridgeStandbyMaxBytesInFlight` immediate control (256 MiB by default); the writes beyond it are dropped, so a slow or unreachable standby does not grow memory. Reads do not use the standby. A group whose only authoritative copy is in that pile cannot use this behavior to acknowledge writes elsewhere.
+
+Database endpoint discovery does not advertise endpoints in `HOT_STANDBY` piles for client traffic. The response still includes these piles in the pile-state metadata. gRPC servers of the pile stop, and Hive moves the tablets out of it.
+
+A `HOT_STANDBY` pile can't be suspended (the `takedown` command): only a `SYNCHRONIZED` pile can enter `SUSPENDED`. To take the standby down, switch it to `DISCONNECTED`.
+
+To enable the prototype for an existing secondary pile, use the hidden `update` command:
+
+```bash
+ydb admin cluster bridge update --set pile_name:HOT_STANDBY
+```
+
+Entering `HOT_STANDBY` marks the pile unsynchronized and resets its group synchronization stages. Background writes may be missed: dropped over the limit, failed, or lost with a restarted node. BSController therefore reconciles each standby group part with a synchronized one, without changing the part's stage. A pass merges blocks, `KEEP` and `DO_NOT_KEEP` flags, copies the blobs the part lacks, and releases the part's `KEEP` flags of the blobs no synchronized pile has. It sends the garbage collection barriers of the synchronized part last, once everything they may collect is kept in the standby as it is in the source. Passes are event-driven: dsproxy-proxy marks the part when it holds back a barrier or `DO_NOT_KEEP` flag, or loses a write, and Node Warden reports the marks to BSController every 10 seconds. A mark is sent when the client request the write belongs to is finished, so a pass started after the mark finds the write in the synchronized pile. A part is reconciled at most once a minute, and at most 16 passes run at once. After a lost `Put` or `Patch`, when BSController starts, and when a node registers (it may have restarted with writes in flight, or its marks may have been lost with its connection), the pass also checks the data of every blob, as the part may have its flags without its data. Reconciliation bounds the standby's garbage and makes promotion fast. To promote the standby, start normal rejoin and wait for the pile to reach `SYNCHRONIZED`:
+
+```bash
+ydb admin cluster bridge rejoin --pile pile_name
+```
+
+When a node quorum of the standby is connected, rejoin switches it to `NOT_SYNCHRONIZED_2` at once, without `NOT_SYNCHRONIZED_1`: writers that don't know the new state yet still send the standby their writes in the background, instead of skipping the pile. BSController resets the standby's group parts to the stage taking every write but no reads, which fences writers using old group generations. Then BSController seals the part: every node reports once its dsproxy-proxies hold no background writes to the part made before the reset, nor unfinished client requests that have lost one, having reported every write lost. Nodes that have disconnected while the pile was in standby report when they register again, and nodes registering during the seal report as well. A part that has missed nothing since its last reconciliation is switched to `SYNCED` when the seal completes. Any other part is reconciled again, thoroughly after a lost blob write or a node registration, and sealed again after the pass: the part is switched to `SYNCED` only by a seal that finds nothing missed since the pass started. The seal waits for every registered node, as the node reports once its client writes are over. After 30 seconds, dsproxy-proxies stop waiting for the background writes of the client writes that are over, as such a write may hang: they report these writes lost, and the part is reconciled thoroughly, finding them in the synchronized pile. A node that isn't registered is waited for until 30 seconds have passed since both the seal start and the node's disconnection; then the part is reconciled thoroughly, and the node isn't waited for again during this promotion unless it registers. The thorough pass finds what such a node has written before the reset, as its acknowledged writes are in the synchronized pile by then, unless a client write of the node lasts longer than these 30 seconds. After BSController restarts, the first promotion of each part waits the 30 seconds as well, as the writers of the previous BSController may not have registered yet. Static groups go through the normal sync. When the standby isn't connected, rejoin proceeds through `NOT_SYNCHRONIZED_1` and the normal sync. Direct promotion from `HOT_STANDBY` to `SYNCHRONIZED` is not allowed. Background replication and reconciliation still consume network and storage resources. dsproxy-proxy doesn't forward garbage collection barriers and `DO_NOT_KEEP` flags, so they can't overtake unconfirmed `KEEP` flags. Until the next reconciliation pass, the standby keeps the data collected since the last one.
+
 ## Bootstrap of BSController and other system tablets {#bootstrap}
 
 The node list for starting a tablet need only specify one set of nodes that includes a sufficient number of nodes from each pile. The Bootstrapper must analyze the state storage proxy-proxy configuration and use it to determine whether the tablet can be started on a given node. If the tablet cannot be started on the node (because the node is not in the `PRIMARY` pile), the Bootstrapper must walk the tree of Bootstrappers connected to it and assign as the launcher a Bootstrapper from the `PRIMARY` pile. If no such Bootstrapper exists, the current Bootstrapper must not start the tablet.
@@ -87,6 +109,6 @@ Tablets are started only in the `PRIMARY` or `PROMOTED` pile. Moving tablets fro
 
 ## Interconnect behavior {#interconnect}
 
-In the [interconnect](../concepts/glossary.md#actor-system-interconnect), metadata exchange is separated from session establishment. Metadata exchange occurs before session establishment and allows a pair of nodes to determine the set of interconnect features in use and to exchange configuration. The interconnect with nodes from the disconnected half of the cluster is torn down, and no connection attempts are made. Connection establishment is only possible after the pile is moved to state `PRIMARY/NOT_SYNCHRONIZED`.
+In the [interconnect](../concepts/glossary.md#actor-system-interconnect), metadata exchange is separated from session establishment. Metadata exchange occurs before session establishment and allows a pair of nodes to determine the set of interconnect features in use and to exchange configuration. The interconnect with nodes from the disconnected half of the cluster is torn down, and no connection attempts are made. Connections can resume after the pile is moved to `NOT_SYNCHRONIZED` or `HOT_STANDBY`.
 
 {% include [career](./_includes/career.md) %}

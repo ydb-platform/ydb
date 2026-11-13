@@ -649,6 +649,10 @@ struct TEvBlobStorage {
         EvNodeWardenAcquireBlobDepotS3Router,
         EvNodeWardenReleaseBlobDepotS3Router,
         EvNodeConfigGetSelfHealState,
+        EvNodeWardenStandbyDirty,
+        EvNodeWardenRegisterBridgeProxy,
+        EvNodeWardenStandbySeal,
+        EvNodeWardenStandbySealed,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

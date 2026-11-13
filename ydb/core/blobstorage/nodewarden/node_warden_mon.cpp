@@ -256,6 +256,9 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                             out << "proxy: " << syncer.BridgeProxyGroupId << ':' << syncer.BridgeProxyGroupGeneration << "<br/>";
                             out << "from: " << syncer.SourceGroupId << "<br/>";
                             out << "to: " << syncer.TargetGroupId;
+                            if (syncer.Reconcile) {
+                                out << "<br/>" << (syncer.Thorough ? "thorough reconcile" : "reconcile");
+                            }
                         }
                         TABLED() { out << syncer.Finished; }
                         TABLED() { out << syncer.ErrorReason; }

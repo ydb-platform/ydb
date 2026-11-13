@@ -164,24 +164,9 @@ private:
     void SeedStageConnectionLiveness(const TOpTraversal& traversal) {
         for (const auto& iter : traversal) {
             const auto& parent = iter.Current;
-            for (auto* child : parent->GetChildren()) {
-                if (!parent->Props.StageId || !child->Props.StageId
-                    || *parent->Props.StageId == *child->Props.StageId)
-                {
-                    continue;
-                }
-
-                const auto producerStageId = static_cast<ui32>(*child->Props.StageId);
-                const auto consumerStageId = static_cast<ui32>(*parent->Props.StageId);
-                const auto& connections = Props.StageGraph.GetConnections(producerStageId, consumerStageId);
-
-                for (const auto& connection : connections) {
-                    // A Replicate port produces only its own stage output.
-                    if (child->Props.StageOutputIndex && connection->GetOutputIndex() != *child->Props.StageOutputIndex) {
-                        continue;
-                    }
-                    // Stage connections seed the producer's LiveOut directly.
-                    child->Props.Analysis.LiveOut->UnionWith(connection->GetUsedIUs());
+            for (ui32 i = 0; i < parent->GetChildren().size(); ++i) {
+                if (const auto* edge = Props.GetStageInputEdge(*parent, i)) {
+                    parent->GetChildren()[i]->Props.Analysis.LiveOut->UnionWith(edge->Connection().GetUsedIUs());
                 }
             }
         }
@@ -378,8 +363,15 @@ void TOpCBOTree::PropagateLiveness(ILivenessContext& ctx) {
     }
 }
 
+void TOpSequencer::PropagateLiveness(ILivenessContext& ctx) {
+    // Keep the connection's full input schema. Allocation is observable even
+    // when a generated column is not demanded by a later projection.
+    ctx.AddLiveInput(this, 0, GetInputColumns().Unordered());
+}
+
 void TOpTableEffect::PropagateLiveness(ILivenessContext& ctx) {
     ctx.AddLiveInput(this, 0, GetColumns().Unordered());
+    ctx.AddLiveInput(this, 0, Options.DefaultColumns);
 }
 
 void ComputePlanLiveness(TOpRoot& root, ELivenessMode mode, bool pruneKeyColumns, EPruningScope scope) {

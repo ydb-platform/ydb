@@ -3,7 +3,6 @@
 
 #include <ydb/library/actors/http/http.h>
 
-
 namespace NKikimr::NExternalSource {
 
 void ValidateHostname(const std::vector<TRegExMatch>& hostnamePatterns, const TString& url) {
@@ -29,4 +28,4 @@ void ValidateHostname(const std::vector<TRegExMatch>& hostnamePatterns, const TS
     throw TExternalSourceException() << "It is not allowed to access hostname '" << hostname << "'";
 }
 
-}  // NKikimr::NExternalSource
+}   // namespace NKikimr::NExternalSource

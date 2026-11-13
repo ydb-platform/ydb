@@ -22,7 +22,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 namespace {
 
-using TCoreTiling = Tiling<NArrow::TSimpleRow, TPortionInfo>;
+using TCoreTiling = Tiling<TPortionInfo>;
 
 /// JSON layout matches TTilingOptimizer in tiling++.cpp (same proto blob).
 struct TPlannerSettings {
@@ -204,6 +204,10 @@ private:
 protected:
     void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         Core.ModifyPortions(add, std::vector<TPortionInfo::TConstPtr>(remove.begin(), remove.end()));
+    }
+
+    void DoAddLoadedPortions(const std::vector<TPortionInfo::TPtr>& add) override {
+        Core.AddLoadedPortions(add);
     }
 
     bool DoUsesPullCompactionScheduling() const override {

@@ -145,6 +145,7 @@ public:
         conf.UnderlayMask = params->UnderlayMask.Get();
         conf.SplitKeys = params->SplitKeys.Get();
         conf.Group(0).Codec = family->Codec;
+        conf.Group(0).CodecLevel = family->CodecLevel;
         conf.SmallEdge = family->Small;
         conf.LargeEdge = family->Large;
         conf.MaxRows = subset->MaxRows();

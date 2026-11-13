@@ -347,6 +347,9 @@ namespace NMonitoring {
                         } else if (NPrometheus::IsSum(name)) {
                             // translate x_sum metric as GAUGE metric
                             ConsumeGauge(name, labels, time, value);
+                        } else if (labels.contains("quantile")) {
+                            auto quantileName = TStringBuilder() << name << ".quantile";
+                            ConsumeGauge(quantileName, labels, time, value);
                         } else {
                             Y_PARSER_FAIL(
                                 "metric " << name <<

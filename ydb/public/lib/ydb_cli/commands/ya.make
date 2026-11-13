@@ -6,6 +6,7 @@ ADDINCL(
 
 SRCS(
     benchmark_utils.cpp
+    parameters.cpp
     topic_operations_scenario.cpp
     topic_read_scenario.cpp
     topic_write_scenario.cpp
@@ -13,6 +14,7 @@ SRCS(
     ydb_admin.cpp
     ydb_benchmark.cpp
     ydb_bridge.cpp
+    ydb_bridge_list.cpp
     ydb_cluster.cpp
     ydb_database_attribute.cpp
     ydb_config.cpp
@@ -67,6 +69,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
     ydb/public/lib/ydb_cli/commands/ydb_discovery
+    ydb/public/lib/ydb_cli/commands/yql_parser
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump
     ydb/public/lib/ydb_cli/dump/files
@@ -100,6 +103,7 @@ PEERDIR(
 )
 ENDIF()
 
+GENERATE_ENUM_SERIALIZATION(parameters.h)
 GENERATE_ENUM_SERIALIZATION(tx_mode.h)
 GENERATE_ENUM_SERIALIZATION(ydb_ping.h)
 GENERATE_ENUM_SERIALIZATION(ydb_latency.h)
@@ -113,6 +117,7 @@ RECURSE(
     topic_workload
     transfer_workload
     ydb_discovery
+    yql_parser
 )
 
 IF (NOT OS_WINDOWS)

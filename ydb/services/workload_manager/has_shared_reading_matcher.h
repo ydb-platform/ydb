@@ -2,7 +2,6 @@
 
 #include <ydb/core/protos/kqp_physical.pb.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
 ///
@@ -10,4 +9,4 @@ namespace NKikimr::NWorkloadManager {
 ///
 bool UsesSharedReading(const NKqpProto::TKqpPhyQuery& phyQuery);
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

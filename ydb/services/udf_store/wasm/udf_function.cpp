@@ -1,5 +1,3 @@
-#include "udf_function.h"
-
 #include "bridge_node_table.h"
 #include "bridge_resident.h"
 #include "bridge_types.h"
@@ -7,13 +5,7 @@
 #include "invocation_context.h"
 #include "registry_helpers.h"
 #include "udf_configured_callable.h"
-
-#include <yql/essentials/public/decimal/yql_decimal.h>
-#include <yql/essentials/public/udf/udf_type_builder.h>
-#include <yql/essentials/public/udf/udf_type_inspection.h>
-#include <yql/essentials/public/udf/udf_data_type.h>
-#include <yql/essentials/minikql/mkql_terminator.h>
-#include <yql/essentials/public/issue/yql_issue.h>
+#include "udf_function.h"
 
 #include <ydb/library/wasm/api/compartment.h>
 #include <ydb/library/wasm/api/data_transfer.h>
@@ -22,6 +14,12 @@
 #include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+#include <yql/essentials/minikql/mkql_terminator.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_type_builder.h>
+#include <yql/essentials/public/udf/udf_type_inspection.h>
 
 #include <algorithm>
 
@@ -77,16 +75,12 @@ TType* BuildLeafDataType(IFunctionTypeInfoBuilder& builder, EUdfValueType type) 
 //! without bound while constructing MiniKQL types.
 constexpr ui32 MaxWasmTypeNodeDepth = 32;
 
-} // namespace
+}   // namespace
 
-TType* BuildTypeFromWasmTypeNode(
-    IFunctionTypeInfoBuilder& builder,
-    const TWasmTypeNode& node,
-    ui32 depth)
+TType* BuildTypeFromWasmTypeNode(IFunctionTypeInfoBuilder& builder, const TWasmTypeNode& node, ui32 depth)
 {
     if (depth > MaxWasmTypeNodeDepth) {
-        ythrow yexception()
-            << "Wasm type nesting exceeds " << MaxWasmTypeNodeDepth << " levels";
+        ythrow yexception() << "Wasm type nesting exceeds " << MaxWasmTypeNodeDepth << " levels";
     }
     switch (node.Kind) {
         case TWasmTypeNode::EKind::Leaf:
@@ -101,15 +95,11 @@ TType* BuildTypeFromWasmTypeNode(
             return BuildLeafDataType(builder, node.Leaf);
         case TWasmTypeNode::EKind::Optional: {
             Y_ENSURE(node.Item);
-            return builder.Optional()
-                ->Item(BuildTypeFromWasmTypeNode(builder, *node.Item, depth + 1))
-                .Build();
+            return builder.Optional()->Item(BuildTypeFromWasmTypeNode(builder, *node.Item, depth + 1)).Build();
         }
         case TWasmTypeNode::EKind::List: {
             Y_ENSURE(node.Item);
-            return builder.List()
-                ->Item(BuildTypeFromWasmTypeNode(builder, *node.Item, depth + 1))
-                .Build();
+            return builder.List()->Item(BuildTypeFromWasmTypeNode(builder, *node.Item, depth + 1)).Build();
         }
         case TWasmTypeNode::EKind::Dict: {
             Y_ENSURE(node.Key && node.Payload);
@@ -122,8 +112,7 @@ TType* BuildTypeFromWasmTypeNode(
             auto tuple = builder.Tuple(node.Members.size());
             for (const auto& member : node.Members) {
                 Y_ENSURE(member.Type);
-                tuple->Add(BuildTypeFromWasmTypeNode(
-                    builder, *member.Type, depth + 1));
+                tuple->Add(BuildTypeFromWasmTypeNode(builder, *member.Type, depth + 1));
             }
             return tuple->Build();
         }
@@ -132,10 +121,7 @@ TType* BuildTypeFromWasmTypeNode(
             for (const auto& member : node.Members) {
                 Y_ENSURE(member.Type);
                 members->AddField(
-                    TStringRef(member.Name.data(), member.Name.size()),
-                    BuildTypeFromWasmTypeNode(
-                        builder, *member.Type, depth + 1),
-                    nullptr);
+                    TStringRef(member.Name.data(), member.Name.size()), BuildTypeFromWasmTypeNode(builder, *member.Type, depth + 1), nullptr);
             }
             return members->Build();
         }
@@ -147,19 +133,15 @@ TType* BuildTypeFromWasmTypeNode(
                 auto members = builder.Struct(node.Members.size());
                 for (const auto& member : node.Members) {
                     Y_ENSURE(member.Type);
-                    members->AddField(
-                        TStringRef(member.Name.data(), member.Name.size()),
-                        BuildTypeFromWasmTypeNode(
-                            builder, *member.Type, depth + 1),
-                        nullptr);
+                    members->AddField(TStringRef(member.Name.data(), member.Name.size()),
+                        BuildTypeFromWasmTypeNode(builder, *member.Type, depth + 1), nullptr);
                 }
                 underlying = members->Build();
             } else {
                 auto tuple = builder.Tuple(node.Members.size());
                 for (const auto& member : node.Members) {
                     Y_ENSURE(member.Type);
-                    tuple->Add(BuildTypeFromWasmTypeNode(
-                        builder, *member.Type, depth + 1));
+                    tuple->Add(BuildTypeFromWasmTypeNode(builder, *member.Type, depth + 1));
                 }
                 underlying = tuple->Build();
             }
@@ -170,12 +152,10 @@ TType* BuildTypeFromWasmTypeNode(
         case TWasmTypeNode::EKind::Callable: {
             Y_ENSURE(node.CallableReturns);
             auto callable = builder.Callable(node.Members.size());
-            callable->Returns(BuildTypeFromWasmTypeNode(
-                builder, *node.CallableReturns, depth + 1));
+            callable->Returns(BuildTypeFromWasmTypeNode(builder, *node.CallableReturns, depth + 1));
             for (const auto& arg : node.Members) {
                 Y_ENSURE(arg.Type);
-                callable->Arg(BuildTypeFromWasmTypeNode(
-                    builder, *arg.Type, depth + 1));
+                callable->Arg(BuildTypeFromWasmTypeNode(builder, *arg.Type, depth + 1));
             }
             return callable->Build();
         }
@@ -183,10 +163,7 @@ TType* BuildTypeFromWasmTypeNode(
     ythrow yexception() << "Unsupported WASM type descriptor";
 }
 
-bool TDeclaredResultShape::Accepts(
-    EBridgeValueKind kind,
-    std::optional<EBridgeValueKind> payload) const
-{
+bool TDeclaredResultShape::Accepts(EBridgeValueKind kind, std::optional<EBridgeValueKind> payload) const {
     auto family = BridgeKindFamily(kind);
     // BridgeMakeOptional registers an Optional node whenever the payload has
     // no identity of its own to reuse. Such a node is a wrapper: MiniKQL reads
@@ -271,9 +248,7 @@ TDeclaredResultShape DeclaredResultShape(const TType* type, const ITypeInfoHelpe
 }
 
 std::unique_ptr<TWasmBridgeFunction> TWasmBridgeFunction::Create(
-    IFunctionTypeInfoBuilder& builder,
-    TWasmCompartmentStatePtr state,
-    const TWasmUdfDescriptor& descriptor)
+    IFunctionTypeInfoBuilder& builder, TWasmCompartmentStatePtr state, const TWasmUdfDescriptor& descriptor)
 {
     TVector<TType*> args;
     for (const auto& type : descriptor.ArgTypes) {
@@ -281,15 +256,12 @@ std::unique_ptr<TWasmBridgeFunction> TWasmBridgeFunction::Create(
     }
     Y_ENSURE(descriptor.ResultType, "Missing bridge result type");
     auto* result = BuildTypeFromWasmTypeNode(builder, *descriptor.ResultType);
-    return std::unique_ptr<TWasmBridgeFunction>(new TWasmBridgeFunction(
-        std::move(state), descriptor, std::move(args), result, builder.TypeInfoHelper()));
+    return std::unique_ptr<TWasmBridgeFunction>(
+        new TWasmBridgeFunction(std::move(state), descriptor, std::move(args), result, builder.TypeInfoHelper()));
 }
 
 void TWasmBridgeFunction::Register(
-    IFunctionTypeInfoBuilder& builder,
-    bool typesOnly,
-    TWasmCompartmentStatePtr state,
-    const TWasmUdfDescriptor& descriptor)
+    IFunctionTypeInfoBuilder& builder, bool typesOnly, TWasmCompartmentStatePtr state, const TWasmUdfDescriptor& descriptor)
 {
     auto function = Create(builder, std::move(state), descriptor);
     builder.Returns(function->ResultType_);
@@ -303,12 +275,8 @@ void TWasmBridgeFunction::Register(
     }
 }
 
-TWasmBridgeFunction::TWasmBridgeFunction(
-    TWasmCompartmentStatePtr state,
-    const TWasmUdfDescriptor& descriptor,
-    TVector<TType*> argTypes,
-    TType* resultType,
-    ITypeInfoHelper::TPtr typeInfoHelper)
+TWasmBridgeFunction::TWasmBridgeFunction(TWasmCompartmentStatePtr state, const TWasmUdfDescriptor& descriptor, TVector<TType*> argTypes,
+    TType* resultType, ITypeInfoHelper::TPtr typeInfoHelper)
     : State_(std::move(state))
     , Descriptor_(descriptor)
     , ArgTypes_(std::move(argTypes))
@@ -338,32 +306,24 @@ void TWasmBridgeFunction::EnsureResultFamily(const TWasmBridgeNodeTable::TNode& 
         Y_ENSURE(!value, "Wasm UDF '" << Descriptor_.Name << "' returned a value for Null");
         return;
     }
-    Y_ENSURE(value.HasValue(), "Wasm UDF '" << Descriptor_.Name
-        << "' returned NULL for a non-optional payload");
+    Y_ENSURE(value.HasValue(), "Wasm UDF '" << Descriptor_.Name << "' returned NULL for a non-optional payload");
 
     // An empty value is a null whatever kind the node it came in carries.
     // Anything else is worth what the node's own type says about it, so that a
     // UDF handed an optional argument may return it unchanged: such a node
     // wears the Optional kind and names its payload only in its type.
-    const auto family = node.Value
-        ? BridgeNodeValueFamily(node, TypeInfoHelper_.Get())
-        : std::make_optional(EBridgeKindFamily::Null);
+    const auto family = node.Value ? BridgeNodeValueFamily(node, TypeInfoHelper_.Get()) : std::make_optional(EBridgeKindFamily::Null);
     if (!ResultShape_.AcceptsFamily(family)) {
-        ythrow yexception()
-            << "Wasm UDF '" << Descriptor_.Name << "' returned a "
-            << (family ? BridgeKindFamilyAsStr(*family) : "optional")
-            << " value, but its result type is "
-            << (ResultShape_.Optional ? "optional " : "")
-            << BridgeKindFamilyAsStr(ResultShape_.Family);
+        ythrow yexception() << "Wasm UDF '" << Descriptor_.Name << "' returned a " << (family ? BridgeKindFamilyAsStr(*family) : "optional")
+                            << " value, but its result type is " << (ResultShape_.Optional ? "optional " : "")
+                            << BridgeKindFamilyAsStr(ResultShape_.Family);
     }
 
     const auto* payload = BridgePeelOptional(ResultType_, TypeInfoHelper_.Get());
-    if (node.Value && family != EBridgeKindFamily::Null && payload
-        && TypeInfoHelper_->GetTypeKind(payload) == ETypeKind::Data) {
+    if (node.Value && family != EBridgeKindFamily::Null && payload && TypeInfoHelper_->GetTypeKind(payload) == ETypeKind::Data) {
         const auto expectedKind = BridgeKindsFromType(payload, TypeInfoHelper_.Get()).Value;
         const auto actualKind = BridgeNodeValueKind(node, TypeInfoHelper_.Get());
-        Y_ENSURE(actualKind && *actualKind == expectedKind,
-            "Wasm UDF '" << Descriptor_.Name << "' returned a different scalar type");
+        Y_ENSURE(actualKind && *actualKind == expectedKind, "Wasm UDF '" << Descriptor_.Name << "' returned a different scalar type");
         const TType* actualType = node.Type ? node.Type : node.AuxType;
         if (expectedKind == EBridgeValueKind::Decimal && actualType) {
             const TDataAndDecimalTypeInspector expected(*TypeInfoHelper_, payload);
@@ -380,27 +340,20 @@ void TWasmBridgeFunction::EnsureResultFamily(const TWasmBridgeNodeTable::TNode& 
     if (node.ValueKind == EBridgeValueKind::Variant && ResultShape_.VariantAlternatives != 0) {
         const ui32 index = node.Value.GetVariantIndex();
         if (index >= ResultShape_.VariantAlternatives) {
-            ythrow yexception()
-                << "Wasm UDF '" << Descriptor_.Name << "' returned alternative " << index
-                << " of a Variant, but its result type declares only "
-                << ResultShape_.VariantAlternatives;
+            ythrow yexception() << "Wasm UDF '" << Descriptor_.Name << "' returned alternative " << index
+                                << " of a Variant, but its result type declares only " << ResultShape_.VariantAlternatives;
         }
     }
     if (node.ValueKind == EBridgeValueKind::Resource && !ResultShape_.ResourceTag.empty()) {
         const TStringRef tag = node.Value.GetResourceTag();
         if (TStringBuf(tag.Data(), tag.Size()) != ResultShape_.ResourceTag) {
-            ythrow yexception()
-                << "Wasm UDF '" << Descriptor_.Name << "' returned a Resource tagged '"
-                << TStringBuf(tag.Data(), tag.Size())
-                << "', but its result type declares '" << ResultShape_.ResourceTag << "'";
+            ythrow yexception() << "Wasm UDF '" << Descriptor_.Name << "' returned a Resource tagged '" << TStringBuf(tag.Data(), tag.Size())
+                                << "', but its result type declares '" << ResultShape_.ResourceTag << "'";
         }
     }
 }
 
-TUnboxedValue TWasmBridgeFunction::Run(
-    const IValueBuilder* valueBuilder,
-    const TUnboxedValuePod* args) const
-{
+TUnboxedValue TWasmBridgeFunction::Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
     try {
         return Invoke(valueBuilder, args);
     } catch (const NKikimr::NMiniKQL::TTerminateException&) {
@@ -413,13 +366,9 @@ TUnboxedValue TWasmBridgeFunction::Run(
     return {};
 }
 
-TUnboxedValue TWasmBridgeFunction::Invoke(
-    const IValueBuilder* valueBuilder,
-    const TUnboxedValuePod* args) const
-{
+TUnboxedValue TWasmBridgeFunction::Invoke(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
     auto* queryHandle = GetCurrentQueryCompartment();
-    Y_ENSURE(queryHandle && queryHandle->Compartment,
-        "Query WASM compartment is not initialized");
+    Y_ENSURE(queryHandle && queryHandle->Compartment, "Query WASM compartment is not initialized");
     Y_ENSURE(queryHandle->BridgeNodes, "Bridge node table is not initialized");
 
     auto* compartment = queryHandle->Compartment.get();
@@ -463,15 +412,14 @@ TUnboxedValue TWasmBridgeFunction::Invoke(
     argHandles.reserve(argc);
 
     for (size_t i = 0; i < argc; ++i) {
-        const auto kinds = args[i]
-            ? BridgeKindsFromType(ArgTypes_[i], TypeInfoHelper_.Get())
-            : TBridgeKinds{EBridgeNodeKind::Scalar, EBridgeValueKind::Null};
+        const auto kinds =
+            args[i] ? BridgeKindsFromType(ArgTypes_[i], TypeInfoHelper_.Get()) : TBridgeKinds{ EBridgeNodeKind::Scalar, EBridgeValueKind::Null };
         argHandles.push_back(table.RegisterOrReuse(kinds.Node, kinds.Value, ArgTypes_[i], args[i]));
     }
 
     if (Descriptor_.IsObjectConstructor) {
-        argHandles.push_back(table.RegisterOrReuse(EBridgeNodeKind::String, EBridgeValueKind::String,
-            nullptr, valueBuilder->NewString(TStringRef::Of(""))));
+        argHandles.push_back(
+            table.RegisterOrReuse(EBridgeNodeKind::String, EBridgeValueKind::String, nullptr, valueBuilder->NewString(TStringRef::Of(""))));
     }
 
     // Result slot: 8-byte ui64 in linear memory for guest to write the result
@@ -482,13 +430,7 @@ TUnboxedValue TWasmBridgeFunction::Invoke(
     };
     *PtrFromVM(compartment, std::bit_cast<ui64*>(resultOffset)) = NullBridgeHandle;
 
-    InvokeUdfExport(
-        compartment,
-        *exportIt,
-        exportName,
-        std::bit_cast<uintptr_t>(&context),
-        resultOffset,
-        argHandles);
+    InvokeUdfExport(compartment, *exportIt, exportName, std::bit_cast<uintptr_t>(&context), resultOffset, argHandles);
 
     const ui64 resultHandle = *PtrFromVM(compartment, std::bit_cast<ui64*>(resultOffset));
     TUnboxedValue result;
@@ -528,12 +470,7 @@ void TWasmSoModule::GetAllFunctions(IFunctionsSink& sink) const {
 }
 
 void TWasmSoModule::BuildFunctionTypeInfo(
-    const TStringRef& name,
-    TType* /*userType*/,
-    const TStringRef& typeConfig,
-    ui32 flags,
-    IFunctionTypeInfoBuilder& builder) const
-{
+    const TStringRef& name, TType* /*userType*/, const TStringRef& typeConfig, ui32 flags, IFunctionTypeInfoBuilder& builder) const {
     try {
         if (State_->ModuleName != ModuleName_) {
             builder.SetError(TStringRef::Of("Unknown wasm UDF module"));
@@ -548,12 +485,7 @@ void TWasmSoModule::BuildFunctionTypeInfo(
 
         const bool typesOnly = (flags & TFlags::TypesOnly) != 0;
         if (descriptor->Binding == EWasmUdfBinding::TypeConfigCallable) {
-            TWasmConfiguredCallable::Register(
-                builder,
-                typesOnly,
-                State_,
-                *descriptor,
-                TString(typeConfig.Data(), typeConfig.Size()));
+            TWasmConfiguredCallable::Register(builder, typesOnly, State_, *descriptor, TString(typeConfig.Data(), typeConfig.Size()));
         } else {
             TWasmBridgeFunction::Register(builder, typesOnly, State_, *descriptor);
         }
@@ -567,4 +499,4 @@ TUniquePtr<IUdfModule> BuildWasmSoModule(TWasmCompartmentStatePtr state) {
     return TUniquePtr<IUdfModule>(new TWasmSoModule(std::move(state), std::move(moduleName)));
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

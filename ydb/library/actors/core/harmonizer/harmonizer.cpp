@@ -1,5 +1,6 @@
 #include "harmonizer.h"
 #include "harmonizer_metrics.h"
+#include <ydb/library/actors/metrics/lines/dynamic_group_line.h>
 #include "history.h"
 #include "pool.h"
 #include "waiting_stats.h"
@@ -39,23 +40,13 @@ using namespace NHarmonizerMetrics;
 class THarmonizer: public IHarmonizer {
 public:
     struct TInMemoryMetricWriters {
-        using TOnChangeFloatMetricLine = TLine<TOnChangeLineFrontend<float>>;
-        using TOnChangeBoolMetricLine = TLine<TOnChangeLineFrontend<bool>>;
-
-        struct TPoolMetricWriters {
-            TLine<TPoolFrontend> Cpu;
-            TOnChangeFloatMetricLine SharedCpuQuota;
-            TOnChangeBoolMetricLine IsNeedy;
-            TOnChangeBoolMetricLine IsStarved;
-            TOnChangeBoolMetricLine IsHoggish;
-        };
-
         bool Initialized = false;
         bool Enabled = false;
         bool PreStopRegistered = false;
         TActorSystem* ActorSystem = nullptr;
         TLine<TGlobalFrontend> Global;
-        TVector<TPoolMetricWriters> Pools;
+        TDynamicGroupLine Cpu;
+        TDynamicGroupLine State;
     };
 
 private:
@@ -145,28 +136,25 @@ void THarmonizer::EnsureInMemoryMetricsInitialized() {
     const std::span<const TLabel> noLabels;
     InMemoryMetrics.Global = registry->CreateLine<TGlobalFrontend>(TGlobal::Name, noLabels);
 
-    InMemoryMetrics.Pools.clear();
-    InMemoryMetrics.Pools.resize(Pools.size());
-    for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
-        const auto& pool = *Pools[poolIdx];
-        std::array<TLabel, 2> labels{{
-            TLabel{.Name = "pool", .Value = pool.Pool->GetName()},
-            TLabel{.Name = "pool_id", .Value = ToString(pool.Pool->PoolId)},
-        }};
-        auto& writers = InMemoryMetrics.Pools[poolIdx];
-        writers.Cpu = registry->CreateLine<TPoolFrontend>(TPool::Name, labels);
-        writers.SharedCpuQuota = registry->CreateLine<TOnChangeLineFrontend<float>>(
-            PoolSharedCpuQuotaMetric,
-            labels);
-        writers.IsNeedy = registry->CreateLine<TOnChangeLineFrontend<bool>>(
-            PoolIsNeedyMetric,
-            labels);
-        writers.IsStarved = registry->CreateLine<TOnChangeLineFrontend<bool>>(
-            PoolIsStarvedMetric,
-            labels);
-        writers.IsHoggish = registry->CreateLine<TOnChangeLineFrontend<bool>>(
-            PoolIsHoggishMetric,
-            labels);
+    if (Pools.size() > TDynamicGroupSchema::MaxFields / 4) {
+        InMemoryMetrics.Enabled = true;
+        return; // Keep global metrics if the pool schema exceeds the bounded format.
+    }
+    TVector<TDynamicGroupField> cpuFields, stateFields;
+    for (const auto& pool : Pools) {
+        const TVector<TLabel> labels = {{"pool", pool->Pool->GetName()}, {"pool_id", ToString(pool->Pool->PoolId)}};
+        cpuFields.push_back({TString(TPool::TAvgUsedCpu::Name), labels, EGroupValueType::Decimal});
+        cpuFields.push_back({TString(TPool::TAvgElapsedCpu::Name), labels, EGroupValueType::Decimal});
+        cpuFields.push_back({TString(TPool::TPotentialMaxThreadCount::Name), labels, EGroupValueType::Decimal});
+        stateFields.push_back({TString(PoolSharedCpuQuotaMetric), labels, EGroupValueType::Decimal});
+        stateFields.push_back({TString(PoolIsNeedyMetric), labels, EGroupValueType::Bool});
+        stateFields.push_back({TString(PoolIsStarvedMetric), labels, EGroupValueType::Bool});
+        stateFields.push_back({TString(PoolIsHoggishMetric), labels, EGroupValueType::Bool});
+    }
+    if (!Pools.empty()) {
+        InMemoryMetrics.Cpu = TDynamicGroupLine::Create(registry, "harmonizer.pools.cpu", std::move(cpuFields));
+        InMemoryMetrics.State = TDynamicGroupLine::Create(registry, "harmonizer.pools.state",
+            std::move(stateFields), EGroupUpdateMode::OnChangePartial);
     }
 
     InMemoryMetrics.Enabled = true;
@@ -188,25 +176,27 @@ void THarmonizer::ReportInMemoryMetrics() {
         TGlobalFrontend::Value<TGlobal::TSharedFreeCpu>(stats.SharedFreeCpu),
     });
 
+    if (!InMemoryMetrics.Cpu && !InMemoryMetrics.State) return;
+    std::array<TLineNumericValue, TDynamicGroupSchema::MaxFields> cpuValues, stateValues;
+    size_t cpuCount = 0, stateCount = 0;
     for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
         const auto poolStats = GetPoolStats(poolIdx);
-        auto& writers = InMemoryMetrics.Pools[poolIdx];
-
-        writers.Cpu.Append({
-            TPoolFrontend::Value<TPool::TAvgUsedCpu>(poolStats.AvgUsedCpu),
-            TPoolFrontend::Value<TPool::TAvgElapsedCpu>(poolStats.AvgElapsedCpu),
-            TPoolFrontend::Value<TPool::TPotentialMaxThreadCount>(poolStats.PotentialMaxThreadCount),
-        });
-        writers.SharedCpuQuota.Append(poolStats.SharedCpuQuota);
-        writers.IsNeedy.Append(poolStats.IsNeedy);
-        writers.IsStarved.Append(poolStats.IsStarved);
-        writers.IsHoggish.Append(poolStats.IsHoggish);
+        cpuValues[cpuCount++] = double(poolStats.AvgUsedCpu);
+        cpuValues[cpuCount++] = double(poolStats.AvgElapsedCpu);
+        cpuValues[cpuCount++] = double(poolStats.PotentialMaxThreadCount);
+        stateValues[stateCount++] = double(poolStats.SharedCpuQuota);
+        stateValues[stateCount++] = poolStats.IsNeedy;
+        stateValues[stateCount++] = poolStats.IsStarved;
+        stateValues[stateCount++] = poolStats.IsHoggish;
     }
+    if (cpuCount) InMemoryMetrics.Cpu.Append({cpuValues.data(), cpuCount});
+    if (stateCount) InMemoryMetrics.State.Append({stateValues.data(), stateCount});
 }
 
 void THarmonizer::ClearInMemoryMetrics() {
     InMemoryMetrics.Global = {};
-    InMemoryMetrics.Pools.clear();
+    InMemoryMetrics.Cpu = {};
+    InMemoryMetrics.State = {};
     // Pre-stop may run before the first harmonization.
     InMemoryMetrics.Initialized = true;
     InMemoryMetrics.Enabled = false;

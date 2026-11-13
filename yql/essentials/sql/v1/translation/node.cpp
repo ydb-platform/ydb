@@ -35,13 +35,6 @@ TString ErrorDistinctByGroupKey(const TString& column) {
     return TStringBuilder() << "Unable to use DISTINCT by grouping column: " << column << ". You should leave one of them.";
 }
 
-TTopicRef::TTopicRef(TString refName, TDeferredAtom cluster, TNodePtr keys)
-    : RefName(std::move(refName))
-    , Cluster(std::move(cluster))
-    , Keys(std::move(keys))
-{
-}
-
 INode::INode(TPosition pos)
     : Pos_(std::move(pos))
 {
@@ -3789,8 +3782,8 @@ bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeg
     TString source;
     if (Source) {
         source = to_upper(Source->GetLiteral() ? *Source->GetLiteral() : TString());
-        if (source != "IAM_DELEGATION") {
-            ctx.Error(stmBeginPos) << "Unknown secret SOURCE: " << source << ". Expected IAM_DELEGATION";
+        if (source != "YC_IAM_DELEGATION") {
+            ctx.Error(stmBeginPos) << "Unknown secret SOURCE: " << source << ". Expected YC_IAM_DELEGATION";
             return false;
         }
     }
@@ -3801,22 +3794,22 @@ bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeg
 
     if (isDelegation) {
         if (Value) {
-            ctx.Error(stmBeginPos) << "Parameter VALUE is not allowed for secrets with SOURCE IAM_DELEGATION";
+            ctx.Error(stmBeginPos) << "Parameter VALUE is not allowed for secrets with SOURCE YC_IAM_DELEGATION";
             return false;
         }
         if (mode == EOperationMode::Create && !ServiceAccountId) {
-            ctx.Error(stmBeginPos) << "Parameter SERVICE_ACCOUNT_ID must be set for secrets with SOURCE IAM_DELEGATION";
+            ctx.Error(stmBeginPos) << "Parameter SERVICE_ACCOUNT_ID must be set for secrets with SOURCE YC_IAM_DELEGATION";
             return false;
         }
         if (mode == EOperationMode::Alter && !hasDelegationParams) {
-            ctx.Error(stmBeginPos) << "Parameter SERVICE_ACCOUNT_ID or RESOURCE must be set to alter a secret with SOURCE IAM_DELEGATION";
+            ctx.Error(stmBeginPos) << "Parameter SERVICE_ACCOUNT_ID or RESOURCE must be set to alter a secret with SOURCE YC_IAM_DELEGATION";
             return false;
         }
         return true;
     }
 
     if (hasDelegationParams) {
-        ctx.Error(stmBeginPos) << "Parameters SERVICE_ACCOUNT_ID and RESOURCE are allowed only for secrets with SOURCE IAM_DELEGATION";
+        ctx.Error(stmBeginPos) << "Parameters SERVICE_ACCOUNT_ID and RESOURCE are allowed only for secrets with SOURCE YC_IAM_DELEGATION";
         return false;
     }
     if (!Value) {

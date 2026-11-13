@@ -18,7 +18,7 @@ namespace {
         ui32 CloseCount = 0;
         TVector<ui64> Values;
         struct TSample {
-            std::array<char, 64> Payload;
+            std::array<char, 128> Payload;
             ui32 UsedBytes;
         };
         TVector<TSample> Samples;
@@ -32,7 +32,7 @@ namespace {
                 return false;
             }
             // A fresh small chunk for each sample is sufficient for this mock.
-            alignas(ui64) std::array<char, 64> payload{};
+            alignas(ui64) std::array<char, 128> payload{};
             TWritableChunkMemory memory{.Payload = payload};
             if (!access(opaque, memory)) {
                 return false;
@@ -149,19 +149,30 @@ Y_UNIT_TEST_SUITE(MetricSystem) {
         UNIT_ASSERT_EQUAL(entry.Meta.Frontend, &TGlobalFrontend::Descriptor());
         UNIT_ASSERT_VALUES_EQUAL(entry.Line->Samples.size(), 1);
         const auto& sample = entry.Line->Samples.front();
+        using TStorage = NHarmonizerMetrics::TDecimalStorage;
         UNIT_ASSERT_VALUES_EQUAL(sample.UsedBytes,
-            sizeof(TGlobalFrontend::TChunkHeader) + sizeof(TGlobalFrontend::TStorageRecord));
-        TGlobalFrontend::TStorageRecord record;
-        std::memcpy(&record, sample.Payload.data() + sizeof(TGlobalFrontend::TChunkHeader), sizeof(record));
-        UNIT_ASSERT_VALUES_EQUAL(record.TimestampTs, 123);
-        const auto values = TGlobalFrontend::DecodeValue(record.Values,
+            sizeof(TStorage::THeader<4>) + 8 + 4 * 9);
+        const char* cursor = sample.Payload.data() + sizeof(TStorage::THeader<4>);
+        const char* end = sample.Payload.data() + sample.UsedBytes;
+        ui64 timestamp;
+        ui8 tag;
+        UNIT_ASSERT(TStorage::Unpack(&cursor, end, &timestamp, &tag));
+        UNIT_ASSERT_VALUES_EQUAL(timestamp, 0); // 123 cycles rounds down to the 100 ms grid.
+        UNIT_ASSERT_VALUES_EQUAL(tag, 0);
+        std::array<ui64, 4> encoded;
+        UNIT_ASSERT(TStorage::UnpackValue<0>(&cursor, end, 0, &encoded[0]));
+        UNIT_ASSERT(TStorage::UnpackValue<1>(&cursor, end, 0, &encoded[1]));
+        UNIT_ASSERT(TStorage::UnpackValue<2>(&cursor, end, 0, &encoded[2]));
+        UNIT_ASSERT(TStorage::UnpackValue<3>(&cursor, end, 0, &encoded[3]));
+        UNIT_ASSERT_EQUAL(cursor, end);
+        const auto values = TGlobalFrontend::DecodeValue(encoded,
             std::make_index_sequence<TGlobalFrontend::FieldCount>{});
         THarmonizerStats stats;
         harmonizer->GetStats(stats);
-        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TAvgAwakeningTimeUs>(), stats.AvgAwakeningTimeUs);
-        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TAvgWakingUpTimeUs>(), stats.AvgWakingUpTimeUs);
-        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TBudget>(), stats.Budget);
-        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TSharedFreeCpu>(), stats.SharedFreeCpu);
+        UNIT_ASSERT_DOUBLES_EQUAL(values.Get<TGlobal::TAvgAwakeningTimeUs>(), stats.AvgAwakeningTimeUs, 0.0051);
+        UNIT_ASSERT_DOUBLES_EQUAL(values.Get<TGlobal::TAvgWakingUpTimeUs>(), stats.AvgWakingUpTimeUs, 0.0051);
+        UNIT_ASSERT_DOUBLES_EQUAL(values.Get<TGlobal::TBudget>(), stats.Budget, 0.0051);
+        UNIT_ASSERT_DOUBLES_EQUAL(values.Get<TGlobal::TSharedFreeCpu>(), stats.SharedFreeCpu, 0.0051);
         actorSystem->Stop();
         harmonizer->Harmonize(Us2Ts(2'000'000));
         UNIT_ASSERT_VALUES_EQUAL(entry.Line->Samples.size(), 1);

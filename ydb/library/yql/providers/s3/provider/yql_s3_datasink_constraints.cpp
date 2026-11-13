@@ -12,21 +12,18 @@ using namespace NNodes;
 
 namespace {
 
-class TS3DataSourceConstraintTransformer : public TVisitorTransformerBase {
+class TS3DataSourceConstraintTransformer: public TVisitorTransformerBase {
     using TBase = TVisitorTransformerBase;
 
 public:
     TS3DataSourceConstraintTransformer()
         : TBase(/* failOnUnknown */ true)
     {
-        AddHandler({TS3SinkOutput::CallableName()}, Hndl(&TS3DataSourceConstraintTransformer::HandleS3SinkOutput));
+        AddHandler({ TS3SinkOutput::CallableName() }, Hndl(&TS3DataSourceConstraintTransformer::HandleS3SinkOutput));
         AddHandler({
-            TCoCommit::CallableName(),
-            TS3WriteObject::CallableName(),
-            TS3Target::CallableName(),
-            TS3SinkSettings::CallableName(),
-            TS3Insert::CallableName(),
-        }, Hndl(&TS3DataSourceConstraintTransformer::HandleDefault));
+                       TCoCommit::CallableName(), TS3WriteObject::CallableName(), TS3Target::CallableName(), TS3SinkSettings::CallableName(),
+                       TS3Insert::CallableName(),
+                   }, Hndl(&TS3DataSourceConstraintTransformer::HandleDefault));
     }
 
     TStatus HandleDefault(TExprBase node, TExprContext&) {
@@ -41,7 +38,7 @@ public:
     }
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateS3DataSinkConstraintTransformer(TIntrusivePtr<TS3State> state) {
     if (!state->EnableS3ConstraintsTransformer) {
@@ -50,4 +47,4 @@ TAutoPtr<IGraphTransformer> CreateS3DataSinkConstraintTransformer(TIntrusivePtr<
     return new TS3DataSourceConstraintTransformer();
 }
 
-} // namespace NYql
+}   // namespace NYql

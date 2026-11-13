@@ -11,7 +11,7 @@
 
 #include <yt/yt/core/rpc/dispatcher.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <util/datetime/base.h>
 
@@ -50,7 +50,7 @@ private:
     TDuration ShiftPeriod_;
     TInstant LastShift_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
 };
 
 DEFINE_REFCOUNTED_TYPE(THedgingRatioCounter)
@@ -207,7 +207,7 @@ private:
 
     NConcurrency::TPeriodicExecutorPtr ClientPriorityUpdateExecutor_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
 
     void UpdateClientPriorities();
 

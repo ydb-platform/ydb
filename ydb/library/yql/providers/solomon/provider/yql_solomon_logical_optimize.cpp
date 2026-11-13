@@ -2,6 +2,7 @@
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <ydb/library/yql/providers/solomon/scheme/yql_solomon_scheme.h>
+
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 
@@ -84,6 +85,7 @@ public:
 
         auto newRowTypeNode = ExpandType(node.Pos(), *ctx.MakeType<TStructExprType>(newColumnTypes), ctx);
 
+        // clang-format off
         return Build<TDqSourceWrap>(ctx, dqSource.Pos())
             .InitFrom(dqSource)
             .Input<TSoSourceSettings>()
@@ -101,16 +103,17 @@ public:
                 .Build()
             .RowType(newRowTypeNode)
             .Done();
+        // clang-format on
     }
 
 private:
     const TSolomonState::TPtr State_;
 };
 
-} // namespace
+}   // namespace
 
 THolder<IGraphTransformer> CreateSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state) {
     return MakeHolder<TSolomonLogicalOptProposalTransformer>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

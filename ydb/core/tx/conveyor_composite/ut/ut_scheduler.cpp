@@ -138,7 +138,7 @@ namespace NKikimr::NConveyorComposite {
             NKqp::NScheduler::NHdrf::NSnapshot::TQueryPtr Snapshot;
 
             void SetFairShare(const ui64 fairShare) {
-                Snapshot->FairShare = fairShare;
+                Snapshot->CpuFairShare = fairShare;
             }
         };
 
@@ -161,7 +161,7 @@ namespace NKikimr::NConveyorComposite {
             database->AddPool(pool);
             pool->AddQuery(query);
             auto snapshot = std::make_shared<NHdrf::NSnapshot::TQuery>(identity.QueryId, query);
-            snapshot->FairShare = fairShare;
+            snapshot->CpuFairShare = fairShare;
             query->SetSnapshot(snapshot);
             return {
                 .DelayParams = std::move(delayParams),

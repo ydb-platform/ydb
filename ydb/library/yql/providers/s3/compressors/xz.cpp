@@ -1,14 +1,15 @@
-#include "xz.h"
 #include "output_queue_impl.h"
+#include "xz.h"
 
-#include <contrib/libs/lzma/liblzma/api/lzma.h>
-
-#include <util/generic/size_literals.h>
-
-#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/core/util/exceptions.h>
 
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+
+#include <contrib/libs/lzma/liblzma/api/lzma.h>
+#include <util/generic/size_literals.h>
 #include <yql/essentials/utils/yql_panic.h>
+
+#undef NO_SANITIZE_THREAD
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 
@@ -18,10 +19,11 @@ using namespace NKikimr;
 
 namespace {
 
-class TReadBuffer : public NDB::ReadBuffer {
+class TReadBuffer: public NDB::ReadBuffer {
 public:
     TReadBuffer(NDB::ReadBuffer& source);
     ~TReadBuffer();
+
 private:
     bool nextImpl() final;
 
@@ -35,7 +37,9 @@ private:
 };
 
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
-    : NDB::ReadBuffer(nullptr, 0ULL), Source_(source), Strm_(LZMA_STREAM_INIT)
+    : NDB::ReadBuffer(nullptr, 0ULL)
+    , Source_(source)
+    , Strm_(LZMA_STREAM_INIT)
 {
     InBuffer.resize(8_KB);
     OutBuffer.resize(64_KB);
@@ -111,23 +115,24 @@ bool TReadBuffer::nextImpl() {
     }
 }
 
-class TCompressor : public TOutputQueue<> {
+class TCompressor: public TOutputQueue<> {
 public:
-    TCompressor(int level) : Strm_(LZMA_STREAM_INIT) {
+    TCompressor(int level)
+        : Strm_(LZMA_STREAM_INIT)
+    {
+        // options for further compression
+        lzma_options_lzma opt_lzma2;
+        if (lzma_lzma_preset(&opt_lzma2, level)) {
+            throw TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "lzma preset failed: lzma version: " << LZMA_VERSION_STRING;
+        }
 
+        lzma_filter filters[] = {
+            { .id = LZMA_FILTER_X86, .options = nullptr },
+            { .id = LZMA_FILTER_LZMA2, .options = &opt_lzma2 },
+            { .id = LZMA_VLI_UNKNOWN, .options = nullptr },
+        };
 
-    // options for further compression
-    lzma_options_lzma opt_lzma2;
-    if (lzma_lzma_preset(&opt_lzma2, level))
-        throw TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "lzma preset failed: lzma version: " << LZMA_VERSION_STRING;
-
-    lzma_filter filters[] = {
-        {.id = LZMA_FILTER_X86, .options = nullptr},
-        {.id = LZMA_FILTER_LZMA2, .options = &opt_lzma2},
-        {.id = LZMA_VLI_UNKNOWN, .options = nullptr},
-    };
-
-    switch (const lzma_ret ret = lzma_stream_encoder(&Strm_, filters, LZMA_CHECK_CRC64)) {
+        switch (const lzma_ret ret = lzma_stream_encoder(&Strm_, filters, LZMA_CHECK_CRC64)) {
             case LZMA_OK:
                 return;
             case LZMA_MEM_ERROR:
@@ -141,7 +146,8 @@ public:
 
     ~TCompressor() {
         lzma_end(&Strm_);
-   }
+    }
+
 private:
     void Push(TString&& item) override {
         InputQueue.Push(std::move(item));
@@ -169,11 +175,13 @@ private:
         while (!InputQueue.Empty() || !TOutputQueue::IsSealed()) {
             const auto& pop = InputQueue.Pop();
             const bool done = InputQueue.IsSealed() && InputQueue.Empty();
-            if (pop.empty() && !done)
+            if (pop.empty() && !done) {
                 break;
+            }
 
-            if (const auto bound = lzma_stream_buffer_bound(pop.size()); bound > OutputBufferSize)
+            if (const auto bound = lzma_stream_buffer_bound(pop.size()); bound > OutputBufferSize) {
                 OutputBuffer = std::make_unique<char[]>(OutputBufferSize = bound);
+            }
 
             Strm_.next_in = const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(pop.data()));
             Strm_.avail_in = pop.size();
@@ -183,8 +191,9 @@ private:
 
             const lzma_ret ret = lzma_code(&Strm_, done ? LZMA_FINISH : LZMA_RUN);
 
-            if (const auto size = OutputBufferSize - Strm_.avail_out)
+            if (const auto size = OutputBufferSize - Strm_.avail_out) {
                 TOutputQueue::Push(TString(OutputBuffer.get(), size));
+            }
 
             switch (ret) {
                 case LZMA_OK:
@@ -215,7 +224,7 @@ private:
     TOutputQueue<0> InputQueue;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source) {
     return std::make_unique<TReadBuffer>(source);
@@ -225,4 +234,4 @@ IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
     return std::make_unique<TCompressor>(cLevel.value_or(LZMA_PRESET_DEFAULT));
 }
 
-} // namespace NYql::NXz
+}   // namespace NYql::NXz

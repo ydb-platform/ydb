@@ -65,6 +65,7 @@ public:
 
     std::optional<size_t> GetStaticExternalMemorySize() const;
     std::optional<size_t> EstimateExternalMemorySize(const void* storage) const;
+    static std::optional<size_t> EstimateValueMemorySize(const NUdf::TUnboxedValuePod& value, TType* type);
 
 private:
     Y_FORCE_INLINE bool IsPresent(const void* storage, const TItem& item) const;

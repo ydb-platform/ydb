@@ -21,7 +21,6 @@
 #include <inttypes.h>
 #include <string.h>
 
-#include <algorithm>
 #include <memory>
 #include <set>
 #include <util/generic/string.h>
@@ -115,7 +114,7 @@ class PickFirst : public LoadBalancingPolicy {
    public:
     class SubchannelData {
      public:
-      SubchannelData(SubchannelList* subchannel_list,
+      SubchannelData(SubchannelList* subchannel_list, size_t index,
                      RefCountedPtr<SubchannelInterface> subchannel);
 
       SubchannelInterface* subchannel() const { return subchannel_.get(); }
@@ -124,12 +123,6 @@ class PickFirst : public LoadBalancingPolicy {
       }
       const y_absl::Status& connectivity_status() const {
         return connectivity_status_;
-      }
-
-      // Returns the index into the subchannel list of this object.
-      size_t Index() const {
-        return static_cast<size_t>(this -
-                                   &subchannel_list_->subchannels_.front());
       }
 
       // Resets the connection backoff.
@@ -154,10 +147,8 @@ class PickFirst : public LoadBalancingPolicy {
       class Watcher
           : public SubchannelInterface::ConnectivityStateWatcherInterface {
        public:
-        Watcher(SubchannelData* subchannel_data,
-                RefCountedPtr<SubchannelList> subchannel_list)
-            : subchannel_data_(subchannel_data),
-              subchannel_list_(std::move(subchannel_list)) {}
+        Watcher(RefCountedPtr<SubchannelList> subchannel_list, size_t index)
+            : subchannel_list_(std::move(subchannel_list)), index_(index) {}
 
         ~Watcher() override {
           subchannel_list_.reset(DEBUG_LOCATION, "Watcher dtor");
@@ -165,8 +156,8 @@ class PickFirst : public LoadBalancingPolicy {
 
         void OnConnectivityStateChange(grpc_connectivity_state new_state,
                                        y_absl::Status status) override {
-          subchannel_data_->OnConnectivityStateChange(new_state,
-                                                      std::move(status));
+          subchannel_list_->subchannels_[index_].OnConnectivityStateChange(
+              new_state, std::move(status));
         }
 
         grpc_pollset_set* interested_parties() override {
@@ -174,8 +165,8 @@ class PickFirst : public LoadBalancingPolicy {
         }
 
        private:
-        SubchannelData* subchannel_data_;
         RefCountedPtr<SubchannelList> subchannel_list_;
+        const size_t index_;
       };
 
       // This method will be invoked once soon after instantiation to report
@@ -194,6 +185,7 @@ class PickFirst : public LoadBalancingPolicy {
 
       // Backpointer to owning subchannel list.  Not owned.
       SubchannelList* subchannel_list_;
+      const size_t index_;
       // The subchannel.
       RefCountedPtr<SubchannelInterface> subchannel_;
       // Will be non-null when the subchannel's state is being watched.
@@ -206,7 +198,8 @@ class PickFirst : public LoadBalancingPolicy {
     };
 
     SubchannelList(RefCountedPtr<PickFirst> policy,
-                   EndpointAddressesList addresses, const ChannelArgs& args);
+                   EndpointAddressesIterator* addresses,
+                   const ChannelArgs& args);
 
     ~SubchannelList() override;
 
@@ -232,7 +225,9 @@ class PickFirst : public LoadBalancingPolicy {
    private:
     // Returns true if all subchannels have seen their initial
     // connectivity state notifications.
-    bool AllSubchannelsSeenInitialState();
+    bool AllSubchannelsSeenInitialState() const {
+      return num_subchannels_seen_initial_notification_ == size();
+    }
 
     // Looks through subchannels_ starting from attempting_index_ to
     // find the first one not currently in TRANSIENT_FAILURE, then
@@ -262,6 +257,8 @@ class PickFirst : public LoadBalancingPolicy {
 
     // TODO(roth): Remove this when we remove the Happy Eyeballs experiment.
     bool in_transient_failure_ = false;
+
+    size_t num_subchannels_seen_initial_notification_ = 0;
 
     // The index into subchannels_ to which we are currently attempting
     // to connect during the initial Happy Eyeballs pass.  Once the
@@ -414,9 +411,9 @@ void PickFirst::ResetBackoffLocked() {
 
 void PickFirst::AttemptToConnectUsingLatestUpdateArgsLocked() {
   // Create a subchannel list from latest_update_args_.
-  EndpointAddressesList addresses;
+  EndpointAddressesIterator* addresses = nullptr;
   if (latest_update_args_.addresses.ok()) {
-    addresses = *latest_update_args_.addresses;
+    addresses = latest_update_args_.addresses->get();
   }
   // Replace latest_pending_subchannel_list_.
   if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_pick_first_trace) &&
@@ -426,7 +423,7 @@ void PickFirst::AttemptToConnectUsingLatestUpdateArgsLocked() {
             latest_pending_subchannel_list_.get());
   }
   latest_pending_subchannel_list_ = MakeOrphanable<SubchannelList>(
-      Ref(), std::move(addresses), latest_update_args_.args);
+      RefAsSubclass<PickFirst>(), addresses, latest_update_args_.args);
   // Empty update or no valid subchannels.  Put the channel in
   // TRANSIENT_FAILURE and request re-resolution.
   if (latest_pending_subchannel_list_->size() == 0) {
@@ -484,9 +481,7 @@ class AddressFamilyIterator {
 y_absl::Status PickFirst::UpdateLocked(UpdateArgs args) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_pick_first_trace)) {
     if (args.addresses.ok()) {
-      gpr_log(GPR_INFO,
-              "Pick First %p received update with %" PRIuPTR " addresses", this,
-              args.addresses->size());
+      gpr_log(GPR_INFO, "Pick First %p received update", this);
     } else {
       gpr_log(GPR_INFO, "Pick First %p received update with address error: %s",
               this, args.addresses.status().ToString().c_str());
@@ -496,51 +491,59 @@ y_absl::Status PickFirst::UpdateLocked(UpdateArgs args) {
   y_absl::Status status;
   if (!args.addresses.ok()) {
     status = args.addresses.status();
-  } else if (args.addresses->empty()) {
-    status = y_absl::UnavailableError("address list must not be empty");
   } else {
-    // Shuffle the list if needed.
-    auto config = static_cast<PickFirstConfig*>(args.config.get());
-    if (config->shuffle_addresses()) {
-      y_absl::c_shuffle(*args.addresses, bit_gen_);
-    }
-    // Flatten the list so that we have one address per endpoint.
-    // While we're iterating, also determine the desired address family
-    // order and the index of the first element of each family, for use in
-    // the interleaving below.
-    std::set<y_absl::string_view> address_families;
-    std::vector<AddressFamilyIterator> address_family_order;
     EndpointAddressesList endpoints;
-    for (const auto& endpoint : *args.addresses) {
-      for (const auto& address : endpoint.addresses()) {
-        endpoints.emplace_back(address, endpoint.args());
-        if (IsPickFirstHappyEyeballsEnabled()) {
-          y_absl::string_view scheme = GetAddressFamily(address);
-          bool inserted = address_families.insert(scheme).second;
-          if (inserted) {
-            address_family_order.emplace_back(scheme, endpoints.size() - 1);
+    (*args.addresses)->ForEach([&](const EndpointAddresses& endpoint) {
+      endpoints.push_back(endpoint);
+    });
+    if (endpoints.empty()) {
+      status = y_absl::UnavailableError("address list must not be empty");
+    } else {
+      // Shuffle the list if needed.
+      auto config = static_cast<PickFirstConfig*>(args.config.get());
+      if (config->shuffle_addresses()) {
+        y_absl::c_shuffle(endpoints, bit_gen_);
+      }
+      // Flatten the list so that we have one address per endpoint.
+      // While we're iterating, also determine the desired address family
+      // order and the index of the first element of each family, for use in
+      // the interleaving below.
+      std::set<y_absl::string_view> address_families;
+      std::vector<AddressFamilyIterator> address_family_order;
+      EndpointAddressesList flattened_endpoints;
+      for (const auto& endpoint : endpoints) {
+        for (const auto& address : endpoint.addresses()) {
+          flattened_endpoints.emplace_back(address, endpoint.args());
+          if (IsPickFirstHappyEyeballsEnabled()) {
+            y_absl::string_view scheme = GetAddressFamily(address);
+            bool inserted = address_families.insert(scheme).second;
+            if (inserted) {
+              address_family_order.emplace_back(scheme,
+                                                flattened_endpoints.size() - 1);
+            }
           }
         }
       }
-    }
-    // Interleave addresses as per RFC-8305 section 4.
-    if (IsPickFirstHappyEyeballsEnabled()) {
-      EndpointAddressesList interleaved_endpoints;
-      interleaved_endpoints.reserve(endpoints.size());
-      std::vector<bool> endpoints_moved(endpoints.size());
-      size_t scheme_index = 0;
-      for (size_t i = 0; i < endpoints.size(); ++i) {
-        EndpointAddresses* endpoint;
-        do {
-          auto& iterator = address_family_order[scheme_index++ %
-                                                address_family_order.size()];
-          endpoint = iterator.Next(endpoints, &endpoints_moved);
-        } while (endpoint == nullptr);
-        interleaved_endpoints.emplace_back(std::move(*endpoint));
+      endpoints = std::move(flattened_endpoints);
+      // Interleave addresses as per RFC-8305 section 4.
+      if (IsPickFirstHappyEyeballsEnabled()) {
+        EndpointAddressesList interleaved_endpoints;
+        interleaved_endpoints.reserve(endpoints.size());
+        std::vector<bool> endpoints_moved(endpoints.size());
+        size_t scheme_index = 0;
+        for (size_t i = 0; i < endpoints.size(); ++i) {
+          EndpointAddresses* endpoint;
+          do {
+            auto& iterator = address_family_order[scheme_index++ %
+                                                  address_family_order.size()];
+            endpoint = iterator.Next(endpoints, &endpoints_moved);
+          } while (endpoint == nullptr);
+          interleaved_endpoints.emplace_back(std::move(*endpoint));
+        }
+        endpoints = std::move(interleaved_endpoints);
       }
-      args.addresses = std::move(interleaved_endpoints);
-    } else {
-      args.addresses = std::move(endpoints);
+      args.addresses =
+          std::make_shared<EndpointAddressesListIterator>(std::move(endpoints));
     }
   }
   // If the update contains a resolver error and we have a previous update
@@ -618,18 +621,20 @@ void PickFirst::HealthWatcher::OnConnectivityStateChange(
 //
 
 PickFirst::SubchannelList::SubchannelData::SubchannelData(
-    SubchannelList* subchannel_list,
+    SubchannelList* subchannel_list, size_t index,
     RefCountedPtr<SubchannelInterface> subchannel)
-    : subchannel_list_(subchannel_list), subchannel_(std::move(subchannel)) {
+    : subchannel_list_(subchannel_list),
+      index_(index),
+      subchannel_(std::move(subchannel)) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_pick_first_trace)) {
     gpr_log(GPR_INFO,
             "[PF %p] subchannel list %p index %" PRIuPTR
             " (subchannel %p): starting watch",
-            subchannel_list_->policy_.get(), subchannel_list_,
-            subchannel_list_->size(), subchannel_.get());
+            subchannel_list_->policy_.get(), subchannel_list_, index_,
+            subchannel_.get());
   }
   auto watcher = std::make_unique<Watcher>(
-      this, subchannel_list_->Ref(DEBUG_LOCATION, "Watcher"));
+      subchannel_list_->Ref(DEBUG_LOCATION, "Watcher"), index_);
   pending_watcher_ = watcher.get();
   subchannel_->WatchConnectivityState(std::move(watcher));
 }
@@ -640,7 +645,7 @@ void PickFirst::SubchannelList::SubchannelData::ShutdownLocked() {
       gpr_log(GPR_INFO,
               "[PF %p] subchannel list %p index %" PRIuPTR " of %" PRIuPTR
               " (subchannel %p): cancelling watch and unreffing subchannel",
-              subchannel_list_->policy_.get(), subchannel_list_, Index(),
+              subchannel_list_->policy_.get(), subchannel_list_, index_,
               subchannel_list_->size(), subchannel_.get());
     }
     subchannel_->CancelConnectivityStateWatch(pending_watcher_);
@@ -660,7 +665,7 @@ void PickFirst::SubchannelList::SubchannelData::OnConnectivityStateChange(
         "status=%s, shutting_down=%d, pending_watcher=%p, "
         "seen_transient_failure=%d, p->selected_=%p, "
         "p->subchannel_list_=%p, p->latest_pending_subchannel_list_=%p",
-        p, subchannel_list_, Index(), subchannel_list_->size(),
+        p, subchannel_list_, index_, subchannel_list_->size(),
         subchannel_.get(),
         (connectivity_state_.has_value()
              ? ConnectivityStateName(*connectivity_state_)
@@ -754,6 +759,11 @@ void PickFirst::SubchannelList::SubchannelData::OnConnectivityStateChange(
     seen_transient_failure_ = true;
     subchannel_list_->last_failure_ = connectivity_status_;
   }
+  // If this is the initial connectivity state update for this subchannel,
+  // increment the counter in the subchannel list.
+  if (!old_state.has_value()) {
+    ++subchannel_list_->num_subchannels_seen_initial_notification_;
+  }
   // If we haven't yet seen the initial connectivity state notification
   // for all subchannels, do nothing.
   if (!subchannel_list_->AllSubchannelsSeenInitialState()) return;
@@ -772,7 +782,7 @@ void PickFirst::SubchannelList::SubchannelData::OnConnectivityStateChange(
   if (!IsPickFirstHappyEyeballsEnabled()) {
     // Ignore any other updates for subchannels we're not currently trying to
     // connect to.
-    if (Index() != subchannel_list_->attempting_index_) return;
+    if (index_ != subchannel_list_->attempting_index_) return;
     // React to the connectivity state.
     ReactToConnectivityStateLocked();
     return;
@@ -785,7 +795,7 @@ void PickFirst::SubchannelList::SubchannelData::OnConnectivityStateChange(
       if (!prev_seen_transient_failure && seen_transient_failure_) {
         // If a connection attempt fails before the timer fires, then
         // cancel the timer and start connecting on the next subchannel.
-        if (Index() == subchannel_list_->attempting_index_) {
+        if (index_ == subchannel_list_->attempting_index_) {
           if (subchannel_list_->timer_handle_.has_value()) {
             p->channel_control_helper()->GetEventEngine()->Cancel(
                 *subchannel_list_->timer_handle_);
@@ -859,7 +869,7 @@ void PickFirst::SubchannelList::SubchannelData::
       // We skip subchannels in state TRANSIENT_FAILURE to avoid a
       // large recursion that could overflow the stack.
       SubchannelData* found_subchannel = nullptr;
-      for (size_t next_index = Index() + 1;
+      for (size_t next_index = index_ + 1;
            next_index < subchannel_list_->size(); ++next_index) {
         SubchannelData* sc = &subchannel_list_->subchannels_[next_index];
         GPR_ASSERT(sc->connectivity_state_.has_value());
@@ -947,14 +957,14 @@ void PickFirst::SubchannelList::SubchannelData::RequestConnectionWithTimer() {
     GPR_ASSERT(connectivity_state_ == GRPC_CHANNEL_CONNECTING);
   }
   // If this is not the last subchannel in the list, start the timer.
-  if (Index() != subchannel_list_->size() - 1) {
+  if (index_ != subchannel_list_->size() - 1) {
     PickFirst* p = subchannel_list_->policy_.get();
     if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_pick_first_trace)) {
       gpr_log(GPR_INFO,
               "Pick First %p subchannel list %p: starting Connection "
               "Attempt Delay timer for %" PRId64 "ms for index %" PRIuPTR,
               p, subchannel_list_, p->connection_attempt_delay_.millis(),
-              Index());
+              index_);
     }
     subchannel_list_->timer_handle_ =
         p->channel_control_helper()->GetEventEngine()->RunAfter(
@@ -1030,7 +1040,7 @@ void PickFirst::SubchannelList::SubchannelData::ProcessUnselectedReadyLocked() {
       gpr_log(GPR_INFO, "[PF %p] starting health watch", p);
     }
     auto watcher = std::make_unique<HealthWatcher>(
-        p->Ref(DEBUG_LOCATION, "HealthWatcher"));
+        p->RefAsSubclass<PickFirst>(DEBUG_LOCATION, "HealthWatcher"));
     p->health_watcher_ = watcher.get();
     auto health_data_watcher = MakeHealthCheckWatcher(
         p->work_serializer(), subchannel_list_->args_, std::move(watcher));
@@ -1042,7 +1052,7 @@ void PickFirst::SubchannelList::SubchannelData::ProcessUnselectedReadyLocked() {
   }
   // Unref all other subchannels in the list.
   for (size_t i = 0; i < subchannel_list_->size(); ++i) {
-    if (i != Index()) {
+    if (i != index_) {
       subchannel_list_->subchannels_[i].ShutdownLocked();
     }
   }
@@ -1053,7 +1063,7 @@ void PickFirst::SubchannelList::SubchannelData::ProcessUnselectedReadyLocked() {
 //
 
 PickFirst::SubchannelList::SubchannelList(RefCountedPtr<PickFirst> policy,
-                                          EndpointAddressesList addresses,
+                                          EndpointAddressesIterator* addresses,
                                           const ChannelArgs& args)
     : InternallyRefCounted<SubchannelList>(
           GRPC_TRACE_FLAG_ENABLED(grpc_lb_pick_first_trace) ? "SubchannelList"
@@ -1063,14 +1073,12 @@ PickFirst::SubchannelList::SubchannelList(RefCountedPtr<PickFirst> policy,
                 .Remove(
                     GRPC_ARG_INTERNAL_PICK_FIRST_OMIT_STATUS_MESSAGE_PREFIX)) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_pick_first_trace)) {
-    gpr_log(GPR_INFO,
-            "[PF %p] Creating subchannel list %p for %" PRIuPTR
-            " subchannels - channel args: %s",
-            policy_.get(), this, addresses.size(), args_.ToString().c_str());
+    gpr_log(GPR_INFO, "[PF %p] Creating subchannel list %p - channel args: %s",
+            policy_.get(), this, args_.ToString().c_str());
   }
-  subchannels_.reserve(addresses.size());
+  if (addresses == nullptr) return;
   // Create a subchannel for each address.
-  for (const EndpointAddresses& address : addresses) {
+  addresses->ForEach([&](const EndpointAddresses& address) {
     GPR_ASSERT(address.addresses().size() == 1);
     RefCountedPtr<SubchannelInterface> subchannel =
         policy_->channel_control_helper()->CreateSubchannel(
@@ -1082,7 +1090,7 @@ PickFirst::SubchannelList::SubchannelList(RefCountedPtr<PickFirst> policy,
                 "[PF %p] could not create subchannel for address %s, ignoring",
                 policy_.get(), address.ToString().c_str());
       }
-      continue;
+      return;
     }
     if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_pick_first_trace)) {
       gpr_log(GPR_INFO,
@@ -1091,8 +1099,8 @@ PickFirst::SubchannelList::SubchannelList(RefCountedPtr<PickFirst> policy,
               policy_.get(), this, subchannels_.size(), subchannel.get(),
               address.ToString().c_str());
     }
-    subchannels_.emplace_back(this, std::move(subchannel));
-  }
+    subchannels_.emplace_back(this, subchannels_.size(), std::move(subchannel));
+  });
 }
 
 PickFirst::SubchannelList::~SubchannelList() {
@@ -1122,13 +1130,6 @@ void PickFirst::SubchannelList::ResetBackoffLocked() {
   for (auto& sd : subchannels_) {
     sd.ResetBackoffLocked();
   }
-}
-
-bool PickFirst::SubchannelList::AllSubchannelsSeenInitialState() {
-  for (auto& sd : subchannels_) {
-    if (!sd.connectivity_state().has_value()) return false;
-  }
-  return true;
 }
 
 void PickFirst::SubchannelList::StartConnectingNextSubchannel() {

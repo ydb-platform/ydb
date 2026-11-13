@@ -1,8 +1,8 @@
 #include "common.h"
 
-#include <util/system/env.h>
-
 #include <ydb/library/aclib/aclib.h>
+
+#include <util/system/env.h>
 
 using namespace NKikimrRun;
 
@@ -15,11 +15,7 @@ TExternalDatabase TExternalDatabase::Parse(const TString& optionValue, const TSt
         ythrow yexception() << "Incorrect external database mapping, expected form database@endpoint";
     }
 
-    TExternalDatabase result = {
-        .Endpoint = TString(endpoint),
-        .Database = TString(database),
-        .Token = GetEnv(tokenVar)
-    };
+    TExternalDatabase result = { .Endpoint = TString(endpoint), .Database = TString(database), .Token = GetEnv(tokenVar) };
 
     if (!result.Token) {
         result.Token = GetEnv(YQL_TOKEN_VARIABLE);
@@ -46,7 +42,7 @@ NYql::TIssue GroupIssues(NYql::TIssue rootIssue, const NYql::TIssues& childrenIs
 
 bool IsFinalStatus(FederatedQuery::QueryMeta::ComputeStatus status) {
     using EStatus = FederatedQuery::QueryMeta;
-    return IsIn({EStatus::FAILED, EStatus::COMPLETED, EStatus::ABORTED_BY_USER, EStatus::ABORTED_BY_SYSTEM}, status);
+    return IsIn({ EStatus::FAILED, EStatus::COMPLETED, EStatus::ABORTED_BY_USER, EStatus::ABORTED_BY_SYSTEM }, status);
 }
 
-}  // namespace NFqRun
+}   // namespace NFqRun

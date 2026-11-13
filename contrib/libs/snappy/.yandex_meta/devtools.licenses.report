@@ -69,6 +69,7 @@ BELONGS ya.make
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
         COPYING [4:28]
+        COPYING.notestdata [4:28]
 
 SKIP     CC-BY-3.0            4fd78bd76e9544afb994175aedd7385b
 BELONGS ya.make

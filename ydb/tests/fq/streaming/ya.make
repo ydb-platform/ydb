@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/vm_metadata_emulator/recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_grpc_emulator/recipe/recipe.inc)
@@ -9,6 +11,7 @@ TEST_SRCS(
     test_iam.py
     test_partitions.py
     test_scalar_topic_write.py
+    test_rescaling.py
     test_streaming.py
     test_streaming_aggregation.py
     test_watermarks.py
@@ -24,7 +27,7 @@ PY_SRCS(
     conftest.py
 )
 
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:1)
 REQUIREMENTS(ram:16)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
@@ -34,7 +37,7 @@ ELSE()
     SIZE(MEDIUM)
     FORK_SUBTESTS()
     REQUIREMENTS(ram:16)
-    SPLIT_FACTOR(20)
+    SPLIT_FACTOR(30)
 ENDIF()
 
 PEERDIR(

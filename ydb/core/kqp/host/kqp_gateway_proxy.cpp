@@ -441,10 +441,6 @@ bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp
         }
     }
 
-    if (families.Modified && !families.ValidateColumnFamilies(&code, &error)) {
-        return false;
-    }
-
     if (!NGRpcService::FillCreateTableSettingsDesc(tableDesc, createTableProto, profiles, code, error, warnings)) {
         return false;
     }
@@ -1043,6 +1039,7 @@ public:
     }
 
     TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) override {
+        Y_ABORT_UNLESS(!settings.Unsafe);
         CHECK_PREPARED_DDL(TruncateTable);
 
         try {
@@ -1294,7 +1291,7 @@ public:
         return tablePromise.GetFuture();
     }
 
-    TFuture<TGenericResult> PrepareAlterTable(const TString&, Ydb::Table::AlterTableRequest&& req,
+    TFuture<TGenericResult> PrepareAlterTable(const TString&, NKikimrKqp::TKqpAlterTableRequest&& req,
         const TMaybe<TString>&, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings)
     {
         YQL_ENSURE(SessionCtx->Query().PreparingQuery);
@@ -1442,6 +1439,16 @@ public:
                 }
 
                 if (buildSettings.has_column_build_operation()) {
+                    if (!NSchemeHelpers::ValidateColumnBuildAlter(modifyScheme,
+                        buildSettings.column_build_operation(), code, error))
+                    {
+                        IKqpGateway::TGenericResult errResult;
+                        const auto issueCode = NYql::YqlStatusFromYdbStatus(code);
+                        errResult.AddIssue(NYql::TIssue(error).SetCode(issueCode, NYql::TSeverityIds::S_ERROR));
+                        errResult.SetStatus(issueCode);
+                        tablePromise.SetValue(errResult);
+                        return;
+                    }
                     buildSettings.MutableAlterMainTablePayload()->PackFrom(modifyScheme);
                     phyTx.MutableSchemeOperation()->MutableBuildOperation()->CopyFrom(buildSettings);
                 } else {
@@ -1462,7 +1469,7 @@ public:
         return Gateway->SendSchemeExecuterRequest(cluster, requestType, phyTx);
     }
 
-    TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
+    TFuture<TGenericResult> AlterTable(const TString& cluster, NKikimrKqp::TKqpAlterTableRequest&& req,
         const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) override
     {
         CHECK_PREPARED_DDL(AlterTable);
@@ -1787,8 +1794,7 @@ public:
                     } else {
                         for (const auto& sid : settings.Roles) {
                             for (const auto& permission : settings.Permissions) {
-                                TACLAttrs aclAttrs = ConvertYdbPermissionNameToACLAttrs(permission);
-                                acl.RemoveAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, sid, aclAttrs.InheritanceType);
+                                RevokeYdbPermission(permission, sid, acl);
                             }
                         }
                     }
@@ -2582,7 +2588,7 @@ public:
         }
     }
 
-    TFuture<TGenericResult> PrepareAlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req)
+    TFuture<TGenericResult> PrepareAlterColumnTable(const TString& cluster, NKikimrKqp::TKqpAlterTableRequest&& req)
     {
         YQL_ENSURE(SessionCtx->Query().PreparingQuery);
 
@@ -2633,7 +2639,7 @@ public:
         return MakeFuture(result);
     }
 
-    TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) override {
+    TFuture<TGenericResult> AlterColumnTable(const TString& cluster, NKikimrKqp::TKqpAlterTableRequest&& req) override {
         CHECK_PREPARED_DDL(AlterColumnTable);
 
         auto tablePromise = NewPromise<TGenericResult>();
@@ -3186,6 +3192,12 @@ public:
             if (const auto& consistency = settings.Settings.GlobalConsistency) {
                 consistency->Serialize(*config.MutableConsistencySettings()->MutableGlobal());
             }
+            if (const auto& initialScan = settings.Settings.InitialScan) {
+                config.SetInitialScan(*initialScan);
+            }
+            if (const auto& availabilityPeriod = settings.Settings.AvailabilityPeriod) {
+                config.MutableAvailabilityPeriod()->CopyFrom(*availabilityPeriod);
+            }
 
             if (params.GetDatabase().empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
@@ -3335,6 +3347,8 @@ public:
 
             auto& op = *tx.MutableDrop();
             op.SetName(pathPair.second);
+
+            op.SetReplicationSourceCleanup(settings.SourceCleanup);
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

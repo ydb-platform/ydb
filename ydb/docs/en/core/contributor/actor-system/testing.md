@@ -18,6 +18,20 @@ For a changed request protocol, cover the successful response and relevant failu
 
 Build and test invocation is described in [Ya Make](../build-ya.md); apply the active workspace or personal build instructions to the selected targets.
 
+## Fast simulated time
+
+`TTestActorRuntimeBase` enables fast simulated time by default. When immediate events have been processed and a timer or frozen mailbox remains, the runtime skips the real 10 ms wait before inspecting that work and advancing simulated time. It still waits when there is no such work. Real-thread runtimes and dispatch with `Quiet` retain their existing behavior.
+
+A test that needs an external operation to complete before simulated timers run or simulated time advances can disable this optimization for its runtime. For an existing runtime named `runtime`, call the following before dispatching events, and document the external dependency in the test:
+
+```cpp
+runtime.SetFastSimulatedTime(false);
+```
+
+This restores the real waits before inspection; it does not guarantee that an external operation will finish within a wait. Prefer explicit synchronization when the test requires a particular completion order.
+
+Skipped waits still charge 10 ms to the dispatch wait budget controlled by `SetDispatchTimeout`. Successful delivery of selected scheduled events resets that budget as before. The budget is not elapsed wall-clock time: a fast dispatch can exhaust it without spending that duration asleep.
+
 ## Review checklist
 
 - Is every actor-owned field mutated only from serialized actor execution?
@@ -30,8 +44,8 @@ Build and test invocation is described in [Ya Make](../build-ya.md); apply the a
 - Are event payload and TActorContext lifetimes respected across suspension?
 - Does shutdown call PassAway once and tolerate events while tasks drain?
 - Can every long wait be cancelled, timed out, or force-destroyed safely?
-- Does request/reply echo a unique cookie (not 0 for concurrent waits) and
-  tolerate stale replies?
+- Does reply correlation distinguish a stale attempt from the current one, and
+  are stale replies tolerated?
 - Does a remote protocol handle timeout, duplicate/ambiguous outcome, and a new
   Interconnect session?
 - Are large events serializable, bounded, and released promptly?
@@ -46,8 +60,9 @@ Build and test invocation is described in [Ya Make](../build-ya.md); apply the a
   that is itself the direct co_await operand?
 - Do lambda closures and every borrowed reference outlive the full await?
 - Is large incoming event data released before long suspension?
-- Is each ActorWaitForEvent cookie unique among live waits (not 0), and are
-  late replies handled by StateFunc?
+- Is each ActorWaitForEvent cookie fresh for its request attempt (not 0, not
+  reused while an earlier reply may arrive), and are late replies handled by
+  StateFunc?
 - After each suspension, are actor state, pointers, generations, and shutdown
   status revalidated?
 - Can cancellation reach every potentially infinite wait?

@@ -7,7 +7,7 @@
 
 #include <library/cpp/yt/containers/ring_queue.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 namespace NYT::NTableClient {
 
@@ -33,7 +33,7 @@ DECLARE_REFCOUNTED_CLASS(TSchemafulPipeWriter);
 
 struct TSchemafulPipeData final
 {
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock);
 
     const IMemoryChunkProviderPtr ChunkProvider;
     const std::optional<int> MaxFlushBatchCount;

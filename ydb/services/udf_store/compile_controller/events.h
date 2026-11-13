@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb/services/udf_store/compile_controller/protos/compile_controller.pb.h>
-
 #include <ydb/core/base/events.h>
+
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/services/udf_store/compile_controller/protos/compile_controller.pb.h>
 
 namespace NKikimr::NUdfStore {
 
@@ -26,37 +26,29 @@ struct TEvCompileController {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_WASM_COMPILE_CTL),
-        "expected EvEnd < EventSpaceEnd(TKikimrEvents::ES_WASM_COMPILE_CTL)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_WASM_COMPILE_CTL), "expected EvEnd < EventSpaceEnd(TKikimrEvents::ES_WASM_COMPILE_CTL)");
 
-    struct TEvDescribeModule
-        : public NActors::TEventPB<TEvDescribeModule, NKikimrUdfStore::TEvDescribeModule, EvDescribeModule> {};
+    struct TEvDescribeModule: public NActors::TEventPB<TEvDescribeModule, NKikimrUdfStore::TEvDescribeModule, EvDescribeModule> {};
+
     struct TEvDescribeModuleResult
         : public NActors::TEventPB<TEvDescribeModuleResult, NKikimrUdfStore::TEvDescribeModuleResult, EvDescribeModuleResult> {};
 
-    struct TEvRegister
-        : public NActors::TEventPB<TEvRegister, NKikimrUdfStore::TEvRegister, EvRegister> {};
+    struct TEvRegister: public NActors::TEventPB<TEvRegister, NKikimrUdfStore::TEvRegister, EvRegister> {};
 
-    struct TEvRegisterResult
-        : public NActors::TEventPB<TEvRegisterResult, NKikimrUdfStore::TEvRegisterResult, EvRegisterResult> {};
+    struct TEvRegisterResult: public NActors::TEventPB<TEvRegisterResult, NKikimrUdfStore::TEvRegisterResult, EvRegisterResult> {};
 
-    struct TEvHeartbeat
-        : public NActors::TEventPB<TEvHeartbeat, NKikimrUdfStore::TEvHeartbeat, EvHeartbeat> {};
+    struct TEvHeartbeat: public NActors::TEventPB<TEvHeartbeat, NKikimrUdfStore::TEvHeartbeat, EvHeartbeat> {};
 
-    struct TEvNeedArtifact
-        : public NActors::TEventPB<TEvNeedArtifact, NKikimrUdfStore::TEvNeedArtifact, EvNeedArtifact> {};
+    struct TEvNeedArtifact: public NActors::TEventPB<TEvNeedArtifact, NKikimrUdfStore::TEvNeedArtifact, EvNeedArtifact> {};
 
-    struct TEvAssignCompile
-        : public NActors::TEventPB<TEvAssignCompile, NKikimrUdfStore::TEvAssignCompile, EvAssignCompile> {};
+    struct TEvAssignCompile: public NActors::TEventPB<TEvAssignCompile, NKikimrUdfStore::TEvAssignCompile, EvAssignCompile> {};
 
-    struct TEvCompileDone
-        : public NActors::TEventPB<TEvCompileDone, NKikimrUdfStore::TEvCompileDone, EvCompileDone> {};
+    struct TEvCompileDone: public NActors::TEventPB<TEvCompileDone, NKikimrUdfStore::TEvCompileDone, EvCompileDone> {};
 
-    struct TEvCompileFailed
-        : public NActors::TEventPB<TEvCompileFailed, NKikimrUdfStore::TEvCompileFailed, EvCompileFailed> {};
+    struct TEvCompileFailed: public NActors::TEventPB<TEvCompileFailed, NKikimrUdfStore::TEvCompileFailed, EvCompileFailed> {};
 
-    struct TEvArtifactReady
-        : public NActors::TEventPB<TEvArtifactReady, NKikimrUdfStore::TEvArtifactReady, EvArtifactReady> {};
+    struct TEvArtifactReady: public NActors::TEventPB<TEvArtifactReady, NKikimrUdfStore::TEvArtifactReady, EvArtifactReady> {};
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

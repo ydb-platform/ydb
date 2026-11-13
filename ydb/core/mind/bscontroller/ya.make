@@ -10,6 +10,9 @@ SRCS(
     bsc_audit.h
     bsc_audit.cpp
     bridge.cpp
+    bridge_sync_counters.h
+    bridge_storage.cpp
+    bridge_storage.h
     cleanup_stale_storage_entries.cpp
     cluster_balancing.cpp
     cmds_box.cpp
@@ -44,6 +47,9 @@ SRCS(
     group_mapper.cpp
     group_mapper.h
     group_metrics_exchange.cpp
+    group_state.cpp
+    group_state_actor.cpp
+    group_state.h
     impl.h
     indir.h
     init_scheme.cpp
@@ -55,6 +61,7 @@ SRCS(
     mood.h
     mv_object_map.h
     node_report.cpp
+    pile_overrides.cpp
     propose_group_key.cpp
     register_node.cpp
     request_controller_info.cpp
@@ -92,6 +99,7 @@ PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/nodewarden
+    ydb/core/blobstorage/syncer
     ydb/core/blob_depot
     ydb/core/engine/minikql
     ydb/core/protos

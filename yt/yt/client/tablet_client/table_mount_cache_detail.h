@@ -8,8 +8,8 @@
 
 #include <yt/yt/core/profiling/public.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NTabletClient {
 
@@ -33,10 +33,10 @@ private:
 
     std::atomic<NProfiling::TCpuInstant> ExpiredEntriesSweepDeadline_ = 0;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, MapLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, MapLock_);
     THashMap<TTabletId, std::vector<TWeakPtr<TTableMountInfo>>> Map_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, GCLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, GCLock_);
     std::queue<TTabletId> GCQueue_;
     std::vector<TTabletId> ExpiredTabletIds_;
 
@@ -77,7 +77,7 @@ protected:
     virtual void RegisterCell(NYTree::INodePtr cellDescriptor);
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     TTableMountCacheConfigPtr Config_;
 
     TTabletInfoPtr FindTabletInfo(

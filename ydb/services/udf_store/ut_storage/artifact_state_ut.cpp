@@ -1,8 +1,8 @@
-#include <ydb/services/udf_store/table_query.h>
-#include <ydb/services/udf_store/metadata_subscription/wasm_artifact.h>
-
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/services/udf_store/metadata_subscription/wasm_artifact.h>
+#include <ydb/services/udf_store/table_query.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -14,7 +14,7 @@ public:
     TStorage()
         : Session(Runner.GetTableClient().CreateSession().GetValueSync().GetSession())
     {
-        for (const auto& path : {CpuA, CpuB}) {
+        for (const auto& path : { CpuA, CpuB }) {
             TStringBuilder ddl;
             ddl << "CREATE TABLE `" << path << "` (";
             for (const auto& column : TUdfWasmArtifact::GetColumnDescription()) {
@@ -26,8 +26,7 @@ public:
         }
     }
 
-    NYdb::NTable::TDataQueryResult Execute(const TString& query,
-        const TString& uid = "uid-1", const TString& error = "")
+    NYdb::NTable::TDataQueryResult Execute(const TString& query, const TString& uid = "uid-1", const TString& error = "")
     {
         Ydb::Table::ExecuteDataQueryRequest request;
         if (error.empty()) {
@@ -38,14 +37,13 @@ public:
         return Execute(query, request);
     }
 
-    NYdb::NTable::TDataQueryResult Execute(const TString& query,
-        const Ydb::Table::ExecuteDataQueryRequest& request)
+    NYdb::NTable::TDataQueryResult Execute(const TString& query, const Ydb::Table::ExecuteDataQueryRequest& request)
     {
         auto params = NYdb::TParamsBuilder().Build();
         *NYdb::TProtoAccessor::GetProtoMapPtr(params) = request.parameters();
-        auto result = Session.ExecuteDataQuery(query,
-            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
-            params).GetValueSync();
+        auto result =
+            Session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(), params)
+                .GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString() << "\n" << query);
         return result;
     }
@@ -80,13 +78,13 @@ public:
     NYdb::NTable::TSession Session;
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(ArtifactCompileState) {
     Y_UNIT_TEST(RejectsMalformedStateAndPreservesTimestampPresence) {
         Ydb::Table::ExecuteQueryResult proto;
         auto& rows = *proto.add_result_sets();
-        for (const auto& name : {"compile_status", "compile_error", "compile_started_at", "compile_finished_at"}) {
+        for (const auto& name : { "compile_status", "compile_error", "compile_started_at", "compile_finished_at" }) {
             rows.add_columns()->set_name(name);
         }
         auto& row = *rows.add_rows();
@@ -124,7 +122,7 @@ Y_UNIT_TEST_SUITE(ArtifactCompileState) {
     Y_UNIT_TEST(IndependentPlatformsAndUploads) {
         TStorage store;
         UNIT_ASSERT(!store.Read(store.CpuA));
-        for (const auto& path : {store.CpuA, store.CpuB}) {
+        for (const auto& path : { store.CpuA, store.CpuB }) {
             store.Execute(BuildEnsurePendingArtifactQuery(path));
             auto state = store.Read(path);
             UNIT_ASSERT(state);
@@ -153,7 +151,7 @@ Y_UNIT_TEST_SUITE(ArtifactCompileState) {
         UNIT_ASSERT_VALUES_EQUAL(b->Error, "unsupported CPU");
         UNIT_ASSERT(b->FinishedAt && *b->FinishedAt >= *b->StartedAt);
 
-        for (const auto& path : {store.CpuA, store.CpuB}) {
+        for (const auto& path : { store.CpuA, store.CpuB }) {
             store.Execute(BuildEnsurePendingArtifactQuery(path));
         }
         UNIT_ASSERT(store.Read(store.CpuA)->Status == ECompileStatus::Ready);
@@ -176,4 +174,4 @@ Y_UNIT_TEST_SUITE(ArtifactCompileState) {
     }
 }
 
-} // namespace NKikimr::NUdfStore::NTableQuery
+}   // namespace NKikimr::NUdfStore::NTableQuery

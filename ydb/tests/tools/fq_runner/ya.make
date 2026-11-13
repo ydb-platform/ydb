@@ -1,5 +1,7 @@
 PY3_LIBRARY()
 
+STYLE_PYTHON()
+
 PY_SRCS(
     custom_hooks.py
     fq_client.py

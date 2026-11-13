@@ -11,6 +11,7 @@ enum class EIndexMode {
     Fulltext = 1,
     JsonIndexOverJson = 2,
     JsonIndexOverJsonDocument = 3,
+    FulltextQuery = 4,
 };
 
 void BuildNgrams(const TString& token, size_t lengthMin, size_t lengthMax, bool edge, TVector<TString>& ngrams);

@@ -20,7 +20,9 @@ class TestListingPaging(SolomonReadingTestBase):
             rows.extend(result.rows)
 
         if len(rows) != self.listing_paging_metrics_size:
-            return False, "Result size differs from expected: have {}, should be {}".format(len(rows), self.listing_paging_metrics_size)
+            return False, "Result size differs from expected: have {}, should be {}".format(
+                len(rows), self.listing_paging_metrics_size
+            )
 
         test_labels = []
         for row in rows:
@@ -41,8 +43,10 @@ class TestListingPaging(SolomonReadingTestBase):
         for result in result_set:
             rows.extend(result.rows)
 
-        if (len(rows) != self.listing_paging_metrics_size + 1):
-            return False, "Result size differs from expected: have {}, should be {}".format(len(rows), self.listing_paging_metrics_size)
+        if len(rows) != self.listing_paging_metrics_size + 1:
+            return False, "Result size differs from expected: have {}, should be {}".format(
+                len(rows), self.listing_paging_metrics_size
+            )
 
         return True, None
 

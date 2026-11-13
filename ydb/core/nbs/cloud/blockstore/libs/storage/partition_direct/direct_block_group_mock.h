@@ -100,6 +100,7 @@ public:
             THostIndex hostIndex,
             TBlockRange16 range,
             const TGuardedSgList& guardedSglist,
+            const TBlockChecksums& checksums,
             const NWilson::TTraceId& traceId)>;
     using TWriteBlocksToPBufferHandler =
         std::function<NThreading::TFuture<TDBGWriteBlocksResponse>(
@@ -108,6 +109,7 @@ public:
             TPBufferKey pBufferKey,
             TBlockRange16 range,
             const TGuardedSgList& guardedSglist,
+            const TBlockChecksums& checksums,
             const NWilson::TTraceId& traceId)>;
     using TWriteBlocksToManyPBuffersHandler = std::function<void(
         ui32 vChunkIndex,
@@ -117,6 +119,7 @@ public:
         TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId,
         TWriteBlocksToManyPBuffersCallback callback)>;
     using TSyncWithPBufferHandler =
@@ -164,6 +167,10 @@ public:
     TWriteBlocksToDDiskHandler WriteBlocksToDDiskHandler;
     TWriteBlocksToPBufferHandler WriteBlocksToPBufferHandler;
     TWriteBlocksToManyPBuffersHandler WriteBlocksToManyPBuffersHandler;
+
+    // Checksums of the last WriteBlocksToDDisk, WriteBlocksToPBuffer or
+    // WriteBlocksToManyPBuffers call.
+    TBlockChecksums LastWriteChecksums;
     TSyncWithPBufferHandler SyncWithPBufferHandler;
     TBatchEraseFromPBufferHandler BatchEraseFromPBufferHandler;
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
@@ -225,6 +232,7 @@ public:
         THostIndex hostIndex,
         TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
@@ -233,6 +241,7 @@ public:
         TPBufferKey pBufferKey,
         TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) override;
 
     void WriteBlocksToManyPBuffers(
@@ -243,6 +252,7 @@ public:
         TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId,
         TWriteBlocksToManyPBuffersCallback callback) override;
 

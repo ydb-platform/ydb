@@ -36,6 +36,7 @@ UDF_OUTPUT_DIR = yatest.common.output_path("ydb_udfs")
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+
 def _run_query(config, query):
     with ydb.Driver(config) as driver:
         with ydb.QuerySessionPool(driver, size=1) as pool:
@@ -148,13 +149,15 @@ def test_udf_store_feature_flag(enable_udf_store):
         )
 
         if enable_udf_store:
-            assert table_appeared, (
-                "UDF metadata table `%s` was NOT created within %ds when udf_store_config.enabled=true"
-                % (UDF_TABLE_MODULES_PATH, _SETTLE_TIMEOUT)
+            assert (
+                table_appeared
+            ), "UDF metadata table `%s` was NOT created within %ds when udf_store_config.enabled=true" % (
+                UDF_TABLE_MODULES_PATH,
+                _SETTLE_TIMEOUT,
             )
-            assert kv_appeared, (
-                "KV volume `%s` was NOT created within %ds when udf_store_config.enabled=true"
-                % (UDF_KV_BINARIES_PATH, _SETTLE_TIMEOUT)
+            assert kv_appeared, "KV volume `%s` was NOT created within %ds when udf_store_config.enabled=true" % (
+                UDF_KV_BINARIES_PATH,
+                _SETTLE_TIMEOUT,
             )
         else:
             assert not table_appeared, (
@@ -195,18 +198,32 @@ def _run_upload_udf(
             return _run_ydb_udf(endpoint, database, "delete", "--name", name or library_name)
         if kind == "library" and not manifest_path:
             manifest_path = _write_manifest(library_name)
-        result = json.loads(_run_ydb_udf(
-            endpoint, database, "upload", "--file", udf_file_path,
-            "--manifest", manifest_path, "--format", "json",
-        ))
+        result = json.loads(
+            _run_ydb_udf(
+                endpoint,
+                database,
+                "upload",
+                "--file",
+                udf_file_path,
+                "--manifest",
+                manifest_path,
+                "--format",
+                "json",
+            )
+        )
         return result["name"]
     cmd = [
         _upload_udf_binary(),
-        "--action", action,
-        "--endpoint", endpoint,
-        "--database", database,
-        "--type", udf_type,
-        "--kind", kind,
+        "--action",
+        action,
+        "--endpoint",
+        endpoint,
+        "--database",
+        database,
+        "--type",
+        udf_type,
+        "--kind",
+        kind,
     ]
     if udf_file_path:
         cmd.extend(["--udf-file", udf_file_path])
@@ -225,9 +242,7 @@ def _run_upload_udf(
     if result.stderr:
         logger.info("upload_udf stderr:\n%s", result.stderr.strip())
     if result.returncode != 0:
-        raise RuntimeError(
-            f"upload_udf failed (rc={result.returncode}): {result.stderr}"
-        )
+        raise RuntimeError(f"upload_udf failed (rc={result.returncode}): {result.stderr}")
     return result.stdout.strip()
 
 
@@ -235,8 +250,9 @@ def _run_upload_library(endpoint, database, library_file_path, library_name):
     """Upload a textual WASM fixture with its library manifest."""
     manifest_path = yatest.common.output_path(library_name + ".manifest.json")
     with open(manifest_path, "w") as output:
-        json.dump(dict(module_name=library_name, module_type="library", module_kind="wasm",
-                       module_extension="wat"), output)
+        json.dump(
+            dict(module_name=library_name, module_type="library", module_kind="wasm", module_extension="wat"), output
+        )
     return _run_upload_udf(
         endpoint,
         database,
@@ -335,9 +351,7 @@ def test_using_native_unsafe_udf():
         CHUNK_SIZE = 4 * 1024 * 1024  # 4 MiB
         binary_size = os.path.getsize(udf_so_path)
         saved_size = os.path.getsize(expected_file_path)
-        assert saved_size == binary_size, (
-            f"File size mismatch: expected {binary_size}, got {saved_size}"
-        )
+        assert saved_size == binary_size, f"File size mismatch: expected {binary_size}, got {saved_size}"
         expected_md5 = hashlib.md5()
         with open(udf_so_path, "rb") as f:
             while True:
@@ -353,9 +367,9 @@ def test_using_native_unsafe_udf():
                     break
                 file_md5_ctx.update(chunk)
         saved_md5 = file_md5_ctx.hexdigest()
-        assert saved_md5 == expected_md5.hexdigest(), (
-            f"MD5 mismatch: expected {expected_md5.hexdigest()}, got {saved_md5}"
-        )
+        assert (
+            saved_md5 == expected_md5.hexdigest()
+        ), f"MD5 mismatch: expected {expected_md5.hexdigest()}, got {saved_md5}"
 
         # --- Step 8: Execute a query using the loaded UDF and verify the result ---
         # TKvBodyReadActor calls LoadUdfs() after writing the file to disk, but the
@@ -383,17 +397,17 @@ def test_using_native_unsafe_udf():
         rows = udf_query_result[0][0].rows
         assert len(rows) == 1, "UDF query returned wrong number of rows"
         result_value = list(rows[0].values())[0]
-        assert isinstance(result_value, dict), (
-            f"Dicts::StrToInt('Sorted') expected a dict, got {type(result_value)}: {result_value!r}"
+        assert isinstance(
+            result_value, dict
+        ), f"Dicts::StrToInt('Sorted') expected a dict, got {type(result_value)}: {result_value!r}"
+        assert result_value.get(b'zero') == 0, f"Expected result_value[b'zero'] == 0, got {result_value!r}"
+        assert result_value.get(b'nine') == 9, f"Expected result_value[b'nine'] == 9, got {result_value!r}"
+        logger.info(
+            "Test passed: dicts UDF (name=%s) appeared at %s and query returned %s",
+            udf_name,
+            expected_file_path,
+            result_value,
         )
-        assert result_value.get(b'zero') == 0, (
-            f"Expected result_value[b'zero'] == 0, got {result_value!r}"
-        )
-        assert result_value.get(b'nine') == 9, (
-            f"Expected result_value[b'nine'] == 9, got {result_value!r}"
-        )
-        logger.info("Test passed: dicts UDF (name=%s) appeared at %s and query returned %s",
-                    udf_name, expected_file_path, result_value)
 
     finally:
         cluster.remove_database(database)
@@ -419,8 +433,10 @@ def _ydb_cli_binary():
 def _run_ydb_udf(endpoint, database, *args):
     cmd = [
         _ydb_cli_binary(),
-        "-e", endpoint,
-        "-d", database,
+        "-e",
+        endpoint,
+        "-d",
+        database,
         "experimental",
         "udf",
         *args,
@@ -469,18 +485,19 @@ def test_ydb_udf_cli_library_roundtrip():
             description="UDF metadata table creation at startup",
         )
 
-        sdk_path = yatest.common.source_path(
-            "ydb/tests/functional/udf_store/data/wasm/sdk_stub.wat"
-        )
+        sdk_path = yatest.common.source_path("ydb/tests/functional/udf_store/data/wasm/sdk_stub.wat")
         library_name = "cli_sdk_stub"
 
         upload_out = _run_ydb_udf(
             endpoint,
             database,
             "upload",
-            "--manifest", _write_manifest(library_name),
-            "--file", sdk_path,
-            "--format", "json",
+            "--manifest",
+            _write_manifest(library_name),
+            "--file",
+            sdk_path,
+            "--format",
+            "json",
         )
         upload = json.loads(upload_out)
         assert upload["name"] == library_name
@@ -489,16 +506,12 @@ def test_ydb_udf_cli_library_roundtrip():
         assert "compile_status" not in upload
         uid = upload["uid"]
 
-        list_out = _run_ydb_udf(
-            endpoint, database, "list", "--type", "library", "--format", "json"
-        )
+        list_out = _run_ydb_udf(endpoint, database, "list", "--type", "library", "--format", "json")
         listed = json.loads(list_out)
         names = {m["name"] for m in listed["modules"]}
         assert library_name in names
 
-        describe_out = _run_ydb_udf(
-            endpoint, database, "describe", "--name", library_name, "--format", "json"
-        )
+        describe_out = _run_ydb_udf(endpoint, database, "describe", "--name", library_name, "--format", "json")
         described = json.loads(describe_out)
         assert described["module"]["name"] == library_name
         assert described["module"]["uid"] == uid
@@ -517,23 +530,19 @@ def test_ydb_udf_cli_library_roundtrip():
         with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED) as package:
             package.write(manifest_path, "manifest.json")
             package.write(sdk_path, "sdk_stub.wat")
-        package_upload = json.loads(_run_ydb_udf(
-            endpoint, database, "upload", "--package", package_path, "--format", "json"
-        ))
+        package_upload = json.loads(
+            _run_ydb_udf(endpoint, database, "upload", "--package", package_path, "--format", "json")
+        )
         assert package_upload["name"] == package_name
         assert package_upload["size"] == os.path.getsize(sdk_path)
-        packaged = json.loads(_run_ydb_udf(
-            endpoint, database, "describe", "--name", package_name, "--format", "json"
-        ))
+        packaged = json.loads(_run_ydb_udf(endpoint, database, "describe", "--name", package_name, "--format", "json"))
         with open(sdk_path, "rb") as package_body:
             package_md5 = hashlib.md5(package_body.read()).hexdigest()
         assert packaged["module"]["md5"] == package_md5
         assert json.loads(packaged["manifest_json"])["module_name"] == package_name
         _run_ydb_udf(endpoint, database, "delete", "--name", package_name)
 
-        list_after = json.loads(
-            _run_ydb_udf(endpoint, database, "list", "--type", "library", "--format", "json")
-        )
+        list_after = json.loads(_run_ydb_udf(endpoint, database, "list", "--type", "library", "--format", "json"))
         assert library_name not in {m["name"] for m in list_after["modules"]}
     finally:
         cluster.remove_database(database)
@@ -575,9 +584,7 @@ def test_ydb_udf_cli_write_preconditions():
             result = _run_query(
                 driver_config,
                 'SELECT uid, size, chunk_count, created_at FROM `{database}/{path}`'
-                ' WHERE name = "{name}"'.format(
-                    database=database, path=UDF_TABLE_MODULES_PATH, name=name
-                ),
+                ' WHERE name = "{name}"'.format(database=database, path=UDF_TABLE_MODULES_PATH, name=name),
             )
             rows = result[0].rows
             return rows[0] if rows else None
@@ -586,19 +593,27 @@ def test_ydb_udf_cli_write_preconditions():
             result = _run_query(
                 driver_config,
                 'SELECT COUNT(*) AS cnt, SUM(LEN(data)) AS total FROM `{database}/{path}`'
-                ' WHERE owner_key = "{uid}"'.format(
-                    database=database, path=UDF_TABLE_MODULE_CHUNKS_PATH, uid=uid
-                ),
+                ' WHERE owner_key = "{uid}"'.format(database=database, path=UDF_TABLE_MODULE_CHUNKS_PATH, uid=uid),
             )
             row = result[0].rows[0]
             return row["cnt"], row["total"] or 0
 
         # --- Write modes and expected_uid on a library ---
         name = "precond_lib"
-        created = json.loads(_run_ydb_udf(
-            endpoint, database, "upload", "--manifest", _write_manifest(name),
-            "--file", sdk_path, "--create-only", "--format", "json",
-        ))
+        created = json.loads(
+            _run_ydb_udf(
+                endpoint,
+                database,
+                "upload",
+                "--manifest",
+                _write_manifest(name),
+                "--file",
+                sdk_path,
+                "--create-only",
+                "--format",
+                "json",
+            )
+        )
         first_uid = created["uid"]
         assert created["replaced_existing"] is False
         first_row = module_row(name)
@@ -606,24 +621,48 @@ def test_ydb_udf_cli_write_preconditions():
 
         # A name already taken is not a bad request but a name already taken.
         error = _run_ydb_udf_expect_failure(
-            endpoint, database, "upload", "--manifest", _write_manifest(name),
-            "--file", sdk_path, "--create-only",
+            endpoint,
+            database,
+            "upload",
+            "--manifest",
+            _write_manifest(name),
+            "--file",
+            sdk_path,
+            "--create-only",
         )
         assert "ALREADY_EXISTS" in error, error
         assert module_row(name)["uid"] == first_uid, "the refused upload changed the row"
 
         # A stale uid means someone else got there first, which is an abort.
         error = _run_ydb_udf_expect_failure(
-            endpoint, database, "upload", "--manifest", _write_manifest(name),
-            "--file", sdk_path, "--expected-uid", "0" * 32,
+            endpoint,
+            database,
+            "upload",
+            "--manifest",
+            _write_manifest(name),
+            "--file",
+            sdk_path,
+            "--expected-uid",
+            "0" * 32,
         )
         assert "ABORTED" in error, error
         assert module_row(name)["uid"] == first_uid
 
-        replaced = json.loads(_run_ydb_udf(
-            endpoint, database, "upload", "--manifest", _write_manifest(name),
-            "--file", sdk_path, "--expected-uid", first_uid, "--format", "json",
-        ))
+        replaced = json.loads(
+            _run_ydb_udf(
+                endpoint,
+                database,
+                "upload",
+                "--manifest",
+                _write_manifest(name),
+                "--file",
+                sdk_path,
+                "--expected-uid",
+                first_uid,
+                "--format",
+                "json",
+            )
+        )
         second_uid = replaced["uid"]
         assert second_uid != first_uid
         assert replaced["replaced_existing"] is True
@@ -640,7 +679,13 @@ def test_ydb_udf_cli_write_preconditions():
         assert chunk_stats(first_uid)[0] == 0, "chunks of the replaced upload were left behind"
 
         error = _run_ydb_udf_expect_failure(
-            endpoint, database, "delete", "--name", name, "--expected-uid", first_uid,
+            endpoint,
+            database,
+            "delete",
+            "--name",
+            name,
+            "--expected-uid",
+            first_uid,
         )
         assert "ABORTED" in error, error
         assert module_row(name) is not None
@@ -651,44 +696,79 @@ def test_ydb_udf_cli_write_preconditions():
 
         # --- Missing module against the modes that require one ---
         error = _run_ydb_udf_expect_failure(
-            endpoint, database, "upload", "--manifest", _write_manifest("precond_absent"),
-            "--file", sdk_path, "--replace-only",
+            endpoint,
+            database,
+            "upload",
+            "--manifest",
+            _write_manifest("precond_absent"),
+            "--file",
+            sdk_path,
+            "--replace-only",
         )
         assert "NOT_FOUND" in error, error
 
         error = _run_ydb_udf_expect_failure(
-            endpoint, database, "delete", "--name", "precond_absent",
+            endpoint,
+            database,
+            "delete",
+            "--name",
+            "precond_absent",
         )
         assert "NOT_FOUND" in error, error
 
         # --- A UDF is named by its manifest ---
         error = _run_ydb_udf_expect_failure(
-            endpoint, database, "upload", "--manifest", manifest_path,
-            "--file", udf_path, "--name", "NotTheManifestName",
+            endpoint,
+            database,
+            "upload",
+            "--manifest",
+            manifest_path,
+            "--file",
+            udf_path,
+            "--name",
+            "NotTheManifestName",
         )
         assert "name" in error.lower(), error
 
-        uploaded = json.loads(_run_ydb_udf(
-            endpoint, database, "upload", "--manifest", manifest_path,
-            "--file", udf_path, "--format", "json",
-        ))
+        uploaded = json.loads(
+            _run_ydb_udf(
+                endpoint,
+                database,
+                "upload",
+                "--manifest",
+                manifest_path,
+                "--file",
+                udf_path,
+                "--format",
+                "json",
+            )
+        )
         assert uploaded["name"] == "LocalUdf", uploaded
-        described = json.loads(_run_ydb_udf(
-            endpoint, database, "describe", "--name", "LocalUdf", "--format", "json"
-        ))
+        described = json.loads(_run_ydb_udf(endpoint, database, "describe", "--name", "LocalUdf", "--format", "json"))
         assert described["module"]["module_type"] == "module"
         assert described["module"]["uid"] == uploaded["uid"]
 
         # A library cannot take over a name a UDF holds, whichever way round.
         error = _run_ydb_udf_expect_failure(
-            endpoint, database, "upload", "--manifest", _write_manifest("LocalUdf"),
-            "--file", sdk_path,
+            endpoint,
+            database,
+            "upload",
+            "--manifest",
+            _write_manifest("LocalUdf"),
+            "--file",
+            sdk_path,
         )
         assert "PRECONDITION_FAILED" in error, error
         assert module_row("LocalUdf")["uid"] == uploaded["uid"]
 
         error = _run_ydb_udf_expect_failure(
-            endpoint, database, "delete", "--name", "LocalUdf", "--type", "library",
+            endpoint,
+            database,
+            "delete",
+            "--name",
+            "LocalUdf",
+            "--type",
+            "library",
         )
         assert "PRECONDITION_FAILED" in error, error
         assert module_row("LocalUdf") is not None
@@ -708,13 +788,32 @@ def test_ydb_udf_cli_yaml_preserves_types():
     from ydb.public.api.protos import ydb_udf_pb2 as udf
     from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 
-    names = ["true", "false", "yes", "on", "null", "~", "12345", "00123", "1e3",
-             "2026-09-16", 'quotes" and\\slashes', "строка\nс переносом"]
-    modules = [udf.ModuleInfo(
-        name=name, module_type=udf.LIBRARY, module_kind=udf.WASM,
-        uid="test-upload-uid", md5="00123456789012345678901234567890",
-        size=8, version=2**64 - 1,
-    ) for name in names]
+    names = [
+        "true",
+        "false",
+        "yes",
+        "on",
+        "null",
+        "~",
+        "12345",
+        "00123",
+        "1e3",
+        "2026-09-16",
+        'quotes" and\\slashes',
+        "строка\nс переносом",
+    ]
+    modules = [
+        udf.ModuleInfo(
+            name=name,
+            module_type=udf.LIBRARY,
+            module_kind=udf.WASM,
+            uid="test-upload-uid",
+            md5="00123456789012345678901234567890",
+            size=8,
+            version=2**64 - 1,
+        )
+        for name in names
+    ]
 
     def response(response_type, result):
         value = response_type()
@@ -725,8 +824,12 @@ def test_ydb_udf_cli_yaml_preserves_types():
 
     class DiscoveryService(discovery_grpc.DiscoveryServiceServicer):
         def ListEndpoints(self, request, context):
-            return response(discovery.ListEndpointsResponse, discovery.ListEndpointsResult(
-                endpoints=[discovery.EndpointInfo(address="127.0.0.1", port=port, node_id=1)]))
+            return response(
+                discovery.ListEndpointsResponse,
+                discovery.ListEndpointsResult(
+                    endpoints=[discovery.EndpointInfo(address="127.0.0.1", port=port, node_id=1)]
+                ),
+            )
 
     class UdfService(udf_grpc.UdfServiceServicer):
         def ListModules(self, request, context):
@@ -734,14 +837,23 @@ def test_ydb_udf_cli_yaml_preserves_types():
 
         def DescribeModule(self, request, context):
             module = next(module for module in modules if module.name == request.name)
-            return response(udf.DescribeModuleResponse, udf.DescribeModuleResult(
-                module_info=module, manifest_json=json.dumps(dict(module_name=module.name)),
-                platforms=[udf.PlatformCompileStatus(cpu_spec="12345", status=udf.FAILED,
-                                                     compile_error='false\n"quoted"\\error',
-                                                     compile_started_at=Timestamp(seconds=123, nanos=456000),
-                                                     compile_finished_at=Timestamp(seconds=789)),
-                           udf.PlatformCompileStatus(cpu_spec="pending", status=udf.PENDING)],
-            ))
+            return response(
+                udf.DescribeModuleResponse,
+                udf.DescribeModuleResult(
+                    module_info=module,
+                    manifest_json=json.dumps(dict(module_name=module.name)),
+                    platforms=[
+                        udf.PlatformCompileStatus(
+                            cpu_spec="12345",
+                            status=udf.FAILED,
+                            compile_error='false\n"quoted"\\error',
+                            compile_started_at=Timestamp(seconds=123, nanos=456000),
+                            compile_finished_at=Timestamp(seconds=789),
+                        ),
+                        udf.PlatformCompileStatus(cpu_spec="pending", status=udf.PENDING),
+                    ],
+                ),
+            )
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         server = grpc.server(executor)
@@ -751,10 +863,12 @@ def test_ydb_udf_cli_yaml_preserves_types():
         server.start()
         try:
             for command in [("list",)] + [("describe", "--name", name) for name in names]:
-                json_value = json.loads(_run_ydb_udf(
-                    "grpc://127.0.0.1:%d" % port, "/Root/test", *command, "--format", "json"))
-                yaml_value = yaml.safe_load(_run_ydb_udf(
-                    "grpc://127.0.0.1:%d" % port, "/Root/test", *command, "--format", "yaml"))
+                json_value = json.loads(
+                    _run_ydb_udf("grpc://127.0.0.1:%d" % port, "/Root/test", *command, "--format", "json")
+                )
+                yaml_value = yaml.safe_load(
+                    _run_ydb_udf("grpc://127.0.0.1:%d" % port, "/Root/test", *command, "--format", "yaml")
+                )
                 assert yaml_value == json_value, (command, yaml_value, json_value)
                 if command[0] == "describe":
                     ready, pending = json_value["platforms"]
@@ -797,9 +911,12 @@ def test_ydb_udf_rpc_validation_and_pagination():
                 return result
 
             def header(value, size=len(body), **params):
-                return udf.UploadModuleChunk(metadata=udf.UploadModuleMetadata(
-                    params=udf.UploadModuleParams(manifest_json=json.dumps(value), **params), total_size=size,
-                ))
+                return udf.UploadModuleChunk(
+                    metadata=udf.UploadModuleMetadata(
+                        params=udf.UploadModuleParams(manifest_json=json.dumps(value), **params),
+                        total_size=size,
+                    )
+                )
 
             def upload(messages, expected):
                 responses = list(stub.UploadModule(iter(messages), metadata=metadata, timeout=60))
@@ -812,17 +929,28 @@ def test_ydb_udf_rpc_validation_and_pagination():
                 return result
 
             for value in [
-                {}, [], manifest(module_name=""), manifest(module_type="udf"),
-                manifest(module_kind="WASM"), manifest(functions=[]), manifest(required_libraries=[]),
+                {},
+                [],
+                manifest(module_name=""),
+                manifest(module_type="udf"),
+                manifest(module_kind="WASM"),
+                manifest(functions=[]),
+                manifest(required_libraries=[]),
                 manifest(module_type="module", functions="invalid"),
             ]:
                 upload([header(value)], StatusIds.BAD_REQUEST)
             for module_type in ("module", "library"):
                 upload([header(manifest(module_type=module_type, module_kind="native"))], StatusIds.PRECONDITION_FAILED)
             data = udf.UploadModuleChunk(data=body)
-            for messages in [[], [data], [header(manifest(), 0)], [header(manifest()), header(manifest())],
-                             [header(manifest(), len(body) + 1), data], [header(manifest(), 1), data],
-                             [header(manifest()), udf.UploadModuleChunk()]]:
+            for messages in [
+                [],
+                [data],
+                [header(manifest(), 0)],
+                [header(manifest()), header(manifest())],
+                [header(manifest(), len(body) + 1), data],
+                [header(manifest(), 1), data],
+                [header(manifest()), udf.UploadModuleChunk()],
+            ]:
                 upload(messages, StatusIds.BAD_REQUEST)
             upload([header(manifest(), 3), udf.UploadModuleChunk(data=b"bad")], StatusIds.BAD_REQUEST)
             upload([header(manifest(module_extension="wat")), data], StatusIds.BAD_REQUEST)
@@ -831,7 +959,9 @@ def test_ydb_udf_rpc_validation_and_pagination():
             assert first.md5 == hashlib.md5(body).hexdigest()
 
             def describe():
-                response = stub.DescribeModule(udf.DescribeModuleRequest(name=first.name), metadata=metadata, timeout=60)
+                response = stub.DescribeModule(
+                    udf.DescribeModuleRequest(name=first.name), metadata=metadata, timeout=60
+                )
                 assert response.operation.status == StatusIds.SUCCESS, response
                 result = udf.DescribeModuleResult()
                 assert response.operation.result.Unpack(result)
@@ -846,15 +976,26 @@ def test_ydb_udf_rpc_validation_and_pagination():
             upload([header(manifest(), expected_uid="stale-uid"), data], StatusIds.ABORTED)
             assert describe().module_info.uid == first.uid
             upload([header(manifest("absent"), write_mode=udf.REPLACE_ONLY), data], StatusIds.NOT_FOUND)
-            stale_delete = stub.DeleteModule(udf.DeleteModuleRequest(
-                name=first.name, expected_uid="stale-uid"), metadata=metadata, timeout=30)
+            stale_delete = stub.DeleteModule(
+                udf.DeleteModuleRequest(name=first.name, expected_uid="stale-uid"), metadata=metadata, timeout=30
+            )
             assert stale_delete.operation.status == StatusIds.ABORTED
 
             def replace():
-                response = list(stub.UploadModule(iter([
-                    header(manifest(), expected_uid=first.uid), data,
-                ]), metadata=metadata, timeout=60))
+                response = list(
+                    stub.UploadModule(
+                        iter(
+                            [
+                                header(manifest(), expected_uid=first.uid),
+                                data,
+                            ]
+                        ),
+                        metadata=metadata,
+                        timeout=60,
+                    )
+                )
                 return response[0].operation.status
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                 statuses = list(executor.map(lambda _: replace(), range(2)))
             assert sorted(statuses) == sorted([StatusIds.SUCCESS, StatusIds.ABORTED]), statuses
@@ -866,8 +1007,11 @@ def test_ydb_udf_rpc_validation_and_pagination():
             token = ""
             seen_tokens = set()
             while True:
-                response = stub.ListModules(udf.ListModulesRequest(
-                    type_filter=udf.LIBRARY, page_size=17, page_token=token), metadata=metadata, timeout=30)
+                response = stub.ListModules(
+                    udf.ListModulesRequest(type_filter=udf.LIBRARY, page_size=17, page_token=token),
+                    metadata=metadata,
+                    timeout=30,
+                )
                 assert response.operation.status == StatusIds.SUCCESS, response
                 page = udf.ListModulesResult()
                 assert response.operation.result.Unpack(page)
@@ -881,8 +1025,9 @@ def test_ydb_udf_rpc_validation_and_pagination():
             assert len(names) == len(set(names))
             assert {"page_%03d" % index for index in range(101)} <= set(names)
             assert seen_tokens
-            native_delete = stub.DeleteModule(udf.DeleteModuleRequest(
-                name=first.name, module_kind=udf.NATIVE), metadata=metadata, timeout=30)
+            native_delete = stub.DeleteModule(
+                udf.DeleteModuleRequest(name=first.name, module_kind=udf.NATIVE), metadata=metadata, timeout=30
+            )
             assert native_delete.operation.status == StatusIds.PRECONDITION_FAILED
             native = stub.ListModules(udf.ListModulesRequest(kind_filter=udf.NATIVE), metadata=metadata, timeout=30)
             assert native.operation.status == StatusIds.PRECONDITION_FAILED
@@ -920,9 +1065,12 @@ def test_ydb_udf_cli_pagination_and_streaming():
                 return result
 
             def header(value, size=len(body), **params):
-                return udf.UploadModuleChunk(metadata=udf.UploadModuleMetadata(
-                    params=udf.UploadModuleParams(manifest_json=json.dumps(value), **params), total_size=size,
-                ))
+                return udf.UploadModuleChunk(
+                    metadata=udf.UploadModuleMetadata(
+                        params=udf.UploadModuleParams(manifest_json=json.dumps(value), **params),
+                        total_size=size,
+                    )
+                )
 
             def upload(messages, expected):
                 responses = list(stub.UploadModule(iter(messages), metadata=metadata, timeout=60))
@@ -942,13 +1090,15 @@ def test_ydb_udf_cli_pagination_and_streaming():
                 path = _write_manifest("native_" + kind, kind, "native")
                 body_path = yatest.common.source_path("ydb/tests/functional/udf_store/data/wasm/sdk_stub.wat")
                 assert "PRECONDITION_FAILED" in _run_ydb_udf_expect_failure(
-                    endpoint, database, "upload", "--file", body_path, "--manifest", path)
+                    endpoint, database, "upload", "--file", body_path, "--manifest", path
+                )
 
             # Exceed the default RPC page size and ensure CLI retrieves all pages.
             for index in range(101):
                 upload([header(manifest("page_%03d" % index)), data], StatusIds.SUCCESS)
-            listed = json.loads(_run_ydb_udf(
-                endpoint, database, "list", "--type", "library", "--kind", "WASM", "--format", "json"))
+            listed = json.loads(
+                _run_ydb_udf(endpoint, database, "list", "--type", "library", "--kind", "WASM", "--format", "json")
+            )
             assert {"page_%03d" % index for index in range(101)} <= {m["name"] for m in listed["modules"]}
             native = stub.ListModules(udf.ListModulesRequest(kind_filter=udf.NATIVE), metadata=metadata, timeout=30)
             assert native.operation.status == StatusIds.PRECONDITION_FAILED
@@ -961,14 +1111,30 @@ def test_ydb_udf_cli_pagination_and_streaming():
             large_path = yatest.common.output_path("multi_chunk.wasm")
             with open(large_path, "wb") as output:
                 output.write(large_body)
-            result = json.loads(_run_ydb_udf(
-                endpoint, database, "upload", "--file", large_path,
-                "--manifest", _write_manifest("multi_chunk"), "--format", "json"))
+            result = json.loads(
+                _run_ydb_udf(
+                    endpoint,
+                    database,
+                    "upload",
+                    "--file",
+                    large_path,
+                    "--manifest",
+                    _write_manifest("multi_chunk"),
+                    "--format",
+                    "json",
+                )
+            )
             assert result["size"] == len(large_body)
             assert result["md5"] == hashlib.md5(large_body).hexdigest()
             assert "Cannot read module file" in _run_ydb_udf_expect_failure(
-                endpoint, database, "upload", "--file", large_path + ".missing",
-                "--manifest", _write_manifest("missing_file"))
+                endpoint,
+                database,
+                "upload",
+                "--file",
+                large_path + ".missing",
+                "--manifest",
+                _write_manifest("missing_file"),
+            )
     finally:
         cluster.remove_database(database)
         cluster.unregister_and_stop_slots(db_nodes)
@@ -997,39 +1163,67 @@ def test_ydb_udf_administrator_access(database_admin):
                 with pool.checkout() as session:
                     session.execute_scheme('GRANT "ydb.generic.use" ON `%s` TO `ordinary@builtin`' % database)
             driver.scheme_client.modify_permissions(
-                database, ydb.ModifyPermissionsSettings().change_owner("owner@builtin"))
+                database, ydb.ModifyPermissionsSettings().change_owner("owner@builtin")
+            )
         body = b"\x00asm\x01\x00\x00\x00"
         with grpc.insecure_channel(endpoint) as channel:
             stub = UdfServiceStub(channel)
             manifest = json.dumps(dict(module_name="rejected", module_type="library", module_kind="wasm"))
-            chunks = [udf.UploadModuleChunk(metadata=udf.UploadModuleMetadata(
-                params=udf.UploadModuleParams(manifest_json=manifest), total_size=len(body))),
-                udf.UploadModuleChunk(data=body)]
-            for metadata in [(), (("x-ydb-auth-ticket", "root@builtin"),),
-                             (("x-ydb-database", ""), ("x-ydb-auth-ticket", "root@builtin"))]:
+            chunks = [
+                udf.UploadModuleChunk(
+                    metadata=udf.UploadModuleMetadata(
+                        params=udf.UploadModuleParams(manifest_json=manifest), total_size=len(body)
+                    )
+                ),
+                udf.UploadModuleChunk(data=body),
+            ]
+            for metadata in [
+                (),
+                (("x-ydb-auth-ticket", "root@builtin"),),
+                (("x-ydb-database", ""), ("x-ydb-auth-ticket", "root@builtin")),
+            ]:
                 responses = list(stub.UploadModule(iter(chunks), metadata=metadata, timeout=30))
                 assert len(responses) == 1
                 assert responses[0].operation.status == StatusIds.BAD_REQUEST, responses
 
             with pytest.raises(grpc.RpcError) as error:
-                list(stub.UploadModule(iter(chunks), metadata=(
-                    ("x-ydb-database", database), ("x-ydb-auth-ticket", "invalid-token")), timeout=30))
+                list(
+                    stub.UploadModule(
+                        iter(chunks),
+                        metadata=(("x-ydb-database", database), ("x-ydb-auth-ticket", "invalid-token")),
+                        timeout=30,
+                    )
+                )
             assert error.value.code() == grpc.StatusCode.UNAUTHENTICATED
 
-            responses = list(stub.UploadModule(iter(chunks), metadata=(
-                ("x-ydb-database", database), ("x-ydb-auth-ticket", "no_connect@builtin")), timeout=30))
+            responses = list(
+                stub.UploadModule(
+                    iter(chunks),
+                    metadata=(("x-ydb-database", database), ("x-ydb-auth-ticket", "no_connect@builtin")),
+                    timeout=30,
+                )
+            )
             assert len(responses) == 1
             assert responses[0].operation.status == StatusIds.UNAUTHORIZED, responses
             assert "No permission to connect to the database" in str(responses[0].operation.issues)
 
-            for user, allowed in [("root@builtin", True), ("owner@builtin", database_admin), ("ordinary@builtin", False)]:
+            for user, allowed in [
+                ("root@builtin", True),
+                ("owner@builtin", database_admin),
+                ("ordinary@builtin", False),
+            ]:
                 metadata = (("x-ydb-database", database), ("x-ydb-auth-ticket", user))
                 expected = StatusIds.SUCCESS if allowed else StatusIds.UNAUTHORIZED
                 name = user.split("@")[0]
                 manifest = json.dumps(dict(module_name=name, module_type="library", module_kind="wasm"))
-                chunks = [udf.UploadModuleChunk(metadata=udf.UploadModuleMetadata(
-                    params=udf.UploadModuleParams(manifest_json=manifest), total_size=len(body))),
-                    udf.UploadModuleChunk(data=body)]
+                chunks = [
+                    udf.UploadModuleChunk(
+                        metadata=udf.UploadModuleMetadata(
+                            params=udf.UploadModuleParams(manifest_json=manifest), total_size=len(body)
+                        )
+                    ),
+                    udf.UploadModuleChunk(data=body),
+                ]
                 responses = list(stub.UploadModule(iter(chunks), metadata=metadata, timeout=60))
                 assert len(responses) == 1
                 assert responses[0].operation.status == expected, responses
@@ -1068,7 +1262,7 @@ def test_ydb_udf_cli_large_upload():
             leb = []
             value = section_size
             while value:
-                leb.append((value & 0x7f) | (0x80 if value > 0x7f else 0))
+                leb.append((value & 0x7F) | (0x80 if value > 0x7F else 0))
                 value >>= 7
             assert len(leb) == leb_size
             body = b"\x00asm\x01\x00\x00\x00\x00" + bytes(leb) + b"\x00" + b" " * (section_size - 1)
@@ -1077,8 +1271,22 @@ def test_ydb_udf_cli_large_upload():
             with open(path, "wb") as output:
                 output.write(body)
             manifest = _write_manifest("large_%d" % size_mib, module_extension="wasm")
-            args = [_ydb_cli_binary(), "-e", endpoint, "-d", database, "experimental", "udf", "upload",
-                    "--file", path, "--manifest", manifest, "--format", "json"]
+            args = [
+                _ydb_cli_binary(),
+                "-e",
+                endpoint,
+                "-d",
+                database,
+                "experimental",
+                "udf",
+                "upload",
+                "--file",
+                path,
+                "--manifest",
+                manifest,
+                "--format",
+                "json",
+            ]
             started = time.monotonic()
             peak_rss_kib = 0
             with open(path + ".stdout", "w+") as stdout, open(path + ".stderr", "w+") as stderr:
@@ -1128,8 +1336,9 @@ def _pad_wat(path, size):
     return padded_path
 
 
-@pytest.mark.parametrize("source_size", [0, 64 * 1024 * 1024, 75 * 1024 * 1024],
-                         ids=["small", "full_pages", "partial_page"])
+@pytest.mark.parametrize(
+    "source_size", [0, 64 * 1024 * 1024, 75 * 1024 * 1024], ids=["small", "full_pages", "partial_page"]
+)
 def test_using_wasm_udf(source_size):
     """
     Upload a WASM UDF (.wat) with JSON manifest into modules(+chunks) tables,
@@ -1155,12 +1364,8 @@ def test_using_wasm_udf(source_size):
             description="UDF metadata table creation at startup",
         )
 
-        wasm_file_path = yatest.common.source_path(
-            "ydb/tests/functional/udf_store/data/wasm/local_udf.wat"
-        )
-        manifest_path = yatest.common.source_path(
-            "ydb/tests/functional/udf_store/data/wasm/local_udf_manifest.json"
-        )
+        wasm_file_path = yatest.common.source_path("ydb/tests/functional/udf_store/data/wasm/local_udf.wat")
+        manifest_path = yatest.common.source_path("ydb/tests/functional/udf_store/data/wasm/local_udf_manifest.json")
         if source_size:
             wasm_file_path = _pad_wat(wasm_file_path, source_size)
 
@@ -1170,9 +1375,7 @@ def test_using_wasm_udf(source_size):
             description="KV volume creation at startup",
         )
 
-        udf_name = _run_upload_udf(
-            endpoint, database, wasm_file_path, udf_type="WASM", manifest_path=manifest_path
-        )
+        udf_name = _run_upload_udf(endpoint, database, wasm_file_path, udf_type="WASM", manifest_path=manifest_path)
 
         def _wasm_compile_ready():
             return _module_compile_ready(endpoint, database, udf_name)
@@ -1235,17 +1438,18 @@ def test_wasm_chunk_query_error_is_persisted(module_type):
         assert _wait_for_condition(lambda: _table_exists(config, database))
         chunks_path = ".metadata/udf_store/module_chunks"
         assert _wait_for_condition(lambda: _table_exists(config, database, chunks_path))
-        manifest_path = yatest.common.source_path(
-            "ydb/tests/functional/udf_store/data/wasm/local_udf_manifest.json"
-        )
+        manifest_path = yatest.common.source_path("ydb/tests/functional/udf_store/data/wasm/local_udf_manifest.json")
         with open(manifest_path) as manifest_file:
             manifest = json.dumps(manifest_file.read())
 
         def publish(uid):
-            _run_query(config, f'''UPSERT INTO `{database}/{UDF_TABLE_MODULES_PATH}`
+            _run_query(
+                config,
+                f'''UPSERT INTO `{database}/{UDF_TABLE_MODULES_PATH}`
                 (name, type, uid, md5, size, chunk_count, version, manifest, created_at)
                 VALUES ("LocalUdf", "{module_type}", "{uid}", "00000000000000000000000000000000",
-                        1ul, 1ul, 1ul, CAST({manifest} AS Json), CurrentUtcTimestamp());''')
+                        1ul, 1ul, 1ul, CAST({manifest} AS Json), CurrentUtcTimestamp());''',
+            )
 
         with grpc.insecure_channel("%s:%s" % (node.host, node.port)) as channel:
             stub = UdfServiceStub(channel)
@@ -1326,9 +1530,7 @@ def test_using_wasm_bridge_dict():
         data_dir = "ydb/tests/functional/udf_store/data/wasm"
         sdk_path = yatest.common.source_path("%s/sdk_stub.wat" % data_dir)
         udf_path = yatest.common.source_path("%s/bridge_dict_lookup.wat" % data_dir)
-        manifest_path = yatest.common.source_path(
-            "%s/bridge_dict_lookup_manifest.json" % data_dir
-        )
+        manifest_path = yatest.common.source_path("%s/bridge_dict_lookup_manifest.json" % data_dir)
 
         _run_upload_library(endpoint, database, sdk_path, "sdk")
 
@@ -1341,9 +1543,7 @@ def test_using_wasm_bridge_dict():
             description="library sdk compile_status=ready",
         )
 
-        udf_name = _run_upload_udf(
-            endpoint, database, udf_path, udf_type="WASM", manifest_path=manifest_path
-        )
+        udf_name = _run_upload_udf(endpoint, database, udf_path, udf_type="WASM", manifest_path=manifest_path)
 
         def _wasm_compile_ready():
             return _module_compile_ready(endpoint, database, udf_name)
@@ -1354,9 +1554,7 @@ def test_using_wasm_bridge_dict():
             description="bridge WASM UDF compile_status=ready for name=%s" % udf_name,
         )
 
-        udf_query = (
-            'SELECT Unwrap(BridgeDict::Lookup(AsDict(AsTuple("a", 42l)), "a")) AS hit;'
-        )
+        udf_query = 'SELECT Unwrap(BridgeDict::Lookup(AsDict(AsTuple("a", 42l)), "a")) AS hit;'
         udf_query_result = [None]
 
         def try_bridge_query():
@@ -1441,9 +1639,7 @@ def test_using_wasm_udf_with_sdk_and_library(large_library):
             description="library helpers compile_status=ready",
         )
 
-        udf_name = _run_upload_udf(
-            endpoint, database, udf_path, udf_type="WASM", manifest_path=manifest_path
-        )
+        udf_name = _run_upload_udf(endpoint, database, udf_path, udf_type="WASM", manifest_path=manifest_path)
 
         def _wasm_compile_ready():
             return _module_compile_ready(endpoint, database, udf_name)
@@ -1536,9 +1732,7 @@ def test_delete_wasm_udf_and_library():
             description="library helpers compile_status=ready",
         )
 
-        udf_name = _run_upload_udf(
-            endpoint, database, udf_path, udf_type="WASM", manifest_path=manifest_path
-        )
+        udf_name = _run_upload_udf(endpoint, database, udf_path, udf_type="WASM", manifest_path=manifest_path)
 
         def _wasm_compile_ready():
             return _module_compile_ready(endpoint, database, udf_name)
@@ -1639,8 +1833,8 @@ def test_delete_wasm_udf_and_library():
 # Feature-flag test: parametrised over udf_store_config enabled / disabled
 # ---------------------------------------------------------------------------
 
-_SETTLE_TIMEOUT = 60   # seconds to wait when flag is ON
-_ABSENT_TIMEOUT = 15   # seconds to confirm absence when flag is OFF
+_SETTLE_TIMEOUT = 60  # seconds to wait when flag is ON
+_ABSENT_TIMEOUT = 15  # seconds to confirm absence when flag is OFF
 
 
 def _make_cluster(
@@ -1666,11 +1860,13 @@ def _make_cluster(
     )
     if database_admin is not None:
         configurator.yaml_config.setdefault("feature_flags", {}).update(
-            enable_database_admin=database_admin, check_database_access_permission=True)
+            enable_database_admin=database_admin, check_database_access_permission=True
+        )
         # An empty registration SID list exempts every authenticated caller
         # from the database connect check. Restrict it to the bootstrap token.
         configurator.yaml_config["domains_config"]["security_config"].update(
-            register_dynamic_node_allowed_sids=["root@builtin"], enforce_user_token_check_requirement=True)
+            register_dynamic_node_allowed_sids=["root@builtin"], enforce_user_token_check_requirement=True
+        )
         configurator.yaml_config.setdefault("auth_config", {})["node_registration_token"] = "root@builtin"
     if enable_udf_store:
         udf_store_config = {"enabled": True, "kv_storage_media": "hdd"}

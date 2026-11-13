@@ -1,5 +1,31 @@
-
 * Added `ydb tools validate s3` and `ydb tools validate nfs` commands to check byte-level integrity of exported schema objects without restoring them. Added `ydb tools list-objects` to generate the list of the objects which are expected to be included in the backup.
+* `ydb scheme rmdir --recursive` now removes objects in parallel. Added `--in-flight` option to set the maximum number of objects removed at the same time (default: 16).
+* Fixed a crash when searching documentation in interactive AI mode.
+* `export s3`, `export nfs` and `export yt` now honor `__omit_backup = "true"`; `tools dump` honors it for tables and changefeeds. S3 export/import now skip async replication changefeeds.
+* Added `ydb admin cluster bridge rollback` to roll a converted cluster back to ordinary mode. `ydb admin cluster bridge list piles` shows its progress.
+* Added `--expected-generation` option to `ydb admin cluster bridge update` to apply a cluster state update only if the cluster state still has the given generation.
+* Added `piles`, `databases`, and `groups` views to `ydb admin cluster bridge list` for synchronization diagnostics.
+* Added `ydb admin cluster bridge set-database-mode` to enable or disable bridge mode for the database selected with `--database-path`. Use `bridged` or `ordinary` as the required mode argument, and optionally `--retain-pile` with `ordinary`.
+* Added `ydb admin cluster bridge destroy-pile` command to destroy a DISCONNECTED pile along with all its data.
+* Added `ydb admin cluster bridge provision-pile` command to provision a pile listed in the bridge config in a running bridged cluster.
+* Renamed `ydb admin cluster bridge rejoin` to `ydb admin cluster bridge join-pile`; `rejoin` remains available as an alias.
+
+## 2.35.0 ##
+
+* Added `--skip-storage-pool-conversion` option to `ydb admin cluster bridge convert` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one; only static storage groups are converted then.
+* Added pending pile operation information to the output of `ydb admin cluster bridge list`.
+* Added `INACTIVE` pile state to the output of `ydb admin cluster bridge list`.
+* Added recursive removal of Solomon (KeyValue) volumes, resource pools, and backup collections in `ydb scheme rmdir --recursive`.
+* Fixed `ydb scheme rmdir --recursive` skipping directories whose names start with `~`.
+* Fixed `ydb tools dump` and `ydb tools restore` skipping user directories whose names start with `~`; temporary directories starting with `~backup_` or `export-` remain excluded.
+
+## 2.34.0 ##
+
+* Fixed `ydb scheme rmdir --recursive` failing when a directory contains schema secrets.
+* Added the `ydb admin cluster bridge convert` command to convert a non-bridged cluster into a bridged one with a single pile; `ydb admin cluster bridge list` now shows whether this conversion is still in progress.
+* Added support for repeating `--pile` in `ydb admin cluster bridge failover` to disconnect multiple failed piles in one operation.
+* Added OIDC authentication with static tokens, client credentials and device authorization, configurable through `--oidc-config` YAML files, direct `--oidc-*` options, environment variables and connection profiles.
+* Fixed incorrect progress, speed, ETA, and final read statistics in `ydb import file parquet`.
 * Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.
 * Fixed a memory leak when closing producers in `ydb workload topic run write|full`.
 * Sped up local YAML selector validation in `ydb admin cluster config replace` and `ydb admin database config replace` by resolving independent sections separately and merging equivalent states.

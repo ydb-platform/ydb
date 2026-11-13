@@ -9,15 +9,16 @@
 
 namespace NYql {
 
-class IPqLocalClientFactory : public TThrRefBase {
+class IPqLocalClientFactory: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IPqLocalClientFactory>;
 
-    virtual std::shared_ptr<NFq::IMessageStreamClient> CreateTopicClient(const TString& stream, const NYdb::NTopic::TTopicClientSettings& clientSettings) = 0;
+    virtual std::shared_ptr<NFq::IMessageStreamClient> CreateTopicClient(
+        const TString& stream, const NYdb::NTopic::TTopicClientSettings& clientSettings) = 0;
 
     virtual IFederatedTopicClient::TPtr CreateFederatedTopicClient(const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) = 0;
 
     virtual IDeferredPublishClient::TPtr CreateDeferredPublishClient(const NYdb::TCommonClientSettings& settings) = 0;
 };
 
-} // namespace NYql
+}   // namespace NYql

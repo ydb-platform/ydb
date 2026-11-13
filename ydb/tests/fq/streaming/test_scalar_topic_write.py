@@ -23,15 +23,15 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
         actual = self._read(path, endpoint, len(expected))
         assert actual == expected, f"topic {path}: expected {expected}, got {actual}"
 
-    def _expect_error(self, kikimr: Kikimr, sql: str, substrings: Iterable[str] = (), client: Optional[YdbClient] = None) -> str:
+    def _expect_error(
+        self, kikimr: Kikimr, sql: str, substrings: Iterable[str] = (), client: Optional[YdbClient] = None
+    ) -> str:
         """Run ``sql`` expecting it to fail and return the error string. ``max_retries=0`` keeps the
         negative case fast even if the underlying error is retriable (e.g. unavailable source)."""
         with pytest.raises(ydb.issues.Error) as exc_info:
             if client is None:
                 client = kikimr.ydb_client
-            client.session_pool.execute_with_retries(
-                sql, retry_settings=ydb.RetrySettings(max_retries=0)
-            )
+            client.session_pool.execute_with_retries(sql, retry_settings=ydb.RetrySettings(max_retries=0))
         message = str(exc_info.value)
         if isinstance(substrings, str):
             substrings = (substrings,)
@@ -49,37 +49,27 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
         kikimr.ydb_client.query(f'INSERT INTO {ref} SELECT "my_data";')
         self._assert_topic(path, endpoint, ["my_data"])
 
-        kikimr.ydb_client.query(
-            f'INSERT INTO {ref} (Data) VALUES ("my_data1"), ("my_data2"), ("my_data3");'
-        )
+        kikimr.ydb_client.query(f'INSERT INTO {ref} (Data) VALUES ("my_data1"), ("my_data2"), ("my_data3");')
         self._assert_topic(path, endpoint, ["my_data1", "my_data2", "my_data3"])
 
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref}
+        kikimr.ydb_client.query(f"""INSERT INTO {ref}
                 SELECT * FROM AS_TABLE([
                     <|Data: "my_data1"|>,
                     <|Data: "my_data2"|>,
                     <|Data: "my_data3"|>,
-                ]);"""
-        )
+                ]);""")
         self._assert_topic(path, endpoint, ["my_data1", "my_data2", "my_data3"])
 
     @link_test_case("#39421")
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_write_precompute_agg(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
-    ) -> None:
+    def test_write_precompute_agg(self, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         endpoint, ref, path = self.get_write_topic(kikimr, "write_agg", local_topics, entity_name)
 
         table = entity_name("my_row_table")
-        kikimr.ydb_client.query(
-            f"""CREATE TABLE `{table}` (id Int32, Data String, PRIMARY KEY (id));"""
-        )
+        kikimr.ydb_client.query(f"""CREATE TABLE `{table}` (id Int32, Data String, PRIMARY KEY (id));""")
         try:
-            kikimr.ydb_client.query(
-                f"""UPSERT INTO `{table}` (id, Data) VALUES
-                    (1, "data_a"), (2, "data_c"), (3, "data_b");"""
-            )
+            kikimr.ydb_client.query(f"""UPSERT INTO `{table}` (id, Data) VALUES
+                    (1, "data_a"), (2, "data_c"), (3, "data_b");""")
 
             # MAX returns Optional<String>; topic write requires a non-optional data column.
             kikimr.ydb_client.query(f"INSERT INTO {ref} SELECT Unwrap(MAX(Data)) FROM `{table}`;")
@@ -92,12 +82,9 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
     def test_write_same_data_multiple_topics(
         self, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        endpoint, refs, paths = self.get_write_topics(
-            kikimr, "write_multi", local_topics, entity_name, topics_count=2
-        )
+        endpoint, refs, paths = self.get_write_topics(kikimr, "write_multi", local_topics, entity_name, topics_count=2)
 
-        kikimr.ydb_client.query(
-            f"""$my_data = SELECT * FROM AS_TABLE([
+        kikimr.ydb_client.query(f"""$my_data = SELECT * FROM AS_TABLE([
                     <|Data: "data1"|>,
                     <|Data: "data2"|>,
                     <|Data: "data3"|>,
@@ -105,8 +92,7 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
                 ]);
 
                 INSERT INTO {refs[0]} SELECT * FROM $my_data;
-                INSERT INTO {refs[1]} SELECT * FROM $my_data;"""
-        )
+                INSERT INTO {refs[1]} SELECT * FROM $my_data;""")
         self._assert_topic(paths[0], endpoint, ["data1", "data2", "data3", "data4"])
         self._assert_topic(paths[1], endpoint, ["data1", "data2", "data3", "data4"])
 
@@ -114,8 +100,7 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
         endpoint2, refs2, paths2 = self.get_write_topics(
             kikimr, "write_multi_filtered", local_topics, entity_name, topics_count=2
         )
-        kikimr.ydb_client.query(
-            f"""$my_data = SELECT * FROM AS_TABLE([
+        kikimr.ydb_client.query(f"""$my_data = SELECT * FROM AS_TABLE([
                     <|Data: "data1"|>,
                     <|Data: "data2"|>,
                     <|Data: "data3"|>,
@@ -123,8 +108,7 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
                 ]);
 
                 INSERT INTO {refs2[0]} SELECT * FROM $my_data WHERE Data >= "data2";
-                INSERT INTO {refs2[1]} SELECT * FROM $my_data WHERE Data <= "data3";"""
-        )
+                INSERT INTO {refs2[1]} SELECT * FROM $my_data WHERE Data <= "data3";""")
         self._assert_topic(paths2[0], endpoint2, ["data2", "data3", "data4"])
         self._assert_topic(paths2[1], endpoint2, ["data1", "data2", "data3"])
 
@@ -137,19 +121,14 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
 
         endpoint, ref, path = self.get_write_topic(kikimr, "write_repeat", local_topics, entity_name)
 
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref} (Data) VALUES ("data0");
+        kikimr.ydb_client.query(f"""INSERT INTO {ref} (Data) VALUES ("data0");
                 INSERT INTO {ref} (Data) VALUES ("data1");
                 INSERT INTO {ref} (Data) VALUES ("data2");
-                INSERT INTO {ref} (Data) VALUES ("data3");"""
-        )
+                INSERT INTO {ref} (Data) VALUES ("data3");""")
         self._assert_topic(path, endpoint, ["data0", "data1", "data2", "data3"])
 
-        endpoint2, ref2, path2 = self.get_write_topic(
-            kikimr, "write_repeat_mixed", local_topics, entity_name
-        )
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref2} (Data) VALUES ("my_data1"), ("my_data2"), ("my_data3");
+        endpoint2, ref2, path2 = self.get_write_topic(kikimr, "write_repeat_mixed", local_topics, entity_name)
+        kikimr.ydb_client.query(f"""INSERT INTO {ref2} (Data) VALUES ("my_data1"), ("my_data2"), ("my_data3");
 
                 INSERT INTO {ref2}
                 SELECT * FROM AS_TABLE([
@@ -161,25 +140,20 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
                 INSERT INTO {ref2}
                 SELECT a.Data || b.Data FROM AS_TABLE([<|Data: "1-X", Id: 1|>, <|Data: "2-X", Id: 2|>]) AS a
                 LEFT JOIN AS_TABLE([<|Data: "2-Y", Id: 2|>, <|Data: "1-Y", Id: 1|>]) AS b
-                ON a.Id = b.Id;"""
-        )
+                ON a.Id = b.Id;""")
         expected = ["my_data1", "my_data2", "my_data3", "my_data4", "my_data5", "my_data6", "j1-j2"]
         self._assert_topic(path2, endpoint2, expected)
 
     @link_test_case("#39434")
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_write_joined_data(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
-    ) -> None:
+    def test_write_joined_data(self, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         endpoint, ref, path = self.get_write_topic(kikimr, "write_join", local_topics, entity_name)
 
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref}
+        kikimr.ydb_client.query(f"""INSERT INTO {ref}
                 SELECT Unwrap(a.Data || b.Data) AS Data
                 FROM AS_TABLE([<|Data: "1-X", Id: 1|>, <|Data: "2-X", Id: 2|>]) AS a
                 LEFT JOIN AS_TABLE([<|Data: "2-Y", Id: 2|>, <|Data: "1-Y", Id: 1|>]) AS b
-                ON a.Id = b.Id;"""
-        )
+                ON a.Id = b.Id;""")
         assert sorted(self._read(path, endpoint, 2)) == ['1-X1-Y', '2-X2-Y']
 
     @link_test_case("#39429")
@@ -191,8 +165,7 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
 
         _, ref, _ = self.get_write_topic(kikimr, "read_own_Write", local_topics, entity_name)
 
-        result_sets = kikimr.ydb_client.query(
-            f"""INSERT INTO {ref}(Data) VALUES("data0");
+        result_sets = kikimr.ydb_client.query(f"""INSERT INTO {ref}(Data) VALUES("data0");
                 INSERT INTO {ref}(Data) VALUES("data1");
                 INSERT INTO {ref}(Data) VALUES("data2");
                 INSERT INTO {ref}(Data) VALUES("data3");
@@ -202,8 +175,7 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
                     __ydb_seq_no as seq_no,
                     __ydb_write_time as write_time,
                     Data
-                FROM {ref};"""
-        )
+                FROM {ref};""")
 
         assert len(result_sets) == 1
         assert len(result_sets[0].rows) == 4
@@ -226,39 +198,31 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
 
     @link_test_case("#39440")
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_data_types_validation(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
-    ) -> None:
+    def test_data_types_validation(self, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         endpoint, ref, path = self.get_write_topic(kikimr, "write_types", local_topics, entity_name)
 
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref} (Data) VALUES ("string");"""
-        )
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref} (Data) VALUES (Unwrap(CAST('{{"my_json": true}}' AS Json)));"""
-        )
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref} (Data) VALUES (Unwrap(CAST('{{abc=123; def=456}}' AS Yson)));"""
-        )
+        kikimr.ydb_client.query(f"""INSERT INTO {ref} (Data) VALUES ("string");""")
+        kikimr.ydb_client.query(f"""INSERT INTO {ref} (Data) VALUES (Unwrap(CAST('{{"my_json": true}}' AS Json)));""")
+        kikimr.ydb_client.query(f"""INSERT INTO {ref} (Data) VALUES (Unwrap(CAST('{{abc=123; def=456}}' AS Yson)));""")
         self._assert_topic(path, endpoint, ["string", "{\"my_json\": true}", "{abc=123; def=456}"])
 
         # Unsupported scalar types must fail.
-        self._expect_error(
-            kikimr, f'INSERT INTO {ref} (Data) VALUES (42);', ["is not a string, yson or json"]
-        )
-        self._expect_error(
-            kikimr, f'INSERT INTO {ref} (Data) VALUES ("utf8"u);', ["is not a string, yson or json"]
-        )
+        self._expect_error(kikimr, f'INSERT INTO {ref} (Data) VALUES (42);', ["is not a string, yson or json"])
+        self._expect_error(kikimr, f'INSERT INTO {ref} (Data) VALUES ("utf8"u);', ["is not a string, yson or json"])
         self._expect_error(
             kikimr, f'INSERT INTO {ref} (Data) VALUES (CurrentUtcTimestamp());', ["is not a string, yson or json"]
         )
 
         # Unsupported nested types must fail.
         self._expect_error(
-            kikimr, f'INSERT INTO {ref} (Data) VALUES ("data"), (Nothing(String?));', ["must have a data type, but has Optional"]
+            kikimr,
+            f'INSERT INTO {ref} (Data) VALUES ("data"), (Nothing(String?));',
+            ["must have a data type, but has Optional"],
         )
         self._expect_error(
-            kikimr, f'INSERT INTO {ref} (Data) VALUES (AsStruct("data" AS Data, 1 AS Id));', ["must have a data type, but has Struct"]
+            kikimr,
+            f'INSERT INTO {ref} (Data) VALUES (AsStruct("data" AS Data, 1 AS Id));',
+            ["must have a data type, but has Struct"],
         )
         self._expect_error(
             kikimr, f'INSERT INTO {ref} (Data) VALUES (AsTuple("data", 1));', ["must have a data type, but has Tuple"]
@@ -266,12 +230,16 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
 
         # Common type inference over incompatible literals must fail.
         self._expect_error(
-            kikimr, f'INSERT INTO {ref} (Data) VALUES ("string"), (42), (CurrentUtcTimestamp());', ["is not a string, yson or json"]
+            kikimr,
+            f'INSERT INTO {ref} (Data) VALUES ("string"), (42), (CurrentUtcTimestamp());',
+            ["is not a string, yson or json"],
         )
 
         # Writing more than one column must fail.
         self._expect_error(
-            kikimr, f'INSERT INTO {ref} (Data, Other) VALUES ("string", "other");', ["Only struct with single string, yson or json field is accepted, but has struct with 2 members"]
+            kikimr,
+            f'INSERT INTO {ref} (Data, Other) VALUES ("string", "other");',
+            ["Only struct with single string, yson or json field is accepted, but has struct with 2 members"],
         )
 
     @link_test_case("#39446")
@@ -287,7 +255,7 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
             kikimr,
             f"""INSERT INTO {ref} WITH (unknown = feature)
                 SELECT 'MyData'""",
-            ["unknown option 'unknown'"]
+            ["unknown option 'unknown'"],
         )
 
     @link_test_case("#39451")
@@ -302,12 +270,26 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
         # Write into a non-existent topic (under an existing source / locally).
         bad_topic_ref = "`non_existent_topic`" if local_topics else f"`{source_name}`.`non_existent_topic`"
         if local_topics:
-            self._expect_error(kikimr, f'INSERT INTO {bad_topic_ref} SELECT "Data";', ["Cannot find table", "non_existent_topic", "because it does not exist or you do not have access permissions"])
+            self._expect_error(
+                kikimr,
+                f'INSERT INTO {bad_topic_ref} SELECT "Data";',
+                [
+                    "Cannot find table",
+                    "non_existent_topic",
+                    "because it does not exist or you do not have access permissions",
+                ],
+            )
         else:
             self._expect_error(
                 kikimr,
                 f'INSERT INTO {bad_topic_ref} SELECT "Data";',
-                ["determine external YDB entity type", "Describe path", "non_existent_topic", "in external YDB database", "with endpoint"],
+                [
+                    "determine external YDB entity type",
+                    "Describe path",
+                    "non_existent_topic",
+                    "in external YDB database",
+                    "with endpoint",
+                ],
             )
 
         # Write into a non-existent external source.
@@ -325,23 +307,31 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
         # Write into an unavailable external source (valid metadata, unreachable location).
         if not local_topics:
             unavailable_source = entity_name("unavailable_source")
-            kikimr.ydb_client.query(
-                f"""CREATE EXTERNAL DATA SOURCE `{unavailable_source}` WITH (
+            kikimr.ydb_client.query(f"""CREATE EXTERNAL DATA SOURCE `{unavailable_source}` WITH (
                         SOURCE_TYPE = "Ydb",
                         LOCATION = "localhost:1",
                         DATABASE_NAME = "/Root",
                         AUTH_METHOD = "NONE"
-                    );"""
-            )
+                    );""")
             self._expect_error(
                 kikimr,
                 f'INSERT INTO `{unavailable_source}`.`my_topic` SELECT "Data";',
-                ["Describe path", "/Root/my_topic", "in external YDB database", "/Root", "with endpoint", "localhost:1", "failed"],
+                [
+                    "Describe path",
+                    "/Root/my_topic",
+                    "in external YDB database",
+                    "/Root",
+                    "with endpoint",
+                    "localhost:1",
+                    "failed",
+                ],
             )
 
         try:
             external_client = YdbClient.from_driver_config(endpoint.endpoint, endpoint.database)
-            test_client = YdbClient.from_driver_config(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
+            test_client = YdbClient.from_driver_config(
+                kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin"
+            )
 
             test_secret_name = entity_name("test_secret")
             test_source_name = entity_name("test_target_source")
@@ -358,17 +348,16 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
 
             path = f"{test_source_name}_test_topic"
             create_stream(path, partitions_count=1, default_endpoint=endpoint)
-            kikimr.ydb_client.query(
-                f"""GRANT DESCRIBE SCHEMA ON `{test_source_name}` TO `test@builtin`;
-                    GRANT USE ON `{test_secret_name}` TO `test@builtin`;"""
-            )
-            external_client.query(
-                f"""GRANT DESCRIBE SCHEMA ON `{path}` TO `test@builtin`;"""
-            )
+            kikimr.ydb_client.query(f"""GRANT DESCRIBE SCHEMA ON `{test_source_name}` TO `test@builtin`;
+                    GRANT USE ON `{test_secret_name}` TO `test@builtin`;""")
+            external_client.query(f"""GRANT DESCRIBE SCHEMA ON `{path}` TO `test@builtin`;""")
 
             ref = f"`{path}`" if local_topics else f"`{test_source_name}`.`{path}`"
             self._expect_error(
-                kikimr, f'INSERT INTO {ref} SELECT "Data";', ["access to topic", "test_topic in database:", "denied for", "test@builtin", "no WriteTopic rights"], client=test_client
+                kikimr,
+                f'INSERT INTO {ref} SELECT "Data";',
+                ["access to topic", "test_topic in database:", "denied for", "test@builtin", "no WriteTopic rights"],
+                client=test_client,
             )
 
             if not local_topics:

@@ -4,6 +4,8 @@ import types
 
 import pytest
 
+import multidict
+
 FREETHREADED = bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
 
 
@@ -123,6 +125,40 @@ def test_create_ci_multidict_proxy_from_multidict(
         ),
     ):
         multidict_module.CIMultiDictProxy(d)
+
+
+@pytest.mark.parametrize("proxy_class_name", ("MultiDictProxy", "CIMultiDictProxy"))
+def test_create_multidict_proxy_missing_arg(
+    multidict_module: types.ModuleType,
+    proxy_class_name: str,
+) -> None:
+    proxy_class = getattr(multidict_module, proxy_class_name)
+    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        proxy_class()
+
+
+@pytest.mark.parametrize("proxy_class_name", ("MultiDictProxy", "CIMultiDictProxy"))
+def test_create_multidict_proxy_too_many_args(
+    multidict_module: types.ModuleType,
+    proxy_class_name: str,
+) -> None:
+    proxy_class = getattr(multidict_module, proxy_class_name)
+    dict_class_name = proxy_class_name.replace("Proxy", "")
+    d = getattr(multidict_module, dict_class_name)(key="val")
+    with pytest.raises(TypeError, match="positional argument"):
+        proxy_class(d, d)
+
+
+@pytest.mark.c_extension
+@pytest.mark.parametrize("proxy_class_name", ("MultiDictProxy", "CIMultiDictProxy"))
+def test_create_multidict_proxy_rejects_kwargs(proxy_class_name: str) -> None:
+    # Unlike the pure-Python implementation, the C extension's
+    # constructor does not accept its single argument by keyword.
+    proxy_class = getattr(multidict, proxy_class_name)
+    dict_class_name = proxy_class_name.replace("Proxy", "")
+    d = getattr(multidict, dict_class_name)(key="val")
+    with pytest.raises(TypeError, match="keyword arguments"):
+        proxy_class(arg=d)
 
 
 def test_generic_alias(multidict_module: types.ModuleType) -> None:

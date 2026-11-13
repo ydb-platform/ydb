@@ -222,10 +222,12 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
              TPBufferKey pBufferKey,
              TBlockRange16 range,
              const TGuardedSgList& guardedSglist,
+             const TBlockChecksums& checksums,
              const NWilson::TTraceId& traceId)
         {
             Y_UNUSED(traceId);
             Y_UNUSED(guardedSglist);
+            Y_UNUSED(checksums);
 
             UNIT_ASSERT_VALUES_EQUAL(
                 UserPBufferKey.Print(),
@@ -287,10 +289,12 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
              TPBufferKey pBufferKey,
              TBlockRange16 range,
              const TGuardedSgList& guardedSglist,
+             const TBlockChecksums& checksums,
              const NWilson::TTraceId& traceId)
         {
             Y_UNUSED(traceId);
             Y_UNUSED(guardedSglist);
+            Y_UNUSED(checksums);
 
             UNIT_ASSERT_VALUES_EQUAL(
                 UserPBufferKey.Print(),

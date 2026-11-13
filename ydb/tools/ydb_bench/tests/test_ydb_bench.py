@@ -7674,6 +7674,28 @@ class WebTest(unittest.TestCase):
             with self.assertRaisesRegex(BenchmarkError, "run not found"):
                 service.events("../" + outside_path.name)
 
+    def test_run_service_detail_reads_only_requested_manifest(self):
+        self._manifest(self.root / "complete")
+        self._manifest(self.root / "imported" / "nested", imported=True)
+        service = RunService(self.root)
+        try:
+            expected = service.model()
+            with mock.patch.object(web, "_manifests", side_effect=AssertionError("history scan")):
+                self.assertEqual(service.detail("complete"), expected["complete"])
+                self.assertEqual(service.detail("imported/nested"), expected["imported/nested"])
+                for missing in ("missing", "../outside", ".", "complete/../complete", "/tmp"):
+                    self.assertIsNone(service.detail(missing))
+                (self.root / "complete" / "run.json").write_text("invalid", encoding="utf-8")
+                self.assertIsNone(service.detail("complete"))
+                # CLI output can itself be a run directory, represented by ".".
+                self._manifest(self.root)
+                root_manifest = web.load_manifest(self.root / "run.json")
+                root_record = web.run_record(".", root_manifest, self.root)
+                root_record.update(current_run_id=None, queue_position=None)
+                self.assertEqual(service.detail("."), root_record)
+        finally:
+            service.shutdown()
+
     def test_run_service_events_decodes_each_persisted_line_once(self):
         self._manifest(self.root / "complete")
         (self.root / "complete" / "events.jsonl").write_text(

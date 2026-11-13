@@ -273,7 +273,8 @@ void ChildPolicyHandler::ResetBackoffLocked() {
 
 OrphanablePtr<LoadBalancingPolicy> ChildPolicyHandler::CreateChildPolicy(
     y_absl::string_view child_policy_name, const ChannelArgs& args) {
-  Helper* helper = new Helper(Ref(DEBUG_LOCATION, "Helper"));
+  Helper* helper =
+      new Helper(RefAsSubclass<ChildPolicyHandler>(DEBUG_LOCATION, "Helper"));
   LoadBalancingPolicy::Args lb_policy_args;
   lb_policy_args.work_serializer = work_serializer();
   lb_policy_args.channel_control_helper =

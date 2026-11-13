@@ -461,7 +461,7 @@ private:
             const auto& inputArg = stage.Program().Args().Arg(i);
 
             // Scan inputs that may contain TKqpTxResultBinding
-            if (input.Maybe<TDqSource>() || input.Maybe<TKqpCnStreamLookup>()) {
+            if (input.Maybe<TDqSource>() || input.Maybe<TKqpCnStreamLookup>() || input.Maybe<TKqpCnVectorSearch>()) {
                 collectBindings(input.Ptr());
             }
 
@@ -566,6 +566,8 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
             collectPrecomputes(maybeSource.Cast().Ptr(), /* checkConnections */ true);
         } else if (auto maybeStreamLookup = input.Maybe<TKqpCnStreamLookup>()) {
             collectPrecomputes(maybeStreamLookup.Cast().Settings().Ptr());
+        } else if (auto maybeVectorSearch = input.Maybe<TKqpCnVectorSearch>()) {
+            collectPrecomputes(maybeVectorSearch.Cast().TopK().Ptr());
         }
     }
 
@@ -573,6 +575,53 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
     collectPrecomputes(stage.Program().Body().Ptr());
 
     return result;
+}
+
+TMaybeNode<TKqlUnsafeTruncate> GetUnsafeTruncate(const TKqlQuery& query) {
+    for (const auto& effect : query.Effects()) {
+        if (auto truncate = effect.Maybe<TKqlUnsafeTruncate>()) {
+            return truncate;
+        }
+    }
+    return {};
+}
+
+TKqpSinkEffect BuildTableTruncateEffect(const TKqlUnsafeTruncate& truncate, TExprContext& ctx) {
+    const auto pos = truncate.Pos();
+    const auto* rowType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{});
+    const auto rows = Build<TCoList>(ctx, pos)
+        .ListType(ExpandType(pos, *ctx.MakeType<TListExprType>(rowType), ctx))
+        .Done();
+
+    TDqStageSettings stageSettings;
+    stageSettings.PartitionMode = TDqStageSettings::EPartitionMode::Single;
+
+    // The sink carries the operation in the physical plan. Its executer needs no input rows.
+    const auto stage = Build<TDqStage>(ctx, pos)
+        .Inputs().Build()
+        .Program()
+            .Args({})
+            .Body<TCoToFlow>().Input(rows).Build()
+            .Build()
+        .Outputs()
+            .Add<TDqSink>()
+                .Index().Build("0")
+                .DataSink<TKqpTableSink>()
+                    .Category().Build(KqpTableTruncateSinkName)
+                    .Cluster().Build("db")
+                    .Build()
+                .Settings<TKqpTableTruncateSettings>()
+                    .TablePath(truncate.TablePath())
+                    .Build()
+                .Build()
+            .Build()
+        .Settings(stageSettings.BuildNode(ctx, pos))
+        .Done();
+
+    return Build<TKqpSinkEffect>(ctx, pos)
+        .Stage(stage)
+        .SinkIndex().Build("0")
+        .Done();
 }
 
 class TKqpBuildTxsTransformer : public TSyncTransformerBase {
@@ -635,7 +684,7 @@ public:
             .Add(CreateKqpTxPeepholeTransformer(
                 typesCtx, config,
                 /* withFinalStageRules */ config->GetBlockChannelsMode() == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE,
-                {"KqpPeephole-RewriteCrossJoin"}),
+                {"KqpPeephole-RewriteCrossJoin", "KqpPeephole-ChooseHashJoin"}),
                 "Peephole")
             .Build(false);
     }
@@ -646,6 +695,35 @@ public:
         YQL_CLOG(DEBUG, ProviderKqp) << ">>> TKqpBuildTxsTransformer: " << KqpExprToPrettyString(*inputExpr, ctx);
 
         TKqlQuery query(inputExpr);
+
+        if (auto truncate = GetUnsafeTruncate(query)) {
+            // The truncate must be the only effect so that no other operations are discarded.
+            AFL_ENSURE(query.Results().Empty() && query.Effects().Size() == 1)
+                ("results", query.Results().Size())("effects", query.Effects().Size());
+
+            const auto effects = Build<TExprList>(ctx, query.Pos())
+                .Add(BuildTableTruncateEffect(truncate.Cast(), ctx))
+                .Done();
+            const auto sinkQuery = Build<TKqlQuery>(ctx, query.Pos())
+                .Results().Build()
+                .Effects(effects)
+                .Done();
+            auto tx = BuildTx(KqpCtx->Config->GetEnableIndexStreamWrite() ? sinkQuery.Ptr() : effects.Ptr(),
+                ctx, /* isPrecompute */ false);
+            if (!tx) {
+                return TStatus::Error;
+            }
+
+            // Truncate has its own transaction and is never deferred as a regular table write.
+            TKqpPhyTxSettings txSettings;
+            txSettings.Type = EPhysicalTxType::Generic;
+            BuildCtx->PhysicalTxs.emplace_back(Build<TKqpPhysicalTx>(ctx, query.Pos())
+                .InitFrom(tx.Cast())
+                .Settings(txSettings.BuildNode(ctx, query.Pos()))
+                .Done());
+
+            return TStatus::Ok;
+        }
 
         if (auto status = TryBuildPrecomputeTx(query, outputExpr, ctx)) {
             return *status;

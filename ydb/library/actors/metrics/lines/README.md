@@ -53,7 +53,9 @@ unchanged. Group records are always published atomically as complete samples.
 
 Dynamic schemas and partial group updates are separate from these storage
 policies; the existing static group still requires all its fields on Append.
-Producers retain their default storage unless they explicitly select a policy.
+Harmonizer groups opt into a 100 ms timestamp step and two decimal places.
+Quota and state share partial on-change storage. Other producers retain their
+default storage unless they explicitly select a policy.
 
 ## Runtime participant groups
 
@@ -74,5 +76,6 @@ Snapshot readers ignore the mutable header cache, reconstruct the complete
 state and preserve on-change range boundaries. Runtime schemas export through
 `ReadNumericRange`; static typed groups keep their existing typed read API.
 
-Participant labels allow fields for different pools to share physical storage
-while remaining separate series for readers.
+Harmonizer production lines: `harmonizer.pools.cpu`,
+`harmonizer.pools.state`, `harmonizer.global`.
+Pool labels belong to participants; pools share physical storage. Harmonizer state uses partial on-change records.

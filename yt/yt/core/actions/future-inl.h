@@ -12,8 +12,10 @@
 #include <yt/yt/core/concurrency/thread_affinity.h>
 #include <yt/yt/core/concurrency/context_switch.h>
 
-#include <library/cpp/yt/threading/event_count.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/cpu_clock/clock.h>
+
+#include <library/cpp/yt/system/event_count.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
@@ -39,7 +41,7 @@ class TFiberCanceledException
 } // namespace NConcurrency
 
 // Forward declaration from invoker_util.h.
-IInvokerPtr GetSyncInvoker();
+const IInvokerPtr& GetSyncInvoker();
 
 namespace NDetail {
 
@@ -318,7 +320,7 @@ protected:
     std::atomic<int> FutureRefCount_;
 
     //! Protects the following section of members.
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::atomic<bool> Canceled_ = false;
     std::atomic<bool> Set_;
     std::atomic<bool> AbandonedUnset_ = false;
@@ -327,7 +329,7 @@ protected:
     TError ResultError_;
     TVoidResultHandlers VoidResultHandlers_;
     TCancelHandlers CancelHandlers_;
-    mutable std::unique_ptr<NThreading::TEvent> ReadyEvent_;
+    mutable std::unique_ptr<TEvent> ReadyEvent_;
 
     explicit constexpr TFutureState(TOKFutureTag)
         : TCancelableStateBase(TOKFutureTag())
@@ -357,10 +359,10 @@ protected:
     virtual void ResetResult();
     virtual void SetResultError(const TError& error);
     virtual bool TrySetError(const TError& error);
-    virtual void SetErrorGuarded(const TError& error, TGuard<NThreading::TSpinLock>&& guard);
+    virtual void SetErrorGuarded(const TError& error, TGuard<TSpinLock>&& guard);
 
     template <bool MustSet, class F>
-    bool DoRunSetter(F setter, TGuard<NThreading::TSpinLock>&& guard)
+    bool DoRunSetter(F setter, TGuard<TSpinLock>&& guard)
     {
         YT_ASSERT_SPINLOCK_AFFINITY(*guard.GetMutex());
         YT_ASSERT(!AbandonedUnset_);
@@ -373,7 +375,7 @@ protected:
         Set_ = true;
 
         bool canceled = Canceled_;
-        NThreading::TEvent* readyEvent = ReadyEvent_.get();
+        TEvent* readyEvent = ReadyEvent_.get();
 
         guard.Release();
 
@@ -393,7 +395,7 @@ protected:
     }
 
     template <bool MustSet>
-    bool DoTrySet(const TError& error, TGuard<NThreading::TSpinLock>&& guard)
+    bool DoTrySet(const TError& error, TGuard<TSpinLock>&& guard)
     {
         // Calling subscribers may release the last reference to this.
         TIntrusivePtr<TFutureState<void>> this_(this);
@@ -405,7 +407,7 @@ protected:
             std::move(guard));
     }
 
-    virtual bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard);
+    virtual bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<TSpinLock>* guard);
 
     void WaitUntilSet() const;
     bool CheckIfSet() const;
@@ -434,7 +436,7 @@ protected:
         TFutureCallbackMap<T>* map,
         TFutureCallbackCookie cookie,
         ui32 base,
-        TGuard<NThreading::TSpinLock>* guard)
+        TGuard<TSpinLock>* guard)
     {
         auto index = TryDecodeFutureCallbackCookie(cookie, base);
         if (index == InvalidSlotMapIndex) {
@@ -493,7 +495,7 @@ private:
     }
 
     template <bool MustSet, class U>
-    bool DoTrySet(U&& value, TGuard<NThreading::TSpinLock>&& guard) noexcept
+    bool DoTrySet(U&& value, TGuard<TSpinLock>&& guard) noexcept
     {
         // Calling subscribers may release the last reference to this.
         TIntrusivePtr<TFutureState<void>> this_(this);
@@ -553,7 +555,7 @@ private:
         return TrySet(error);
     }
 
-    void SetErrorGuarded(const TError& error, TGuard<NThreading::TSpinLock>&& guard) override
+    void SetErrorGuarded(const TError& error, TGuard<TSpinLock>&& guard) override
     {
         DoTrySet<true>(error, std::move(guard));
     }
@@ -570,7 +572,7 @@ private:
         Result_.emplace(error);
     }
 
-    bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard) override
+    bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<TSpinLock>* guard) override
     {
         YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
         return
@@ -613,7 +615,7 @@ public:
                 return GetUniqueResult();
             }
             if (!ReadyEvent_) {
-                ReadyEvent_.reset(new NThreading::TEvent());
+                ReadyEvent_.reset(new TEvent());
             }
         }
 
@@ -920,10 +922,26 @@ TFuture<R> ApplyUniqueHelper(const TIntrusivePtr<TFutureState<T>>& impl, TCallba
     return promise;
 }
 
-template <class T, class D>
+template <class TTimeoutOrDeadline>
+TError MakeFutureTimeoutError(TTimeoutOrDeadline timeoutOrDeadline, const TFutureTimeoutOptions& options)
+{
+    auto error = TError(NYT::EErrorCode::Timeout, "Operation timed out");
+    if constexpr (std::is_same_v<TTimeoutOrDeadline, TDuration>) {
+        error.Add("timeout", timeoutOrDeadline);
+    }
+    if constexpr (std::is_same_v<TTimeoutOrDeadline, TInstant>) {
+        error.Add("deadline", timeoutOrDeadline);
+    }
+    if (!options.Error.IsOK()) {
+        error = options.Error.With(std::move(error));
+    }
+    return error;
+}
+
+template <class T, class TTimeoutOrDeadline>
 TFuture<T> ApplyTimeoutHelper(
     const TFutureBase<T>& this_,
-    D timeoutOrDeadline,
+    TTimeoutOrDeadline timeoutOrDeadline,
     TFutureTimeoutOptions options)
 {
     auto promise = NewPromise<T>();
@@ -933,17 +951,11 @@ TFuture<T> ApplyTimeoutHelper(
             TError error;
             if (aborted) {
                 error = TError(NYT::EErrorCode::Canceled, "Operation aborted");
+                if (!options.Error.IsOK()) {
+                    error = options.Error.With(std::move(error));
+                }
             } else {
-                error = TError(NYT::EErrorCode::Timeout, "Operation timed out");
-                if constexpr (std::is_same_v<D, TDuration>) {
-                    error = error.With("timeout", timeoutOrDeadline);
-                }
-                if constexpr (std::is_same_v<D, TInstant>) {
-                    error = error.With("deadline", timeoutOrDeadline);
-                }
-            }
-            if (!options.Error.IsOK()) {
-                error = options.Error.With(std::move(error));
+                error = MakeFutureTimeoutError(timeoutOrDeadline, options);
             }
             promise.TrySet(error);
             cancelable.Cancel(error);
@@ -1207,11 +1219,39 @@ TFuture<T> TFutureBase<T>::WithDeadline(
 {
     YT_ASSERT(Impl_);
 
+    if (deadline <= GetInstant()) {
+        if (IsSet()) {
+            if (GetOrCrash().IsOK()) {
+                return MakeFuture<T>(NYT::NDetail::MakeFutureTimeoutError(deadline, options));
+            }
+
+            return TFuture<T>(Impl_);
+        }
+
+        auto error = NYT::NDetail::MakeFutureTimeoutError(deadline, options);
+        if (options.Invoker) {
+            options.Invoker->Invoke(BIND_NO_PROPAGATE([cancelable = AsCancelable(), error] {
+                cancelable.Cancel(error);
+            }));
+        } else {
+            Cancel(error);
+        }
+        return MakeFuture<T>(std::move(error));
+    }
+
     if (IsSet()) {
         return TFuture<T>(Impl_);
     }
 
     return NYT::NDetail::ApplyTimeoutHelper(*this, deadline, std::move(options));
+}
+
+template <class T>
+TFuture<T> TFutureBase<T>::WithDeadline(
+    std::optional<TInstant> deadline,
+    TFutureTimeoutOptions options) const
+{
+    return deadline ? WithDeadline(*deadline, std::move(options)) : TFuture<T>(Impl_);
 }
 
 template <class T>
@@ -1408,6 +1448,12 @@ TFuture<R> TFuture<void>::Apply(TCallback<R()> callback) const
 }
 
 template <class R>
+TFuture<R> TFuture<void>::Apply(TCallback<TErrorOr<R>()> callback) const
+{
+    return NYT::NDetail::ApplyHelper<R>(this->Impl_, callback);
+}
+
+template <class R>
 TFuture<R> TFuture<void>::Apply(TCallback<TFuture<R>()> callback) const
 {
     return NYT::NDetail::ApplyHelper<R>(this->Impl_, callback);
@@ -1509,6 +1555,12 @@ TFuture<R> TUniqueFuture<T>::Apply(TCallback<TUniqueFuture<R>(T&&)> callback) co
 
 template <class R>
 TFuture<R> TUniqueFuture<void>::Apply(TCallback<R()> callback) const
+{
+    return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, callback);
+}
+
+template <class R>
+TFuture<R> TUniqueFuture<void>::Apply(TCallback<TErrorOr<R>()> callback) const
 {
     return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, callback);
 }
@@ -2236,7 +2288,7 @@ private:
     const TFutureCombinerOptions Options_;
     const TPromise<T> Promise_ = NewPromise<T>();
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ErrorsLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, ErrorsLock_);
     std::vector<TError> Errors_;
 
     void OnFutureSet(const TErrorOr<T>& result)
@@ -2334,7 +2386,7 @@ private:
     const TFutureCombinerOptions Options_;
     const TPromise<TAnySetMatchingResult<T>> Promise_ = NewPromise<TAnySetMatchingResult<T>>();
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::vector<std::optional<TErrorOr<T>>> Results_;
     int ResponseCount_ = 0;
     std::atomic<bool> ResultObtained_ = false;
@@ -2536,7 +2588,7 @@ private:
     std::atomic<int> ResponseCount_ = 0;
     std::atomic<int> FillCount_ = 0;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ErrorsLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, ErrorsLock_);
     std::vector<TError> Errors_;
 
     void OnFutureSet(int /*index*/, const TErrorOr<T>& result)
@@ -2816,7 +2868,7 @@ private:
     const int ConcurrencyLimit_;
     const TPromise<std::vector<TErrorOr<T>>> Promise_ = NewPromise<std::vector<TErrorOr<T>>>();
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::optional<TError> Error_;
     std::vector<TFuture<void>> Futures_;
     std::vector<TErrorOr<T>> Results_;

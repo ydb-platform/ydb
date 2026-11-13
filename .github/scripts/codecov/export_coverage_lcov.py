@@ -287,9 +287,10 @@ def generate_html_report(
     )
     try:
         proc = subprocess.run(cmd, check=False, text=True, capture_output=True)
+        if proc.stderr:
+            print(proc.stderr, file=sys.stderr, end="")
         if proc.returncode != 0:
             print(proc.stdout, file=sys.stderr)
-            print(proc.stderr, file=sys.stderr)
             raise SystemExit(f"llvm-cov HTML generation failed with exit {proc.returncode}")
         if not (temporary_dir / "index.html").is_file():
             raise SystemExit(
@@ -401,8 +402,11 @@ def main() -> int:
 
     print("+", " ".join(cmd[:6]), f"... ({len(objects)} objects)", flush=True)
     proc = subprocess.run(cmd, check=False, text=True, capture_output=True)
+    # LLVM may report dropped/mismatched functions even with exit code zero.
+    # Keep those diagnostics visible; success must not silently hide warnings.
+    if proc.stderr:
+        print(proc.stderr, file=sys.stderr, end="")
     if proc.returncode != 0:
-        print(proc.stderr, file=sys.stderr)
         raise SystemExit(f"llvm-cov export failed with exit {proc.returncode}")
 
     filtered, generated_sources = filter_suite_lcov(proc.stdout, cfg["lcov_prefixes"])

@@ -7,6 +7,7 @@ SRCS(
     log_stack.cpp
     meta_writer.cpp
     native_types_support.cpp
+    string_value_extractor.cpp
     structured_message.cpp
     text_writer.cpp
 )

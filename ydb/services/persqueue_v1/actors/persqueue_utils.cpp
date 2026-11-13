@@ -37,7 +37,7 @@ using namespace NSchemeCache;
 
 TProcessingResult ProcessMetaCacheTopicResponse(const TSchemeCacheNavigate::TEntry& entry) {
     auto fullPath = JoinPath(entry.Path);
-    auto& topicName = entry.Path.back();
+    const auto& topicName = entry.Path.empty() ? fullPath : entry.Path.back();
     switch (entry.Status) {
         case TSchemeCacheNavigate::EStatus::RootUnknown : {
             return TProcessingResult {

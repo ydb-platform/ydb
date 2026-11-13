@@ -92,9 +92,16 @@ class KqpRun(object):
 
         self.queries.append(query_path)
 
-    def yql_exec(self, verbose: bool = False, check_error: bool = True, var_templates: Optional[List[str]] = None,
-                 yql_program: Optional[str] = None, yql_tables: List[yql_utils.Table] = [], user: Optional[str] = None,
-                 action: str = "execute") -> yql_utils.YQLExecResult:
+    def yql_exec(
+        self,
+        verbose: bool = False,
+        check_error: bool = True,
+        var_templates: Optional[List[str]] = None,
+        yql_program: Optional[str] = None,
+        yql_tables: List[yql_utils.Table] = [],
+        user: Optional[str] = None,
+        action: str = "execute",
+    ) -> yql_utils.YQLExecResult:
         udfs_dir = self.udfs_dir
 
         config_file = self.config_file
@@ -156,7 +163,9 @@ class KqpRun(object):
 
         proc_result = yatest.common.process.execute(cmd.strip().split(), check_exit_code=False, cwd=self.res_dir)
         if proc_result.exit_code != 0 and check_error:
-            assert 0, f'Command\n{cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err}\n\nlog file:\n{yql_utils.read_res_file(log_file)[1]}'
+            assert (
+                0
+            ), f'Command\n{cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err}\n\nlog file:\n{yql_utils.read_res_file(log_file)[1]}'
 
         self.__normalize_explain_file(ast_file)
         self.__normalize_explain_file(plan_file)

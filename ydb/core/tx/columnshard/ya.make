@@ -4,6 +4,7 @@ SRCS(
     background_controller.cpp
     blob.cpp
     blob_cache.cpp
+    columnshard_find_empty_history_intervals.cpp
     columnshard.cpp
     columnshard__init.cpp
     columnshard__locks.cpp
@@ -18,6 +19,7 @@ SRCS(
     columnshard__write.cpp
     columnshard__write_index.cpp
     columnshard_impl.cpp
+    columnshard_local_db_backup.cpp
     columnshard_private_events.cpp
     columnshard_schema.cpp
     columnshard_subdomain_path_id.cpp
@@ -34,9 +36,10 @@ GENERATE_ENUM_SERIALIZATION(columnshard.h)
 GENERATE_ENUM_SERIALIZATION(columnshard_impl.h)
 
 PEERDIR(
+    library/cpp/monlib/service/pages
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/control/lib
     ydb/core/formats
     ydb/core/kqp
@@ -60,6 +63,8 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/writer
     ydb/core/tx/columnshard/export
     ydb/core/tx/columnshard/loading
+    ydb/core/tx/columnshard/local_db_backup
+    ydb/core/tx/columnshard/maintenance/cut_history
     ydb/core/tx/columnshard/normalizer
     ydb/core/tx/columnshard/operations
     ydb/core/tx/columnshard/overload_manager
@@ -106,6 +111,9 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    hooks/abstract
+    maintenance/cut_history
+    ut_local_db_backup
     ut_rw
     ut_schema
     backup

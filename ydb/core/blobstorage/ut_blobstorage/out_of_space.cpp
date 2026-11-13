@@ -11,6 +11,11 @@ Y_UNIT_TEST_SUITE(OutOfSpace) {
         }};
         auto& runtime = env.Runtime;
 
+        if (runtime->GetNode(1)->AppData->FeatureFlags.GetEnableTinyDisks()) {
+            // TODO: rewrite test for new huge blob sizes
+            return;
+        }
+
         env.CreateBoxAndPool(1, 1, 1, NKikimrBlobStorage::EPDiskType::NVME, std::nullopt);
         env.Sim(TDuration::Seconds(30));
 

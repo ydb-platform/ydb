@@ -6,4 +6,4 @@ namespace NFq {
 
 NActors::TActorId MakeYqlAnalyticsHttpProxyId();
 
-}  // namespace NFq
+}   // namespace NFq

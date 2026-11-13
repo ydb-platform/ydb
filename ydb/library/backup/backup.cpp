@@ -42,6 +42,8 @@
 #include <library/cpp/regex/pcre/regexp.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
+#include <algorithm>
+
 #include <util/datetime/base.h>
 #include <util/folder/dirut.h>
 #include <util/folder/path.h>
@@ -66,6 +68,9 @@ static constexpr i64 FILE_SPLIT_THRESHOLD = 128 << 20; // 128 MiB
 static constexpr i64 READ_TABLE_RETRIES = 100;
 static const std::string ATTR_ASYNC_REPLICATION = "__async_replication";
 static const std::string ATTR_ASYNC_REPLICA = "__async_replica";
+// Explicit backup exclusion for scheme objects; independent of the
+// replication markers above. Directories do not support this attribute.
+static const std::string ATTR_OMIT_BACKUP = "__omit_backup";
 
 ////////////////////////////////////////////////////////////////////////////////
 //                               Util
@@ -73,6 +78,12 @@ static const std::string ATTR_ASYNC_REPLICA = "__async_replica";
 
 void TYdbErrorException::LogToStderr() const {
     Cerr << Status;
+}
+
+template <typename TAttributes>
+static bool IsOmittedFromBackup(const TAttributes& attributes) {
+    const auto it = attributes.find(ATTR_OMIT_BACKUP);
+    return it != attributes.end() && it->second == "true";
 }
 
 static void VerifyStatus(TStatus status, const TString& explain = {}) {
@@ -410,6 +421,56 @@ TString BuildQuotedIdentifierList(const std::vector<std::string>& names) {
     return JoinSeq(", ", quoted);
 }
 
+// Which cells of the saved key tuple are NULL.
+std::vector<bool> NullCellsOf(const TValue& key) {
+    std::vector<bool> result;
+    TValueParser parser(key);
+    parser.OpenTuple();
+    while (parser.TryNextElement()) {
+        bool isNull = false;
+        if (parser.GetKind() == TTypeParser::ETypeKind::Optional) {
+            parser.OpenOptional();
+            isNull = parser.IsNull();
+            parser.CloseOptional();
+        }
+        result.push_back(isNull);
+    }
+    parser.CloseTuple();
+    return result;
+}
+
+// Builds the "key > $pk" condition for resuming a read after a saved key with NULL cells, where $pk is the saved
+// key tuple. NULL is the smallest value, the same as in ORDER BY. A plain tuple comparison "(k0, k1) > $pk" evaluates
+// to NULL as soon as a compared cell on either side is NULL, and WHERE drops such rows: a retry that resumed after
+// such a key would silently skip the rest of the table. So the comparison is expanded by hand, and since the saved
+// cells are known here, each one gets a plain comparison or a NULL test (KQP turns both into key ranges):
+//   gt(k, p) = k > $pk.i      or, for a NULL cell,  k IS NOT NULL
+//   eq(k, p) = k = $pk.i      or, for a NULL cell,  k IS NULL
+//   key > $pk = gt(k0, p0) OR (eq(k0, p0) AND gt(k1, p1)) OR (eq(k0, p0) AND eq(k1, p1) AND gt(k2, p2)) ...
+// A NULL cell of the row makes "k > p" and "k = p" NULL, which WHERE treats as false: correct, since NULL is neither
+// greater than nor equal to a non-NULL saved cell.
+TString BuildResumeCondition(const std::vector<std::string>& pkColumns, const std::vector<bool>& savedCellIsNull) {
+    Y_ENSURE(pkColumns.size() == savedCellIsNull.size());
+    TVector<TString> alternatives;
+    TVector<TString> equalPrefix;
+    for (size_t i = 0; i < pkColumns.size(); ++i) {
+        const TString column = TStringBuilder() << '`' << pkColumns[i] << '`';
+        const TString saved = TStringBuilder() << "$pk." << i;
+        TVector<TString> conditions = equalPrefix;
+        if (savedCellIsNull[i]) {
+            conditions.push_back(TStringBuilder() << column << " IS NOT NULL");
+            equalPrefix.push_back(TStringBuilder() << column << " IS NULL");
+        } else {
+            conditions.push_back(TStringBuilder() << column << " > " << saved);
+            equalPrefix.push_back(TStringBuilder() << column << " = " << saved);
+        }
+        alternatives.push_back(TStringBuilder() << '(' << JoinSeq(" AND ", conditions) << ')');
+    }
+    return JoinSeq(" OR ", alternatives);
+}
+
+} // anonymous namespace
+
 std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescription& desc,
         const TString& fullTablePath, TMaybe<TValue> lastWrittenPK)
 {
@@ -431,7 +492,19 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
     query << "SELECT " << BuildQuotedIdentifierList(columnNames)
         << " FROM `" << fullTablePath << '`';
     if (lastWrittenPK) {
-        query << " WHERE (" << quotedPkList << ") > $pk";
+        const auto& pkColumns = desc.GetPrimaryKeyColumns();
+        const auto nullCells = NullCellsOf(*lastWrittenPK);
+        Y_ENSURE(nullCells.size() == pkColumns.size());
+        const bool hasNullCell = std::find(nullCells.begin(), nullCells.end(), true) != nullCells.end();
+        if (pkColumns.size() > 1 && !hasNullCell) {
+            // the usual case: a tuple comparison, which KQP turns into a key range
+            query << " WHERE (" << quotedPkList << ") > $pk";
+        } else {
+            // A saved key with NULL cells needs the comparison expanded per column, see BuildResumeCondition.
+            // A single-column key is expanded as well: in YQL "(a) > $pk" is the scalar a compared with a tuple,
+            // which does not compile.
+            query << " WHERE " << BuildResumeCondition(pkColumns, nullCells);
+        }
     }
     // lastWrittenPK is only a valid resume point if every attempt, including the first,
     // returns rows in PK order - otherwise a retry can both skip and duplicate rows.
@@ -441,6 +514,8 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
     query << ';';
     return {query.Str(), paramsBuilder.Build()};
 }
+
+namespace {
 
 TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::TTableDescription& desc,
         const TString& fullTablePath, const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32* fileCounter)
@@ -611,6 +686,42 @@ NScheme::TSchemeEntry DescribePath(TDriver driver, const TString& fullPath) {
     return status.GetEntry();
 }
 
+static bool IsPathOmittedFromBackup(TDriver driver, const TString& path, NScheme::ESchemeEntryType type, bool checkTopicParent) {
+    if (type == NScheme::ESchemeEntryType::Table || type == NScheme::ESchemeEntryType::ColumnTable) {
+        const auto description = DescribeTable(driver, path);
+        const auto& attributes = description.GetAttributes();
+        const auto replica = attributes.find(ATTR_ASYNC_REPLICA);
+        return IsOmittedFromBackup(attributes)
+            || (replica != attributes.end() && replica->second == "true");
+    }
+    if (type == NScheme::ESchemeEntryType::Topic && checkTopicParent) {
+        // A directly requested changefeed is exposed as a topic. Its attributes
+        // belong to the parent table's changefeed description, not DescribeTopic.
+        const TString parentPath(TStringBuf(path).RBefore('/'));
+        try {
+            const auto parent = DescribePath(driver, parentPath);
+            if (parent.Type == NScheme::ESchemeEntryType::Table) {
+                const auto description = DescribeTable(driver, parentPath);
+                for (const auto& feed : description.GetChangefeedDescriptions()) {
+                    if (TStringBuf(feed.GetName()) == TStringBuf(path).RAfter('/')) {
+                        return IsOmittedFromBackup(feed.GetAttributes())
+                            || feed.GetAttributes().contains(ATTR_ASYNC_REPLICATION);
+                    }
+                }
+            }
+        } catch (const TYdbErrorException& e) {
+            if (e.Status.GetStatus() != EStatus::UNAUTHORIZED) {
+                throw;
+            }
+            LOG_W("Cannot check changefeed backup exclusions for " << path.Quote()
+                << ": access to parent " << parentPath.Quote() << " is denied; dumping the topic");
+        }
+    }
+    // Other object types do not expose scheme user attributes through the
+    // existing public API. Their exclusion is supported by server-side export.
+    return false;
+}
+
 TAsyncStatus CopyTableAsyncStart(TDriver driver, const TString& src, const TString& dst) {
     LOG_I("Copy table " << src.Quote() << " to " << dst.Quote());
 
@@ -706,8 +817,10 @@ NTopic::TTopicDescription DescribeTopic(TDriver driver, const TString& path) {
 
 void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& folderPath, const NTable::TTableDescription& desc) {
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
-        if (changefeedDesc.GetAttributes().contains(ATTR_ASYNC_REPLICATION)) {
-            // this changefeed is managed by ASYNC REPLICATION and does not need backing up separately
+        if (IsOmittedFromBackup(changefeedDesc.GetAttributes())
+            || changefeedDesc.GetAttributes().contains(ATTR_ASYNC_REPLICATION))
+        {
+            // Replication feeds remain excluded even if __omit_backup is removed.
             continue;
         }
         TFsPath changefeedDirPath = CreateDirectory(folderPath, TString{changefeedDesc.GetName()});
@@ -732,10 +845,10 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     const auto originalTablePath = JoinDatabasePath(dbPrefix, path);
     const auto originalTableDesc = DescribeTable(driver, originalTablePath);
     if (auto replicaAttribute = originalTableDesc.GetAttributes().find(ATTR_ASYNC_REPLICA);
-        replicaAttribute != originalTableDesc.GetAttributes().end()
-        && replicaAttribute->second == "true"
+        (replicaAttribute != originalTableDesc.GetAttributes().end() && replicaAttribute->second == "true")
+        || IsOmittedFromBackup(originalTableDesc.GetAttributes())
     ) {
-        LOG_D("Skip table " << originalTablePath.Quote() << ", because it is a replica table");
+        LOG_D("Skip table " << originalTablePath.Quote() << ", because it is a replica table or is marked with " << ATTR_OMIT_BACKUP);
         // remove the backup folder
         TVector<TString> children;
         folderPath.ListNames(children);
@@ -1098,7 +1211,11 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     {
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
+            // Only directly requested topics are already listed. Topics found
+            // while traversing directories have directory parents, not tables.
+            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)
+                || IsPathOmittedFromBackup(driver, dbIt.GetFullPath(), dbIt.GetCurrentNode()->Type, dbIt.IsListed()))
+            {
                 LOG_D("Skip " << dbIt.GetFullPath().Quote());
                 dbIt.Next();
                 continue;
@@ -1125,7 +1242,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                         auto status = CopyTableAsyncStart(driver, dbIt.GetFullPath(), tmpTablePath);
                         copiedTablesStatuses.emplace(dbIt.GetFullPath(), std::move(status));
                     }
-                } else if (dbIt.IsDir() && !dbIt.IsSystemDir()) {
+                } else if (dbIt.IsDir() && !dbIt.IsInternalDir()) {
                     CreateClusterDirectory(driver, JoinDatabasePath(backupPrefix, dbIt.GetRelPath()));
                 }
             }
@@ -1247,7 +1364,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             } else if (dbIt.IsDir()) {
                 MaybeCreateEmptyFile(childFolderPath);
                 BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-                if (!avoidCopy && !dbIt.IsSystemDir()) {
+                if (!avoidCopy && !dbIt.IsInternalDir()) {
                     RemoveClusterDirectory(driver, tmpTablePath);
                 }
             }
@@ -1459,11 +1576,12 @@ void BackupGroupMembers(TDriver driver, const TString& dbPath, const TFsPath& fo
     WriteCreationQueryToFile(alterGroupQuery.Str(), folderPath, NDump::NFiles::AlterGroup());
 }
 
-void BackupDatabaseImpl(TDriver driver, const TString& dbPath, const TFsPath& folderPath, TBackupDatabaseSettings settings) {
+void BackupDatabaseImpl(TDriver driver, TString dbPath, const TFsPath& folderPath, TBackupDatabaseSettings settings) {
     LOG_I("Backup database " << dbPath.Quote() << " to " << folderPath.GetPath().Quote());
     folderPath.MkDirs();
 
     auto status = GetDatabaseStatus(driver, dbPath);
+    dbPath = TString(status.GetPath());
     Ydb::Cms::CreateDatabaseRequest proto;
     status.SerializeTo(proto);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::Database());

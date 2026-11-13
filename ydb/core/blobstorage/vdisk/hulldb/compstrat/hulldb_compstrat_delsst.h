@@ -22,10 +22,12 @@ namespace NKikimr {
             TStrategyDelSst(
                     TIntrusivePtr<THullCtx> hullCtx,
                     const TLevelIndexSnapshot &levelSnap,
-                    TTask *task)
+                    TTask *task,
+                    TCompactionYield* yield = nullptr)
                 : HullCtx(std::move(hullCtx))
                 , LevelSnap(levelSnap)
                 , Task(task)
+                , Yield(yield)
             {}
 
             EAction Select() {
@@ -49,6 +51,7 @@ namespace NKikimr {
             TIntrusivePtr<THullCtx> HullCtx;
             const TLevelIndexSnapshot &LevelSnap;
             TTask *Task = nullptr;
+            TCompactionYield* const Yield;
             ui32 SstToDelete = 0;
 
             EAction FindSstsToRemove() {
@@ -58,6 +61,7 @@ namespace NKikimr {
                 TSstIterator it(&LevelSnap.SliceSnap);
                 it.SeekToFirst();
                 while (it.Valid()) {
+                    CheckCompactionYield(Yield);
                     TLevelSstPtr p = it.Get();
                     TSstRatioPtr ratio = p.SstPtr->StorageRatio.Get();
                     if (p.Level > 0 && ratio && ratio->CanDeleteSst()) {
@@ -68,7 +72,7 @@ namespace NKikimr {
                                 {"SST", p},
                                 {"ration", ratio->ToString()});
                         }
-                        Task->DeleteSsts.DeleteSst(p.Level, p.SstPtr);
+                        Task->DeleteSsts.DeleteSst(p.Level, p.SstPtr, Yield);
                         SstToDelete++;
                     }
 

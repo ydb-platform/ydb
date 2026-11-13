@@ -1,6 +1,6 @@
 # Structure of the Actual Query Plan
 
-The [diagram](layout.md) shows the structure of [stages](../../concepts/glossary.md#processing-stage) and [operators](../../concepts/glossary.md#operator) in the left column; below are their semantics, [communication channels](../../concepts/glossary.md#channels), and non-trivial topologies.
+The [diagram](layout.md) shows the structure of [stages](#stages) and operators in the left column; below are their semantics, [communication channels](#connections), and non-trivial topologies.
 
 ## Stages {#stages}
 
@@ -17,22 +17,22 @@ SELECT count(*) cnt, l_orderkey, sum(l_quantity)
 
 ![Simple aggregation](../../_assets/rts-structure-1.svg){inline=false}
 
-The example has three compute [stages](../../concepts/glossary.md#processing-stage), numbered `0`, `1`, and `2`, plus a separate stage for the `lineitem` table (read stages are not numbered). Any stage can be temporarily highlighted in the diagram; here stage `1` is highlighted.
+The example has three compute [stages](#stages), numbered `0`, `1`, and `2`, plus a separate stage for the `lineitem` table (read stages are not numbered). Any stage can be temporarily highlighted in the diagram; here stage `1` is highlighted.
 
 Interactive elements on embedded images are not available — see [Information layout in the query plan](layout.md).
 
-The diagram shows the query execution structure obtained after compilation: [physical operators](../../concepts/glossary.md#physical-operator) grouped into execution stages.
+The diagram shows the query execution structure obtained after compilation: physical operators grouped into execution stages.
 
-A [stage](../../concepts/glossary.md#processing-stage) is the main unit of the plan; [tasks](../../concepts/glossary.md#task) of a stage run in parallel, often on different [nodes](../../concepts/glossary.md#node). Data is passed from stage to stage from bottom to top: from storage to the result.
+A [stage](#stages) is the main unit of the plan; [tasks](layout.md#progress) of a stage run in parallel, often on different [nodes](../../concepts/glossary.md#node). Data is passed from stage to stage from bottom to top: from storage to the result.
 
-[Stages](../../concepts/glossary.md#processing-stage) are of two types:
+[Stages](#stages) are of two types:
 
 1. Scan stages, which run in storage ([column-oriented tables](../../concepts/glossary.md#column-oriented-table) or [row-oriented tables](../../concepts/glossary.md#row-oriented-table)), have a dark background.
 2. Compute stages are displayed on a light background and are numbered sequentially starting from `0`.
 
 {% note info %}
 
-The numbered list below on the page goes **from top to bottom**, while on the diagram stages and [operators](../../concepts/glossary.md#operator) are arranged **from bottom to top**. It is convenient to match the items with the diagram starting from the **bottom** part of the plan.
+The numbered list below on the page goes **from top to bottom**, while on the diagram stages and operators are arranged **from bottom to top**. It is convenient to match the items with the diagram starting from the **bottom** part of the plan.
 
 {% endnote %}
 
@@ -53,7 +53,7 @@ A non-obvious element of the diagram can be highlighted with the cursor: most no
 
 ## Communication channels {#connections}
 
-A [communication channel](../../concepts/glossary.md#channels) is shown on the diagram as a pentagon with a flow direction. In this example, the channel ![](../../_assets/rts-hash-conn-u.svg) between stages `0` and `1` is highlighted.
+A [communication channel](#connections) is shown on the diagram as a pentagon with a flow direction. In this example, the channel ![](../../_assets/rts-hash-conn-u.svg) between stages `0` and `1` is highlighted.
 
 A linear plan of four stages has three connections:
 
@@ -72,16 +72,16 @@ On the diagram of a **successfully** completed query, the data volume at the cha
 
 While the query is running, input and output metrics may diverge due to buffer latency and asynchronous statistics updates. Divergences are also possible on the diagram of a failed query.
 
-The input channel is associated with the [operator](../../concepts/glossary.md#operator) that receives the data. In the simple case, a stage has one input: the stream from the channel is fed to the first [operator](../../concepts/glossary.md#operator) in processing order (the bottom one in the list). In complex query execution structures, there are often multiple inputs; the [operator](../../concepts/glossary.md#operator) on the right duplicates the number of the source stage of the outgoing channel (here `0`), which is highlighted when the channel is selected. An analysis using a `JOIN` example is in the [section below](#join).
+The input channel is associated with the operator that receives the data. In the simple case, a stage has one input: the stream from the channel is fed to the first operator in processing order (the bottom one in the list). In complex query execution structures, there are often multiple inputs; the operator on the right duplicates the number of the source stage of the outgoing channel (here `0`), which is highlighted when the channel is selected. An analysis using a `JOIN` example is in the [section below](#join).
 
 What can be understood for the selected channel between stages `0` and `1`:
 
 1. It starts in stage `0` and is directed to stage `1`.
 2. It goes through a [hash shuffle](#connections).
 3. It enters stage `1` from stage `0`.
-4. It is fed to the aggregation [operator](../../concepts/glossary.md#operator).
+4. It is fed to the aggregation operator.
 
-Scan and compute stages are connected by similar [communication channels](../../concepts/glossary.md#channels) that have a slightly different set of metrics than channels connecting two compute stages (see [above](#stages)). The {{ ydb-short-name }} planner places related [tasks](../../concepts/glossary.md#task) on the same node whenever possible to reduce the amount of data sent over the network and speed up query execution.
+Scan and compute stages are connected by similar [communication channels](#connections) that have a slightly different set of metrics than channels connecting two compute stages (see [above](#stages)). The {{ ydb-short-name }} planner places related [tasks](layout.md#progress) on the same node whenever possible to reduce the amount of data sent over the network and speed up query execution.
 
 ## Stage joins {#join}
 
@@ -102,31 +102,31 @@ The `region` and `nation` tables are small (5 and 25 rows), the query is fast, t
 
 Stage `2` (initially highlighted in the diagram) receives data from two stages numbered `0` and `1`. Stages are arranged vertically, and the direction of data movement is from bottom to top; however, the connections between them are not necessarily sequential. If a stage has multiple predecessors, an indent appears on the left, and the input `H`-channels are marked with a pentagon ![](../../_assets/rts-hash-conn-l.svg) pointing left; in this example, there are two such connections.
 
-The data is combined in the InnerJoin [physical operator](../../concepts/glossary.md#physical-operator) (the equivalent of `JOIN` in the query text). The keys `n_regionkey` and `r_regionkey` are specified; on the right are the stage numbers `0` and `1`.
+The data is combined in the InnerJoin physical operator (the equivalent of `JOIN` in the query text). The keys `n_regionkey` and `r_regionkey` are specified; on the right are the stage numbers `0` and `1`.
 
-The red circles with numbers `1` and `5` are a reminder from the [Aggregates](metrics.md#aggregates) section: the number of non-zero metrics (here — by traffic in channels) is less than the number of [tasks](../../concepts/glossary.md#task) in the stage. Some [tasks](../../concepts/glossary.md#task) received no data; a common cause is [data skew](metrics.md#dataskew) or excessive parallelism.
+The red circles with numbers `1` and `5` are a reminder from the [Aggregates](metrics.md#aggregates) section: the number of non-zero metrics (here — by traffic in channels) is less than the number of [tasks](layout.md#progress) in the stage. Some [tasks](layout.md#progress) received no data; a common cause is [data skew](metrics.md#dataskew) or excessive parallelism.
 
-This diagram highlights two typical cases that cause [data skew](metrics.md#dataskew) (`data skew`) and thus slow down query execution, because those [tasks](../../concepts/glossary.md#task) that received a smaller amount of traffic finish faster and wait for others that received more data:
+This diagram highlights two typical cases that cause [data skew](metrics.md#dataskew) (`data skew`) and thus slow down query execution, because those [tasks](layout.md#progress) that received a smaller amount of traffic finish faster and wait for others that received more data:
 
 ### 1. Uneven data distribution in storage
 
-The `Tasks` column shows that the read stages have a parallelism of 1 (one [shard](../../concepts/glossary.md#data-shard) per `region` and `nation` table). For the associated compute stages numbered `0` and `1`, the planner created 3 [tasks](../../concepts/glossary.md#task) each. All rows read from each table were grouped into a single batch and sent from the [column-oriented shard](../../concepts/glossary.md#data-shard) to **one** of the three [tasks](../../concepts/glossary.md#task) (random). The remaining [tasks](../../concepts/glossary.md#task) received nothing, so they did not report in the statistics for this channel.
+The `Tasks` column shows that the read stages have a parallelism of 1 (one [shard](../../concepts/glossary.md#data-shard) per `region` and `nation` table). For the associated compute stages numbered `0` and `1`, the planner created 3 [tasks](layout.md#progress) each. All rows read from each table were grouped into a single batch and sent from the [column-oriented shard](../../concepts/glossary.md#data-shard) to **one** of the three [tasks](layout.md#progress) (random). The remaining [tasks](layout.md#progress) received nothing, so they did not report in the statistics for this channel.
 
-When a table has more data and the transfer uses more than one message, the data is usually distributed evenly among the compute [tasks](../../concepts/glossary.md#task). However, if data skew occurs during storage (some [shards](../../concepts/glossary.md#data-shard) contain more data than others), similar unevenness can also appear and negatively affect performance, so it is highlighted in the diagram to draw attention to it.
+When a table has more data and the transfer uses more than one message, the data is usually distributed evenly among the compute [tasks](layout.md#progress). However, if data skew occurs during storage (some [shards](../../concepts/glossary.md#data-shard) contain more data than others), similar unevenness can also appear and negatively affect performance, so it is highlighted in the diagram to draw attention to it.
 
 ### 2. Uneven key distribution
 
 Even if the data in storage is evenly distributed, it is redistributed during subsequent processing, which can also cause skew due to algorithmic implementation features.
 
-A **hash shuffle** join is used to correctly process large data volumes with multiple [tasks](../../concepts/glossary.md#task) simultaneously. The purpose of this action is to split the entire set of rows into several non-overlapping groups so that rows with the same values of certain columns end up in the same group. Then each [task](../../concepts/glossary.md#task) can independently process its group and get the correct result. Such columns are also called key columns because they are used as keys for the **[hash shuffle](#connections)** and subsequent [operators](../../concepts/glossary.md#operator).
+A **hash shuffle** join is used to correctly process large data volumes with multiple [tasks](layout.md#progress) simultaneously. The purpose of this action is to split the entire set of rows into several non-overlapping groups so that rows with the same values of certain columns end up in the same group. Then each [task](layout.md#progress) can independently process its group and get the correct result. Such columns are also called key columns because they are used as keys for the **[hash shuffle](#connections)** and subsequent operators.
 
-In this example, the **[hash shuffle](#connections)** is used to group the required rows in the [task](../../concepts/glossary.md#task) that implements the `JOIN` [operator](../../concepts/glossary.md#operator). It is implemented as computing the hash function value of all key columns and then the remainder of dividing this value by the total number of such [tasks](../../concepts/glossary.md#task).
+In this example, the **[hash shuffle](#connections)** is used to group the required rows in the [task](layout.md#progress) that implements the `JOIN` operator. It is implemented as computing the hash function value of all key columns and then the remainder of dividing this value by the total number of such [tasks](layout.md#progress).
 
 However, the total number of distinct values (cardinality) of the hash function cannot exceed the total number of distinct keys in our data, so even if the data is initially large and evenly distributed in storage, but the number of keys is small and differs significantly for different key values, skew can occur again, which we observe in this plan.
 
-After applying the `WHERE` condition, only one row remains from the `region` table, which naturally falls into only one of the created [tasks](../../concepts/glossary.md#task), as indicated by the red circle with the mark `1` at the input of stage `2` (we observe low cardinality on the `r_regionkey` key).
+After applying the `WHERE` condition, only one row remains from the `region` table, which naturally falls into only one of the created [tasks](layout.md#progress), as indicated by the red circle with the mark `1` at the input of stage `2` (we observe low cardinality on the `r_regionkey` key).
 
-All 25 rows are selected from the `nation` table. However, for the `n_regionkey` key, we have only 5 distinct values. Therefore, out of all 8 [tasks](../../concepts/glossary.md#task) of stage `2`, data from the `nation` table arrives only to 5 (the remaining [tasks](../../concepts/glossary.md#task) received nothing). All 8 [tasks](../../concepts/glossary.md#task) execute the `JOIN` [operator](../../concepts/glossary.md#operator), but only one of them will have a non-empty result — the one that received the row from the `region` table. This [task](../../concepts/glossary.md#task) will return the 5 selected rows of the `nation` table associated with this region. Therefore, a red mark `1` also appears at the output of stage `2`.
+All 25 rows are selected from the `nation` table. However, for the `n_regionkey` key, we have only 5 distinct values. Therefore, out of all 8 [tasks](layout.md#progress) of stage `2`, data from the `nation` table arrives only to 5 (the remaining [tasks](layout.md#progress) received nothing). All 8 [tasks](layout.md#progress) execute the `JOIN` operator, but only one of them will have a non-empty result — the one that received the row from the `region` table. This [task](layout.md#progress) will return the 5 selected rows of the `nation` table associated with this region. Therefore, a red mark `1` also appears at the output of stage `2`.
 
 ## Multiple outputs {#multiout}
 
@@ -197,6 +197,6 @@ SELECT s_suppkey, s_name, s_address, s_phone, total_revenue
 
 ![Precompute](../../_assets/rts-tpch-q15.svg){inline=false}
 
-The connection of the precompute with the main execution structure becomes obvious when highlighting the precompute name or its output [channel](../../concepts/glossary.md#channels) with the result: the input of the [operator](../../concepts/glossary.md#operator) that uses this result is highlighted simultaneously. Such an input is marked with the symbol `P`. In this example, it is stage `3` in the upper structure; data from the precompute enters the right side of the Map Join.
+The connection of the precompute with the main execution structure becomes obvious when highlighting the precompute name or its output [channel](#connections) with the result: the input of the operator that uses this result is highlighted simultaneously. Such an input is marked with the symbol `P`. In this example, it is stage `3` in the upper structure; data from the precompute enters the right side of the Map Join.
 
-In heavy queries (including those from TPC-DS), there are multiple precomputes; they can run sequentially or in parallel, results are mixed into subsequent stages or spawn new precomputes. The plan format is designed so that the actual execution structure and the correspondence of [tasks](../../concepts/glossary.md#task) on the {{ ydb-short-name }} [cluster](../../concepts/glossary.md#cluster) can be reconstructed from the diagram.
+In heavy queries (including those from TPC-DS), there are multiple precomputes; they can run sequentially or in parallel, results are mixed into subsequent stages or spawn new precomputes. The plan format is designed so that the actual execution structure and the correspondence of [tasks](layout.md#progress) on the {{ ydb-short-name }} [cluster](../../concepts/glossary.md#cluster) can be reconstructed from the diagram.

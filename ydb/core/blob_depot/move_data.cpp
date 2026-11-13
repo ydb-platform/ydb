@@ -106,6 +106,7 @@ namespace NKikimr::NBlobDepot {
 
                     state.Key = binaryKey;
                     state.ValueChainIndex = static_cast<ui32>(value.ValueChain.size());
+                    ++Self->MoveData.RecordsScanned;
                     if (++keysProcessed >= Self->MoveData.MaxMoveDataKeysPerTx) {
                         stoppedByLimit = true;
                         return false;
@@ -159,6 +160,13 @@ namespace NKikimr::NBlobDepot {
             auto& state = Self->MoveData;
             Y_ABORT_UNLESS(state.Phase == TMoveDataState::EPhase::UpdatingIndex);
             Y_ABORT_UNLESS(state.Key);
+
+            // A reused copy may have lost its last reference since the scan.
+            // Retry through scanning; newly copied blobs are still protected.
+            if (!state.ProtectedBlobSeqIds.contains(state.NewBlobSeqId) &&
+                    !Self->Data->IsBlobReferenced(MakeFirstBlobId(Self->TabletID(), state.NewBlobLocator))) {
+                return true;
+            }
 
             const TData::TKey key = TData::TKey::FromBinaryKey(*state.Key, Self->Config);
             Result = Self->Data->ReplaceLocatorForMoveData(key, state.ValueChainIndex, state.ValueVersion,
@@ -718,6 +726,7 @@ namespace NKikimr::NBlobDepot {
         MoveData.BlobLocator.Clear();
         MoveData.NewBlobLocator.Clear();
         MoveData.NewBlobSeqId = {};
+        MoveData.RecordsScanned = 0;
         MoveData.Phase = TMoveDataState::EPhase::ScanningIndex;
     }
 

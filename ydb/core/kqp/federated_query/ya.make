@@ -15,11 +15,14 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/pq/comp_nodes
     ydb/library/yql/providers/pq/gateway/abstract
-    ydb/library/yql/providers/pq/transform
     ydb/library/yql/providers/pq/gateway/native
+    ydb/library/yql/providers/pq/transform
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/solomon/gateway
+    ydb/library/yql/providers/ydb_external/common
+    ydb/library/yql/providers/ydb_external/provider
+    ydb/library/yql/providers/yt/gateway/clients/message_stream
     ydb/public/api/protos
     ydb/public/sdk/cpp/adapters/executor
     ydb/public/sdk/cpp/adapters/issue
@@ -37,4 +40,5 @@ END()
 
 RECURSE(
     actors
+    streaming
 )

@@ -21,9 +21,12 @@
 
 #include <library/cpp/yt/mpl/type_traits.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 #include <library/cpp/yt/assert/assert.h>
+
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 #include <optional>
 #include <variant>
@@ -944,13 +947,13 @@ template <class TUnderlyingSerializer = TDefaultSerializer>
 struct TAtomicObjectSerializer
 {
     template <class T, class C>
-    static void Save(C& context, const NThreading::TAtomicObject<T>& object)
+    static void Save(C& context, const TAtomicObject<T>& object)
     {
         TUnderlyingSerializer::Save(context, object.Load());
     }
 
     template <class T, class C>
-    static void Load(C& context, NThreading::TAtomicObject<T>& object)
+    static void Load(C& context, TAtomicObject<T>& object)
     {
         T value;
         TUnderlyingSerializer::Load(context, value);
@@ -1133,6 +1136,12 @@ struct TSorterSelector<std::map<T...>, C, TSortedTag>
 };
 
 template <class C, class... T>
+struct TSorterSelector<absl::flat_hash_set<T...>, C, TSortedTag>
+{
+    using TSorter = TCollectionSorter<absl::flat_hash_set<T...>, TValueSorterComparer<C>>;
+};
+
+template <class C, class... T>
 struct TSorterSelector<std::unordered_set<T...>, C, TSortedTag>
 {
     using TSorter = TCollectionSorter<std::unordered_set<T...>, TValueSorterComparer<C>>;
@@ -1172,6 +1181,12 @@ template <class C, class... T>
 struct TSorterSelector<std::unordered_map<T...>, C, TSortedTag>
 {
     using TSorter = TCollectionSorter<std::unordered_map<T...>, TKeySorterComparer<C>>;
+};
+
+template <class C, class... T>
+struct TSorterSelector<absl::flat_hash_map<T...>, C, TSortedTag>
+{
+    using TSorter = TCollectionSorter<absl::flat_hash_map<T...>, TKeySorterComparer<C>>;
 };
 
 template <class C, class... T>
@@ -1997,6 +2012,12 @@ struct TSerializerTraits<THashSet<T, H, E, A>, C, void>
     using TSerializer = TSetSerializer<>;
 };
 
+template <class T, class H, class E, class A, class C>
+struct TSerializerTraits<absl::flat_hash_set<T, H, E, A>, C, void>
+{
+    using TSerializer = TSetSerializer<>;
+};
+
 template <class T, size_t N, class Q, class C>
 struct TSerializerTraits<TCompactSet<T, N, Q>, C, void>
 {
@@ -2059,6 +2080,12 @@ struct TSerializerTraits<std::map<K, V, Q, A>, C, void>
 
 template <class K, class V, class H, class P, class A, class C>
 struct TSerializerTraits<std::unordered_map<K, V, H, P, A>, C, void>
+{
+    using TSerializer = TMapSerializer<>;
+};
+
+template <class K, class V, class H, class P, class A, class C>
+struct TSerializerTraits<absl::flat_hash_map<K, V, H, P, A>, C, void>
 {
     using TSerializer = TMapSerializer<>;
 };
@@ -2137,15 +2164,15 @@ struct TSerializerTraits<TMaybeInf<T>, C, void>
 };
 
 template <class T, class C>
-struct TSerializerTraits<NThreading::TAtomicObject<T>, C, void>
+struct TSerializerTraits<TAtomicObject<T>, C, void>
 {
     // NB: Neither default is safe: in-place serialization holds the spinlock across IO that
     // may wait for a future (Cf. checkpointable_stream.cpp), and copying an arbitrary T may
     // be too expensive. The caller chooses; see TAtomicObjectSerializer.
     struct TSerializer
     {
-        static void Save(C& context, const NThreading::TAtomicObject<T>& object) = delete;
-        static void Load(C& context, NThreading::TAtomicObject<T>& object) = delete;
+        static void Save(C& context, const TAtomicObject<T>& object) = delete;
+        static void Load(C& context, TAtomicObject<T>& object) = delete;
     };
 };
 

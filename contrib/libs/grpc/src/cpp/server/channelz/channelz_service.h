@@ -25,7 +25,6 @@
 #include <grpcpp/support/status.h>
 
 #include "grpc/channelz/v1/channelz.grpc.pb.h"
-#include "grpc/channelz/v1/channelz.pb.h"
 
 namespace grpc {
 

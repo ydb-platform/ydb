@@ -2911,6 +2911,7 @@ IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& 
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        isUniversal = node->GetTypeAnn() && node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal;
         return IGraphTransformer::TStatus::Ok;
     }
 

@@ -7,20 +7,22 @@ void TResponseTasks::AddTaskNonBlocking(const TString& key, const TTask& task) {
 }
 
 void TResponseTasks::AddTaskBlocking(const TString& key, const TTask& task) {
-    with_lock (Mutex) {
+    with_lock(Mutex) {
         Tasks[key] = task;
     }
 }
 
 void TResponseTasks::SafeEraseTaskNonBlocking(const TString& key) {
-    if (auto it = Tasks.find(key); it != Tasks.end())
+    if (auto it = Tasks.find(key); it != Tasks.end()) {
         Tasks.erase(it);
+    }
 }
 
 void TResponseTasks::SafeEraseTaskBlocking(const TString& key) {
-    with_lock (Mutex) {
-        if (auto it = Tasks.find(key); it != Tasks.end())
+    with_lock(Mutex) {
+        if (auto it = Tasks.find(key); it != Tasks.end()) {
             Tasks.erase(it);
+        }
     }
 }
 
@@ -29,7 +31,7 @@ bool TResponseTasks::EmptyNonBlocking() {
 }
 
 bool TResponseTasks::EmptyBlocking() {
-    with_lock (Mutex) {
+    with_lock(Mutex) {
         return Tasks.empty();
     }
 }
@@ -39,9 +41,9 @@ const THashMap<TString, TTask>& TResponseTasks::GetTasksNonBlocking() {
 }
 
 const THashMap<TString, TTask>& TResponseTasks::GetTasksBlocking() {
-    with_lock (Mutex) {
+    with_lock(Mutex) {
         return Tasks;
     }
 }
 
-} //NFq
+}   // namespace NFq

@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
         for (ui32 i = 0; i < repeats; i++) {
             TEventHolder& event = pool.Allocate(q);
             TString data = TString::Uninitialized(buffSize);
-            auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(data));
+            auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(std::move(data)));
             event.Fill(*holder);
 
             pool.Release(q, q.begin());
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
         for (ui32 i = 0; i < repeats; i++) {
             TEventHolder& event = pool.Allocate(q);
             TString data = TString::Uninitialized(buffSize);
-            auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(data));
+            auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(std::move(data)));
             event.Fill(*holder);
         }
         for (ui32 i = 0; i < repeats; i++) {

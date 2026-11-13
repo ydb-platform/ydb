@@ -136,6 +136,51 @@ Y_UNIT_TEST_SUITE(LockFreeMailbox) {
         UNIT_ASSERT(m.IsEmpty());
     }
 
+    Y_UNIT_TEST(RegisterAliasesAfterMultipleActors) {
+        // Two actors enter Array; eight fill it without converting to Map.
+        for (const int count : {2, 8}) {
+            std::vector<std::unique_ptr<IActor>> actors;
+            TMailbox m;
+            for (int i = 0; i < count; ++i) {
+                actors.emplace_back(new TSimpleActor);
+                m.AttachActor(100 + i, actors.back().get());
+            }
+
+            m.AttachAlias(1, actors[0].get());
+            m.AttachAlias(2, actors[0].get());
+            m.AttachAlias(3, actors[1].get());
+            auto checkActors = [&](int first) {
+                UNIT_ASSERT(!m.IsEmpty());
+                for (int i = first; i < count; ++i) {
+                    UNIT_ASSERT(m.FindActor(100 + i) == actors[i].get());
+                }
+            };
+            checkActors(0);
+            for (ui64 alias : {1, 2, 3}) {
+                UNIT_ASSERT(m.FindActor(alias) == nullptr);
+                UNIT_ASSERT(m.FindAlias(alias) == actors[alias == 3 ? 1 : 0].get());
+            }
+
+            UNIT_ASSERT(m.DetachAlias(1) == actors[0].get());
+            UNIT_ASSERT(m.FindAlias(1) == nullptr);
+            UNIT_ASSERT(m.FindAlias(2) == actors[0].get());
+            UNIT_ASSERT(m.FindAlias(3) == actors[1].get());
+            checkActors(0);
+
+            UNIT_ASSERT(m.DetachActor(100) == actors[0].get());
+            UNIT_ASSERT(m.FindActor(100) == nullptr);
+            UNIT_ASSERT(m.FindAlias(2) == nullptr);
+            UNIT_ASSERT(m.FindAlias(3) == actors[1].get());
+            checkActors(1);
+
+            for (int i = 1; i < count; ++i) {
+                UNIT_ASSERT(m.DetachActor(100 + i) == actors[i].get());
+            }
+            UNIT_ASSERT(m.FindAlias(3) == nullptr);
+            UNIT_ASSERT(m.IsEmpty());
+        }
+    }
+
     Y_UNIT_TEST(MultiThreadedPushPop) {
         constexpr size_t nThreads = 3;
         constexpr size_t nEvents = NSan::PlainOrUnderSanitizer(1000000, 100000);

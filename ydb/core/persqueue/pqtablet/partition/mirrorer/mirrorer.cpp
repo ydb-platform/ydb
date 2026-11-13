@@ -8,6 +8,7 @@
 #include <ydb/library/actors/struct_log/text_writer.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/replication.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
@@ -34,6 +35,19 @@ TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
     TStringBuilder out;
     NActors::NStructuredLog::TTextWriter writer;
     writer.Write(out, prefix);
+    return out;
+}
+
+TString FormatOffsetsByConsumers(const y_absl::flat_hash_map<TString, ui64>& offsetsByConsumers) {
+    TStringBuilder out;
+    bool firstConsumer = true;
+    for (const auto& [consumer, offset] : offsetsByConsumers) {
+        if (!firstConsumer) {
+            out << ", ";
+        }
+        firstConsumer = false;
+        out << consumer << ": " << offset;
+    }
     return out;
 }
 
@@ -86,6 +100,7 @@ TMirrorer::TMirrorer(
     , Partition(partition)
     , IsLocalDC(localDC)
     , EndOffset(endOffset)
+    , ConfirmedEndOffset(endOffset)
     , OffsetToRead(endOffset)
     , Config(config)
 {
@@ -342,7 +357,14 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         LOG_N(
             "[STATE] next offset to read current end offset",
             {"offsetToRead", OffsetToRead},
-            {"endOffset", EndOffset}
+            {"endOffset", EndOffset},
+            {"confirmedEndOffset", ConfirmedEndOffset}
+        );
+        LOG_N(
+            "[STATE] replication offsets",
+            {"replicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
+            {"offsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
+            {"lastReplicationDataTimestamp", LastReplicationDataTimestamp}
         );
         LOG_N(
             "[STATE] bytes in flight messages in write request queue",
@@ -430,6 +452,7 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
     }
 
     THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    request->FromMirrorer = true;
     auto req = request->Record.MutablePartitionRequest();
     req->SetTopic(TopicConverter->GetClientsideName());
     req->SetPartition(Partition);
@@ -483,6 +506,58 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
     }
     Send(PartitionActor, std::move(request));
     EndPartitionSessionEvent = std::nullopt;
+}
+
+void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
+    if (OffsetsByConsumers.empty() && !MirroredOffsetToSend) {
+        return;
+    }
+
+    y_absl::flat_hash_map<TString, ui64> offsetsByConsumersToSend;
+    for (auto& [consumer, offset] : OffsetsByConsumers) {
+        auto offsetToSend = Min(offset, Max(EndOffset, ConfirmedEndOffset));
+        if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offsetToSend) {
+            continue;
+        }
+        
+        offsetsByConsumersToSend[consumer] = offsetToSend;
+    }
+
+    if (offsetsByConsumersToSend.empty() && !MirroredOffsetToSend.Defined()) {
+        return;
+    }
+
+    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+    for (const auto& [consumer, offset] : offsetsByConsumersToSend) {
+        (event->OffsetsByConsumers)[consumer] = offset;
+
+        ReplicatedOffsetsByConsumers[consumer] = offset;
+
+        if (offset == OffsetsByConsumers[consumer]) {
+            OffsetsByConsumers.erase(consumer);
+        }
+    }
+
+    LOG_D("Sending replication data to consumers",
+        {"offsetsByConsumersToSend", FormatOffsetsByConsumers(offsetsByConsumersToSend)},
+        {"ReplicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
+        {"OffsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
+        {"MirroredOffsetToSend", MirroredOffsetToSend ? ToString(*MirroredOffsetToSend) : "none"});
+
+    if (MirroredOffsetToSend) {
+        event->MirroredOffset = *MirroredOffsetToSend;
+        MirroredOffsetToSend = Nothing();
+    }
+
+    ctx.Send(PartitionActor, event.Release());
+}
+
+void TMirrorer::Handle(TEvPQ::TEvPersistDone::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Sender != PartitionActor) {
+        return;
+    }
+    ConfirmedEndOffset = Max(ConfirmedEndOffset, ev->Get()->EndOffset);
+    TryToSendReplicationData(ctx);
 }
 
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
@@ -540,6 +615,7 @@ void TMirrorer::RetryWrite(const TActorContext& ctx) {
     PQ_ENSURE(WriteRequestInFlight);
 
     THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    request->FromMirrorer = true;
     auto req = request->Record.MutablePartitionRequest();
     req->CopyFrom(WriteRequestInFlight.value());
 
@@ -555,6 +631,7 @@ void TMirrorer::HandleWakeup(const TActorContext& ctx) {
     TryToRead(ctx);
     TryToWrite(ctx);
     TryToSplitMerge(ctx);
+    TryToSendReplicationData(ctx);
 }
 
 void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorContext& ctx) {
@@ -678,9 +755,27 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     ctx.Send(TabletActorId, request.Release());
 }
 
-void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
+void TMirrorer::AddMessagesToQueue(
+    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages
+) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
+        if (NYdb::NTopic::IsReplicationServiceMessage(offset, msg.GetMessageMeta()->Fields)) {
+            NKikimrPQ::TReplicationDataPayload replicationData;
+            if (replicationData.ParseFromString(msg.GetData())) {
+                LastReplicationDataTimestamp = TActivationContext::Now();
+                LOG_D("Received replication data", {"replicationData", replicationData.DebugString()});
+
+                for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
+                    auto& pendingOffset = OffsetsByConsumers[consumer];
+                    pendingOffset = Max(pendingOffset, offset);
+                }
+            } else {
+                LOG_E("Failed to parse replication service message", {"payloadSize", msg.GetData().size()});
+            }
+            continue;
+        }
+
         PQ_ENSURE(OffsetToRead <= offset);
         LastReadOffset = offset;
         ui64 messageSize = msg.GetData().size();
@@ -915,6 +1010,7 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
             actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPQ::TEvRewindCommitResult(std::move(status), newEndOffset)));
         }
     );
+
     return true;
 }
 
@@ -930,6 +1026,10 @@ void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const
         return;
     }
     EndOffset = ev->Get()->EndOffset;
+    if (!WasSuccessfulRecording) {
+        MirroredOffsetToSend = Max(MirroredOffsetToSend.GetOrElse(0), EndOffset);
+        TryToSendReplicationData(ctx);
+    }
     ScheduleConsumerCreation(ctx);
 }
 

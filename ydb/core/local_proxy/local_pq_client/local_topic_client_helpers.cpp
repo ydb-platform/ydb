@@ -8,14 +8,15 @@ using namespace NYdb;
 
 namespace {
 
-std::shared_ptr<ICredentialsProvider> CreateCredentialsProvider(const std::optional<std::shared_ptr<ICredentialsProviderFactory>>& maybeFactory) {
+std::shared_ptr<ICredentialsProvider> CreateCredentialsProvider(
+    const std::optional<std::shared_ptr<ICredentialsProviderFactory>>& maybeFactory) {
     if (const auto factory = maybeFactory.value_or(nullptr)) {
         return factory->CreateProvider();
     }
     return nullptr;
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 TLocalTopicClientBase::TLocalTopicClientBase(const TLocalTopicClientSettings& localSettings, const TCommonClientSettings& clientSettings)
     : ActorSystem(localSettings.ActorSystem)
@@ -29,4 +30,4 @@ TLocalTopicClientBase::TLocalTopicClientBase(const TLocalTopicClientSettings& lo
     Y_VALIDATE(clientSettings.DiscoveryEndpoint_.value_or("").empty(), "Discovery endpoint is not allowed for local topics");
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

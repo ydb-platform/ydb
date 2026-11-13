@@ -54,7 +54,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
                             PROPERTY("Topic", Topic);
                             PROPERTY("Path", Path);
                             PROPERTY("Initialized", Inited ? "yes" : "no");
-                            PROPERTY("SchemeShard", "<a href=\"?TabletID=" << SchemeShardId << "\">" << SchemeShardId << "</a>");
+                            PROPERTY("SchemeShard", TStringBuilder() << "<a href=\"?TabletID=" << SchemeShardId << "\">" << SchemeShardId << "</a>");
                             PROPERTY("PathId", PathId);
                             PROPERTY("Version", Version);
                             PROPERTY("Generation", Generation);
@@ -67,10 +67,10 @@ TString TPersQueueReadBalancer::GenerateStat() {
                             PROPERTY("Total data size", metrics.TotalDataSize);
                             PROPERTY("Reserve size", PartitionReserveSize());
                             PROPERTY("Used reserve size", metrics.TotalUsedReserveSize);
-                            PROPERTY("[Total/Max/Avg]WriteSpeedSec", metrics.TotalAvgWriteSpeedPerSec << "/" << metrics.MaxAvgWriteSpeedPerSec << "/" << metrics.TotalAvgWriteSpeedPerSec / NumActiveParts);
-                            PROPERTY("[Total/Max/Avg]WriteSpeedMin", metrics.TotalAvgWriteSpeedPerMin << "/" << metrics.MaxAvgWriteSpeedPerMin << "/" << metrics.TotalAvgWriteSpeedPerMin / NumActiveParts);
-                            PROPERTY("[Total/Max/Avg]WriteSpeedHour", metrics.TotalAvgWriteSpeedPerHour << "/" << metrics.MaxAvgWriteSpeedPerHour << "/" << metrics.TotalAvgWriteSpeedPerHour / NumActiveParts);
-                            PROPERTY("[Total/Max/Avg]WriteSpeedDay", metrics.TotalAvgWriteSpeedPerDay << "/" << metrics.MaxAvgWriteSpeedPerDay << "/" << metrics.TotalAvgWriteSpeedPerDay / NumActiveParts);
+                            PROPERTY("[Total/Max/Avg]WriteSpeedSec", TStringBuilder() << metrics.TotalAvgWriteSpeedPerSec << "/" << metrics.MaxAvgWriteSpeedPerSec << "/" << metrics.TotalAvgWriteSpeedPerSec / NumActiveParts);
+                            PROPERTY("[Total/Max/Avg]WriteSpeedMin", TStringBuilder() << metrics.TotalAvgWriteSpeedPerMin << "/" << metrics.MaxAvgWriteSpeedPerMin << "/" << metrics.TotalAvgWriteSpeedPerMin / NumActiveParts);
+                            PROPERTY("[Total/Max/Avg]WriteSpeedHour", TStringBuilder() << metrics.TotalAvgWriteSpeedPerHour << "/" << metrics.MaxAvgWriteSpeedPerHour << "/" << metrics.TotalAvgWriteSpeedPerHour / NumActiveParts);
+                            PROPERTY("[Total/Max/Avg]WriteSpeedDay", TStringBuilder() << metrics.TotalAvgWriteSpeedPerDay << "/" << metrics.MaxAvgWriteSpeedPerDay << "/" << metrics.TotalAvgWriteSpeedPerDay / NumActiveParts);
                         }
                     }
                 }

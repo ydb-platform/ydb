@@ -397,7 +397,8 @@ void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx)
         topicConverterFactory
     );
 
-    auto topicsToConverter = topicHandler->GetReadTopicsList(topicsToResolve, false, Context->DatabasePath);
+    auto topicsToConverter = topicHandler->GetReadTopicsList(topicsToResolve, false, Context->DatabasePath,
+        NKikimr::AppData()->FeatureFlags.GetEnableRelativePaths());
     if (!topicsToConverter.IsValid) {
         YDB_LOG_CRIT("Commit offsets failed. topicsToConverter is not valid",
             {LogPrefix()});
@@ -414,6 +415,10 @@ void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx)
 }
 
 void TKafkaOffsetCommitActor::Bootstrap(const NActors::TActorContext& ctx) {
+    if (!NKikimr::AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        SendFailedForAllPartitions(EKafkaErrors::POLICY_VIOLATION, ctx);
+        return;
+    }
     if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
         Error = EKafkaErrors::COORDINATOR_NOT_AVAILABLE;
         SendFailedForAllPartitions(Error, ctx);

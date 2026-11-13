@@ -8,4 +8,4 @@ namespace NYql {
 
 IPqGatewayFactory::TPtr CreatePqNativeGatewayFactory(const TPqGatewayServices& services);
 
-} // namespace NYql
+}   // namespace NYql

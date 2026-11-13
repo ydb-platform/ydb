@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/test_tli.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 #include <ydb/core/testlib/actors/wait_events.h>
@@ -468,23 +468,11 @@ namespace {
 
     // ==================== Test context and table helpers ====================
 
-    struct TTliLogs {
-        TString Snapshot() const {
-            TGuard<TMutex> guard(*Mutex_);
-            return Stream_.Str();
-        }
-
-    private:
-        friend TKikimrSettings MakeKikimrSettings(TTliLogs&);
-
-        TStringStream Stream_;
-        std::shared_ptr<TMutex> Mutex_ = std::make_shared<TMutex>();
-    };
+    using TTliLogs = TCapturedLog;
 
     TKikimrSettings MakeKikimrSettings(TTliLogs& ss) {
         TKikimrSettings settings;
-        settings.LogStream = &ss.Stream_;
-        settings.LogStreamMutex = ss.Mutex_;
+        settings.SetLogCapture(ss);
         settings.SetWithSampleTables(false);
         return settings;
     }

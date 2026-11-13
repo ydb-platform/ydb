@@ -173,7 +173,11 @@ TResult ApplyChangesInt(
                 if (auto r = ValidateTopicPartitionCount(settings.set_max_active_partitions(), "Max active partitions"); !r) {
                     return r;
                 }
-                pqTabletConfig->MutablePartitionStrategy()->SetMaxPartitionCount(settings.set_max_active_partitions());
+                const auto maxParts = IfEqualThenDefault<i64>(
+                    settings.set_max_active_partitions(),
+                    0L,
+                    pqTabletConfig->GetPartitionStrategy().GetMinPartitionCount());
+                pqTabletConfig->MutablePartitionStrategy()->SetMaxPartitionCount(maxParts);
             }
             if (settings.has_alter_auto_partitioning_settings()) {
                 if (settings.alter_auto_partitioning_settings().has_set_partition_write_speed()) {
@@ -492,7 +496,8 @@ NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlter
         .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(settings.Request)),
         .IfExists = settings.IfExists,
         .PrepareOnly = settings.PrepareOnly,
-        .Cookie = settings.Cookie
+        .Cookie = settings.Cookie,
+        .EnableRelativePaths = true,
     });
 }
 

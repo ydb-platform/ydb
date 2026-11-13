@@ -51,11 +51,7 @@ class TStringValue {
 #endif
             Y_DEBUG_ABORT_UNLESS(Refs_ > 0);
             if (!--Refs_) {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
                 UdfFreeWithSize(this, sizeof(*this) + Capacity_);
-#else
-                UdfFree(this);
-#endif
             }
         }
         inline void ReleaseRef() {
@@ -74,11 +70,7 @@ class TStringValue {
             }
 #endif
             if (!Refs_) {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
                 UdfFreeWithSize(this, sizeof(*this) + Capacity_);
-#else
-                UdfFree(this);
-#endif
             }
         }
 
@@ -256,11 +248,7 @@ public:
     static TData* AllocateData(ui32 len, ui32 cap) {
         const auto alligned = AlignUp<ui64>(cap, 16ULL);
         const auto dataSize = sizeof(TData) + alligned;
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
         return ::new (UdfAllocateWithSize(dataSize)) TData(len, alligned);
-#else
-        return ::new (UdfAllocate(dataSize)) TData(len, alligned);
-#endif
     }
 
 private:

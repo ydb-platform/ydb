@@ -19,8 +19,8 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -36,8 +36,7 @@ struct TPushdownSettings: public NPq::TCommonPushdownSettings {
         using EFlag = NPushdown::TSettings::EFeatureFlag;
         Enable(
             // Split features
-            EFlag::SplitOrOperator
-        );
+            EFlag::SplitOrOperator);
     }
 };
 
@@ -62,32 +61,21 @@ void GetUsedWatermarkColumnNames(const TExprBase& expr, std::unordered_set<TStri
     }
 }
 
-void GetUsedWatermarkGeneratorColumnNames(
-    std::unordered_set<TString>& usedColumnNames,
-    const TPqState& state
-) {
+void GetUsedWatermarkGeneratorColumnNames(std::unordered_set<TString>& usedColumnNames, const TPqState& state) {
     static constexpr auto RequiredKeys = std::to_array<std::string_view>({
-        "cluster",
-        "partition_id",
-        "write_time",
+        "cluster", "partition_id", "write_time",
     });
 
     for (const auto& key : RequiredKeys) {
-        const auto descriptor = GetPqMetaFieldDescriptorByKey(
-            TString(key),
-            state.AddTransparentPrefixToTransparentSystemColumns,
-            state.EnableUserAttributesInTopicQuery,
-            state.ForbidYqlSysColumnsAndSystemMetadata
-        );
+        const auto descriptor = GetPqMetaFieldDescriptorByKey(TString(key), state.ShouldAddTransparentPrefixToTransparentSystemColumns(),
+            state.EnableUserAttributesInTopicQuery, state.ForbidYqlSysColumnsAndSystemMetadata);
         YQL_ENSURE(descriptor, "Unexpected pq metadata key: " << key);
         usedColumnNames.emplace(descriptor->SysColumn);
     }
 }
 
 TVector<TCoNameValueTuple> DropUnusedMetadata(
-    const TPqTopic& pqTopic,
-    const std::unordered_set<TString>& usedColumnNames,
-    bool includeUserAttributes)
+    const TPqTopic& pqTopic, const std::unordered_set<TString>& usedColumnNames, bool includeUserAttributes)
 {
     TVector<TCoNameValueTuple> newSourceMetadata;
     for (auto metadataItem : pqTopic.Metadata()) {
@@ -101,9 +89,7 @@ TVector<TCoNameValueTuple> DropUnusedMetadata(
 }
 
 TCoNameValueTupleList DropUnusedMetadataFromDqWrapSettings(
-    const TDqSourceWrap& dqSourceWrap,
-    const TVector<TCoNameValueTuple>& newSourceMetadata,
-    TExprContext& ctx)
+    const TDqSourceWrap& dqSourceWrap, const TVector<TCoNameValueTuple>& newSourceMetadata, TExprContext& ctx)
 {
     TVector<TCoNameValueTuple> newSettings;
     for (const auto settingItem : dqSourceWrap.Settings().Maybe<TCoNameValueTupleList>().Cast()) {
@@ -112,16 +98,14 @@ TCoNameValueTupleList DropUnusedMetadataFromDqWrapSettings(
             newMetadataColumns.reserve(newSourceMetadata.size());
 
             for (auto metadataName : newSourceMetadata) {
-                newMetadataColumns.push_back(ctx.NewAtom(
-                    dqSourceWrap.Pos(),
-                    metadataName.Value().Maybe<TCoAtom>().Cast().StringValue()));
+                newMetadataColumns.push_back(ctx.NewAtom(dqSourceWrap.Pos(), metadataName.Value().Maybe<TCoAtom>().Cast().StringValue()));
             }
 
             if (!newMetadataColumns.empty()) {
-                newSettings.push_back(Build<TCoNameValueTuple>(ctx, dqSourceWrap.Pos())
-                    .Name().Build("metadataColumns")
-                    .Value(ctx.NewList(dqSourceWrap.Pos(), std::move(newMetadataColumns)))
-                    .Done());
+                newSettings.push_back(
+                    Build<TCoNameValueTuple>(ctx, dqSourceWrap.Pos())
+                        .Name()
+                        .Build("metadataColumns") .Value(ctx.NewList(dqSourceWrap.Pos(), std::move(newMetadataColumns))).Done());
             }
 
             continue;
@@ -130,16 +114,11 @@ TCoNameValueTupleList DropUnusedMetadataFromDqWrapSettings(
         newSettings.push_back(settingItem);
     }
 
-    return Build<TCoNameValueTupleList>(ctx, dqSourceWrap.Pos())
-        .Add(std::move(newSettings))
-        .Done();
+    return Build<TCoNameValueTupleList>(ctx, dqSourceWrap.Pos()).Add(std::move(newSettings)).Done();
 }
 
 TExprNode::TPtr DropUnusedRowItems(
-    TPositionHandle position,
-    const TStructExprType* oldRowType,
-    const std::unordered_set<TString>& usedColumnNames,
-    TExprContext& ctx)
+    TPositionHandle position, const TStructExprType* oldRowType, const std::unordered_set<TString>& usedColumnNames, TExprContext& ctx)
 {
     TVector<const TItemExprType*> newFields;
     newFields.reserve(oldRowType->GetSize());
@@ -156,10 +135,7 @@ TExprNode::TPtr DropUnusedRowItems(
     return ExpandType(position, *ctx.MakeType<TStructExprType>(newFields), ctx);
 }
 
-TExprNode::TPtr DropUnusedColumns(
-    TExprBase oldColumns,
-    const std::unordered_set<TString>& usedColumnNames,
-    TExprContext& ctx)
+TExprNode::TPtr DropUnusedColumns(TExprBase oldColumns, const std::unordered_set<TString>& usedColumnNames, TExprContext& ctx)
 {
     TExprNode::TListType res;
     for (const auto& column : oldColumns.Cast<TCoAtomList>()) {
@@ -173,18 +149,18 @@ TExprNode::TPtr DropUnusedColumns(
     return ctx.NewList(oldColumns.Pos(), std::move(res));
 }
 
-class TPqLogicalOptProposalTransformer : public TOptimizeTransformerBase {
+class TPqLogicalOptProposalTransformer: public TOptimizeTransformerBase {
 public:
     TPqLogicalOptProposalTransformer(TPqState::TPtr state)
         : TOptimizeTransformerBase(state->Types, NLog::EComponent::ProviderPq, {})
         , State_(state)
     {
-#define HNDL(name) "LogicalOptimizer-"#name, Hndl(&TPqLogicalOptProposalTransformer::name)
-      //  AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
+#define HNDL(name) "LogicalOptimizer-" #name, Hndl(&TPqLogicalOptProposalTransformer::name)
+        //  AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToPqTopicSource));
-        SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes.
-        #undef HNDL
+        SetGlobal(0);   // Stage 0 of this optimizer is global => we can remap nodes.
+#undef HNDL
     }
 
     /*
@@ -207,7 +183,8 @@ public:
             .Done();
     }*/
 
-    TMaybeNode<TExprBase> ExtractMembersOverDqWrap(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
+    TMaybeNode<TExprBase> ExtractMembersOverDqWrap(
+        TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
         const auto& extractMembers = node.Cast<TCoExtractMembers>();
         const auto& extractMembersInput = extractMembers.Input();
         const auto& maybeDqSourceWrap = extractMembersInput.Maybe<TDqSourceWrap>();
@@ -264,7 +241,8 @@ public:
                     }
                 }
 
-                YQL_CLOG(TRACE, ProviderPq) << "PQ ExtractMembersOverDqWrap. Detected source multi usage, extract common columns: " << usedColumnNames.size();
+                YQL_CLOG(TRACE, ProviderPq) << "PQ ExtractMembersOverDqWrap. Detected source multi usage, extract common columns: "
+                                            << usedColumnNames.size();
             }
         }
 
@@ -281,6 +259,7 @@ public:
 
         const auto& newSourceMetadata = DropUnusedMetadata(pqTopic, usedColumnNames, State_->EnableUserAttributesInTopicQuery);
 
+        // clang-format off
         const TExprNode::TPtr newPqTopicSource = Build<TDqPqTopicSource>(ctx, dqPqTopicSource.Pos())
             .InitFrom(dqPqTopicSource)
             .Topic<TPqTopic>()
@@ -292,17 +271,20 @@ public:
             .RowType(DropUnusedRowItems(dqPqTopicSource.RowType().Pos(), oldRowType, usedColumnNames, ctx))
             .Done()
             .Ptr();
+        // clang-format on
 
         const TExprNode::TPtr newDqSourceWrap = Build<TDqSourceWrap>(ctx, dqSourceWrap.Pos())
-            .InitFrom(dqSourceWrap)
-            .Input(newPqTopicSource)
-            .Settings(DropUnusedMetadataFromDqWrapSettings(dqSourceWrap, newSourceMetadata, ctx))
-            .RowType(DropUnusedRowItems(dqSourceWrap.RowType().Pos(), oldRowType, usedColumnNames, ctx))
-            .Done()
-            .Ptr();
+                                                    .InitFrom(dqSourceWrap)
+                                                    .Input(newPqTopicSource)
+                                                    .Settings(DropUnusedMetadataFromDqWrapSettings(dqSourceWrap, newSourceMetadata, ctx))
+                                                    .RowType(DropUnusedRowItems(dqSourceWrap.RowType().Pos(), oldRowType, usedColumnNames, ctx))
+                                                    .Done()
+                                                    .Ptr();
 
-        const auto makeNewExtractMembers = [&ctx, &usedColumnNames, &dqSourceWrap, &newDqSourceWrap](const TCoExtractMembers& initialExtractMembers) {
-            const TStructExprType* outputRowType = initialExtractMembers.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        const auto makeNewExtractMembers = [&ctx, &usedColumnNames, &dqSourceWrap, &newDqSourceWrap](
+                                               const TCoExtractMembers& initialExtractMembers) {
+            const TStructExprType* outputRowType =
+                initialExtractMembers.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             if (outputRowType->GetSize() == usedColumnNames.size()) {
                 return newDqSourceWrap;
             }
@@ -335,9 +317,7 @@ public:
         auto maybeExtractMembers = flatmap.Input().Maybe<TCoExtractMembers>();
 
         auto maybeDqSourceWrap =
-            maybeExtractMembers
-            ? maybeExtractMembers.Cast().Input().Maybe<TDqSourceWrap>()
-            : flatmap.Input().Maybe<TDqSourceWrap>();
+            maybeExtractMembers ? maybeExtractMembers.Cast().Input().Maybe<TDqSourceWrap>() : flatmap.Input().Maybe<TDqSourceWrap>();
 
         if (!maybeDqSourceWrap) {
             return node;
@@ -356,16 +336,14 @@ public:
         }
 
         if (auto list = dqPqTopicSource.Partitions().Maybe<TCoList>()) {
-            if (list.Cast().Args().Count() == 1) {  //  only ListType
+            if (list.Cast().Args().Count() == 1) {   //  only ListType
                 YQL_CLOG(INFO, ProviderPq) << "Empty list by partitions, replace node to List";
                 return ctx.NewCallable(node.Pos(), "List", { ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx) });
             }
         }
 
-        if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()
-            || !dqPqTopicSource.WriteTimePredicate().Ref().Content().empty()
-            || !dqPqTopicSource.OffsetPredicate().Ref().Content().empty()
-            || !dqPqTopicSource.Partitions().Ref().IsCallable("Void")) {
+        if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty() || !dqPqTopicSource.WriteTimePredicate().Ref().Content().empty() ||
+            !dqPqTopicSource.OffsetPredicate().Ref().Content().empty() || !dqPqTopicSource.Partitions().Ref().IsCallable("Void")) {
             return node;
         }
 
@@ -373,22 +351,19 @@ public:
         TString writeTimePredicateSerializedProto;
 
         if (State_->EnableTopicsPredicatePushdown) {
-            std::unordered_set<TString> fields{
-                "_yql_sys_offset", "_yql_sys_write_time", "_yql_sys_partition_id",
-                "__ydb_offset", "__ydb_write_time", "__ydb_partition_id"
-            };
-            bool hasPredicate = !!FindNode(flatmap.Lambda().Body().Ptr(),
-                [&](const TExprNode::TPtr& node) {
-                    if (!TCoMember::Match(node.Get())) {
-                        return false;
-                    }
-                    auto member = TExprBase(node).Cast<TCoMember>();
-                    auto name = member.Name().StringValue();
-                    return fields.contains(name);
-                });
+            std::unordered_set<TString> fields{ "_yql_sys_offset", "_yql_sys_write_time", "_yql_sys_partition_id", "__ydb_offset",
+                "__ydb_write_time", "__ydb_partition_id" };
+            bool hasPredicate = !!FindNode(flatmap.Lambda().Body().Ptr(), [&](const TExprNode::TPtr& node) {
+                if (!TCoMember::Match(node.Get())) {
+                    return false;
+                }
+                auto member = TExprBase(node).Cast<TCoMember>();
+                auto name = member.Name().StringValue();
+                return fields.contains(name);
+            });
             if (hasPredicate) {
                 auto hasEvaluateFilter = [&](const TExprNode::TPtr& node) -> bool {
-                    return node->IsCallable({"EvaluateExpr"});
+                    return node->IsCallable({ "EvaluateExpr" });
                 };
                 if (!!FindNode(flatmap.Lambda().Body().Ptr(), hasEvaluateFilter)) {
                     return node;
@@ -397,20 +372,17 @@ public:
                 auto splitedPredicate = SplitPredicateByMember(flatmap.Lambda(), fields, ctx, true);
                 if (splitedPredicate) {
                     auto modifiedPredicate = ReplaceCompareNodesToEvaluate(splitedPredicate.Cast().Ptr(), flatmap.Lambda().Body().Ptr(), ctx);
-                    if (modifiedPredicate) {    // something replaced
+                    if (modifiedPredicate) {   // something replaced
                         auto originalLambda = flatmap.Lambda();
-                        auto newLambda = Build<TCoLambda>(ctx, originalLambda.Pos())
-                            .Args(originalLambda.Args())
-                            .Body(TExprBase(modifiedPredicate))
-                            .Done();
+                        auto newLambda =
+                            Build<TCoLambda>(ctx, originalLambda.Pos()).Args(originalLambda.Args()).Body(TExprBase(modifiedPredicate)).Done();
 
-                        return Build<TCoFlatMap>(ctx, flatmap.Pos())
-                            .InitFrom(flatmap)
-                            .Lambda(newLambda)
-                            .Done();
+                        return Build<TCoFlatMap>(ctx, flatmap.Pos()).InitFrom(flatmap).Lambda(newLambda).Done();
                     }
-                    auto [offsetProto, emptyRangeByOffsets] = SerializePredicateForFields({"_yql_sys_offset", "__ydb_offset"}, flatmap.Lambda(), ctx);
-                    auto [writeTimeProto, emptyRangeByWriteTime] = SerializePredicateForFields({"_yql_sys_write_time", "__ydb_write_time"}, flatmap.Lambda(), ctx);
+                    auto [offsetProto, emptyRangeByOffsets] =
+                        SerializePredicateForFields({ "_yql_sys_offset", "__ydb_offset" }, flatmap.Lambda(), ctx);
+                    auto [writeTimeProto, emptyRangeByWriteTime] =
+                        SerializePredicateForFields({ "_yql_sys_write_time", "__ydb_write_time" }, flatmap.Lambda(), ctx);
                     if (emptyRangeByOffsets || emptyRangeByWriteTime) {
                         YQL_CLOG(INFO, ProviderPq) << "Empty range by offsets or write time, replace node to List";
                         return ctx.NewCallable(node.Pos(), "List", { ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx) });
@@ -428,7 +400,8 @@ public:
             if (!sharedReadingPredicate.IsEmpty()) {
                 TStringBuilder err;
                 NYql::NConnector::NApi::TPredicate predicateProto;
-                if (!NYql::SerializeFilterPredicate(ctx, sharedReadingPredicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
+                if (!NYql::SerializeFilterPredicate(
+                        ctx, sharedReadingPredicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
                     return node;
                 }
@@ -439,7 +412,7 @@ public:
         bool isPartitionListUpdated = false;
         TExprNode::TPtr partitionList = dqPqTopicSource.Partitions().Ptr();
         if (State_->EnableTopicsPredicatePushdown) {
-            auto splitedPredicate = SplitPredicateByMember(flatmap.Lambda(), {"_yql_sys_partition_id", "__ydb_partition_id"}, ctx, false);
+            auto splitedPredicate = SplitPredicateByMember(flatmap.Lambda(), { "_yql_sys_partition_id", "__ydb_partition_id" }, ctx, false);
 
             if (splitedPredicate) {
                 auto newFilterArg = ctx.NewArgument(node.Pos(), "_yql_sys_partition_id");
@@ -450,9 +423,8 @@ public:
                 VisitExpr(predicateBody, [&](const TExprNode::TPtr& exprNode) {
                     if (TCoMember::Match(exprNode.Get())) {
                         auto member = TCoMember(exprNode.Get());
-                        if (member.Struct().Raw() == lambdaArg
-                            && (member.Name().StringValue() == "_yql_sys_partition_id"
-                                || member.Name().StringValue() == "__ydb_partition_id")) {
+                        if (member.Struct().Raw() == lambdaArg &&
+                            (member.Name().StringValue() == "_yql_sys_partition_id" || member.Name().StringValue() == "__ydb_partition_id")) {
                             replaces[exprNode.Get()] = newFilterArg;
                         }
                         return false;
@@ -461,9 +433,7 @@ public:
                 });
                 auto replacedBody = ctx.ReplaceNodes(std::move(predicateBody), replaces);
 
-                auto newFilterLambda = ctx.NewLambda(node.Pos(),
-                    ctx.NewArguments(node.Pos(), {newFilterArg}),
-                    std::move(replacedBody));
+                auto newFilterLambda = ctx.NewLambda(node.Pos(), ctx.NewArguments(node.Pos(), { newFilterArg }), std::move(replacedBody));
 
                 const auto& federatedTopics = *(topicMeta->FederatedTopic);
                 size_t topicPartitionsCount = 0;
@@ -474,6 +444,7 @@ public:
                     return node;
                 }
                 isPartitionListUpdated = true;
+                // clang-format off
                 partitionList = ctx.Builder(node.Pos())
                     .Callable("EvaluateExpr")
                         .Callable(0, "Filter")
@@ -489,13 +460,12 @@ public:
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
             }
         }
 
-        if (sharedReadingPridicateSerializedProto.empty()
-            && !isPartitionListUpdated
-            && offsetPredicateSerializedProto.empty()
-            && writeTimePredicateSerializedProto.empty()) {
+        if (sharedReadingPridicateSerializedProto.empty() && !isPartitionListUpdated && offsetPredicateSerializedProto.empty() &&
+            writeTimePredicateSerializedProto.empty()) {
             return node;
         }
 
@@ -508,17 +478,15 @@ public:
             }
             if (isPartitionListUpdated) {
                 newSettings.push_back(Build<TCoNameValueTuple>(ctx, src.Pos())
-                    .Name().Build(UsedPartitionPredicateSetting)
-                    .Value<TCoAtom>().Build("true")
-                    .Done());
+                                          .Name()
+                                          .Build(UsedPartitionPredicateSetting) .Value<TCoAtom>().Build("true") .Done());
             }
-            return Build<TCoNameValueTupleList>(ctx, src.Settings().Pos())
-                .Add(std::move(newSettings))
-                .Done();
+            return Build<TCoNameValueTupleList>(ctx, src.Settings().Pos()).Add(std::move(newSettings)).Done();
         };
 
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
         if (maybeExtractMembers) {
+            // clang-format off
             return Build<TCoFlatMap>(ctx, flatmap.Pos())
                 .InitFrom(flatmap)
                 .Input<TCoExtractMembers>()
@@ -536,7 +504,9 @@ public:
                         .Build()
                     .Build()
                 .Done();
+            // clang-format on
         }
+        // clang-format off
         return Build<TCoFlatMap>(ctx, flatmap.Pos())
             .InitFrom(flatmap)
             .Input<TDqSourceWrap>()
@@ -551,6 +521,7 @@ public:
                     .Build()
                 .Build()
             .Done();
+        // clang-format on
     }
 
 private:
@@ -573,7 +544,8 @@ private:
 
     bool UseSharedReadingForTopic(const TDqPqTopicSource& topicSource) const {
         const bool sharedReading = FromString(GetTopicSourceSetting(topicSource, SharedReading).value_or("false"));
-        const bool streamingTopicRead = FromString(GetTopicSourceSetting(topicSource, StreamingTopicRead).value_or(State_->StreamingTopicsReadByDefault ? "true" : "false"));
+        const bool streamingTopicRead =
+            FromString(GetTopicSourceSetting(topicSource, StreamingTopicRead).value_or(State_->StreamingTopicsReadByDefault ? "true" : "false"));
         return sharedReading && streamingTopicRead;
     }
 
@@ -620,28 +592,20 @@ private:
 
         VisitExpr(lambda, [&](const TExprNode::TPtr& exprNode) {
             if (!TCoCompare::Match(exprNode.Get())) {
-                return true; // continue traversal
+                return true;   // continue traversal
             }
             auto compare = TCoCompare(exprNode.Get());
             auto left = compare.Left().Ptr();
             auto right = compare.Right().Ptr();
 
             if (!containsMemberCached(right) && !isConstant(right) && !replaces.contains(right.Get())) {
-                replaces[right.Get()] = ctx.Builder(exprNode->Pos())
-                    .Callable("EvaluateExpr")
-                        .Add(0, right)
-                    .Seal()
-                    .Build();
+                replaces[right.Get()] = ctx.Builder(exprNode->Pos()).Callable("EvaluateExpr").Add(0, right).Seal().Build();
             }
 
             if (!containsMemberCached(left) && !isConstant(left) && !replaces.contains(left.Get())) {
-                replaces[left.Get()] = ctx.Builder(exprNode->Pos())
-                    .Callable("EvaluateExpr")
-                        .Add(0, left)
-                    .Seal()
-                    .Build();
+                replaces[left.Get()] = ctx.Builder(exprNode->Pos()).Callable("EvaluateExpr").Add(0, left).Seal().Build();
             }
-            return false; // don't descend into compare children
+            return false;   // don't descend into compare children
         });
         if (replaces.empty()) {
             return {};
@@ -649,42 +613,37 @@ private:
         return ctx.ReplaceNodes(std::move(originalLambdaBody), replaces);
     }
 
-    std::pair<TString, bool> SerializePredicate(
-        const TString& memberName,
-        const NNodes::TCoLambda& lambda,
-        TExprContext& ctx
-    ) const {
+    std::pair<TString, bool> SerializePredicate(const TString& memberName, const NNodes::TCoLambda& lambda, TExprContext& ctx) const {
         if (!State_->EnableTopicsPredicatePushdown) {
-            return {{}, false};
+            return { {}, false };
         }
         auto settings = NPushdown::TSettings(NLog::EComponent::ProviderPq);
         settings.EnableMember(memberName);
 
         using EFlag = NPushdown::TSettings::EFeatureFlag;
-        settings.Enable(
-            EFlag::ExpressionAsPredicate | EFlag::ImplicitConversionToInt64 |
-            EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
-            EFlag::JustPassthroughOperators | EFlag::PredicateAsExpression |
-            EFlag::SplitOrOperator | EFlag::TimestampCtor
-        );
+        settings.Enable(EFlag::ExpressionAsPredicate | EFlag::ImplicitConversionToInt64 | EFlag::DoNotCheckCompareArgumentsTypes |
+                        EFlag::InOperator | EFlag::JustPassthroughOperators | EFlag::PredicateAsExpression | EFlag::SplitOrOperator |
+                        EFlag::TimestampCtor);
 
         NPushdown::TPredicateNode predicate = MakePushdownNode(lambda, ctx, lambda.Pos(), settings);
         if (predicate.IsEmpty()) {
-            return {{}, false};
+            return { {}, false };
         }
         TStringBuilder err;
         TDisjointIntervalTree<i64> tree;
         if (!NYql::NPushdown::ConvertPredicateToIntervals(predicate.ExprNode.Cast(), tree, err)) {
             ctx.AddWarning(TIssue(ctx.GetPosition(lambda.Pos()), "Failed to calculate filter predicate for source: " + err));
-            return {{}, false};
+            return { {}, false };
         }
 
         NPq::NProto::TOffsetPredicate proto;
         if (tree.Empty()) {
-            return {{}, true};
+            return { {}, true };
         }
 
-        YQL_CLOG(TRACE, ProviderPq) << "ConvertPredicateToIntervals result over " << memberName << ": {" << tree.Min() << ", " << tree.Max() << "}" << Endl;;
+        YQL_CLOG(TRACE, ProviderPq) << "ConvertPredicateToIntervals result over " << memberName << ": {" << tree.Min() << ", " << tree.Max()
+                                    << "}" << Endl;
+        ;
         if (tree.Min() != Min<i64>() || tree.Max() != Max<i64>()) {
             auto* item = proto.AddItem();
             if (tree.Min() != Min<i64>()) {
@@ -698,31 +657,24 @@ private:
         }
         TString result;
         YQL_ENSURE(proto.SerializeToString(&result));
-        return {result, false};
+        return { result, false };
     }
 
     // Serialize predicate for multiple equivalent field names (e.g. _yql_sys_offset and __ydb_offset).
     // Tries each field name and returns the first non-empty result.
     std::pair<TString, bool> SerializePredicateForFields(
-        const std::vector<TString>& memberNames,
-        const NNodes::TCoLambda& lambda,
-        TExprContext& ctx
-    ) const {
+        const std::vector<TString>& memberNames, const NNodes::TCoLambda& lambda, TExprContext& ctx) const {
         for (const auto& memberName : memberNames) {
             auto result = SerializePredicate(memberName, lambda, ctx);
             if (!result.first.empty() || result.second) {
                 return result;
             }
         }
-        return {{}, false};
+        return { {}, false };
     }
 
     TMaybeNode<TExprBase> SplitPredicateByMember(
-        const NNodes::TCoLambda& lambda,
-        std::unordered_set<TString> fields,
-        TExprContext& ctx,
-        bool anyExpressions
-    ) const {
+        const NNodes::TCoLambda& lambda, std::unordered_set<TString> fields, TExprContext& ctx, bool anyExpressions) const {
         if (!State_->EnableTopicsPredicatePushdown) {
             return {};
         }
@@ -732,12 +684,9 @@ private:
         }
 
         using EFlag = NPushdown::TSettings::EFeatureFlag;
-        settings.Enable(
-            EFlag::ExpressionAsPredicate | EFlag::ImplicitConversionToInt64 |
-            EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
-            EFlag::JustPassthroughOperators | EFlag::PredicateAsExpression |
-            EFlag::SplitOrOperator | EFlag::TimestampCtor | EFlag::IntervalCtor | EFlag::ArithmeticalExpressions
-        );
+        settings.Enable(EFlag::ExpressionAsPredicate | EFlag::ImplicitConversionToInt64 | EFlag::DoNotCheckCompareArgumentsTypes |
+                        EFlag::InOperator | EFlag::JustPassthroughOperators | EFlag::PredicateAsExpression | EFlag::SplitOrOperator |
+                        EFlag::TimestampCtor | EFlag::IntervalCtor | EFlag::ArithmeticalExpressions);
         if (anyExpressions) {
             settings.Enable(EFlag::AnyExpressionExceptMember);
         }
@@ -752,10 +701,10 @@ private:
     TPqState::TPtr State_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<IGraphTransformer> CreatePqLogicalOptProposalTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqLogicalOptProposalTransformer>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

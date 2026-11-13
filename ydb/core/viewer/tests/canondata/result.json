@@ -4,6 +4,9 @@
             "status": "SUCCESS"
         },
         "describe_result": {
+            "availability_period": {
+                "unlimited": {}
+            },
             "connection_params": {
                 "connection_string": "text",
                 "database": "/Root/dedicated_db",
@@ -802,8 +805,8 @@
         }
     },
     "test.TestViewer.test_storage_groups": {
-        "FieldsAvailable": "1111110111111111111111111111",
-        "FieldsRequired": "1111111111111111111111111111",
+        "FieldsAvailable": "11111111111111110111111111111111111111",
+        "FieldsRequired": "11111111111111111111111111111111111111",
         "FoundGroups": 5,
         "GroupSizeInUnitsChecks": {
             "GroupSizeOnly": {
@@ -818,6 +821,7 @@
         "StorageGroups": [
             {
                 "Available": "not-zero-number-text",
+                "BridgeSyncStatus": "NOT_REQUIRED",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
@@ -837,6 +841,9 @@
                 "Overall": "Green",
                 "PoolName": "static",
                 "State": "ok",
+                "StateInfo": {
+                    "Status": "ok"
+                },
                 "Usage": "number",
                 "Used": "text",
                 "VDisks": [
@@ -930,6 +937,7 @@
             },
             {
                 "Available": "not-zero-number-text",
+                "BridgeSyncStatus": "NOT_REQUIRED",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
@@ -951,6 +959,9 @@
                 "Overall": "Green",
                 "PoolName": "dynamic_storage_pool:1",
                 "State": "ok",
+                "StateInfo": {
+                    "Status": "ok"
+                },
                 "Usage": "number",
                 "Used": "text",
                 "VDisks": [
@@ -1044,6 +1055,7 @@
             },
             {
                 "Available": "not-zero-number-text",
+                "BridgeSyncStatus": "NOT_REQUIRED",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
@@ -1065,6 +1077,9 @@
                 "Overall": "Green",
                 "PoolName": "dynamic_storage_pool:1",
                 "State": "ok",
+                "StateInfo": {
+                    "Status": "ok"
+                },
                 "Usage": "number",
                 "Used": "text",
                 "VDisks": [
@@ -1159,6 +1174,7 @@
             {
                 "AllocationUnits": "34",
                 "Available": "not-zero-number-text",
+                "BridgeSyncStatus": "NOT_REQUIRED",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
@@ -1180,6 +1196,9 @@
                 "Overall": "Green",
                 "PoolName": "/Root/dedicated_db:hdd",
                 "State": "ok",
+                "StateInfo": {
+                    "Status": "ok"
+                },
                 "Usage": "number",
                 "Used": "text",
                 "VDisks": [
@@ -1274,6 +1293,7 @@
             {
                 "AllocationUnits": "54",
                 "Available": "not-zero-number-text",
+                "BridgeSyncStatus": "NOT_REQUIRED",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
@@ -1295,6 +1315,9 @@
                 "Overall": "Green",
                 "PoolName": "/Root/shared_db:hdd",
                 "State": "ok",
+                "StateInfo": {
+                    "Status": "ok"
+                },
                 "Usage": "number",
                 "Used": "text",
                 "VDisks": [
@@ -9241,8 +9264,8 @@
         }
     },
     "test.TestViewer.test_viewer_groups_allocation_units_without_pool_name": {
-        "FieldsAvailable": "1000000100000100000100011111",
-        "FieldsRequired": "0000000000000100000000000011",
+        "FieldsAvailable": "11111111111000000100000100000100011111",
+        "FieldsRequired": "00000000000000000000000100000000000011",
         "FoundGroups": 5,
         "StorageGroups": [
             {
@@ -9267,8 +9290,8 @@
     },
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {
-            "FieldsAvailable": "1111110111111011111011110001",
-            "FieldsRequired": "0100000000010000000000000001",
+            "FieldsAvailable": "11111111111111110111111011111011110001",
+            "FieldsRequired": "11111111110100000000010000000000000001",
             "FoundGroups": 5,
             "StorageGroupGroups": [
                 {
@@ -9287,27 +9310,32 @@
             "TotalGroups": 5
         },
         {
-            "FieldsAvailable": "1111110111111011111011110001",
-            "FieldsRequired": "0100000000010000000000000001",
+            "FieldsAvailable": "11111111111111110111111011111011110001",
+            "FieldsRequired": "11111111110100000000010000000000000001",
             "FoundGroups": 5,
             "StorageGroups": [
                 {
+                    "BridgeSyncStatus": "NOT_REQUIRED",
                     "CapacityAlert": "GREEN",
                     "GroupId": "0"
                 },
                 {
+                    "BridgeSyncStatus": "NOT_REQUIRED",
                     "CapacityAlert": "GREEN",
                     "GroupId": "2181038080"
                 },
                 {
+                    "BridgeSyncStatus": "NOT_REQUIRED",
                     "CapacityAlert": "GREEN",
                     "GroupId": "2181038081"
                 },
                 {
+                    "BridgeSyncStatus": "NOT_REQUIRED",
                     "CapacityAlert": "GREEN",
                     "GroupId": "2181038082"
                 },
                 {
+                    "BridgeSyncStatus": "NOT_REQUIRED",
                     "CapacityAlert": "GREEN",
                     "GroupId": "2181038083"
                 }
@@ -9317,8 +9345,8 @@
     ],
     "test.TestViewer.test_viewer_groups_group_by_pool_name": [
         {
-            "FieldsAvailable": "1000000100000000000100011111",
-            "FieldsRequired": "0000000000000000000000000011",
+            "FieldsAvailable": "11111111111000000100000000000100011111",
+            "FieldsRequired": "11111111110000000000000000000000000011",
             "FoundGroups": 5,
             "StorageGroupGroups": [
                 {
@@ -9353,11 +9381,12 @@
             "TotalGroups": 5
         },
         {
-            "FieldsAvailable": "1000000100000000000100011111",
-            "FieldsRequired": "0000000000000000000000000011",
+            "FieldsAvailable": "11111111111000000100000000000100011111",
+            "FieldsRequired": "11111111110000000000000000000000000011",
             "FoundGroups": 1,
             "StorageGroups": [
                 {
+                    "BridgeSyncStatus": "NOT_REQUIRED",
                     "GroupId": "0",
                     "PoolName": "static"
                 }
@@ -9437,6 +9466,11 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 1,
+                "Location": {
+                    "DataCenter": "1",
+                    "Rack": "1",
+                    "Unit": "1"
+                },
                 "PhysicalLocation": {
                     "Body": 1,
                     "DataCenter": 49,
@@ -9454,6 +9488,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50000,
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,
@@ -9471,6 +9506,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50001,
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,
@@ -9488,6 +9524,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50001,
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,
@@ -9505,6 +9542,11 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 1,
+                "Location": {
+                    "DataCenter": "1",
+                    "Rack": "1",
+                    "Unit": "1"
+                },
                 "PhysicalLocation": {
                     "Body": 1,
                     "DataCenter": 49,
@@ -9520,6 +9562,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50001,
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,
@@ -9535,6 +9578,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50000,
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,

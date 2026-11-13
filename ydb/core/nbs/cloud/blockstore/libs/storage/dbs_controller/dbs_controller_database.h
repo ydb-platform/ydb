@@ -67,6 +67,7 @@ public:
 
     bool GetAffectedDBGsWithNodeCounts(
         const TVector<ui32>& nodeIds,
+        const THashSet<ui32>& lockedNodes,
         THashMap<TDirectKey, ui64>& outDbgs);
 };
 

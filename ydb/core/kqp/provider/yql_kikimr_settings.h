@@ -59,6 +59,7 @@ public:
     NCommon::TConfSetting<TString, Static> _DefaultCluster;
     NCommon::TConfSetting<ui32, Static> _ResultRowsLimit;
     NCommon::TConfSetting<bool, Static> EnableSystemColumns;
+    NCommon::TConfSetting<bool, Static> EnableUnsafeTruncateTable;
     NCommon::TConfSetting<bool, Static> UseLlvm;
     NCommon::TConfSetting<bool, Static> EnableLlvm;
     NCommon::TConfSetting<NDq::EHashJoinMode, Static> HashJoinMode;
@@ -70,6 +71,9 @@ public:
     NCommon::TConfSetting<bool, Static> EnableNewRBOPhysicalStagePeephole;
     NCommon::TConfSetting<bool, Static> BlockHashJoinSwapLeftJoinSides;
     NCommon::TConfSetting<bool, Static> EnableBlockHashJoinEqualNulls;
+    NCommon::TConfSetting<bool, Static> UseScalarHashJoin;
+    NCommon::TConfSetting<bool, Static> UseScalarHashJoinForMap;
+    NCommon::TConfSetting<bool, Static> EnableLookupJoinPointPrefixes;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
     NCommon::TConfSetting<ui32, Static> DqChannelVersion;
@@ -78,6 +82,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
     NCommon::TConfSetting<bool, Static> UseDqHashAggregate;
     NCommon::TConfSetting<bool, Static> DqHashOperatorsUseBlocks;
+    NCommon::TConfSetting<ui32, Static> DqHashAggregationDescriptorVersion;
     NCommon::TConfSetting<bool, Static> DqHashCombineExportTypeInfo;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
@@ -91,6 +96,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapSortedRead;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownAggregate;
     NCommon::TConfSetting<TString, Static> OptForceOlapPushdownDistinct;
     NCommon::TConfSetting<ui64, Static> OptForceOlapPushdownDistinctLimit;
@@ -199,7 +205,7 @@ public:
     bool HasOptEnableInplaceUpdate() const;
 };
 
-struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDispatcher, public NKikimrConfig::TTableServiceConfig {
+struct TKikimrConfiguration : public NCommon::TDispatcherAndSettings<TKikimrSettings>, public NKikimrConfig::TTableServiceConfig {
     using TPtr = TIntrusivePtr<TKikimrConfiguration>;
 
     TKikimrConfiguration();
@@ -220,7 +226,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
         this->SetValidClusters(clusters);
 
         if (defaultCluster) {
-            this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", *defaultCluster, EStage::CONFIG, NCommon::TSettingDispatcher::GetDefaultErrorCallback());
+            this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", *defaultCluster, EStage::CONFIG, NCommon::GetDefaultErrorCallback());
         }
 
         // Init settings from config
@@ -237,7 +243,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     {
         this->SetValidClusters(TVector<TString>{cluster});
 
-        this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", cluster, EStage::CONFIG, NCommon::TSettingDispatcher::GetDefaultErrorCallback());
+        this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", cluster, EStage::CONFIG, NCommon::GetDefaultErrorCallback());
         this->Dispatch(defaultSettings);
         this->Dispatch(NCommon::ALL_CLUSTERS, settings);
 
@@ -265,10 +271,14 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetUseDqHashCombine() const;
     bool GetUseDqHashAggregate() const;
     bool GetDqHashOperatorsUseBlocks() const;
+    ui32 GetDqHashAggregationDescriptorVersion() const;
     bool GetDqHashCombineExportTypeInfo() const;
     bool GetUseBlockHashJoin() const;
     bool GetUseBlockHashJoinForCross() const;
     bool GetEnableBlockHashJoinEqualNulls() const;
+    bool GetUseScalarHashJoin() const;
+    bool GetUseScalarHashJoinForMap() const;
+    bool GetEnableLookupJoinPointPrefixes() const;
     bool GetEnableNewRBOPhysicalStagePeephole() const;
     bool GetUseKqpTasksGraphV2() const;
     bool GetWindowFunctionsV2() const;

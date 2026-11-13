@@ -978,8 +978,11 @@ public:
         record.SetMaxBytes(Min<ui64>(record.GetMaxBytes(), BufSize));
 
         record.SetResultFormat(Settings->GetDataFormat());
+        if (Settings->GetReadHints()) {
+            record.SetHints(Settings->GetReadHints());
+        }
 
-        if (Settings->HasLockTxId() && BrokenLocks.empty()) {
+        if (Settings->HasLockTxId() && LockInfo.BrokenLocks.empty()) {
             record.SetLockTxId(Settings->GetLockTxId());
             if (Settings->HasLockMode()) {
                 ev->Record.SetLockMode(Settings->GetLockMode());
@@ -1137,7 +1140,10 @@ public:
         auto replyError = [&](auto message, auto status) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
-            return RuntimeError(message, status, issues);
+            // Preserve the reason so explicit-snapshot queries can fail without retrying the same lost snapshot.
+            const auto issueCode = record.GetStatus().GetCode() == Ydb::StatusIds::PRECONDITION_FAILED
+                ? NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED : 0;
+            return RuntimeError(message, status, issues, issueCode);
         };
 
         // Preserve schema errors so the session can invalidate a stale query plan.
@@ -1224,38 +1230,19 @@ public:
             }
         }
 
-        for (auto& lock : record.GetTxLocks()) {
-            Locks.push_back(lock);
-        }
-
         if (!Snapshot.IsValid()) {
             Snapshot = IKqpGateway::TKqpSnapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
         }
 
-        for (auto& lock : record.GetBrokenTxLocks()) {
-            BrokenLocks.push_back(lock);
-        }
-
-        // Collect deferred breaker info for TLI logging
-        {
-            const auto& traceIds = record.GetDeferredBreakerQuerySpanIds();
-            const auto& nodeIds = record.GetDeferredBreakerNodeIds();
-            for (int i = 0; i < traceIds.size(); ++i) {
-                DeferredBreakers.push_back({traceIds[i], i < nodeIds.size() ? nodeIds[i] : 0u});
-            }
-        }
-
-        if (record.HasDeferredVictimQuerySpanId() && DeferredVictimQuerySpanId == 0) {
-            DeferredVictimQuerySpanId = record.GetDeferredVictimQuerySpanId();
-        }
+        LockInfo.Add(record);
 
         if (UseFollowers) {
-            YQL_ENSURE(Locks.empty());
+            YQL_ENSURE(LockInfo.Locks.empty());
         }
 
         YDB_LOG_DEBUG("Collected transaction locks from read result",
             {"logPrefix", this->LogPrefix},
-            {"locksCount", Locks.size()});
+            {"locksCount", LockInfo.Locks.size()});
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
         ui64 seqNo = record.GetSeqNo();
@@ -1667,16 +1654,7 @@ public:
             //tableStats->SetReadBytes(tableStats->GetReadBytes() + BytesStats.DataBytes);
             //tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
 
-            // Add lock stats for broken locks from read operations
-            if (!BrokenLocks.empty()) {
-                NKqpProto::TKqpTaskExtraStats extraStats;
-                if (stats->HasExtra()) {
-                    stats->GetExtra().UnpackTo(&extraStats);
-                }
-                extraStats.MutableLockStats()->SetBrokenAsVictim(
-                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
-                stats->MutableExtra()->PackFrom(extraStats);
-            }
+            LockInfo.FillExtraStats(stats);
         }
     }
 
@@ -1706,8 +1684,11 @@ public:
         TBase::PassAway();
     }
 
-    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {},
+        NYql::TIssueCode issueCode = 0)
+    {
         NYql::TIssue issue(message);
+        issue.SetCode(issueCode, NYql::TSeverityIds::S_ERROR);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
         }
@@ -1726,21 +1707,7 @@ public:
 
     TMaybe<google::protobuf::Any> ExtraData() override {
         google::protobuf::Any result;
-        NKikimrTxDataShard::TEvKqpInputActorResultInfo resultInfo;
-        for (auto& lock : Locks) {
-            resultInfo.AddLocks()->CopyFrom(lock);
-        }
-        for (auto& lock : BrokenLocks) {
-            resultInfo.AddLocks()->CopyFrom(lock);
-        }
-        // Add deferred breaker info for TLI logging
-        for (const auto& breaker : DeferredBreakers) {
-            resultInfo.AddDeferredBreakerQuerySpanIds(breaker.QuerySpanId);
-            resultInfo.AddDeferredBreakerNodeIds(breaker.NodeId);
-        }
-        if (DeferredVictimQuerySpanId) {
-            resultInfo.SetDeferredVictimQuerySpanId(DeferredVictimQuerySpanId);
-        }
+        auto resultInfo = LockInfo.GetExtraData();
         if (Settings->GetIsBatch() && !BatchOperationMaxRow.GetCells().empty()) {
             std::vector<TCell> keyRow;
             auto cells = BatchOperationMaxRow.GetCells();
@@ -1814,14 +1781,7 @@ private:
 
     TQueue<TResult> Results;
 
-    TVector<NKikimrDataEvents::TLock> Locks;
-    TVector<NKikimrDataEvents::TLock> BrokenLocks;
-    struct TDeferredBreakerInfo {
-        ui64 QuerySpanId = 0;
-        ui32 NodeId = 0;
-    };
-    TVector<TDeferredBreakerInfo> DeferredBreakers;
-    ui64 DeferredVictimQuerySpanId = 0;
+    TReadLockInfo LockInfo;
 
     IKqpGateway::TKqpSnapshot Snapshot;
 

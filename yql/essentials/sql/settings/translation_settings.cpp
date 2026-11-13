@@ -7,6 +7,7 @@
 #include <library/cpp/deprecated/split/split_iterator.h>
 
 #include <util/string/cast.h>
+#include <util/string/ascii.h>
 #include <util/string/split.h>
 #include <util/string/join.h>
 #include <util/system/env.h>
@@ -40,6 +41,10 @@ public:
 } // namespace
 
 namespace NSQLTranslation {
+bool IsTranslatorLevelPragma(TStringBuf name) {
+    return !name.Contains('.') || AsciiHasPrefixIgnoreCase(name, "yson.");
+}
+
 ISqlFeaturePolicy::TPtr ISqlFeaturePolicy::MakeAlwaysDisallow() {
     return new TAlwaysDiallowPolicy;
 }
@@ -181,6 +186,22 @@ void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettin
     using TFlagValueParser = std::function<void(const TVector<TString>& args, TTranslationSettings& s)>;
 
     static const THashMap<TString, TFlagValueParser> Parsers = {
+        {
+            "GroupByLimit",
+            [](const TVector<TString>& args, TTranslationSettings& settings) {
+                if (args.empty() || !TryFromString(args[0], settings.GroupByLimit)) {
+                    ThrowBad("GroupByLimit", args);
+                }
+            },
+        },
+        {
+            "GroupByCubeLimit",
+            [](const TVector<TString>& args, TTranslationSettings& settings) {
+                if (args.empty() || !TryFromString(args[0], settings.GroupByCubeLimit)) {
+                    ThrowBad("GroupByCubeLimit", args);
+                }
+            },
+        },
         {
             "YqlSelect",
             [](const TVector<TString>& args, TTranslationSettings& s) {

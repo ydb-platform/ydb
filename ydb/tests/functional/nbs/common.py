@@ -248,7 +248,7 @@ class NbsTestBase:
     def fetch_pbuffer_page(self, pb_service_ids):
         """
         Fetch Persistent Buffer mon pages for the given service ids (grouped by
-        node — the mon actor only lists local PBuffers), with tablet LSN table.
+        node — the mon actor only lists local PBuffers).
         """
         by_node = {}
         for pb in pb_service_ids:
@@ -259,7 +259,6 @@ class NbsTestBase:
             params = [
                 ('formPresent', '1'),
                 ('describeFreeSpace', '0'),
-                ('showTablets', '1'),
                 ('autoRefresh', '0'),
             ]
             for pb in pbs:
@@ -269,6 +268,31 @@ class NbsTestBase:
                 self.fetch_mon(f'/node/{node_id}/actors/persistent_buffer?{query}')
             )
         return '\n'.join(pages)
+
+    def fetch_pbuffer_tablets(self, pb_service_ids, tablet_id, allow_missing=False):
+        """Fetch all namespaces of a tablet through the paginated PBuffer API."""
+        tablets = []
+        for pb in pb_service_ids:
+            node_id = self.pbuffer_node_id(pb)
+            page = 0
+            while True:
+                query = urllib.parse.urlencode({
+                    'action': 'tablets', 'pb': pb, 'tabletId': str(tablet_id), 'page': page,
+                })
+                url = f'{self.mon_base_url()}/node/{node_id}/actors/persistent_buffer?{query}'
+                response = requests.get(url, timeout=10)
+                if allow_missing and response.status_code == 404:
+                    break
+                assert response.status_code == 200, (
+                    f"PBuffer tablets request failed: {url} status={response.status_code} "
+                    f"body={response.text[:500]}"
+                )
+                data = response.json()
+                tablets.extend(data['tablets'])
+                page = data['page'] + 1
+                if page >= data['pages']:
+                    break
+        return tablets
 
     @staticmethod
     def parse_dbg_indexes(html):

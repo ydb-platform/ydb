@@ -3551,6 +3551,8 @@ void TExprContext::UnFreeze() {
 void TExprContext::Reset() {
     YQL_ENSURE(!Frozen);
 
+    LazyBindings.clear();
+    LazyBindingClones.clear();
     IssueManager.Reset();
     Step.Reset();
     RepeatTransformCounter = 0;
@@ -3567,7 +3569,7 @@ size_t TExprContext::GetHash(TPositionHandle p) const {
     YQL_ENSURE(p.Handle_ < Positions_.size());
 
     const TPosition& pos = Positions_[p.Handle_];
-    size_t h = ComputeHash(pos.File);
+    size_t h = ComputeHash(TStringBuf(pos.File));
     h = CombineHashes(h, NumericHash(pos.Row));
     return CombineHashes(h, NumericHash(pos.Column));
 }

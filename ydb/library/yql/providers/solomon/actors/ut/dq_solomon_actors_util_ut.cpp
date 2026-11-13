@@ -2,9 +2,8 @@
 
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_actors_util.h>
 
-#include <yql/essentials/public/udf/udf_data_type.h>
-
 #include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 namespace NYql::NDq {
 
@@ -12,7 +11,7 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
-constexpr ui16 DATE_DAYS = 19000; // 2022-01-08
+constexpr ui16 DATE_DAYS = 19000;   // 2022-01-08
 const TInstant EXPECTED_INSTANT = TInstant::Days(DATE_DAYS);
 
 TString EncodeOnePoint(NUdf::TDataTypeId timestampType, NUdf::TUnboxedValuePod timestamp, bool cloudFormat) {
@@ -31,7 +30,7 @@ TString EncodeOnePoint(NUdf::TDataTypeId timestampType, NUdf::TUnboxedValuePod t
     sensor.SetDataTypeId(NUdf::TDataType<ui32>::Id);
 
     TMetricsEncoder encoder(scheme, cloudFormat);
-    encoder.Append(CreateStruct(holderFactory, {timestamp, NUdf::TUnboxedValuePod(ui32(42))}));
+    encoder.Append(CreateStruct(holderFactory, { timestamp, NUdf::TUnboxedValuePod(ui32(42)) }));
     return encoder.Encode();
 }
 
@@ -40,15 +39,13 @@ TString EncodeAsTimestamp(bool cloudFormat) {
 }
 
 void CheckSameAsTimestamp(NUdf::TDataTypeId timestampType, NUdf::TUnboxedValuePod timestamp) {
-    for (const bool cloudFormat : {false, true}) {
+    for (const bool cloudFormat : { false, true }) {
         UNIT_ASSERT_VALUES_EQUAL_C(
-            EncodeOnePoint(timestampType, timestamp, cloudFormat),
-            EncodeAsTimestamp(cloudFormat),
-            "cloudFormat: " << cloudFormat);
+            EncodeOnePoint(timestampType, timestamp, cloudFormat), EncodeAsTimestamp(cloudFormat), "cloudFormat: " << cloudFormat);
     }
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TMetricsEncoderTimestampTest) {
     Y_UNIT_TEST(TimestampIsEncodedAsUnixSeconds) {
@@ -76,4 +73,4 @@ Y_UNIT_TEST_SUITE(TMetricsEncoderTimestampTest) {
     }
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

@@ -43,6 +43,7 @@
 
 #include <util/stream/zlib.h>
 
+#include <util/system/file.h>
 #include <util/system/fs.h>
 #include <util/system/tempfile.h>
 
@@ -385,6 +386,80 @@ TEST_F(TLoggingTest, FileWriter)
     }
 }
 
+#ifdef _linux_
+
+TEST_F(TLoggingTest, TryEvictPageCacheOnFileClose)
+{
+    const std::string message(60_KB, 'x');
+
+    for (auto compressionMethod : {
+        std::optional<ECompressionMethod>{},
+        std::optional<ECompressionMethod>{ECompressionMethod::Gzip},
+        std::optional<ECompressionMethod>{ECompressionMethod::Zstd},
+    }) {
+        SCOPED_TRACE(compressionMethod ? ToString(*compressionMethod) : "none");
+
+        TTempFile logFile(GenerateLogFileName());
+        TTempFile rotatedLogFile(logFile.Name() + ".1");
+        auto writerConfig = New<TFileLogWriterConfig>();
+        writerConfig->FileName = logFile.Name();
+        writerConfig->TryEvictPageCacheOnFileClose = true;
+        writerConfig->RotationPolicy->MaxSegmentSize = 1;
+        if (compressionMethod) {
+            writerConfig->EnableCompression = true;
+            writerConfig->CompressionMethod = *compressionMethod;
+        }
+
+        auto writer = CreateFileLogWriter(
+            std::make_unique<TPlainTextLogFormatter>(),
+            CreateDefaultSystemLogEventProvider(writerConfig),
+            "test_writer",
+            writerConfig,
+            this);
+
+        TFile cacheInspector(logFile.Name(), OpenExisting | RdWr | NoReadAhead);
+
+        TLogEvent event{
+            .Category = Logger().GetCategory(),
+            .Level = ELogLevel::Debug,
+            .Family = ELogFamily::PlainText,
+            .Payload = MakeTaggedPayloadFromMessage(message),
+            .ThreadId = 0xba,
+        };
+        writer->Write(event);
+        writer->Flush();
+        writer->Write(event);
+
+        cacheInspector.PrefetchCache();
+        ASSERT_GT(cacheInspector.CountCache(), 0);
+        writer->MaybeRotate();
+        i64 cachedAfterRotation = cacheInspector.CountCache();
+        ASSERT_GE(cachedAfterRotation, 0);
+        // Eviction is best effort, so compare with the underlying file operation.
+        cacheInspector.FlushCache();
+        cacheInspector.EvictCache();
+        i64 cachedAfterEviction = cacheInspector.CountCache();
+        ASSERT_GE(cachedAfterEviction, 0);
+        // Eviction is best effort: the writer's close-time eviction may be
+        // a no-op if kernel writeback is still in flight for the file's pages,
+        // so only require that our own eviction does not increase the cache.
+        EXPECT_LE(cachedAfterEviction, cachedAfterRotation);
+
+        auto lines = ReadPlainTextEvents(rotatedLogFile.Name(), compressionMethod);
+        ASSERT_EQ(2, std::ssize(lines));
+        for (const auto& line : lines) {
+            EXPECT_EQ(
+                Format("\tD\t%v\t%v\t%v\t\t\n",
+                    Logger().GetCategory()->Name,
+                    message,
+                    "ba"),
+                line.substr(DateLength));
+        }
+    }
+}
+
+#endif
+
 TEST_F(TLoggingTest, GzipCompression)
 {
     // No compression.
@@ -564,6 +639,7 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
         .Payload = MakeTaggedPayloadFromMessage("test_message"),
         .FiberId = 31,
         .TraceId = TTraceId(1, 2, 3, 4),
+        .SpanId = 0x1234abcd,
         .SourceFile = "a/b.cpp",
         .SourceLine = 123,
     };
@@ -594,6 +670,7 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
             EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger().GetCategory()->Name);
             EXPECT_EQ(message->GetChildOrThrow("fiber_id")->AsString()->GetValue(), "1f");
             EXPECT_EQ(message->GetChildOrThrow("trace_id")->AsString()->GetValue(), "4-3-2-1");
+            EXPECT_EQ(message->FindChild("span_id"), nullptr);
 
             if (enableSourceLocation) {
                 EXPECT_EQ(message->GetChildOrThrow("source_file")->AsString()->GetValue(), "b.cpp:123");
@@ -601,6 +678,42 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
                 EXPECT_EQ(message->FindChild("source_file"), nullptr);
             }
         }
+    }
+}
+
+TEST_F(TLoggingTest, StructuredFormatterSpanIdField)
+{
+    TLogEvent event{
+        .Category = Logger().GetCategory(),
+        .Level = ELogLevel::Debug,
+        .Family = ELogFamily::PlainText,
+        .Payload = MakeTaggedPayloadFromMessage("test_message"),
+        .TraceId = TTraceId(1, 2, 3, 4),
+        .SpanId = 0x1234abcd,
+    };
+
+    for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
+        TTempFile logFile(GenerateLogFileName());
+
+        auto writerConfig = New<TFileLogWriterConfig>();
+        writerConfig->FileName = logFile.Name();
+
+        auto writer = CreateFileLogWriter(
+            std::make_unique<TStructuredLogFormatter>(TStructuredLogFormatterOptions{.Format = format, .EnableSpanIdField = true}),
+            CreateDefaultSystemLogEventProvider(writerConfig),
+            "test_writer",
+            writerConfig,
+            this);
+
+        WriteEvent(writer, event);
+        TLogManager::Get()->Synchronize();
+
+        auto lines = ReadPlainTextEvents(logFile.Name());
+        EXPECT_EQ(1, std::ssize(lines));
+
+        auto message = DeserializeStructuredEvent(lines[0], format);
+        EXPECT_EQ(message->GetChildOrThrow("trace_id")->AsString()->GetValue(), "4-3-2-1");
+        EXPECT_EQ(message->GetChildOrThrow("span_id")->AsString()->GetValue(), "000000001234abcd");
     }
 }
 
@@ -615,6 +728,7 @@ TEST_F(TLoggingTest, StructuredLogging)
             .Finish()),
         .FiberId = 31,
         .TraceId = TTraceId(1, 2, 3, 4),
+        .SpanId = 0x1234abcd,
     };
 
     for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
@@ -643,6 +757,7 @@ TEST_F(TLoggingTest, StructuredLogging)
 
         EXPECT_EQ(message->FindChild("fiber_id"), nullptr);
         EXPECT_EQ(message->FindChild("trace_id"), nullptr);
+        EXPECT_EQ(message->FindChild("span_id"), nullptr);
     }
 }
 

@@ -12,14 +12,14 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/providers/common/message_stream/async_io
     library/cpp/containers/disjoint_interval_tree
     library/cpp/protobuf/interop
     library/cpp/retry
     ydb/core/fq/libs/graph_params/proto
     ydb/core/fq/libs/protos
-    ydb/core/fq/libs/row_dispatcher
+    ydb/core/fq/libs/row_dispatcher/events
     ydb/library/accessor
-    ydb/library/actors/log_backend
     ydb/library/services
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/common/token_accessor/client
@@ -41,3 +41,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

@@ -150,23 +150,26 @@ int TTokenizer::ParseHexDigit(char ch, TStringBuf context)
 
 void TTokenizer::Expect(ETokenType expectedType, TSourceLocation location) const
 {
+    if (expectedType == Type_) {
+        return;
+    }
+
+    // NB: The guard is not free; keep it off the success path.
     auto guard = MakeSourceLocationErrorCodicil(location);
-    if (expectedType != Type_) {
-        if (Type_ == ETokenType::EndOfStream) {
-            if (PreviousType_ == ETokenType::Slash) {
-                THROW_ERROR_EXCEPTION("Expected %Qlv in YPath but found end-of-string; please note that YPath cannot "
-                    "normally end with \"/\"",
-                    expectedType);
-            } else {
-                THROW_ERROR_EXCEPTION("Expected %Qlv in YPath but found end-of-string",
-                    expectedType);
-            }
+    if (Type_ == ETokenType::EndOfStream) {
+        if (PreviousType_ == ETokenType::Slash) {
+            THROW_ERROR_EXCEPTION("Expected %Qlv in YPath but found end-of-string; please note that YPath cannot "
+                "normally end with \"/\"",
+                expectedType);
         } else {
-            THROW_ERROR_EXCEPTION("Expected %Qlv in YPath but found %Qlv token %Qv",
-                expectedType,
-                Type_,
-                Token_);
+            THROW_ERROR_EXCEPTION("Expected %Qlv in YPath but found end-of-string",
+                expectedType);
         }
+    } else {
+        THROW_ERROR_EXCEPTION("Expected %Qlv in YPath but found %Qlv token %Qv",
+            expectedType,
+            Type_,
+            Token_);
     }
 }
 
@@ -174,10 +177,10 @@ void TTokenizer::ExpectListIndex(TSourceLocation location) const
 {
     Expect(NYPath::ETokenType::Literal, location);
 
-    auto guard = MakeSourceLocationErrorCodicil(location);
     i64 index;
     const auto& token = GetLiteralValue();
     if (!IsSpecialListKey(token) && !TryFromString(token, index)) {
+        auto guard = MakeSourceLocationErrorCodicil(location);
         THROW_ERROR_EXCEPTION("Expected special list key or integer for repeated field index, %Qv found", token)
             .With("ypath", GetPrefixPlusToken());
     }

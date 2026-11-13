@@ -126,6 +126,16 @@ struct ChannelArgTypeTraits<
   };
 };
 
+// Define a check for shared_ptr supported types, which must extend
+// enable_shared_from_this.
+template <typename T>
+struct SupportedSharedPtrType
+    : std::integral_constant<
+          bool, std::is_base_of<std::enable_shared_from_this<T>, T>::value> {};
+template <>
+struct SupportedSharedPtrType<grpc_event_engine::experimental::EventEngine>
+    : std::true_type {};
+
 // Specialization for shared_ptr
 // Incurs an allocation because shared_ptr.release is not a thing.
 template <typename T>
@@ -174,19 +184,27 @@ struct ChannelArgTypeTraits<T,
   };
 };
 
-// GetObject support for shared_ptr and RefCountedPtr
+// Determine if the pointer for a channel arg name should be const or not
+template <typename T, typename SfinaeVoid = void>
+struct ChannelArgPointerShouldBeConst {
+  static constexpr bool kValue = false;
+};
+
 template <typename T>
-struct WrapInSharedPtr
-    : std::integral_constant<
-          bool, std::is_base_of<std::enable_shared_from_this<T>, T>::value> {};
-template <>
-struct WrapInSharedPtr<grpc_event_engine::experimental::EventEngine>
-    : std::true_type {};
+struct ChannelArgPointerShouldBeConst<
+    T, y_absl::void_t<decltype(T::ChannelArgUseConstPtr())>> {
+  static constexpr bool kValue = T::ChannelArgUseConstPtr();
+};
+
+// GetObject support for shared_ptr and RefCountedPtr
 template <typename T, typename Ignored = void /* for SFINAE */>
 struct GetObjectImpl;
 // std::shared_ptr implementation
 template <typename T>
-struct GetObjectImpl<T, y_absl::enable_if_t<WrapInSharedPtr<T>::value, void>> {
+struct GetObjectImpl<
+    T, y_absl::enable_if_t<!ChannelArgPointerShouldBeConst<T>::kValue &&
+                             SupportedSharedPtrType<T>::value,
+                         void>> {
   using Result = T*;
   using ReffedResult = std::shared_ptr<T>;
   using StoredType = std::shared_ptr<T>*;
@@ -206,9 +224,32 @@ struct GetObjectImpl<T, y_absl::enable_if_t<WrapInSharedPtr<T>::value, void>> {
 };
 // RefCountedPtr
 template <typename T>
-struct GetObjectImpl<T, y_absl::enable_if_t<!WrapInSharedPtr<T>::value, void>> {
+struct GetObjectImpl<
+    T, y_absl::enable_if_t<!ChannelArgPointerShouldBeConst<T>::kValue &&
+                             !SupportedSharedPtrType<T>::value,
+                         void>> {
   using Result = T*;
   using ReffedResult = RefCountedPtr<T>;
+  using StoredType = Result;
+  static Result Get(StoredType p) { return p; };
+  static ReffedResult GetReffed(StoredType p) {
+    if (p == nullptr) return nullptr;
+    return p->template RefAsSubclass<T>();
+  };
+  static ReffedResult GetReffed(StoredType p, const DebugLocation& location,
+                                const char* reason) {
+    if (p == nullptr) return nullptr;
+    return p->template RefAsSubclass<T>(location, reason);
+  };
+};
+
+template <typename T>
+struct GetObjectImpl<
+    T, y_absl::enable_if_t<ChannelArgPointerShouldBeConst<T>::kValue &&
+                             !SupportedSharedPtrType<T>::value,
+                         void>> {
+  using Result = const T*;
+  using ReffedResult = RefCountedPtr<const T>;
   using StoredType = Result;
   static Result Get(StoredType p) { return p; };
   static ReffedResult GetReffed(StoredType p) {
@@ -238,6 +279,7 @@ struct ChannelArgNameTraits<grpc_event_engine::experimental::EventEngine> {
     return GRPC_INTERNAL_ARG_EVENT_ENGINE;
   }
 };
+
 class ChannelArgs {
  public:
   class Pointer {
@@ -304,7 +346,7 @@ class ChannelArgs {
       return &rep_;
     }
 
-    TString ToString() const;
+    y_absl::string_view ToString(std::list<TString>& backing) const;
 
     grpc_arg MakeCArg(const char* name) const;
 
@@ -377,12 +419,26 @@ class ChannelArgs {
   GRPC_MUST_USE_RESULT auto Set(y_absl::string_view name,
                                 RefCountedPtr<T> value) const
       -> y_absl::enable_if_t<
-          std::is_same<const grpc_arg_pointer_vtable*,
-                       decltype(ChannelArgTypeTraits<
-                                y_absl::remove_cvref_t<T>>::VTable())>::value,
+          !ChannelArgPointerShouldBeConst<T>::kValue &&
+              std::is_same<const grpc_arg_pointer_vtable*,
+                           decltype(ChannelArgTypeTraits<
+                                    y_absl::remove_cvref_t<T>>::VTable())>::value,
           ChannelArgs> {
     return Set(
         name, Pointer(value.release(),
+                      ChannelArgTypeTraits<y_absl::remove_cvref_t<T>>::VTable()));
+  }
+  template <typename T>
+  GRPC_MUST_USE_RESULT auto Set(y_absl::string_view name,
+                                RefCountedPtr<const T> value) const
+      -> y_absl::enable_if_t<
+          ChannelArgPointerShouldBeConst<T>::kValue &&
+              std::is_same<const grpc_arg_pointer_vtable*,
+                           decltype(ChannelArgTypeTraits<
+                                    y_absl::remove_cvref_t<T>>::VTable())>::value,
+          ChannelArgs> {
+    return Set(
+        name, Pointer(const_cast<T*>(value.release()),
                       ChannelArgTypeTraits<y_absl::remove_cvref_t<T>>::VTable()));
   }
   template <typename T>
@@ -392,6 +448,9 @@ class ChannelArgs {
           decltype(ChannelArgTypeTraits<std::shared_ptr<T>>::VTable())>::value,
       ChannelArgs>
   Set(y_absl::string_view name, std::shared_ptr<T> value) const {
+    static_assert(SupportedSharedPtrType<T>::value,
+                  "Type T must extend std::enable_shared_from_this to be added "
+                  "into ChannelArgs as a shared_ptr<T>");
     auto* store_value = new std::shared_ptr<T>(value);
     return Set(
         name,
@@ -419,6 +478,8 @@ class ChannelArgs {
   y_absl::optional<int> GetInt(y_absl::string_view name) const;
   y_absl::optional<y_absl::string_view> GetString(y_absl::string_view name) const;
   y_absl::optional<TString> GetOwnedString(y_absl::string_view name) const;
+  // WARNING: this is broken if `name` represents something that was stored as a
+  // RefCounted<const T> - we will discard the const-ness.
   void* GetVoidPointer(y_absl::string_view name) const;
   template <typename T>
   typename GetObjectImpl<T>::StoredType GetPointer(

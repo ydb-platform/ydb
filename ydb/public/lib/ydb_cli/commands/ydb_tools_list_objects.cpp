@@ -102,7 +102,7 @@ TVector<TString> ListObjects(
 
     TVector<TSchemeEntry> entries = std::move(listing.Entries);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(tableClient.RetryOperationSync([&entries](TSession session) {
-        return RemoveAsyncReplicaTables(session, entries);
+        return RemoveNotExportableTables(session, entries);
     }));
 
     THashSet<TString> names;

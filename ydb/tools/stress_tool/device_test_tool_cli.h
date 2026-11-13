@@ -32,11 +32,13 @@ struct TInFlightOptions {
     TString To;
 };
 
-TInFlightOptions ResolveInFlight(const NLastGetopt::TOptsParseResult& res, bool ddisk);
+TInFlightOptions ResolveInFlight(const NLastGetopt::TOptsParseResult& res);
 TVector<ui32> InFlightValues(ui32 from, ui32 to);
 NDevicePerfTest::TPerfTests MakeDDiskTests(const NLastGetopt::TOptsParseResult& res);
 void ValidateDDiskTests(const NDevicePerfTest::TPerfTests& tests);
 void ValidateDDiskOptions(const NLastGetopt::TOptsParseResult& res);
+void ValidatePDiskSectorMapOptions(const NLastGetopt::TOptsParseResult& res, bool ddisk);
+void ValidatePDiskSectorMapTests(const NDevicePerfTest::TPerfTests& tests);
 NDevicePerfTest::TPerfTests LoadTests(const NLastGetopt::TOptsParseResult& res, bool ddisk);
 
 } // namespace NKikimr::NStressTool

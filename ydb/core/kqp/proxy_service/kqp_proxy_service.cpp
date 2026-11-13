@@ -1,7 +1,6 @@
 #include "kqp_proxy_service.h"
 #include "kqp_proxy_service_impl.h"
 #include "kqp_query_text_cache_service.h"
-#include "kqp_script_executions.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -10,15 +9,15 @@
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp_current_query_stats.h>
-#include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/simple/session_id.h>
@@ -29,15 +28,21 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/pq_checkpoint_provider_integration.h>
-#include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
+#include <ydb/core/kqp/federated_query/streaming/streaming_query_controller.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/script_executions/finalization/kqp_finalize_script_service.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_pool_cap_pusher.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/sys_view/common/registry.h>
@@ -61,8 +66,7 @@
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_pool_cap_pusher.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
-#include <ydb/services/workload_manager/events.h>
-#include <ydb/services/workload_manager/query_classifier.h>
+#include <ydb/services/metadata/service.h>
 
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -280,6 +284,7 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         ListScriptExecutionOperations,
         CancelScriptExecutionOperation,
         GetScriptExecutionPhysicalGraph,
+        FetchScriptResults,
     };
 
 public:
@@ -301,7 +306,6 @@ public:
         , QueryServiceConfig(queryServiceConfig)
         , TliConfig(tliConfig)
         , FeatureFlags()
-        , WorkloadManagerConfig()
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , FederatedQuerySetupFactory(federatedQuerySetupFactory)
         , QueryReplayFactory(std::move(queryReplayFactory))
@@ -320,7 +324,6 @@ public:
         ctx.Register(CreateVectorIndexLevelsCacheMaintainer(
             VectorIndexLevelsCache, GetKqpResourceManager(), TableServiceConfig.GetResourceManager()));
         FeatureFlags = AppData()->FeatureFlags;
-        WorkloadManagerConfig = AppData()->WorkloadManagerConfig;
         WarmupApplicable = IsCompileCacheWarmupEnabled(TableServiceConfig, AppData()->TenantName,
             AppData()->DomainsInfo->Domain ? AppData()->DomainsInfo->Domain->Name : TString());
         WarmupGateOpen = !WarmupApplicable;
@@ -335,6 +338,10 @@ public:
             FederatedQuerySetup->CheckpointProviderIntegrations.try_emplace(
                 TString(NYql::PqProviderName),
                 CreatePqCheckpointProviderIntegration(TActivationContext::ActorSystem(), FederatedQuerySetup->PqGatewayFactory->CreatePqGateway(), *FederatedQuerySetup->Driver, FederatedQuerySetup->CredentialsFactory)
+            );
+            FederatedQuerySetup->StreamingQueryControllerFactory = CreateStreamingQueryControllerFactory(
+                FederatedQuerySetup->PqGatewayFactory,
+                FederatedQuerySetup->CheckpointProviderIntegrations
             );
         }
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);
@@ -373,16 +380,14 @@ public:
         ui32 tableServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::TableServiceConfigItem;
         ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
         ui32 featureFlagsKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
-        ui32 workloadManagerKind = (ui32)NKikimrConsole::TConfigItem::WorkloadManagerConfigItem;
         ui32 queryServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::QueryServiceConfigItem;
         ui32 tliConfigKind = (ui32)NKikimrConsole::TConfigItem::TliConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
-                {tableServiceConfigKind, logConfigKind, featureFlagsKind, workloadManagerKind, queryServiceConfigKind, tliConfigKind}),
+                {tableServiceConfigKind, logConfigKind, featureFlagsKind, queryServiceConfigKind, tliConfigKind}),
             IEventHandle::FlagTrackDelivery);
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
             SpillingService = TActivationContext::Register(NYql::NDq::CreateDqLocalFileSpillingService(
@@ -652,7 +657,6 @@ public:
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
         });
 
-        ResourcePoolsCache.UnsubscribeFromResourcePoolClassifiers(ActorContext());
         DatabasesCache.StopSubscriberActor(ActorContext());
 
         return TActor::PassAway();
@@ -683,9 +687,6 @@ public:
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvResetManagerRegistration(TStreamingQueryBehaviour::GetInstance()));
         }
 
-        WorkloadManagerConfig.Swap(event.MutableConfig()->MutableWorkloadManagerConfig());
-        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
-
         if (event.GetConfig().HasQueryServiceConfig()) {
             QueryServiceConfig.Swap(event.MutableConfig()->MutableQueryServiceConfig());
         }
@@ -695,13 +696,13 @@ public:
         }
 
         RebuildSharedServiceConfigs();
-
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
-        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
         InitSharedReading();
         InitCheckpointStorage();
         InitDescribeResourceIdService();
         InitAccessServiceService();
+
+        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -898,6 +899,20 @@ public:
             ev->Get()->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(traceId, database, sessionId));
         }
 
+        const bool isChecksumTable = ev->Get()->IsInternalCall()
+            && ev->Get()->GetRequestType() == NRequestTypes::ChecksumTable
+            && (queryType == NKikimrKqp::QUERY_TYPE_SQL_DML
+                || queryType == NKikimrKqp::QUERY_TYPE_PREPARED_DML
+                || queryType == NKikimrKqp::QUERY_TYPE_AST_DML);
+        ev->Get()->GetUserRequestContext()->ReadHints = isChecksumTable
+            ? NKikimrTxDataShard::TEvRead::HINT_BATCH | NKikimrTxDataShard::TEvRead::HINT_LOW_PRIORITY
+            : 0;
+        if (isChecksumTable) {
+            // This flag is local to the event. Reapply it at each proxy hop before
+            // calculating deadlines, including when the session is on another node.
+            ev->Get()->SetDisableDefaultTimeout(true);
+        }
+
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
         if (!dbCounters) {
@@ -951,6 +966,12 @@ public:
                 // A concurrent request must not replace the active query's stats.
                 // The session actor still decides whether to accept the request.
                 LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
+                // A forwarded request's sender is a remote proxy. Local WM
+                // events must never be sent over interconnect.
+                if (ev->Get()->Record.GetRequest().GetReportWmStateChanges() &&
+                    ev->Sender.NodeId() == SelfId().NodeId()) {
+                    sessionInfo->WmState->SetStateObserver(ev->Sender, ev->Cookie);
+                }
             }
             if (FeatureFlags.GetEnableKqpRuntimeStats()) {
                 ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval = CurrentQueryStatsReportInterval;
@@ -960,8 +981,6 @@ public:
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");
             ev->Get()->SetWmSessionUpdater(sessionInfo->WmState);
         }
-
-        SetupWorkloadManagerQueryClassifier(ev, sessionInfo, requestId);
 
         TActorId targetId;
         if (sessionInfo) {
@@ -1768,14 +1787,14 @@ public:
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvGetScriptExecutionPhysicalGraph, Handle);
+            hFunc(NKqp::TEvFetchScriptResultsRequest, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
-            hFunc(NWorkloadManager::TEvUpdatePoolInfo, Handle);
             hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
             hFunc(TEvKqp::TEvDelayedRequestError, Handle);
-            hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
+            hFunc(TEvKqp::TEvGetVectorIndexLevelsCacheRequest, Handle)
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -2004,37 +2023,6 @@ private:
         }
     }
 
-    void SetupWorkloadManagerQueryClassifier(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 /*requestId*/) {
-        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
-        const auto& databaseId = ev->Get()->GetDatabaseId();
-
-        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)
-            || ev->Get()->IsInternalCall()
-            || ev->Get()->GetIsWarmupCompilation()) {
-            return;
-        }
-
-        auto poolId = ev->Get()->GetPoolId();
-        ResourcePoolsCache.GetPoolInfo(databaseId, poolId ? poolId : NResourcePool::DEFAULT_POOL_ID, ActorContext());
-
-        auto context = NWorkloadManager::TClassifyContext{
-            // This parameter is set when user creates a request with an explicit PoolId
-            .PoolId = poolId,
-            .AppName = sessionInfo ? sessionInfo->ClientApplicationName : "",
-            .UserToken = ev->Get()->GetUserToken()
-        };
-
-        auto classifier = NWorkloadManager::CreateQueryClassifier(
-            ResourcePoolsCache.GetLastResourcePoolMapSnapshot(),
-            ResourcePoolsCache.GetClassifierViewFor(databaseId),
-            databaseId,
-            std::move(context),
-            *AppData()
-        );
-
-        ev->Get()->SetWmQueryClassifier(classifier);
-    }
-
     void UpdateYqlLogLevels() {
         const auto& kqpYqlName = NKikimrServices::EServiceKikimr_Name(NKikimrServices::KQP_YQL);
         for (auto &entry : LogConfig.GetEntry()) {
@@ -2088,6 +2076,10 @@ private:
 
             case EDelayedRequestType::GetScriptExecutionPhysicalGraph:
                 HandleDelayedScriptRequestError<TEvGetScriptPhysicalGraphResponse>(std::move(requestEvent), status, std::move(issues));
+                break;
+
+            case EDelayedRequestType::FetchScriptResults:
+                HandleDelayedScriptRequestError<TEvFetchScriptResultsResponse>(std::move(requestEvent), status, std::move(issues));
                 break;
         }
     }
@@ -2193,6 +2185,14 @@ private:
     void Handle(TEvGetScriptExecutionPhysicalGraph::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::GetScriptExecutionPhysicalGraph)) {
             Register(CreateGetScriptExecutionPhysicalGraphActor(ev->Sender, ev->Get()->Database, ev->Get()->ExecutionId));
+        }
+    }
+
+    void Handle(TEvFetchScriptResultsRequest::TPtr& ev) {
+        if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::FetchScriptResults)) {
+            auto& request = *ev->Get();
+            Register(CreateGetScriptExecutionResultActor(ev->Sender, std::move(request.Database), std::move(request.ExecutionId),
+                std::move(request.UserSID), request.ResultSetIndex, request.Offset, request.RowsLimit, request.SizeLimit, request.Deadline));
         }
     }
 
@@ -2302,13 +2302,8 @@ private:
         Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 
-    void Handle(NWorkloadManager::TEvUpdatePoolInfo::TPtr& ev) {
-        ResourcePoolsCache.UpdatePoolInfo(ev->Get()->DatabaseId, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject, ActorContext());
-    }
-
     void Handle(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev) {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->DatabaseId, ev->Get()->Serverless);
             Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddDatabase(ev->Get()->DatabaseId));
         }
         DatabasesCache.UpdateDatabaseInfo(ev, ActorContext());
@@ -2318,8 +2313,10 @@ private:
         HandleDelayedRequestError(static_cast<EDelayedRequestType>(ev->Cookie), std::move(ev->Get()->RequestEvent), ev->Get()->Status, std::move(ev->Get()->Issues));
     }
 
-    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetValidatedSnapshotAs<NWorkloadManager::TResourcePoolClassifierSnapshot>(), ActorContext());
+    void Handle(TEvKqp::TEvGetVectorIndexLevelsCacheRequest::TPtr& ev) {
+        auto result = std::make_unique<TEvKqp::TEvGetVectorIndexLevelsCacheResponse>();
+        result->CachePtr = VectorIndexLevelsCache;
+        Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 
     void InitSharedReading() {
@@ -2416,7 +2413,6 @@ private:
     std::shared_ptr<const NKikimrConfig::TQueryServiceConfig> SharedQueryServiceConfig;
     std::shared_ptr<const NKikimrConfig::TTliConfig> SharedTliConfig;
     NKikimrConfig::TFeatureFlags FeatureFlags;
-    NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     TKqpSettings::TConstPtr KqpSettings;
     TIntrusiveConstPtr<NYql::TKikimrConfiguration> KqpConfig;
     IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
@@ -2492,7 +2488,6 @@ private:
     ui64 ScriptExecutionsTalesGeneration = 0;
     TActorId KqpTempTablesAgentActor;
 
-    TResourcePoolsCache ResourcePoolsCache;
     TDatabasesCache DatabasesCache;
 
     std::unique_ptr<TEvKqp::TEvCloseSessionResponse> CreateEvCloseSessionResponse(

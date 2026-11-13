@@ -2,19 +2,19 @@
 
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/base/counters.h>
-
 #include <ydb/core/kqp/common/events/events.h>
-#include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
-#include <ydb/services/workload_manager/actors/actors.h>
-#include <ydb/services/workload_manager/tables/table_queries.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+
 #include <ydb/library/yql/providers/common/http_gateway/ut_helpers/http_gateway_holder.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/services/workload_manager/actors/actors.h>
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
+#include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
+#include <ydb/services/workload_manager/service/service.h>
+#include <ydb/services/workload_manager/tables/table_queries.h>
 
 namespace NKikimr::NWorkloadManager {
 
@@ -26,12 +26,11 @@ using namespace NThreading;
 using namespace NYdb;
 using namespace Tests;
 
-
 // Events
 
 struct TEvQueryRunner {
     // Event ids
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvExecutionStarted = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvContinueExecution,
         EvExecutionFinished,
@@ -42,33 +41,34 @@ struct TEvQueryRunner {
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
     // Events
-    struct TEvExecutionStarted : public TEventLocal<TEvExecutionStarted, EvExecutionStarted> {
-    };
+    struct TEvExecutionStarted: public TEventLocal<TEvExecutionStarted, EvExecutionStarted> {};
 
-    struct TEvContinueExecution : public TEventLocal<TEvContinueExecution, EvContinueExecution> {
+    struct TEvContinueExecution: public TEventLocal<TEvContinueExecution, EvContinueExecution> {
         explicit TEvContinueExecution(TPromise<void> promise)
             : Promise(promise)
-        {}
+        {
+        }
 
         TPromise<void> Promise;
     };
 
-    struct TEvExecutionFinished : public TEventLocal<TEvExecutionFinished, EvExecutionFinished> {
-    };
+    struct TEvExecutionFinished: public TEventLocal<TEvExecutionFinished, EvExecutionFinished> {};
 };
 
 // Query runner
 
-class TQueryRunnerActor : public TActorBootstrapped<TQueryRunnerActor> {
+class TQueryRunnerActor: public TActorBootstrapped<TQueryRunnerActor> {
     using TBase = TActorBootstrapped<TQueryRunnerActor>;
 
 public:
-    TQueryRunnerActor(std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> request, TPromise<TQueryRunnerResult> promise, const TQueryRunnerSettings& settings, ui32 targetNodeId)
+    TQueryRunnerActor(std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> request, TPromise<TQueryRunnerResult> promise,
+        const TQueryRunnerSettings& settings, ui32 targetNodeId)
         : Request_(std::move(request))
         , Promise_(promise)
         , Settings_(settings)
         , TargetNodeId_(targetNodeId)
-    {}
+    {
+    }
 
     void Registered(TActorSystem* sys, const TActorId& owner) override {
         TBase::Registered(sys, owner);
@@ -83,7 +83,8 @@ public:
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        UNIT_ASSERT_C(Settings_.ExecutionExpected_ || ExecutionContinued, "Unexpected stream data, execution is not expected and was not continued");
+        UNIT_ASSERT_C(
+            Settings_.ExecutionExpected_ || ExecutionContinued, "Unexpected stream data, execution is not expected and was not continued");
         if (!ExecutionStartReported) {
             ExecutionStartReported = true;
             SendNotification<TEvQueryRunner::TEvExecutionStarted>();
@@ -158,7 +159,7 @@ private:
 
 // In flight coordinator
 
-class TInFlightCoordinatorActor : public TActor<TInFlightCoordinatorActor> {
+class TInFlightCoordinatorActor: public TActor<TInFlightCoordinatorActor> {
     using TBase = TActor<TInFlightCoordinatorActor>;
 
 public:
@@ -226,10 +227,11 @@ private:
 };
 
 // The only purpose is to allow BUILTIN_SYSTEM_DOMAIN users
-struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
+struct TFakeTicketParserActor: public TActor<TFakeTicketParserActor> {
     TFakeTicketParserActor()
         : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StateFunc)
-    {}
+    {
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
@@ -249,7 +251,7 @@ IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
 }
 
 // Ydb setup
-class TWorkloadServiceYdbSetup : public IYdbSetup {
+class TWorkloadServiceYdbSetup: public IYdbSetup {
 private:
     TAppConfig GetAppConfig() const {
         TAppConfig appConfig;
@@ -293,12 +295,12 @@ private:
         TAppConfig appConfig = GetAppConfig();
 
         auto serverSettings = TServerSettings(msgBusPort)
-            .SetGrpcPort(grpcPort)
-            .SetNodeCount(Settings_.NodeCount_)
-            .SetDomainName(Settings_.DomainName_)
-            .SetAppConfig(appConfig)
-            .SetFeatureFlags(appConfig.GetFeatureFlags())
-            .SetInitializeFederatedQuerySetupFactory(true);
+                                  .SetGrpcPort(grpcPort)
+                                  .SetNodeCount(Settings_.NodeCount_)
+                                  .SetDomainName(Settings_.DomainName_)
+                                  .SetAppConfig(appConfig)
+                                  .SetFeatureFlags(appConfig.GetFeatureFlags())
+                                  .SetInitializeFederatedQuerySetupFactory(true);
 
         if (Settings_.WorkSafeWithGlobalObjects_) {
             serverSettings.SetKqpLoggerScope(NYql::NTestHelpers::GetGlobalHttpGatewayHolder().LoggerScope);
@@ -307,8 +309,7 @@ private:
         if (Settings_.CreateSampleTenants_) {
             const auto dedicatedPoolKind = SplitPath(Settings_.GetDedicatedTenantName()).back();
             const auto sharedPoolKind = SplitPath(Settings_.GetSharedTenantName()).back();
-            serverSettings
-                .SetDynamicNodeCount(2)
+            serverSettings.SetDynamicNodeCount(2)
                 .AddStoragePool(dedicatedPoolKind, TStringBuilder() << Settings_.GetDedicatedTenantName() << ":" << dedicatedPoolKind)
                 .AddStoragePool(sharedPoolKind, TStringBuilder() << Settings_.GetSharedTenantName() << ":" << sharedPoolKind);
         }
@@ -326,7 +327,7 @@ private:
     }
 
     void CreateTenants() {
-        {  // Dedicated
+        {   // Dedicated
             Ydb::Cms::CreateDatabaseRequest request;
             SetupResourcesTenant(request, request.mutable_resources()->add_storage_units(), Settings_.GetDedicatedTenantName());
 
@@ -338,10 +339,11 @@ private:
             Tenants_->CreateTenant(std::move(request));
             const auto describeResult = Client_->Describe(GetRuntime(), Settings_.GetDedicatedTenantName());
             DedicatedTenantPathId = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey().GetPathId();
-            Server_->EnableGRpc(PortManager_.GetPort(), Tenants_->List(Settings_.GetDedicatedTenantName())[0], Settings_.GetDedicatedTenantName());
+            Server_->EnableGRpc(
+                PortManager_.GetPort(), Tenants_->List(Settings_.GetDedicatedTenantName())[0], Settings_.GetDedicatedTenantName());
         }
 
-        {  // Shared
+        {   // Shared
             Ydb::Cms::CreateDatabaseRequest request;
             SetupResourcesTenant(request, request.mutable_shared_resources()->add_storage_units(), Settings_.GetSharedTenantName());
             Tenants_->CreateTenant(std::move(request));
@@ -350,7 +352,7 @@ private:
             Server_->EnableGRpc(PortManager_.GetPort(), Tenants_->List(Settings_.GetSharedTenantName())[0], Settings_.GetSharedTenantName());
         }
 
-        {  // Serverless
+        {   // Serverless
             Ydb::Cms::CreateDatabaseRequest request;
             request.set_path(Settings_.GetServerlessTenantName());
             request.mutable_serverless_resources()->set_shared_database_path(Settings_.GetSharedTenantName());
@@ -376,10 +378,11 @@ private:
         Client_->InitRootScheme();
 
         YdbDriver_ = std::make_unique<TDriver>(TDriverConfig()
-            .SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
-            .SetDatabase(TStringBuilder() << "/" << Settings_.DomainName_));
+                                                   .SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
+                                                   .SetDatabase(TStringBuilder() << "/" << Settings_.DomainName_));
 
-        TableClient_ = std::make_unique<NYdb::NTable::TTableClient>(*YdbDriver_, NYdb::NTable::TClientSettings().AuthToken("user@" BUILTIN_SYSTEM_DOMAIN));
+        TableClient_ =
+            std::make_unique<NYdb::NTable::TTableClient>(*YdbDriver_, NYdb::NTable::TClientSettings().AuthToken("user@" BUILTIN_SYSTEM_DOMAIN));
         TableClientSession_ = std::make_unique<NYdb::NTable::TSession>(TableClient_->CreateSession().GetValueSync().GetSession());
 
         Tenants_ = std::make_unique<TTenants>(Server_);
@@ -394,14 +397,14 @@ private:
         }
 
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, Settings_.PoolId_, Settings_.GetDefaultPoolSettings(), nullptr, {}));
+        GetRuntime()->Register(
+            CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, Settings_.PoolId_, Settings_.GetDefaultPoolSettings(), nullptr, {}));
         auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvCreatePoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
     }
 
 public:
-    explicit TWorkloadServiceYdbSetup(const TYdbSetupSettings& settings,
-        std::function<void(Tests::TServerSettings&)> fnc = nullptr)
+    explicit TWorkloadServiceYdbSetup(const TYdbSetupSettings& settings, std::function<void(Tests::TServerSettings&)> fnc = nullptr)
         : Settings_(settings)
         , SettingsTweakFnc_(fnc)
     {
@@ -430,16 +433,12 @@ public:
         pools.emplace_back("User", usage, threads, threads);
 
         auto edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
-        GetRuntime()->Send(
-            NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetRuntime()->GetNodeId(nodeIndex)), edgeActor,
-            new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(pools), nodeIndex
-        );
+        GetRuntime()->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetRuntime()->GetNodeId(nodeIndex)), edgeActor,
+            new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(pools), nodeIndex);
 
         WaitFor(FUTURE_WAIT_TIMEOUT, "node cpu usage", [this, usage, threads, nodeIndex, edgeActor](TString& errorString) {
-            GetRuntime()->Send(
-                NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetRuntime()->GetNodeId(nodeIndex)), edgeActor,
-                new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest(), nodeIndex
-            );
+            GetRuntime()->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetRuntime()->GetNodeId(nodeIndex)), edgeActor,
+                new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest(), nodeIndex);
             auto response = GetRuntime()->GrabEdgeEvent<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
 
             if (!response->Get()->Record.SystemStateInfoSize()) {
@@ -470,17 +469,19 @@ public:
         return NYdb::NTable::TTableClient(*YdbDriver_, settings.UseQueryCache(false));
     }
 
-    void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const override {
+    void ExecuteSchemeQuery(
+        const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const override {
         TStatus status = TableClientSession_->ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), expectedStatus,
-            TStringBuilder() << "Query: " << query << Endl << status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            status.GetStatus(), expectedStatus, TStringBuilder() << "Query: " << query << Endl << status.GetIssues().ToOneLineString());
         if (expectedStatus != NYdb::EStatus::SUCCESS) {
             UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), expectedMessage);
         }
     }
 
-    THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) const override {
-        return NKqp::Navigate(*GetRuntime(), GetRuntime()->AllocateEdgeActor(), CanonizePath({Settings_.DomainName_, path}), operation);
+    THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path,
+        NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) const override {
+        return NKqp::Navigate(*GetRuntime(), GetRuntime()->AllocateEdgeActor(), CanonizePath({ Settings_.DomainName_, path }), operation);
     }
 
     void WaitPoolAccess(const TString& userSID, ui32 access, const TString& poolId = "") const override {
@@ -516,12 +517,14 @@ public:
         auto event = GetQueryRequest(query, settings);
         auto promise = NewPromise<TQueryRunnerResult>();
         auto edgeActor = GetRuntime()->AllocateEdgeActor();
-        auto runnerActor = GetRuntime()->Register(new TQueryRunnerActor(std::move(event), promise, settings, GetRuntime()->GetNodeId(settings.NodeIndex_)), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        auto runnerActor = GetRuntime()->Register(new TQueryRunnerActor(std::move(event), promise, settings,
+                                                      GetRuntime()->GetNodeId(settings.NodeIndex_)), 0, 0, TMailboxType::Simple, 0, edgeActor);
 
-        return {.AsyncResult = promise.GetFuture(), .QueryRunnerActor = runnerActor, .EdgeActor = edgeActor};
+        return { .AsyncResult = promise.GetFuture(), .QueryRunnerActor = runnerActor, .EdgeActor = edgeActor };
     }
 
-    void ExecuteQueryRetry(const TString& retryMessage, const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings(), TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
+    void ExecuteQueryRetry(const TString& retryMessage, const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings(),
+        TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
         WaitFor(timeout, retryMessage, [this, query, settings](TString& errorString) {
             auto result = ExecuteQuery(query, settings);
             errorString = result.GetIssues().ToOneLineString();
@@ -548,14 +551,7 @@ public:
     // Pools actions
     void CreateResourcePool(const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& settings) const override {
         auto edgeActor = GetRuntime()->AllocateEdgeActor();
-        auto actor = CreatePoolCreatorActor(
-            edgeActor,
-            databaseId,
-            poolId,
-            settings,
-            nullptr,
-            {}
-        );
+        auto actor = CreatePoolCreatorActor(edgeActor, databaseId, poolId, settings, nullptr, {});
 
         GetRuntime()->Register(actor);
         auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvCreatePoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
@@ -575,8 +571,10 @@ public:
 
         TInstant startAt = TInstant::Now();
         while (true) {
-            GetRuntime()->Register(CreateRefreshPoolStateActor(edgeActor, CanonizePath(Settings_.DomainName_), poolId ? poolId : Settings_.PoolId_, leaseDuration, GetRuntime()->GetAppData().Counters));
-            auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvRefreshPoolStateResponse>(edgeActor, FUTURE_WAIT_TIMEOUT - (TInstant::Now() - startAt));
+            GetRuntime()->Register(CreateRefreshPoolStateActor(edgeActor, CanonizePath(Settings_.DomainName_),
+                poolId ? poolId : Settings_.PoolId_, leaseDuration, GetRuntime()->GetAppData().Counters));
+            auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvRefreshPoolStateResponse>(
+                edgeActor, FUTURE_WAIT_TIMEOUT - (TInstant::Now() - startAt));
             if (TInstant::Now() < startAt + FUTURE_WAIT_TIMEOUT && response->Get()->Status != Ydb::StatusIds::SUCCESS) {
                 continue;
             }
@@ -594,7 +592,8 @@ public:
         });
     }
 
-    void WaitPoolHandlersCount(i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
+    void WaitPoolHandlersCount(
+        i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
         auto counter = GetWorkloadManagerCounters(0)->GetCounter("ActivePoolHandlers");
 
         if (initialCount) {
@@ -618,8 +617,8 @@ public:
 
     void ValidateWorkloadServiceCounters(bool checkTableCounters = true, const TString& poolId = "") const override {
         for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount_; ++nodeIndex) {
-            auto subgroup = GetWorkloadManagerCounters(nodeIndex)
-                ->GetSubgroup("pool", CanonizePath(TStringBuilder() << Settings_.DomainName_ << "/" << (poolId ? poolId : Settings_.PoolId_)));
+            auto subgroup = GetWorkloadManagerCounters(nodeIndex)->GetSubgroup(
+                "pool", CanonizePath(TStringBuilder() << Settings_.DomainName_ << "/" << (poolId ? poolId : Settings_.PoolId_)));
 
             const TString description = TStringBuilder() << "Node id: " << GetRuntime()->GetNodeId(nodeIndex);
             CheckCommonCounters(subgroup, description);
@@ -652,19 +651,13 @@ public:
     }
 
     TTenantInfo GetDedicatedTenantInfo() const override {
-        return {
-            .PathId = DedicatedTenantPathId,
-            .GrpcPort = Server_->GetTenantGRpcServer(Settings_.GetDedicatedTenantName()).GetPort(),
-            .NodeIdx = Tenants_->List(Settings_.GetDedicatedTenantName())[0]
-        };
+        return { .PathId = DedicatedTenantPathId, .GrpcPort = Server_->GetTenantGRpcServer(Settings_.GetDedicatedTenantName()).GetPort(),
+            .NodeIdx = Tenants_->List(Settings_.GetDedicatedTenantName())[0] };
     }
 
     TTenantInfo GetSharedTenantInfo() const override {
-        return {
-            .PathId = SharedTenantPathId,
-            .GrpcPort = Server_->GetTenantGRpcServer(Settings_.GetSharedTenantName()).GetPort(),
-            .NodeIdx = Tenants_->List(Settings_.GetSharedTenantName())[0]
-        };
+        return { .PathId = SharedTenantPathId, .GrpcPort = Server_->GetTenantGRpcServer(Settings_.GetSharedTenantName()).GetPort(),
+            .NodeIdx = Tenants_->List(Settings_.GetSharedTenantName())[0] };
     }
 
     TTenantInfo GetServerlessTenantInfo() const override {
@@ -748,7 +741,8 @@ private:
         };
         for (const auto& operation : tableQueries) {
             auto operationSubgroup = subgroup->GetSubgroup("operation", operation);
-            UNIT_ASSERT_VALUES_EQUAL_C(operationSubgroup->GetCounter("FinishError", true)->Val(), 0, TStringBuilder() << description << ", unexpected vaule for operation " << operation);
+            UNIT_ASSERT_VALUES_EQUAL_C(operationSubgroup->GetCounter("FinishError", true)->Val(), 0,
+                TStringBuilder() << description << ", unexpected vaule for operation " << operation);
         }
     }
 
@@ -770,7 +764,7 @@ private:
     std::unique_ptr<NYdb::NTable::TSession> TableClientSession_;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 //// TQueryRunnerResult
 
@@ -856,7 +850,8 @@ void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TString& query, c
         auto result = ydb->ExecuteQuery(query, settings);
 
         errorString = result.GetIssues().ToOneLineString();
-        return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED && errorString.Contains(TStringBuilder() << "Resource pool " << poolId << " was disabled due to zero concurrent query limit");
+        return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED &&
+               errorString.Contains(TStringBuilder() << "Resource pool " << poolId << " was disabled due to zero concurrent query limit");
     });
 }
 
@@ -877,27 +872,41 @@ void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSe
     WaitForClassifierSuccess(ydb, TSampleQueries::TSelect42::Query, settings);
 }
 
-
-void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex) {
+void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& poolId) {
     const ui32 nodeId = runtime.GetNodeId(nodeIndex);
     const TActorId edgeActor = runtime.AllocateEdgeActor(nodeIndex);
 
-    runtime.Send(
-        NMetadata::NProvider::MakeServiceId(nodeId),
-        edgeActor,
-        new NMetadata::NProvider::TEvAskSnapshot(
-            std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()),
-        nodeIndex);
+    runtime.Send(NMetadata::NProvider::MakeServiceId(nodeId), edgeActor,
+        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()), nodeIndex);
 
-    const auto response = runtime.GrabEdgeEvent<NMetadata::NProvider::TEvRefreshSubscriberData>(
-        edgeActor, FUTURE_WAIT_TIMEOUT);
+    const auto response = runtime.GrabEdgeEvent<NMetadata::NProvider::TEvRefreshSubscriberData>(edgeActor, FUTURE_WAIT_TIMEOUT);
     UNIT_ASSERT_C(response, "Timed out waiting for resource pool classifier snapshot refresh");
 
-    runtime.Send(
-        NKqp::MakeKqpProxyID(nodeId),
-        edgeActor,
-        new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()),
-        nodeIndex);
+    // Classifiers and pool settings arrive independently. A query with a
+    // classifier snapshot but no target pool in its pool snapshot falls back
+    // to the default pool. Populate both caches before launching the query.
+    if (poolId) {
+        const auto snapshot = response->Get()->GetValidatedSnapshotAs<TResourcePoolClassifierSnapshot>();
+        bool found = false;
+        for (const auto& [databaseId, configs] : snapshot->GetResourcePoolClassifierConfigs()) {
+            for (const auto& [_, classifier] : configs.ByName) {
+                if (classifier.GetClassifierSettings().ResourcePool != poolId) {
+                    continue;
+                }
+                found = true;
+                runtime.Send(MakeServiceId(nodeId), edgeActor, new TEvSubscribeOnPoolChanges(databaseId, poolId), nodeIndex);
+                const auto pool = runtime.GrabEdgeEvent<TEvUpdatePoolInfo>(edgeActor, FUTURE_WAIT_TIMEOUT);
+                UNIT_ASSERT_C(pool && pool->Get()->Config, "Failed to load resource pool " << poolId);
+                runtime.Send(MakeWorkloadManagerStateActorId(nodeId), edgeActor,
+                    new TEvUpdatePoolInfo(databaseId, poolId, pool->Get()->Config, pool->Get()->SecurityObject), nodeIndex);
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "No classifier targets resource pool " << poolId);
+    }
+
+    runtime.Send(MakeWorkloadManagerStateActorId(nodeId), edgeActor,
+        new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()), nodeIndex);
 }
 
-}  // NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

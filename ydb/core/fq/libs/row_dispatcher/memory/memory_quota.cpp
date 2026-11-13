@@ -10,22 +10,24 @@ namespace {
 
 constexpr ui64 MIN_MEMORY_DELTA = 1_MB;
 
-class TMemoryQuotaExceededException : public NKikimr::TMemoryLimitExceededException {
+class TMemoryQuotaExceededException: public NKikimr::TMemoryLimitExceededException {
 public:
     explicit TMemoryQuotaExceededException(TString details)
         : Details(std::move(details))
-    {}
+    {
+    }
 
     const TString Details;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 TMemoryQuota::TMemoryQuota(NYql::NDq::IMemoryQuotaManager::TPtr manager, TString memoryName, NMonitoring::TDynamicCounterPtr counters)
     : Manager(std::move(manager))
     , MemoryName(std::move(memoryName))
     , ReservedBytes(counters ? counters->GetSubgroup("component", "MemoryQuota")->GetCounter(MemoryName) : nullptr)
-{}
+{
+}
 
 TMemoryQuota::~TMemoryQuota() {
     if (Manager && AllocatedSize) {
@@ -40,9 +42,9 @@ void TMemoryQuota::Resize(ui64 size) {
     if (size > AllocatedSize) {
         const ui64 delta = AlignUp(size - AllocatedSize, MIN_MEMORY_DELTA);
         if (Manager && !Manager->AllocateQuota(delta, /* isOptional */ false)) {
-            throw TMemoryQuotaExceededException(TStringBuilder()
-                << "failed to reserve " << delta << " bytes for " << MemoryName
-                << " (already reserved: " << AllocatedSize << " bytes, actually used bytes " << CurrentSize << ")");
+            throw TMemoryQuotaExceededException(TStringBuilder() << "failed to reserve " << delta << " bytes for " << MemoryName
+                                                                 << " (already reserved: " << AllocatedSize << " bytes, actually used bytes "
+                                                                 << CurrentSize << ")");
         }
         AllocatedSize += delta;
         if (ReservedBytes) {
@@ -79,7 +81,8 @@ TString GetMemoryLimitExceededMessage(const NKikimr::TMemoryLimitExceededExcepti
     return message;
 }
 
-void LimitAllocator(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NYql::NDq::IMemoryQuotaManager::TPtr& manager, TString memoryName, NMonitoring::TDynamicCounterPtr counters) {
+void LimitAllocator(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NYql::NDq::IMemoryQuotaManager::TPtr& manager, TString memoryName,
+    NMonitoring::TDynamicCounterPtr counters) {
     if (!manager && !counters) {
         return;
     }
@@ -94,4 +97,4 @@ void LimitAllocator(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NYql::NDq::IMe
     });
 }
 
-} // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

@@ -1,17 +1,19 @@
-#include <queue>
-
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/actor_coroutine.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/events/events.h>
-#include <yql/essentials/utils/yql_panic.h>
 
 #include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <queue>
 
 #if defined(_linux_) || defined(_darwin_)
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 #endif
 
@@ -21,7 +23,7 @@ using namespace ::NActors;
 
 namespace {
 
-class TS3DecompressorCoroImpl : public TActorCoroImpl {
+class TS3DecompressorCoroImpl: public TActorCoroImpl {
 public:
     TS3DecompressorCoroImpl(const TActorId& parent, const TString& compression, IDqSchedulableWorkFactoryPtr workFactory)
         : TActorCoroImpl(256_KB)
@@ -29,15 +31,17 @@ public:
         , Parent(parent)
         , WorkFactory(std::move(workFactory))
         , Work(WorkFactory ? WorkFactory->CreateSchedulableWork() : nullptr)
-    {}
+    {
+    }
 
 private:
-    class TCoroReadBuffer : public NDB::ReadBuffer {
+    class TCoroReadBuffer: public NDB::ReadBuffer {
     public:
         explicit TCoroReadBuffer(TS3DecompressorCoroImpl* coro)
             : NDB::ReadBuffer(nullptr, 0)
             , Coro(coro)
-        {}
+        {
+        }
 
     private:
         bool nextImpl() final {
@@ -74,7 +78,8 @@ private:
     // consumes only the first; extras leak into the general event flow and reach
     // StateFunc via WaitForEvent in ProcessOneEvent. Ignore them here; StartUnit
     // re-checks TryStartExecution on every wakeup anyway.
-    void HandleWakeup() {}
+    void HandleWakeup() {
+    }
 
     void Handle(TEvS3Provider::TEvDecompressDataRequest::TPtr& ev) {
         Requests.push(std::move(ev->Release()));
@@ -98,9 +103,8 @@ private:
                 break;
             }
             // A delivered event means the scheduler woke us up.
-            const auto resumeEv = WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(
-                &TS3DecompressorCoroImpl::ProcessEventWhileAcquiringSlot,
-                now + *delay);
+            const auto resumeEv =
+                WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3DecompressorCoroImpl::ProcessEventWhileAcquiringSlot, now + *delay);
             Work->NotifyResumed(/* byScheduler = */ static_cast<bool>(resumeEv));
         }
         Working = true;
@@ -149,8 +153,10 @@ private:
             while (!decompressorBuffer->eof()) {
                 decompressorBuffer->nextIfAtEnd();
                 StartUnit();
-                Y_DEFER { StopUnit(); };
-                TString data{decompressorBuffer->available(), ' '};
+                Y_DEFER {
+                    StopUnit();
+                };
+                TString data{ decompressorBuffer->available(), ' ' };
                 decompressorBuffer->read(&data.front(), decompressorBuffer->available());
                 Send(Parent, new TEvS3Provider::TEvDecompressDataResult(std::move(data), TakeCpuTimeDelta()));
             }
@@ -202,28 +208,30 @@ private:
     std::queue<THolder<TEvS3Provider::TEvDecompressDataRequest>> Requests;
     const IDqSchedulableWorkFactoryPtr WorkFactory;
     std::unique_ptr<IDqSchedulableWork> Work;
-    bool Working = false;            // holds HDRF slot — allowed to consume CPU
-    bool UpstreamPaused = false;     // waiting on decompress input / HDRF admission — stop consuming
+    bool Working = false;   // holds HDRF slot — allowed to consume CPU
+    bool UpstreamPaused = false;   // waiting on decompress input / HDRF admission — stop consuming
 };
 
-class TS3DecompressorCoroActor : public TActorCoro {
+class TS3DecompressorCoroActor: public TActorCoro {
     static constexpr char ActorName[] = "S3_DECOMPRESSOR";
 
 public:
     explicit TS3DecompressorCoroActor(THolder<TS3DecompressorCoroImpl> impl)
         : TActorCoro(std::move(impl), TStringBuf(ActorName))
-    {}
+    {
+    }
 
 private:
     void Registered(TActorSystem* actorSystem, const TActorId& parent) override {
-        TActorCoro::Registered(actorSystem, parent); // Calls TActorCoro::OnRegister and sends bootstrap event to ourself.
+        TActorCoro::Registered(actorSystem, parent);   // Calls TActorCoro::OnRegister and sends bootstrap event to ourself.
     }
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression, IDqSchedulableWorkFactoryPtr workFactory) {
+NActors::IActor* CreateS3DecompressorActor(
+    const NActors::TActorId& parent, const TString& compression, IDqSchedulableWorkFactoryPtr workFactory) {
     return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression, std::move(workFactory)));
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

@@ -240,4 +240,8 @@ void UrlExternalAccountCredentials::FinishRetrieveSubjectToken(
   }
 }
 
+y_absl::string_view UrlExternalAccountCredentials::CredentialSourceType() {
+  return "url";
+}
+
 }  // namespace grpc_core

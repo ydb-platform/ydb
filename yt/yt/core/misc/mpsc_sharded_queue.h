@@ -1,8 +1,7 @@
 #pragma once
 
-#include <library/cpp/yt/system/tscp.h>
-
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/access_spreader.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <vector>
 
@@ -21,7 +20,7 @@ public:
     int GetSize();
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, QueueLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, QueueLock_);
     std::vector<TItem> Queue_;
 
     std::vector<TItem> Dequeued_;
@@ -43,12 +42,14 @@ public:
     int GetShardSize();
 
 private:
+    static constexpr int ShardCount = 64;
+
     struct alignas(2 * CacheLineSize) TShard
     {
         TSimpleMpscSpinLockQueue<TItem> Queue;
     };
 
-    std::array<TShard, NProfiling::TTscp::MaxProcessorId> Shards_;
+    std::array<TShard, ShardCount> Shards_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

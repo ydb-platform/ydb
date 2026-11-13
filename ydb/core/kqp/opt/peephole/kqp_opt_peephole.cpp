@@ -2,6 +2,7 @@
 #include "kqp_opt_peephole_rules.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp_expr_helpers.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/host/kqp_transform.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
@@ -23,20 +24,6 @@
 
 namespace NKikimr::NKqp::NOpt {
 
-std::unordered_set<std::string_view> GetNonDeterministicFunctions() {
-    static const std::unordered_set<std::string_view> nonDeterministicFunctions = {
-        "RandomNumber",
-        "Random",
-        "RandomUuid",
-        "Now",
-        "CurrentUtcDate",
-        "CurrentUtcDatetime",
-        "CurrentUtcTimestamp"
-    };
-
-    return nonDeterministicFunctions;
-}
-
 namespace {
 
 using namespace NYql;
@@ -55,7 +42,7 @@ TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& c
     auto status = OptimizeExpr(input, output, [paramBindings](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (auto maybeCallable = TMaybeNode<TCallable>(node)) {
             auto callable = maybeCallable.Cast();
-            if (GetNonDeterministicFunctions().contains(callable.CallableName()) && callable.Ref().ChildrenSize() == 0) {
+            if (IsQueryBoundNonDeterministic(callable.Ref())) {
                 const auto paramName = TStringBuilder() << ParamNamePrefix
                     << NNaming::CamelToSnakeCase(TString(callable.CallableName()));
 

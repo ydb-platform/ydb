@@ -408,6 +408,54 @@ private:
     TVector<TAutoPtr<IEventHandle>> Pending;
 };
 
+class TCompleteWorkerSetGate: public TDecorator {
+public:
+    static constexpr ui64 Blocked = 32;
+    static constexpr ui64 Release = 33;
+    static constexpr ui64 Released = 34;
+
+    TCompleteWorkerSetGate(THolder<IActor> actor, ui64 targetId, TActorId notify)
+        : TDecorator(std::move(actor))
+        , TargetId(targetId)
+        , Notify(notify)
+    {}
+
+    bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) override {
+        if (Blocking && ev->GetTypeRewrite() == TEvPrivate::TEvCompleteWorkerSet::EventType
+            && ev->Get<TEvPrivate::TEvCompleteWorkerSet>()->TargetId == TargetId)
+        {
+            // Retain the registrar's original event, including its sender.
+            Pending.push_back(std::move(ev));
+            ctx.Send(Notify, new TEvents::TEvWakeup(Blocked), 0, TargetId);
+            return false;
+        }
+
+        if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+            switch (ev->Get<TEvents::TEvWakeup>()->Tag) {
+            case Release:
+                UNIT_ASSERT(!Pending.empty());
+                Blocking = false;
+                for (auto& pending : Pending) {
+                    ctx.Send(pending.Release());
+                }
+                Pending.clear();
+                ctx.Send(ctx.SelfID, new TEvents::TEvWakeup(Released));
+                return false;
+            case Released:
+                ctx.Send(Notify, new TEvents::TEvWakeup(Released));
+                return false;
+            }
+        }
+        return true;
+    }
+
+private:
+    const ui64 TargetId;
+    const TActorId Notify;
+    bool Blocking = true;
+    TVector<TAutoPtr<IEventHandle>> Pending;
+};
+
 class TDstAlterResultGate: public TDecorator {
 public:
     static constexpr ui64 Blocked = 24;
@@ -4255,6 +4303,138 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         }
 
         UNIT_FAIL("Timed out waiting for replicated DROP INDEX");
+    }
+
+    void CheckDroppedIndexDelayedCompleteWorkerSet(bool globalConsistency, bool restart) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
+        TEnv env(flags);
+        auto& runtime = env.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
+
+        // Keep the real data-plane service and copy its handshakes for RestartController.
+        const auto workerStarts = std::make_shared<std::atomic<ui32>>(0);
+        const auto info = StartReplication(env, 1, "root@builtin", globalConsistency, true,
+            NKikimrSchemeOp::EIndexTypeGlobal, false, Nothing(), workerStarts);
+        auto client = CreateTableClient(env);
+        auto session = CreateTableSession(env, client);
+        const auto readPersistedTargets = [&] {
+            return ReadControllerQuery(runtime, info.ControllerId, R"((
+                (let range '('('ReplicationId (Uint64 '1) (Uint64 '1)) '('Id (Null) (Void))))
+                (return (AsList (SetResult 'Rows (SelectRange 'Targets range
+                    '('Id 'SrcPath 'DstPath 'WorkerSetComplete) '())))))
+            )");
+        };
+        const auto assertPersistedTargets = [&](ui32 expected) {
+            const auto result = readPersistedTargets();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetValue().GetStruct(0).GetOptional().GetStruct(0).ListSize(),
+                expected, result.DebugString());
+        };
+        const auto upsert = [&](ui32 key) {
+            UNIT_ASSERT_C(WaitFor([&] {
+                const auto result = session.ExecuteDataQuery(Sprintf(
+                    "UPSERT INTO `/Root/table1` (key, value) VALUES (%u, 'value');", key),
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                if (result.IsSuccess()) {
+                    return true;
+                }
+                const auto status = result.GetStatus();
+                UNIT_ASSERT_C(status == NYdb::EStatus::ABORTED || status == NYdb::EStatus::SCHEME_ERROR
+                    || status == NYdb::EStatus::OVERLOADED, result.GetIssues().ToString());
+                return false;
+            }, 600), "Source UPSERT did not succeed");
+        };
+        const auto waitForRow = [&](ui32 key) {
+            UNIT_ASSERT_C(WaitFor([&] {
+                const auto state = DescribeReplication(env, info);
+                UNIT_ASSERT_C(!state->Get()->Record.GetState().HasError(), state->Get()->Record.DebugString());
+                const auto rows = session.ExecuteDataQuery(Sprintf(
+                    "SELECT key FROM `/Root/replica1` WHERE key = %u;", key),
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                return rows.IsSuccess() && rows.GetResultSet(0).RowsCount() == 1;
+            }, 600), "Destination did not receive row " << key);
+        };
+
+        upsert(1);
+        waitForRow(1);
+        const auto initial = DescribeReplication(env, info);
+        UNIT_ASSERT_VALUES_EQUAL(initial->Get()->Record.TargetsSize(), 2);
+        ui64 indexId = 0;
+        for (const auto& target : initial->Get()->Record.GetTargets()) {
+            if (target.GetDstPath() == "/Root/replica1/by_value/indexImplTable") {
+                indexId = target.GetId();
+            }
+        }
+        UNIT_ASSERT_C(indexId, initial->Get()->Record.DebugString());
+        assertPersistedTargets(2);
+
+        const auto controller = InstallControllerGate(env, info.ControllerId,
+            [indexId](THolder<IActor> actor, TActorId notify) {
+                return new TCompleteWorkerSetGate(std::move(actor), indexId, notify);
+            });
+        // Refreshing the source proxy starts another real registration pass.
+        // Only the index completion is held; the base-table barrier remains usable.
+        RequestConfigUpdate(env, info, 1001);
+        const auto blocked = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(blocked->Get()->Tag, TCompleteWorkerSetGate::Blocked);
+        UNIT_ASSERT_VALUES_EQUAL(blocked->Cookie, indexId);
+
+        const auto dropped = session.ExecuteSchemeQuery(
+            "ALTER TABLE `/Root/table1` DROP INDEX by_value;").GetValueSync();
+        UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
+        UNIT_ASSERT_C(WaitFor([&] {
+            const auto state = DescribeReplication(env, info);
+            UNIT_ASSERT_C(!state->Get()->Record.GetState().HasError(), state->Get()->Record.DebugString());
+            return state->Get()->Record.TargetsSize() == 1;
+        }, 600), "Dropped index target was not removed");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1")
+            .GetPathDescription().GetTable().TableIndexesSize(), 0);
+        assertPersistedTargets(1);
+        upsert(2);
+        waitForRow(2);
+
+        Cerr << "Delayed CompleteWorkerSet: index target " << indexId
+            << " removed from memory and storage; releasing original registrar event" << Endl;
+        env.SendAsync(controller, new TEvents::TEvWakeup(TCompleteWorkerSetGate::Release));
+        const auto released = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(released->Get()->Tag, TCompleteWorkerSetGate::Released);
+        const auto afterRelease = DescribeReplication(env, info);
+        UNIT_ASSERT_C(!afterRelease->Get()->Record.GetState().HasError(), afterRelease->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(afterRelease->Get()->Record.TargetsSize(), 1);
+
+        const auto persisted = readPersistedTargets();
+        const auto persistedCount = persisted.GetValue().GetStruct(0).GetOptional().GetStruct(0).ListSize();
+        Cerr << "Delayed CompleteWorkerSet: persisted targets=" << persistedCount
+            << " in-memory targets=" << afterRelease->Get()->Record.TargetsSize()
+            << " storage=" << persisted.DebugString() << Endl;
+
+        if (restart) {
+            UNIT_ASSERT(RestartController(env, info.ControllerId) > info.Generation);
+            UNIT_ASSERT_C(WaitFor([&] {
+                const auto state = DescribeReplication(env, info);
+                return state->Get()->Record.GetState().HasError()
+                    || (state->Get()->Record.TargetsSize() == 1 && state->Get()->Record.GetState().HasStandBy());
+            }, 600), "Replication did not recover after controller restart");
+            const auto recovered = DescribeReplication(env, info);
+            UNIT_ASSERT_C(!recovered->Get()->Record.GetState().HasError(),
+                "Delayed CompleteWorkerSet broke replication after restart: " << recovered->Get()->Record.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(recovered->Get()->Record.TargetsSize(), 1);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(persistedCount, 1,
+            "Delayed CompleteWorkerSet recreated the dropped index target: " << persisted.DebugString());
+        assertPersistedTargets(1);
+        upsert(3);
+        waitForRow(3);
+    }
+
+    Y_UNIT_TEST_TWIN(DroppedIndexIgnoresDelayedCompleteWorkerSet, GlobalConsistency) {
+        CheckDroppedIndexDelayedCompleteWorkerSet(GlobalConsistency, false);
+    }
+
+    Y_UNIT_TEST_TWIN(DroppedIndexIgnoresDelayedCompleteWorkerSetAfterRestart, GlobalConsistency) {
+        CheckDroppedIndexDelayedCompleteWorkerSet(GlobalConsistency, true);
     }
 
     Y_UNIT_TEST(SourceDropSyncIndexWithGlobalConsistency) {

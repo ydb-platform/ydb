@@ -14,6 +14,7 @@
 #include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/sys_view/common/db_counters.h>
 #include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -214,10 +215,9 @@ Y_UNIT_TEST_SUITE(TTabletCountersParsedOpts) {
         TTestBasicRuntime runtime(1);
         runtime.Initialize(TAppPrepare().Unwrap());
         runtime.GetAppData(0).FeatureFlags.SetEnableDbCounters(true);
-        TIntrusivePtr<NSysView::IDbCounters> node;
-        auto observer = runtime.AddObserver<NSysView::TEvSysView::TEvRegisterDbCounters>([&](auto& ev) {
-            node = ev->Get()->Counters;
-        });
+        // The basic runtime has no SysView service, and sends to a missing service never reach observers
+        const TActorId sysViewService = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NSysView::MakeSysViewServiceID(runtime.GetNodeId(0)), sysViewService);
 
         NTabletFlatExecutor::TExecutorCounters executorCounters;
         executorCounters.Cumulative()[NTabletFlatExecutor::TExecutorCounters::GC_DISCOVERED_DEPRECATED].Increment(5);
@@ -228,10 +228,10 @@ Y_UNIT_TEST_SUITE(TTabletCountersParsedOpts) {
         appCounters.TxCumulative(NFlatTxCoordinator::TXTYPE_RESTART_MEDIATOR_DEPRECATED, COUNTER_TT_RW_COMPLETED).Increment(5);
         appCounters.TxCumulative(NFlatTxCoordinator::TXTYPE_ACQUIRE_READ_STEP, COUNTER_TT_RW_COMPLETED).Increment(7);
         ApplyCounters(runtime, TTabletTypes::Coordinator, executorCounters, appCounters);
-        runtime.WaitFor("tablet db counters", [&] { return bool(node); }, TDuration::Seconds(10));
-        UNIT_ASSERT(node);
+        auto ev = runtime.GrabEdgeEvent<NSysView::TEvSysView::TEvRegisterDbCounters>(sysViewService, TDuration::Seconds(10));
+        UNIT_ASSERT(ev);
         NSysView::TDbServiceCounters sysView;
-        node->ToProto(sysView);
+        ev->Get()->Counters->ToProto(sysView);
 
         // Expected slots come from the enums alone, so a layout that drops deprecated slots fails here
         const auto& app = sysView.FindOrAddTabletCounters(TTabletTypes::Coordinator)->GetAppCounters();

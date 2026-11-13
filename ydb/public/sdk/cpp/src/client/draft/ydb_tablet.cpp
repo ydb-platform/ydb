@@ -37,20 +37,12 @@ namespace NYdb::inline Dev::NTablet {
             }
             request.set_async(settings.Async_);
 
-            auto promise = NThreading::NewPromise<TReassignTabletsOperation>();
-            auto extractor = [promise](Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
-                if (operation) {
-                    promise.SetValue(TReassignTabletsOperation(TStatus(std::move(status)), std::move(*operation)));
-                } else {
-                    promise.SetValue(TReassignTabletsOperation(TStatus(std::move(status))));
-                }
-            };
-            Connections_->RunDeferred<Ydb::Tablet::V1::TabletService,
-                                      Ydb::Tablet::ReassignTabletsRequest, Ydb::Tablet::ReassignTabletsResponse>(
-                std::move(request), std::move(extractor),
+            return RunOperation<Ydb::Tablet::V1::TabletService,
+                                Ydb::Tablet::ReassignTabletsRequest, Ydb::Tablet::ReassignTabletsResponse,
+                                TReassignTabletsOperation>(
+                std::move(request),
                 &Ydb::Tablet::V1::TabletService::Stub::AsyncReassignTablets,
-                DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, TRpcRequestSettings::Make(settings));
-            return promise.GetFuture();
+                TRpcRequestSettings::Make(settings));
         }
     };
 

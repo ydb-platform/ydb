@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>

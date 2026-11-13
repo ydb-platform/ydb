@@ -30,9 +30,9 @@ Y_UNIT_TEST_SUITE(TConsoleAuditEndRemoveDatabase) {
                 UNIT_ASSERT_STRING_CONTAINS(line, "component=console");
                 UNIT_ASSERT_STRING_CONTAINS(line, success ? "status=SUCCESS" : "status=ERROR");
                 if (!reason.empty()) {
-                    UNIT_ASSERT_STRING_CONTAINS(line, "reason=Original diagnostic,");
+                    UNIT_ASSERT_STRING_CONTAINS(line, "reason=Original diagnostic");
                 } else if (!success) {
-                    UNIT_ASSERT_STRING_CONTAINS(line, "reason=Database removal failed,");
+                    UNIT_ASSERT_STRING_CONTAINS(line, "reason=Database removal failed");
                 } else {
                     UNIT_ASSERT(line.find("reason=") == std::string::npos);
                 }

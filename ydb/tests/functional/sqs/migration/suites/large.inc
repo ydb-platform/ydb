@@ -6,7 +6,6 @@ DATA(
     arcadia/ydb/tests/functional/sqs/large
 )
 
-REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

@@ -7,4 +7,6 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/sqs/migration/suites/large.inc)
 FORK_SUBTESTS()
 SPLIT_FACTOR(5)
 
+REQUIREMENTS(cpu:4)
+
 END()

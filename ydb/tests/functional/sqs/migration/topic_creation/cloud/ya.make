@@ -7,4 +7,6 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/sqs/migration/suites/cloud.inc)
 FORK_SUBTESTS()
 SPLIT_FACTOR(40)
 
+REQUIREMENTS(cpu:1)
+
 END()

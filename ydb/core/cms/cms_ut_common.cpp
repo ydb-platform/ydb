@@ -331,6 +331,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             pdiskConfig.SetPath(pdiskPath);
             pdiskConfig.SetGuid(1);
             pdiskConfig.SetDriveStatus(NKikimrBlobStorage::ACTIVE);
+            pdiskConfig.SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
 
             if (node.VDisksMoved) {
                 continue;

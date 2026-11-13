@@ -500,6 +500,25 @@ namespace {
         row.FreeText(freeText);
     }
 
+    TPrettyTable MakeTable(const NTablet::TReassignTabletsOperation&) {
+        return TPrettyTable({"id", "ready", "status", "selected tablets", "completed tablets"});
+    }
+
+    void PrettyPrint(const NTablet::TReassignTabletsOperation& operation, TPrettyTable& table) {
+        const auto& status = operation.Status();
+        const auto& metadata = operation.Metadata();
+        auto& row = table.AddRow();
+        row.Column(0, operation.Id().ToString())
+            .Column(1, operation.Ready() ? "true" : "false")
+            .Column(2, status.GetStatus() == EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()))
+            .Column(3, metadata.SelectedTablets)
+            .Column(4, metadata.CompletedTablets);
+        TStringBuilder freeText;
+        AppendIssues(status, freeText);
+        AppendOperationInfo(operation, freeText);
+        row.FreeText(freeText);
+    }
+
     // Common
     template <typename T>
     void PrintOperationImpl(const T& operation, EDataFormat format) {
@@ -641,6 +660,10 @@ void PrintOperation(const NYdb::NTable::TSetNotNullOperation& operation, EDataFo
 
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TSetNotNullOperation>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
+}
+
+void PrintOperation(const NTablet::TReassignTabletsOperation& operation, EDataFormat format) {
+    PrintOperationImpl(operation, format);
 }
 
 /// QueryService

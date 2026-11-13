@@ -115,6 +115,8 @@ int TCommandGetOperation::Run(TConfig& config) {
         return GetOperation<NTable::TAnalyzeOperation>(client, OperationId, OutputFormat);
     case TOperationId::SET_NOT_NULL:
         return GetOperation<NTable::TSetNotNullOperation>(client, OperationId, OutputFormat);
+    case TOperationId::REASSIGN_TABLETS:
+        return GetOperation<NTablet::TReassignTabletsOperation>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";
     }

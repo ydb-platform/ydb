@@ -4218,36 +4218,6 @@ void TPersQueue::AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
     range->SetIncludeTo(false);
 }
 
-void TPersQueue::AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
-                                   const NKikimrPQ::TPQTabletConfig& cfg,
-                                   const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
-                                   const NKikimrPQ::TPartitions& partitionsData,
-                                   const TActorContext& ctx)
-{
-    PQ_ENSURE(request);
-
-    TString str;
-    PQ_ENSURE(cfg.SerializeToString(&str));
-
-    auto write = request->Record.AddCmdWrite();
-    write->SetKey(KeyConfig());
-    write->SetValue(str);
-    write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
-    write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-
-    auto graph = MakePartitionGraph(cfg);
-    for (const auto& partition : cfg.GetPartitions()) {
-        auto explicitMessageGroups = CreateExplicitMessageGroups(bootstrapCfg, partitionsData, graph, partition.GetPartitionId());
-
-        TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
-        for (const auto& [id, mg] : *explicitMessageGroups) {
-            sourceIdWriter.RegisterSourceId(id, mg.SeqNo, 0, ctx.Now(), std::move(mg.KeyRange), false);
-        }
-
-        sourceIdWriter.FillRequest(request, TPartitionId(partition.GetPartitionId()));
-    }
-}
-
 void TPersQueue::AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& request)
 {
     NKikimrPQ::TTabletTxInfo info;
@@ -5204,14 +5174,11 @@ void TPersQueue::SendProposeTransactionOverloaded(const TActorId& target,
 void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
                                               TDistributedTransaction& tx)
 {
-    auto graph = MakePartitionGraph(tx.TabletConfig);
-
     for (auto& [partitionId, partition] : Partitions) {
         if (partitionId.IsSupportivePartition()) {
             continue;
         }
 
-        auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, graph, partitionId.OriginalPartitionId);
         auto event = std::make_unique<TEvPQ::TEvProposePartitionConfig>(tx.Step, tx.TxId);
 
         event->TopicConverter = tx.TopicConverter;

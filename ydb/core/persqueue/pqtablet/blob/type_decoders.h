@@ -111,13 +111,22 @@ template <>
 class TDecoderMask<true> {
 public:
     TDecoderMask(const TDataRef& data)
-        : MaskSize(ReadUnaligned<ui32>(data.End() - sizeof(ui32)))
-        , Bits((const ui8*)(data.End() - Size()))
-    { }
+        : MaskSize(0)
+        , Bits(nullptr)
+    {
+        AFL_ENSURE(data.Size() >= sizeof(ui32))
+            ("description", "Masked chunk is too small")("chunkSize", data.Size());
+        MaskSize = ReadUnaligned<ui32>(data.End() - sizeof(ui32));
+        AFL_ENSURE(Size() <= data.Size())
+            ("description", "Mask is out of chunk bounds")("maskSize", MaskSize)("chunkSize", data.Size());
+        Bits = (const ui8*)(data.End() - Size());
+    }
 
     inline size_t Size() const { return MaskSize + sizeof(ui32); }
 
     inline bool IsNotNull(size_t index) const {
+        AFL_ENSURE(index < MaskSize * 8)
+            ("description", "Mask index is out of mask bounds")("index", index)("maskBits", MaskSize * 8);
         TMaskIterator iter(Bits);
         iter.Forward(index);
         return iter.Peek();
@@ -132,14 +141,28 @@ template <>
 class TDecoderMaskIterator<true> {
 public:
     TDecoderMaskIterator(const TDataRef& data) {
+        AFL_ENSURE(data.Size() >= sizeof(ui32))
+            ("description", "Masked chunk is too small")("chunkSize", data.Size());
         const char* sizePtr = data.Data() + data.Size() - sizeof(ui32);
-        BitIter.Reset((const ui8*)(sizePtr - ReadUnaligned<ui32>(sizePtr)));
+        const ui32 maskSize = ReadUnaligned<ui32>(sizePtr);
+        AFL_ENSURE(static_cast<size_t>(maskSize) + sizeof(ui32) <= data.Size())
+            ("description", "Mask is out of chunk bounds")("maskSize", maskSize)("chunkSize", data.Size());
+        BitsLeft = static_cast<size_t>(maskSize) * 8;
+        BitIter.Reset((const ui8*)(sizePtr - maskSize));
     }
-    inline bool IsNotNull() const { return BitIter.Peek(); }
-    inline bool Next() { return BitIter.Next(); }
+    inline bool IsNotNull() const {
+        AFL_ENSURE(BitsLeft > 0)("description", "Nullable chunk mask is exhausted");
+        return BitIter.Peek();
+    }
+    inline bool Next() {
+        AFL_ENSURE(BitsLeft > 0)("description", "Nullable chunk mask is exhausted");
+        --BitsLeft;
+        return BitIter.Next();
+    }
 
 private:
     TMaskIterator BitIter;
+    size_t BitsLeft = 0;
 };
 
 template <>
@@ -178,6 +201,13 @@ public:
 
     TDataRef GetValue(size_t index) const override {
         if (Mask.IsNotNull(index)) {
+            AFL_ENSURE(Data.Size() >= Mask.Size() + sizeof(TCodecSig))
+                ("description", "FixedLen chunk is too small")
+                ("chunkSize", Data.Size())("maskSize", Mask.Size());
+            const size_t valuesCount = (Data.Size() - Mask.Size() - sizeof(TCodecSig)) / Size;
+            AFL_ENSURE(index < valuesCount)
+                ("description", "FixedLen chunk: value index is out of chunk")
+                ("index", index)("valuesCount", valuesCount);
             const char* data = Data.Data() + sizeof(TCodecSig) + index * Size;
             return TDataRef(data, Size);
         }
@@ -227,22 +257,43 @@ public:
         , Mask(Data)
     {
         TVarLenDecoder::VerifySignature(data);
-        const char* sizesEnd = data.End() - Mask.Size();
-        if ((const char*)(Sizes + 1) <= sizesEnd) {
-            auto dataSize = ReadUnaligned<ui32>((const ui32*)sizesEnd - 1);
-            Sizes = (const ui32*)((const char*)Sizes + dataSize);
+        const char* payloadStart = Data.Data() + sizeof(TCodecSig);
+        const char* chunkEnd = Data.End() - Mask.Size();
+        AFL_ENSURE(chunkEnd >= payloadStart)
+            ("description", "VarLen chunk is too small")("chunkSize", Data.Size());
+        const size_t tailSize = static_cast<size_t>(chunkEnd - payloadStart);
+        OffsetsEnd = (const ui32*)chunkEnd;
+        if (tailSize >= sizeof(ui32)) {
+            PayloadSize = ReadUnaligned<ui32>((const ui32*)chunkEnd - 1);
+            AFL_ENSURE(static_cast<size_t>(PayloadSize) + sizeof(ui32) <= tailSize)
+                ("description", "VarLen chunk: data size is out of chunk bounds")
+                ("dataSize", PayloadSize)("chunkSize", Data.Size());
+            AFL_ENSURE((tailSize - PayloadSize) % sizeof(ui32) == 0)
+                ("description", "VarLen chunk: misaligned offsets table")
+                ("tailSize", tailSize)("dataSize", PayloadSize)("chunkSize", Data.Size());
+            Sizes = (const ui32*)(payloadStart + PayloadSize);
+        } else {
+            AFL_ENSURE(tailSize == 0)
+                ("description", "VarLen chunk: malformed tail")("chunkSize", Data.Size());
         }
     }
 
     TAutoPtr<IChunkIterator> MakeIterator() const override {
-        return new TChunkIterator(Data, Sizes, Data.End() - Mask.Size());
+        return new TChunkIterator(Data, Sizes, OffsetsEnd, PayloadSize);
     }
 
     TDataRef GetValue(size_t index) const override {
         if (Mask.IsNotNull(index)) {
-            YDB_LOG_ENSURE(ReadUnaligned<ui32>(Sizes + index) + sizeof(TCodecSig) <= Data.Size() - Mask.Size());
+            YDB_LOG_ENSURE(index < static_cast<size_t>(OffsetsEnd - Sizes),
+                {"description", "VarLen chunk: value index is out of offsets table"},
+                {"index", index},
+                {"valuesCount", static_cast<size_t>(OffsetsEnd - Sizes)});
             ui32 begin = index ? ReadUnaligned<ui32>(Sizes + index - 1) : 0;
-            return TDataRef(Data.Data() + sizeof(TCodecSig) + begin, ReadUnaligned<ui32>(Sizes + index) - begin);
+            ui32 endOffset = ReadUnaligned<ui32>(Sizes + index);
+            AFL_ENSURE(endOffset >= begin && endOffset <= PayloadSize)
+                ("description", "VarLen chunk: invalid cumulative offset")
+                ("endOffset", endOffset)("beginOffset", begin)("dataSize", PayloadSize);
+            return TDataRef(Data.Data() + sizeof(TCodecSig) + begin, endOffset - begin);
         }
         return TDataRef();
     }
@@ -250,24 +301,31 @@ public:
 private:
     class TChunkIterator : public IChunkIterator {
     public:
-        TChunkIterator(const TDataRef& data, const ui32* sizes, const char* end)
+        TChunkIterator(const TDataRef& data, const ui32* sizes, const ui32* offsetsEnd, const ui32 payloadSize)
             : Current(data.Data() + sizeof(TCodecSig))
-            , End(end)
+            , PayloadEnd(data.Data() + sizeof(TCodecSig) + payloadSize)
             , LastOffset(0)
             , CurrentOffset(sizes)
+            , OffsetsEnd(offsetsEnd)
+            , PayloadSize(payloadSize)
             , MaskIter(data)
         { }
 
         TDataRef Next() override {
+            AFL_ENSURE(CurrentOffset < OffsetsEnd)
+                ("description", "VarLen chunk: value requested beyond the offsets table");
             if (MaskIter.Next()) {
                 ui32 endOffset = ReadUnaligned<ui32>(CurrentOffset);
-                CurrentOffset++;
+                AFL_ENSURE(endOffset >= LastOffset && endOffset <= PayloadSize)
+                    ("description", "VarLen chunk: invalid cumulative offset")
+                    ("endOffset", endOffset)("lastOffset", LastOffset)("dataSize", PayloadSize);
+                ++CurrentOffset;
                 ui32 size = endOffset - LastOffset;
                 LastOffset = endOffset;
 
                 const char* data = Current;
                 Current += size;
-                YDB_LOG_ENSURE(data + size <= End);
+                YDB_LOG_ENSURE(data + size <= PayloadEnd);
                 return TDataRef(data, size);
             }
             ++CurrentOffset;
@@ -275,18 +333,27 @@ private:
         }
 
         TDataRef Peek() const override {
+            AFL_ENSURE(CurrentOffset < OffsetsEnd)
+                ("description", "VarLen chunk: value requested beyond the offsets table");
             if (MaskIter.IsNotNull()) {
-                YDB_LOG_ENSURE(Current + ReadUnaligned<ui32>(CurrentOffset) - LastOffset <= End);
-                return TDataRef(Current, ReadUnaligned<ui32>(CurrentOffset) - LastOffset);
+                ui32 endOffset = ReadUnaligned<ui32>(CurrentOffset);
+                YDB_LOG_ENSURE(endOffset >= LastOffset && endOffset <= PayloadSize,
+                    {"description", "VarLen chunk: invalid cumulative offset"},
+                    {"endOffset", endOffset},
+                    {"lastOffset", LastOffset},
+                    {"dataSize", PayloadSize});
+                return TDataRef(Current, endOffset - LastOffset);
             }
             return TDataRef();
         }
 
     private:
         const char* Current;
-        const char* End;
+        const char* PayloadEnd;
         ui32 LastOffset;
         const ui32* CurrentOffset;
+        const ui32* OffsetsEnd;
+        ui32 PayloadSize;
         TDecoderMaskIterator<IsNullable> MaskIter;
     };
 
@@ -294,6 +361,8 @@ private:
     TDataRef Data;
     const ui32* Sizes;
     TDecoderMask<IsNullable> Mask;
+    const ui32* OffsetsEnd = nullptr;
+    ui32 PayloadSize = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -304,16 +373,21 @@ public:
     using TType = TIntType;
 
     inline TType Peek(const char* data, const char* end) const {
+        AFL_ENSURE(data < end)("description", "No data left in the chunk");
         i64 value;
         auto bytes = in_long(value, data);
-        YDB_LOG_ENSURE(data + bytes <= end);
+
+        YDB_LOG_ENSURE(data + bytes <= end,
+            {"description", "Value is out of chunk bounds"});
         return value;
     }
 
     inline size_t Load(const char* data, const char* end, TType& value) const {
+        AFL_ENSURE(data < end)("description", "No data left in the chunk");
         i64 loaded = 0;
         auto bytes = in_long(loaded, data);
-        YDB_LOG_ENSURE(data + bytes <= end);
+        YDB_LOG_ENSURE(data + bytes <= end,
+            {"description", "Value is out of chunk bounds"});
         value = loaded;
         return bytes;
     }
@@ -326,16 +400,21 @@ public:
     using TUnsigned = std::make_unsigned_t<TType>;
 
     inline TType Peek(const char* data, const char* end) const {
+        AFL_ENSURE(data < end)("description", "No data left in the chunk");
         i64 value;
         auto bytes = in_long(value, data);
-        YDB_LOG_ENSURE(data + bytes <= end);
+        YDB_LOG_ENSURE(data + bytes <= end,
+            {"description", "Value is out of chunk bounds"});
         return ZigZagDecode(static_cast<TUnsigned>(value));
     }
 
     inline size_t Load(const char* data, const char* end, TType& value) const {
+        AFL_ENSURE(data < end)("description", "No data left in the chunk");
         i64 loaded = 0;
         auto bytes = in_long(loaded, data);
-        YDB_LOG_ENSURE(data + bytes <= end);
+
+        YDB_LOG_ENSURE(data + bytes <= end,
+            {"description", "Value is out of chunk bounds"});
         value = ZigZagDecode(static_cast<TUnsigned>(loaded));
         return bytes;
     }

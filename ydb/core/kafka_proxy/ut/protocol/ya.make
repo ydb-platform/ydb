@@ -21,6 +21,7 @@ SRCS(
     ../test_server.cpp
     ../ut_auth.cpp
     ../ut_authz.cpp
+    ../ut_mtls.cpp
     ../ut_protocol.cpp
 )
 

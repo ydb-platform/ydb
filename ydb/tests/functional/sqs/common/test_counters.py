@@ -79,19 +79,22 @@ class TestSqsCountersFeatures(KikimrSqsTestBase):
         else:
             self.enable_detailed_queue_counters()
 
-        time.sleep(2)  # Wait attributes/settings cache time
-        self._sqs_api.get_queue_attributes(queue_url)
+        def assert_detailed_counters(counters):
+            self._sqs_api.get_queue_attributes(queue_url)
+            detailed_counter = self._get_counter(counters, detailed_counter_labels)
+            assert_that(detailed_counter, not_(none()))
+            assert any(bucket > 0 for bucket in detailed_counter['hist']['buckets'])
+
+        self._wait_for_sqs_counters(assert_detailed_counters)
         self._sqs_api.send_message(queue_url, 'data')
 
-        counters = self._get_sqs_counters()
         if not self._is_topic_migration_finished():
-            counter = self._get_counter_value(counters, transaction_counter_labels, None)
-            assert_that(counter, not_(none()))
-            assert_that(counter, greater_than(0))
+            def assert_transaction_counter(counters):
+                counter = self._get_counter_value(counters, transaction_counter_labels, None)
+                assert_that(counter, not_(none()))
+                assert_that(counter, greater_than(0))
 
-        detailed_counter = self._get_counter(counters, detailed_counter_labels)
-        assert_that(detailed_counter, not_(none()))
-        assert any(bucket > 0 for bucket in detailed_counter['hist']['buckets'])
+            self._wait_for_sqs_counters(assert_transaction_counter)
 
     def test_disables_user_counters(self):
         self._sqs_api.list_queues()  # init user's structure in server

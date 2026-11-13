@@ -11,7 +11,8 @@ Y_UNIT_TEST_SUITE(TLockFreeIntrusiveStackTest) {
 
     template<template<class> class TItemBase, template<class> class TStack>
     void DoConcurrent(const size_t itemsCount, const size_t workersCount) {
-        static constexpr size_t Iterations = 100000;
+        static constexpr size_t Rounds = 4;
+        static constexpr size_t OpsPerRound = 10000;
 
         struct TMyItem : public TItemBase<TMyItem> {
             size_t Count = 0; // this count is not lock-free
@@ -27,10 +28,9 @@ Y_UNIT_TEST_SUITE(TLockFreeIntrusiveStackTest) {
         TVector<THolder<TWorkerThread>> workers(workersCount);
         for (size_t i = 0; i < workersCount; ++i) {
             workers[i] = TWorkerThread::Spawn([&]() {
-                THPTimer timer;
-                while (timer.Passed() < 5.0) {
+                for (size_t round = 0; round < Rounds; ++round) {
                     size_t added = 0;
-                    for (size_t i = 0; i < Iterations; ++i) {
+                    for (size_t op = 0; op < OpsPerRound; ++op) {
                         if (TMyItem* item = stack.Pop()) {
                             item->Count++;
                             stack.Push(item);

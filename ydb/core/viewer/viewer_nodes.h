@@ -3720,8 +3720,10 @@ public:
                     jsonNode.SetReceiveThroughput(node->ReceiveThroughput);
                 }
                 if (FieldsAvailable.test(+ENodeFields::PileName) && FieldsRequested.test(+ENodeFields::PileName)) {
-                    if (node->GetPileName()) {
-                        jsonNode.SetPileName(node->GetPileName());
+                    // GetPileName reads SystemState; capture it before SystemState is moved into jsonNode below.
+                    const TString pileName = node->GetPileName();
+                    if (pileName) {
+                        jsonNode.SetPileName(pileName);
                     }
                 }
                 if ((FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) && (FieldsRequested & FieldsSystemState).any()) {

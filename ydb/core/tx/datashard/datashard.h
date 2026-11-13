@@ -413,6 +413,9 @@ namespace TEvDataShard {
         EvDatabaseFreeze,
         EvDatabaseFreezeResult,
 
+        EvStoreBackupChecksumRequest,
+        EvStoreBackupChecksumResponse,
+
         EvEnd
     };
 
@@ -1353,6 +1356,35 @@ namespace TEvDataShard {
             , TxId(txId)
         {
         }
+    };
+
+    struct TEvStoreBackupChecksumRequest
+        : public TEventLocal<TEvStoreBackupChecksumRequest, EvStoreBackupChecksumRequest> {
+        ui64 TxId;
+        ui64 Count;
+        ui64 Hash;
+
+        TEvStoreBackupChecksumRequest(ui64 txId, ui64 count, ui64 hash)
+            : TxId(txId)
+            , Count(count)
+            , Hash(hash)
+        {}
+    };
+
+    struct TEvStoreBackupChecksumResponse
+        : public TEventLocal<TEvStoreBackupChecksumResponse, EvStoreBackupChecksumResponse> {
+        ui64 Count = 0;
+        ui64 Hash = 0;
+        TString Error;
+
+        TEvStoreBackupChecksumResponse(ui64 count, ui64 hash)
+            : Count(count)
+            , Hash(hash)
+        {}
+
+        explicit TEvStoreBackupChecksumResponse(TString error)
+            : Error(std::move(error))
+        {}
     };
 
     struct TEvStoreS3UploadId

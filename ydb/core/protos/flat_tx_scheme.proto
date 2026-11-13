@@ -122,6 +122,22 @@ message TEvDescribeSchemeResult {
     optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
 
     optional fixed64 PathOwnerId = 10;
+    optional bool SupportsBackupSnapshotRetention = 11;
+}
+
+message TCheckTableChecksumRetentionRequest {
+    optional uint64 BackupTxId = 1;
+    optional uint64 TableOwnerId = 2;
+    optional uint64 TableId = 3;
+    optional uint64 SnapshotStep = 4;
+    optional uint64 SnapshotTxId = 5;
+    optional uint64 RequestId = 6;
+}
+
+message TCheckTableChecksumRetentionResponse {
+    optional uint32 Status = 1;
+    optional string Error = 2;
+    optional uint64 RequestId = 3;
 }
 
 message TEvCancelTx {

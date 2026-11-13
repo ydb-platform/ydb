@@ -243,6 +243,21 @@ private:
     THolder<TEvDataShard::TEvS3Upload> Reply;
 };
 
+class TDataShard::TTxStoreBackupChecksum : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxStoreBackupChecksum(TDataShard* ds, TEvDataShard::TEvStoreBackupChecksumRequest::TPtr ev);
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+
+    TTxType GetTxType() const override {
+        return TXTYPE_STORE_BACKUP_CHECKSUM;
+    }
+
+private:
+    TEvDataShard::TEvStoreBackupChecksumRequest::TPtr Ev;
+    THolder<TEvDataShard::TEvStoreBackupChecksumResponse> Reply;
+};
+
 class TDataShard::TTxStoreS3UploadId: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxStoreS3UploadId(TDataShard* ds, TEvDataShard::TEvStoreS3UploadId::TPtr ev);

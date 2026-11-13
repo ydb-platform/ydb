@@ -487,4 +487,6 @@ message TFeatureFlags {
     optional bool EnableDataShardSnapshotLocking = 387 [default = false];
     optional bool EnableRowTableZstdCompression = 388 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
+    // Logical table checksums for server-side S3 and FS export/import
+    optional bool EnableBackupTableChecksum = 390 [default = false];
 }

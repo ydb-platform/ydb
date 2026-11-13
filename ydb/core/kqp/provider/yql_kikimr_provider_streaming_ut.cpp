@@ -1005,7 +1005,7 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
             cases.push_back({TStringBuilder() << "(DataType '" << name << ")", true});
         }
         for (const TStringBuf type : {
-                "(DataType 'Decimal '22 '9)", "(PgType 'int4)", "(PgType '_int4)",
+                "(DataType 'Decimal '22 '9)",
                 "(OptionalType (DataType 'Json))", "(ListType (DataType 'JsonDocument))",
                 "(TupleType)", "(TupleType (DataType 'String) (DataType 'Uint64))",
                 "(StructType)", "(StructType '('member (DataType 'String)))",
@@ -1013,7 +1013,6 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
                 "(TaggedType (DataType 'String) 'tag)",
                 "(VariantType (TupleType (DataType 'String) (DataType 'Int64)))",
                 "(VariantType (StructType '('member (DataType 'String))))",
-                "(OptionalType (ListType (StructType '('member (TaggedType (DictType (DataType 'String) (PgType 'int4)) 'tag)))))",
                 "(VoidType)", "(NullType)", "(EmptyListType)", "(EmptyDictType)"}) {
             cases.push_back({TString(type), true});
         }

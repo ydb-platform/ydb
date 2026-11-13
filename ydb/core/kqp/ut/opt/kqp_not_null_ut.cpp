@@ -1359,8 +1359,6 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         builder.AddNonNullableColumn("Key1", EPrimitiveType::Uint64);
         builder.AddNullableColumn("Key2", EPrimitiveType::Uint64);
         builder.AddNullableColumn("Value1", EPrimitiveType::String);
-        builder.AddNullableColumn("Value2", TPgType("pgint2"));
-        builder.AddNonNullableColumn("Value3", TPgType("pgint2"));
         builder.SetPrimaryKeyColumns({"Key1", "Key2"});
         auto createTableResult = session.CreateTable("/Root/DescribeTest", builder.Build()).GetValueSync();
         UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
@@ -1371,17 +1369,13 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         const THashMap<std::string_view, std::string_view> columnTypes = {
             {"Key1", "Uint64"},
             {"Key2", "Uint64?"},
-            {"Value1", "String?"},
-            {"Value2", "Pg('pgint2','',21,0,0)"},
-            {"Value3", "Pg('pgint2','',21,0,0)"}
+            {"Value1", "String?"}
         };
 
         const THashMap<std::string_view, bool> columnNonNullability = {
             {"Key1", false},
             {"Key2", false},
-            {"Value1", false},
-            {"Value2", false},
-            {"Value3", true}
+            {"Value1", false}
         };
 
         const auto& columns = describeTableResult.GetTableDescription().GetTableColumns();
@@ -1404,8 +1398,6 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             TTableBuilder builder;
             builder.AddNullableColumn("1", EPrimitiveType::Uint64);
             builder.AddNonNullableColumn("2", EPrimitiveType::Uint64);
-            builder.AddNullableColumn("3", TPgType("pgint2"));
-            builder.AddNonNullableColumn("4", TPgType("pgint2"));
             builder.SetPrimaryKeyColumn("1");
             auto result = session.CreateTable("/Root/NotNullCheck", builder.Build()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1415,8 +1407,6 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         const THashMap<std::string_view, bool> columnNonNullability = {
             {"1", false},
             {"2", false},
-            {"3", false},
-            {"4", true},
         };
 
         const auto& columns = describeTableResult.GetTableDescription().GetTableColumns();
@@ -1447,10 +1437,9 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         TTableBuilder builder;
         builder.AddNonNullableColumn("Key1", EPrimitiveType::Int64);
         builder.AddNonNullableColumn("Key2", EPrimitiveType::Utf8);
-        builder.AddNonNullableColumn("Key3", TPgType("pgint2"));
         builder.AddNullableColumn("Value1", EPrimitiveType::Utf8);
         builder.AddNullableColumn("Value2", EPrimitiveType::Bool);
-        builder.SetPrimaryKeyColumns({"Key1", "Key2", "Key3"});
+        builder.SetPrimaryKeyColumns({"Key1", "Key2"});
         auto createResult = session.CreateTable("/Root/TestTable", builder.Build()).GetValueSync();
         UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
 

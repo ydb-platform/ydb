@@ -85,13 +85,11 @@ private:
     struct TColumnDesc {
         ui32 Tag;
         NScheme::TTypeInfo Type;
-        TString PgTypeMod;
         TString Name;
 
-        TColumnDesc(ui32 tag, NScheme::TTypeInfo type, TString pgTypeMod, TString name)
+        TColumnDesc(ui32 tag, NScheme::TTypeInfo type, TString name)
             : Tag(tag)
             , Type(type)
-            , PgTypeMod(std::move(pgTypeMod))
             , Name(std::move(name))
         {}
         TColumnDesc(TColumnDesc&&) noexcept = default;

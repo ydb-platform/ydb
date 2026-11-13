@@ -1,4 +1,5 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_type_registry.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/vector.h>
@@ -13,6 +14,26 @@ Y_UNIT_TEST_SUITE(Scheme) {
 
     namespace NTypeIds = NScheme::NTypeIds;
     using TTypeInfo = NScheme::TTypeInfo;
+
+    Y_UNIT_TEST(DumpIntCells) {
+        NScheme::TTypeRegistry typeRegistry;
+        i64 intVal = 55555;
+        TCell cell((const char *)&intVal, sizeof(i64));
+        NScheme::TTypeInfo typeInfo(NScheme::TInt64::TypeId);
+
+        TString printRes = DbgPrintCell(cell, typeInfo, typeRegistry);
+        UNIT_ASSERT_STRINGS_EQUAL(printRes, "Int64 : 55555");
+    }
+
+    Y_UNIT_TEST(DumpStringCells) {
+        NScheme::TTypeRegistry typeRegistry;
+        char strVal[] = "This is the value";
+        TCell cell((const char*)&strVal, sizeof(strVal) - 1);
+        NScheme::TTypeInfo typeInfo(NScheme::TString::TypeId);
+
+        TString printRes = DbgPrintCell(cell, typeInfo, typeRegistry);
+        UNIT_ASSERT_STRINGS_EQUAL(printRes, TStringBuilder() << "String : " << strVal);
+    }
 
     Y_UNIT_TEST(NullCell) {
         TCell nullCell;

@@ -154,6 +154,5 @@ RECURSE_FOR_TESTS(
     benchmark
     ut
     ut_large
-    ut_pg
     ut_util
 )

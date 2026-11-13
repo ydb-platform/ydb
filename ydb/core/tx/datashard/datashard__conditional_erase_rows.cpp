@@ -12,7 +12,6 @@
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
-#include <yql/essentials/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
@@ -523,20 +522,6 @@ static bool CheckUnit(NScheme::TTypeInfo type, NKikimrSchemeOp::TTTLSettings::EU
     case NScheme::NTypeIds::Uint64:
     case NScheme::NTypeIds::DyNumber:
         return CheckUnit(false, unit, error);
-
-    case NScheme::NTypeIds::Pg:
-        switch (NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc())) {
-            case DATEOID:
-            case TIMESTAMPOID:
-                return CheckUnit(true, unit, error);
-            case INT4OID:
-            case INT8OID:
-                return CheckUnit(false, unit, error);
-            default:
-                error = "Unsupported PG type";
-                return false;
-        }
-        break;
 
     default:
         error = TStringBuilder() << "Unsupported type: " << static_cast<ui32>(type.GetTypeId());

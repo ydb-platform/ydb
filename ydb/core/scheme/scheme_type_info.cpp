@@ -3,14 +3,11 @@
 #include <util/string/printf.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NKikimr::NScheme {
 
-::TString TypeName(const TTypeInfo typeInfo, const ::TString& typeMod) {
+::TString TypeName(const TTypeInfo typeInfo, const ::TString&) {
     switch (typeInfo.GetTypeId()) {
-    case NScheme::NTypeIds::Pg:
-        return NPg::PgTypeNameFromTypeDesc(typeInfo.GetPgTypeDesc(), typeMod);
     case NScheme::NTypeIds::Decimal: {
         const TDecimalType& decimal = typeInfo.GetDecimalType();
         return Sprintf("Decimal(%u,%u)", decimal.GetPrecision(), decimal.GetScale());
@@ -34,13 +31,6 @@ bool GetTypeInfo(const NScheme::IType* type, const NKikimrProto::TTypeInfo& type
             typeInfo = NScheme::TypeInfoFromProto(NScheme::NTypeIds::Decimal, typeInfoProto);
         } else {
             typeInfo = *decimalType;
-        }
-        return true;
-    } else if (const auto pgTypeDesc = NPg::TypeDescFromPgTypeName(typeName)) {
-        if (typeInfoProto.HasPgTypeId()) {
-            typeInfo = NScheme::TypeInfoFromProto(NScheme::NTypeIds::Pg, typeInfoProto);
-        } else {
-            typeInfo = pgTypeDesc;
         }
         return true;
     } else {

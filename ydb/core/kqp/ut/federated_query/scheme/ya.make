@@ -22,8 +22,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/library/yql/providers/pq/proto
     ydb/services/workload_manager/ut/common
-    yql/essentials/parser/pg_wrapper
-    yql/essentials/sql/pg
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

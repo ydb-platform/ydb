@@ -81,10 +81,6 @@ struct TTypeInfoOrder {
         return TTypeInfo(GetTypeId(), RawDesc);
     }
     
-    const NPg::ITypeDesc* GetPgTypeDesc() const {
-        return reinterpret_cast<const NPg::ITypeDesc*>(RawDesc);
-    }    
-
 private:
     TTypeIdOrder TypeIdOrder;
     TTypeInfo::TRawTypeDesc RawDesc;

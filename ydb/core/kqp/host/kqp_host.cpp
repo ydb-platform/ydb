@@ -39,7 +39,6 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/config/yql_config_provider.h>
-#include <yql/essentials/providers/pg/provider/yql_pg_provider_impl.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
 
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
@@ -2091,14 +2090,6 @@ private:
         });
     }
 
-    void InitPgProvider() {
-        auto state = MakeIntrusive<NYql::TPgState>();
-        state->Types = TypesCtx.Get();
-
-        TypesCtx->AddDataSource(NYql::PgProviderName, NYql::CreatePgDataSource(state));
-        TypesCtx->AddDataSink(NYql::PgProviderName, NYql::CreatePgDataSink(state));
-    }
-
     void InitSolomonProvider() {
         if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::SolomonProviderName))) {
             return;
@@ -2239,8 +2230,6 @@ private:
             }
             TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
         }
-
-        InitPgProvider();
 
         TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
         TypesCtx->TimeProvider = TAppData::TimeProvider;

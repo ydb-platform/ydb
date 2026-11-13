@@ -57,7 +57,7 @@ class TestSecondaryIndexBase(TestBase):
         count_col = rows[0].count
         for type_name in index.keys():
             # Boolean generators only produce two distinct predicates.
-            values = (1, 4) if type_name in ("Bool", "pgbool") else range(1, count_col + 1)
+            values = (1, 4) if type_name == "Bool" else range(1, count_col + 1)
             for i in values:
 
                 def process(session):
@@ -69,11 +69,11 @@ class TestSecondaryIndexBase(TestBase):
                             """,
                         tx=session.transaction(tx_mode=ydb.QueryStaleReadOnly()),
                     )
-                    if type_name in ("Bool", "pgbool"):
+                    if type_name == "Bool":
                         assert (
                             len(rows) == 1 and rows[0].count == (0 if i > 3 else count_col - 3)  # value is False for first 3 rows
                         ), f"there were not enough rows by type {type_name}"
-                    elif type_name in ("String", "Utf8", "pgbytea", "pgtext", "pgvarchar"):
+                    elif type_name in ("String", "Utf8"):
                         if i < 10:
                             if i * 10 > count_col:
                                 count = count_col - (9 - i)
@@ -115,7 +115,7 @@ class TestSecondaryIndexBase(TestBase):
             statements.append(f"col_{cleanup_type_name(data_type)}")
 
         for type_name in index.keys():
-            if type_name in ("Bool", "pgbool"):
+            if type_name == "Bool":
                 select_sql = f"""
                     select {", ".join(statements)}
                     from {table_name} VIEW idx_col_index_{cleanup_type_name(type_name)}

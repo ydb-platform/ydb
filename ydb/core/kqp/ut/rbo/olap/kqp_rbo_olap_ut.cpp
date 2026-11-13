@@ -19,7 +19,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
-#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>

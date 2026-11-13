@@ -4,7 +4,6 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/algorithm.h>
@@ -255,7 +254,7 @@ THolder<TKeyDesc> ExtractEraseRow(TCallable& callable, const TTypeEnvironment& e
 template<typename TStringBackend>
 TCell MakeCellImpl(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
     const TStringBackend& env, bool copy,
-    i32 typmod, TMaybe<TString>* error)
+    i32, TMaybe<TString>*)
 {
     if (!value)
         return TCell();
@@ -272,28 +271,8 @@ TCell MakeCellImpl(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
         break;
     }
 
-    TString binary;
-    NYql::NUdf::TStringRef ref;
-    bool isPg = (type.GetTypeId() == NScheme::NTypeIds::Pg);
-    if (isPg) {
-        auto typeDesc = type.GetPgTypeDesc();
-        if (typmod != -1 && NPg::TypeDescNeedsCoercion(typeDesc)) {
-            TMaybe<TString> err;
-            binary = NYql::NCommon::PgValueCoerce(value, NPg::PgTypeIdFromTypeDesc(typeDesc), typmod, &err);
-            if (err) {
-                if (error) {
-                    *error = err;
-                }
-                return TCell();
-            }
-        } else {
-            binary = NYql::NCommon::PgValueToNativeBinary(value, NPg::PgTypeIdFromTypeDesc(typeDesc));
-        }
-        ref = NYql::NUdf::TStringRef(binary);
-    } else {
-        ref = value.AsStringRef();
-    }
-    if (!isPg && !copy && !value.IsEmbedded() && (value.IsString() || TCell::CanInline(ref.Size()))) {
+    const auto ref = value.AsStringRef();
+    if (!copy && !value.IsEmbedded() && (value.IsString() || TCell::CanInline(ref.Size()))) {
         return TCell(ref.Data(), ref.Size());
     }
 

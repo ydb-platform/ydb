@@ -5,7 +5,6 @@
 #include <ydb/core/tablet_flat/flat_table_stats.h>
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
-#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/library/aclib/user_context.h>
 
@@ -1092,10 +1091,6 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
 
         default:
             break;
-    }
-
-    if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
-        return NYql::NCommon::PgValueFromNativeBinary(cell.AsBuf(), NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc()));
     }
 
     Y_DEBUG_ABORT("Unsupported type: %" PRIu16, type.GetTypeId());

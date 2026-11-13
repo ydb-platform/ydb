@@ -79,8 +79,8 @@ class TestSplitMergeBase(TestBase):
         if ttl:
             columns.append((f"ttl_{cleanup_type_name(ttl)}", ttl, ttl_types))
 
-        # Every schema has an Int64/pgint8 column identifying the generated row.
-        row_number_column = next(name for name, type_name, _ in columns if type_name in ("Int64", "pgint8"))
+        # Every schema has an Int64 column identifying the generated row.
+        row_number_column = next(name for name, type_name, _ in columns if type_name == "Int64")
         primary_key = ", ".join(f"pk_{cleanup_type_name(type_name)}" for type_name in pk_types)
         rows = self.query(f"SELECT {', '.join(name for name, _, _ in columns)} FROM `{table_name}` ORDER BY {primary_key}")
         row_numbers = [int(row[row_number_column]) for row in rows]

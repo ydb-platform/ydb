@@ -6,11 +6,6 @@
 
 #include <util/generic/yexception.h>
 
-namespace NKikimr::NPg {
-struct ITypeDesc;
-TString TypeModFromPgTypeName(const TStringBuf name);
-}
-
 namespace NKikimr::NScheme {
 
 class TTypeInfo {
@@ -31,11 +26,6 @@ public:
     {
         Y_ENSURE(!NTypeIds::IsParametrizedType(typeId), "TTypeInfo(TTypeId) cannot be used for parameterized types");
     }
-
-    constexpr TTypeInfo(const NKikimr::NPg::ITypeDesc* typeDesc)
-        : TypeId(NTypeIds::Pg)
-        , PgTypeDesc(typeDesc)
-    {}
 
     constexpr TTypeInfo(const TDecimalType& decimalType)
         : TypeId(NTypeIds::Decimal)
@@ -60,15 +50,6 @@ public:
         return TypeId;
     }
 
-    constexpr const NKikimr::NPg::ITypeDesc* GetPgTypeDesc() const {
-        Y_ENSURE(TypeId == NTypeIds::Pg, "TTypeInfo::GetPgTypeDesc() requires a Pg type info");
-        return PgTypeDesc;
-    }
-
-    const TString GetPgTypeMod(const TStringBuf name) const {
-        return TypeId != NTypeIds::Pg ? TString{} : NPg::TypeModFromPgTypeName(name);
-    }
-
     constexpr const TDecimalType& GetDecimalType() const {
         Y_ENSURE(TypeId == NTypeIds::Decimal, "TTypeInfo::GetDecimalType() requires a Decimal type info");
         return DecimalTypeDesc;
@@ -87,7 +68,6 @@ private:
     // Storage for parameters of types
     union {
         TRawTypeDesc RawDesc;                       // internal descriptor, used for passing inside YDB Core
-        const NKikimr::NPg::ITypeDesc* PgTypeDesc;  // PG descriptor, used for pg_wrapper
         TDecimalType DecimalTypeDesc;               // Decimal parameters, stored inplace
     };
 

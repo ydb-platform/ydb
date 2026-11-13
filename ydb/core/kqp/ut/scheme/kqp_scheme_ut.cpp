@@ -16680,7 +16680,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(alterResult.GetIssues().ToString(),
-                "Type 'pgfloat4' specified for column 'new_column' is not supported for column tables");
+                "Type 'pgfloat4' specified for column 'new_column' is not supported by storage");
         }
 
         {
@@ -17719,18 +17719,17 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("i2").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint2")}),
-            TTestHelper::TColumnSchema().SetName("i4").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint4")}),
-            TTestHelper::TColumnSchema().SetName("i8").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint8")}),
-            TTestHelper::TColumnSchema().SetName("f4").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgfloat4")}),
-            TTestHelper::TColumnSchema().SetName("f8").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgfloat8")})
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        auto result = testHelper.GetSession().ExecuteSchemeQuery(testTable.BuildQuery()).GetValueSync();
+        auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/ColumnTableTest` (
+                id Int32 NOT NULL,
+                i2 pgint2,
+                i4 pgint4,
+                i8 pgint8,
+                f4 pgfloat4,
+                f8 pgfloat8,
+                PRIMARY KEY (id)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "PostgreSQL types are not supported");
     }

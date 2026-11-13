@@ -452,15 +452,8 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
     auto itName = table->ColumnNames.find(name);
 
     NScheme::TTypeInfo typeInfo;
-    TString pgTypeMod;
     Y_ENSURE((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));
     switch ((NScheme::TTypeId)type) {
-    case NScheme::NTypeIds::Pg: {
-        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
-        typeInfo = typeInfoMod.TypeInfo;
-        pgTypeMod = typeInfoMod.TypeMod;
-        break;
-    }
     case NScheme::NTypeIds::Decimal: {
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
         typeInfo = typeInfoMod.TypeInfo;
@@ -487,9 +480,9 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
         Y_ENSURE(itName->second == id, describeFailure());
         // Sanity check that this column exists and types match
         Y_ENSURE(it != table->Columns.end() && it->second.Name == name);
-        Y_ENSURE(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
+        Y_ENSURE(it->second.PType == typeInfo,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << name
-            << "' expected type " << NScheme::TypeName(typeInfo, pgTypeMod)
+            << "' expected type " << NScheme::TypeName(typeInfo)
             << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
 
         bool changes = false;
@@ -508,9 +501,9 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
 
     // We assume column is renamed when the same id already exists
     if (it != table->Columns.end()) {
-        Y_ENSURE(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
+        Y_ENSURE(it->second.PType == typeInfo,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << it->second.Name << "' renamed to '" << name << "'"
-            << " with type " << NScheme::TypeName(typeInfo, pgTypeMod)
+            << " with type " << NScheme::TypeName(typeInfo)
             << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
         table->ColumnNames.erase(it->second.Name);
         it->second.Name = name;
@@ -518,7 +511,7 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
         return true;
     }
 
-    auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, pgTypeMod, notNull, isSensitive, setNotNullInProgress));
+    auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, {}, notNull, isSensitive, setNotNullInProgress));
     Y_ENSURE(pr.second);
     it = pr.first;
     table->ColumnNames.emplace(name, id);

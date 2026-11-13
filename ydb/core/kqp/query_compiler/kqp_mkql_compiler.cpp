@@ -81,8 +81,6 @@ NMiniKQL::TType* CreateColumnType(const NKikimr::NScheme::TTypeInfo& typeInfo, c
         const NScheme::TDecimalType& decimal = typeInfo.GetDecimalType();
         return ctx.PgmBuilder().NewDecimalType(decimal.GetPrecision(), decimal.GetScale());
     }
-    case NKikimr::NScheme::NTypeIds::Pg:
-        return ctx.PgmBuilder().NewPgType(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()));
     default:
         return ctx.PgmBuilder().NewDataType(typeId);
     }
@@ -92,11 +90,6 @@ void ValidateColumnType(const TTypeAnnotationNode* type, NKikimr::NScheme::TType
     YQL_ENSURE(type);
     bool isOptional;
     switch (columnTypeId) {
-    case NKikimr::NScheme::NTypeIds::Pg: {
-        const TPgExprType* pgType = nullptr;
-        YQL_ENSURE(IsPg(type, pgType));
-        break;
-    }
     default: {
         const TDataExprType* dataType = nullptr;
         YQL_ENSURE(IsDataOrOptionalOfData(type, isOptional, dataType));

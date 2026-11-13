@@ -1,5 +1,4 @@
 import pytest
-import binascii
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
@@ -23,23 +22,17 @@ unsupported_distinct_types = [
     "DyNumber",
     "UUID",  # https://github.com/ydb-platform/ydb/issues/17484
 ]
-uncomparable_types = ["Json", "JsonDocument", "Yson", "pgjson", "pgjsonb"]
-text_types = ["String", "Utf8", "pgbytea", "pgtext", "pgvarchar"]
+uncomparable_types = ["Json", "JsonDocument", "Yson"]
+text_types = ["String", "Utf8"]
 
 
 def numeric_sort_key(s, type):
     if isinstance(s, bytes):
         s = s.decode('utf-8')
-    if type == 'pgbytea':
-        s = binascii.unhexlify(s[2:]).decode('utf-8')
     if type in text_types:
         parts = s.split(' ', 1)
         if len(parts) == 2:
             return parts[0] + ' ' + ('%04d' % int(parts[1]))
-    if type in ("pgint2", "pgint4", "pgint8"):
-        return int(s)
-    if type in ("pgnumeric", "pgfloat4", "pgfloat8"):
-        return float(s)
     return s
 
 
@@ -52,11 +45,6 @@ def assert_bool_types(type, rows):
             errors.append(f"Expected False at first row, got {rows[0][0]} for type {type}")
         if rows[1][0] is not True:
             errors.append(f"Expected True at second row, got {rows[1][0]} for type {type}")
-    elif type == "pgbool":
-        if rows[0][0] != 'f':
-            errors.append(f"Expected 'f' (False) at first row, got {rows[0][0]} for type {type}")
-        if rows[1][0] != 't':
-            errors.append(f"Expected 't' (True) at second row, got {rows[1][0]} for type {type}")
     else:
         errors.append(f"Unknown bool type: {type}")
     assert not errors, "errors occured:\n{}".format("\n".join(errors))
@@ -179,7 +167,7 @@ class TestSelectBase(TestBase):
             ):
                 rows_distinct = self.query(f"SELECT DISTINCT col_{cleanup_type_name(type)} from {table_name}")
                 rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0], type))
-                if type in ("Bool", "pgbool"):
+                if type == "Bool":
                     assert_bool_types(type, rows_distinct)
                 else:
                     for i in range(len(rows_distinct)):
@@ -188,7 +176,7 @@ class TestSelectBase(TestBase):
             if type not in unsupported_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT pk_{cleanup_type_name(type)} from {table_name}")
                 rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0], type))
-                if type in ("Bool", "pgbool"):
+                if type == "Bool":
                     assert_bool_types(type, rows_distinct)
                 else:
                     for i in range(len(rows_distinct)):
@@ -197,7 +185,7 @@ class TestSelectBase(TestBase):
             if type not in unsupported_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT col_index_{cleanup_type_name(type)} from {table_name}")
                 rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0], type))
-                if type in ("Bool", "pgbool"):
+                if type == "Bool":
                     assert_bool_types(type, rows_distinct)
                 else:
                     for i in range(len(rows_distinct)):
@@ -322,19 +310,19 @@ class TestSelectBase(TestBase):
         for i in (1, 2, 50, 99, 100):
             rows = self.query(f"select {", ".join(selected_columns)} from {table_name} TABLESAMPLE SYSTEM({i}.0)")
             for _, row in enumerate(rows):
-                numb = int(row["pk_pgint8"]) if "pk_pgint8" in row else row["pk_Int64"]
+                numb = row["pk_Int64"]
                 self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
 
             rows = self.query(
                 f"select {", ".join(selected_columns)} from {table_name} TABLESAMPLE BERNOULLI({i}.0) REPEATABLE({i})"
             )
             for _, row in enumerate(rows):
-                numb = int(row["pk_pgint8"]) if "pk_pgint8" in row else row["pk_Int64"]
+                numb = row["pk_Int64"]
                 self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
 
             rows = self.query(f"select {", ".join(selected_columns)} from {table_name} SAMPLE 1.0 / {i}")
             for _, row in enumerate(rows):
-                numb = int(row["pk_pgint8"]) if "pk_pgint8" in row else row["pk_Int64"]
+                numb = row["pk_Int64"]
                 self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
 
     def order_by(
@@ -364,10 +352,10 @@ class TestSelectBase(TestBase):
             if column_type in uncomparable_types:
                 continue
 
-            if column_type in ("Bool", "pgbool"):
+            if column_type == "Bool":
                 # add second column for stable order
-                ordering_asc = f'{column_name} ASC, {"pk_pgint8" if "pgint8" in pk_types else "pk_Int64"} ASC'
-                ordering_desc = f'{column_name} DESC, {"pk_pgint8" if "pgint8" in pk_types else "pk_Int64"} DESC'
+                ordering_asc = f'{column_name} ASC, pk_Int64 ASC'
+                ordering_desc = f'{column_name} DESC, pk_Int64 DESC'
             else:
                 ordering_asc = f'{column_name} ASC'
                 ordering_desc = f'{column_name} DESC'

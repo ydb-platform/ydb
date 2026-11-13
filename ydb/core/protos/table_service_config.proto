@@ -328,7 +328,8 @@ message TTableServiceConfig {
     reserved 51; // optional bool EnableColumnsWithDefault = 51 [default = true];
 
     optional bool EnableAstCache = 52 [default = false, (InvalidateCompileCache) = true];
-    optional bool EnablePgConstsToParams = 53 [default = false, (InvalidateCompileCache) = true];
+    reserved 53;
+    reserved "EnablePgConstsToParams";
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000, (InvalidateCompileCache) = true];
 

@@ -4,7 +4,6 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -254,21 +253,9 @@ Y_UNIT_TEST_SUITE(KeyRangePredicate) {
         UNIT_ASSERT(!BuildPred(Key, types, MakeRange({TCell::Make(ui64(1))}, true, {}, false), p));
         UNIT_ASSERT(p.Error.Contains("unsupported key column type"));
         UNIT_ASSERT(!CanEncodeKeyBoundType(NScheme::NTypeIds::PairUi64Ui64));
-        UNIT_ASSERT(!CanEncodeKeyBoundType(NScheme::NTypeIds::Pg));
         UNIT_ASSERT(!CanEncodeKeyRangePredicate(types));
         UNIT_ASSERT(CanEncodeKeyBoundType(NScheme::NTypeIds::DyNumber));
         UNIT_ASSERT(CanEncodeKeyRangePredicate(Uint64));
-    }
-
-    Y_UNIT_TEST(PgTypeFailsEncoding) {
-        auto* desc = NPg::TypeDescFromPgTypeName("pgint8");
-        UNIT_ASSERT(desc);
-        const TVector<NScheme::TTypeInfo> types{NScheme::TTypeInfo(desc)};
-        TPred p;
-        UNIT_ASSERT(!BuildPred(Key, types, MakeRange({TCell::Make(i64(1))}, true, {}, false), p));
-        UNIT_ASSERT(p.Error.Contains("unsupported key column type"));
-        UNIT_ASSERT(p.Error.Contains("pgint8"));
-        UNIT_ASSERT(!CanEncodeKeyRangePredicate(types));
     }
 
     Y_UNIT_TEST(DyNumberBoundUsesTextParam) {

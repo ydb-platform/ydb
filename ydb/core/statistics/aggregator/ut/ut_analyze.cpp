@@ -5,9 +5,7 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
-#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/base/request_types.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -18,7 +16,6 @@
 #include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <util/string/cast.h>
 
@@ -1480,61 +1477,6 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         CheckTableSummaryRowCount(runtime, tableInfo.PathId, 3);
     }
 
-    Y_UNIT_TEST(AnalyzePgKeyFallsBackToWholeTableScan) {
-        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
-            settings.SetEnableTablePgTypes(true);
-            settings.AppConfig->MutableFeatureFlags()->SetEnableTablePgTypes(true);
-            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeRowTableWholeTableScanMaxBytes(0);
-        });
-        auto& runtime = *env.GetServer().GetRuntime();
-        CreateDatabase(env, "Database");
-        env.RunInThreadPool([&] {
-            NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
-                .Database("/Root/Database").DiscoveryMode(NYdb::EDiscoveryMode::Off));
-            auto sessionResult = client.CreateSession().GetValueSync();
-            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
-            auto session = sessionResult.GetSession();
-            auto createResult = session.CreateTable("/Root/Database/Table", NYdb::NTable::TTableBuilder()
-                .AddNullableColumn("Key", NYdb::TPgType("pgint8"))
-                .AddNullableColumn("Value", NYdb::EPrimitiveType::String)
-                .SetPrimaryKeyColumns({"Key"})
-                .Build()).GetValueSync();
-            UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
-
-            NYdb::TValueBuilder rows;
-            rows.BeginList();
-            for (const auto& [key, value] : {std::pair{"1", "one"}, std::pair{"2", "two"}}) {
-                rows.AddListItem().BeginStruct()
-                    .AddMember("Key").Pg(NYdb::TPgValue(NYdb::TPgValue::VK_TEXT, key, NYdb::TPgType("pgint8")))
-                    .AddMember("Value").String(value)
-                    .EndStruct();
-            }
-            rows.EndList();
-            auto uploadResult = client.BulkUpsert("/Root/Database/Table", rows.Build()).GetValueSync();
-            UNIT_ASSERT_C(uploadResult.IsSuccess(), uploadResult.GetIssues().ToString());
-        });
-
-        const auto tableInfo = ResolveRowTable(runtime, "/Root/Database/Table");
-        size_t scanRequests = 0;
-        auto observer = runtime.AddObserver<NKqp::TEvKqp::TEvQueryRequest>([&](auto& ev) {
-            const auto& request = *ev->Get();
-            const auto& query = request.GetQuery();
-            if (ev->Sender == request.GetRequestActorId()
-                && request.GetRequestType() == NRequestTypes::Analyze
-                && request.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN
-                && query.Contains("`/Root/Database/Table`")) {
-                ++scanRequests;
-                UNIT_ASSERT_C(!query.Contains(" WITH TabletId"), query);
-                UNIT_ASSERT_C(!query.Contains(" WHERE "), query);
-            }
-        });
-        const auto result = Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId},
-            "operationId", {}, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
-        UNIT_ASSERT_GT(scanRequests, 0);
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(result.GetIssues(), issues);
-        UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "PostgreSQL types are not supported");
-    }
 }
 
 } // NStat

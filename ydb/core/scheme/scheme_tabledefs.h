@@ -9,8 +9,6 @@
 #include <ydb/core/scheme_types/scheme_type_info.h>  // for NScheme::TTypeInfo
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>  // for NScheme::NTypeIds
 
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>  // for NPg::TypeDescIsComparable
-
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
 #include <util/generic/maybe.h>
@@ -32,8 +30,6 @@ inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::Double:
         case NScheme::NTypeIds::JsonDocument:
             return false;
-        case NScheme::NTypeIds::Pg:
-            return NPg::TypeDescIsComparable(typeInfo.GetPgTypeDesc());
         default:
             return true;
     }

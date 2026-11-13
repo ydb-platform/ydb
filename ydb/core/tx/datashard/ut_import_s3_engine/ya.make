@@ -6,9 +6,8 @@ PEERDIR(
     library/cpp/testing/common
     ydb/core/testlib
     ydb/core/tx
-    yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/sql/pg
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

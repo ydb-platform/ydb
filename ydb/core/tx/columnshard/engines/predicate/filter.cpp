@@ -379,26 +379,6 @@ TConclusion<TCell> TRangesBuilder::MakeDefaultCell(const NScheme::TTypeInfo type
         case NScheme::NTypeIds::StepOrderId:
             break;   // Deprecated types
 
-        case NScheme::NTypeIds::Pg:
-            switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
-                case INT2OID:
-                    return MakeDefaultCellByPrimitiveType<i16>();
-                case INT4OID:
-                    return MakeDefaultCellByPrimitiveType<i32>();
-                case INT8OID:
-                    return MakeDefaultCellByPrimitiveType<i64>();
-                case FLOAT4OID:
-                    return MakeDefaultCellByPrimitiveType<float>();
-                case FLOAT8OID:
-                    return MakeDefaultCellByPrimitiveType<double>();
-                case BYTEAOID:
-                    return TCell(Default<TString>().data(), Default<TString>().size());
-                case TEXTOID:
-                    return TCell(Default<TString>().data(), Default<TString>().size());
-                default:
-                    break;
-            }
-            break;
     }
     return TConclusionStatus::Fail(TStringBuilder() << "Unsupported type: " << NScheme::TypeName(typeInfo.GetTypeId()));
 }

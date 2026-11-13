@@ -38,11 +38,10 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/services
     yql/essentials/minikql/invoke_builtins
-    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/parser/pg_catalog
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/udf_resolve
     yql/essentials/providers/config
-    yql/essentials/providers/pg/provider
     yql/essentials/providers/result/provider
     yql/essentials/sql
     yql/essentials/sql/v1/translation

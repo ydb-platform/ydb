@@ -18,8 +18,7 @@ PEERDIR(
     ydb/core/statistics/ut_common
     ydb/library/plan2svg
     ydb/public/lib/ut_helpers
-    yql/essentials/sql/pg
-    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/digest
 )
 

@@ -369,10 +369,6 @@ static bool BuildAlterTableAddIndexRequestImpl(const TRequest* req, NKikimrIndex
         return false;
     }
 
-    if (flags & NKqpProto::TKqpSchemeOperation::FLAG_PG_MODE) {
-        settings->set_pg_mode(true);
-    }
-
     if (flags & NKqpProto::TKqpSchemeOperation::FLAG_IF_NOT_EXISTS) {
         settings->set_if_not_exist(true);
     }
@@ -1021,19 +1017,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
     newColumn->set_name(column.GetName());
 
     Ydb::Type* columnType = nullptr;
-    auto typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
-    if (typeDesc) {
-        columnType = newColumn->mutable_type();
-        auto* pg = columnType->mutable_pg_type();
-        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pg->set_type_modifier(NPg::TypeModFromPgTypeName(column.GetType()));
-        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
-        pg->set_typlen(0);
-        pg->set_typmod(0);
-        if (column.GetNotNull()) {
-            newColumn->set_not_null(column.GetNotNull());
-        }
-    } else if (column.HasTypeInfo() && column.GetTypeInfo().HasDecimalPrecision() && column.GetTypeInfo().HasDecimalScale()) {
+    if (column.HasTypeInfo() && column.GetTypeInfo().HasDecimalPrecision() && column.GetTypeInfo().HasDecimalScale()) {
         if (column.GetNotNull()) {
             columnType = newColumn->mutable_type();
             newColumn->set_not_null(column.GetNotNull());
@@ -1067,19 +1051,7 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     newColumn->set_name(column.GetName());
 
     Ydb::Type* columnType = nullptr;
-    auto typeDesc = NPg::TypeDescFromPgTypeName(column.GetType());
-    if (typeDesc) {
-        columnType = newColumn->mutable_type();
-        auto* pg = columnType->mutable_pg_type();
-        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pg->set_type_modifier(NPg::TypeModFromPgTypeName(column.GetType()));
-        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
-        pg->set_typlen(0);
-        pg->set_typmod(0);
-        if (column.GetNotNull()) {
-            newColumn->set_not_null(column.GetNotNull());
-        }
-    } else if (column.HasTypeInfo() && column.GetTypeInfo().HasDecimalPrecision()) {
+    if (column.HasTypeInfo() && column.GetTypeInfo().HasDecimalPrecision()) {
         if (column.GetNotNull()) {
             columnType = newColumn->mutable_type();
         } else {
@@ -1411,7 +1383,7 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
     FillColumnTableIndexesFromOlapColumnSchema<false>(out, in);
 }
 
-bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
+bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString&,
     const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error)
 {
     ui32 typeId = 0;
@@ -1430,19 +1402,10 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
             outTypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType(precision, scale));
             return true;
         }
-        case Ydb::Type::kPgType: {
-            const auto& pgType = itemType.pg_type();
-            const auto& typeName = pgType.type_name();
-            auto desc = NPg::TypeDescFromPgTypeName(typeName);
-            if (!desc) {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Invalid PG type name: " << typeName;
-                return false;
-            }
-            outTypeInfo = NScheme::TTypeInfo(desc);
-            outTypeMod = pgType.type_modifier();
-            return true;
-        }
+        case Ydb::Type::kPgType:
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "PostgreSQL types are not supported";
+            return false;
 
         default: {
             status = Ydb::StatusIds::BAD_REQUEST;
@@ -1466,6 +1429,11 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {
     for (const auto& column : in) {
+        if (column.GetTypeId() == NScheme::NTypeIds::Pg) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Unsupported column type for column: " + column.GetName();
+            return false;
+        }
         auto& description = *out.AddColumns();
         description.SetName(column.GetName());
         description.SetType(column.GetType());
@@ -1500,15 +1468,18 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error) {
 
     for (const auto& column : in) {
+        NScheme::TTypeInfo typeInfo;
+        TString typeMod;
+        if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.type(), status, error)) {
+            return false;
+        }
         NKikimrSchemeOp::TColumnDescription* cd = out.AddColumns();
         cd->SetName(column.name());
         bool notOptional = !column.type().has_optional_type();
         if (!column.has_not_null()) {
-            if (!column.type().has_pg_type()) {
-                cd->SetNotNull(notOptional);
-            }
+            cd->SetNotNull(notOptional);
         } else {
-            if (!column.type().has_pg_type() && notOptional != column.not_null()) {
+            if (notOptional != column.not_null()) {
                 status = Ydb::StatusIds::BAD_REQUEST;
                 error = "Not consistent column type and not_null option for column: " + column.name();
                 return false;
@@ -1521,11 +1492,6 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
             return false;
         }
 
-        NScheme::TTypeInfo typeInfo;
-        TString typeMod;
-        if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.type(), status, error)) {
-            return false;
-        }
         cd->SetType(NScheme::TypeName(typeInfo, typeMod));
 
         if (NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
@@ -3501,53 +3467,27 @@ bool FillSequenceDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDe
                 }
                 if (sequenceDescription.HasDataType()) {
                     auto* dataType = fromSequence->mutable_data_type();
-                    auto typeDesc = NPg::TypeDescFromPgTypeName(sequenceDescription.GetDataType());
-                    if (typeDesc) {
-                        auto* pg = dataType->mutable_pg_type();
-                        auto typeId = NPg::PgTypeIdFromTypeDesc(typeDesc);
-                        switch (typeId) {
-                            case INT2OID:
-                            case INT4OID:
-                            case INT8OID:
-                                break;
-                            default: {
-                                TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeDesc);
-                                status = Ydb::StatusIds::BAD_REQUEST;
-                                error = Sprintf(
-                                    "Invalid type name %s for sequence: %s", sequenceType.c_str(), sequenceDescription.GetName().data()
-                                );
-                                return false;
-                                break;
-                            }
+                    NYql::NProto::TypeIds protoType;
+                    if (!NYql::NProto::TypeIds_Parse(sequenceDescription.GetDataType(), &protoType)) {
+                        status = Ydb::StatusIds::BAD_REQUEST;
+                        error = Sprintf(
+                            "Invalid type name %s for sequence: %s", sequenceDescription.GetDataType().data(), sequenceDescription.GetName().data()
+                        );
+                        return false;
+                    }
+                    switch (protoType) {
+                        case NYql::NProto::TypeIds::Int16:
+                        case NYql::NProto::TypeIds::Int32:
+                        case NYql::NProto::TypeIds::Int64: {
+                            NMiniKQL::ExportPrimitiveTypeToProto(protoType, *dataType);
+                            break;
                         }
-                        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-                        pg->set_type_modifier(NPg::TypeModFromPgTypeName(sequenceDescription.GetDataType()));
-                        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
-                        pg->set_typlen(0);
-                        pg->set_typmod(0);
-                    } else {
-                        NYql::NProto::TypeIds protoType;
-                        if (!NYql::NProto::TypeIds_Parse(sequenceDescription.GetDataType(), &protoType)) {
+                        default: {
                             status = Ydb::StatusIds::BAD_REQUEST;
                             error = Sprintf(
                                 "Invalid type name %s for sequence: %s", sequenceDescription.GetDataType().data(), sequenceDescription.GetName().data()
                             );
                             return false;
-                        }
-                        switch (protoType) {
-                            case NYql::NProto::TypeIds::Int16:
-                            case NYql::NProto::TypeIds::Int32:
-                            case NYql::NProto::TypeIds::Int64: {
-                                NMiniKQL::ExportPrimitiveTypeToProto(protoType, *dataType);
-                                break;
-                            }
-                            default: {
-                                status = Ydb::StatusIds::BAD_REQUEST;
-                                error = Sprintf(
-                                    "Invalid type name %s for sequence: %s", sequenceDescription.GetDataType().data(), sequenceDescription.GetName().data()
-                                );
-                                return false;
-                            }
                         }
                     }
                 }
@@ -3607,25 +3547,6 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
             case NScheme::NTypeIds::Int32:
             case NScheme::NTypeIds::Int64: {
                 out.SetDataType(NScheme::TypeName(typeInfo, typeMod));
-                break;
-            }
-            case NScheme::NTypeIds::Pg: {
-                switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
-                    case INT2OID:
-                    case INT4OID:
-                    case INT8OID: {
-                        out.SetDataType(NScheme::TypeName(typeInfo, typeMod));
-                        break;
-                    }
-                    default: {
-                        TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeInfo.GetPgTypeDesc());
-                        status = Ydb::StatusIds::BAD_REQUEST;
-                        error = Sprintf(
-                            "Invalid type name %s for sequence: %s", sequenceType.c_str(), out.GetName().data()
-                        );
-                        return false;
-                    }
-                }
                 break;
             }
             default: {

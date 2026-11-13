@@ -14,8 +14,7 @@ ENDIF()
 PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/tx/schemeshard/ut_helpers
-    yql/essentials/parser/pg_wrapper
-    yql/essentials/sql/pg
+    yql/essentials/sql/pg_dummy
 )
 
 SRCS(

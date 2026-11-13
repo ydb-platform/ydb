@@ -7,9 +7,6 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <yql/essentials/minikql/mkql_string_util.h>
-#include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
-#include <yql/essentials/parser/pg_wrapper/interface/pack.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <util/generic/guid.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -25,14 +22,6 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
         return { sizeof(NUdf::TUnboxedValue), 8 }; // Special value for NULL elements
     }
     switch (type.GetTypeId()) {
-        case NTypeIds::Pg:
-        {
-            return {
-                sizeof(NUdf::TUnboxedValue),
-                PgValueSize(value, NPg::TypeDescGetTypeLen(type.GetPgTypeDesc()))
-            };
-        }
-
         case NTypeIds::Bool:
         case NTypeIds::Int8:
         case NTypeIds::Uint8:
@@ -497,23 +486,6 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
             Y_VERIFY_DEBUG_S(false, "Unsupported (deprecated) type: " << NScheme::TypeName(columnType.GetTypeId()));
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, NUdf::TStringRef>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
-        case NTypeIds::Pg:
-            switch (NPg::PgTypeIdFromTypeDesc(columnType.GetPgTypeDesc())) {
-                case INT2OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
-                case INT4OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
-                case INT8OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int64Array, i64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
-                case FLOAT4OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FloatArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
-                case FLOAT8OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::DoubleArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
-                default:
-                    break;
-            }
-            // TODO: support pg types
-            YQL_ENSURE(false, "Unsupported pg type at column " << columnIndex);
         default:
             YQL_ENSURE(false, "Unsupported type: " << NScheme::TypeName(columnType.GetTypeId()) << " at column " << columnIndex);
     }
@@ -717,8 +689,7 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TRowBatchReader::AddData(con
     return stats;
 }
 
-std::shared_ptr<arrow::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow::Array>& original,
-    const TKqpComputeContextBase::TColumn& column, std::optional<NYql::TColumnConverter>& cachedPgConverter)
+std::shared_ptr<arrow::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow::Array>& original)
 {
     if (original->type_id() == arrow::Type::TIMESTAMP) {
         auto timestamps = std::static_pointer_cast<arrow::TimestampArray>(original);
@@ -741,15 +712,6 @@ std::shared_ptr<arrow::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow::A
         }
     }
 
-    if (column.PgType) {
-        if (!cachedPgConverter.has_value()) {
-            cachedPgConverter = NYql::BuildPgColumnConverter(original->type(), column.PgType);
-        }
-        if (*cachedPgConverter) {
-            return (*cachedPgConverter)(original);
-        }
-    }
-
     return original;
 }
 
@@ -758,16 +720,13 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
 {
     TBytesStatistics stats;
     auto totalColsCount = TotalColumnsCount + 1;
-    if (CachedPgConverters.empty()) {
-        CachedPgConverters.resize(ResultColumns.size());
-    }
     auto batches = NArrow::SliceToRecordBatches(dataAccessor.GetFiltered());
     for (auto&& filtered : batches) {
         TUnboxedValueVector batchValues;
         batchValues.resize(totalColsCount);
         Y_ENSURE(TotalColumnsCount == static_cast<ui32>(filtered->num_columns()));
         for (int i = 0; i < filtered->num_columns(); ++i) {
-            batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(filtered->column(i), ResultColumns[i], CachedPgConverters[i])), NYql::DefaultDatumValidationMode);
+            batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(filtered->column(i))), NYql::DefaultDatumValidationMode);
         }
         const ui64 batchByteSize = NArrow::GetBatchDataSize(filtered);
         stats.AddStatistics({batchByteSize, batchByteSize});

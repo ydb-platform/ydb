@@ -754,6 +754,9 @@ public:
     TChangefeedDescription& SetAttributes(std::unordered_map<std::string, std::string>&& attrs);
     // Value that will be emitted in the `awsRegion` field of the record in DynamoDBStreamsJson format
     TChangefeedDescription& WithAwsRegion(const std::string& value);
+    // Compress every changefeed message. ZSTD uses level 3 when level is not specified.
+    TChangefeedDescription& WithCompression(EChangefeedCompression compression,
+        std::optional<int32_t> level = std::nullopt);
 
     const std::string& GetName() const;
     EChangefeedMode GetMode() const;
@@ -767,6 +770,8 @@ public:
     bool GetTraceIds() const;
     const std::unordered_map<std::string, std::string>& GetAttributes() const;
     const std::string& GetAwsRegion() const;
+    EChangefeedCompression GetCompression() const;
+    const std::optional<int32_t>& GetCompressionLevel() const;
     const std::optional<TInitialScanProgress>& GetInitialScanProgress() const;
 
     void SerializeTo(Ydb::Table::Changefeed& proto) const;
@@ -798,6 +803,8 @@ private:
     bool TraceIds_ = false;
     std::unordered_map<std::string, std::string> Attributes_;
     std::string AwsRegion_;
+    EChangefeedCompression Compression_ = EChangefeedCompression::None;
+    std::optional<int32_t> CompressionLevel_;
     std::optional<TInitialScanProgress> InitialScanProgress_;
 };
 

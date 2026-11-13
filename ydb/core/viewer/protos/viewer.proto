@@ -528,6 +528,11 @@ message TStorageGroupStateInfo {
     repeated uint32 FailedDomainsPerRealm = 3; // mirror-3-dc: descending counts, excluding zeroes
 }
 
+message TBridgeGroupLink {
+    string GroupId = 1;
+    string PileName = 2; // omitted when the pile name is unavailable
+}
+
 message TStorageGroupInfo {
     string GroupId = 1;
     uint64 GroupGeneration = 2;
@@ -570,6 +575,8 @@ message TStorageGroupInfo {
     optional uint64 BridgeSyncLastErrorTimestamp = 39; // last failure report observed by BSC, in Unix microseconds
     optional uint32 BridgeSyncErrorCount = 40; // reported failures on the current stage
     optional NKikimrBridge.ESynchronizationStatus BridgeSyncStatus = 41;
+    optional bool BridgeMode = 42; // belongs to a bridge group; omitted without BSC data
+    repeated TBridgeGroupLink BridgeGroups = 43; // other physical parts of the same bridge group, excluding this group
 }
 
 message TStorageGroupGroup {

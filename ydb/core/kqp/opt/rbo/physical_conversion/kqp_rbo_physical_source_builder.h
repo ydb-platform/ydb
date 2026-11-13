@@ -67,6 +67,8 @@ private:
     TExprNode::TPtr AddOlapAggregate(TExprNode::TPtr processLambda, TVector<TString>& outputFields) const;
     // Mark the DISTINCT key in the program and list its only output field.
     TExprNode::TPtr AddOlapDistinct(TExprNode::TPtr processLambda, TVector<TString>& outputFields) const;
+    // Make the program output only `outputFields`.
+    TExprNode::TPtr AddOlapExtractMembers(TExprNode::TPtr processLambda, const TVector<TString>& outputFields) const;
     // A program projection that casts `column` to Double into `field`.
     TExprBase BuildOlapDoubleCast(const TString& column, const TTypeAnnotationNode& columnType, const TString& field) const;
     // Rebuild the aggregate's outputs, its keys and partial states, from the program row.

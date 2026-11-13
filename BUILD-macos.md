@@ -1,8 +1,8 @@
 # Building YDB on an Apple Silicon Mac
 
-This experimental recipe uses YDB's Clang 20 toolchain and macOS SDK 26.5. It pins a source revision and pending fixes checked on November 4, 2026. It is a development setup, not a supported production deployment configuration. Recheck the fix list before using a newer source revision.
+This experimental recipe uses YDB's Clang 20 toolchain and macOS SDK 26.5. It pins a source revision and pending fixes checked on November 13, 2026. It is a development setup, not a supported production deployment configuration. Recheck the fix list before using a newer source revision.
 
-All nine fix commits below apply together to this pinned revision without conflicts. The fixes have been used in local macOS builds and selected tests; #58144 was checked with all 24 `vector_distance/ut` tests on the November 3 revision `d512b14ef7870a128d2642442d14080307d3bdbb`. A complete clean build and full test suite on the November 4 revision have not been verified. The SDK override below also resolved the `INFINITY` compilation failure on a second Apple Silicon Mac.
+All eight fix commits below apply together to this pinned revision without conflicts. The fixes have been used in local macOS builds and selected tests, but a complete clean server build and full test suite on this pinned revision have not been verified. The SDK override below also resolved the `INFINITY` compilation failure on a second Apple Silicon Mac.
 
 Run the commands in order in the same terminal. Stop if a command fails.
 
@@ -40,11 +40,11 @@ mkdir -p "$HOME/ydbwork"
 cd "$HOME/ydbwork"
 git clone --origin official https://github.com/ydb-platform/ydb.git ydb
 cd ydb
-git switch -c local/macos-build 256b17261eb000cb0782dafea7783751ef5ed44f
+git switch -c local/macos-build bd35691c3a8ce87d220ded807a359dcf86054f88
 export YA_CACHE_DIR="$HOME/ydbwork/.ya"
 ```
 
-This base is a `main` revision from November 4, 2026. Pinning it avoids applying an already-merged fix again when `main` advances.
+This base is a `main` revision from November 7, 2026. It already includes the int4 SSE/sse2neon type fix merged through [#58044](https://github.com/ydb-platform/ydb/pull/58044) (`dbe0e3e71d2d4319e219dc8a5a1833052d7ac78e`). Do not additionally cherry-pick the equivalent fix from #58144. Pinning the base keeps the prerequisite list reproducible as `main` advances.
 
 ## 3. Apply the fixes
 
@@ -57,7 +57,7 @@ git config --get user.email
 
 If either value is missing or incorrect, set `git config --local user.name` and `git config --local user.email` with your own name and email before continuing.
 
-All eight PRs in this table were open when checked on November 4. Fetch their public refs, then cherry-pick the nine exact commits below rather than moving PR heads. These fixes are not included in the pinned revision.
+All seven PRs in this table were open when checked on November 13, 2026. Fetch their public refs, then cherry-pick the eight exact commits below rather than moving PR heads. These fixes are not included in the pinned revision.
 
 | PR | Purpose |
 | --- | --- |
@@ -68,7 +68,6 @@ All eight PRs in this table were open when checked on November 4. Fetch their pu
 | [#56501](https://github.com/ydb-platform/ydb/pull/56501) | Exclude Darwin from the GNU Bison linker workaround; draft pending upstream integration. |
 | [#56502](https://github.com/ydb-platform/ydb/pull/56502) | Work around the missing Darwin ARM64 cryptography Rust archive using the existing 3.3.2 fallback instead of 41.0.6; draft temporary workaround with different APIs and dependencies. |
 | [#56503](https://github.com/ydb-platform/ydb/pull/56503) | Use loopback hostnames for dynamic nodes in local macOS test clusters. |
-| [#58144](https://github.com/ydb-platform/ydb/pull/58144) | Fix int4 SSE loads with sse2neon on ARM by using an explicit `__m128i` intermediate. Required after the int4 implementation introduced in #57603. |
 
 ```bash
 git fetch official \
@@ -78,8 +77,7 @@ git fetch official \
   pull/55893/head:refs/remotes/official/pr-55893 \
   pull/56501/head:refs/remotes/official/pr-56501 \
   pull/56502/head:refs/remotes/official/pr-56502 \
-  pull/56503/head:refs/remotes/official/pr-56503 \
-  pull/58144/head:refs/remotes/official/pr-58144
+  pull/56503/head:refs/remotes/official/pr-56503
 
 git cherry-pick \
   f9b173456a22932c2da98a96f71d6805a9b52af4 \
@@ -89,8 +87,7 @@ git cherry-pick \
   7596224d366a404202582a89fb46bcaa4dc80375 \
   230b67f0c63a0d1d77e64804adcaad06bbf1710d \
   8f5b996561cfc1823b4df4978d9f16f002c1d59e \
-  0d4e6a046221a5b8797b2f458d26b41f90dac47c \
-  74b34773b60334e549e7a44c9ac3315ab52d6a2f
+  0d4e6a046221a5b8797b2f458d26b41f90dac47c
 ```
 
 If a PR has been rewritten and an exact commit is unavailable, recheck this recipe against that PR. Do not silently substitute its new head. On a conflict, stop and inspect the base and existing changes; `git cherry-pick --abort` cancels the current sequence.
@@ -165,7 +162,8 @@ Keep the same SDK flags when building test targets. See [Build and test YDB usin
 
 ## Troubleshooting
 
-- **`int4_distance_sse_impl.h` reports `no viable overloaded '='`:** verify that step 3 included #58144. The reassigned `values` intermediate must be `__m128i`, not `auto`, so different sse2neon wrapper results can convert to the same vector type.
+- **`ld64.lld: unknown argument: --allow-multiple-definition` while linking Bison:** verify that step 3 included #56501. In `contrib/tools/bison/ya.make`, the linker workaround must be guarded by `IF (OPENSOURCE AND NOT OS_DARWIN)`; the patch also updates the regeneration hook. This flag comes from the Bison build definition, not the SDK selection.
+- **`int4_distance_sse_impl.h` reports `no viable overloaded '='`:** check the source revision. The pinned base already includes #58044; an older checkout needs the equivalent int4 fix. The reassigned `values` intermediate must be `__m128i`, not `auto`, so different sse2neon wrapper results can convert to the same vector type.
 - **`origin/main` or `origin` does not exist:** this recipe uses `official`. Inspect `git remote -v` before adapting commands to an existing checkout.
 - **`INFINITY` is undeclared in Arrow or libc++ `<random>`:** rerun step 4 and inspect the failing compiler command for the explicit `-isysroot` pointing to SDK 26.5. To collect diagnostic output from the build, add `--verbose --log-file="$PWD/macos-build.log"` to the step 5 command and inspect the compiler invocations in that log. SDK 27 with Clang 20 reproduced this error. An Xcode switch or an exported `SDKROOT` is not sufficient evidence that the build uses the desired headers.
 - **`lld22.json`, `clang22-rt`, or sanitizer headers are missing after experimenting with Clang 22:** start from the Clang 20 commands above. Remove the experimental `clang22-*`, `USE_ARCADIA_COMPILER_RUNTIME=no`, and `LLD_VERSION` overrides from the command and any local configuration before retrying.

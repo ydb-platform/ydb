@@ -48,7 +48,7 @@ TString Describe(const TIndexInfo& info) {
     info.GetMetadataManagerConstructor()->SerializeToProto(metadataManager);
     sb << "options actualization=" << info.GetSchemeNeedActualization() << " reader=" << info.GetScanReaderPolicyName().value_or("none")
        << " deduplication=" << (info.GetDeduplicationEnabled() ? ::ToString(*info.GetDeduplicationEnabled()) : "none")
-       << " cache_after_write=" << info.GetCacheBlobsAfterWrite()
+       << " cache_after_write=" << info.GetCacheBlobsAfterWrite() << " tiering_actualization=" << info.GetTieringNeedActualization()
        << " build_indexes=" << (info.GetInsertOptions().BuildIndexesEnabled ? ::ToString(*info.GetInsertOptions().BuildIndexesEnabled) : "none")
        << " build_indexes_min_bytes="
        << (info.GetInsertOptions().BuildIndexesMinBlobBytes ? ::ToString(*info.GetInsertOptions().BuildIndexesMinBlobBytes) : "none")
@@ -376,9 +376,18 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         options.SetScanReaderPolicyName("SIMPLE");
         options.SetDeduplicationEnabled(true);
         options.SetCacheBlobsAfterWrite(true);
+        options.SetTieringNeedActualization(true);
         options.MutableInsertOptions()->SetBuildIndexesEnabled(true);
         options.MutableInsertOptions()->SetBuildIndexesMinBlobBytes(1024);
         CheckDiffsBuildSchemas(history);
+    }
+
+    Y_UNIT_TEST(ChangeTieringActualizationOption) {
+        TSchemaHistory history;
+        history.NextVersion().MutableOptions().SetTieringNeedActualization(true);
+        history.NextVersion().MutableOptions().SetTieringNeedActualization(false);
+        CheckDiffsBuildSchemas(history);
+        CheckMergedDiffBuildsSchema(history);
     }
 
     Y_UNIT_TEST(MergedAddAndDropColumn) {

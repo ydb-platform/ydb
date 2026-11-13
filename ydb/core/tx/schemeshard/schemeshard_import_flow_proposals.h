@@ -5,6 +5,14 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo& importInfo,
+    ui32 itemIdx,
+    TString& error
+);
+
 // `indexesToBuild` receives the names of the indexes whose materialized data from the backup is
 // incompatible with the layout created in this database: they are left out of the create request
 // and must be built from the restored table data.

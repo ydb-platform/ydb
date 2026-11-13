@@ -2349,6 +2349,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         THashMap<TPathId, TShardIdx> kesusShards; // pathId -> shardIdx
         THashMap<TPathId, TShardIdx> replicationControllers;
         THashMap<TPathId, TShardIdx> blobDepotShards;
+        THashMap<TPathId, TShardIdx> cdcAggregators;
         THashMap<TPathId, TVector<TShardIdx>> olapColumnShards;
         {
             TShardsRows shards;
@@ -2406,6 +2407,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         break;
                     case ETabletType::BlobDepot:
                         blobDepotShards.emplace(shard.PathId, idx);
+                        break;
+                    case ETabletType::CdcAggregator:
+                        cdcAggregators.emplace(shard.PathId, idx);
                         break;
                     default:
                         break;
@@ -3023,7 +3027,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 alterData->AlterVersion = rowset.GetValue<Schema::PersQueueGroupAlters::AlterVersion>();
                 alterData->TotalGroupCount = rowset.GetValue<Schema::PersQueueGroupAlters::TotalGroupCount>();
                 alterData->NextPartitionId = rowset.GetValueOrDefault<Schema::PersQueueGroupAlters::NextPartitionId>(alterData->TotalGroupCount);
-                alterData->BootstrapConfig = rowset.GetValue<Schema::PersQueueGroupAlters::BootstrapConfig>();
 
                 const bool ok = alterData->FillKeySchema(alterData->TabletConfig);
                 Y_ABORT_UNLESS(ok);
@@ -3503,7 +3506,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStream::UserSIDs>(false))
                     .WithTraceIds(rowset.GetValueOrDefault<Schema::CdcStream::TraceIds>(false))
                     .WithCompression(rowset.GetValueOrDefault<Schema::CdcStream::Compression>(NKikimrSchemeOp::ECdcStreamCompressionNone))
-                    .WithCompressionLevel(rowset.GetValueOrDefault<Schema::CdcStream::CompressionLevel>(0));
+                    .WithCompressionLevel(rowset.GetValueOrDefault<Schema::CdcStream::CompressionLevel>(0))
+                    .WithHeartbeatMode(rowset.GetValueOrDefault<Schema::CdcStream::HeartbeatMode>(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect));
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -3514,6 +3518,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 Y_ABORT_UNLESS(!Self->CdcStreams.contains(pathId));
                 const auto& stream = Self->CdcStreams.Set(pathId, new TCdcStreamInfo(alterVersion, std::move(settings)));
+
+                if (cdcAggregators.contains(pathId)) {
+                    stream->AggregatorShardIdx = cdcAggregators.at(pathId);
+                }
 
                 if (stream->State == NKikimrSchemeOp::ECdcStreamStateScan) {
                     Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
@@ -3552,7 +3560,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     .WithUserSIDs(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::UserSIDs>(false))
                     .WithTraceIds(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::TraceIds>(false))
                     .WithCompression(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::Compression>(NKikimrSchemeOp::ECdcStreamCompressionNone))
-                    .WithCompressionLevel(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::CompressionLevel>(0));
+                    .WithCompressionLevel(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::CompressionLevel>(0))
+                    .WithHeartbeatMode(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::HeartbeatMode>(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect));
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 auto path = Self->PathsById.at(pathId);
@@ -3570,6 +3579,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_ABORT_UNLESS(stream->AlterData == nullptr);
                 Y_ABORT_UNLESS(stream->AlterVersion < alterVersion);
                 stream->AlterData = new TCdcStreamInfo(alterVersion, std::move(settings));
+
+                if (cdcAggregators.contains(pathId)) {
+                    stream->AlterData->AggregatorShardIdx = cdcAggregators.at(pathId);
+                }
 
                 Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
                     << ", cdc stream pathId: " << pathId
@@ -4923,6 +4936,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::TestShard:
                 Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
                 break;
+            case ETabletType::CdcAggregator:
+                Self->TabletCounters->Simple()[COUNTER_CDC_AGGREGATOR_COUNT].Add(1);
+                break;
             default:
                 YDB_LOG_WARN_CTX(ctx, "Don't know how to interpret tablet type",
                     {"type_id", (ui32)si.second.TabletType},
@@ -5222,6 +5238,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         importInfo->UserSID = rowset.GetValue<Schema::Imports::UserSID>();
                     }
                     importInfo->SanitizedToken = rowset.GetValueOrDefault<Schema::Imports::SanitizedToken>();
+                    importInfo->CanRestoreRateLimiterMetering = rowset.GetValueOrDefault<Schema::Imports::CanRestoreRateLimiterMetering>(false);
 
                     ui32 items = rowset.GetValue<Schema::Imports::Items>();
                     importInfo->Items.resize(items);
@@ -5326,6 +5343,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
+                    if (rowset.HaveValue<Schema::ImportItems::Kesus>()) {
+                        NKikimrSchemeOp::TImportKesus kesus;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(kesus, rowset.GetValue<Schema::ImportItems::Kesus>()));
+                        item.Kesus = std::move(kesus);
+                    }
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ImportItems::WaitTxId>(InvalidTxId);
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
                     item.NextChangefeedIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextChangefeedIdx>(0);

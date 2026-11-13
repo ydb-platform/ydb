@@ -42,6 +42,7 @@ TString EBalancerTypeName(EBalancerType value) {
         case EBalancerType::SpreadNeighbours: return "Spread";
         case EBalancerType::Manual: return "Manual";
         case EBalancerType::Storage: return "Storage";
+        case EBalancerType::ScatterNamed: return "Named";
     }
 }
 
@@ -150,6 +151,7 @@ TMetrics& TMetrics::operator+=(const TMetrics& other) {
     WriteThroughput += other.WriteThroughput;
     ReadIops += other.ReadIops;
     WriteIops += other.WriteIops;
+    NamedResources.Add(other.NamedResources);
     return *this;
 }
 
@@ -185,6 +187,7 @@ void TMetrics::ToProto(NKikimrTabletBase::TMetrics* proto) const {
     proto->MutableGroupWriteThroughput()->Assign(GroupWriteThroughput.begin(), GroupWriteThroughput.end());
     proto->MutableGroupReadIops()->Assign(GroupReadIops.begin(), GroupReadIops.end());
     proto->MutableGroupWriteIops()->Assign(GroupWriteIops.begin(), GroupWriteIops.end());
+    NamedResources.ToProto(proto->MutableNamedResources());
 }
 
 template <typename K, typename V>

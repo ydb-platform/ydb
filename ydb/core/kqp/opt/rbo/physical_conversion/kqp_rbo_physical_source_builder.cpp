@@ -6,6 +6,9 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+
+#include <util/generic/algorithm.h>
 
 using namespace NYql::NNodes;
 using namespace NKikimr;
@@ -106,6 +109,21 @@ TExprNode::TPtr TPhysicalSourceBuilder::AddOlapDistinct(TExprNode::TPtr processL
     return Ctx.ChangeChild(*processLambda, TCoLambda::idx_Body, std::move(olapDistinct));
 }
 
+TExprNode::TPtr TPhysicalSourceBuilder::AddOlapExtractMembers(TExprNode::TPtr processLambda,
+                                                              const TVector<TString>& outputFields) const {
+    TVector<TExprNode::TPtr> members;
+    for (const auto& field : outputFields) {
+        members.push_back(Ctx.NewAtom(Pos, field));
+    }
+    // clang-format off
+    auto extractMembers = Build<TKqpOlapExtractMembers>(Ctx, Pos)
+        .Input(TCoLambda(processLambda).Body())
+        .Members().Add(members).Build()
+    .Done().Ptr();
+    // clang-format on
+    return Ctx.ChangeChild(*processLambda, TCoLambda::idx_Body, std::move(extractMembers));
+}
+
 TExprBase TPhysicalSourceBuilder::BuildOlapDoubleCast(const TString& column, const TTypeAnnotationNode& columnType, const TString& field) const {
     const TVector<const TItemExprType*> rowItems{Ctx.MakeType<TItemExprType>(column, &columnType)};
     const auto* rowType = Ctx.MakeType<TStructExprType>(rowItems);
@@ -194,6 +212,15 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildOlapAverageState(const TOlapAggrega
             .Seal()
         .Seal().Build();
     // clang-format on
+}
+
+TExprNode::TPtr TPhysicalSourceBuilder::AddOlapComputeSharding(TExprNode::TPtr settings) const {
+    TExprNode::TListType columns;
+    for (const auto& column : OlapComputeSharding->Columns) {
+        columns.push_back(Ctx.NewAtom(Pos, column));
+    }
+    const TString name(TKqpReadTableSettings::GroupByFieldNames);
+    return NYql::AddSetting(*settings, Pos, name, Ctx.NewList(Pos, std::move(columns)), Ctx);
 }
 
 NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
@@ -301,7 +328,32 @@ NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
             } else if (OlapDistinct) {
                 processLambda = AddOlapDistinct(processLambda, outputFields);
             } else {
-                outputFields = storageColumns;
+                // As in the old optimizer, column shards return only the columns the plan uses, not those only
+                // the program or the ranges need. With none of them, the program still returns one column, so
+                // that compute counts the rows.
+                const auto liveNames =
+                    NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(Read), Names);
+                EraseIf(renames, [&](const auto& rename) { return !liveNames.contains(rename.second); });
+                for (const auto& [column, name] : renames) {
+                    outputFields.push_back(column);
+                }
+                std::sort(outputFields.begin(), outputFields.end());
+                outputFields.erase(std::unique(outputFields.begin(), outputFields.end()), outputFields.end());
+                if (outputFields.empty()) {
+                    outputFields.push_back(storageColumns.front());
+                }
+                if (outputFields.size() < storageColumns.size()) {
+                    const TCoLambda program(processLambda);
+                    if (program.Body().Raw() != program.Args().Arg(0).Raw()) {
+                        processLambda = AddOlapExtractMembers(processLambda, outputFields);
+                    } else {
+                        // The program reads no other column, so column shards do not read them either.
+                        columns.clear();
+                        for (const auto& field : outputFields) {
+                            columns.push_back(Ctx.NewAtom(Pos, field));
+                        }
+                    }
+                }
             }
 
             TKqpReadTableSettings settings;
@@ -327,12 +379,17 @@ NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
                 settings.SequentialInFlight = 1;
             }
 
+            auto settingsNode = settings.BuildNode(Ctx, Pos).Ptr();
+            if (OlapComputeSharding) {
+                settingsNode = AddOlapComputeSharding(std::move(settingsNode));
+            }
+
             // clang-format off
             auto olapRead = Build<TKqpBlockReadOlapTableRanges>(Ctx, Pos)
                 .Table(Read.TableCallable)
                 .Ranges(ranges)
                 .Columns().Add(columns).Build()
-                .Settings(settings.BuildNode(Ctx, Pos))
+                .Settings(settingsNode)
                 .ExplainPrompt<TCoNameValueTupleList>().Build()
                 .Process(processLambda)
             .Done().Ptr();

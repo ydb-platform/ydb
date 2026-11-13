@@ -6606,6 +6606,11 @@
                 "ColumnId": 14,
                 "ColumnName": "SanitizedToken",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "CanRestoreRateLimiterMetering",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6625,7 +6630,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6771,6 +6777,11 @@
             },
             {
                 "ColumnId": 24,
+                "ColumnName": "Kesus",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 25,
                 "ColumnName": "IndexIVs",
                 "ColumnType": "String"
             }
@@ -6802,7 +6813,8 @@
                     21,
                     22,
                     23,
-                    24
+                    24,
+                    25
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7429,6 +7441,11 @@
                 "ColumnId": 14,
                 "ColumnName": "CompressionLevel",
                 "ColumnType": "Int32"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "HeartbeatMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -7448,7 +7465,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7546,6 +7564,11 @@
                 "ColumnId": 14,
                 "ColumnName": "CompressionLevel",
                 "ColumnType": "Int32"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "HeartbeatMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -7565,7 +7588,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,

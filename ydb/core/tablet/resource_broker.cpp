@@ -76,7 +76,10 @@ void TTask::OutputState(IOutputStream &os, const TString &prefix) const
 {
     os << prefix << "Task " << Name << Endl
        << prefix << "  ID: " << TaskId << Endl
-       << prefix << "  Client: " << Client.ToString() << Endl
+       << prefix << "  Client: " << Client.ToString() << Endl;
+    if (TabletId)
+        os << prefix << "  Tablet: " << TabletId << "." << FollowerId << Endl;
+    os
        << prefix << "  Type: " << ToString(Type) << Endl
        << prefix << "  Required resources: {" << JoinSeq(", ", RequiredResources) << "}" << Endl
        << prefix << "  Priority: " << Priority << Endl
@@ -203,6 +206,7 @@ void TTaskQueue::InsertTask(TTaskPtr task, TInstant now)
         task->Counters->EnqueuedTasks->Inc();
     }
 
+    UpdateTabletUsage(task, true);
     task->Queue = this;
 }
 
@@ -240,7 +244,44 @@ void TTaskQueue::EraseTask(TTaskPtr task, bool finished, TInstant now)
         TotalCounters->EnqueuedTasks->Dec();
         task->Counters->EnqueuedTasks->Dec();
     }
+
+    UpdateTabletUsage(task, false);
     task->Queue = nullptr;
+}
+
+void TTaskQueue::UpdateTabletUsage(const TTaskPtr &task, bool insert)
+{
+    if (!task->TabletId)
+        return;
+
+    const ui64 value = task->RequiredResources[NKikimrResourceBroker::CPU];
+    const auto key = std::make_pair(task->TabletId, task->FollowerId);
+    auto &usage = TabletUsage[key];
+    ui64 &counter = task->InFly ? usage.Running : usage.Waiting;
+    if (insert) {
+        counter += value;
+    } else {
+        Y_DEBUG_ABORT_UNLESS(counter >= value);
+        counter -= Min(counter, value);
+    }
+    if (usage.Waiting == 0 && usage.Running == 0)
+        TabletUsage.erase(key);
+}
+
+TEvResourceBroker::TQueueUsage TTaskQueue::GetUsage() const
+{
+    TEvResourceBroker::TQueueUsage result;
+    result.Name = Name;
+    result.Limit = QueueLimit.Limit[NKikimrResourceBroker::CPU];
+    result.Tablets.reserve(TabletUsage.size());
+    for (const auto &[key, usage] : TabletUsage) {
+        auto &tablet = result.Tablets.emplace_back();
+        tablet.TabletId = key.first;
+        tablet.FollowerId = key.second;
+        tablet.Waiting = usage.Waiting;
+        tablet.Running = usage.Running;
+    }
+    return result;
 }
 
 TTaskPtr TTaskQueue::FrontTask()
@@ -333,8 +374,16 @@ void TTaskQueue::OutputState(IOutputStream &os, const TString &prefix) const
        << prefix << "  QueueConsumption: {" << JoinSeq(", ", QueueLimit.Used) << "}" << Endl
        << prefix << "  Real resource usage: " << RealResourceUsage << " (updated "
        << UsageTimestamp.ToStringLocalUpToSeconds() << ")" << Endl
-       << prefix << "  Planned resource usage: " << PlannedResourceUsage << Endl
-       << prefix << "  Enqueued tasks:" << Endl;
+       << prefix << "  Planned resource usage: " << PlannedResourceUsage << Endl;
+
+    if (!TabletUsage.empty()) {
+        os << prefix << "  Tablet usage (waiting/running):" << Endl;
+        for (const auto &[key, usage] : TabletUsage)
+            os << prefix << "    " << key.first << "." << key.second << ": "
+               << usage.Waiting << "/" << usage.Running << Endl;
+    }
+
+    os << prefix << "  Enqueued tasks:" << Endl;
 
     for (auto it = Tasks.begin(); it != Tasks.end(); ++it)
         (*it)->OutputState(os, prefix + "    ");
@@ -786,6 +835,15 @@ void TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSyst
         AssignTask(entry.second, as);
 }
 
+TVector<TEvResourceBroker::TQueueUsage> TScheduler::GetQueueUsage() const
+{
+    TVector<TEvResourceBroker::TQueueUsage> result;
+    result.reserve(Queues.size());
+    for (const auto &[_, queue] : Queues)
+        result.emplace_back(queue->GetUsage());
+    return result;
+}
+
 void TScheduler::UpdateTime(TInstant now)
 {
     Now = now;
@@ -834,6 +892,13 @@ NKikimrResourceBroker::TResourceBrokerConfig TResourceBroker::GetConfig() const
 {
     with_lock(Lock) {
         return Config;
+    }
+}
+
+TVector<TEvResourceBroker::TQueueUsage> TResourceBroker::GetQueueUsage() const
+{
+    with_lock(Lock) {
+        return Scheduler.GetQueueUsage();
     }
 }
 
@@ -1297,6 +1362,14 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvResourceBrokerRequest::T
     resp->ResourceBroker = ResourceBroker;
 
     ctx.Send(ev->Sender, resp.Release());
+}
+
+void TResourceBrokerActor::Handle(TEvResourceBroker::TEvQueueUsageRequest::TPtr &ev, const TActorContext &ctx)
+{
+    auto resp = MakeHolder<TEvResourceBroker::TEvQueueUsageResponse>();
+    resp->Queues = ResourceBroker->GetQueueUsage();
+
+    ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
 
 void TResourceBrokerActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx)

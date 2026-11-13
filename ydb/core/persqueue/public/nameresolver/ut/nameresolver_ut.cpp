@@ -1,11 +1,15 @@
 #include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/testlib/actor_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <expected>
+#include <initializer_list>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NKikimr::NPQ::NNameResolver;
@@ -210,6 +214,58 @@ Y_UNIT_TEST_F(ModernPathNormalizedWithDatabase, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "/Root/Db/account/topic", "dc1", "")),
         "/Root/Db/account/topic");
+}
+
+Y_UNIT_TEST_F(FccResourcePathsUseDatabaseAndLeadingSlash, TNameResolverFixture) {
+    ActorSystemStub.AppData.FeatureFlags.SetEnableRelativePaths(true);
+    auto checkPaths = [&](const TString& database, TStringBuf expectedDatabase,
+                          std::initializer_list<std::pair<TString, TString>> cases) {
+        for (const auto& [name, expected] : cases) {
+            const auto resolved = OkFull(ResolveName(database, name, {}, {}, true));
+            UNIT_ASSERT_VALUES_EQUAL_C(resolved.Path, expected, database << ": " << name);
+            UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, expectedDatabase);
+        }
+    };
+    for (const TString database : {"/Root/Db", "Root/Db", "/Root/team/Db", "/Root/Root/Db"}) {
+        const TString canonicalDatabase = CanonizePath(database);
+        checkPaths(database, canonicalDatabase, {
+            {"topic", canonicalDatabase + "/topic"},
+            {"Db/topic", canonicalDatabase + "/Db/topic"},
+            {"Root2/topic", canonicalDatabase + "/Root2/topic"},
+            {"Root/Db/topic", canonicalDatabase + "/Root/Db/topic"},
+            {"Root/Root/Db/topic", canonicalDatabase + "/Root/Root/Db/topic"},
+            {"Root/other/topic", canonicalDatabase + "/Root/other/topic"},
+            {"/Root/other/topic", "/Root/other/topic"},
+            {"/Root2/topic", "/Root2/topic"},
+            {"/rt3.dc1--account--topic", "/rt3.dc1--account--topic"},
+            {"/Root/LbCommunal/account/topic", "/Root/LbCommunal/account/topic"},
+        });
+    }
+    checkPaths("/Other/Db", "/Other/Db", {
+        {"Root/other/topic", "/Other/Db/Root/other/topic"},
+        {"Other/topic", "/Other/Db/Other/topic"},
+        {"Root2/topic", "/Other/Db/Root2/topic"},
+    });
+    checkPaths("", "", {
+        {"topic", "/topic"},
+        {"Root/Db/topic", "/Root/Db/topic"},
+        {"/Root/Db/topic", "/Root/Db/topic"},
+        {"/Root/LbCommunal/account/topic", "/Root/LbCommunal/account/topic"},
+        {"", ""},
+    });
+}
+
+Y_UNIT_TEST_F(RelativePathsRequireFlagAndCallerOptIn, TNameResolverFixture) {
+    for (bool enabled : {false, true}) {
+        ActorSystemStub.AppData.FeatureFlags.SetEnableRelativePaths(enabled);
+        for (const TStringBuf name : {"topic", "Root/Db/topic", "/Root/Db/topic"}) {
+            UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, name)), "/Root/Db/topic");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/other/topic")), "/Root/Db/other/topic");
+    }
+    ActorSystemStub.AppData.FeatureFlags.SetEnableRelativePaths(false);
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "Root/Db/topic", {}, {}, true)), "/Root/Db/topic");
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/other/topic", {}, {}, true)), "/Root/Db/other/topic");
 }
 
 Y_UNIT_TEST_F(FccKeepsLiteralRt3, TNameResolverFixture) {

@@ -506,6 +506,10 @@ struct Schema : NIceDb::Schema {
         struct AlterVersion :    Column<4, NScheme::NTypeIds::Uint64> {};
         struct NextPartitionId : Column<6, NScheme::NTypeIds::Uint32> {};
         struct TotalGroupCount : Column<5, NScheme::NTypeIds::Uint32> {};
+        // Deprecated: the write-only BootstrapConfig copy is no longer written
+        // or read (the wire bootstrap is rebuilt from the table's partitions);
+        // the column stays declared so the stored scheme layout is unchanged,
+        // and the column id must never be reused.
         struct BootstrapConfig : Column<7, NScheme::NTypeIds::String> { using Type = TString; };
 
         using TKey = TableKey<PathId>;
@@ -1755,6 +1759,7 @@ struct Schema : NIceDb::Schema {
         struct EndTime : Column<12, NScheme::NTypeIds::Uint64> {};
         struct PeerName : Column<13, NScheme::NTypeIds::Utf8> {};
         struct SanitizedToken : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct CanRestoreRateLimiterMetering : Column<15, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1771,7 +1776,8 @@ struct Schema : NIceDb::Schema {
             StartTime,
             EndTime,
             PeerName,
-            SanitizedToken
+            SanitizedToken,
+            CanRestoreRateLimiterMetering
         >;
     };
 
@@ -1792,6 +1798,7 @@ struct Schema : NIceDb::Schema {
         struct Topic : Column<20, NScheme::NTypeIds::String> {};
         struct SysView : Column<22, NScheme::NTypeIds::String> {};
         struct ReplicationConfig : Column<23, NScheme::NTypeIds::String> {};
+        struct Kesus : Column<24, NScheme::NTypeIds::String> {};
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1802,7 +1809,7 @@ struct Schema : NIceDb::Schema {
         struct EncryptionIV : Column<18, NScheme::NTypeIds::String> {};
         struct SrcPath : Column<19, NScheme::NTypeIds::Utf8> {};
         struct ParentIndex : Column<21, NScheme::NTypeIds::Uint32> {};
-        struct IndexIVs : Column<24, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportIndexIVs; };
+        struct IndexIVs : Column<25, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportIndexIVs; };
 
         using TKey = TableKey<ImportId, Index>;
         using TColumns = TableColumns<
@@ -1829,6 +1836,7 @@ struct Schema : NIceDb::Schema {
             ParentIndex,
             SysView,
             ReplicationConfig,
+            Kesus,
             IndexIVs
         >;
     };
@@ -1938,6 +1946,7 @@ struct Schema : NIceDb::Schema {
         struct TraceIds: Column<12, NScheme::NTypeIds::Bool> {};
         struct Compression: Column<13, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamCompression; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamCompressionNone; };
         struct CompressionLevel: Column<14, NScheme::NTypeIds::Int32> {};
+        struct HeartbeatMode: Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamHeartbeatMode; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect; };
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1954,7 +1963,8 @@ struct Schema : NIceDb::Schema {
             UserSIDs,
             TraceIds,
             Compression,
-            CompressionLevel
+            CompressionLevel,
+            HeartbeatMode
         >;
     };
 
@@ -1973,6 +1983,7 @@ struct Schema : NIceDb::Schema {
         struct TraceIds: Column<12, NScheme::NTypeIds::Bool> {};
         struct Compression: Column<13, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamCompression; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamCompressionNone; };
         struct CompressionLevel: Column<14, NScheme::NTypeIds::Int32> {};
+        struct HeartbeatMode: Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamHeartbeatMode; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect; };
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1989,7 +2000,8 @@ struct Schema : NIceDb::Schema {
             UserSIDs,
             TraceIds,
             Compression,
-            CompressionLevel
+            CompressionLevel,
+            HeartbeatMode
         >;
     };
 

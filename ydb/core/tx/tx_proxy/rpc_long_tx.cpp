@@ -1,7 +1,7 @@
 #include "long_tx_write_flow_control.h"
 
 #include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/data_events/shard_writer.h>

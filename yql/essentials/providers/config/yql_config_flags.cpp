@@ -12,11 +12,6 @@ TConfigFlags::TConfigFlags(TTypeAnnotationContext& types, TAllowSettingPolicy po
     , Policy_(std::move(policy))
 {
     InitFlags();
-    for (const auto name : {"ValidateUdf", "LLVM_OFF", "LLVM", "UdfSupportsYield", "GeobaseDownloadUrl"}) {
-        auto flagIt = Flags_.find(name);
-        YQL_ENSURE(flagIt != Flags_.end(), "Unknown flag " << name);
-        flagIt->second.AllowInProjectSettings = true;
-    }
 }
 
 TConfigFlags::TFlagHandler TConfigFlags::ToggleHandler(bool* field, TStringBuf enableName) {
@@ -148,8 +143,8 @@ bool TConfigFlags::ApplyFlag(const TPosition& pos, const TStringBuf name, const 
     return it->second.Handler(name, pos, args, ctx);
 }
 
-void TConfigFlags::AddFlag(TStringBuf name, TStringBuf disableName, bool system, TFlagHandler handler) {
-    TFlag flag{.Name = name, .System = system, .Handler = std::move(handler)};
+void TConfigFlags::AddFlag(TStringBuf name, TStringBuf disableName, bool system, bool allowInProjectSettings, TFlagHandler handler) {
+    TFlag flag{.Name = name, .System = system, .AllowInProjectSettings = allowInProjectSettings, .Handler = std::move(handler)};
     Flags_[name] = flag;
     if (!disableName.empty()) {
         flag.System = false; // Always allow disable pragma
@@ -188,15 +183,15 @@ bool TConfigFlags::ApplyProjectSettings(TExprContext& ctx) {
 }
 
 void TConfigFlags::InitFlags() {
-    AddFlag("UnsecureCredential", {}, /*system=*/false, DelegateHandler(&TConfigFlags::AddCredential));
-    AddFlag("ImportUdfs", {}, /*system=*/false, DelegateHandler(&TConfigFlags::ImportUdfs));
-    AddFlag("AddFileByUrl", {}, /*system=*/false, DelegateHandler(&TConfigFlags::AddFileByUrl));
-    AddFlag("SetFileOption", {}, /*system=*/false, DelegateHandler(&TConfigFlags::SetFileOption));
-    AddFlag("AddFolderByUrl", {}, /*system=*/false, DelegateHandler(&TConfigFlags::AddFolderByUrl));
-    AddFlag("SetPackageVersion", {}, /*system=*/false, DelegateHandler(&TConfigFlags::SetPackageVersion));
-    AddFlag(TStringBuf("Warning"), {}, /*system=*/false, DelegateHandler(&TConfigFlags::SetWarningRule));
+    AddFlag("UnsecureCredential", {}, /*system=*/false, /*allowInProjectSettings=*/false, DelegateHandler(&TConfigFlags::AddCredential));
+    AddFlag("ImportUdfs", {}, /*system=*/false, /*allowInProjectSettings=*/false, DelegateHandler(&TConfigFlags::ImportUdfs));
+    AddFlag("AddFileByUrl", {}, /*system=*/false, /*allowInProjectSettings=*/false, DelegateHandler(&TConfigFlags::AddFileByUrl));
+    AddFlag("SetFileOption", {}, /*system=*/false, /*allowInProjectSettings=*/false, DelegateHandler(&TConfigFlags::SetFileOption));
+    AddFlag("AddFolderByUrl", {}, /*system=*/false, /*allowInProjectSettings=*/false, DelegateHandler(&TConfigFlags::AddFolderByUrl));
+    AddFlag("SetPackageVersion", {}, /*system=*/false, /*allowInProjectSettings=*/false, DelegateHandler(&TConfigFlags::SetPackageVersion));
+    AddFlag(TStringBuf("Warning"), {}, /*system=*/false, /*allowInProjectSettings=*/false, DelegateHandler(&TConfigFlags::SetWarningRule));
 
-    AddFlag("ValidateUdf", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("ValidateUdf", {}, /*system=*/false, /*allowInProjectSettings=*/true, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
             return false;
@@ -210,7 +205,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("UdfBridge", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("UdfBridge", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (!args.empty()) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
             return false;
@@ -227,7 +222,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("LLVM_OFF", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("LLVM_OFF", {}, /*system=*/false, /*allowInProjectSettings=*/true, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (!args.empty()) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
             return false;
@@ -236,7 +231,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("LLVM", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("LLVM", {}, /*system=*/false, /*allowInProjectSettings=*/true, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() > 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
             return false;
@@ -245,7 +240,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("RuntimeLogLevel", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("RuntimeLogLevel", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
             return false;
@@ -259,12 +254,12 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("NodesAllocationLimit", {}, /*system=*/false, IntegerCtxFlagHandler(&TExprContext::NodesAllocationLimit));
-    AddFlag("StringsAllocationLimit", {}, /*system=*/false, IntegerCtxFlagHandler(&TExprContext::StringsAllocationLimit));
-    AddFlag("RepeatTransformLimit", {}, /*system=*/false, IntegerCtxFlagHandler(&TExprContext::RepeatTransformLimit));
-    AddFlag("TypeAnnNodeRepeatLimit", {}, /*system=*/false, IntegerCtxFlagHandler(&TExprContext::TypeAnnNodeRepeatLimit));
+    AddFlag("NodesAllocationLimit", {}, /*system=*/false, /*allowInProjectSettings=*/false, IntegerCtxFlagHandler(&TExprContext::NodesAllocationLimit));
+    AddFlag("StringsAllocationLimit", {}, /*system=*/false, /*allowInProjectSettings=*/false, IntegerCtxFlagHandler(&TExprContext::StringsAllocationLimit));
+    AddFlag("RepeatTransformLimit", {}, /*system=*/false, /*allowInProjectSettings=*/false, IntegerCtxFlagHandler(&TExprContext::RepeatTransformLimit));
+    AddFlag("TypeAnnNodeRepeatLimit", {}, /*system=*/false, /*allowInProjectSettings=*/false, IntegerCtxFlagHandler(&TExprContext::TypeAnnNodeRepeatLimit));
 
-    AddFlag("TransformCycleDetector", {}, /*system=*/false, [](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("TransformCycleDetector", {}, /*system=*/false, /*allowInProjectSettings=*/false, [](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
             return false;
@@ -280,7 +275,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("PureDataSource", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("PureDataSource", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
             return false;
@@ -305,7 +300,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("FullResultDataSink", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("FullResultDataSink", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
             return false;
@@ -323,23 +318,23 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("Diagnostics", {}, /*system=*/false, BoolHandler(&Types_.Diagnostics, /*value=*/true));
+    AddFlag("Diagnostics", {}, /*system=*/false, /*allowInProjectSettings=*/false, BoolHandler(&Types_.Diagnostics, /*value=*/true));
 
-    AddFlag("UdfSupportsYield", {}, /*system=*/false, OptionalBoolHandler(&Types_.UdfSupportsYield));
+    AddFlag("UdfSupportsYield", {}, /*system=*/false, /*allowInProjectSettings=*/true, OptionalBoolHandler(&Types_.UdfSupportsYield));
 
-    AddFlag("EvaluateForLimit", {}, /*system=*/false, Ui32Handler(&Types_.EvaluateForLimit));
+    AddFlag("EvaluateForLimit", {}, /*system=*/false, /*allowInProjectSettings=*/false, Ui32Handler(&Types_.EvaluateForLimit));
 
-    AddFlag("EvaluateParallelForLimit", {}, /*system=*/false, Ui32Handler(&Types_.EvaluateParallelForLimit));
+    AddFlag("EvaluateParallelForLimit", {}, /*system=*/false, /*allowInProjectSettings=*/false, Ui32Handler(&Types_.EvaluateParallelForLimit));
 
-    AddFlag("PullUpFlatMapOverJoin", "DisablePullUpFlatMapOverJoin", /*system=*/false,
+    AddFlag("PullUpFlatMapOverJoin", "DisablePullUpFlatMapOverJoin", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.PullUpFlatMapOverJoin, "PullUpFlatMapOverJoin"));
 
-    AddFlag("FilterPushdownOverJoinOptionalSide", "DisableFilterPushdownOverJoinOptionalSide", /*system=*/false,
+    AddFlag("FilterPushdownOverJoinOptionalSide", "DisableFilterPushdownOverJoinOptionalSide", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.FilterPushdownOverJoinOptionalSide, "FilterPushdownOverJoinOptionalSide"));
 
-    AddFlag("RotateJoinTree", {}, /*system=*/false, OptionalBoolHandler(&Types_.RotateJoinTree));
+    AddFlag("RotateJoinTree", {}, /*system=*/false, /*allowInProjectSettings=*/false, OptionalBoolHandler(&Types_.RotateJoinTree));
 
-    AddFlag("SQL", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("SQL", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() > 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
             return false;
@@ -348,7 +343,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("DisableConstraintCheck", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("DisableConstraintCheck", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.empty()) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at least 1 argument, but got " << args.size()));
             return false;
@@ -359,7 +354,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("EnableConstraintCheck", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("EnableConstraintCheck", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.empty()) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at least 1 argument, but got " << args.size()));
             return false;
@@ -370,7 +365,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("DisableConstraints", {}, /*system=*/false, [](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("DisableConstraints", {}, /*system=*/false, /*allowInProjectSettings=*/false, [](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.empty()) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at least 1 argument, but got " << args.size()));
             return false;
@@ -381,7 +376,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("EnableConstraints", {}, /*system=*/false, [](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("EnableConstraints", {}, /*system=*/false, /*allowInProjectSettings=*/false, [](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.empty()) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at least 1 argument, but got " << args.size()));
             return false;
@@ -392,14 +387,14 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("UseTableMetaFromGraph", {}, /*system=*/true, OptionalBoolHandler(&Types_.UseTableMetaFromGraph));
+    AddFlag("UseTableMetaFromGraph", {}, /*system=*/true, /*allowInProjectSettings=*/false, OptionalBoolHandler(&Types_.UseTableMetaFromGraph));
 
-    AddFlag("DiscoveryMode", {}, /*system=*/false, BoolHandler(&Types_.DiscoveryMode, /*value=*/true));
+    AddFlag("DiscoveryMode", {}, /*system=*/false, /*allowInProjectSettings=*/false, BoolHandler(&Types_.DiscoveryMode, /*value=*/true));
 
-    AddFlag("WindowNewPipeline", "DisableWindowNewPipeline", /*system=*/false,
+    AddFlag("WindowNewPipeline", "DisableWindowNewPipeline", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.WindowNewPipeline, "WindowNewPipeline"));
 
-    AddFlag("EnableSystemColumns", {}, /*system=*/false, [](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("EnableSystemColumns", {}, /*system=*/false, /*allowInProjectSettings=*/false, [](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (!args.empty()) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
             return false;
@@ -407,7 +402,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("UdfIgnoreCase", "UdfStrictCase", /*system=*/false, [this](TStringBuf name, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("UdfIgnoreCase", "UdfStrictCase", /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf name, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (!args.empty()) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
             return false;
@@ -423,10 +418,10 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("NamedArgsIgnoreCase", "NamedArgsStrictCase", /*system=*/false,
+    AddFlag("NamedArgsIgnoreCase", "NamedArgsStrictCase", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.CaseInsensitiveNamedArgs, "NamedArgsIgnoreCase"));
 
-    AddFlag("DqEngine", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("DqEngine", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
             return false;
@@ -458,7 +453,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("IssueCountLimit", {}, /*system=*/false, [](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("IssueCountLimit", {}, /*system=*/false, /*allowInProjectSettings=*/false, [](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
             return false;
@@ -472,10 +467,10 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("StrictTableProps", "DisableStrictTableProps", /*system=*/false,
+    AddFlag("StrictTableProps", "DisableStrictTableProps", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.StrictTableProps, "StrictTableProps"));
 
-    AddFlag("GeobaseDownloadUrl", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("GeobaseDownloadUrl", {}, /*system=*/false, /*allowInProjectSettings=*/true, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
             return false;
@@ -485,10 +480,10 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("JsonQueryReturnsJsonDocument", "DisableJsonQueryReturnsJsonDocument", /*system=*/false,
+    AddFlag("JsonQueryReturnsJsonDocument", "DisableJsonQueryReturnsJsonDocument", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.JsonQueryReturnsJsonDocument, "JsonQueryReturnsJsonDocument"));
 
-    AddFlag("OrderedColumns", "DisableOrderedColumns", /*system=*/false, [this](TStringBuf name, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("OrderedColumns", "DisableOrderedColumns", /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf name, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (!args.empty()) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
             return false;
@@ -498,7 +493,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("PositionalUnionAll", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("PositionalUnionAll", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (!args.empty()) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
             return false;
@@ -509,24 +504,24 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("ShowLinksInPlan", "DisableShowLinksInPlan", /*system=*/false,
+    AddFlag("ShowLinksInPlan", "DisableShowLinksInPlan", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.ShowLinksInPlan, "ShowLinksInPlan"));
 
-    AddFlag("DeriveColumnOrder", "DisableDeriveColumnOrder", /*system=*/false,
+    AddFlag("DeriveColumnOrder", "DisableDeriveColumnOrder", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.DeriveColumnOrder, "DeriveColumnOrder"));
 
-    AddFlag("FolderSubDirsLimit", {}, /*system=*/false, Ui32Handler(&Types_.FolderSubDirsLimit));
+    AddFlag("FolderSubDirsLimit", {}, /*system=*/false, /*allowInProjectSettings=*/false, Ui32Handler(&Types_.FolderSubDirsLimit));
 
-    AddFlag("YsonCastToString", "DisableYsonCastToString", /*system=*/false,
+    AddFlag("YsonCastToString", "DisableYsonCastToString", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.YsonCastToString, "YsonCastToString"));
 
-    AddFlag("UseBlocks", "DisableUseBlocks", /*system=*/false,
+    AddFlag("UseBlocks", "DisableUseBlocks", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.UseBlocks, "UseBlocks"));
 
-    AddFlag("DebugPositions", "DisableDebugPositions", /*system=*/false,
+    AddFlag("DebugPositions", "DisableDebugPositions", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.DebugPositions, "DebugPositions"));
 
-    AddFlag("UseCanonicalLibrarySuffix", "DisableUseCanonicalLibrarySuffix", /*system=*/false, [this](TStringBuf name, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("UseCanonicalLibrarySuffix", "DisableUseCanonicalLibrarySuffix", /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf name, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (!args.empty()) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
             return false;
@@ -537,10 +532,10 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("PgEmitAggApply", "DisablePgEmitAggApply", /*system=*/false,
+    AddFlag("PgEmitAggApply", "DisablePgEmitAggApply", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleMaybeHandler(&Types_.PgEmitAggApply, "PgEmitAggApply"));
 
-    AddFlag("CostBasedOptimizer", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("CostBasedOptimizer", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
             return false;
@@ -552,7 +547,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("CostBasedOptimizerVersion", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("CostBasedOptimizerVersion", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
             return false;
@@ -571,10 +566,10 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("_EnableMatchRecognize", "DisableMatchRecognize", /*system=*/true,
+    AddFlag("_EnableMatchRecognize", "DisableMatchRecognize", /*system=*/true, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.MatchRecognize, "_EnableMatchRecognize"));
 
-    AddFlag("TimeOrderRecoverDelay", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("TimeOrderRecoverDelay", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected one argument, but got " << args.size()));
             return false;
@@ -592,7 +587,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("TimeOrderRecoverAhead", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("TimeOrderRecoverAhead", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected one argument, but got " << args.size()));
             return false;
@@ -608,7 +603,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("TimeOrderRecoverRowLimit", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("TimeOrderRecoverRowLimit", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected one argument, but got " << args.size()));
             return false;
@@ -624,7 +619,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("MatchRecognizeStream", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("MatchRecognizeStream", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
             return false;
@@ -643,7 +638,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("BlockEngine", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("BlockEngine", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
             return false;
@@ -656,7 +651,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("DecimalCommonTypeConversionMode", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("DecimalCommonTypeConversionMode", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
             return false;
@@ -671,7 +666,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("OptimizerFlags", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("OptimizerFlags", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         for (auto& arg : args) {
             if (arg.empty()) {
                 ctx.AddError(TIssue(pos, "Empty flags are not supported"));
@@ -682,7 +677,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("PeepholeFlags", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("PeepholeFlags", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         for (auto& arg : args) {
             if (arg.empty()) {
                 ctx.AddError(TIssue(pos, "Empty flags are not supported"));
@@ -693,10 +688,10 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("_EnableStreamLookupJoin", "DisableStreamLookupJoin", /*system=*/true,
+    AddFlag("_EnableStreamLookupJoin", "DisableStreamLookupJoin", /*system=*/true, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.StreamLookupJoin, "_EnableStreamLookupJoin"));
 
-    AddFlag("MaxAggPushdownPredicates", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("MaxAggPushdownPredicates", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected single numeric argument, but got " << args.size()));
             return false;
@@ -715,9 +710,9 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("AndOverOrExpansionLimit", {}, /*system=*/false, Ui32Handler(&Types_.AndOverOrExpansionLimit));
+    AddFlag("AndOverOrExpansionLimit", {}, /*system=*/false, /*allowInProjectSettings=*/false, Ui32Handler(&Types_.AndOverOrExpansionLimit));
 
-    AddFlag("Engine", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("Engine", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
             return false;
@@ -751,9 +746,9 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("NormalizeDependsOn", {}, /*system=*/false, OptionalBoolHandler(&Types_.NormalizeDependsOn));
+    AddFlag("NormalizeDependsOn", {}, /*system=*/false, /*allowInProjectSettings=*/false, OptionalBoolHandler(&Types_.NormalizeDependsOn));
 
-    AddFlag("UseUrlListerForFolder", "DisableUseUrlListerForFolder", /*system=*/false, [](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("UseUrlListerForFolder", "DisableUseUrlListerForFolder", /*system=*/false, /*allowInProjectSettings=*/false, [](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         // TODO: remove
         if (!args.empty()) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -762,29 +757,29 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("EarlyExpandSeq", "DisableEarlyExpandSeq", /*system=*/false,
+    AddFlag("EarlyExpandSeq", "DisableEarlyExpandSeq", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.EarlyExpandSeq, "EarlyExpandSeq"));
 
-    AddFlag("DirectRowDependsOn", "DisableDirectRowDependsOn", /*system=*/false,
+    AddFlag("DirectRowDependsOn", "DisableDirectRowDependsOn", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.DirectRowDependsOn, "DirectRowDependsOn"));
 
-    AddFlag("EnableLineage", "DisableLineage", /*system=*/false,
+    AddFlag("EnableLineage", "DisableLineage", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.LineageSettings.EnableLineage, "EnableLineage"));
 
-    AddFlag("EnableStandaloneLineage", "DisableStandaloneLineage", /*system=*/false,
+    AddFlag("EnableStandaloneLineage", "DisableStandaloneLineage", /*system=*/false, /*allowInProjectSettings=*/false,
             ToggleHandler(&Types_.LineageSettings.EnableStandaloneLineage, "EnableStandaloneLineage"));
 
-    AddFlag("EnableEvaluateExprCache", {}, /*system=*/false, BoolHandler(&Types_.EnableEvaluateExprCache, /*value=*/true));
+    AddFlag("EnableEvaluateExprCache", {}, /*system=*/false, /*allowInProjectSettings=*/false, BoolHandler(&Types_.EnableEvaluateExprCache, /*value=*/true));
 
-    AddFlag("LineageOutputLimit", {}, /*system=*/false, Ui64Handler(&Types_.LineageSettings.LineageOutputLimit));
+    AddFlag("LineageOutputLimit", {}, /*system=*/false, /*allowInProjectSettings=*/false, Ui64Handler(&Types_.LineageSettings.LineageOutputLimit));
 
-    AddFlag("LineageMemoryLimit", {}, /*system=*/false, Ui64Handler(&Types_.LineageSettings.LineageMemoryLimit));
+    AddFlag("LineageMemoryLimit", {}, /*system=*/false, /*allowInProjectSettings=*/false, Ui64Handler(&Types_.LineageSettings.LineageMemoryLimit));
 
-    AddFlag("LineageVersion", {}, /*system=*/false, Ui32Handler(&Types_.LineageSettings.LineageVersion));
+    AddFlag("LineageVersion", {}, /*system=*/false, /*allowInProjectSettings=*/false, Ui32Handler(&Types_.LineageSettings.LineageVersion));
 
-    AddFlag("LineageStandaloneVersion", {}, /*system=*/false, Ui32Handler(&Types_.LineageSettings.LineageStandaloneVersion));
+    AddFlag("LineageStandaloneVersion", {}, /*system=*/false, /*allowInProjectSettings=*/false, Ui32Handler(&Types_.LineageSettings.LineageStandaloneVersion));
 
-    AddFlag("Layer", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+    AddFlag("Layer", {}, /*system=*/false, /*allowInProjectSettings=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
         if (args.size() != 1) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected exactly 1 argument, but got " << args.size()));
             return false;
@@ -795,7 +790,7 @@ void TConfigFlags::InitFlags() {
         return true;
     });
 
-    AddFlag("ProcessedLayer", {}, /*system=*/false, [](TStringBuf, const TPosition&, const TVector<TStringBuf>&, TExprContext&) {
+    AddFlag("ProcessedLayer", {}, /*system=*/false, /*allowInProjectSettings=*/false, [](TStringBuf, const TPosition&, const TVector<TStringBuf>&, TExprContext&) {
         return true;
     });
 }

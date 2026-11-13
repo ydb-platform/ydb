@@ -2,6 +2,7 @@ syntax = "proto3";
 option cc_enable_arenas = true;
 
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 
@@ -59,4 +60,36 @@ message RestartTabletRequest {
 message RestartTabletResponse {
     Ydb.StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
+}
+
+message ReassignTabletsRequest {
+    // Optional storage pool filter. At least storage_pool or a non-zero group is required.
+    string storage_pool = 1;
+
+    // Current storage group to filter by. Zero means all groups, as in Hive HTTP.
+    uint32 group = 2;
+
+    // Maximum number of tablets being reassigned concurrently. Defaults to 1; must be positive.
+    optional uint32 max_in_flight = 3;
+
+    // Percentage of matching tablets, starting with the oldest channel assignments.
+    // Defaults to 100. Valid values are 0 through 100.
+    optional uint32 percent = 4;
+
+    // Mark channels for reassignment on a subsequent restart instead of starting it immediately.
+    // This does not control whether the RPC waits: the RPC always acknowledges the start only.
+    bool async = 5;
+}
+
+message ReassignTabletsResponse {
+    // Always asynchronous. Poll with GetOperation; stop with CancelOperation.
+    // Cancellation stops scheduling new tablets; dispatched work continues without rollback.
+    // State is kept in Hive memory and lost on restart. Completed operations are retained
+    // for up to 10 minutes, limited to the most recent 1024 jobs. Expired IDs return NOT_FOUND.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ReassignTabletsMetadata {
+    uint64 selected_tablets = 1;
+    uint64 completed_tablets = 2;
 }

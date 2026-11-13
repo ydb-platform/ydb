@@ -28,7 +28,6 @@ TSubscriberTypeCounters::TSubscriberTypeCounters(const TSubscriberCounters& owne
     ReplyBytes = TBase::GetDeriviative("Replies/Bytes");
 
     BytesAllocated = TBase::GetValueAutoAggregationsClient("Allocated/Bytes");
-    CountAllocated = TBase::GetValueAutoAggregationsClient("Allocated/Count");
 }
 
 }   // namespace NKikimr::NOlap::NResourceBroker::NSubscribe

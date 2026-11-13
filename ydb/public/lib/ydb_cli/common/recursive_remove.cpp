@@ -12,6 +12,12 @@
 #include <util/string/builder.h>
 #include <util/system/type_name.h>
 
+#include <algorithm>
+#include <map>
+#include <mutex>
+#include <optional>
+#include <thread>
+
 namespace NYdb::NConsoleClient {
 
 using namespace NScheme;
@@ -295,15 +301,108 @@ TStatus RemovePathRecursive(
 
 namespace NInternal {
 
+    TStatus RemoveInParallel(
+        const TVector<const NScheme::TSchemeEntry*>& entries,
+        TRemover& remover,
+        TProgressBar* progressBar,
+        ui32 threads
+    ) {
+        std::mutex mutex;
+        size_t nextIndex = 0;
+        std::optional<TStatus> firstError;
+        std::exception_ptr firstException;
+
+        // Returns nullptr when all entries are taken or after the first failure.
+        auto takeNextEntry = [&]() -> const NScheme::TSchemeEntry* {
+            std::lock_guard lock(mutex);
+            if (firstError || firstException || nextIndex == entries.size()) {
+                return nullptr;
+            }
+            return entries[nextIndex++];
+        };
+
+        auto removeEntries = [&]() {
+            while (const auto* entry = takeNextEntry()) {
+                try {
+                    auto result = remover(*entry);
+                    std::lock_guard lock(mutex);
+                    if (!result.IsSuccess() && !firstError) {
+                        firstError = std::move(result);
+                    } else if (result.IsSuccess() && progressBar) {
+                        progressBar->AddProgress(1);
+                    }
+                } catch (...) {
+                    // An exception must not escape a worker thread: it would terminate the process.
+                    std::lock_guard lock(mutex);
+                    if (!firstException) {
+                        firstException = std::current_exception();
+                    }
+                }
+            }
+        };
+
+        // The current thread is one of the workers, so threads == 1 removes the entries in their original order.
+        const size_t threadCount = std::min<size_t>(std::max<ui32>(threads, 1), entries.size());
+        // std::jthread joins in its destructor, so the started workers are joined even if starting the next one throws.
+        std::vector<std::jthread> workers;
+        for (size_t i = 1; i < threadCount; ++i) {
+            workers.emplace_back(removeEntries);
+        }
+        removeEntries();
+        for (auto& worker : workers) {
+            worker.join();
+        }
+
+        if (firstException) {
+            std::rethrow_exception(firstException);
+        }
+        return firstError.value_or(TStatus(EStatus::SUCCESS, {}));
+    }
+
+    TVector<TVector<const NScheme::TSchemeEntry*>> SplitIntoRemoveBatches(
+        const TVector<const NScheme::TSchemeEntry*>& entries
+    ) {
+        TVector<const NScheme::TSchemeEntry*> withoutDependents;
+        // Replications and transfers might need a secret to finish their removal, so secrets go after them.
+        TVector<const NScheme::TSchemeEntry*> secrets;
+        // The name of a descendant is "<parent name>/<child name>...", so it always contains more '/' than its parent.
+        std::map<size_t, TVector<const NScheme::TSchemeEntry*>, std::greater<size_t>> withDependentsBySlashCount;
+        for (const auto* entry : entries) {
+            if (MightHaveDependents(entry->Type)) {
+                const size_t slashCount = std::count(entry->Name.begin(), entry->Name.end(), '/');
+                withDependentsBySlashCount[slashCount].push_back(entry);
+            } else if (entry->Type == ESchemeEntryType::Secret) {
+                secrets.push_back(entry);
+            } else {
+                withoutDependents.push_back(entry);
+            }
+        }
+
+        TVector<TVector<const NScheme::TSchemeEntry*>> batches;
+        if (!withoutDependents.empty()) {
+            batches.push_back(std::move(withoutDependents));
+        }
+        if (!secrets.empty()) {
+            batches.push_back(std::move(secrets));
+        }
+        for (auto& [slashCount, batch] : withDependentsBySlashCount) {
+            batches.push_back(std::move(batch));
+        }
+        return batches;
+    }
+
     TRemover CreateDefaultRemover(
         const TDriver& driver,
         const TRemoveDirectoryRecursiveSettings& settings
     ) {
+        // Every removing thread holds at most one session at a time.
         return [
             schemeClient = TSchemeClient(driver),
-            tableClient = TTableClient(driver),
+            tableClient = TTableClient(driver, NTable::TClientSettings()
+                .SessionPoolSettings(NTable::TSessionPoolSettings().MaxActiveSessions(settings.Threads_))),
             topicClient = TTopicClient(driver),
-            queryClient = NQuery::TQueryClient(driver),
+            queryClient = NQuery::TQueryClient(driver, NQuery::TClientSettings()
+                .SessionPoolSettings(NQuery::TSessionPoolSettings().MaxActiveSessions(settings.Threads_))),
             coordinationClient = NCoordination::TClient(driver),
             keyValueClient = NKeyValue::TKeyValueClient(driver),
             settings
@@ -314,9 +413,11 @@ namespace NInternal {
 
     bool MightHaveDependents(ESchemeEntryType type) {
         switch (type) {
-        // Containers must outlive descendants deferred to the second pass.
+        // containers can be removed only after the objects inside them
         case ESchemeEntryType::Directory:
+        case ESchemeEntryType::ColumnStore:
         case ESchemeEntryType::BackupCollection:
+        // external data sources might have dependent objects (i.e. external tables)
         case ESchemeEntryType::ExternalDataSource:
             return true;
         default:

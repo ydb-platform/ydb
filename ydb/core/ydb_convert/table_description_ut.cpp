@@ -309,6 +309,77 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         }
     }
 
+    Y_UNIT_TEST(ColumnTableNullabilityFromType) {
+        TActorSystemStub actorSystem;
+
+        google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta> columns;
+        {
+            // not_null is not set: NOT NULL is inferred from the non-optional type, as for row tables
+            auto& column = *columns.Add();
+            column.set_name("key");
+            column.mutable_type()->set_type_id(Ydb::Type::INT64);
+        }
+        {
+            auto& column = *columns.Add();
+            column.set_name("value");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+        }
+        {
+            auto& column = *columns.Add();
+            column.set_name("explicit_not_null");
+            column.mutable_type()->set_type_id(Ydb::Type::UINT32);
+            column.set_not_null(true);
+        }
+        {
+            auto& column = *columns.Add();
+            column.set_name("explicit_nullable");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
+            column.set_not_null(false);
+        }
+
+        NKikimrSchemeOp::TColumnTableDescription result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        UNIT_ASSERT_C(FillColumnDescription(result, columns, status, error), error);
+
+        const auto& schema = result.GetSchema();
+        UNIT_ASSERT_VALUES_EQUAL(schema.ColumnsSize(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(0).GetName(), "key");
+        UNIT_ASSERT(schema.GetColumns(0).GetNotNull());
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(1).GetName(), "value");
+        UNIT_ASSERT(!schema.GetColumns(1).GetNotNull());
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(2).GetName(), "explicit_not_null");
+        UNIT_ASSERT(schema.GetColumns(2).GetNotNull());
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(3).GetName(), "explicit_nullable");
+        UNIT_ASSERT(!schema.GetColumns(3).GetNotNull());
+    }
+
+    Y_UNIT_TEST(ColumnTableRejectsInconsistentNullability) {
+        TActorSystemStub actorSystem;
+
+        const auto check = [](const bool optionalType, const bool notNull) {
+            google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta> columns;
+            auto& column = *columns.Add();
+            column.set_name("value");
+            if (optionalType) {
+                column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT32);
+            } else {
+                column.mutable_type()->set_type_id(Ydb::Type::INT32);
+            }
+            column.set_not_null(notNull);
+
+            NKikimrSchemeOp::TColumnTableDescription result;
+            auto status = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT(!FillColumnDescription(result, columns, status, error));
+            UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(error, "Not consistent column type and not_null option for column: value");
+        };
+
+        check(/* optionalType */ true, /* notNull */ true);
+        check(/* optionalType */ false, /* notNull */ false);
+    }
+
     Y_UNIT_TEST(ColumnTablesRejectSetNotNull) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.FeatureFlags.SetEnableSetColumnConstraint(true);

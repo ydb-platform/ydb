@@ -72,6 +72,7 @@ public:
     THive& Hive;
     TNodeId Id;
     TActorId Local;
+    NKikimrLocal::TLocalCapabilities Capabilities;
     bool Down;
     bool Freeze;
     bool Drain;
@@ -91,6 +92,8 @@ public:
     NMetrics::TFastRiseAverageValue<double, 20> AveragedNodeTotalUsage;
     NMetrics::TAverageValue<double, 20> AveragedNodeTotalCpuUsage;
     TResourceRawValues ResourceMaximumValues;
+    TNamedResourceValues NamedResourceValues; // accumulated named resources from tablet metrics
+    THashMap<TString, ui64> NamedResourceMaximum; // capacities of named resources reported by the node
     TInstant StartTime;
     TNodeLocation Location;
     bool LocationAcquired;
@@ -268,7 +271,7 @@ public:
     bool CanBeDeleted(TInstant now) const;
     void RegisterInDomains();
     void DeregisterInDomains();
-    void Ping();
+    void Ping(bool sendSettings = false, bool sendCapabilities = false);
     void SendReconnect(const TActorId& local);
     // reason and details describe who/what initiated the change, see THive::RecordNodeEvent
     void SetDown(bool down, EHiveEventReason reason, TString details = {});
@@ -282,10 +285,20 @@ public:
         return ResourceMaximumValues;
     }
 
-    double GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty = true) const;
+    // includeNamed adds the balanced named resources of the tablet: they rank nodes for the tablet,
+    // but must not make a node unable to run it, as a full queue only means the work has to wait
+    double GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty = true, bool includeNamed = false) const;
+    // The highest usage among the balanced named resources of the tablet if it runs on this node, 0 if none
+    double GetNamedUsageForTablet(const TTabletInfo& tablet) const;
     double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
     double GetNodeUsage(const TResourceNormalizedValues& normValues,
                         EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
+
+    // Capacity of the named resource: reported by the node or the default from config
+    std::optional<ui64> GetNamedResourceMaximum(const TString& name) const;
+    // Normalized usage of the named resource with `extra` added to the node's value,
+    // nullopt when capacity of the resource on the node is unknown
+    std::optional<double> GetNamedResourceUsage(const TString& name, ui64 extra = 0) const;
 
     ui64 GetTabletsRunningByType(TTabletTypes::EType tabletType) const;
 

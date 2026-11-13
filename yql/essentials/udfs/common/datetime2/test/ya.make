@@ -4,8 +4,13 @@ DEPENDS(
     yql/essentials/udfs/common/datetime2/impl
 )
 
-TIMEOUT(600)
-
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    TIMEOUT(1200)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+ENDIF()
 
 END()

@@ -1663,7 +1663,19 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
             return false;
         }
         columnDesc->SetType(NScheme::TypeName(typeInfo, typeMod));
-        columnDesc->SetNotNull(column.not_null());
+
+        // The same rule as for row tables: a non-optional type means NOT NULL unless not_null says otherwise.
+        const bool notOptional = !column.type().has_optional_type();
+        if (!column.has_not_null()) {
+            columnDesc->SetNotNull(notOptional);
+        } else {
+            if (notOptional != column.not_null()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "Not consistent column type and not_null option for column: " + column.name();
+                return false;
+            }
+            columnDesc->SetNotNull(column.not_null());
+        }
 
         if (NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
             NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *columnDesc->MutableTypeInfo());

@@ -2340,6 +2340,84 @@ Y_UNIT_TEST_F(WriteInitThrottledMetricTracksLastMinuteMaximum, TPartitionFixture
     checkMetric(0);
 }
 
+Y_UNIT_TEST_F(WriteInitSessionsUsageTracksLastSecond, TPartitionFixture)
+{
+    // TSlidingWindow needs an initial timestamp greater than its window length.
+    Ctx->Runtime->UpdateCurrentTime(TInstant::Days(1));
+    CreatePartition();
+    UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1)));
+
+    auto createSessions = [&](ui64 count) {
+        for (ui64 i = 0; i < count; ++i) {
+            const auto pipe = Ctx->Runtime->AllocateEdgeActor();
+            auto event = MakeHolder<TEvPQ::TEvChangeOwner>(1, "owner", pipe, Ctx->Edge, true);
+            Ctx->Runtime->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+        }
+    };
+
+    auto checkUsage = [&](ui64 expected) {
+        // Allow counter publication (at least 300 ms), keeping samples inside the second.
+        Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(400));
+        Ctx->Runtime->Send(new IEventHandle(ActorId, Ctx->Edge, new TEvents::TEvWakeup()));
+        auto events = Ctx->Runtime->CaptureMailboxEvents(Ctx->Edge.Hint(), Ctx->Edge.NodeId());
+        std::optional<ui64> usage;
+        for (const auto& event : events) {
+            if (auto* report = event->CastAsLocal<TEvPQ::TEvPartitionLabeledCounters>()) {
+                const auto& counters = report->LabeledCounters.GetCounters();
+                if (counters.Size() > METRIC_WRITE_INIT_SESSIONS_USAGE) {
+                    usage = counters[METRIC_WRITE_INIT_SESSIONS_USAGE].Get();
+                }
+            }
+        }
+        UNIT_ASSERT_C(usage, "Expected a partition counters report with session usage");
+        UNIT_ASSERT_VALUES_EQUAL(*usage, expected);
+    };
+
+    checkUsage(0);
+    createSessions(3);
+    checkUsage(3);
+    createSessions(2);
+    checkUsage(5);
+    checkUsage(2); // Only the first three sessions have expired.
+    checkUsage(0); // All sessions have expired without new ownership requests.
+
+    createSessions(1);
+    checkUsage(1);
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::Seconds(10));
+    checkUsage(0);
+}
+
+Y_UNIT_TEST_F(WriteInitSessionsLimitReflectsConfig, TPartitionFixture)
+{
+    Ctx->Runtime->UpdateCurrentTime(TInstant::Days(1));
+    Ctx->Runtime->GetAppData().PQConfig.SetWriteSessionsInitRps(17);
+    CreatePartition();
+    UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1)));
+
+    auto checkLimit = [&](ui64 expected) {
+        Ctx->Runtime->AdvanceCurrentTime(TDuration::Seconds(1));
+        Ctx->Runtime->Send(new IEventHandle(ActorId, Ctx->Edge, new TEvents::TEvWakeup()));
+        auto events = Ctx->Runtime->CaptureMailboxEvents(Ctx->Edge.Hint(), Ctx->Edge.NodeId());
+        std::optional<ui64> limit;
+        for (const auto& event : events) {
+            if (auto* report = event->CastAsLocal<TEvPQ::TEvPartitionLabeledCounters>()) {
+                const auto& counters = report->LabeledCounters.GetCounters();
+                if (counters.Size() > METRIC_WRITE_INIT_SESSIONS_LIMIT) {
+                    limit = counters[METRIC_WRITE_INIT_SESSIONS_LIMIT].Get();
+                }
+            }
+        }
+        UNIT_ASSERT_C(limit, "Expected a partition counters report with session limit");
+        UNIT_ASSERT_VALUES_EQUAL(*limit, expected);
+    };
+
+    checkLimit(17);
+    Ctx->Runtime->GetAppData().PQConfig.SetWriteSessionsInitRps(42);
+    checkLimit(42);
+    Ctx->Runtime->GetAppData().PQConfig.SetWriteSessionsInitRps(0);
+    checkLimit(0);
+}
+
 Y_UNIT_TEST_F(UserActCount, TPartitionFixture)
 {
     // In the test, we check that the reference count for `UserInfo` decreases in case of errors. To do this,

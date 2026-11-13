@@ -43,6 +43,7 @@ Y_UNIT_TEST_SUITE(ImdbWorkload) {
         THolder<TWorkloadParams> params(TWorkloadFactory::Construct("imdb"));
         UNIT_ASSERT(params);
         UNIT_ASSERT_VALUES_EQUAL(params->GetWorkloadName(), "IMDb");
+        UNIT_ASSERT(params->CreateGenerator()->GetInitialData().empty());
         const auto types = params->CreateGenerator()->GetSupportedWorkloadTypes();
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(types.front().CommandName, "bench");

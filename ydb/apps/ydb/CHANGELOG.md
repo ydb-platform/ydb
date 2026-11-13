@@ -1,5 +1,4 @@
 * `ydb scheme rmdir --recursive` now removes objects in parallel. Added `--in-flight` option to set the maximum number of objects removed at the same time (default: 16).
-* Moved `ydb workload imdb` to the experimental CLI (`ydb/apps/ydb/experimental/ydb`).
 * Workload imports with `--file-output-path` now skip database post-import actions such as index building and statistics collection.
 * Fixed a crash when searching documentation in interactive AI mode.
 * `export s3`, `export nfs` and `export yt` now honor `__omit_backup = "true"`; `tools dump` honors it for tables and changefeeds. S3 export/import now skip async replication changefeeds.

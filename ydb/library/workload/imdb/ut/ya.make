@@ -4,9 +4,13 @@ SIZE(SMALL)
 
 SRCS(
     imdb_ut.cpp
+    import_ut.cpp
+    post_import_ut.cpp
 )
 
 PEERDIR(
+    library/cpp/testing/common
+    ydb/public/api/grpc
     ydb/public/lib/ydb_cli/import
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql

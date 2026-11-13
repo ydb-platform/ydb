@@ -93,6 +93,7 @@ public:
                     {"kind", target.Kind},
                     {"srcPath", target.Config->GetSrcPath()},
                     {"dstPath", target.Config->GetDstPath()},
+                    {"bootstrap", Replication->GetConfig().GetBootstrap()},
                     {"qualifiedSourceId", qualifiedSourceId});
             }
         } else {

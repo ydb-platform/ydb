@@ -254,6 +254,57 @@ Y_UNIT_TEST_SUITE(TVectorResolveActor) {
         UNIT_ASSERT_VALUES_EQUAL(response->Clusters[0][0], SetPostingParentFlag(31));
     }
 
+    // An empty (NULL) vector has no clusters even when its prefix already points
+    // at a posting parent, and it must not allocate a prefix id of its own.
+    Y_UNIT_TEST(PrefixedEmptyVectorsHaveNoClusters) {
+        TResolveTestEnv env;
+        env.CreateTables(true);
+        env.CreatePrefixSequence();
+
+        env.Upsert(LevelUpsertSql({
+            {10, SetPostingParentFlag(31), CentroidA()},
+        }));
+        env.Upsert(TStringBuilder()
+            << "UPSERT INTO `" << kPrefixTable << "` (`user`, `" << IdColumn << "`) VALUES "
+            << "(\"a\", " << ClusterLiteral(10) << "), "
+            << "(\"b\", " << ClusterLiteral(SetPostingParentFlag(20)) << ");");
+
+        auto resolver = env.CreateResolver(MakeSettings(true));
+
+        TVector<TSerializedCellVec> prefixes;
+        auto addPrefix = [&](const TString& value) {
+            TString storage;
+            prefixes.emplace_back(StringCells(value, storage));
+        };
+
+        addPrefix("b"); // existing prefix, direct posting parent
+        addPrefix("b");
+        addPrefix("c"); // new prefix, reused by an empty vector
+        addPrefix("c");
+        addPrefix("d"); // new prefix used by an empty vector only
+
+        auto response = env.Resolve(resolver, 4, {
+            "",             // prefix b, empty vector
+            "\x01\x18\x02", // prefix b, close to B
+            "",             // prefix c, empty vector
+            "\x18\x01\x02", // prefix c, close to A
+            "",             // prefix d, empty vector
+        }, prefixes);
+
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters.size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters[0].size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters[1].size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters[1][0], SetPostingParentFlag(20));
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters[2].size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters[3].size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters[4].size(), 0);
+
+        // Only the prefix of the non-empty vector gets a fresh id.
+        UNIT_ASSERT_VALUES_EQUAL(response->NewPrefixes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->NewPrefixes[0].Prefix.GetBuffer(), prefixes[2].GetBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters[3][0], response->NewPrefixes[0].Id);
+    }
+
     Y_UNIT_TEST(LevelTableCache) {
         TResolveTestEnv env;
         env.CreateTables(false);

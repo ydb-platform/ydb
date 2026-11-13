@@ -201,6 +201,10 @@ private:
 
         THashMap<TString, ui32> prefixIndex;
         for (size_t row = 0; row < request.Prefixes.size(); ++row) {
+            if (request.Vectors[row].empty()) {
+                // Empty vectors are omitted from the index
+                continue;
+            }
             const TString& key = request.Prefixes[row].GetBuffer();
             auto [it, inserted] = prefixIndex.try_emplace(key, request.DistinctPrefixes.size());
             if (inserted) {
@@ -496,8 +500,12 @@ private:
         ClearChildClusters(request);
 
         if (request.ResolvedLevel == 0) {
-            if (IsPrefixed) {
-                for (size_t row = 0; row < request.Vectors.size(); ++row) {
+            for (size_t row = 0; row < request.Vectors.size(); ++row) {
+                if (request.Vectors[row].empty()) {
+                    // Empty vectors are omitted from the index
+                    continue;
+                }
+                if (IsPrefixed) {
                     const TClusterId root = request.Roots[row];
                     if (NTableIndex::NKMeans::HasPostingParentFlag(root)) {
                         // The prefix has a single cluster, it is the posting parent directly.
@@ -505,9 +513,7 @@ private:
                     } else {
                         request.LevelClusters[root].push_back(row);
                     }
-                }
-            } else {
-                for (size_t row = 0; row < request.Vectors.size(); ++row) {
+                } else {
                     request.LevelClusters[0].push_back(row);
                 }
             }

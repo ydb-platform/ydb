@@ -697,6 +697,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
     }
 
     constexpr ui32 EvCloseFile = EventSpaceBegin(TEvents::ES_PRIVATE) + 1;
+    constexpr ui32 EvWriteFileResponse = EventSpaceBegin(TEvents::ES_PRIVATE) + 3;
     constexpr ui32 EvReadFileResponse = EventSpaceBegin(TEvents::ES_PRIVATE) + 4;
 
     struct TFifoIoQueueBlocker {
@@ -736,7 +737,14 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         }
     };
 
-    SIMPLE_UNIT_FORKED_TEST(CloseBehindRejectedRead) {
+    void AssertFileClosed(TTestActorRuntime& runtime) {
+        UNIT_ASSERT(!NFs::Exists((runtime.GetSpillingNodeDir() / "1_test_0").GetPath()));
+        UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/FileDescriptors", false), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/StoredBlobs", false), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/TotalSpaceUsed", false), 0);
+    }
+
+    void CloseBehindRejectedOp(bool write) {
         TTestActorRuntime runtime;
         runtime.Initialize();
         auto service = runtime.StartSpillingService(1000, 500, 100, 1);
@@ -745,27 +753,35 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         runtime.WaitBootstrap();
         WriteOk(runtime, actor, tester, 0, 10);
 
-        TAutoPtr<IEventHandle> readResponse;
-        bool holdRead = true;
+        auto sendOp = [&](ui64 blobId) {
+            IEventBase* ev = write
+                ? static_cast<IEventBase*>(new TEvDqSpilling::TEvWrite(blobId, CreateRope(10, 'a')))
+                : new TEvDqSpilling::TEvRead(0, false);
+            runtime.Send(new IEventHandle(actor, tester, ev));
+        };
+
+        TAutoPtr<IEventHandle> response;
+        bool hold = true;
+        const ui32 responseType = write ? EvWriteFileResponse : EvReadFileResponse;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (holdRead && ev->GetRecipientRewrite() == service && ev->GetTypeRewrite() == EvReadFileResponse) {
-                holdRead = false;
-                readResponse.Reset(ev.Release());
+            if (hold && ev->GetRecipientRewrite() == service && ev->GetTypeRewrite() == responseType) {
+                hold = false;
+                response.Reset(ev.Release());
                 return TTestActorRuntimeBase::EEventAction::DROP;
             }
             return TTestActorRuntimeBase::EEventAction::PROCESS;
         });
-        runtime.Send(new IEventHandle(actor, tester, new TEvDqSpilling::TEvRead(0, false)));
+        sendOp(1);
         {
             TDispatchOptions options;
-            options.CustomFinalCondition = [&]() { return bool(readResponse); };
+            options.CustomFinalCondition = [&]() { return bool(response); };
             UNIT_ASSERT(runtime.DispatchEvents(options));
         }
 
         TFifoIoQueueBlocker blocker(runtime, service);
         blocker.Block();
 
-        runtime.Send(new IEventHandle(actor, tester, new TEvDqSpilling::TEvRead(0, false)));
+        sendOp(2);
         runtime.Send(new IEventHandle(actor, tester, new TEvents::TEvPoison));
         {
             TDispatchOptions options;
@@ -773,10 +789,16 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             UNIT_ASSERT(runtime.DispatchEvents(options));
         }
 
-        runtime.Send(readResponse.Release());
+        runtime.Send(response.Release());
+        AssertFileClosed(runtime);
+    }
 
-        UNIT_ASSERT(!NFs::Exists((runtime.GetSpillingNodeDir() / "1_test_0").GetPath()));
-        UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/FileDescriptors", false), 0);
+    SIMPLE_UNIT_FORKED_TEST(CloseBehindRejectedRead) {
+        CloseBehindRejectedOp(false);
+    }
+
+    SIMPLE_UNIT_FORKED_TEST(CloseBehindRejectedWrite) {
+        CloseBehindRejectedOp(true);
     }
 
     SIMPLE_UNIT_FORKED_TEST(CloseRejectedByFullQueue) {
@@ -795,9 +817,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(EvCloseFile);
         UNIT_ASSERT(runtime.DispatchEvents(options));
-
-        UNIT_ASSERT(!NFs::Exists((runtime.GetSpillingNodeDir() / "1_test_0").GetPath()));
-        UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/FileDescriptors", false), 0);
+        AssertFileClosed(runtime);
     }
 
     Y_UNIT_TEST(ThreadPoolQueueOverflow) {

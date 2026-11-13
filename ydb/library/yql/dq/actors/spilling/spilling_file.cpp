@@ -527,9 +527,12 @@ private:
 
             tc.StoredBlobs->Inc();
             tc.TotalSpaceUsed->Add(blobDesc.Size);
+            ++fd.StoredBlobs;
+            fd.StoredSize += blobDesc.Size;
 
             if (msg.NewFileHandle) {
                 tc.FileDescriptors->Inc();
+                ++fd.FileDescriptors;
                 fp->FileHandle.Swap(msg.NewFileHandle);
             }
         } else {
@@ -688,6 +691,9 @@ private:
                 tc.TotalSpaceUsed->Sub(fp->Size);
                 tc.StoredBlobs->Sub(fp->Blobs.size());
                 tc.FileDescriptors->Dec();
+                fd.StoredSize -= fp->Size;
+                fd.StoredBlobs -= fp->Blobs.size();
+                --fd.FileDescriptors;
 
                 fd.Parts.erase(msg.BlobId);
                 fd.PartsList.remove_if([fp](const auto& x) { return &x == fp; });
@@ -918,16 +924,11 @@ private:
     }
 
     void FinishClose(TFilesIt it) {
-        auto& tc = Counters_->GetTypeCounters(it->second.SpillingType);
-        tc.FileDescriptors->Sub(it->second.PartsList.size());
-
-        ui64 blobs = 0;
-        for (auto& fp : it->second.PartsList) {
-            blobs += fp.Blobs.size();
-        }
-
-        tc.StoredBlobs->Sub(blobs);
-        tc.TotalSpaceUsed->Sub(it->second.TotalSize);
+        auto& fd = it->second;
+        auto& tc = Counters_->GetTypeCounters(fd.SpillingType);
+        tc.FileDescriptors->Sub(fd.FileDescriptors);
+        tc.StoredBlobs->Sub(fd.StoredBlobs);
+        tc.TotalSpaceUsed->Sub(fd.StoredSize);
 
         MoveFileToClosed(it);
     }
@@ -1103,6 +1104,9 @@ private:
         };
 
         ui64 TotalSize = 0;
+        ui64 StoredSize = 0;
+        ui64 StoredBlobs = 0;
+        ui64 FileDescriptors = 0;
 
         TDuration TotalWorkTime;
         TDuration TotalWaitTime;

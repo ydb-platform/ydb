@@ -117,13 +117,18 @@ namespace NTabletFlatExecutor {
         };
 
     public:
+        /**
+         * followerId must outlive TScans, it is read on every task submission
+         * since executor learns its follower id only during boot.
+         */
         TScans(NUtil::ILogger *logger, IOps *ops, TIntrusivePtr<TIdEmitter> emitter,
-                    ITablet *owner, const TActorId& ownerActorId)
+                    ITablet *owner, const TActorId& ownerActorId, const ui32& followerId)
             : Logger(logger)
             , Ops(ops)
             , Owner(owner)
             , OwnerActorId(ownerActorId)
             , Tablet(Owner->TabletID())
+            , FollowerId(followerId)
             , Emitter(std::move(emitter))
         {
 
@@ -171,12 +176,14 @@ namespace NTabletFlatExecutor {
 
                 const auto* overrides = std::get_if<TScanOptions::TResourceBrokerOptions>(&options.ResourceBroker);
 
-                ToBroker(new TEvResourceBroker::TEvSubmitTask(
+                auto submit = MakeHolder<TEvResourceBroker::TEvSubmitTask>(
                             one.TaskId, MakeLabelFor(one),
-                            {{ 1, 0 }},
+                            NResourceBroker::TResourceValues{{ 1, 0 }},
                             overrides ? overrides->Type : Tables[table].Type,
                             overrides ? overrides->Prio : Tables[table].Prio,
-                            new TCookie(one.Serial)));
+                            new TCookie(one.Serial));
+                submit->SetOwner(Tablet, FollowerId);
+                ToBroker(submit.Release());
             }
 
             return one.Serial;
@@ -444,6 +451,7 @@ namespace NTabletFlatExecutor {
         ITablet * const Owner;
         const TActorId OwnerActorId;
         const ui64 Tablet;
+        const ui32& FollowerId;
 
         ui64 Serial = 0;
 

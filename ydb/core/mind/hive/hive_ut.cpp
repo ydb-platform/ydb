@@ -22,6 +22,7 @@
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/tablet_impl.h>
+#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -7091,6 +7092,668 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         UNIT_ASSERT_GT(movedToFirstNode, 0);
         UNIT_ASSERT_LE(movedToFirstNode, TABLETS_PER_NODE / 2);
+    }
+
+    using ENamedBalanceMode = NKikimrConfig::THiveConfig::TNamedResourceSettings::EBalanceMode;
+
+    struct TNamedUsage {
+        ui64 Value = 1;
+        bool Transferable = true;
+        ui64 CPU = 0;
+    };
+    static constexpr TNamedUsage NAMED_WAITING{.Value = 1, .Transferable = true};
+    static constexpr TNamedUsage NAMED_RUNNING{.Value = 1, .Transferable = false};
+
+    struct TNamedResourceBalancingResult {
+        std::vector<ui64> Transferable; // tablets of the first node with transferable usage
+        std::vector<ui64> NotTransferable; // tablets of the first node with usage which is not transferable
+        std::vector<ui64> Other; // tablets of the first node without usage
+        std::vector<ui64> MovedFromFirstNode;
+        std::vector<ui64> MovedFromSecondNode;
+    };
+
+    struct TNamedResourceBalancingOptions {
+        ENamedBalanceMode Mode = NKikimrConfig::THiveConfig::TNamedResourceSettings::SATURATION;
+        // usage of the named resource (capacity of 2 on each node) by the tablets of each node, the rest have none
+        std::vector<TNamedUsage> FirstNode;
+        std::vector<TNamedUsage> SecondNode;
+        // CPU of the tablets without the named resource
+        ui64 FirstNodeOtherCPU = 0;
+        ui64 SecondNodeOtherCPU = 0;
+        bool BalanceCPU = false;
+    };
+
+    TNamedResourceBalancingResult RunNamedResourceBalancing(const TNamedResourceBalancingOptions& opts) {
+        static constexpr ui64 TABLETS_PER_NODE = 4;
+        UNIT_ASSERT(opts.FirstNode.size() <= TABLETS_PER_NODE);
+        UNIT_ASSERT(opts.SecondNode.size() <= TABLETS_PER_NODE);
+        const TString resource = NResourceBroker::MakeQueueResourceName("queue_cdc_initial_scan");
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true, 1, [&](TAppPrepare& app) {
+            app.HiveConfig.SetTabletKickCooldownPeriod(0);
+            app.HiveConfig.SetResourceChangeReactionPeriod(0);
+            // only the named resource is balanced, unless asked otherwise
+            app.HiveConfig.SetMinCounterScatterToBalance(1);
+            app.HiveConfig.SetMinCPUScatterToBalance(opts.BalanceCPU ? 0.5 : 1);
+            app.HiveConfig.SetMinMemoryScatterToBalance(1);
+            app.HiveConfig.SetMinNetworkScatterToBalance(1);
+            auto* settings = app.HiveConfig.AddNamedResources();
+            settings->SetName(resource);
+            settings->SetBalanceMode(opts.Mode);
+            settings->SetMinScatterToBalance(0.4);
+            settings->SetDefaultMaximum(2);
+        });
+        const int nodeBase = runtime.GetNodeId(0);
+        TActorId sender = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+
+        auto getDistribution = [&]() -> std::array<std::vector<ui64>, 2> {
+            std::array<std::vector<ui64>, 2> nodeTablets = {};
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo());
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                UNIT_ASSERT(((int)tablet.GetNodeID() - nodeBase >= 0) && (tablet.GetNodeID() - nodeBase < 2));
+                nodeTablets[tablet.GetNodeID() - nodeBase].push_back(tablet.GetTabletID());
+            }
+            return nodeTablets;
+        };
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
+            runtime.DispatchEvents(options);
+        }
+
+        for (size_t i = 0; i < 2 * TABLETS_PER_NODE; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, TTabletTypes::Dummy, BINDED_CHANNELS));
+            ev->Record.SetObjectId(i);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+
+        auto initialDistribution = getDistribution();
+        UNIT_ASSERT_VALUES_EQUAL(initialDistribution[0].size(), TABLETS_PER_NODE);
+        UNIT_ASSERT_VALUES_EQUAL(initialDistribution[1].size(), TABLETS_PER_NODE);
+
+        TNamedResourceBalancingResult result;
+        {
+            // hive accepts named resources only from the node of the tablet
+            std::array<THolder<TEvHive::TEvTabletMetrics>, 2> nodeMetrics = {
+                MakeHolder<TEvHive::TEvTabletMetrics>(), MakeHolder<TEvHive::TEvTabletMetrics>()};
+            auto addUsage = [&](size_t nodeIndex, ui64 tabletId, std::optional<TNamedUsage> usage, ui64 otherCPU) {
+                auto* tabletMetrics = nodeMetrics[nodeIndex]->Record.AddTabletMetrics();
+                tabletMetrics->SetTabletID(tabletId);
+                if (!usage) {
+                    if (otherCPU) {
+                        tabletMetrics->MutableResourceUsage()->SetCPU(otherCPU);
+                    }
+                    return;
+                }
+                if (usage->CPU) {
+                    tabletMetrics->MutableResourceUsage()->SetCPU(usage->CPU);
+                }
+                auto* named = tabletMetrics->MutableResourceUsage()->AddNamedResources();
+                named->SetName(resource);
+                named->SetValue(usage->Value);
+                if (!usage->Transferable) {
+                    named->SetTransferable(false);
+                }
+            };
+            for (size_t i = 0; i < TABLETS_PER_NODE; ++i) {
+                ui64 tabletId = initialDistribution[0][i];
+                if (i < opts.FirstNode.size()) {
+                    addUsage(0, tabletId, opts.FirstNode[i], 0);
+                    (opts.FirstNode[i].Transferable ? result.Transferable : result.NotTransferable).push_back(tabletId);
+                } else {
+                    addUsage(0, tabletId, std::nullopt, opts.FirstNodeOtherCPU);
+                    result.Other.push_back(tabletId);
+                }
+            }
+            for (size_t i = 0; i < TABLETS_PER_NODE; ++i) {
+                ui64 tabletId = initialDistribution[1][i];
+                if (i < opts.SecondNode.size()) {
+                    addUsage(1, tabletId, opts.SecondNode[i], 0);
+                } else {
+                    addUsage(1, tabletId, std::nullopt, opts.SecondNodeOtherCPU);
+                }
+            }
+            for (ui32 nodeIndex = 0; nodeIndex < 2; ++nodeIndex) {
+                TActorId nodeSender = runtime.AllocateEdgeActor(nodeIndex);
+                // the second time is a periodic resend by local, it must not change anything
+                for (int attempt = 0; attempt < 2; ++attempt) {
+                    auto ev = MakeHolder<TEvHive::TEvTabletMetrics>();
+                    ev->Record = nodeMetrics[nodeIndex]->Record;
+                    runtime.SendToPipe(hiveTablet, nodeSender, ev.Release(), nodeIndex, GetPipeConfigWithRetries());
+                    TAutoPtr<IEventHandle> handle;
+                    runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
+                }
+            }
+        }
+
+        for (int i = 0; i < 5; ++i) {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBalancerOut);
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+        }
+
+        auto newDistribution = getDistribution();
+        for (auto tablet : initialDistribution[0]) {
+            if (std::find(newDistribution[0].begin(), newDistribution[0].end(), tablet) == newDistribution[0].end()) {
+                result.MovedFromFirstNode.push_back(tablet);
+            }
+        }
+        for (auto tablet : initialDistribution[1]) {
+            if (std::find(newDistribution[1].begin(), newDistribution[1].end(), tablet) == newDistribution[1].end()) {
+                result.MovedFromSecondNode.push_back(tablet);
+            }
+        }
+        return result;
+    }
+
+    static bool Contains(const std::vector<ui64>& tablets, ui64 tablet) {
+        return std::find(tablets.begin(), tablets.end(), tablet) != tablets.end();
+    }
+
+    Y_UNIT_TEST(TestHiveBalancerNamedResourceSaturation) {
+        // first node: 2 running + 2 waiting with capacity of 2, second node is idle
+        auto result = RunNamedResourceBalancing({
+            .FirstNode = {NAMED_RUNNING, NAMED_RUNNING, NAMED_WAITING, NAMED_WAITING},
+        });
+        // exactly the waiting tablets are moved, running ones stay
+        auto moved = result.MovedFromFirstNode;
+        auto waiting = result.Transferable;
+        std::sort(moved.begin(), moved.end());
+        std::sort(waiting.begin(), waiting.end());
+        UNIT_ASSERT_VALUES_EQUAL(moved, waiting);
+        UNIT_ASSERT(result.MovedFromSecondNode.empty());
+    }
+
+    Y_UNIT_TEST(TestHiveBalancerNamedResourceSaturationPartialCapacity) {
+        // second node has room for one more task only
+        auto result = RunNamedResourceBalancing({
+            .FirstNode = {NAMED_RUNNING, NAMED_RUNNING, NAMED_WAITING, NAMED_WAITING},
+            .SecondNode = {NAMED_RUNNING},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result.MovedFromFirstNode.size(), 1);
+        UNIT_ASSERT(Contains(result.Transferable, result.MovedFromFirstNode[0]));
+        UNIT_ASSERT(result.MovedFromSecondNode.empty());
+    }
+
+    Y_UNIT_TEST(TestHiveBalancerNamedResourceSaturationPartialOverflow) {
+        // 4 of 2 on the first node, 1 of 2 on the second: moving the tablet with 2 waiting tasks
+        // overfills the second node, but reduces the total amount of waiting work
+        auto result = RunNamedResourceBalancing({
+            .FirstNode = {NAMED_RUNNING, NAMED_RUNNING, TNamedUsage{.Value = 2, .Transferable = true}},
+            .SecondNode = {NAMED_RUNNING},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result.MovedFromFirstNode, result.Transferable);
+        UNIT_ASSERT(result.MovedFromSecondNode.empty());
+    }
+
+    Y_UNIT_TEST(TestHiveBalancerNamedResourceMixedNotMoved) {
+        // a tablet with both running and waiting work is not moved, it would interrupt the running one
+        auto result = RunNamedResourceBalancing({
+            .FirstNode = {TNamedUsage{.Value = 2, .Transferable = false}, TNamedUsage{.Value = 2, .Transferable = false}, NAMED_WAITING},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result.MovedFromFirstNode, result.Transferable);
+        UNIT_ASSERT(result.MovedFromSecondNode.empty());
+    }
+
+    Y_UNIT_TEST(TestHiveBalancerNamedResourceAllSaturated) {
+        // second node is fully busy as well: nowhere to move
+        auto result = RunNamedResourceBalancing({
+            .FirstNode = {NAMED_RUNNING, NAMED_RUNNING, NAMED_WAITING, NAMED_WAITING},
+            .SecondNode = {NAMED_RUNNING, NAMED_RUNNING},
+        });
+        UNIT_ASSERT(result.MovedFromFirstNode.empty());
+        UNIT_ASSERT(result.MovedFromSecondNode.empty());
+    }
+
+    Y_UNIT_TEST(TestHiveBalancerNamedResourceNoBalance) {
+        auto result = RunNamedResourceBalancing({
+            .Mode = NKikimrConfig::THiveConfig::TNamedResourceSettings::NO_BALANCE,
+            .FirstNode = {NAMED_RUNNING, NAMED_RUNNING, NAMED_WAITING, NAMED_WAITING},
+        });
+        UNIT_ASSERT(result.MovedFromFirstNode.empty());
+        UNIT_ASSERT(result.MovedFromSecondNode.empty());
+    }
+
+    Y_UNIT_TEST(TestHiveBalancerNamedResourceScatter) {
+        // first node: 1 running + 3 waiting, usage 2.0 vs 0.0 on the second node
+        auto result = RunNamedResourceBalancing({
+            .Mode = NKikimrConfig::THiveConfig::TNamedResourceSettings::SCATTER,
+            .FirstNode = {NAMED_RUNNING, NAMED_WAITING, NAMED_WAITING, NAMED_WAITING},
+        });
+        // moves stop once the usage is even: 1 + 3 -> 2 + 2
+        UNIT_ASSERT_VALUES_EQUAL(result.MovedFromFirstNode.size(), 2);
+        for (auto tablet : result.MovedFromFirstNode) {
+            UNIT_ASSERT(Contains(result.Transferable, tablet));
+        }
+        UNIT_ASSERT(result.MovedFromSecondNode.empty());
+    }
+
+    Y_UNIT_TEST(TestHiveBalancerNamedResourceKeepsCPUBalance) {
+        // the second node has free slots, but is busy with CPU: moving the waiting tablets there would worsen
+        // the CPU balance, which the named resource balancer must not do
+        auto result = RunNamedResourceBalancing({
+            .FirstNode = {NAMED_RUNNING, NAMED_RUNNING, TNamedUsage{.Value = 1, .Transferable = true, .CPU = 1'000'000}},
+            .SecondNodeOtherCPU = 2'000'000,
+        });
+        UNIT_ASSERT(result.MovedFromFirstNode.empty());
+        UNIT_ASSERT(result.MovedFromSecondNode.empty());
+    }
+
+    Y_UNIT_TEST(TestHiveBalancerCPUKeepsNamedResourceBalance) {
+        // CPU is unbalanced, but the only tablets with CPU on the first node wait in the queue
+        // which is full on the second node: moving them there would make them wait there as well
+        auto result = RunNamedResourceBalancing({
+            .FirstNode = {
+                TNamedUsage{.Value = 1, .Transferable = true, .CPU = 2'000'000},
+                TNamedUsage{.Value = 1, .Transferable = true, .CPU = 2'000'000},
+            },
+            .SecondNode = {NAMED_RUNNING, NAMED_RUNNING},
+            .BalanceCPU = true,
+        });
+        UNIT_ASSERT(result.MovedFromFirstNode.empty());
+        UNIT_ASSERT(result.MovedFromSecondNode.empty());
+    }
+
+    Y_UNIT_TEST(TestHiveBalancerCPUIgnoresUnrelatedNamedResource) {
+        // tablets without the named resource are balanced by CPU even if the queue on the target is full
+        auto result = RunNamedResourceBalancing({
+            .SecondNode = {NAMED_RUNNING, NAMED_RUNNING},
+            .FirstNodeOtherCPU = 2'000'000,
+            .BalanceCPU = true,
+        });
+        UNIT_ASSERT_GT(result.MovedFromFirstNode.size(), 0);
+    }
+
+    // Three nodes with capacity of 2 for the named resource: up to 2 tablets of the first node wait in the queue,
+    // the queue of the second node is full, the queue of the third one is full or idle.
+    // Drains the first node and returns the tablets which waited, with the indexes of the nodes they moved to.
+    std::vector<std::pair<ui64, int>> RunNamedResourceDrain(bool thirdNodeFull) {
+        static constexpr int NUM_NODES = 3;
+        static constexpr int NUM_TABLETS = 9;
+        const TString resource = NResourceBroker::MakeQueueResourceName("queue_cdc_initial_scan");
+        TTestBasicRuntime runtime(NUM_NODES, false);
+        Setup(runtime, true, 1, [&](TAppPrepare& app) {
+            app.HiveConfig.SetTabletKickCooldownPeriod(0);
+            app.HiveConfig.SetResourceChangeReactionPeriod(0);
+            app.HiveConfig.SetMinCounterScatterToBalance(1);
+            app.HiveConfig.SetMinCPUScatterToBalance(1);
+            app.HiveConfig.SetMinMemoryScatterToBalance(1);
+            app.HiveConfig.SetMinNetworkScatterToBalance(1);
+            auto* settings = app.HiveConfig.AddNamedResources();
+            settings->SetName(resource);
+            settings->SetBalanceMode(NKikimrConfig::THiveConfig::TNamedResourceSettings::SATURATION);
+            settings->SetDefaultMaximum(2);
+        });
+        const int nodeBase = runtime.GetNodeId(0);
+        TActorId sender = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+
+        auto getDistribution = [&]() -> std::array<std::vector<ui64>, NUM_NODES> {
+            std::array<std::vector<ui64>, NUM_NODES> nodeTablets = {};
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo());
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                int index = (int)tablet.GetNodeID() - nodeBase;
+                UNIT_ASSERT(index >= 0 && index < NUM_NODES);
+                nodeTablets[index].push_back(tablet.GetTabletID());
+            }
+            return nodeTablets;
+        };
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
+            runtime.DispatchEvents(options);
+        }
+        for (int i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, TTabletTypes::Dummy, BINDED_CHANNELS));
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+
+        auto initialDistribution = getDistribution();
+        for (int i = 0; i < NUM_NODES; ++i) {
+            UNIT_ASSERT_GE(initialDistribution[i].size(), 2);
+        }
+        std::vector<ui64> waiting;
+        {
+            // hive accepts named resources only from the node of the tablet
+            std::array<THolder<TEvHive::TEvTabletMetrics>, NUM_NODES> nodeMetrics;
+            for (auto& metrics : nodeMetrics) {
+                metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            }
+            auto addUsage = [&](size_t nodeIndex, ui64 tabletId, bool transferable) {
+                auto* tabletMetrics = nodeMetrics[nodeIndex]->Record.AddTabletMetrics();
+                tabletMetrics->SetTabletID(tabletId);
+                auto* named = tabletMetrics->MutableResourceUsage()->AddNamedResources();
+                named->SetName(resource);
+                named->SetValue(1);
+                if (!transferable) {
+                    named->SetTransferable(false);
+                }
+            };
+            for (int i = 0; i < 2; ++i) {
+                waiting.push_back(initialDistribution[0][i]);
+                addUsage(0, initialDistribution[0][i], true);
+                addUsage(1, initialDistribution[1][i], false);
+                if (thirdNodeFull) {
+                    addUsage(2, initialDistribution[2][i], false);
+                }
+            }
+            for (ui32 nodeIndex = 0; nodeIndex < NUM_NODES; ++nodeIndex) {
+                TActorId nodeSender = runtime.AllocateEdgeActor(nodeIndex);
+                runtime.SendToPipe(hiveTablet, nodeSender, nodeMetrics[nodeIndex].Release(), nodeIndex, GetPipeConfigWithRetries());
+                TAutoPtr<IEventHandle> handle;
+                runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
+            }
+        }
+
+        {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvDrainNode(runtime.GetNodeId(0)));
+            TAutoPtr<IEventHandle> handle;
+            auto drainResponse = runtime.GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(drainResponse->Record.GetStatus(), NKikimrProto::EReplyStatus::OK);
+        }
+
+        auto newDistribution = getDistribution();
+        UNIT_ASSERT_VALUES_EQUAL(newDistribution[0].size(), 0);
+        std::vector<std::pair<ui64, int>> result;
+        for (ui64 tabletId : waiting) {
+            for (int i = 0; i < NUM_NODES; ++i) {
+                if (Contains(newDistribution[i], tabletId)) {
+                    result.emplace_back(tabletId, i);
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), waiting.size());
+        return result;
+    }
+
+    Y_UNIT_TEST(TestDrainNamedResourcePrefersFreeQueue) {
+        // the waiting tablets go to the node with free slots in the queue
+        for (const auto& [tabletId, nodeIndex] : RunNamedResourceDrain(false)) {
+            UNIT_ASSERT_VALUES_EQUAL_C(nodeIndex, 2, "tablet " << tabletId);
+        }
+    }
+
+    Y_UNIT_TEST(TestDrainNamedResourceAllQueuesFull) {
+        // full queues do not prevent the drain, see RunNamedResourceDrain
+        RunNamedResourceDrain(true);
+    }
+
+    Y_UNIT_TEST(TestNamedResourcesPersistence) {
+        const TString resource = NResourceBroker::MakeQueueResourceName("queue_cdc_initial_scan");
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        TActorId sender = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 1);
+            runtime.DispatchEvents(options);
+        }
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, TTabletTypes::Dummy, BINDED_CHANNELS));
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        auto reportUsage = [&](ui64 value, bool transferable) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            auto* tabletMetrics = metrics->Record.AddTabletMetrics();
+            tabletMetrics->SetTabletID(tabletId);
+            auto* named = tabletMetrics->MutableResourceUsage()->AddNamedResources();
+            named->SetName(resource);
+            named->SetValue(value);
+            if (!transferable) {
+                named->SetTransferable(false);
+            }
+            runtime.SendToPipe(hiveTablet, sender, metrics.Release());
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
+            // let the metrics be persisted
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        };
+
+        auto getUsage = [&]() -> std::optional<NKikimrTabletBase::TNamedResource> {
+            THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
+            request->Record.SetTabletID(tabletId);
+            request->Record.SetReturnMetrics(true);
+            runtime.SendToPipe(hiveTablet, sender, request.Release());
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.TabletsSize(), 1);
+            for (const auto& named : response->Record.GetTablets(0).GetMetrics().GetNamedResources()) {
+                if (named.GetName() == resource) {
+                    return named;
+                }
+            }
+            return std::nullopt;
+        };
+
+        // the first report is persisted along with the rest of the new tablet metrics, the second one
+        // changes the named resource only
+        reportUsage(1, true);
+        reportUsage(3, false);
+        RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
+        {
+            auto usage = getUsage();
+            UNIT_ASSERT(usage);
+            UNIT_ASSERT_VALUES_EQUAL(usage->GetValue(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(usage->GetTransferable(), false);
+            UNIT_ASSERT(!usage->HasEstimateDeadline());
+        }
+
+        // a restart carries the whole value over as an estimate, which survives a reboot of hive as well
+        RebootTablet(runtime, tabletId, runtime.AllocateEdgeActor(0));
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
+        {
+            auto usage = getUsage();
+            UNIT_ASSERT(usage);
+            UNIT_ASSERT_VALUES_EQUAL(usage->GetValue(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(usage->GetTransferable(), false);
+            UNIT_ASSERT(usage->HasEstimateDeadline());
+        }
+        // nobody reports it: the estimate expires
+        runtime.SimulateSleep(NHive::NAMED_RESOURCE_ESTIMATE_TIMEOUT + TDuration::Seconds(10));
+        UNIT_ASSERT(!getUsage());
+        RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
+        UNIT_ASSERT(!getUsage());
+
+        reportUsage(3, true);
+        {
+            auto usage = getUsage();
+            UNIT_ASSERT(usage);
+            UNIT_ASSERT_VALUES_EQUAL(usage->GetTransferable(), true);
+        }
+        reportUsage(0, true);
+        RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
+        UNIT_ASSERT(!getUsage());
+    }
+
+    Y_UNIT_TEST(TestNamedResourcesReportedByLocal) {
+        // resource broker -> local -> hive
+        const TString resource = NResourceBroker::MakeQueueResourceName("queue_cdc_initial_scan");
+        TTestBasicRuntime runtime(1, false);
+        // Local polls the broker and sends metrics on schedule, but schedules are enabled for Local only after
+        // it has registered its child actors: enable them for all actors registered by Local and its descendants
+        THashSet<TActorId> localActors;
+        auto prevObserver = runtime.SetRegistrationObserverFunc([&localActors](TTestActorRuntimeBase& rt, const TActorId& parentId, const TActorId& actorId) {
+            TTestActorRuntimeBase::DefaultRegistrationObserver(rt, parentId, actorId);
+            if (parentId == rt.GetLocalServiceId(MakeLocalID(rt.GetNodeId(0)), 0) || localActors.contains(parentId)) {
+                localActors.insert(actorId);
+                rt.EnableScheduleForActor(actorId, true);
+            }
+        });
+        Y_UNUSED(prevObserver);
+        Setup(runtime, true);
+        {
+            // hive tests do not set up a resource broker by default
+            TActorId brokerId = runtime.Register(NResourceBroker::CreateResourceBrokerActor(
+                NResourceBroker::MakeDefaultConfig(), runtime.GetDynamicCounters(0)), 0);
+            runtime.RegisterService(NResourceBroker::MakeResourceBrokerID(), brokerId, 0);
+        }
+        TActorId sender = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 1);
+            runtime.DispatchEvents(options);
+        }
+        std::vector<ui64> tabletIds;
+        for (ui64 i = 0; i < 2; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, TTabletTypes::Dummy, BINDED_CHANNELS));
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+            tabletIds.push_back(tabletId);
+        }
+
+        auto getUsage = [&](ui64 tabletId) -> std::optional<NKikimrTabletBase::TNamedResource> {
+            THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
+            request->Record.SetTabletID(tabletId);
+            request->Record.SetReturnMetrics(true);
+            runtime.SendToPipe(hiveTablet, sender, request.Release());
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.TabletsSize(), 1);
+            for (const auto& named : response->Record.GetTablets(0).GetMetrics().GetNamedResources()) {
+                if (named.GetName() == resource) {
+                    return named;
+                }
+            }
+            return std::nullopt;
+        };
+
+        // the queue runs 2 tasks at a time by default: the first tablet runs 2 tasks and has one more waiting,
+        // the task of the second tablet waits
+        TActorId taskOwner = runtime.AllocateEdgeActor(0);
+        const std::vector<ui64> taskTablets = {tabletIds[0], tabletIds[0], tabletIds[1], tabletIds[0]};
+        for (ui64 taskId = 1; taskId <= taskTablets.size(); ++taskId) {
+            auto submit = MakeHolder<NResourceBroker::TEvResourceBroker::TEvSubmitTask>(
+                taskId, TStringBuilder() << "scan-" << taskId, NResourceBroker::TResourceValues{{1, 0}}, "cdc_initial_scan", 10, nullptr);
+            submit->SetOwner(taskTablets[taskId - 1]);
+            runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), taskOwner, submit.Release()), 0);
+        }
+
+        std::optional<NKikimrTabletBase::TNamedResource> usage;
+        std::optional<NKikimrTabletBase::TNamedResource> waitingUsage;
+        for (int i = 0; i < 30 && !(usage && waitingUsage); ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            usage = getUsage(tabletIds[0]);
+            waitingUsage = getUsage(tabletIds[1]);
+        }
+        UNIT_ASSERT_C(usage && waitingUsage, "queue usage was not reported to hive");
+        // running work makes the tablet not transferable
+        UNIT_ASSERT_VALUES_EQUAL(usage->GetValue(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(usage->GetTransferable(), false);
+        UNIT_ASSERT_VALUES_EQUAL(waitingUsage->GetValue(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(waitingUsage->GetTransferable(), true);
+
+        // the work is gone: usage disappears
+        runtime.Send(new IEventHandle(NResourceBroker::MakeResourceBrokerID(), taskOwner, new NResourceBroker::TEvResourceBroker::TEvNotifyActorDied), 0);
+        for (int i = 0; i < 30 && (usage || waitingUsage); ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            usage = getUsage(tabletIds[0]);
+            waitingUsage = getUsage(tabletIds[1]);
+        }
+        UNIT_ASSERT_C(!usage && !waitingUsage, "queue usage was not removed in hive");
+
+        // a lost update, e.g. a zero acked by hive but not persisted before its restart: local resends
+        // the names it has reported, zeros included, and repairs it
+        {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            auto* tabletMetrics = metrics->Record.AddTabletMetrics();
+            tabletMetrics->SetTabletID(tabletIds[0]);
+            auto* named = tabletMetrics->MutableResourceUsage()->AddNamedResources();
+            named->SetName(resource);
+            named->SetValue(3);
+            runtime.SendToPipe(hiveTablet, sender, metrics.Release());
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
+        }
+        usage = getUsage(tabletIds[0]);
+        UNIT_ASSERT_C(usage, "stale value was not accepted by hive");
+        UNIT_ASSERT_VALUES_EQUAL(usage->GetValue(), 3);
+        for (int i = 0; i < 90 && usage; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            usage = getUsage(tabletIds[0]);
+        }
+        UNIT_ASSERT_C(!usage, "lost update was not repaired by local");
+    }
+
+    Y_UNIT_TEST(TestNamedResourcesIgnoredFromOtherNode) {
+        const TString resource = NResourceBroker::MakeQueueResourceName("queue_cdc_initial_scan");
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+        TActorId sender = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
+            runtime.DispatchEvents(options);
+        }
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, TTabletTypes::Dummy, BINDED_CHANNELS));
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        ui32 tabletNodeIndex = 0;
+        {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo());
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.TabletsSize(), 1);
+            tabletNodeIndex = response->Record.GetTablets(0).GetNodeID() - runtime.GetNodeId(0);
+            UNIT_ASSERT(tabletNodeIndex < 2);
+        }
+
+        auto reportUsage = [&](ui32 nodeIndex) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            auto* tabletMetrics = metrics->Record.AddTabletMetrics();
+            tabletMetrics->SetTabletID(tabletId);
+            auto* named = tabletMetrics->MutableResourceUsage()->AddNamedResources();
+            named->SetName(resource);
+            named->SetValue(3);
+            TActorId nodeSender = runtime.AllocateEdgeActor(nodeIndex);
+            runtime.SendToPipe(hiveTablet, nodeSender, metrics.Release(), nodeIndex, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
+        };
+        auto getValue = [&]() -> ui64 {
+            THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
+            request->Record.SetTabletID(tabletId);
+            request->Record.SetReturnMetrics(true);
+            runtime.SendToPipe(hiveTablet, sender, request.Release());
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            for (const auto& named : response->Record.GetTablets(0).GetMetrics().GetNamedResources()) {
+                if (named.GetName() == resource) {
+                    return named.GetValue();
+                }
+            }
+            return 0;
+        };
+
+        // e.g. a late report from the previous node of a moved tablet
+        reportUsage(1 - tabletNodeIndex);
+        UNIT_ASSERT_VALUES_EQUAL(getValue(), 0);
+        reportUsage(tabletNodeIndex);
+        UNIT_ASSERT_VALUES_EQUAL(getValue(), 3);
     }
 
     Y_UNIT_TEST(TestHiveBalancerDifferentResources2) {

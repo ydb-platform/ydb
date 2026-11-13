@@ -14,6 +14,16 @@ message TTabletAvailability {
     optional int32 Priority = 3;
 }
 
+// Features requiring peer support must be gated on its advertised capabilities.
+message TLocalCapabilities {
+}
+
+message THiveCapabilities {
+}
+
+message THiveSettings {
+}
+
 message TEvRegisterNode {
     optional fixed64 HiveId = 1;
     repeated NKikimrSubDomains.TDomainKey ServicedDomains = 2;
@@ -21,6 +31,7 @@ message TEvRegisterNode {
     repeated TTabletAvailability TabletAvailability = 4;
     optional string Name = 5;
     optional uint32 BridgePileId = 6;
+    optional TLocalCapabilities Capabilities = 7;
 }
 
 message TEvRegisterNodeResult {
@@ -38,6 +49,12 @@ message TEvPing {
     optional uint32 HiveGeneration = 2;
     optional bool Purge = 3;
     optional TLocalConfig Config = 4;
+    // Sent on registration and settings changes. Presence replaces the entire
+    // snapshot; absence preserves it.
+    optional THiveSettings HiveSettings = 5;
+    // Sent on registration and fixed for this Hive incarnation. Absence preserves
+    // the previous capabilities; a new connection starts with none.
+    optional THiveCapabilities Capabilities = 6;
 }
 
 message TEvDeadTabletAck {

@@ -5820,6 +5820,113 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
+    // The replies of a proxy to the requests about one batch come in any order. Here the proxy answers about
+    // the disks, which releases the batch, and no node answers it about the system state and about tablets,
+    // so both these replies come without a payload. Each of them finishes its own request only: the reply
+    // about tablets must not finish the request for the system state, or the response is sent before
+    // the reply that tells which nodes the proxy did not wait for.
+    void CheckNodesTimeoutFromEmptyProxyReplies(bool tabletReplyFirst) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        // TServer registers viewers by node index; offload requests address them by node ID.
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            runtime.RegisterService(MakeViewerID(runtime.GetNodeId(nodeIndex)), viewerId, nodeIndex);
+        }
+        bool holdEmptyReplies = true;
+        size_t diskProxyReplies = 0;
+        bool emptyReplyBeforeDiskReply = false;
+        TAutoPtr<IEventHandle> emptySystemReply;
+        TAutoPtr<IEventHandle> emptyTabletReply;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                // one data center, so all the nodes get into one batch with one proxy
+                SetNodesLocation(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev), "dc-1");
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvSystemStateResponse
+                    || ev->GetTypeRewrite() == TEvWhiteboard::EvTabletStateResponse) {
+                // no node answers about its system state and its tablets
+                return TTestActorRuntime::EEventAction::DROP;
+            } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse) {
+                const auto& record = ev->Get<TEvViewer::TEvViewerResponse>()->Record;
+                if (record.Response_case() == NKikimrViewer::TEvViewerResponse::ResponseCase::kPDiskResponse) {
+                    ++diskProxyReplies;
+                } else if (holdEmptyReplies
+                        && record.Response_case() == NKikimrViewer::TEvViewerResponse::ResponseCase::RESPONSE_NOT_SET) {
+                    // the replies without a payload are kept to be delivered in the order under test
+                    TAutoPtr<IEventHandle>* held = nullptr;
+                    if (record.GetAnsweredRequest() == static_cast<ui32>(NKikimrViewer::TEvViewerRequest::kSystemRequest)) {
+                        held = &emptySystemReply;
+                    } else if (record.GetAnsweredRequest() == static_cast<ui32>(NKikimrViewer::TEvViewerRequest::kTabletRequest)) {
+                        held = &emptyTabletReply;
+                    }
+                    if (held && !*held) {
+                        emptyReplyBeforeDiskReply |= diskProxyReplies == 0;
+                        held->Reset(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/json/nodes?type=static&fields_required=NodeId,SystemState,Tablets,PDisks&sort=NodeId"
+            "&offload_merge=true&offload_merge_attempts=1&timeout=1000&enums=true HTTP/1.1\r\n\r\n", endpoint, {});
+        TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+
+        // the proxy gives up at half of the timeout of the request, long before the handler does
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return bool(emptySystemReply) && bool(emptyTabletReply);
+        };
+        runtime.DispatchEvents(options, TDuration::Seconds(10));
+        UNIT_ASSERT_C(emptySystemReply && emptyTabletReply, "the proxy must answer both requests without a payload");
+        // the scenario itself: the answer about the disks has already released the batch
+        UNIT_ASSERT(diskProxyReplies > 0);
+        UNIT_ASSERT(!emptyReplyBeforeDiskReply);
+
+        holdEmptyReplies = false;
+        // the handler of the request works on the node the request was sent to
+        const ui32 handlerNodeIndex = 0;
+        if (tabletReplyFirst) {
+            runtime.Send(emptyTabletReply.Release(), handlerNodeIndex, true);
+            runtime.Send(emptySystemReply.Release(), handlerNodeIndex, true);
+        } else {
+            runtime.Send(emptySystemReply.Release(), handlerNodeIndex, true);
+            runtime.Send(emptyTabletReply.Release(), handlerNodeIndex, true);
+        }
+
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const TString context = NJson::WriteJson(json, false);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(json["Nodes"].GetArray().size(), 3, context);
+        for (const auto& node : json["Nodes"].GetArray()) {
+            // no node has answered about its system state in time, whichever reply came first
+            UNIT_ASSERT_C(node["ResponseTimeout"].GetBoolean(), context);
+        }
+    }
+
+    Y_UNIT_TEST(NodesPageReportsTimeoutWhenEmptySystemProxyReplyIsFirst) {
+        CheckNodesTimeoutFromEmptyProxyReplies(false);
+    }
+
+    Y_UNIT_TEST(NodesPageReportsTimeoutWhenEmptyTabletProxyReplyIsFirst) {
+        CheckNodesTimeoutFromEmptyProxyReplies(true);
+    }
+
     Y_UNIT_TEST(NodesPageKeepsPDisksForDisconnectedNode)
     {
         TPortManager tp;

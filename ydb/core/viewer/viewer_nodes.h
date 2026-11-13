@@ -3284,66 +3284,35 @@ public:
             }
         }
         TString error("WrongResponse");
-        {
-            auto itSystemViewerResponse = SystemViewerResponse.find(nodeId);
-            if (itSystemViewerResponse != SystemViewerResponse.end()) {
-                if (itSystemViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
+        // A proxy answers every request with a reply of its own, and such a reply names its request. While
+        // the batch is kept, it is asked again as a whole, so every pending request to this proxy is finished
+        // with it: a later answer of the proxy would list the same tablets and disks twice. Once the batch
+        // is released by an answer with data, nothing is asked again, and only the named request is finished:
+        // the others are still to be answered, and the reply about the system state is the only one that
+        // tells which nodes the proxy did not wait for. A proxy of an older version does not name the request,
+        // and all its pending requests are finished, as before.
+        if (NodeBatches.count(nodeId) == 0) {
+            switch (ev->Get()->Record.GetAnsweredRequest()) {
+                case NKikimrViewer::TEvViewerRequest::kSystemRequest:
+                    FailViewerRequest(SystemViewerResponse, nodeId, error);
+                    return;
+                case NKikimrViewer::TEvViewerRequest::kTabletRequest:
+                    FailViewerRequest(TabletViewerResponse, nodeId, error);
+                    return;
+                case NKikimrViewer::TEvViewerRequest::kPDiskRequest:
+                    FailViewerRequest(PDiskViewerResponse, nodeId, error);
+                    return;
+                case NKikimrViewer::TEvViewerRequest::kVDiskRequest:
+                    FailViewerRequest(VDiskViewerResponse, nodeId, error);
+                    return;
+                case NKikimrViewer::TEvViewerRequest::kNodeRequest:
+                    FailViewerRequest(PeersViewerResponse, nodeId, error);
+                    return;
+                default:
+                    break;
             }
         }
-        {
-            auto itTabletViewerResponse = TabletViewerResponse.find(nodeId);
-            if (itTabletViewerResponse != TabletViewerResponse.end()) {
-                if (itTabletViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itPDiskViewerResponse = PDiskViewerResponse.find(nodeId);
-            if (itPDiskViewerResponse != PDiskViewerResponse.end()) {
-                if (itPDiskViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itVDiskViewerResponse = VDiskViewerResponse.find(nodeId);
-            if (itVDiskViewerResponse != VDiskViewerResponse.end()) {
-                if (itVDiskViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itPeersViewerResponse = PeersViewerResponse.find(nodeId);
-            if (itPeersViewerResponse != PeersViewerResponse.end()) {
-                if (itPeersViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
+        FailViewerRequestsForNode(nodeId, error);
     }
 
     void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
@@ -3374,67 +3343,27 @@ public:
         }
     }
 
+    using TViewerResponses = std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>>;
+
+    void FailViewerRequest(TViewerResponses& responses, TNodeId nodeId, const TString& error) {
+        auto itResponse = responses.find(nodeId);
+        if (itResponse != responses.end()) {
+            if (itResponse->second.Error(error)) {
+                if (NodeBatches.count(nodeId)) {
+                    SendWhiteboardRequest(NodeBatches[nodeId]);
+                    NodeBatches.erase(nodeId);
+                }
+                WhiteboardRequestDone();
+            }
+        }
+    }
+
     void FailViewerRequestsForNode(TNodeId nodeId, const TString& error) {
-        {
-            auto itSystemViewerResponse = SystemViewerResponse.find(nodeId);
-            if (itSystemViewerResponse != SystemViewerResponse.end()) {
-                if (itSystemViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itTabletViewerResponse = TabletViewerResponse.find(nodeId);
-            if (itTabletViewerResponse != TabletViewerResponse.end()) {
-                if (itTabletViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itPDiskViewerResponse = PDiskViewerResponse.find(nodeId);
-            if (itPDiskViewerResponse != PDiskViewerResponse.end()) {
-                if (itPDiskViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itVDiskViewerResponse = VDiskViewerResponse.find(nodeId);
-            if (itVDiskViewerResponse != VDiskViewerResponse.end()) {
-                if (itVDiskViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itPeersViewerResponse = PeersViewerResponse.find(nodeId);
-            if (itPeersViewerResponse != PeersViewerResponse.end()) {
-                if (itPeersViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
+        FailViewerRequest(SystemViewerResponse, nodeId, error);
+        FailViewerRequest(TabletViewerResponse, nodeId, error);
+        FailViewerRequest(PDiskViewerResponse, nodeId, error);
+        FailViewerRequest(VDiskViewerResponse, nodeId, error);
+        FailViewerRequest(PeersViewerResponse, nodeId, error);
     }
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {

@@ -605,6 +605,7 @@ class TestViewer(object):
 
         replace_with_values.update({'CpuUsage',
                                     'DiskSpaceUsage',
+                                    'DiskSpaceQuotaUsage',
                                     'Address',
                                     'Port',
                                     'port',
@@ -1233,6 +1234,38 @@ class TestViewer(object):
         for name in cls.databases_and_no_database:
             result[name]['TenantInfo'].sort(key=lambda x: x['Name'])
         return result
+
+    @classmethod
+    def test_viewer_tenantinfo_disk_space_quota(cls):
+        # not canonized: usage depends on the data written by other tests
+        for name in cls.databases:
+            tenants = []
+            for _ in range(15):
+                result = cls.get_viewer("/viewer/tenantinfo", {'database': name, 'storage': 'true'})
+                tenants = [t for t in result.get('TenantInfo', []) if t.get('Name') == name]
+                if tenants and 'DiskSpaceQuota' in tenants[0]:
+                    break
+                time.sleep(1)
+            assert tenants, "no TenantInfo for %s in /viewer/tenantinfo response" % name
+            tenant = tenants[0]
+            quota = tenant.get('DiskSpaceQuota')
+            assert quota is not None, "no DiskSpaceQuota for %s: %s" % (name, tenant)
+            assert quota.get('DiskQuotaExceeded') is False, quota
+            assert quota.get('StorageSpaceExhausted') is False, quota
+            assert quota.get('SmallBlobsQuotaExceeded') is False, quota
+            usage = quota.get('DiskSpaceQuotaUsage')
+            assert usage is not None, quota
+            assert usage.get('Mode') == 'MODE_DATABASE', usage
+            assert usage.get('QuotaExceeded') is False, usage
+            entries = usage.get('Entries', [])
+            assert len(entries) == 1, usage
+            assert 'Usage' in entries[0], usage
+            assert int(entries[0].get('SoftQuota', 0)) == 0, usage
+            assert int(entries[0].get('HardQuota', 0)) == 0, usage
+            # no quotas configured, so there is no limit
+            for tables_storage in tenant.get('TablesStorage', []):
+                for key in ('Limit', 'SoftQuota', 'HardQuota'):
+                    assert key not in tables_storage, tenant['TablesStorage']
 
     @classmethod
     def test_viewer_healthcheck(cls):

@@ -1227,6 +1227,7 @@ private:
 
 class TOpSort: public IUnaryOperator {
 public:
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     const TUnorderedIUs& GetOutputIUs() override { return GetInput()->GetOutputIUs(); }
     TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, TSortIUs keys,
         std::optional<TExpression> limit = std::nullopt);
@@ -1338,6 +1339,7 @@ private:
  ***/
 class TOpIndexLookupJoin: public IUnaryOperator {
 public:
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind, TJoinIUs joinKeys);
     void PropagateLiveness(ILivenessContext& ctx) override;

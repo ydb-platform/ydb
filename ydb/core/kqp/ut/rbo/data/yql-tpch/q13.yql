@@ -8,9 +8,9 @@ FROM (
         c_custkey,
         Count(o_orderkey) AS c_count
     FROM
-        `/Root/customer` as customer
+        `customer` as customer
     LEFT OUTER JOIN
-        `/Root/orders` as orders
+        `orders` as orders
     ON
         c_custkey == o_custkey
         AND o_comment NOT LIKE '%special%requests%'

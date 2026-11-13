@@ -17,6 +17,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/actors/struct_log/string_value_extractor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
@@ -2364,8 +2365,13 @@ void KqpRm::ArenaGrowRefusalLoggedOnChange() {
             const auto* log = ev->Get<NLog::TEvLog>();
             if (log->Component == NKikimrServices::KQP_RESOURCE_MANAGER && log->Line.StartsWith("Memory arena growth")) {
                 const auto& fields = *log->StructuredMessage;
-                lines.push_back({log->Line, fields.GetValue<TString>("size").value_or(""),
-                    fields.GetValue<TString>("delta").value_or(""), fields.GetValue<TString>("granted").value_or("")});
+
+                NActors::NStructuredLog::TStringValueExtractor extractor;
+                const auto size = extractor.ExtractValue(fields, {"size"}).value_or("");
+                const auto delta = extractor.ExtractValue(fields, {"delta"}).value_or("");
+                const auto granted = extractor.ExtractValue(fields, {"granted"}).value_or("");
+
+                lines.push_back({log->Line, size, delta, granted});
             }
         }
         return prevFilter(runtime, ev);

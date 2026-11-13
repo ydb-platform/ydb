@@ -9,6 +9,37 @@
 namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
+Y_UNIT_TEST_LLVM(TestTakeWhileInclusiveEmptyStream) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+    using TRow = std::tuple<TVector<ui64>, ui64>;
+    const auto input = NTest::ConvertValueToLiteralNode(pb, TVector<TRow>{});
+    const auto prefix = pb.TakeWhileInclusive(pb.Iterator(input, {}), [&](TRuntimeNode) {
+        return NTest::ConvertValueToLiteralNode(pb, true);
+    });
+    // YQL-21833: projecting tuple fields makes a spurious empty-stream item crash.
+    const auto projected = pb.Map(prefix, [&](TRuntimeNode row) {
+        return pb.NewTuple({pb.Length(pb.Nth(row, 0)), pb.Nth(row, 1)});
+    });
+    auto graph = setup.BuildGraph(pb.Collect(projected));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<ui64, ui64>>{});
+}
+
+Y_UNIT_TEST_LLVM(TestTakeWhileInclusiveStreamEnd) {
+    const TVector<std::pair<TVector<ui64>, TVector<ui64>>> cases{
+        {{}, {}}, {{0}, {0}}, {{0, 1}, {0, 1}}, {{0, 1, 2, 3}, {0, 1, 2}}, {{2, 3}, {2}}};
+    for (const auto& [input, expected] : cases) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+        const auto list = NTest::ConvertValueToLiteralNode(pb, input);
+        const auto prefix = pb.TakeWhileInclusive(pb.Iterator(list, {}), [&](TRuntimeNode item) {
+            return pb.AggrLess(item, NTest::ConvertValueToLiteralNode(pb, ui64(2)));
+        });
+        auto graph = setup.BuildGraph(pb.Collect(prefix));
+        AssertUnboxedValueElementEqual(graph->GetValue(), expected);
+    }
+}
+
 Y_UNIT_TEST_LLVM(TestSkipNullMembers) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;

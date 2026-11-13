@@ -481,6 +481,8 @@ public:
                     tableSnapshot->SetTableId(localTableId);
                     TString compressedBody = NBlockCodecs::Codec("lz4fast")->Encode(snapBody);
                     tableSnapshot->SetSnapshotData(compressedBody);
+                    TSnapshotManager::SerializeRemovedRowVersions(txc.DB.GetRemovedRowVersions(localTableId),
+                        *tableSnapshot->MutableRemovedRowVersions());
                 }
             }
 
@@ -491,8 +493,11 @@ public:
                     snapshot->SetMinWriteVersionTxId(minVersion.TxId);
                 }
 
-                snapshot->SetMvccLowWatermarkStep(SnapContext->LowWatermark.Step);
-                snapshot->SetMvccLowWatermarkTxId(SnapContext->LowWatermark.TxId);
+                // Cleanup can advance while the snapshot is being flushed.
+                // Transfer its current watermark together with current removals.
+                const auto lowWatermark = Max(SnapContext->LowWatermark, Self->GetSnapshotManager().GetLowWatermark());
+                snapshot->SetMvccLowWatermarkStep(lowWatermark.Step);
+                snapshot->SetMvccLowWatermarkTxId(lowWatermark.TxId);
                 snapshot->SetMvccCompleteEdgeStep(SnapContext->CompleteEdge.Step);
                 snapshot->SetMvccCompleteEdgeTxId(SnapContext->CompleteEdge.TxId);
                 snapshot->SetMvccIncompleteEdgeStep(SnapContext->IncompleteEdge.Step);

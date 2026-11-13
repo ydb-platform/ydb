@@ -412,6 +412,10 @@ class ZSTDDecompressor(DecompressionBaseHandler):
         if self._pending_unused_data is not None:
             data = self._pending_unused_data + data
             self._pending_unused_data = None
+        if self._obj.eof:
+            if not data:
+                return b""
+            self._obj = ZstdDecompressor()
         result = self._obj.decompress(data, zstd_max_length)
 
         # Handle multi-frame zstd streams.
@@ -429,16 +433,14 @@ class ZSTDDecompressor(DecompressionBaseHandler):
                     break
             result += self._obj.decompress(unused_data, zstd_max_length)
 
-        # Frame ended exactly at chunk boundary — no unused_data, but the
-        # next feed_data() call would fail on the spent decompressor.
-        # Prepare a fresh one for the next chunk.
-        if self._obj.eof:
-            self._obj = ZstdDecompressor()
-
         return result
 
     def flush(self) -> bytes:
         return b""
+
+    @property
+    def eof(self) -> bool:
+        return self._obj.eof and self._pending_unused_data is None
 
     @property
     def data_available(self) -> bool:

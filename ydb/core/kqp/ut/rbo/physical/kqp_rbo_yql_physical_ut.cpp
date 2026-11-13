@@ -2212,7 +2212,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
         CreateTablesFromPath(tableSession, "data/", "schema/tpch.sql", /*useColumnStore*/ true);
 
-        TString query = GetFullPath("data/yql-tpch/q", "5.yql");
+        TString query = ReadBenchmarkQuery(EBenchType::TPCH, 5);
         const TString toDecimal = R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
         const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
         query = toDecimal + "\n" + toDecimalMax + "\n" +

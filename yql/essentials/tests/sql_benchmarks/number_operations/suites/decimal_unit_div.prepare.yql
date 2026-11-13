@@ -1,0 +1,4 @@
+SELECT
+    CAST(index AS Decimal(22, 0)) AS unit_left,
+    CAST(index / 2 AS Decimal(22, 0)) AS unit_right
+FROM Input;

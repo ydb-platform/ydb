@@ -1,0 +1,2 @@
+SELECT left_value == right_value AS result
+FROM Input;

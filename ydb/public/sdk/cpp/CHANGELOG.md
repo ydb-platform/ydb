@@ -1,3 +1,7 @@
+* Added support for tablet reassignment operation IDs.
+
+## v3.27.0
+
 * Fixed static login credentials failing permanently when the initial Login operation returns a transient service error.
 
 * Added draft `TBridgeClient::Rollback()` to roll a cluster converted into a bridged one back to ordinary mode, and `TBridgeClient::GetRollbackStatus()` to show the progress of the rollback.

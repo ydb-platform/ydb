@@ -392,44 +392,51 @@ namespace NActors {
 
         TActorRunnableQueue queue(this);
 
+        IActorExceptionHandler* handler = dynamic_cast<IActorExceptionHandler*>(this);
+        if (!handler) {
+            // Do not catch and rethrow fatal exceptions: unwinding to this catch
+            // would remove the original actor frames before terminate captures them.
+            DispatchEvent(ev);
+            return;
+        }
+
         try {
-            if (ev->Flags & IEventHandle::FlagSystemMessage) {
-                switch (ev->GetTypeRewrite()) {
-                    case TEvents::TSystem::ResumeRunnable:
-                        // ResumeRunnable is local-only and legitimate senders
-                        // always provide its in-process event object.
-                        if (ev->HasEvent()) {
-                            HandleResumeRunnable(ev);
-                        }
-                        break;
-                    case TEvents::TSystem::CheckActorLiveness:
-                        HandleCheckActorLiveness(ev);
-                        break;
-                    default:
-                        // System messages must never reach actor
-                        // awaiters or user state functions. Event flags are
-                        // controlled by senders, so unknown values are ignored
-                        // instead of terminating the actor system.
-                        break;
-                }
-            } else if (!HandleRegisteredEvent(ev)) {
-                (this->*StateFunc_)(ev);
-            }
+            DispatchEvent(ev);
         } catch (...) {
-            if (!OnUnhandledExceptionSafe(std::current_exception())) {
+            if (!OnUnhandledExceptionSafe(*handler, std::current_exception())) {
                 throw;
             }
         }
     }
 
-    bool IActor::OnUnhandledExceptionSafe(const std::exception_ptr& excPtr) {
-        auto* handler = dynamic_cast<IActorExceptionHandler*>(this);
-        if (!handler) {
-            return false;
+    void IActor::DispatchEvent(TAutoPtr<IEventHandle>& ev) {
+        if (ev->Flags & IEventHandle::FlagSystemMessage) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvents::TSystem::ResumeRunnable:
+                    // ResumeRunnable is local-only and legitimate senders
+                    // always provide its in-process event object.
+                    if (ev->HasEvent()) {
+                        HandleResumeRunnable(ev);
+                    }
+                    break;
+                case TEvents::TSystem::CheckActorLiveness:
+                    HandleCheckActorLiveness(ev);
+                    break;
+                default:
+                    // System messages must never reach actor
+                    // awaiters or user state functions. Event flags are
+                    // controlled by senders, so unknown values are ignored
+                    // instead of terminating the actor system.
+                    break;
+            }
+        } else if (!HandleRegisteredEvent(ev)) {
+            (this->*StateFunc_)(ev);
         }
+    }
 
+    bool IActor::OnUnhandledExceptionSafe(IActorExceptionHandler& handler, const std::exception_ptr& excPtr) {
         try {
-            return handler->OnUnhandledException(excPtr);
+            return handler.OnUnhandledException(excPtr);
         } catch (const std::exception& handleExc) {
             Cerr << "OnUnhandledException throws unhandled exception "
                 << TypeName(handleExc) << ": " << handleExc.what() << Endl

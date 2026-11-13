@@ -1179,7 +1179,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
         const auto& forwarded = request->Get()->Record;
         UNIT_ASSERT(forwarded.GetView() == NKikimrBridge::TStorageQuery::GROUPS);
         UNIT_ASSERT(!forwarded.HasStoragePool());
-        UNIT_ASSERT(!forwarded.HasStoragePoolId());
+        UNIT_ASSERT_VALUES_EQUAL(forwarded.StoragePoolIdsSize(), 0);
         UNIT_ASSERT(!forwarded.GetFilterPools());
         UNIT_ASSERT(forwarded.HasPileName());
         UNIT_ASSERT(forwarded.GetPileName().empty());
@@ -1230,9 +1230,9 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
         const auto request = setup.GrabStorageQuery();
         const auto& forwarded = request->Get()->Record;
         UNIT_ASSERT(forwarded.GetView() == NKikimrBridge::TStorageQuery::GROUPS);
-        UNIT_ASSERT(forwarded.HasStoragePoolId());
-        UNIT_ASSERT_VALUES_EQUAL(forwarded.GetStoragePoolId().box_id(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(forwarded.GetStoragePoolId().pool_id(), 25);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded.StoragePoolIdsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded.GetStoragePoolIds(0).box_id(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded.GetStoragePoolIds(0).pool_id(), 25);
         UNIT_ASSERT(forwarded.HasPileName());
         UNIT_ASSERT_VALUES_EQUAL(forwarded.GetPileName(), "");
         UNIT_ASSERT_VALUES_EQUAL(forwarded.StatusesSize(), 3);

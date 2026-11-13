@@ -7,6 +7,20 @@
 
 namespace NKikimr {
 
+    inline NKikimrBridge::ESynchronizationStatus GetBridgeSynchronizationStatus(ui64 required, ui64 synced,
+            ui64 syncing, ui64 unknown) {
+        if (!required) {
+            return NKikimrBridge::NOT_REQUIRED;
+        }
+        if (synced == required) {
+            return NKikimrBridge::SYNCED;
+        }
+        if (syncing) {
+            return NKikimrBridge::SYNCING;
+        }
+        return unknown ? NKikimrBridge::UNKNOWN : NKikimrBridge::PENDING;
+    }
+
     struct TEvBlobStorage::TEvControllerQueryBridgeStorage: TEventPB<TEvControllerQueryBridgeStorage,
                                                                      NKikimrBridge::TStorageQuery, TEvBlobStorage::EvControllerQueryBridgeStorage> {
         static constexpr ui64 MaxResultBytes = 32'000'000;

@@ -9,6 +9,9 @@ namespace NKikimr {
 
     namespace NRepl {
         struct TProxyStat;
+
+        TDuration EstimateReplicationTimeOfArrival(ui64 workAtBegin, ui64 workAtEnd,
+            TInstant timeAtBegin, TInstant timeAtEnd);
     };
 
     struct TBlobIdQueue {

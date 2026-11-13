@@ -914,6 +914,7 @@ namespace NKikimr::NStorage {
             ui64 ReportedBlobsDone = 0;
             ui64 ReportedBlobsTotal = 0;
             ui64 ReportedBlobsError = 0;
+            ui64 ReportedScannedItems = 0;
             ui64 ReportedBytesToCopy = 0;
             ui64 ReportedBytesCopied = 0;
             bool ReportedScanFinished = false;

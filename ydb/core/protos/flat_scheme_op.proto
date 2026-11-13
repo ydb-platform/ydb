@@ -1176,6 +1176,8 @@ enum ECdcStreamFormat {
     ECdcStreamFormatJson = 2;
     ECdcStreamFormatDynamoDBStreamsJson = 3;
     ECdcStreamFormatDebeziumJson = 4;
+    // Cells in TDataChange, value tags are name-sorted indexes. Used by async replication.
+    ECdcStreamFormatBinary = 5;
 }
 
 enum ECdcStreamCompression {

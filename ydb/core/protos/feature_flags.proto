@@ -486,4 +486,6 @@ message TFeatureFlags {
     // Requires EnableSnapshotsLocking to publish the registry consumed by DataShard.
     optional bool EnableDataShardSnapshotLocking = 387 [default = false];
     optional bool EnableRowTableZstdCompression = 388 [default = false];
+    // Permits FORMAT BINARY for changefeeds and for asynchronous replication.
+    optional bool EnableBinaryChangefeedForAsyncReplication = 389 [default = false];
 }

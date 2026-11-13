@@ -158,11 +158,15 @@ bool TUserTable::HasAsyncIndexes() const {
     return AsyncIndexCount > 0;
 }
 
-static bool IsJsonCdcStream(TUserTable::TCdcStream::EFormat format) {
+// JSON serializers and the binary format both render column identity from the
+// schema version captured with the change, so that version must stay available
+// until the record is sent.
+static bool FormatNeedsSchemaSnapshot(TUserTable::TCdcStream::EFormat format) {
     switch (format) {
     case TUserTable::TCdcStream::EFormat::ECdcStreamFormatJson:
     case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDynamoDBStreamsJson:
     case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDebeziumJson:
+    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatBinary:
         return true;
     default:
         return false;
@@ -178,7 +182,7 @@ void TUserTable::AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& stre
     }
 
     CdcStreams.emplace(streamPathId, TCdcStream(streamDesc));
-    JsonCdcStreamCount += ui32(IsJsonCdcStream(streamDesc.GetFormat()));
+    SchemaSnapshotCdcStreamCount += ui32(FormatNeedsSchemaSnapshot(streamDesc.GetFormat()));
     if (streamDesc.GetSchemaChanges()) {
         SchemaChangesCdcStreams.insert(streamPathId);
     }
@@ -221,7 +225,7 @@ void TUserTable::DropCdcStream(const TPathId& streamPathId) {
         return;
     }
 
-    JsonCdcStreamCount -= ui32(IsJsonCdcStream(it->second.Format));
+    SchemaSnapshotCdcStreamCount -= ui32(FormatNeedsSchemaSnapshot(it->second.Format));
     SchemaChangesCdcStreams.erase(streamPathId);
     CdcStreams.erase(it);
 
@@ -247,7 +251,7 @@ bool TUserTable::HasCdcStreams() const {
 }
 
 bool TUserTable::NeedSchemaSnapshots() const {
-    return JsonCdcStreamCount > 0;
+    return SchemaSnapshotCdcStreamCount > 0;
 }
 
 const TSet<TPathId>& TUserTable::GetSchemaChangesCdcStreams() const {
@@ -386,7 +390,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         Y_ENSURE(streamDesc.HasPathId());
         const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
         CdcStreams.emplace(streamPathId, TCdcStream(streamDesc));
-        JsonCdcStreamCount += ui32(IsJsonCdcStream(streamDesc.GetFormat()));
+        SchemaSnapshotCdcStreamCount += ui32(FormatNeedsSchemaSnapshot(streamDesc.GetFormat()));
         if (streamDesc.GetSchemaChanges()) {
             SchemaChangesCdcStreams.insert(streamPathId);
         }

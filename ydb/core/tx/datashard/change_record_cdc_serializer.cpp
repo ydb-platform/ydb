@@ -23,6 +23,9 @@
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <util/charset/utf8.h>
+#include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/stream/str.h>
 #include <util/string/printf.h>
 
@@ -66,6 +69,28 @@ class TBaseSerializer: public IChangeRecordSerializer {
     }
 
 protected:
+    // Same codec path as JSON changefeeds: zstd at CompressionLevel, or 3 when
+    // the level is unset. Heartbeats stay raw and never call this.
+    void SetCompressedPayload(NKikimrPQClient::TDataChunk& data, TString payload) const {
+        switch (Opts.Compression) {
+        case NKikimrSchemeOp::ECdcStreamCompressionNone:
+            data.SetData(std::move(payload));
+            break;
+        case NKikimrSchemeOp::ECdcStreamCompressionZstd: {
+            TString compressed;
+            TStringOutput output(compressed);
+            TZstdCompress compressor(&output, Opts.CompressionLevel ? Opts.CompressionLevel : DEFAULT_ZSTD_COMPRESSION_LEVEL);
+            compressor.Write(payload.data(), payload.size());
+            compressor.Finish();
+            data.SetCodec(NPersQueueCommon::ZSTD);
+            data.SetData(std::move(compressed));
+            break;
+        }
+        default:
+            Y_ENSURE(false, "Unsupported changefeed compression");
+        }
+    }
+
     virtual void FillDataChunk(NKikimrPQClient::TDataChunk& chunk, const TChangeRecord& record) = 0;
 
 public:
@@ -78,11 +103,14 @@ public:
         cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
         switch (record.GetKind()) {
         case TChangeRecord::EKind::CdcDataChange:
-            return SerializeDataChange(cmd, record);
+            SerializeDataChange(cmd, record);
+            break;
         case TChangeRecord::EKind::CdcSchemaChange:
-            return SerializeSchemaChange(cmd, record);
+            SerializeSchemaChange(cmd, record);
+            break;
         case TChangeRecord::EKind::CdcHeartbeat:
-            return SerializeHeartbeat(cmd, record);
+            SerializeHeartbeat(cmd, record);
+            break;
         case TChangeRecord::EKind::AsyncIndex:
         case TChangeRecord::EKind::IncrementalRestore:
             Y_ENSURE(false, "Unexpected");
@@ -330,23 +358,7 @@ protected:
     }
 
     void SetJsonData(NKikimrPQClient::TDataChunk& data, TString json) const {
-        switch (Opts.Compression) {
-        case NKikimrSchemeOp::ECdcStreamCompressionNone:
-            data.SetData(std::move(json));
-            break;
-        case NKikimrSchemeOp::ECdcStreamCompressionZstd: {
-            TString compressed;
-            TStringOutput output(compressed);
-            TZstdCompress compressor(&output, Opts.CompressionLevel ? Opts.CompressionLevel : DEFAULT_ZSTD_COMPRESSION_LEVEL);
-            compressor.Write(json.data(), json.size());
-            compressor.Finish();
-            data.SetCodec(NPersQueueCommon::ZSTD);
-            data.SetData(std::move(compressed));
-            break;
-        }
-        default:
-            Y_ENSURE(false, "Unsupported changefeed compression");
-        }
+        SetCompressedPayload(data, std::move(json));
     }
 
     void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {
@@ -574,6 +586,12 @@ protected:
 
 public:
     using TJsonSerializer::TJsonSerializer;
+
+    void WriteSchemaJson(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
+        NJson::TJsonValue json;
+        SerializeSchemaChange(json, record);
+        data.SetData(JsonToString(json));
+    }
 
 }; // TYdbJsonSerializer
 
@@ -813,6 +831,137 @@ public:
 
 }; // TDebeziumJsonSerializer
 
+// Topic payload for FORMAT BINARY.
+// Data and heartbeat records are NKikimrChangeExchange::TChangeRecord.
+// Value tags are indexes of non-key columns sorted by name. The cell bytes
+// stay in the TSerializedCellVec that the tablet already stored. The key is
+// that same vector in primary-key order. Schema records stay the JSON snapshot.
+class TBinaryCdcSerializer: public TBaseSerializer {
+    struct TColumnIndex {
+        TVector<ui32> KeyOrder;
+        THashMap<ui32, ui32> ValueTagToIndex;
+    };
+
+    const TColumnIndex& ColumnIndexFor(const TChangeRecord& record) {
+        const auto* table = record.GetSchema().Get();
+        Y_ENSURE(table);
+        if (CachedTable == table && CachedVersion == record.GetSchemaVersion()) {
+            return CachedIndex;
+        }
+
+        TColumnIndex index;
+        index.KeyOrder = table->KeyColumnIds;
+        THashSet<ui32> keys(index.KeyOrder.begin(), index.KeyOrder.end());
+
+        TVector<std::pair<TString, ui32>> values;
+        values.reserve(table->Columns.size());
+        for (const auto& [tag, column] : table->Columns) {
+            if (!keys.contains(tag)) {
+                values.emplace_back(column.Name, tag);
+            }
+        }
+        Sort(values);
+
+        for (ui32 i = 0; i < values.size(); ++i) {
+            index.ValueTagToIndex.emplace(values[i].second, i);
+        }
+
+        CachedTable = table;
+        CachedVersion = record.GetSchemaVersion();
+        CachedIndex = std::move(index);
+        return CachedIndex;
+    }
+
+    static void RewriteValueTags(
+            NKikimrChangeExchange::TDataChange::TSerializedCells& cells,
+            const THashMap<ui32, ui32>& tagToIndex)
+    {
+        for (ui32 i = 0; i < cells.TagsSize(); ++i) {
+            const auto it = tagToIndex.find(cells.GetTags(i));
+            Y_ENSURE(it != tagToIndex.end(), "Binary CDC record refers to unknown column tag " << cells.GetTags(i));
+            cells.SetTags(i, it->second);
+        }
+    }
+
+    void FillDataChange(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
+        const auto& index = ColumnIndexFor(record);
+        NKikimrChangeExchange::TDataChange change = record.GetDataChange();
+
+        auto* key = change.MutableKey();
+        Y_ENSURE(key->TagsSize() == index.KeyOrder.size(),
+            "Binary CDC key width does not match the primary key");
+        for (ui32 i = 0; i < key->TagsSize(); ++i) {
+            Y_ENSURE(key->GetTags(i) == index.KeyOrder[i],
+                "Binary CDC key tag order does not match the primary key");
+            key->SetTags(i, i);
+        }
+
+        if (change.HasUpsert()) {
+            RewriteValueTags(*change.MutableUpsert(), index.ValueTagToIndex);
+        }
+        if (change.HasReset()) {
+            RewriteValueTags(*change.MutableReset(), index.ValueTagToIndex);
+        }
+        if (change.HasOldImage()) {
+            RewriteValueTags(*change.MutableOldImage(), index.ValueTagToIndex);
+        }
+        if (change.HasNewImage()) {
+            RewriteValueTags(*change.MutableNewImage(), index.ValueTagToIndex);
+        }
+
+        NKikimrChangeExchange::TChangeRecord proto;
+        if (Opts.VirtualTimestamps) {
+            proto.SetStep(record.GetStep());
+            proto.SetTxId(record.GetTxId());
+        }
+        *proto.MutableCdcDataChange() = std::move(change);
+        SetCompressedPayload(data, proto.SerializeAsString());
+    }
+
+    void FillSchemaChange(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
+        TYdbJsonSerializer json(Opts);
+        NKikimrPQClient::TDataChunk raw;
+        json.WriteSchemaJson(raw, record);
+        SetCompressedPayload(data, raw.GetData());
+    }
+
+    void FillHeartbeat(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
+        NKikimrChangeExchange::TChangeRecord proto;
+        proto.SetStep(record.GetStep());
+        proto.SetTxId(record.GetTxId());
+        proto.MutableCdcHeartbeat();
+        data.SetData(proto.SerializeAsString());
+    }
+
+protected:
+    void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {
+        switch (record.GetKind()) {
+        case TChangeRecord::EKind::CdcDataChange:
+            return FillDataChange(data, record);
+        case TChangeRecord::EKind::CdcSchemaChange:
+            return FillSchemaChange(data, record);
+        case TChangeRecord::EKind::CdcHeartbeat:
+            return FillHeartbeat(data, record);
+        case TChangeRecord::EKind::AsyncIndex:
+        case TChangeRecord::EKind::IncrementalRestore:
+            Y_ENSURE(false, "Unexpected");
+        }
+    }
+
+public:
+    using TBaseSerializer::TBaseSerializer;
+
+    TString DebugString(const TChangeRecord& record) override {
+        return TStringBuilder() << "binary CDC kind " << static_cast<int>(record.GetKind());
+    }
+
+private:
+    const TUserTable* CachedTable = nullptr;
+    ui64 CachedVersion = 0;
+    TColumnIndex CachedIndex;
+
+}; // TBinaryCdcSerializer
+
 TChangeRecordSerializerOpts TChangeRecordSerializerOpts::DebugOpts() {
     TChangeRecordSerializerOpts opts;
     opts.Debug = true;
@@ -829,6 +978,8 @@ IChangeRecordSerializer* CreateChangeRecordSerializer(const TChangeRecordSeriali
         return new TDynamoDBStreamsJsonSerializer(opts);
     case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDebeziumJson:
         return new TDebeziumJsonSerializer(opts);
+    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatBinary:
+        return new TBinaryCdcSerializer(opts);
     default:
         Y_ENSURE(false, "Unsupported format");
     }
@@ -853,6 +1004,17 @@ TString TChangeRecord::GetPartitionKey() const {
 
     PartitionKey.ConstructInPlace(MD5::Calc(WriteJson(key, false)));
     return *PartitionKey;
+}
+
+TString TChangeRecord::GetRawKeyPartitionKey() const {
+    if (RawKeyPartitionKey) {
+        return *RawKeyPartitionKey;
+    }
+
+    Y_ENSURE(Kind == EKind::CdcDataChange);
+    const auto& key = GetDataChange().GetKey().GetData();
+    RawKeyPartitionKey.ConstructInPlace(MD5::Calc(TStringBuf(key)));
+    return *RawKeyPartitionKey;
 }
 
 }

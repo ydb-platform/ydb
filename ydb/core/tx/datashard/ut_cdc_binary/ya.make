@@ -1,0 +1,18 @@
+UNITTEST_FOR(ydb/core/tx/datashard)
+
+SIZE(SMALL)
+
+YQL_LAST_ABI_VERSION()
+
+PEERDIR(
+    library/cpp/digest/md5
+    library/cpp/streams/zstd
+    library/cpp/testing/unittest
+    ydb/core/testlib/default
+)
+
+SRCS(
+    datashard_ut_cdc_binary.cpp
+)
+
+END()

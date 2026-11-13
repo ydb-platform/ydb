@@ -108,7 +108,7 @@ namespace {
 
         TFixture(
             TIntrusivePtr<TSettings> settings,
-            NStructuredLog::ILogSinkSPtr sink) : Settings(settings)
+            std::shared_ptr<ILogSink> sink) : Settings(settings)
         {
             Runtime.Initialize();
             LogBackend.reset(new TMockBackend{ThrowAlways});

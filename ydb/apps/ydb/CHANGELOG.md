@@ -1,5 +1,4 @@
 * Added `ydb admin cluster reassign-tablets` to start bulk tablet channel reassignment in the Hive selected by `--database`, with progress available through `ydb operation get` and cancellation through `ydb operation cancel`.
-* Added `ydb admin database reassign-tablets` to start bulk tablet channel reassignment, with progress available through `ydb operation get` and cancellation through `ydb operation cancel`.
 * `ydb scheme rmdir --recursive` now removes objects in parallel. Added `--in-flight` option to set the maximum number of objects removed at the same time (default: 16).
 * Workload imports with `--file-output-path` now skip database post-import actions such as index building and statistics collection.
 * Fixed a crash when searching documentation in interactive AI mode.

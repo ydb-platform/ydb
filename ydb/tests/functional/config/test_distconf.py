@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
+from contextlib import ExitStack
 import yaml
 import tempfile
 import os
@@ -352,7 +353,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
                 logger.error(f"Viewer API response content: {pdisk_info}")
             raise
 
-    def test_dynamic_node_start_with_seed_nodes(self):
+    def test_dynamic_node_start_with_seed_nodes(self, request):
         database_path = os.path.join('/', self.cluster.domain_name, 'dyn_seed_db')
         try:
             self.cluster.remove_database(database_path)
@@ -361,8 +362,10 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         self.cluster.create_database(database_path, storage_pool_units_count={'rot': 1}, timeout_seconds=60)
 
         endpoint = f"{self.cluster.nodes[1].host}:{self.cluster.nodes[1].grpc_port}"
-        driver = ydb.Driver(ydb.DriverConfig(endpoint, database_path))
-        pool = ydb.SessionPool(driver)
+        clients = ExitStack()
+        request.addfinalizer(clients.close)
+        driver = clients.enter_context(ydb.Driver(ydb.DriverConfig(endpoint, database_path)))
+        pool = clients.enter_context(ydb.SessionPool(driver))
 
         def create_table(num, session):
             session.execute_scheme(
@@ -426,14 +429,17 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             assert False, 'Query unexpectedly failed with dynamic slots'
         finally:
             try:
-                self.cluster.remove_database(database_path)
-            except Exception:
-                pass
-            if os.path.exists(seed_nodes_file.name):
+                clients.close()
+            finally:
                 try:
-                    os.unlink(seed_nodes_file.name)
+                    self.cluster.remove_database(database_path)
                 except Exception:
                     pass
+                if os.path.exists(seed_nodes_file.name):
+                    try:
+                        os.unlink(seed_nodes_file.name)
+                    except Exception:
+                        pass
 
     def test_cluster_expand_with_seed_nodes(self):
         table_path = '/Root/mydb/mytable_with_seed_nodes'

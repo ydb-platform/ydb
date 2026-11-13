@@ -588,6 +588,18 @@ namespace NKikimr {
                 // create reply
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncGuidResult>(NKikimrProto::OK, selfVDisk,
                     TAppData::TimeProvider->Now(), nullptr, nullptr, ev->GetChannel());
+                bool conflictingGuid = data.Info.GetState() == NKikimrBlobStorage::TSyncGuidInfo::Final
+                    && data.Info.GetGuid() != guid;
+                for (const auto& witness : SyncerData->GuidHistory.GetWitnesses()) {
+                    if (TVDiskIdShort(VDiskIDFromVDiskID(witness.GetOwnerVDiskID())) == TVDiskIdShort(vdisk)) {
+                        conflictingGuid |= witness.GetGuid() != guid;
+                    }
+                }
+                if (conflictingGuid) {
+                    result->Record.SetStatus(NKikimrProto::ERROR);
+                    DelayedQueue.ReadRequest(ctx, ev->Sender, std::move(result));
+                    return;
+                }
                 if (!SyncerCtx->Config->BaseInfo.ReadOnly) {
                     data.Info = info;
                     // put reply into the queue and wait until it would be committed

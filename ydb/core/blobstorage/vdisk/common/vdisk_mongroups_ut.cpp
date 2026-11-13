@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TVDiskMonitoring) {
                 UNIT_ASSERT_VALUES_EQUAL(counters->FindCounter("MinHugeBlobInBytes")->Val(), size);
             }
             UNIT_ASSERT(!counters->FindCounter("MinHugeBlobInBytes")->ForDerivative());
-            UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), extended ? 24 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), extended ? 23 : 1);
             auto old = counters->FindSubgroup("MinHugeBlobInBytes", "131072");
             UNIT_ASSERT_VALUES_EQUAL(old->FindCounter("count")->Val(), 0);
         }

@@ -375,7 +375,6 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(LocalRecovBytesDispatched, true);
                 COUNTER_INIT_IF_EXTENDED(LocalRecovRecsApplied, true);
                 COUNTER_INIT_IF_EXTENDED(LocalRecovBytesApplied, true);
-                COUNTER_INIT_IF_EXTENDED(BulkLogoBlobs, true);
             }
 
             COUNTER_DEF(LogoBlobsDbEmpty);
@@ -385,7 +384,6 @@ public:                                                                         
             COUNTER_DEF(LocalRecovBytesDispatched);
             COUNTER_DEF(LocalRecovRecsApplied);
             COUNTER_DEF(LocalRecovBytesApplied);
-            COUNTER_DEF(BulkLogoBlobs);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -613,7 +611,6 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(BlockAndGetMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(GCMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(GetBarrierMsgs, true);
-                COUNTER_INIT_IF_EXTENDED(SyncMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(SyncFullMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(RecoveredHugeBlobMsgs, true);
                 COUNTER_INIT_IF_EXTENDED(StatusMsgs, true);
@@ -670,7 +667,6 @@ public:                                                                         
             COUNTER_DEF(BlockAndGetMsgs);
             COUNTER_DEF(GCMsgs);
             COUNTER_DEF(GetBarrierMsgs);
-            COUNTER_DEF(SyncMsgs);
             COUNTER_DEF(SyncFullMsgs);
             COUNTER_DEF(RecoveredHugeBlobMsgs);
             COUNTER_DEF(StatusMsgs);

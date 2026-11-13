@@ -31,6 +31,7 @@ def kikimr_udfs(request):
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
         udfs_path=yatest.common.build_path("yql/essentials/udfs/common/python/python3_small"),
+        dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0, num_groups=2)],
     )
     config.yaml_config["log_config"] = {
         "default_level": 4,

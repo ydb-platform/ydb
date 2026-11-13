@@ -4,6 +4,8 @@
 
 #include <util/generic/hash.h>
 
+#include <util/string/escape.h>
+
 namespace NSkiff {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -30,8 +32,11 @@ bool operator!=(const TSkiffSchema& lhs, const TSkiffSchema& rhs)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void PrintShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema, IOutputStream* out)
+void PrintShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema, IOutputStream* out, bool includeNames)
 {
+    if (includeNames && !schema->GetName().empty()) {
+        (*out) << '"' << EscapeC(schema->GetName()) << "\": ";
+    }
     (*out) << ToString(schema->GetWireType());
     switch (GetSchemaKind(schema->GetWireType())) {
         case ESchemaKind::Simple:
@@ -44,7 +49,7 @@ void PrintShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema, IO
             if (!children.empty()) {
                 (*out) << '<';
                 for (const auto& child : children) {
-                    PrintShortDebugString(child, out);
+                    PrintShortDebugString(child, out, includeNames);
                     (*out) << ';';
                 }
                 (*out) << '>';
@@ -54,10 +59,10 @@ void PrintShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema, IO
     }
 }
 
-TString GetShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema)
+TString GetShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema, bool includeNames)
 {
     TStringStream out;
-    PrintShortDebugString(schema, &out);
+    PrintShortDebugString(schema, &out, includeNames);
     return out.Str();
 }
 

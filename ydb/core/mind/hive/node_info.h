@@ -72,6 +72,7 @@ public:
     THive& Hive;
     TNodeId Id;
     TActorId Local;
+    NKikimrLocal::TLocalCapabilities Capabilities;
     bool Down;
     bool Freeze;
     bool Drain;
@@ -268,7 +269,7 @@ public:
     bool CanBeDeleted(TInstant now) const;
     void RegisterInDomains();
     void DeregisterInDomains();
-    void Ping();
+    void Ping(bool sendSettings = false, bool sendCapabilities = false);
     void SendReconnect(const TActorId& local);
     // reason and details describe who/what initiated the change, see THive::RecordNodeEvent
     void SetDown(bool down, EHiveEventReason reason, TString details = {});

@@ -419,13 +419,15 @@ void TNodeInfo::DeregisterInDomains() {
     Hive.UpdateNodeSegments(this);
 }
 
-void TNodeInfo::Ping() {
+void TNodeInfo::Ping(bool sendSettings, bool sendCapabilities) {
     Y_ABORT_UNLESS((bool)Local);
     YDB_LOG_DEBUG("TNodeInfo::Ping queueing ping",
         {"logPrefix", GetLogPrefix()},
         {"nodeId", Id},
-        {"local", Local});
-    Hive.QueuePing(Local);
+        {"local", Local},
+        {"sendSettings", sendSettings},
+        {"sendCapabilities", sendCapabilities});
+    Hive.QueuePing({.Local = Local, .SendSettings = sendSettings, .SendCapabilities = sendCapabilities});
 }
 
 void TNodeInfo::SendReconnect(const TActorId& local) {

@@ -386,23 +386,6 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
         }
     }
 
-    Y_UNIT_TEST(InvalidSelectionDoesNotChangeQuorumOrReuseReplicas) {
-        TStateStorageInfo info;
-        FillStateStorageInfo(&info, 3, 3, 3, false);
-        TStateStorageInfo::TSelection selection;
-        UNIT_ASSERT(info.SelectReplicas(100, &selection, 0));
-        UNIT_ASSERT_VALUES_EQUAL(selection.Sz, 3);
-        for (ui32 nToSelect : {0u, 9u}) {
-            info.RingGroups[0].NToSelect = nToSelect;
-            UNIT_ASSERT(!info.SelectReplicas(100, &selection, 0));
-            UNIT_ASSERT_VALUES_EQUAL(selection.Sz, 0);
-            UNIT_ASSERT_VALUES_EQUAL(info.RingGroups[0].NToSelect, nToSelect);
-        }
-        info.RingGroups[0].NToSelect = 3;
-        UNIT_ASSERT(info.SelectReplicas(100, &selection, 0));
-        UNIT_ASSERT_VALUES_EQUAL(selection.Sz, 3);
-    }
-
     ui64 StabilityRun(ui32 replicas, ui32 nToSelect, ui32 replicasInRing, bool useRingSpecificNodeSelection) {
         ui64 retHash = 0;
 

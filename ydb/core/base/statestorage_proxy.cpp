@@ -364,16 +364,11 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     template<typename TEv>
-    bool PrepareInit(TEv *ev) {
+    void PrepareInit(TEv *ev) {
         TabletID = ev->TabletID;
         Cookie = ev->Cookie;
         ProxyOptions = ev->ProxyOptions;
         SelectRequestReplicas(Info.Get());
-        if (!Replicas) {
-            ReplyAndDie(NKikimrProto::ERROR);
-            return false;
-        }
-        return true;
     }
 
     // request setup
@@ -386,9 +381,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
 
-        if (!PrepareInit(msg)) {
-            return;
-        }
+        PrepareInit(msg);
         SendRequest([this](ui64 cookie, TActorId /*replica*/) { return new TEvStateStorage::TEvReplicaLookup(TabletID, cookie, Info->ClusterStateGeneration, Info->ClusterStateGuid); });
 
         Become(&TThis::StateLookup, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
@@ -402,9 +395,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
 
-        if (!PrepareInit(msg)) {
-            return;
-        }
+        PrepareInit(msg);
 
         SuggestedLeader = msg->ProposedLeader;
         SuggestedLeaderTablet = msg->ProposedLeaderTablet;
@@ -424,9 +415,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
 
-        if (!PrepareInit(msg)) {
-            return;
-        }
+        PrepareInit(msg);
 
         SuggestedLeader = msg->ProposedLeader;
         SuggestedGeneration = msg->ProposedGeneration;
@@ -859,20 +848,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     }
 
 
-    bool ValidateSelectionBounds() const {
-        for (const auto& group : Info->RingGroups) {
-            if (group.State == ERingGroupState::DISCONNECTED || group.State == ERingGroupState::NOT_SYNCHRONIZED) {
-                continue;
-            }
-            if (!group.NToSelect || group.NToSelect > group.Rings.size()) {
-                YDB_LOG_CRIT("Invalid state storage ring group selection",
-                    {"nToSelect", group.NToSelect}, {"rings", group.Rings.size()});
-                return false;
-            }
-        }
-        return true;
-    }
-
     void HandleInit(TEvStateStorage::TEvLookup::TPtr &ev) {
         TEvStateStorage::TEvLookup *msg = ev->Get();
         Source = ev->Sender;
@@ -883,11 +858,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         ProxyOptions = msg->ProxyOptions;
         YDB_LOG_DEBUG("RingGroupProxyRequest::HandleInit",
             {"ev", msg->ToString()});
-        if (!ValidateSelectionBounds()) {
-            Reply(NKikimrProto::ERROR);
-            PassAway();
-            return;
-        }
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             const auto &ringGroup = Info->RingGroups[ringGroupIndex];
             if (ringGroup.State == ERingGroupState::DISCONNECTED || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
@@ -915,11 +885,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         ProxyOptions = msg->ProxyOptions;
         YDB_LOG_DEBUG("RingGroupProxyRequest::HandleInit",
             {"ev", msg->ToString()});
-        if (!ValidateSelectionBounds()) {
-            Reply(NKikimrProto::ERROR);
-            PassAway();
-            return;
-        }
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             const auto &ringGroup = Info->RingGroups[ringGroupIndex];
             if (ringGroup.State == ERingGroupState::DISCONNECTED || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
@@ -1376,12 +1341,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
                 continue;
             }
             THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
-            if (!info->SelectReplicas(tabletId, selection.Get(), ringGroupIndex)) {
-                // An empty result reports unavailability; never expose a smaller
-                // replica set from an invalid configuration to board clients.
-                reply->ReplicaGroups.clear();
-                break;
-            }
+            info->SelectReplicas(tabletId, selection.Get(), ringGroupIndex);
             reply->ReplicaGroups.resize(reply->ReplicaGroups.size() + 1);
             auto &rg = reply->ReplicaGroups.back();
             rg.WriteOnly = info->RingGroups[ringGroupIndex].WriteOnly;

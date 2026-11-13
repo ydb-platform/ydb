@@ -1,4 +1,5 @@
 #include "distconf.h"
+#include <ydb/core/base/statestorage.h>
 
 #include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
 #include <ydb/core/blobstorage/base/pdisk_config_validation.h>
@@ -523,6 +524,20 @@ namespace NKikimr::NStorage {
             }
         }
         return {};
+    }
+
+    std::optional<TString> ValidateStateStorageSelections(const NKikimrBlobStorage::TStorageConfig& config) {
+#define VALIDATE_STATE_STORAGE_SELECTION(NAME) \
+        if (config.Has##NAME##Config()) { \
+            if (TString error = ValidateStateStorageConfigSelection(config.Get##NAME##Config())) { \
+                return TStringBuilder() << #NAME << ' ' << error; \
+            } \
+        }
+        VALIDATE_STATE_STORAGE_SELECTION(StateStorage)
+        VALIDATE_STATE_STORAGE_SELECTION(StateStorageBoard)
+        VALIDATE_STATE_STORAGE_SELECTION(SchemeBoard)
+#undef VALIDATE_STATE_STORAGE_SELECTION
+        return std::nullopt;
     }
 
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config) {

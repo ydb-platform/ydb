@@ -184,7 +184,6 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         None,
         Reorder,
         DuplicateAck,
-        InvalidSelection,
     };
 
     void TestPopulatorQuorum(TVector<TStateStorageInfo::TRingGroup>&& ringGroupsConfiguration,
@@ -285,21 +284,6 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
             UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
         }
         ackBlocker.Stop();
-        if (reconfiguration == EReconfiguration::InvalidSelection) {
-            for (ui32 nToSelect : {0u, 9u}) {
-                auto invalid = MakeIntrusive<TStateStorageInfo>();
-                invalid->RingGroups = stateStorageInfo->RingGroups;
-                invalid->RingGroups.front().NToSelect = nToSelect;
-                runtime.Send(new IEventHandle(populator, edge, new TEvStateStorage::TEvListSchemeBoardResult(invalid)));
-                UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
-                const auto& last = requiredAcks.back();
-                auto ack = MakeHolder<TUpdateAck>(owner, generation, pathId, last->Get()->Record.GetVersion());
-                runtime.Send(new IEventHandle(populator, last->Sender, ack.Release(), 0, cookie));
-                UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
-                UNIT_ASSERT_VALUES_EQUAL(invalid->RingGroups.front().NToSelect, nToSelect);
-            }
-            runtime.Send(new IEventHandle(populator, edge, new TEvStateStorage::TEvListSchemeBoardResult(stateStorageInfo)));
-        }
         runtime.Send(requiredAcks.back().Release());
 
         auto mainAck = runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10));
@@ -1219,10 +1203,6 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
 
     Y_UNIT_TEST(ReorderRingGroupsDuringPublication) {
         TestPopulatorQuorum({ {.State = PRIMARY}, {.State = SYNCHRONIZED} }, EReconfiguration::Reorder);
-    }
-
-    Y_UNIT_TEST(InvalidSelectionDoesNotAcknowledgePublicationAndRecovers) {
-        TestPopulatorQuorum({ {} }, EReconfiguration::InvalidSelection);
     }
 
     Y_UNIT_TEST(DuplicateReplicaAckDoesNotReachQuorum) {

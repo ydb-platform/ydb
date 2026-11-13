@@ -1055,6 +1055,13 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         const auto& replicaGroups = ev->Get()->ReplicaGroups;
 
+        if (replicaGroups.empty()) {
+            Y_ABORT_UNLESS(ProxyGroups.empty());
+            YDB_LOG_ERROR("Subscribe on unconfigured SchemeBoard");
+            this->Become(&TDerived::StateCalm);
+            return;
+        }
+
         for (const auto& group : ProxyGroups) {
             for (const auto& [proxy, _] : group.Proxies) {
                 this->Send(proxy, new TEvents::TEvPoisonPill());
@@ -1075,12 +1082,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         State.Clear();
         PendingSync.clear();
         ReceivedSync.clear();
-
-        if (replicaGroups.empty()) {
-            YDB_LOG_ERROR("Subscribe on unconfigured SchemeBoard");
-            this->Become(&TDerived::StateResolve);
-            return;
-        }
 
         ClusterState.Generation = ev->Get()->ClusterStateGeneration;
         ClusterState.Guid = ev->Get()->ClusterStateGuid;

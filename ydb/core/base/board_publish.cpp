@@ -153,7 +153,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
         auto *msg = ev->Get();
 
         if (msg->ReplicaGroups.empty() || msg->ReplicaGroups[0].Replicas.empty()) {
-            // Keep existing publishers until a valid replica configuration arrives.
+            Y_ABORT_UNLESS(ReplicaPublishActors.empty());
             YDB_LOG_ERROR("Publish on unconfigured statestorage board service");
         } else {
             ClusterStateGeneration = msg->ClusterStateGeneration;

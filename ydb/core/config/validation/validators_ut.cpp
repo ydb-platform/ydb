@@ -501,12 +501,16 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
                     }
                     auto* group = ringGroups ? ss->AddRingGroups() : ss->MutableRing();
                     FillRing(group, 3, 9); // 3 rings with several nodes each are still only 3 rings.
-                    std::vector<TString> errors;
-                    UNIT_ASSERT_EQUAL(ValidateConfig(app, errors), EValidationResult::Error);
-                    UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
-                    UNIT_ASSERT_STRING_CONTAINS(errors[0], "NToSelect# 9 must be in [1, 3]");
+                    for (ui32 nToSelect : {0u, 9u}) {
+                        group->SetNToSelect(nToSelect);
+                        std::vector<TString> errors;
+                        UNIT_ASSERT_EQUAL(ValidateConfig(app, errors), EValidationResult::Error);
+                        UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+                        UNIT_ASSERT_STRING_CONTAINS(errors[0],
+                            TStringBuilder() << "NToSelect# " << nToSelect << " must be in [1, 3]");
+                    }
                     group->SetNToSelect(3);
-                    errors.clear();
+                    std::vector<TString> errors;
                     UNIT_ASSERT_C(ValidateConfig(app, errors) == EValidationResult::Ok, errors.empty() ? "" : errors[0]);
                 }
             }

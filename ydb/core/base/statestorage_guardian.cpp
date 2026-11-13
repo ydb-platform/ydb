@@ -15,8 +15,6 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
 
-#include <algorithm>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATESTORAGE
 
 namespace NKikimr {
@@ -430,19 +428,10 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         return Info ? Info->Leader : FollowerInfo->Follower;
     }
 
-    void StopReplicaGuardians() {
-        for (const auto& [_, guardian] : ReplicaGuardians) {
-            if (guardian) {
-                Send(guardian, new TEvents::TEvPoison());
-            }
-        }
-        ReplicaGuardians.clear();
-        MissingReplicas.clear();
-        FollowerTracker.Reset();
-    }
-
     void HandlePoison() {
-        StopReplicaGuardians();
+        for (const auto &xpair : ReplicaGuardians)
+            Send(xpair.second, new TEvents::TEvPoison());
+
         return PassAway();
     }
 
@@ -456,19 +445,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         const TVector<TActorId> &replicasList = ev->Get()->GetPlainReplicas();
         ui64 clusterStateGeneration = ev->Get()->ClusterStateGeneration;
         ui64 clusterStateGuid = ev->Get()->ClusterStateGuid;
-        if (replicasList.empty()) {
-            YDB_LOG_ERROR("State storage replicas unavailable for tablet guardian");
-            if (Info) {
-                Send(Launcher(), new TEvTablet::TEvDemoted(true));
-                HandlePoison();
-            } else {
-                // Bootstrapping followers cannot process TEvDemoted yet. Drop old
-                // children but keep the subscription until a valid selection arrives.
-                StopReplicaGuardians();
-                Become(&TThis::StateResolve);
-            }
-            return;
-        }
+        Y_ABORT_UNLESS(!replicasList.empty(), "must not happens, guardian must be created over active tablet");
 
         const ui32 replicaSz = replicasList.size();
 
@@ -583,10 +560,6 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     }
 
     void Handle(TEvPrivate::TEvReplicaMissing::TPtr &ev) {
-        if (std::none_of(ReplicaGuardians.begin(), ReplicaGuardians.end(),
-                [&](const auto& pair) { return pair.second == ev->Sender; })) {
-            return;
-        }
         auto* msg = ev->Get();
 
         if (msg->Missing) {
@@ -598,13 +571,14 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     }
 
     void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
+        Y_ABORT_UNLESS(FollowerTracker);
+
         const NKikimrStateStorage::TEvInfo &record = ev->Get()->Record;
         const TActorId guardian = ev->Sender;
         for (ui32 idx : xrange(ReplicaGuardians.size())) {
             if (ReplicaGuardians[idx].second != guardian)
                 continue;
 
-            Y_ABORT_UNLESS(FollowerTracker);
             TVector<TActorId> reported;
 
             // NOTE: The Follower, FollowerTablet and FollowerCandidate fields

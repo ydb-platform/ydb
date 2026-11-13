@@ -2129,8 +2129,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
                     group->SetNToSelect(nToSelect);
                     // Historical bad data must remain readable by administrative APIs.
                     UNIT_ASSERT(!NStorage::ValidateConfig(config));
-                    auto proposed = config;
-                    const auto error = NStorage::TDistributedConfigKeeper::TransformConfigBeforeCommit(&proposed);
+                    const auto error = NStorage::ValidateStateStorageSelections(config);
                     if (nToSelect == 3) {
                         UNIT_ASSERT_C(!error, error.value_or(""));
                     } else {
@@ -2144,11 +2143,215 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
                             : corrected.MutableSchemeBoardConfig();
                         auto* fixedGroup = legacyNodes ? fixedSS->MutableRing() : fixedSS->MutableRingGroups(0);
                         fixedGroup->SetNToSelect(3);
-                        UNIT_ASSERT(!NStorage::TDistributedConfigKeeper::TransformConfigBeforeCommit(&corrected));
+                        UNIT_ASSERT(!NStorage::ValidateStateStorageSelections(corrected));
                         UNIT_ASSERT(!NStorage::ValidateConfigUpdate(config, corrected));
                     }
                 }
             }
+        }
+    }
+
+    void SetStateStorageSelection(NKikimrBlobStorage::TStorageConfig& config, ui32 section, ui32 nToSelect) {
+        auto *ss = section == 0 ? config.MutableStateStorageConfig()
+            : section == 1 ? config.MutableStateStorageBoardConfig() : config.MutableSchemeBoardConfig();
+        ss->Clear();
+        auto *ring = ss->MutableRing();
+        ring->SetNToSelect(nToSelect);
+        ring->AddNode(1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+    }
+
+    Y_UNIT_TEST(StateStorageSelectionRejectedBeforeApplyOrPropose) {
+        auto config = MakeStorageConfig(2, 1);
+        config.MutableSelfManagementConfig()->SetEnabled(true);
+        config.MutableSelfManagementConfig()->SetAutomaticBootstrap(false);
+        for (ui32 section : xrange<ui32>(3)) {
+            SetStateStorageSelection(config, section, 1);
+        }
+        TNodeWardenTestState state;
+        for (ui32 nodeId : {1u, 2u}) {
+            state.Metadata[{nodeId, TStringBuilder() << "/dev/disk" << nodeId << "_1"}]
+                .MutableCommittedStorageConfig()->CopyFrom(config);
+        }
+        TTestActorSystem runtime(2);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        const std::vector keepers{RegisterKeeper(runtime, config, 1, state), RegisterKeeper(runtime, config, 2, state)};
+        std::optional<ui32> root;
+        UNIT_ASSERT(SimUntil(runtime, [&] { root = FindConvergedRoot(runtime, keepers); return root.has_value(); }));
+        const TActorId keeperId = keepers[*root - 1];
+        QueryKeeper(runtime, keeperId, true);
+
+        ui32 invalidMessages = 0;
+        runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            const auto invalid = [](const auto& value) { return NStorage::ValidateStateStorageSelections(value).has_value(); };
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigReversePush::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigReversePush>()->Record;
+                invalidMessages += record.HasCommittedStorageConfig() && invalid(record.GetCommittedStorageConfig());
+            } else if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigScatter::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigScatter>()->Record;
+                invalidMessages += record.HasProposeStorageConfig() && invalid(record.GetProposeStorageConfig().GetConfig());
+            } else if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record;
+                invalidMessages += (record.HasCommittedStorageConfig() && invalid(record.GetCommittedStorageConfig()))
+                    || (record.HasProposedStorageConfig() && invalid(record.GetProposedStorageConfig()));
+            } else if (ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                invalidMessages += invalid(*ev->Get<TEvNodeWardenStorageConfig>()->Config);
+            }
+            return true;
+        };
+        for (ui32 section : xrange<ui32>(3)) {
+            for (ui32 nToSelect : {0u, 2u}) {
+                auto bad = config;
+                bad.SetGeneration(2);
+                SetStateStorageSelection(bad, section, nToSelect);
+                UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor *actor) {
+                    auto *keeper = static_cast<NStorage::TDistributedConfigKeeper*>(actor);
+                    UNIT_ASSERT(!keeper->ApplyStorageConfig(bad));
+                    keeper->ApplyCommittedStorageConfig(bad);
+                    keeper->FanOutReversePush(&bad);
+                    for (bool recovery : {false, true}) {
+                        auto proposed = bad;
+                        const auto error = keeper->StartProposition(&proposed, nullptr, {}, false, false, recovery);
+                        UNIT_ASSERT(error);
+                        UNIT_ASSERT_STRING_CONTAINS(*error, "must be in [1, 1]");
+                    }
+                }));
+                const TActorId edge = runtime.AllocateEdgeActor(keeperId.NodeId());
+                NKikimrBlobStorage::TEvNodeConfigScatter request;
+                request.MutableProposeStorageConfig()->MutableConfig()->CopyFrom(bad);
+                UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor *actor) {
+                    static_cast<NStorage::TDistributedConfigKeeper*>(actor)->IssueScatterTask(TActorId(edge), std::move(request));
+                }));
+                const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigGather>(edge);
+                const auto& statuses = response->Get()->Record.GetProposeStorageConfig().GetStatus();
+                UNIT_ASSERT_VALUES_EQUAL(statuses.size(), 1);
+                UNIT_ASSERT_C(statuses.Get(0).GetStatus() ==
+                    NKikimrBlobStorage::TEvNodeConfigGather::TProposeStorageConfig::ERROR,
+                    statuses.Get(0).DebugString());
+                UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, keeperId).GetQueryConfig().GetConfig().GetGeneration(), 1);
+            }
+        }
+        SimUntil(runtime, [] { return false; }, TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(invalidMessages, 0);
+
+        auto valid = config;
+        valid.SetGeneration(2);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&valid);
+        UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor *actor) {
+            static_cast<NStorage::TDistributedConfigKeeper*>(actor)->ApplyCommittedStorageConfig(valid);
+        }));
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return state.NodeWardenConfigs.size() == 2 && std::ranges::all_of(state.NodeWardenConfigs,
+                [&](const auto& entry) { return entry.second->GetFingerprint() == valid.GetFingerprint(); });
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(invalidMessages, 0);
+    }
+
+    Y_UNIT_TEST(StateStorageSelectionRejectedDuringDiskBootstrap) {
+        for (bool olderCommitted : {false, true}) {
+            auto base = MakeStorageConfig(1, 0);
+            base.MutableSelfManagementConfig()->SetEnabled(true);
+            base.MutableSelfManagementConfig()->SetAutomaticBootstrap(false);
+            SetStateStorageSelection(base, 0, 1);
+            auto bad = base;
+            bad.SetGeneration(2);
+            SetStateStorageSelection(bad, 0, 2);
+            auto* extraDrive = bad.MutableBlobStorageConfig()->MutableDefineHostConfig(0)->AddDrive();
+            extraDrive->SetPath("/dev/disk1_2");
+            extraDrive->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&bad);
+            TNodeWardenTestState state;
+            state.Metadata[std::pair<ui32, TString>{1, "/dev/disk1_1"}].MutableCommittedStorageConfig()->CopyFrom(bad);
+            if (olderCommitted) {
+                auto older = bad;
+                older.SetGeneration(1);
+                SetStateStorageSelection(older, 0, 1);
+                state.Metadata[std::pair<ui32, TString>{1, "/dev/disk1_1"}].MutableCommittedStorageConfig()->CopyFrom(older);
+                state.Metadata[std::pair<ui32, TString>{1, "/dev/disk1_2"}].MutableCommittedStorageConfig()->CopyFrom(bad);
+            }
+            TTestActorSystem runtime(1);
+            ui32 writes = 0;
+            bool discoveredDriveRead = false;
+            runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                writes += ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType;
+                if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadata::EventType) {
+                    discoveredDriveRead |= ev->Get<NStorage::TEvNodeWardenReadMetadata>()->Path == "/dev/disk1_2";
+                }
+                return true;
+            };
+            runtime.Start();
+            Y_DEFER { runtime.Stop(); };
+            const TActorId keeperId = RegisterKeeper(runtime, base, 1, state);
+            UNIT_ASSERT(SimUntil(runtime, [&] { return state.NodeWardenConfigs.contains(1); }));
+            SimUntil(runtime, [] { return false; }, TDuration::MilliSeconds(100));
+            UNIT_ASSERT(discoveredDriveRead);
+            UNIT_ASSERT_VALUES_EQUAL(state.NodeWardenConfigs.at(1)->GetFingerprint(), base.GetFingerprint());
+            UNIT_ASSERT_VALUES_EQUAL(writes, 0);
+            const std::pair<ui32, TString> badConfigDisk{1, olderCommitted ? "/dev/disk1_2" : "/dev/disk1_1"};
+            UNIT_ASSERT_VALUES_EQUAL(state.Metadata.at(badConfigDisk)
+                .GetCommittedStorageConfig().GetFingerprint(), bad.GetFingerprint());
+
+            // Rejected data remains readable from metadata for diagnostics and repair.
+            const TActorId edge = runtime.AllocateEdgeActor(1);
+            NKikimrBlobStorage::TEvNodeConfigScatter request;
+            request.MutableCollectConfigs();
+            UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor *actor) {
+                static_cast<NStorage::TDistributedConfigKeeper*>(actor)->IssueScatterTask(TActorId(edge), std::move(request));
+            }));
+            const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigGather>(edge);
+            const auto& collected = response->Get()->Record.GetCollectConfigs();
+            UNIT_ASSERT_VALUES_EQUAL(collected.CommittedConfigsSize(), olderCommitted ? 2 : 1);
+            UNIT_ASSERT(std::ranges::any_of(collected.GetCommittedConfigs(), [&](const auto& value) {
+                return value.GetConfig().GetFingerprint() == bad.GetFingerprint();
+            }));
+            UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, keeperId).GetQueryConfig().GetConfig().GetGeneration(), 0);
+
+            // A rejected higher local commit still fences delayed older commits and conflicting replacements.
+            for (ui64 generation : {1u, 2u}) {
+                auto stale = bad;
+                stale.SetGeneration(generation);
+                SetStateStorageSelection(stale, 0, 1);
+                UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor *actor) {
+                    auto *keeper = static_cast<NStorage::TDistributedConfigKeeper*>(actor);
+                    UNIT_ASSERT(!keeper->ApplyStorageConfig(stale));
+                    keeper->ApplyCommittedStorageConfig(stale);
+                    keeper->FanOutReversePush(&stale);
+                    for (bool recovery : {false, true}) {
+                        auto proposed = stale;
+                        const auto error = keeper->StartProposition(&proposed, nullptr, {}, false, false, recovery);
+                        UNIT_ASSERT(error);
+                        UNIT_ASSERT_STRING_CONTAINS(*error, "conflicts with stored committed metadata");
+                    }
+                }));
+                const TActorId proposeEdge = runtime.AllocateEdgeActor(1);
+                NKikimrBlobStorage::TEvNodeConfigScatter propose;
+                propose.MutableProposeStorageConfig()->MutableConfig()->CopyFrom(stale);
+                UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor *actor) {
+                    static_cast<NStorage::TDistributedConfigKeeper*>(actor)->IssueScatterTask(TActorId(proposeEdge),
+                        std::move(propose));
+                }));
+                const auto proposed = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigGather>(proposeEdge);
+                const auto& statuses = proposed->Get()->Record.GetProposeStorageConfig().GetStatus();
+                UNIT_ASSERT_VALUES_EQUAL(statuses.size(), 1);
+                UNIT_ASSERT_C(statuses.Get(0).GetStatus() ==
+                    NKikimrBlobStorage::TEvNodeConfigGather::TProposeStorageConfig::ERROR,
+                    statuses.Get(0).DebugString());
+                UNIT_ASSERT_VALUES_EQUAL(state.NodeWardenConfigs.at(1)->GetFingerprint(), base.GetFingerprint());
+                UNIT_ASSERT_VALUES_EQUAL(writes, 0);
+            }
+
+            auto corrected = bad;
+            corrected.SetGeneration(3);
+            SetStateStorageSelection(corrected, 0, 1);
+            UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor *actor) {
+                static_cast<NStorage::TDistributedConfigKeeper*>(actor)->ApplyCommittedStorageConfig(corrected);
+            }));
+            UNIT_ASSERT(SimUntil(runtime, [&] {
+                return state.NodeWardenConfigs.at(1)->GetFingerprint() == corrected.GetFingerprint()
+                    && state.Metadata.at(badConfigDisk).GetCommittedStorageConfig().GetFingerprint() == corrected.GetFingerprint();
+            }));
+            UNIT_ASSERT(writes);
         }
     }
 
@@ -3649,6 +3852,27 @@ selector_config: []
         UNIT_ASSERT(result.ConfigToPropose->GetSelfManagementConfig().GetAutomaticBootstrap());
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetFingerprint(),
             fixture.Config.GetFingerprint());
+    }
+
+    Y_UNIT_TEST(StateStorageSelectionRejectedDuringRecovery) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.Start(true);
+        for (bool proposed : {false, true}) {
+            auto bad = MakeNextConfig(fixture.Config);
+            SetStateStorageSelection(bad, 0, 2);
+            auto collected = MakeCollectedConfigs(fixture.Config);
+            if (proposed) {
+                AddCollectedConfig(collected, fixture.Config, {1, 2, 3});
+            }
+            AddCollectedConfig(collected, bad, {1, 2, 3}, !proposed);
+            const auto result = ProcessCollectedConfigs(fixture, collected);
+            UNIT_ASSERT(result.ErrorReason);
+            UNIT_ASSERT_STRING_CONTAINS(*result.ErrorReason, "must be in [1, 1]");
+            UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetGeneration(), 1);
+            for (ui32 nodeId : {1u, 2u, 3u}) {
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetGeneration(), 1);
+            }
+        }
     }
 
     Y_UNIT_TEST(RecoveryRejectsUnknownProposalLineage) {

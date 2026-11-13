@@ -3,8 +3,6 @@
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/services/services.pb.h>
 #include <util/digest/city.h>
 #include <util/generic/xrange.h>
 #include <util/generic/mem_copy.h>
@@ -64,7 +62,7 @@ ui64 GetSchemeBoardSelectionKey(const TPathId& pathId) {
     return pathId.Hash();
 }
 
-bool TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui32 ringGroupIdx) const {
+void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui32 ringGroupIdx) const {
     const ui32 hash = StateStorageHashFromTabletID(tabletId);
 
     Y_ABORT_UNLESS(ringGroupIdx < RingGroups.size());
@@ -72,12 +70,7 @@ bool TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui3
     auto& ringGroup = RingGroups[ringGroupIdx];
     const ui32 total = ringGroup.Rings.size();
 
-    if (!ringGroup.NToSelect || ringGroup.NToSelect > total) {
-        YDB_LOG_CRIT_COMP(NKikimrServices::STATESTORAGE, "Invalid state storage NToSelect; refusing replica selection",
-            {"ringGroup", ringGroupIdx}, {"nToSelect", ringGroup.NToSelect}, {"rings", total});
-        selection->Sz = 0;
-        return false;
-    }
+    Y_ABORT_UNLESS(ringGroup.NToSelect <= total);
 
     if (selection->Sz < ringGroup.NToSelect) {
         selection->Status.Reset(new TStateStorageInfo::TSelection::EStatus[ringGroup.NToSelect]);
@@ -97,7 +90,6 @@ bool TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui3
             selection->SelectedReplicas[idx++] = ringGroup.Rings[ringIdx].SelectReplica(hash);
         }
     }
-    return true;
 }
 
 TActorId TStateStorageInfo::TRing::SelectReplica(ui32 hash) const {

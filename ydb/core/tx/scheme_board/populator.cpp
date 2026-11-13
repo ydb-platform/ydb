@@ -620,16 +620,10 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             }
             TStateStorageInfo::TSelection selection;
 
-            if (!GroupInfo->SelectReplicas(pathKey, &selection, ringGroupIndex)) {
-                SelectionReplicaCache.clear();
-                return {};
-            }
+            GroupInfo->SelectReplicas(pathKey, &selection, ringGroupIndex);
             SelectionReplicaCache.insert(SelectionReplicaCache.end(), selection.begin(), selection.end());
 
-            if (!GroupInfo->SelectReplicas(idKey, &selection, ringGroupIndex)) {
-                SelectionReplicaCache.clear();
-                return {};
-            }
+            GroupInfo->SelectReplicas(idKey, &selection, ringGroupIndex);
             for (const TActorId& replica : selection) {
                 if (Find(SelectionReplicaCache, replica) == SelectionReplicaCache.end()) {
                     SelectionReplicaCache.emplace_back(replica);
@@ -891,9 +885,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
             TStateStorageInfo::TSelection selection;
             for (ui64 key : keys) {
-                if (!GroupInfo->SelectReplicas(key, &selection, ringGroupIndex)) {
-                    return false;
-                }
+                GroupInfo->SelectReplicas(key, &selection, ringGroupIndex);
                 ui32 acks = 0;
                 for (const auto& replica : selection) {
                     const auto* populator = ReplicaToReplicaPopulator.FindPtr(replica);

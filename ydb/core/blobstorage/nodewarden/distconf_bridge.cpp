@@ -1,6 +1,5 @@
 #include "distconf.h"
 #include "distconf_invoke.h"
-#include <ydb/core/base/statestorage.h>
 #include <contrib/libs/xxhash/xxhash.h>
 #include <google/protobuf/util/message_differencer.h>
 
@@ -231,17 +230,6 @@ namespace NKikimr::NStorage {
         } else if (auto error = ExtractStateStorageConfig(config)) { // extract final state storage config
             return error;
         }
-        // Reject new selections without blocking reads or repair of accepted history.
-#define VALIDATE_STATE_STORAGE_SELECTION(NAME) \
-        if (config->Has##NAME##Config()) { \
-            if (TString error = ValidateStateStorageConfigSelection(config->Get##NAME##Config())) { \
-                return TStringBuilder() << #NAME << ' ' << error; \
-            } \
-        }
-        VALIDATE_STATE_STORAGE_SELECTION(StateStorage)
-        VALIDATE_STATE_STORAGE_SELECTION(StateStorageBoard)
-        VALIDATE_STATE_STORAGE_SELECTION(SchemeBoard)
-#undef VALIDATE_STATE_STORAGE_SELECTION
         return std::nullopt;
     }
 

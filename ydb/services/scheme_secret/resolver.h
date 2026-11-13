@@ -26,9 +26,6 @@ struct TDescribeSecretSettings {
 
 };
 
-IRetryPolicy<>::TPtr MakeShortRetryPolicy();
-IRetryPolicy<>::TPtr MakeLongRetryPolicy();
-
 NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecret(
     const TVector<TString>& secretNames,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,

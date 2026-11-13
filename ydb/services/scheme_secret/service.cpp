@@ -204,6 +204,30 @@ TString ListSecrets(const TVector<TString>& paths) {
     return sb;
 }
 
+
+IRetryPolicy<>::TPtr MakeShortRetryPolicy() {
+    return IRetryPolicy<>::GetExponentialBackoffPolicy(
+        [](){ return ERetryErrorClass::ShortRetry; },
+        /* minDelay */ TDuration::MilliSeconds(100),
+        /* minLongRetryDelay */ TDuration::MilliSeconds(500),
+        /* maxDelay */ TDuration::Seconds(5),
+        /* maxRetries */ 10,
+        /* maxTime */ TDuration::Seconds(10)
+    );
+}
+
+IRetryPolicy<>::TPtr MakeLongRetryPolicy() {
+    return IRetryPolicy<>::GetExponentialBackoffPolicy(
+        [](){ return ERetryErrorClass::LongRetry; },
+        /* minDelay */ TDuration::Seconds(1),
+        /* minLongRetryDelay */ TDuration::Seconds(10),
+        /* maxDelay */ TDuration::Seconds(30),
+        /* maxRetries */ std::numeric_limits<size_t>::max(),
+        /* maxTime */ TDuration::Minutes(60)
+    );
+}
+
+
 }  // anonymous namespace
 
 void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr& ev) {
@@ -618,28 +642,6 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeShardRetry(const ui64& request
     }
 
     return false;
-}
-
-IRetryPolicy<>::TPtr MakeShortRetryPolicy() {
-    return IRetryPolicy<>::GetExponentialBackoffPolicy(
-        [](){ return ERetryErrorClass::ShortRetry; },
-        /* minDelay */ TDuration::MilliSeconds(100),
-        /* minLongRetryDelay */ TDuration::MilliSeconds(500),
-        /* maxDelay */ TDuration::Seconds(5),
-        /* maxRetries */ 10,
-        /* maxTime */ TDuration::Seconds(10)
-    );
-}
-
-IRetryPolicy<>::TPtr MakeLongRetryPolicy() {
-    return IRetryPolicy<>::GetExponentialBackoffPolicy(
-        [](){ return ERetryErrorClass::LongRetry; },
-        /* minDelay */ TDuration::Seconds(1),
-        /* minLongRetryDelay */ TDuration::Seconds(10),
-        /* maxDelay */ TDuration::Seconds(30),
-        /* maxRetries */ std::numeric_limits<size_t>::max(),
-        /* maxTime */ TDuration::Minutes(60)
-    );
 }
 
 

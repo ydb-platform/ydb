@@ -534,7 +534,7 @@ class TCdcChangeSenderMain
         Stream = TUserTable::TCdcStream(entry.CdcStreamInfo->Description);
         if (AggregatedHeartbeats) {
             AggregatedHeartbeats->SetAggregatorTabletId(Stream.AggregatorTabletId);
-            RemoveRecords(AggregatedHeartbeats->SendIfReady());
+            RemoveRecords(AggregatedHeartbeats->SendReadyHeartbeat());
         }
 
         Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
@@ -667,7 +667,7 @@ class TCdcChangeSenderMain
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
         if (AggregatedHeartbeats) {
-            AggregatedHeartbeats->OnRecordsEnqueued(ev->Get()->Records);
+            AggregatedHeartbeats->TrackRecords(ev->Get()->Records);
         }
         EnqueueRecords(std::move(ev->Get()->Records));
     }
@@ -676,8 +676,8 @@ class TCdcChangeSenderMain
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
         if (AggregatedHeartbeats) {
-            ForgetRecords(AggregatedHeartbeats->OnRecordsReceived(ev->Get()->Records));
-            RemoveRecords(AggregatedHeartbeats->SendIfReady());
+            ForgetRecords(AggregatedHeartbeats->ExtractHeartbeats(ev->Get()->Records));
+            RemoveRecords(AggregatedHeartbeats->SendReadyHeartbeat());
         }
         ProcessRecords(std::move(ev->Get()->Records));
     }
@@ -686,8 +686,8 @@ class TCdcChangeSenderMain
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
         if (AggregatedHeartbeats) {
-            AggregatedHeartbeats->OnRecordsRemoved(ev->Get()->Records);
-            RemoveRecords(AggregatedHeartbeats->SendIfReady());
+            AggregatedHeartbeats->UntrackRecords(ev->Get()->Records);
+            RemoveRecords(AggregatedHeartbeats->SendReadyHeartbeat());
         }
         ForgetRecords(std::move(ev->Get()->Records));
     }
@@ -697,7 +697,7 @@ class TCdcChangeSenderMain
             {"eventDetails", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
         if (AggregatedHeartbeats) {
-            RemoveRecords(AggregatedHeartbeats->SendIfReady());
+            RemoveRecords(AggregatedHeartbeats->SendReadyHeartbeat());
         }
     }
 
@@ -714,14 +714,14 @@ class TCdcChangeSenderMain
 
         RemoveRecords();
         if (AggregatedHeartbeats) {
-            RemoveRecords(AggregatedHeartbeats->RemoveAll());
+            RemoveRecords(AggregatedHeartbeats->ReleaseHeartbeats());
         }
         PassAway();
     }
 
     void OnRecordsRemoved(const TVector<ui64>& orders) override {
         if (AggregatedHeartbeats) {
-            AggregatedHeartbeats->OnRecordsRemoved(orders);
+            AggregatedHeartbeats->UntrackRecords(orders);
         }
     }
 
@@ -729,13 +729,13 @@ class TCdcChangeSenderMain
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
         if (AggregatedHeartbeats) {
-            RemoveRecords(AggregatedHeartbeats->OnWriteResult(*ev->Get(), ev->Cookie));
+            RemoveRecords(AggregatedHeartbeats->HandleWriteResult(*ev->Get(), ev->Cookie));
         }
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         if (AggregatedHeartbeats) {
-            AggregatedHeartbeats->OnUndelivered(ev->Cookie);
+            AggregatedHeartbeats->RetryHeartbeat(ev->Cookie);
         }
     }
 

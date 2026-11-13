@@ -25,13 +25,13 @@ public:
     explicit TCdcAggregatedHeartbeats(THolder<IChangeRecordSerializer> serializer, ui64 sourceDataShardId);
 
     void SetAggregatorTabletId(ui64 aggregatorTabletId);
-    void OnRecordsEnqueued(const TVector<TRecordInfo>& records);
-    TVector<ui64> OnRecordsReceived(TVector<NChangeExchange::IChangeRecord::TPtr>& records);
-    void OnRecordsRemoved(const TVector<ui64>& orders);
-    TVector<ui64> SendIfReady();
-    TVector<ui64> OnWriteResult(const TEvWriteHeartbeatResult& result, ui64 cookie);
-    void OnUndelivered(ui64 cookie);
-    TVector<ui64> RemoveAll();
+    void TrackRecords(const TVector<TRecordInfo>& records);
+    TVector<ui64> ExtractHeartbeats(TVector<NChangeExchange::IChangeRecord::TPtr>& records);
+    void UntrackRecords(const TVector<ui64>& orders);
+    TVector<ui64> SendReadyHeartbeat();
+    TVector<ui64> HandleWriteResult(const TEvWriteHeartbeatResult& result, ui64 cookie);
+    void RetryHeartbeat(ui64 cookie);
+    TVector<ui64> ReleaseHeartbeats();
 
 private:
     void Send(TDuration delay);

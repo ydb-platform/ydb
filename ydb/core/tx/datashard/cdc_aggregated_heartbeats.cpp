@@ -3,6 +3,7 @@
 
 #include <ydb/core/change_exchange/visitor.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
@@ -39,13 +40,13 @@ void TCdcAggregatedHeartbeats::SetAggregatorTabletId(ui64 aggregatorTabletId) {
     AggregatorTabletId = aggregatorTabletId;
 }
 
-void TCdcAggregatedHeartbeats::OnRecordsEnqueued(const TVector<TRecordInfo>& records) {
+void TCdcAggregatedHeartbeats::TrackRecords(const TVector<TRecordInfo>& records) {
     for (const auto& record : records) {
         Undelivered.insert(record.Order);
     }
 }
 
-TVector<ui64> TCdcAggregatedHeartbeats::OnRecordsReceived(TVector<NChangeExchange::IChangeRecord::TPtr>& records) {
+TVector<ui64> TCdcAggregatedHeartbeats::ExtractHeartbeats(TVector<NChangeExchange::IChangeRecord::TPtr>& records) {
     TVector<ui64> heartbeats;
     TVector<NChangeExchange::IChangeRecord::TPtr> rest(Reserve(records.size()));
     for (auto& record : records) {
@@ -65,13 +66,13 @@ TVector<ui64> TCdcAggregatedHeartbeats::OnRecordsReceived(TVector<NChangeExchang
     return heartbeats;
 }
 
-void TCdcAggregatedHeartbeats::OnRecordsRemoved(const TVector<ui64>& orders) {
+void TCdcAggregatedHeartbeats::UntrackRecords(const TVector<ui64>& orders) {
     for (const auto order : orders) {
         Undelivered.erase(order);
     }
 }
 
-TVector<ui64> TCdcAggregatedHeartbeats::SendIfReady() {
+TVector<ui64> TCdcAggregatedHeartbeats::SendReadyHeartbeat() {
     const auto ready = Undelivered ? Held.lower_bound(*Undelivered.begin()) : Held.end();
     if (!AggregatorTabletId || ready == Held.begin() || Sent == std::prev(ready)->first) {
         return {};
@@ -83,7 +84,7 @@ TVector<ui64> TCdcAggregatedHeartbeats::SendIfReady() {
     return covered;
 }
 
-TVector<ui64> TCdcAggregatedHeartbeats::OnWriteResult(const TEvWriteHeartbeatResult& result, ui64 cookie) {
+TVector<ui64> TCdcAggregatedHeartbeats::HandleWriteResult(const TEvWriteHeartbeatResult& result, ui64 cookie) {
     using EStatus = TEvWriteHeartbeatResult::EStatus;
     if (!Sent || cookie != Cookie) {
         return {};
@@ -104,13 +105,13 @@ TVector<ui64> TCdcAggregatedHeartbeats::OnWriteResult(const TEvWriteHeartbeatRes
     return confirmed;
 }
 
-void TCdcAggregatedHeartbeats::OnUndelivered(ui64 cookie) {
+void TCdcAggregatedHeartbeats::RetryHeartbeat(ui64 cookie) {
     if (Sent && cookie == Cookie) {
         Send(Backoff.Next());
     }
 }
 
-TVector<ui64> TCdcAggregatedHeartbeats::RemoveAll() {
+TVector<ui64> TCdcAggregatedHeartbeats::ReleaseHeartbeats() {
     Sent.reset();
     return RemoveHeld(Held.end());
 }

@@ -202,7 +202,8 @@ void TGranuleMeta::AddPortionsToOptimizer(const std::vector<std::shared_ptr<TPor
     OptimizerPlanner->AddLoadedPortions(activePortions);
 }
 
-std::vector<std::shared_ptr<TPortionInfo>> TGranuleMeta::AddPortionsLoadedInBatch(const std::vector<std::shared_ptr<TPortionInfo>>& portions) {
+std::vector<std::shared_ptr<TPortionInfo>> TGranuleMeta::AddPortionsLoadedInBatch(
+    const std::vector<std::shared_ptr<TPortionInfo>>& portions, TLoadedKeyRanges&& loadedKeyRanges) {
     std::vector<std::shared_ptr<TPortionInfo>> loaded;
     std::vector<std::shared_ptr<TPortionInfo>> active;
     for (const auto& portion : portions) {
@@ -224,6 +225,7 @@ std::vector<std::shared_ptr<TPortionInfo>> TGranuleMeta::AddPortionsLoadedInBatc
         }
     }
     AddPortionsToOptimizer(active);
+    LoadedKeyRanges = std::move(loadedKeyRanges);
     return loaded;
 }
 

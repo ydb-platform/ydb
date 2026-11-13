@@ -17,6 +17,7 @@ public:
     TConfSetting<TString, EConfSettingType::Dynamic> ThirdString;
     TConfSetting<i64, EConfSettingType::Static> StaticInteger;
     TConfSetting<bool, EConfSettingType::Static> StaticBoolean;
+    TConfSetting<bool, EConfSettingType::Dynamic> Boolean;
     TConfSetting<TString, EConfSettingType::Static> OtherStaticString;
     TConfSetting<TString, EConfSettingType::Static> ThirdStaticString;
 };
@@ -230,6 +231,31 @@ Y_UNIT_TEST(MalformedProjectSettingNamesAreUnclaimed) {
             dispatcher.ApplyProjectSettings(settings);
             UNIT_ASSERT(!dispatcher.AcceptsProjectSetting(settings.Pragmas.front()));
             UNIT_ASSERT_VALUES_EQUAL(dispatcher.Integer.Get(ALL_CLUSTERS).GetRef(), 42);
+        }
+    }
+}
+
+Y_UNIT_TEST(ProjectSettingsWithoutValueUseEmptyString) {
+    for (bool strict : {false, true}) {
+        for (const TString& prefix : {"test", "cluster"}) {
+            for (const TVector<TString>& values : {TVector<TString>{}, TVector<TString>{""}}) {
+                TDispatcherAndSettings<TTestSettings> dispatcher(TStringBuf("test"), {}, strict);
+                dispatcher.SetValidClusters(TVector<TString>{"cluster"});
+                dispatcher.AddSetting("Boolean", &TTestSettings::Boolean);
+                dispatcher.AddSetting("String", &TTestSettings::MySetting);
+                dispatcher.Boolean[ALL_CLUSTERS] = false;
+                dispatcher.MySetting[ALL_CLUSTERS] = "initial";
+                TProjectSettings settings;
+                settings.AddPragma(prefix + ".Boolean", values);
+                settings.AddPragma(prefix + ".String", values);
+                dispatcher.ApplyProjectSettings(settings);
+                UNIT_ASSERT(dispatcher.Boolean.Get("cluster").GetRef());
+                UNIT_ASSERT_VALUES_EQUAL(dispatcher.MySetting.Get("cluster").GetRef(), "");
+                if (prefix == "cluster") {
+                    UNIT_ASSERT(!dispatcher.Boolean.Get("other").GetRef());
+                    UNIT_ASSERT_VALUES_EQUAL(dispatcher.MySetting.Get("other").GetRef(), "initial");
+                }
+            }
         }
     }
 }

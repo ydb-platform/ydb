@@ -5,6 +5,7 @@ SRCS(
     pg_sql_autoparam_ut.cpp
     optimizer_ut.cpp
     optimizer_impl_ut.cpp
+    util.cpp
 )
 
 ADDINCL(

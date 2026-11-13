@@ -1,16 +1,17 @@
 #include "suite.h"
 
 #include <library/cpp/string_utils/quote/quote.h>
+#include <library/cpp/testing/common/env.h>
 
 #include <util/folder/path.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
-#include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/string/join.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
 #include <util/system/fstat.h>
@@ -28,6 +29,7 @@ constexpr TStringBuf LanguageVersionSetting = "langver";
 constexpr TStringBuf GenerationSyntaxSetting = "bench_generation_syntax";
 constexpr TStringBuf QuerySyntaxSetting = "bench_query_syntax";
 constexpr TStringBuf InputRowsSetting = "bench_input_rows";
+constexpr TStringBuf UdfsDirectorySetting = "bench_udfs_dir";
 constexpr TStringBuf LLVMSetting = "bench_llvm_settings";
 constexpr TStringBuf BlockEnginesSetting = "bench_block_engines";
 constexpr TStringBuf GatewayConfigurationPatchSetting = "gateway_cfg_patch";
@@ -43,20 +45,14 @@ TString ReadRequiredFile(const TFsPath& path) {
     return contents;
 }
 
-void FindMeasuredQueries(const TFsPath& directory, const TFsPath& suiteDirectory,
-                         THashSet<TString>& ancestors, TVector<TFsPath>& queries) {
-    const TString canonicalDirectory = directory.RealPath().GetPath();
-    Y_ENSURE(ancestors.insert(canonicalDirectory).second, "Cyclic suite directory link: " << directory);
-    Y_DEFER {
-        ancestors.erase(canonicalDirectory);
-    };
+void FindMeasuredQueries(const TFsPath& directory, const TFsPath& suiteDirectory, TVector<TFsPath>& queries) {
     TVector<TFsPath> children;
     directory.List(children);
     for (const auto& child : children) {
         const TFileStat status(child);
-        Y_ENSURE(!status.IsNull() || child.IsSymlink(), "Cannot read suite entry: " << child);
+        Y_ENSURE(!status.IsNull(), "Cannot read suite entry: " << child);
         if (status.IsDir()) {
-            FindMeasuredQueries(child, suiteDirectory, ancestors, queries);
+            FindMeasuredQueries(child, suiteDirectory, queries);
         } else if (status.IsFile() && child.GetExtension() == QueryFileExtension && !child.GetName().EndsWith(PreparationFileSuffix)) {
             queries.push_back(child.RelativeTo(suiteDirectory));
         }
@@ -66,8 +62,7 @@ void FindMeasuredQueries(const TFsPath& directory, const TFsPath& suiteDirectory
 TVector<TFsPath> ListMeasuredQueries(const TFsPath& suiteDirectory) {
     Y_ENSURE(suiteDirectory.IsDirectory(), "Suite directory is missing or is not a directory: " << suiteDirectory);
     TVector<TFsPath> queries;
-    THashSet<TString> ancestors;
-    FindMeasuredQueries(suiteDirectory, suiteDirectory, ancestors, queries);
+    FindMeasuredQueries(suiteDirectory, suiteDirectory, queries);
     Sort(queries, [](const TFsPath& left, const TFsPath& right) { return left.GetPath() < right.GetPath(); });
     return queries;
 }
@@ -112,6 +107,8 @@ void ApplyProgramSetting(TBenchmarkProgramOptions& options, TStringBuf key, TStr
         options.MeasuredQuerySyntax = FromString<ESyntax>(value);
     } else if (key == InputRowsSetting) {
         options.GeneratorInputRows = FromString<ui64>(value);
+    } else if (key == UdfsDirectorySetting) {
+        options.UdfsDirectory = BinaryPath(value);
     } else if (key == LLVMSetting) {
         options.LLVMSettings = value;
     } else if (key == GatewayConfigurationPatchSetting) {
@@ -145,7 +142,7 @@ void ParseConfigurationLine(TVector<TBenchmarkCase>& cases, THashSet<TString>& d
 
 TVector<TBenchmarkCase> ParseConfiguration(const TFsPath& configurationPath) {
     TVector<TBenchmarkCase> cases{{.Options = {.EnableCalibration = false}}};
-    if (!configurationPath.Exists() && !configurationPath.IsSymlink()) {
+    if (!configurationPath.Exists()) {
         return cases;
     }
     const TString contents = ReadFile(configurationPath);
@@ -162,11 +159,12 @@ TVector<TBenchmarkCase> LoadQueryCases(TStringBuf suiteName, const TFsPath& suit
     const TString basename = measuredQueryPath.GetName().substr(0, measuredQueryPath.GetName().size() - QueryFileSuffix.size());
     auto cases = ParseConfiguration(queryDirectory / (basename + ConfigurationFileSuffix));
     const TFsPath preparationPath = queryDirectory / (basename + PreparationFileSuffix);
-    const TMaybe<TString> preparation = preparationPath.Exists() || preparationPath.IsSymlink()
+    const TMaybe<TString> preparation = preparationPath.Exists()
                                             ? ReadRequiredFile(preparationPath)
                                             : TMaybe<TString>();
     const TString measuredQuery = ReadRequiredFile(measuredQueryPath);
-    TString queryName = relativeQueryPath.GetPath().substr(0, relativeQueryPath.GetPath().size() - QueryFileSuffix.size());
+    TString queryName = JoinSeq('/', relativeQueryPath.PathSplit());
+    queryName.resize(queryName.size() - QueryFileSuffix.size());
     TString encodedSuiteName(suiteName);
     Quote(encodedSuiteName, "");
     Quote(queryName);

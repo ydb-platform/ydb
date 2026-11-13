@@ -5,6 +5,7 @@ PEERDIR(
 )
 
 SRCS(
+    heartbeat_queue_ut.cpp
     service_ut.cpp
 )
 

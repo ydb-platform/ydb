@@ -339,6 +339,7 @@ class KikimrSqsTestBase(object):
             use_in_memory_pdisks=cls.use_in_memory_pdisks,
             additional_log_configs=log_configs,
             enable_sqs=True,
+            dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0, num_groups=2)],
         )
         for flag, enabled in cls._get_sqs_migration_feature_flags().items():
             config_generator.yaml_config['feature_flags'][flag] = enabled

@@ -141,7 +141,7 @@ class KikimrConfigGenerator(object):
             dynamic_pdisk_size=PDISK_SIZE,
             dynamic_pdisks=[],
             dynamic_pdisks_config=None,
-            dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0)],
+            dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0, num_groups=1)],
             state_storage_rings=None,
             n_to_select=None,
             use_log_files=True,

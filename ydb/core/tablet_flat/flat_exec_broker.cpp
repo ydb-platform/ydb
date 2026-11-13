@@ -5,22 +5,26 @@ namespace NTabletFlatExecutor {
 
 using namespace NResourceBroker;
 
-TBroker::TBroker(IOps* ops, TIntrusivePtr<TIdEmitter> emitter)
+TBroker::TBroker(IOps* ops, TIntrusivePtr<TIdEmitter> emitter, ui64 tabletId, const ui32& followerId)
     : Ops(ops)
     , Emitter(std::move(emitter))
+    , TabletId(tabletId)
+    , FollowerId(followerId)
 { }
 
 TTaskId TBroker::SubmitTask(TString name, TResourceParams params, TResourceConsumer consumer) {
     Y_ENSURE(consumer, "Resource consumer cannot be null");
     TTaskId taskId = Emitter->Do();
     Submitted[taskId].swap(consumer);
-    SendToBroker(new TEvResourceBroker::TEvSubmitTask(
+    auto submit = MakeHolder<TEvResourceBroker::TEvSubmitTask>(
         taskId,
         std::move(name),
-        {{ params.CPU, params.Memory }},
+        TResourceValues{{ params.CPU, params.Memory }},
         std::move(params.Type),
         params.Priority,
-        /* cookie */ nullptr));
+        /* cookie */ nullptr);
+    submit->SetOwner(TabletId, FollowerId);
+    SendToBroker(submit.Release());
     return taskId;
 }
 

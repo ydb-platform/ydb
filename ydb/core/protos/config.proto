@@ -2937,6 +2937,20 @@ message THiveConfig {
     optional double TabletImpactShareToPin = 94 [default = 0.5, (ParamDescription) = "Same as above, but relative to node's total usage"];
     optional uint64 TabletEventHistorySize = 95 [default = 20, (ParamDescription) = "Number of recent events kept in memory per tablet for debugging, shown on the tablet page in Hive UI. 0 disables per-tablet history, values above 5000 are capped."];
     optional uint64 NodeEventHistorySize = 96 [default = 50, (ParamDescription) = "Number of recent events kept in memory per node for debugging, shown on the node page in Hive UI. 0 disables per-node history, values above 5000 are capped."];
+
+    message TNamedResourceSettings {
+        enum EBalanceMode {
+            NO_BALANCE = 0; // observe only: values are stored and shown, but never trigger tablet moves
+            SATURATION = 1; // balance when some node exceeds its maximum while another one has spare capacity
+            SCATTER = 2; // balance by spread of normalized usage between nodes, like the built-in resources
+        }
+
+        optional string Name = 1 [(ParamDescription) = "Resource name, or a prefix ending with '*'. Exact match wins over prefix, longer prefix wins over shorter."];
+        optional EBalanceMode BalanceMode = 2 [(ParamDescription) = "How the resource is balanced."];
+        optional double MinScatterToBalance = 3 [default = 0.5, (ParamDescription) = "Scatter threshold for SCATTER balance mode, as a normalized fraction."];
+        optional uint64 DefaultMaximum = 4 [(ParamDescription) = "Node capacity for the resource when the node does not report one. Without it such nodes are ignored when balancing the resource."];
+    }
+    repeated TNamedResourceSettings NamedResources = 97 [(ParamDescription) = "Settings of named resources (e.g. resource broker queues). Entries override built-in defaults."];
 }
 
 message THealthCheckConfig {

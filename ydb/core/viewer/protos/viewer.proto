@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import "ydb/core/graph/protos/graph.proto";
+import "ydb/core/protos/bridge_storage.proto";
 import "ydb/core/protos/tablet_counters.proto";
 import "ydb/core/protos/memory_stats.proto";
 import "ydb/core/protos/node_whiteboard.proto";
@@ -350,10 +351,20 @@ message TBridgePileInfo {
     optional uint32 AliveStorageNodes = 9;
     optional uint32 ComputeNodes = 10; // Known dynamic nodes.
     optional uint32 AliveComputeNodes = 11;
+    // Storage-owning databases with fully bridged pools, keyed by synchronization status.
+    // Serverless databases without own storage pools do not increase these counts.
+    // Shares completeness with TBridgeInfo.BridgeDatabasesComplete.
+    map<string, uint64> DatabaseCountsBySyncStatus = 12;
 }
 
 message TBridgeInfo {
     repeated TBridgePileInfo Piles = 1;
+    // Known storage-owning databases with fully bridged pools, including the root database.
+    // Serverless databases without own storage pools do not increase this count.
+    // A lower bound while BridgeDatabasesComplete is false.
+    optional uint64 BridgeDatabases = 2;
+    // False if pool ownership is incomplete or the matching BSC snapshot is unavailable/incomplete.
+    optional bool BridgeDatabasesComplete = 3;
 }
 
 message TClusterInfo {
@@ -449,6 +460,9 @@ message TTenant {
     uint64 NetworkWriteThroughput = 53;
     uint64 GrpcRequestBytes = 54;
     uint64 GrpcResponseBytes = 55;
+    // Omitted when the database's storage mode is unavailable or mixed.
+    optional bool BridgeMode = 56;
+    optional NKikimrBridge.ESynchronizationStatus BridgeSyncStatus = 57;
 }
 
 message TTenants {
@@ -546,6 +560,16 @@ message TStorageGroupInfo {
     optional uint32 GroupSizeInUnits = 29;
     repeated TStorageVDisk VDisks = 30;
     TStorageGroupStateInfo StateInfo = 31; // omitted when CalcState cannot determine a known status
+    optional string BridgeSyncStage = 32;
+    optional string BridgeSyncLastError = 33;
+    optional uint64 BridgeSyncLastProgressTimestamp = 34; // last confirmed progress, in Unix microseconds
+    optional uint64 BridgeSyncCopyBytesPerSecond = 35; // average over the last minute, in blob bytes
+    optional uint64 BridgeSyncRemainingBytes = 36;
+    optional bool BridgeSyncRemainingBytesComplete = 37; // a full scan exists for the estimate
+    optional bool BridgeSyncRunning = 38;
+    optional uint64 BridgeSyncLastErrorTimestamp = 39; // last failure report observed by BSC, in Unix microseconds
+    optional uint32 BridgeSyncErrorCount = 40; // reported failures on the current stage
+    optional NKikimrBridge.ESynchronizationStatus BridgeSyncStatus = 41;
 }
 
 message TStorageGroupGroup {

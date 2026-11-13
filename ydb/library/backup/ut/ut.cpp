@@ -21,6 +21,83 @@
 
 namespace NYdb {
 
+Y_UNIT_TEST_SUITE(BackupToolColumnTableReadQuery) {
+
+Y_UNIT_TEST(FirstReadHasNoCondition) {
+    const auto desc = NTable::TTableBuilder()
+        .AddNullableColumn("a", EPrimitiveType::Int64)
+        .AddNonNullableColumn("b", EPrimitiveType::Int32)
+        .AddNullableColumn("v", EPrimitiveType::Utf8)
+        .SetPrimaryKeyColumns({"a", "b"})
+        .Build();
+
+    const auto [query, params] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", Nothing());
+    UNIT_ASSERT_VALUES_EQUAL(query, "SELECT `a`, `b`, `v` FROM `/Root/t` ORDER BY `a`, `b`;");
+    UNIT_ASSERT(params.GetValues().empty());
+}
+
+Y_UNIT_TEST(ResumeConditionDependsOnNullCellsOfSavedKey) {
+    const auto desc = NTable::TTableBuilder()
+        .AddNullableColumn("a", EPrimitiveType::Int64)
+        .AddNullableColumn("b", EPrimitiveType::Int32)
+        .AddNullableColumn("v", EPrimitiveType::Utf8)
+        .SetPrimaryKeyColumns({"a", "b"})
+        .Build();
+
+    const auto conditionFor = [&](const TValue& lastPK) {
+        const auto [query, params] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", lastPK);
+        UNIT_ASSERT_C(query.StartsWith("DECLARE $pk AS Tuple<"), query);
+        UNIT_ASSERT(params.GetValue("$pk").has_value());
+        const TString prefix = "SELECT `a`, `b`, `v` FROM `/Root/t` WHERE ";
+        const TString suffix = " ORDER BY `a`, `b`;";
+        const size_t from = query.find(prefix);
+        UNIT_ASSERT_C(from != TString::npos && query.EndsWith(suffix), query);
+        return query.substr(from + prefix.size(), query.size() - from - prefix.size() - suffix.size());
+    };
+    const auto key = [](std::optional<i64> a, std::optional<i32> b) {
+        return TValueBuilder()
+            .BeginTuple()
+                .AddElement().OptionalInt64(a)
+                .AddElement().OptionalInt32(b)
+            .EndTuple()
+            .Build();
+    };
+
+    // no NULL cells: the plain tuple comparison, which KQP turns into a key range
+    UNIT_ASSERT_VALUES_EQUAL(conditionFor(key(1, 5)), "(`a`, `b`) > $pk");
+    // a plain "(a, b) > $pk" is NULL, hence false, for a NULL cell on either side; with a NULL saved cell the
+    // comparison is expanded so that NULL is the smallest value, consistently with ORDER BY
+    UNIT_ASSERT_VALUES_EQUAL(conditionFor(key(std::nullopt, 5)),
+        "(`a` IS NOT NULL) OR (`a` IS NULL AND `b` > $pk.1)");
+    UNIT_ASSERT_VALUES_EQUAL(conditionFor(key(1, std::nullopt)),
+        "(`a` > $pk.0) OR (`a` = $pk.0 AND `b` IS NOT NULL)");
+    UNIT_ASSERT_VALUES_EQUAL(conditionFor(key(std::nullopt, std::nullopt)),
+        "(`a` IS NOT NULL) OR (`a` IS NULL AND `b` IS NOT NULL)");
+}
+
+Y_UNIT_TEST(ResumeConditionForSingleColumnKey) {
+    const auto desc = NTable::TTableBuilder()
+        .AddNullableColumn("a", EPrimitiveType::Int64)
+        .AddNullableColumn("v", EPrimitiveType::Utf8)
+        .SetPrimaryKeyColumns({"a"})
+        .Build();
+    const auto conditionFor = [&](std::optional<i64> a) {
+        const auto lastPK = TValueBuilder().BeginTuple().AddElement().OptionalInt64(a).EndTuple().Build();
+        const auto [query, params] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", lastPK);
+        const TString prefix = "SELECT `a`, `v` FROM `/Root/t` WHERE ";
+        const TString suffix = " ORDER BY `a`;";
+        const size_t from = query.find(prefix);
+        UNIT_ASSERT_C(from != TString::npos && query.EndsWith(suffix), query);
+        return query.substr(from + prefix.size(), query.size() - from - prefix.size() - suffix.size());
+    };
+
+    // never "(`a`) > $pk": in YQL that is the scalar `a` compared with a tuple, which does not compile
+    UNIT_ASSERT_VALUES_EQUAL(conditionFor(1), "(`a` > $pk.0)");
+    UNIT_ASSERT_VALUES_EQUAL(conditionFor(std::nullopt), "(`a` IS NOT NULL)");
+}
+
+}
+
 Y_UNIT_TEST_SUITE(BackupToolValuePrintParse) {
 
 void TestResultSetParsedOk(const TString& protoStr, const TString& expect) {

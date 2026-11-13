@@ -50,6 +50,7 @@ constexpr bool DEFAULT_KEY_FILTER_FOR_STARTS_WITH = true;
 constexpr ui64 DEFAULT_MAX_KEY_RANGE_COUNT = 1000ULL;
 
 constexpr bool DEFAULT_USE_NATIVE_DESC_SORT = false;
+constexpr bool DEFAULT_ALLOW_NATIVE_DESC_SORT = true;
 
 constexpr ui64 DEFAULT_MAX_CHUNKS_FOR_DQ_READ = 500;
 

@@ -340,6 +340,16 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT(lastLevel.Candidates.empty());
     }
 
+    Y_UNIT_TEST(LastLevelMeasuresPortionBelowAll) {
+        TCounters counters;
+        TTestLastLevel lastLevel(TLastLevelSettings{}, counters);
+        lastLevel.AddPortion(MakePortion(1, 20, 30, 100));
+        lastLevel.AddPortion(MakePortion(2, 40, 50, 100));
+
+        UNIT_ASSERT_VALUES_EQUAL(lastLevel.Measure(MakePortion(3, 0, 19, 100)), 0);
+        UNIT_ASSERT_VALUES_EQUAL(lastLevel.Measure(MakePortion(4, 0, 20, 100)), 1);
+    }
+
     Y_UNIT_TEST(TilingReturnsAccumulatorTask) {
         TTestTiling::TilingSettings settings;
         settings.AccumulatorSettings.Trigger.Bytes = 100;
@@ -482,7 +492,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         std::mt19937_64 rng(42);
         std::shuffle(portions.begin(), portions.end(), rng);
 
-        tiling.ModifyPortions(portions, {});
+        tiling.AddLoadedPortions(portions);
 
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Portions.size(), 100);
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.WidthByPortionId.size(), 100);
@@ -500,6 +510,63 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
 
         UNIT_ASSERT_VALUES_EQUAL(accumulatorPortions, 2);
         UNIT_ASSERT_VALUES_EQUAL(widePortionsOutsideLastLevel, 20);
+    }
+
+    Y_UNIT_TEST(LoadedBatchSettlesNarrowPortionsFirst) {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorPortionSizeLimit = 100;
+        settings.K = 2;
+        settings.MiddleLevelCount = TILING_LAYERS_COUNT;
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        tiling.AddLoadedPortions({ MakePortion(1, 0, 100, 1000), MakePortion(2, 60, 69, 1000), MakePortion(3, 40, 49, 1000),
+            MakePortion(4, 20, 29, 1000), MakePortion(5, 0, 9, 1000) });
+
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(1).Level, 3);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Portions.size(), 4);
+    }
+
+    Y_UNIT_TEST(LoadedBatchIsMeasuredAgainstEarlierOnes) {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorPortionSizeLimit = 100;
+        settings.K = 2;
+        settings.MiddleLevelCount = TILING_LAYERS_COUNT;
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+        tiling.AddLoadedPortions(
+            { MakePortion(1, 0, 9, 1000), MakePortion(2, 20, 29, 1000), MakePortion(3, 40, 49, 1000), MakePortion(4, 60, 69, 1000) });
+
+        tiling.AddLoadedPortions({ MakePortion(5, 0, 100, 1000) });
+
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(5).Level, 3);
+    }
+
+    Y_UNIT_TEST(LoadedBatchIgnoresEvictedPortions) {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorPortionSizeLimit = 100;
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        tiling.AddLoadedPortions(
+            { std::make_shared<TTestPortion>(1, 0, 10, 1000, 1, NPortion::EVICTED), MakePortion(2, 5, 20, 1000), MakePortion(3, 15, 30, 1000) });
+
+        UNIT_ASSERT(tiling.LastLevel.PortionIds.contains(2));
+    }
+
+    Y_UNIT_TEST(ModifyPortionsAddsOneByOne) {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorPortionSizeLimit = 100;
+        settings.K = 2;
+        settings.MiddleLevelCount = TILING_LAYERS_COUNT;
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+
+        tiling.ModifyPortions({ MakePortion(1, 0, 100, 1000), MakePortion(2, 0, 9, 1000), MakePortion(3, 20, 29, 1000),
+                                  MakePortion(4, 40, 49, 1000), MakePortion(5, 60, 69, 1000) },
+            {});
+
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(1).Level, 1);
     }
 
     Y_UNIT_TEST(TilingAgingPromotesPortionDownLevelByLevel) {
@@ -720,7 +787,7 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
         {
             TCounters counters;
             TTestTiling tiling(MakeCountPrioritySettings(/*compatibilityMode=*/true), counters);
-            tiling.ModifyPortions(MakeAccumulatorPortions(10), {});
+            tiling.AddLoadedPortions(MakeAccumulatorPortions(10));
             UNIT_ASSERT(tiling.DoGetUsefulMetric().IsCritical());
             UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
             UNIT_ASSERT(!tiling.IsOverloaded());
@@ -729,7 +796,7 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
         {
             TCounters counters;
             TTestTiling tiling(MakeCountPrioritySettings(/*compatibilityMode=*/false), counters);
-            tiling.ModifyPortions(MakeAccumulatorPortions(10), {});
+            tiling.AddLoadedPortions(MakeAccumulatorPortions(10));
             UNIT_ASSERT(tiling.DoGetUsefulMetric().IsCritical());
             UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
             UNIT_ASSERT(tiling.IsOverloaded());
@@ -738,11 +805,43 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
         {
             TCounters counters;
             TTestTiling tiling(MakeCountPrioritySettings(/*compatibilityMode=*/true), counters);
-            tiling.ModifyPortions(MakeAccumulatorPortions(2), {});
+            tiling.AddLoadedPortions(MakeAccumulatorPortions(2));
             UNIT_ASSERT(!tiling.DoGetUsefulMetric().IsCritical());
             UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
             UNIT_ASSERT(!tiling.IsOverloaded());
         }
+    }
+
+    Y_UNIT_TEST(LaterLoadedBatchEntersCompatibility) {
+        TCounters counters;
+        TTestTiling tiling(MakeCountPrioritySettings(/*compatibilityMode=*/true), counters);
+        tiling.AddLoadedPortions({ MakePortion(1, 0, 1, 10), MakePortion(2, 10, 11, 10) });
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
+
+        TVector<TTestPortion::TPtr> secondBatch;
+        for (ui64 i = 2; i < 10; ++i) {
+            secondBatch.push_back(MakePortion(i + 1, i * 10, i * 10 + 1, 10));
+        }
+        tiling.AddLoadedPortions(secondBatch);
+
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
+        UNIT_ASSERT(!tiling.IsOverloaded());
+    }
+
+    Y_UNIT_TEST(NonCriticalLoadedBatchKeepsCompatibility) {
+        TCounters counters;
+        TTestTiling tiling(MakeCountPrioritySettings(/*compatibilityMode=*/true), counters);
+        const auto firstBatch = MakeAccumulatorPortions(10);
+        tiling.AddLoadedPortions(firstBatch);
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
+        for (ui64 i = 0; i < 9; ++i) {
+            tiling.RemovePortion(firstBatch[i]);
+        }
+
+        tiling.AddLoadedPortions({ MakePortion(100, 1000, 1001, 10) });
+
+        UNIT_ASSERT(!tiling.DoGetUsefulMetric().IsCritical());
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
     }
 
     // 2) Compatibility recovery: the overload ceiling ratchets down with the load (IncPercent(10)
@@ -756,7 +855,7 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
 
         // 9000 portions -> useful level 90, ceiling IncPercent(10) = (99, 9900).
         auto portions = MakeAccumulatorPortions(9000);
-        tiling.ModifyPortions(portions, {});
+        tiling.AddLoadedPortions(portions);
         UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
         UNIT_ASSERT(!tiling.IsOverloaded());
 
@@ -798,7 +897,7 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
 
         // Enter compatibility with a large backlog: level 90 -> ceiling IncPercent(10) = (99, 9900).
         auto portions = MakeAccumulatorPortions(9990);
-        tiling.ModifyPortions(TVector<TTestPortion::TPtr>(portions.begin(), portions.begin() + 9000), {});
+        tiling.AddLoadedPortions(TVector<TTestPortion::TPtr>(portions.begin(), portions.begin() + 9000));
         UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
         UNIT_ASSERT(tiling.DoGetUsefulMetric().IsCritical());
         UNIT_ASSERT(!tiling.IsOverloaded());
@@ -817,6 +916,52 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
         }
         UNIT_ASSERT(tiling.IsOverloaded());
         UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
+    }
+
+    Y_UNIT_TEST(EmptyLoadedBatchKeepsRegular) {
+        TCounters counters;
+        TTestTiling tiling(MakeWideBandSettings(), counters);
+        auto portions = MakeAccumulatorPortions(2000);
+        tiling.AddLoadedPortions(TVector<TTestPortion::TPtr>(portions.begin(), portions.begin() + 500));
+        for (ui64 i = 500; i < 2000; ++i) {
+            tiling.AddPortion(portions[i]);
+        }
+        UNIT_ASSERT(tiling.DoGetUsefulMetric().IsCritical());
+
+        tiling.AddLoadedPortions({});
+
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
+    }
+
+    Y_UNIT_TEST(LoadedBatchKeepsWriteOverloadInCompatibility) {
+        TCounters counters;
+        TTestTiling tiling(MakeWideBandSettings(), counters);
+        auto portions = MakeAccumulatorPortions(10090);
+        tiling.AddLoadedPortions(TVector<TTestPortion::TPtr>(portions.begin(), portions.begin() + 9000));
+        for (ui64 i = 9000; i < 9990; ++i) {
+            tiling.AddPortion(portions[i]);
+        }
+        UNIT_ASSERT(tiling.IsOverloaded());
+
+        tiling.AddLoadedPortions(TVector<TTestPortion::TPtr>(portions.begin() + 9990, portions.end()));
+
+        UNIT_ASSERT(tiling.IsOverloaded());
+    }
+
+    Y_UNIT_TEST(LoadedBatchKeepsWriteOverloadInRegular) {
+        TCounters counters;
+        TTestTiling tiling(MakeWideBandSettings(), counters);
+        auto portions = MakeAccumulatorPortions(2100);
+        tiling.AddLoadedPortions(TVector<TTestPortion::TPtr>(portions.begin(), portions.begin() + 500));
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
+        for (ui64 i = 500; i < 2000; ++i) {
+            tiling.AddPortion(portions[i]);
+        }
+        UNIT_ASSERT(tiling.IsOverloaded());
+
+        tiling.AddLoadedPortions(TVector<TTestPortion::TPtr>(portions.begin() + 2000, portions.end()));
+
+        UNIT_ASSERT(tiling.IsOverloaded());
     }
 
     // Settings for the aging/promotion tests: accumulator disabled, routing purely by measure.

@@ -6,11 +6,13 @@ from . import __version__ as pyjwt_version
 
 try:
     import cryptography
+
+    cryptography_version = cryptography.__version__
 except ModuleNotFoundError:
-    cryptography = None  # type: ignore
+    cryptography_version = ""
 
 
-def info():
+def info() -> dict[str, dict[str, str]]:
     """
     Generate information for a bug report.
     Based on the requests package help utility module.
@@ -28,14 +30,18 @@ def info():
     if implementation == "CPython":
         implementation_version = platform.python_version()
     elif implementation == "PyPy":
+        pypy_version_info = sys.pypy_version_info  # type: ignore[attr-defined]
         implementation_version = (
-            f"{sys.pypy_version_info.major}."
-            f"{sys.pypy_version_info.minor}."
-            f"{sys.pypy_version_info.micro}"
+            f"{pypy_version_info.major}."
+            f"{pypy_version_info.minor}."
+            f"{pypy_version_info.micro}"
         )
-        if sys.pypy_version_info.releaselevel != "final":
+        if pypy_version_info.releaselevel != "final":
             implementation_version = "".join(
-                [implementation_version, sys.pypy_version_info.releaselevel]
+                [
+                    implementation_version,
+                    pypy_version_info.releaselevel,
+                ]
             )
     else:
         implementation_version = "Unknown"
@@ -46,12 +52,12 @@ def info():
             "name": implementation,
             "version": implementation_version,
         },
-        "cryptography": {"version": getattr(cryptography, "__version__", "")},
+        "cryptography": {"version": cryptography_version},
         "pyjwt": {"version": pyjwt_version},
     }
 
 
-def main():
+def main() -> None:
     """Pretty-print the bug information as JSON."""
     print(json.dumps(info(), sort_keys=True, indent=2))
 

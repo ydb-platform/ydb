@@ -1,9 +1,8 @@
 #include <yql/essentials/tools/purebench/gbenchmark/register.h>
 
 #include <library/cpp/testing/common/env.h>
+#include <library/cpp/testing/gbenchmark/benchmark.h>
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <benchmark/benchmark.h>
 
 #include <util/folder/path.h>
 #include <util/folder/tempdir.h>

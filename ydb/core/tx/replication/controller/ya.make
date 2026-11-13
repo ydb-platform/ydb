@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/library/naming_conventions
     ydb/public/api/protos
+    ydb/public/sdk/cpp/src/client/proto
     ydb/services/metadata
     yql/essentials/public/issue
     library/cpp/json

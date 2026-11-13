@@ -1942,7 +1942,6 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     ui32 MaxPartsPerTablet = 0;
     ui64 AlterVersion = 0;
     TString TabletConfig;
-    TString BootstrapConfig;
     THashMap<TShardIdx, TTopicTabletInfo::TPtr> Shards; // key - shardIdx
     TKeySchema KeySchema;
     TTopicInfo::TPtr AlterData; // changes to be applied

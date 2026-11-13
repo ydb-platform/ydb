@@ -268,7 +268,7 @@ public:
         }
 
         if (streamDesc.HasHeartbeatMode() || streamDesc.HasAggregatorTabletId()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "HeartbeatMode and AggregatorTabletId are assigned by SchemeShard and cannot be set in a request");
             return result;
         }

@@ -128,6 +128,7 @@ struct TDropTopicSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     bool IfExists = false;
     ui64 Cookie = 0;
+    bool EnableRelativePaths = false;
 };
 
 NActors::IActor* CreateDropTopicActor(const NActors::TActorId& parentId, TDropTopicSettings&& settings);

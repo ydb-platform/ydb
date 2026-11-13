@@ -399,6 +399,85 @@ Y_UNIT_TEST_SUITE(TTableRangeReaderTest) {
         }
     }
 
+    // When the request has no explicit snapshot, the shard picks one. If a read
+    // receives a batch and then disconnects, the retry resumes after the last
+    // processed key and must reuse that same snapshot, otherwise the response
+    // mixes an old prefix with a newer suffix.
+    Y_UNIT_TEST(ResumesRetryFromSelectedSnapshot) {
+        TPortManager pm;
+        TActorId sender;
+        TServer::TPtr server = StartServer(pm, sender);
+        auto& runtime = *server->GetRuntime();
+
+        InitReaderTable(server, sender);
+
+        TActorId reader = StartReader(runtime);
+        auto readerSender = runtime.AllocateEdgeActor();
+
+        auto shards = GetTableShards(server, sender, kReaderTable);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TMaybe<TRowVersion> selectedSnapshot;
+        TMaybe<TRowVersion> retrySnapshot;
+        ui64 firstReadId = 0;
+        ui64 retryReadId = 0;
+        bool firstAckDropped = false;
+        runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+            const ui32 type = event->GetTypeRewrite();
+            if (type == TEvDataShard::TEvReadResult::EventType) {
+                const auto& record = event->Get<TEvDataShard::TEvReadResult>()->Record;
+                if (!selectedSnapshot && record.GetRowCount() > 0 && record.HasSnapshot()) {
+                    selectedSnapshot = TRowVersion::FromProto(record.GetSnapshot());
+                }
+                return false;
+            }
+            if (type == TEvDataShard::TEvRead::EventType) {
+                auto& record = event->Get<TEvDataShard::TEvRead>()->Record;
+                if (!firstReadId) {
+                    firstReadId = record.GetReadId();
+                    // Answer in batches, so the read has a continuation point.
+                    record.SetMaxRows(2);
+                } else if (record.GetReadId() != firstReadId) {
+                    retryReadId = record.GetReadId();
+                    if (record.HasSnapshot()) {
+                        retrySnapshot = TRowVersion::FromProto(record.GetSnapshot());
+                    }
+                }
+                return false;
+            }
+            if (type == TEvDataShard::TEvReadAck::EventType && !firstAckDropped) {
+                // The reader has already kept the first batch: drop the ack, as
+                // if the connection to the shard had just been lost.
+                firstAckDropped = true;
+                return true;
+            }
+            return false;
+        });
+
+        runtime.Send(new IEventHandle(reader, readerSender, MakeReadRequest(70, {}, {}).Release()));
+        runtime.WaitFor("first batch", [&] { return firstAckDropped; }, TDuration::Seconds(10));
+
+        runtime.Send(new IEventHandle(reader, readerSender,
+            new TEvPipeCache::TEvDeliveryProblem(shards.at(0), false, true, /* isDeleted */ false)));
+
+        auto response = runtime.GrabEdgeEventRethrow<TEvReadTableRangeResponse>(readerSender, TDuration::Seconds(30));
+        UNIT_ASSERT_C(response, "request was never completed");
+        UNIT_ASSERT_C(response->Get()->Success, response->Get()->Issues.ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->RequestId, 70u);
+
+        UNIT_ASSERT_C(selectedSnapshot, "the shard did not select a snapshot for the first read");
+        UNIT_ASSERT_C(retryReadId && retryReadId != firstReadId, "the shard read was not retried");
+        UNIT_ASSERT_C(retrySnapshot, "the retry did not reuse the selected snapshot");
+        UNIT_ASSERT_VALUES_EQUAL(retrySnapshot->Step, selectedSnapshot->Step);
+        UNIT_ASSERT_VALUES_EQUAL(retrySnapshot->TxId, selectedSnapshot->TxId);
+
+        auto rows = CollectRows(*response->Get());
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 5u);
+        for (size_t i = 0; i < rows.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(rows[i].first, static_cast<ui32>(i + 1));
+        }
+    }
+
     Y_UNIT_TEST(UnknownColumnFailsRequest) {
         TPortManager pm;
         TActorId sender;

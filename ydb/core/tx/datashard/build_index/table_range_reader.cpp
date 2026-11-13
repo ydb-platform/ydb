@@ -109,6 +109,9 @@ class TTableRangeReader : public NActors::TActorBootstrapped<TTableRangeReader> 
         // continues after it instead of re-reading the whole range.
         TSerializedCellVec ResumeKey;
         bool HasResumeKey = false;
+        // Snapshot the shard selected for this read when the request had none.
+        // Reused on retries, so the resumed batches stay one repeatable image.
+        TMaybe<TRowVersion> Snapshot;
         bool Finished = false;
         // A retry of this shard read is already scheduled.
         bool RetryPending = false;
@@ -572,9 +575,13 @@ private:
         }
         record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
 
-        if (state.Snapshot) {
-            record.MutableSnapshot()->SetStep(state.Snapshot->Step);
-            record.MutableSnapshot()->SetTxId(state.Snapshot->TxId);
+        // The shard picks a snapshot when the request has none; a retry that
+        // resumes from a continuation token must keep reading that same
+        // snapshot, otherwise the response mixes data from different times.
+        const TMaybe<TRowVersion>& snapshot = state.Snapshot ? state.Snapshot : shard.Snapshot;
+        if (snapshot) {
+            record.MutableSnapshot()->SetStep(snapshot->Step);
+            record.MutableSnapshot()->SetTxId(snapshot->TxId);
         }
 
         if (shard.HasResumeKey) {
@@ -625,6 +632,10 @@ private:
             }
             HandleShardFailure(state, shard, route.ShardIndex, status, issues);
             return;
+        }
+
+        if (!shard.Snapshot && record.HasSnapshot()) {
+            shard.Snapshot = TRowVersion::FromProto(record.GetSnapshot());
         }
 
         YDB_LOG_DEBUG("TableRangeReader: received read result",

@@ -168,6 +168,28 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
         env.Finish();
     }
 
+    Y_UNIT_TEST(CredentialGenerationSelectsFreshProxyAndPreservesExistingUsers) {
+        TCredentialCacheEnv env;
+        NKikimrReplication::TConnectionParams credentials;
+        credentials.MutableStaticCredentials()->SetUser("user");
+        credentials.MutableStaticCredentials()->SetPassword("same-password");
+        const auto defaultProxy = env.Start(1, credentials);
+        credentials.SetCredentialGeneration("");
+        UNIT_ASSERT_VALUES_EQUAL(env.Start(2, credentials), defaultProxy);
+        credentials.SetCredentialGeneration("first-resolve");
+        const auto original = env.Start(3, credentials);
+        UNIT_ASSERT(original != defaultProxy);
+        UNIT_ASSERT_VALUES_EQUAL(env.Start(4, credentials), original);
+        credentials.SetCredentialGeneration("new-secret-version");
+        const auto refreshed = env.Start(5, credentials);
+        UNIT_ASSERT(refreshed != original);
+        UNIT_ASSERT(refreshed != defaultProxy);
+        UNIT_ASSERT_VALUES_EQUAL(env.Start(6, credentials), refreshed);
+        UNIT_ASSERT(env.Runtime.FindActor(original));
+        UNIT_ASSERT(!env.Poisoned.contains(original));
+        env.Finish();
+    }
+
     Y_UNIT_TEST(IamCredentialsReuseProxyByAccountAndResource) {
         TCredentialCacheEnv env;
         NKikimrReplication::TConnectionParams credentials;

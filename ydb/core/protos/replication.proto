@@ -63,6 +63,8 @@ message TIamCredentials {
 }
 
 message TConnectionParams {
+    // Optional cache discriminator for a fresh credential incarnation. Old nodes ignore it.
+    optional string CredentialGeneration = 8;
     optional string Endpoint = 1;
     optional string Database = 2;
     optional bool EnableSsl = 5;

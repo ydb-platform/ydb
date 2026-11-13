@@ -733,6 +733,9 @@ namespace NKikimr {
                 ctx.Send(ev->Forward(SchedulerId));
             } else {
                 auto result = std::make_unique<TEvLocalStatusResult>();
+                // Includes the interval before the startup scheduler is created.
+                result->Record.SetReplicated(false);
+                result->Record.SetDurabilityReplicated(false);
                 NKikimrBlobStorage::TSyncerStatus *rec = result->Record.MutableSyncerStatus();
                 rec->SetPhase(Phase);
                 ctx.Send(ev->Sender, result.release());

@@ -27,9 +27,10 @@ void PrintPlan(const TString& plan, bool analyzeMode) {
 
 Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
 
-    Y_UNIT_TEST(LookupJoins_oldRbo) {
+    Y_UNIT_TEST_TWIN(LookupJoins_oldRbo, ScalarHashJoinForMap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        appConfig.MutableTableServiceConfig()->SetUseScalarHashJoinForMap(ScalarHashJoinForMap);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         // appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
@@ -193,6 +194,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
                     NYdb::NQuery::TTxControl::NoTx(),
                     NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
                 ).ExtractValueSync();
+            UNIT_ASSERT_C(result2.IsSuccess(), result2.GetIssues().ToString());
             const auto plan = TString{*result2.GetStats()->GetPlan()};
             PrintPlan(plan, /*analyzeMode=*/false);
             const auto ast = TString{*result2.GetStats()->GetAst()};
@@ -202,7 +204,8 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
             if (cases[i].Lookup) {
                 UNIT_ASSERT_C(lookupPlan, "query #" << i << " expected a lookup join, plan:\n" << plan);
             } else {
-                UNIT_ASSERT_C(plan.Contains("InnerJoin (Map)"), "query #" << i << " expected a map join, plan:\n" << plan);
+                const TStringBuf expectedJoin = ScalarHashJoinForMap ? "InnerJoin (ScalarHash)" : "InnerJoin (Map)";
+                UNIT_ASSERT_C(plan.Contains(expectedJoin), "query #" << i << " expected " << expectedJoin << ", plan:\n" << plan);
                 UNIT_ASSERT_C(!lookupPlan, "query #" << i << " expected no lookup join, plan:\n" << plan);
             }
 
@@ -390,7 +393,7 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
                 const TString predicateIndexTable = "/Root/" + table + "/" + predicateIndex + "/indexImplTable";
                 UNIT_ASSERT_C(!ast.Contains(predicateIndexTable), table << ": expected no read of " << predicateIndex << ", ast:\n" << ast);
             }
-            UNIT_ASSERT_C(ast.Contains(R"('('"AllowNullKeysPrefixSize" '1))"), table << ": expected a lookup by a point prefix, ast:\n" << ast);
+            UNIT_ASSERT_C(ast.Contains(R"('('"AllowNullKeysPrefixSize" '"1"))"), table << ": expected a lookup by a point prefix, ast:\n" << ast);
         }
     }
 
@@ -560,14 +563,14 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL_C(indexLookups.size(), 1, ast);
-        UNIT_ASSERT_C(indexLookups[0].Contains(R"('('"Strategy" '"LookupJoinRows") '('"AllowNullKeysPrefixSize" '1))"),
+        UNIT_ASSERT_C(indexLookups[0].Contains(R"('('"Strategy" '"LookupJoinRows") '('"AllowNullKeysPrefixSize" '"1"))"),
                       "expected a lookup join by the point prefix, ast:\n" << ast);
 
         // The primary key has no nulls, so the main table lookup does not allow null keys: the rows without a match
         // in the index come with a missing key, which is not looked up.
         const auto mainLookups = streamLookupsInto("/Root/t1");
         UNIT_ASSERT_VALUES_EQUAL_C(mainLookups.size(), 1, ast);
-        UNIT_ASSERT_C(mainLookups[0].Contains(R"('('"Strategy" '"LookupJoinRows") '('"AllowNullKeysPrefixSize" '0))"),
+        UNIT_ASSERT_C(mainLookups[0].Contains(R"('('"Strategy" '"LookupJoinRows") '('"AllowNullKeysPrefixSize" '"0"))"),
                       "expected a lookup join by the primary key, ast:\n" << ast);
 
         // The index lookup feeds the main table lookup directly, so a single lookup join consumes the result.
@@ -776,13 +779,13 @@ Y_UNIT_TEST_SUITE(KqpRboLookupJoin) {
 
         const auto indexLookups = StreamLookupsInto(ast, "/Root/t1/idx_c_k/indexImplTable");
         UNIT_ASSERT_VALUES_EQUAL_C(indexLookups.size(), 1, ast);
-        UNIT_ASSERT_C(indexLookups[0].Contains(R"('('"Strategy" '"LookupJoinRows") '('"AllowNullKeysPrefixSize" '1))"),
+        UNIT_ASSERT_C(indexLookups[0].Contains(R"('('"Strategy" '"LookupJoinRows") '('"AllowNullKeysPrefixSize" '"1"))"),
                       "expected a lookup join by the point prefix, ast:\n" << ast);
 
         // The main table lookup allows a null primary key.
         const auto mainLookups = StreamLookupsInto(ast, "/Root/t1");
         UNIT_ASSERT_VALUES_EQUAL_C(mainLookups.size(), 1, ast);
-        UNIT_ASSERT_C(mainLookups[0].Contains(R"('('"Strategy" '"LookupJoinRows") '('"AllowNullKeysPrefixSize" '1))"),
+        UNIT_ASSERT_C(mainLookups[0].Contains(R"('('"Strategy" '"LookupJoinRows") '('"AllowNullKeysPrefixSize" '"1"))"),
                       "expected a lookup join by a nullable primary key, ast:\n" << ast);
 
         // A lookup join drops the rows without a match in the index before the main table lookup.

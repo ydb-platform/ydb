@@ -20,11 +20,15 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+GENERATE_ENUM_SERIALIZATION(keyvalue_test_enums.h)
+
 SRCS(
     keyvalue_ut.cpp
     keyvalue_collector_ut.cpp
     keyvalue_storage_read_request_ut.cpp
     keyvalue_move_data_ut.cpp
 )
+
+GENERATE_ENUM_SERIALIZATION(keyvalue_move_data_test_enums.h)
 
 END()

@@ -1,87 +1,101 @@
 {
-    "test.test[BlockFrom]": [
+    "test.test[BlockFrom-Peephole]": [
         {
-            "uri": "file://test.test_BlockFrom_/results.txt"
+            "checksum": "3e7b2620524a4780e0dc38dad18112be",
+            "size": 5096,
+            "uri": "https://{canondata_backend}/212715/074d96b5bbec3fa3a192521a4fa0b0dfacec305f/resource.tar.gz#test.test_BlockFrom-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockSplitMake]": [
+    "test.test[BlockFrom-Results]": [
         {
-            "uri": "file://test.test_BlockSplitMake_/results.txt"
+            "uri": "file://test.test_BlockFrom-Results_/results.txt"
         }
     ],
-    "test.test[EndOf]": [
+    "test.test[BlockSplitMake-Peephole]": [
         {
-            "uri": "file://test.test_EndOf_/results.txt"
+            "checksum": "c455fc13325c0d5a6e5a6fd6ec456265",
+            "size": 6827,
+            "uri": "https://{canondata_backend}/1871182/f98682bd61f2fe12214f8c34287ed6d3e975ebc2/resource.tar.gz#test.test_BlockSplitMake-Peephole_/opt.yql"
         }
     ],
-    "test.test[FormatWriteOffsetWithColon]": [
+    "test.test[BlockSplitMake-Results]": [
         {
-            "uri": "file://test.test_FormatWriteOffsetWithColon_/results.txt"
+            "uri": "file://test.test_BlockSplitMake-Results_/results.txt"
         }
     ],
-    "test.test[From]": [
+    "test.test[EndOf-Results]": [
         {
-            "uri": "file://test.test_From_/results.txt"
+            "uri": "file://test.test_EndOf-Results_/results.txt"
         }
     ],
-    "test.test[Get]": [
+    "test.test[FormatWriteOffsetWithColon-Results]": [
         {
-            "uri": "file://test.test_Get_/results.txt"
+            "uri": "file://test.test_FormatWriteOffsetWithColon-Results_/results.txt"
         }
     ],
-    "test.test[Parse64TzNameVsTzOffset]": [
+    "test.test[From-Results]": [
         {
-            "uri": "file://test.test_Parse64TzNameVsTzOffset_/extracted"
+            "uri": "file://test.test_From-Results_/results.txt"
         }
     ],
-    "test.test[Parse64TzOffsetVsTzName]": [
+    "test.test[Get-Results]": [
         {
-            "uri": "file://test.test_Parse64TzOffsetVsTzName_/extracted"
+            "uri": "file://test.test_Get-Results_/results.txt"
         }
     ],
-    "test.test[Parse64TzOffset]": [
+    "test.test[Parse64-Results]": [
         {
-            "uri": "file://test.test_Parse64TzOffset_/results.txt"
+            "uri": "file://test.test_Parse64-Results_/results.txt"
         }
     ],
-    "test.test[Parse64]": [
+    "test.test[Parse64TzNameVsTzOffset-Results]": [
         {
-            "uri": "file://test.test_Parse64_/results.txt"
+            "uri": "file://test.test_Parse64TzNameVsTzOffset-Results_/extracted"
         }
     ],
-    "test.test[Shift]": [
+    "test.test[Parse64TzOffset-Results]": [
         {
-            "uri": "file://test.test_Shift_/results.txt"
+            "uri": "file://test.test_Parse64TzOffset-Results_/results.txt"
         }
     ],
-    "test.test[SplitMakeNarrow]": [
+    "test.test[Parse64TzOffsetVsTzName-Results]": [
         {
-            "uri": "file://test.test_SplitMakeNarrow_/results.txt"
+            "uri": "file://test.test_Parse64TzOffsetVsTzName-Results_/extracted"
         }
     ],
-    "test.test[SplitMake]": [
+    "test.test[Shift-Results]": [
         {
-            "uri": "file://test.test_SplitMake_/results.txt"
+            "uri": "file://test.test_Shift-Results_/results.txt"
         }
     ],
-    "test.test[StartOf]": [
+    "test.test[SplitMake-Results]": [
         {
-            "uri": "file://test.test_StartOf_/results.txt"
+            "uri": "file://test.test_SplitMake-Results_/results.txt"
         }
     ],
-    "test.test[To]": [
+    "test.test[SplitMakeNarrow-Results]": [
         {
-            "uri": "file://test.test_To_/results.txt"
+            "uri": "file://test.test_SplitMakeNarrow-Results_/results.txt"
         }
     ],
-    "test.test[UpdateTz]": [
+    "test.test[StartOf-Results]": [
         {
-            "uri": "file://test.test_UpdateTz_/results.txt"
+            "uri": "file://test.test_StartOf-Results_/results.txt"
         }
     ],
-    "test.test[Update]": [
+    "test.test[To-Results]": [
         {
-            "uri": "file://test.test_Update_/results.txt"
+            "uri": "file://test.test_To-Results_/results.txt"
+        }
+    ],
+    "test.test[Update-Results]": [
+        {
+            "uri": "file://test.test_Update-Results_/results.txt"
+        }
+    ],
+    "test.test[UpdateTz-Results]": [
+        {
+            "uri": "file://test.test_UpdateTz-Results_/results.txt"
         }
     ]
 }

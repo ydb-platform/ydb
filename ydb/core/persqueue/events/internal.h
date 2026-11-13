@@ -252,6 +252,7 @@ struct TEvPQ {
         EvResetOffsetResponse,
         EvReplicationData,
         EvReplicationDataAck,
+        EvPersistDone,
         EvEnd,
     };
 
@@ -349,6 +350,7 @@ struct TEvPQ {
         bool IsDirectWrite;
         std::optional<ui64> InitialSeqNo;
         EWriteExternalDeduplicationStatus ExternalDeduplicationStatus;
+        bool FromMirrorer = false;
     };
 
     struct TEvReadTimeout : public TEventLocal<TEvReadTimeout, EvReadTimeout> {
@@ -398,6 +400,7 @@ struct TEvPQ {
         TActorId PipeClient;
         ui64 LastOffset;
         TActorId ReplyTo;
+        TActorId ReadSessionActor;
 
         bool IsInternal() {
             return !!ReplyTo;
@@ -501,6 +504,7 @@ struct TEvPQ {
         bool Strict;
         bool MLPRequest;
         TActorId PipeClient;
+        TActorId ReadSessionActor;
         std::optional<TString> CommittedMetadata;
         bool IsInternal = false;
         bool AllowInactiveRewind = false;
@@ -679,6 +683,7 @@ struct TEvPQ {
         TActorId Sender;
         bool Force;
         bool RegisterIfNotExists;
+        TDuration WriteSessionQuotaWaitTime = TDuration::Zero();
     };
 
     struct TEvPipeDisconnected : public TEventLocal<TEvPipeDisconnected, EvPipeDisconnected> {
@@ -1377,7 +1382,12 @@ struct TEvPQ {
         TMaybe<ui64> MirroredOffset;
     };
 
-    struct TEvReplicationDataAck : public TEventLocal<TEvReplicationDataAck, EvReplicationDataAck> {
+    struct TEvPersistDone : public TEventLocal<TEvPersistDone, EvPersistDone> {
+        explicit TEvPersistDone(ui64 endOffset)
+            : EndOffset(endOffset)
+        {}
+
+        ui64 EndOffset;
     };
 
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {
@@ -1846,6 +1856,10 @@ struct TEvPQ {
         ui32 GetPartitionId() const {
             return Record.GetPartitionId();
         }
+
+        std::optional<ui64> GetToOffset() const {
+            return Record.HasToOffset() ? std::make_optional(Record.GetToOffset()) : std::nullopt;
+        }
     };
 
     struct TEvMLPPurgeResponse : TEventPB<TEvMLPPurgeResponse, NKikimrPQ::TEvMLPPurgeResponse, EvMLPPurgeResponse> {
@@ -2007,6 +2021,71 @@ struct TEvPQ {
 
     struct TEvTopicSqsActionMetrics : TEventPB<TEvTopicSqsActionMetrics, NKikimrPQ::TEvTopicSqsActionMetrics, EvTopicSqsActionMetrics> {
         TEvTopicSqsActionMetrics() = default;
+    };
+};
+
+struct TEvWriteSessionsQuoter {
+    enum EEv {
+        EvNotify = InternalEventSpaceBegin(NPQ::NEvents::EServices::WRITE_SESSIONS_QUOTER),
+        EvAcquireQuota,
+        EvQuotaAcquired,
+        EvRemove,
+        EvQuotaDeclined,
+        EvEnd,
+    };
+
+    static_assert(EvEnd <= InternalEventSpaceBegin(NPQ::NEvents::EServices::END));
+
+    struct TEvNotify : TEventLocal<TEvNotify, EvNotify> {
+        TEvNotify(const TString& topic, ui32 partition, ui32 generation)
+            : Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
+    };
+
+    struct TEvAcquireQuota : TEventLocal<TEvAcquireQuota, EvAcquireQuota> {
+        TEvAcquireQuota(const TString& topic, ui32 partition, ui32 generation)
+            : Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
+    };
+
+    struct TEvQuotaAcquired : TEventLocal<TEvQuotaAcquired, EvQuotaAcquired> {
+        TEvQuotaAcquired(TDuration quotaWaitTime)
+            : QuotaWaitTime(quotaWaitTime)
+        {
+        }
+
+        const TDuration QuotaWaitTime;
+    };
+
+    struct TEvQuotaDeclined : TEventLocal<TEvQuotaDeclined, EvQuotaDeclined> {
+        TEvQuotaDeclined() = default;
+    };
+
+    struct TEvRemove : TEventLocal<TEvRemove, EvRemove> {
+        TEvRemove(const TString& topic, ui32 partition, ui32 generation)
+            : Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
     };
 };
 

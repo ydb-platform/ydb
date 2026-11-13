@@ -218,6 +218,8 @@ message TFollowerPartSwitchAux {
     }
 
     repeated TBySwitch BySwitchAux = 1;
+    // Follower notifications to deliver before replaying this update's redo.
+    repeated uint32 TruncatedTables = 2;
 }
 
 message TFollowerAux {

@@ -1,87 +1,47 @@
 #include "dst_creator.h"
 #include "private_events.h"
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/replication/ut_helpers/mock_service.h>
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/base/statestorage.h>
-#include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
+#include <contrib/libs/zstd/include/zstd.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/scope.h>
 
 #include <atomic>
-#include <memory>
 
 namespace NKikimr::NReplication::NController {
-
-namespace {
-
-class TAttachmentAllocator: public TActorBootstrapped<TAttachmentAllocator> {
-public:
-    TAttachmentAllocator(TActorId txProxy, TActorId allocator)
-        : TxProxy(txProxy)
-        , Allocator(allocator)
-    {}
-
-    void Bootstrap() {
-        Become(&TThis::StateWork);
-    }
-
-    STFUNC(StateWork) {
-        Send(ev->Forward(ev->GetTypeRewrite() == TEvTxUserProxy::TEvAllocateTxId::EventType
-            ? Allocator : TxProxy));
-    }
-
-private:
-    const TActorId TxProxy;
-    const TActorId Allocator;
-};
-
-class TAttachmentEventCounter: public TActorBootstrapped<TAttachmentEventCounter> {
-public:
-    TAttachmentEventCounter(TActorId recipient, ui32 type, std::shared_ptr<std::atomic<ui32>> count)
-        : Recipient(recipient)
-        , Type(type)
-        , Count(std::move(count))
-    {}
-
-    void Bootstrap() {
-        Become(&TThis::StateWork);
-    }
-
-    STFUNC(StateWork) {
-        if (ev->GetTypeRewrite() == Type) {
-            ++*Count;
-        }
-        Send(ev->Forward(Recipient));
-    }
-
-private:
-    const TActorId Recipient;
-    const ui32 Type;
-    const std::shared_ptr<std::atomic<ui32>> Count;
-};
-
-} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(DstCreator) {
     using namespace NTestHelpers;
 
-    void PrepareAttachDst(TEnv<>& env) {
-        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
-        UNIT_ASSERT(ev->Get()->DstPathId);
-        env.GetRuntime().Send(ev->Sender, env.GetSender(), new TEvPrivate::TEvPrepareAttachDstResult());
+    void SetImportState(TEnv<>& env, const TString& path,
+            NKikimrSchemeOp::TTableReplicationConfig::EImportState state,
+            EConsistencyLevel consistency = EConsistencyLevel::Row) {
+        const auto schemeShardId = env.GetSchemeshardId(path);
+        static std::atomic<ui64> nextTxId{100500};
+        const ui64 txId = nextTxId++;
+        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShardId);
+        auto& tx = *request->Record.AddTransaction();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        tx.SetInternal(true);
+        env.GetPathId(path).ToProto(tx.MutableAlterTable()->MutablePathId());
+        auto& config = *tx.MutableAlterTable()->MutableReplicationConfig();
+        FillReplicationConfig(config, EReplicationMode::ReadOnly, consistency);
+        config.SetImportState(state);
+        auto result = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(schemeShardId, std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted, result->Get()->Record.GetReason());
+        env.Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(schemeShardId,
+            new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(txId));
     }
 
     void CheckTableReplica(
@@ -140,10 +100,271 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         const auto& replicatedDesc = desc.GetPathDescription().GetTable();
 
         CheckTableReplica(tableDesc, replicatedDesc, mode, consistency);
+        UNIT_ASSERT(!replicatedDesc.GetReplicationConfig().HasImportState());
+    }
+
+    // The destination of a table with a serial column has to get the sequence as well: the column
+    // default references it, and the sequence position is then advanced by replication.
+    void WithSerialColumn(bool withLiteralDefault) {
+        TEnv env;
+
+        NKikimrSchemeOp::TIndexedTableCreationConfig config;
+        auto& tableDesc = *config.MutableTableDescription();
+        tableDesc.SetName("Table");
+        {
+            auto* column = tableDesc.AddColumns();
+            column->SetName("id");
+            column->SetType("Int64");
+            column->SetDefaultFromSequence("_serial_column_id");
+        }
+        {
+            auto* column = tableDesc.AddColumns();
+            column->SetName("value");
+            column->SetType("Utf8");
+            if (withLiteralDefault) {
+                auto* literal = column->MutableDefaultFromLiteral();
+                literal->mutable_type()->set_type_id(Ydb::Type::UTF8);
+                literal->mutable_value()->set_text_value("default message");
+            }
+        }
+        tableDesc.AddKeyColumnNames("id");
+        {
+            auto* sequence = config.AddSequenceDescription();
+            sequence->SetName("_serial_column_id");
+            sequence->SetMinValue(1);
+            sequence->SetDataType("Int64");
+            sequence->MutableSetVal()->SetNextValue(42);
+            sequence->MutableSetVal()->SetNextUsed(true);
+        }
+
+        env.CreateIndexedTable("/Root", config);
+        UNIT_ASSERT(env.GetDescription("/Root/Table").GetPathDescription().HasTable());
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Table_replica",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
+
+        auto desc = env.GetDescription("/Root/Table_replica");
+        const auto& replicatedDesc = desc.GetPathDescription().GetTable();
+
+        const auto* idColumn = FindIfPtr(replicatedDesc.GetColumns(), [](const auto& column) {
+            return column.GetName() == "id";
+        });
+        UNIT_ASSERT(idColumn);
+        UNIT_ASSERT_VALUES_EQUAL(idColumn->GetDefaultFromSequence(), "_serial_column_id");
+
+        UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.SequencesSize(), 1);
+        const auto& sequence = replicatedDesc.GetSequences(0);
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetName(), "_serial_column_id");
+        UNIT_ASSERT_VALUES_EQUAL(sequence.GetDataType(), "Int64");
+
+        if (withLiteralDefault) {
+            const auto* valueColumn = FindIfPtr(replicatedDesc.GetColumns(), [](const auto& column) {
+                return column.GetName() == "value";
+            });
+            UNIT_ASSERT(valueColumn);
+            UNIT_ASSERT(valueColumn->HasDefaultFromLiteral());
+            UNIT_ASSERT_VALUES_EQUAL(valueColumn->GetDefaultFromLiteral().SerializeAsString(),
+                tableDesc.GetColumns(1).GetDefaultFromLiteral().SerializeAsString());
+        }
+
+        // The sequence position is only returned by a table describe asked for it, the scheme
+        // description above never has it.
+        env.RunCall([&] {
+            NYdb::NTable::TTableClient client(env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.DescribeTable("/Root/Table_replica",
+                NYdb::NTable::TDescribeTableSettings().WithSetVal(true)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            const auto columns = result.GetTableDescription().GetTableColumns();
+            const auto* column = FindIfPtr(columns, [](const auto& column) {
+                return column.Name == "id";
+            });
+            UNIT_ASSERT(column);
+            UNIT_ASSERT(column->SequenceDescription);
+            UNIT_ASSERT(column->SequenceDescription->SetVal);
+            UNIT_ASSERT_VALUES_EQUAL(column->SequenceDescription->SetVal->NextValue, 42);
+            UNIT_ASSERT(column->SequenceDescription->SetVal->NextUsed);
+        });
+    }
+
+    Y_UNIT_TEST(CreateTableWithSerialColumn) {
+        WithSerialColumn(false);
+    }
+
+    Y_UNIT_TEST(CreateTableWithSerialColumnAndLiteralDefault) {
+        WithSerialColumn(true);
     }
 
     Y_UNIT_TEST(Basic) {
         Basic("/Root/Replicated");
+    }
+
+    Y_UNIT_TEST(CreateTableWithLiteralDefaults) {
+        TEnv env;
+        auto source = MakeTableDescription(TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint64"},
+                {.Name = "count", .Type = "Uint64"},
+                {.Name = "message", .Type = "Utf8"},
+                {.Name = "bytes", .Type = "String"},
+                {.Name = "value", .Type = "Int32"},
+            },
+            .ReplicationConfig = Nothing(),
+        });
+        auto* count = source->MutableColumns(1);
+        count->SetNotNull(true);
+        count->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+        count->MutableDefaultFromLiteral()->mutable_value()->set_uint64_value(0);
+        auto* message = source->MutableColumns(2)->MutableDefaultFromLiteral();
+        message->mutable_type()->set_type_id(Ydb::Type::UTF8);
+        message->mutable_value()->set_text_value("default message");
+        auto* bytes = source->MutableColumns(3)->MutableDefaultFromLiteral();
+        bytes->mutable_type()->set_type_id(Ydb::Type::STRING);
+        bytes->mutable_value()->set_bytes_value(std::string("\0\xff", 2));
+        auto* value = source->MutableColumns(4)->MutableDefaultFromLiteral();
+        value->mutable_type()->set_type_id(Ydb::Type::INT32);
+        value->mutable_value()->set_int32_value(-42);
+        env.CreateTable("/Root", *source);
+
+        for (const auto consistency : {EConsistencyLevel::Row, EConsistencyLevel::Global}) {
+            const TString dstPath = consistency == EConsistencyLevel::Row ? "/Root/Row" : "/Root/Global";
+            // Repeating creation also exercises validation of an existing destination.
+            for (ui32 attempt = 0; attempt < 2; ++attempt) {
+                env.GetRuntime().Register(CreateDstCreator(
+                    env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+                    "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                    "/Root/Source", dstPath, EReplicationMode::ReadOnly, consistency));
+                auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+                UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+
+                const auto description = env.GetDescription(dstPath);
+                const auto& destination = description.GetPathDescription().GetTable();
+                for (const auto& expected : source->GetColumns()) {
+                    const auto* actual = FindIfPtr(destination.GetColumns(), [&](const auto& column) {
+                        return column.GetName() == expected.GetName();
+                    });
+                    UNIT_ASSERT(actual);
+                    UNIT_ASSERT_VALUES_EQUAL(actual->GetNotNull(), expected.GetNotNull());
+                    UNIT_ASSERT_VALUES_EQUAL(actual->HasDefaultFromLiteral(), expected.HasDefaultFromLiteral());
+                    UNIT_ASSERT_VALUES_EQUAL(actual->GetDefaultFromLiteral().SerializeAsString(),
+                        expected.GetDefaultFromLiteral().SerializeAsString());
+                }
+            }
+        }
+    }
+
+    void ExistingDstLiteralDefault(const TMaybe<ui64>& sourceDefault, const TMaybe<ui64>& destinationDefault) {
+        for (const auto consistency : {EConsistencyLevel::Row, EConsistencyLevel::Global}) {
+            for (const bool notNull : {false, true}) {
+                TEnv env;
+                auto source = MakeTableDescription({
+                    .Name = "Src",
+                    .KeyColumns = {"key"},
+                    .Columns = {
+                        {.Name = "key", .Type = "Uint64"},
+                        {.Name = "count", .Type = "Uint64"},
+                    },
+                    .ReplicationConfig = Nothing(),
+                });
+                auto* column = source->MutableColumns(1);
+                column->SetNotNull(notNull);
+                if (sourceDefault) {
+                    column->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+                    column->MutableDefaultFromLiteral()->mutable_value()->set_uint64_value(*sourceDefault);
+                }
+                env.CreateTable("/Root", *source);
+
+                auto destination = *source;
+                destination.SetName("Dst");
+                FillReplicationConfig(*destination.MutableReplicationConfig(), EReplicationMode::ReadOnly, consistency);
+                column = destination.MutableColumns(1);
+                column->ClearDefaultFromLiteral();
+                if (destinationDefault) {
+                    column->MutableDefaultFromLiteral()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+                    column->MutableDefaultFromLiteral()->mutable_value()->set_uint64_value(*destinationDefault);
+                }
+                env.CreateTable("/Root", destination);
+
+                env.GetRuntime().Register(CreateDstCreator(
+                    env.GetSender(), env.GetSchemeshardId("/Root/Src"), env.GetYdbProxy(),
+                    "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                    "/Root/Src", "/Root/Dst", EReplicationMode::ReadOnly, consistency));
+                const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSchemeError, result->Get()->Error);
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "Column literal default mismatch: name: count");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ColumnLiteralDefaultMissing) {
+        ExistingDstLiteralDefault(ui64(0), Nothing());
+    }
+
+    Y_UNIT_TEST(ColumnLiteralDefaultMismatch) {
+        ExistingDstLiteralDefault(ui64(0), ui64(1));
+    }
+
+    Y_UNIT_TEST(ColumnLiteralDefaultUnexpected) {
+        ExistingDstLiteralDefault(Nothing(), ui64(0));
+    }
+
+    Y_UNIT_TEST(CreateWaitingImportTable) {
+        TEnv env;
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+        for (ui32 attempt = 0; attempt < 2; ++attempt) {
+            env.GetRuntime().Register(CreateDstCreator(
+                env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global,
+                false, TReplication::EState::Paused));
+            auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+            UNIT_ASSERT(result->Get()->WaitingImport);
+        }
+        const auto desc = env.GetDescription("/Root/Dst");
+        const auto& config = desc.GetPathDescription().GetTable().GetReplicationConfig();
+        UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetImportState(), NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
+    }
+
+    Y_UNIT_TEST(RejectIncompleteImport) {
+        for (const auto state : {NKikimrSchemeOp::TTableReplicationConfig::IMPORT_STATE_NONE,
+                NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT,
+                NKikimrSchemeOp::TTableReplicationConfig::IMPORTING}) {
+            TEnv env;
+            auto table = TTestTableDescription{
+                .Name = "Source",
+                .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}},
+                .ReplicationConfig = Nothing(),
+            };
+            env.CreateTable("/Root", *MakeTableDescription(table));
+            table.Name = "Dst";
+            env.CreateTable("/Root", *MakeTableDescription(table));
+            SetImportState(env, "/Root/Dst", state);
+            env.GetRuntime().Register(CreateDstCreator(
+                env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+            auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            UNIT_ASSERT(!result->Get()->IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "expected IMPORTED");
+        }
     }
 
     Y_UNIT_TEST(AttachTable) {
@@ -161,18 +382,25 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         auto dst = table;
         dst.Name = "Dst";
         env.CreateTable("/Root", *MakeTableDescription(dst));
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
         const auto pathId = env.GetPathId("/Root/Dst");
+
+        auto observer = env.GetRuntime().AddObserver([](IEventHandle::TPtr& ev) {
+            UNIT_ASSERT_C(ev->GetTypeRewrite() != NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType,
+                "Attaching an imported table must not modify its schema");
+        });
 
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
             "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
             "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global, false));
 
-        PrepareAttachDst(env);
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DstPathId, pathId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable()
+            .GetReplicationConfig().GetImportState(), NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
         CheckTableReplica(table, env.GetDescription("/Root/Dst").GetPathDescription().GetTable(),
             EReplicationMode::ReadOnly, EConsistencyLevel::Global);
     }
@@ -198,34 +426,18 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         UNIT_ASSERT_C(created->Get()->Result.IsSuccess(), created->Get()->Result.GetIssues().ToString());
     }
 
-    TActorId StartVectorIndexAttachment(TEnv<>& env, const TPathId& pendingDstPathId = {},
-            bool cleanup = false)
-    {
+    TActorId StartVectorIndexAttachment(TEnv<>& env) {
         return env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
             "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
             "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global,
-            false /* initialScan */, pendingDstPathId, cleanup));
+            false /* initialScan */));
     }
 
     void AssertVectorIndexAttachment(TEnv<>& env, const TPathId& pathId) {
-        // Also accept an early result so a schema mismatch fails the assertion
-        // instead of timing out while waiting for the attachment handshake.
-        for (;;) {
-            TAutoPtr<IEventHandle> handle;
-            auto [prepare, result] = env.GetRuntime().GrabEdgeEvents<
-                TEvPrivate::TEvPrepareAttachDst, TEvPrivate::TEvCreateDstResult>(handle);
-            if (prepare) {
-                UNIT_ASSERT_VALUES_EQUAL(prepare->DstPathId, pathId);
-                env.GetRuntime().Send(handle->Sender, env.GetSender(), new TEvPrivate::TEvPrepareAttachDstResult());
-                continue;
-            }
-
-            UNIT_ASSERT(result);
-            UNIT_ASSERT_VALUES_EQUAL_C(result->Status, NKikimrScheme::StatusSuccess, result->Error);
-            UNIT_ASSERT_VALUES_EQUAL(result->DstPathId, pathId);
-            break;
-        }
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSuccess, result->Get()->Error);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, pathId);
 
         const auto desc = env.GetDescription("/Root/Dst");
         TString error;
@@ -239,6 +451,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         CreateTableWithVectorIndexes(env, "/Root/Source", withSyncIndex);
         CreateTableWithVectorIndexes(env, "/Root/Dst", withSyncIndex);
         const auto pathId = env.GetPathId("/Root/Dst");
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
 
         StartVectorIndexAttachment(env);
         AssertVectorIndexAttachment(env, pathId);
@@ -274,6 +487,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                     .Primitive(NYdb::EPrimitiveType::Uint64).EndOptional().Build()})));
         UNIT_ASSERT_C(altered->Get()->Result.IsSuccess(), altered->Get()->Result.GetIssues().ToString());
 
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
         StartVectorIndexAttachment(env);
         const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusSchemeError);
@@ -286,8 +500,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         CreateTableWithVectorIndexes(env, "/Root/Source");
         CreateTableWithVectorIndexes(env, "/Root/Dst");
         const auto pathId = env.GetPathId("/Root/Dst");
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
         const auto creator = StartVectorIndexAttachment(env);
-        PrepareAttachDst(env);
 
         bool dropCompleted = false;
         auto observer = env.GetRuntime().AddObserver<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(
@@ -302,54 +516,31 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         observer.Remove();
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 1);
 
-        StartVectorIndexAttachment(env, pathId);
+        StartVectorIndexAttachment(env);
         AssertVectorIndexAttachment(env, pathId);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Source").GetPathDescription().GetTable().TableIndexesSize(), 2);
     }
 
-    Y_UNIT_TEST(DoneDuringAttachmentPreservesVectorIndexes) {
-        TEnv env;
-        CreateTableWithVectorIndexes(env, "/Root/Source");
-        CreateTableWithVectorIndexes(env, "/Root/Dst");
-        const auto pathId = env.GetPathId("/Root/Dst");
-
-        StartVectorIndexAttachment(env, pathId, true /* cleanup */);
-        AssertVectorIndexAttachment(env, pathId);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 2);
-    }
-
-    Y_UNIT_TEST(CleanupBeforeVectorIndexDropPreservesIndexes) {
-        TEnv env(true, ERuntimeMode::Simulated);
-        CreateTableWithVectorIndexes(env, "/Root/Source");
-        CreateTableWithVectorIndexes(env, "/Root/Dst");
-        const auto pathId = env.GetPathId("/Root/Dst");
-        const auto creator = StartVectorIndexAttachment(env);
-        const auto prepare = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
-        UNIT_ASSERT_VALUES_EQUAL(prepare->Get()->DstPathId, pathId);
-
-        // DONE/DROP can arrive while the controller persists the destination.
-        // Finish attachment locally without submitting the prepared DROP INDEX.
-        env.SendAsync(creator, new TEvPrivate::TEvCompleteDstAttachment());
-        env.SendAsync(creator, new TEvPrivate::TEvPrepareAttachDstResult());
-        AssertVectorIndexAttachment(env, pathId);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 2);
-    }
-
     Y_UNIT_TEST(StandbyDropsRestoredVectorIndexes) {
         TEnv env(true, ERuntimeMode::Simulated);
         CreateTableWithVectorIndexes(env, "/Root/Source");
-        CreateTableWithVectorIndexes(env, "/Root/Dst");
-        const auto pathId = env.GetPathId("/Root/Dst");
         env.GetRuntime().RegisterService(MakeReplicationServiceId(env.GetRuntime().GetNodeId(0)),
             env.GetRuntime().Register(CreateReplicationMockService(env.GetSender())));
 
         bool streamCreated = false;
+        bool placeholderCreated = false;
         auto streamObserver = env.GetRuntime().AddObserver([&](IEventHandle::TPtr& ev) {
             if (ev->GetTypeRewrite() == TEvPrivate::EvCreateStreamResult && ev->HasEvent()) {
                 if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateStreamResult*>(ev->GetBase())) {
                     UNIT_ASSERT_C(result->IsSuccess(), result->Status.GetIssues().ToString());
                     streamCreated = true;
+                }
+            }
+            if (ev->GetTypeRewrite() == TEvPrivate::EvCreateDstResult && ev->HasEvent()) {
+                if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateDstResult*>(ev->GetBase())) {
+                    UNIT_ASSERT_C(result->IsSuccess(), result->Error);
+                    placeholderCreated = result->WaitingImport;
                 }
             }
         });
@@ -361,7 +552,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         const auto created = env.RunCall([&] {
             return session.ExecuteSchemeQuery(TStringBuilder() << R"(
                 CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/Source` AS `/Root/Dst`
-                WITH (INITIAL_SCAN = FALSE, TOKEN = "root@builtin",
+                WITH (INITIAL_SCAN = FALSE, CONSISTENCY_LEVEL = "GLOBAL", TOKEN = "root@builtin",
                     CONNECTION_STRING = "grpc://)" << env.GetEndpoint() << R"(/?database=/Root");
             )").GetValueSync();
         });
@@ -374,7 +565,25 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.SendAsync(replication.GetControllerId(), new TEvService::TEvStatus());
         // Bootstrap from backup starts after the source stream is ready.
         env.GetRuntime().WaitFor("source stream creation", [&] { return streamCreated; }, TDuration::Seconds(60));
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 2);
+        env.GetRuntime().WaitFor("destination placeholder", [&] { return placeholderCreated; }, TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.GetDescription("/Root/Dst").GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
+            NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
+        const auto ssId = env.GetSchemeshardId("/Root/Dst");
+        auto drop = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(200600, ssId);
+        auto& tx = *drop->Record.AddTransaction();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
+        tx.SetInternal(true);
+        tx.SetWorkingDir("/Root");
+        tx.MutableDrop()->SetName("Dst");
+        const auto dropResult = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(ssId, std::move(drop));
+        UNIT_ASSERT_VALUES_EQUAL_C(dropResult->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted,
+            dropResult->Get()->Record.GetReason());
+        env.Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(ssId,
+            new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(200600));
+        CreateTableWithVectorIndexes(env, "/Root/Dst");
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
+        const auto pathId = env.GetPathId("/Root/Dst");
 
         const auto resumed = env.RunCall([&] {
             return session.ExecuteSchemeQuery(
@@ -398,7 +607,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Destination,
     };
 
-    void RecoverAttachment(bool attached, EAttachmentSchemaChange schemaChange, bool doneWithoutSource = false) {
+    void RecoverAttachment(EAttachmentSchemaChange schemaChange) {
         TEnv env;
         const auto table = TTestTableDescription{
             .Name = "Source",
@@ -414,286 +623,65 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         dst.Name = "Dst";
         env.CreateTable("/Root", *MakeTableDescription(dst));
 
-        auto createDstCreator = [&](const TPathId& pendingDstPathId) {
-            const bool finishWithoutSource = pendingDstPathId && doneWithoutSource;
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
+
+        auto createDstCreator = [&] {
             return env.GetRuntime().Register(CreateDstCreator(
-                env.GetSender(), env.GetSchemeshardId("/Root/Source"),
-                finishWithoutSource ? TActorId{} : env.GetYdbProxy(),
+                env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
                 "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
-                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global,
-                false /* initialScan */, pendingDstPathId,
-                finishWithoutSource));
+                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global, false));
         };
 
-        const auto creator = createDstCreator({});
-        auto prepare = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
-        const auto pendingDstPathId = prepare->Get()->DstPathId;
-        UNIT_ASSERT_VALUES_EQUAL(pendingDstPathId, env.GetPathId("/Root/Dst"));
+        createDstCreator();
+        const auto first = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL_C(first->Get()->Status, NKikimrScheme::StatusSuccess, first->Get()->Error);
+        const auto dstPathId = first->Get()->DstPathId;
 
-        if (attached) {
-            env.SendAsync(creator, new TEvPrivate::TEvPrepareAttachDstResult());
-            auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrScheme::StatusSuccess, ev->Get()->Error);
-        } else {
-            // Restart after persisting the path ID, before SchemeShard alters the table.
-            env.SendAsync(creator, new TEvents::TEvPoison());
-        }
-
+        // Retry as if the controller restarted before persisting the first result.
         if (schemaChange != EAttachmentSchemaChange::None) {
             const auto path = schemaChange == EAttachmentSchemaChange::Source ? "/Root/Source" : "/Root/Dst";
-            auto ev = env.Send<TEvYdbProxy::TEvAlterTableResponse>(env.GetYdbProxy(),
-                new TEvYdbProxy::TEvAlterTableRequest(path, NYdb::NTable::TAlterTableSettings()
-                    .AppendDropColumns("value")));
-            UNIT_ASSERT_C(ev->Get()->Result.IsSuccess(), ev->Get()->Result.GetIssues().ToString());
+            const auto ssId = env.GetSchemeshardId(path);
+            auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(200500, ssId);
+            auto& tx = *request->Record.AddTransaction();
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+            tx.SetInternal(true);
+            env.GetPathId(path).ToProto(tx.MutableAlterTable()->MutablePathId());
+            tx.MutableAlterTable()->AddDropColumns()->SetName("value");
+            auto result = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(ssId, std::move(request));
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted, result->Get()->Record.GetReason());
+            env.Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(ssId,
+                new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(200500));
         }
 
-        createDstCreator(pendingDstPathId);
+        createDstCreator();
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         const auto desc = env.GetDescription("/Root/Dst");
-        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/Dst"), pendingDstPathId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/Dst"), dstPathId);
         if (schemaChange == EAttachmentSchemaChange::None) {
             UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrScheme::StatusSuccess, ev->Get()->Error);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DstPathId, pendingDstPathId);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DstPathId, dstPathId);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
+                NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
             CheckTableReplica(table, desc.GetPathDescription().GetTable(),
                 EReplicationMode::ReadOnly, EConsistencyLevel::Global);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSchemeError);
             UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "Columns size mismatch");
             UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
-                attached ? NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
-                         : NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+                NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
         }
     }
 
     Y_UNIT_TEST(RecoverAttachment) {
-        RecoverAttachment(false, EAttachmentSchemaChange::None);
-    }
-
-    Y_UNIT_TEST(RecoverAttachedTable) {
-        RecoverAttachment(true, EAttachmentSchemaChange::None);
+        RecoverAttachment(EAttachmentSchemaChange::None);
     }
 
     Y_UNIT_TEST(RecoverAttachmentWithSourceSchemaDrift) {
-        RecoverAttachment(false, EAttachmentSchemaChange::Source);
+        RecoverAttachment(EAttachmentSchemaChange::Source);
     }
 
     Y_UNIT_TEST(RecoverAttachmentWithDestinationSchemaDrift) {
-        RecoverAttachment(false, EAttachmentSchemaChange::Destination);
-    }
-
-    Y_UNIT_TEST(RecoverAttachedTableWithSourceSchemaDrift) {
-        RecoverAttachment(true, EAttachmentSchemaChange::Source);
-    }
-
-    Y_UNIT_TEST(RecoverAttachmentForDoneWithoutSource) {
-        RecoverAttachment(false, EAttachmentSchemaChange::None, true);
-    }
-
-    Y_UNIT_TEST(RecoverAttachedTableForDoneWithoutSource) {
-        RecoverAttachment(true, EAttachmentSchemaChange::None, true);
-    }
-
-    enum class EAttachmentStart {
-        FreshWritable,
-        FreshPublished,
-        RecoveredPublished,
-        RecoveredBeforeSubmission,
-    };
-
-    void CheckAttachmentCompletionBarrier(
-            EAttachmentStart start,
-            bool cleanup = false,
-            bool acceptedBeforeRetry = false)
-    {
-        const bool recovery = start == EAttachmentStart::RecoveredPublished
-            || start == EAttachmentStart::RecoveredBeforeSubmission;
-        const bool beforeSubmission = start == EAttachmentStart::RecoveredBeforeSubmission;
-        TEnv env;
-        auto& runtime = env.GetRuntime();
-        const auto table = TTestTableDescription{
-            .Name = "Source",
-            .KeyColumns = {"key"},
-            .Columns = {{.Name = "key", .Type = "Uint32"}},
-            .ReplicationConfig = Nothing(),
-        };
-        env.CreateTable("/Root", *MakeTableDescription(table));
-        auto dst = table;
-        dst.Name = "Dst";
-        env.CreateTable("/Root", *MakeTableDescription(dst));
-        const auto pathId = env.GetPathId("/Root/Dst");
-        const auto databasePathId = env.GetPathId("/Root");
-        auto description = env.GetDescription("/Root/Dst");
-
-        const auto allocator = runtime.AllocateEdgeActor();
-        const auto pipeCache = runtime.AllocateEdgeActor();
-        const auto results = std::make_shared<std::atomic<ui32>>(0);
-        const auto requests = std::make_shared<std::atomic<ui32>>(0);
-        const auto parent = runtime.Register(new TAttachmentEventCounter(
-            env.GetSender(),
-            TEvPrivate::TEvCreateDstResult::EventType,
-            results));
-        const auto countedPipeCache = runtime.Register(new TAttachmentEventCounter(
-            pipeCache,
-            TEvPipeCache::TEvForward::EventType,
-            requests));
-        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
-        runtime.RegisterService(MakeTxProxyID(), runtime.Register(new TAttachmentAllocator(txProxy, allocator)));
-        Y_DEFER {
-            runtime.RegisterService(MakeTxProxyID(), txProxy);
-        };
-        const auto creator = runtime.Register(CreateDstCreator(
-            parent,
-            pathId.OwnerId,
-            cleanup ? TActorId{} : env.GetYdbProxy(),
-            "/Root",
-            databasePathId,
-            1,
-            1,
-            TReplication::ETargetKind::Table,
-            "/Root/Source",
-            "/Root/Dst",
-            EReplicationMode::ReadOnly,
-            EConsistencyLevel::Row,
-            false,
-            recovery ? pathId : TPathId{},
-            cleanup));
-
-        auto allocate = [&](ui64 txId) {
-            for (;;) {
-                const auto request = runtime.GrabEdgeEvent<TEvTxUserProxy::TEvAllocateTxId>(allocator);
-                if (request->Sender == creator) {
-                    break;
-                }
-                runtime.Send(request->Forward(txProxy));
-            }
-            NTxProxy::TTxProxyServices services;
-            services.LeaderPipeCache = countedPipeCache;
-            runtime.Send(
-                creator,
-                allocator,
-                new TEvTxUserProxy::TEvAllocateTxIdResult(txId, services, {}));
-        };
-        auto expectRequest = [&](ui32 type) {
-            const auto request = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
-            UNIT_ASSERT_VALUES_EQUAL(request->Get()->Ev->Type(), type);
-        };
-        auto describe = [&](bool published) {
-            expectRequest(NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType);
-            auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
-            result->Record.SetStatus(NKikimrScheme::StatusSuccess);
-            result->Record.SetPathId(pathId.LocalPathId);
-            result->Record.SetPathOwnerId(pathId.OwnerId);
-            *result->Record.MutablePathDescription() = description.GetPathDescription();
-            if (published) {
-                // SchemeShard has planned the ALTER but still awaits destination
-                // shards. Its published mode alone cannot release workers.
-                FillReplicationConfig(
-                    *result->Record.MutablePathDescription()->MutableTable()->MutableReplicationConfig(),
-                    EReplicationMode::ReadOnly,
-                    EConsistencyLevel::Row);
-                result->Record.MutablePathDescription()->MutableSelf()->SetPathState(
-                    NKikimrSchemeOp::EPathStateAlter);
-            }
-            runtime.Send(creator, pipeCache, result.Release());
-            Sleep(TDuration::MilliSeconds(100));
-            UNIT_ASSERT_VALUES_EQUAL_C(results->load(), 0, "Attachment completed before shards");
-        };
-        auto proposeResult = [&](ui64 txId, NKikimrScheme::EStatus status) {
-            expectRequest(NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
-            runtime.Send(
-                creator,
-                pipeCache,
-                new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(status, txId, pathId.OwnerId));
-        };
-
-        allocate(100);
-        describe(start == EAttachmentStart::RecoveredPublished || start == EAttachmentStart::FreshPublished);
-        if (!recovery) {
-            runtime.GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
-            env.SendAsync(creator, new TEvPrivate::TEvPrepareAttachDstResult());
-        }
-        allocate(101);
-        if (!beforeSubmission) {
-            if (!recovery) {
-                // Lose the proposal response after it was submitted. The retry
-                // must serialize behind that ALTER even after mode publication.
-                if (acceptedBeforeRetry) {
-                    proposeResult(101, NKikimrScheme::StatusAccepted);
-                    expectRequest(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion::EventType);
-                } else {
-                    expectRequest(NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
-                }
-                runtime.Send(creator, pipeCache, new TEvPipeCache::TEvDeliveryProblem(pathId.OwnerId, false));
-                env.SendAsync(creator, new TEvents::TEvWakeup());
-                allocate(102);
-            }
-            proposeResult(recovery ? 101 : 102, NKikimrScheme::StatusMultipleModifications);
-            env.SendAsync(creator, new TEvents::TEvWakeup());
-            describe(true);
-            allocate(103);
-        }
-
-        const ui64 txId = beforeSubmission ? 101 : 103;
-        proposeResult(txId, NKikimrScheme::StatusAccepted);
-        expectRequest(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion::EventType);
-        const ui32 requestsBeforeStaleReplies = requests->load();
-        // Replies to earlier proposals/subscriptions can survive a pipe retry.
-        // Neither may replace the currently awaited transaction or complete it.
-        runtime.Send(
-            creator,
-            pipeCache,
-            new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
-                NKikimrScheme::StatusAccepted,
-                101 - beforeSubmission,
-                pathId.OwnerId));
-        runtime.Send(
-            creator,
-            pipeCache,
-            new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult(101 - beforeSubmission));
-        Sleep(TDuration::MilliSeconds(100));
-        UNIT_ASSERT_VALUES_EQUAL(requests->load(), requestsBeforeStaleReplies);
-        UNIT_ASSERT_VALUES_EQUAL(results->load(), 0);
-        // DONE/DROP may arrive after submission. They must retain this barrier
-        // and complete attachment locally before detaching the retained table.
-        env.SendAsync(creator, new TEvPrivate::TEvCompleteDstAttachment());
-        runtime.Send(
-            creator,
-            pipeCache,
-            new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult(txId));
-        expectRequest(NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType);
-        auto completed = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
-        completed->Record.SetStatus(NKikimrScheme::StatusSuccess);
-        completed->Record.SetPathId(pathId.LocalPathId);
-        completed->Record.SetPathOwnerId(pathId.OwnerId);
-        *completed->Record.MutablePathDescription() = description.GetPathDescription();
-        FillReplicationConfig(
-            *completed->Record.MutablePathDescription()->MutableTable()->MutableReplicationConfig(),
-            EReplicationMode::ReadOnly,
-            EConsistencyLevel::Row);
-        runtime.Send(creator, pipeCache, completed.Release());
-        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, pathId);
-    }
-
-    Y_UNIT_TEST_TWIN(RecoveryWaitsForAttachmentShardCompletion, Cleanup) {
-        CheckAttachmentCompletionBarrier(EAttachmentStart::RecoveredPublished, Cleanup);
-    }
-
-    Y_UNIT_TEST_TWIN(RecoveryBeforeAttachmentSubmission, Cleanup) {
-        CheckAttachmentCompletionBarrier(EAttachmentStart::RecoveredBeforeSubmission, Cleanup);
-    }
-
-    Y_UNIT_TEST(AttachmentWaitsForCompletionAfterPipeRetry) {
-        CheckAttachmentCompletionBarrier(EAttachmentStart::FreshWritable);
-    }
-
-    Y_UNIT_TEST(AttachmentIgnoresOldCompletionAfterPipeRetry) {
-        CheckAttachmentCompletionBarrier(EAttachmentStart::FreshWritable, false, true);
-    }
-
-    Y_UNIT_TEST(FreshReadonlyAttachmentWaitsForShardCompletion) {
-        CheckAttachmentCompletionBarrier(EAttachmentStart::FreshPublished);
+        RecoverAttachment(EAttachmentSchemaChange::Destination);
     }
 
     Y_UNIT_TEST(MissingAttachmentTable) {
@@ -726,6 +714,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         table.Name = "Dst";
         table.Columns[0].Type = "Utf8";
         env.CreateTable("/Root", *MakeTableDescription(table));
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
 
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
@@ -735,7 +724,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSchemeError);
         UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "Column type mismatch");
-        UNIT_ASSERT(!env.GetDescription("/Root/Dst").GetPathDescription().GetTable().HasReplicationConfig());
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable()
+            .GetReplicationConfig().GetImportState(), NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
     }
 
     Y_UNIT_TEST_TWIN(AttachIndexTable, ConcurrentRecovery) {
@@ -757,11 +747,13 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.CreateTableWithIndex("/Root", *MakeTableDescription(table),
             "by_value", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
 
+        SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        SetImportState(env, "/Root/Dst/by_value/indexImplTable", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
             "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
             "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
-        PrepareAttachDst(env);
         UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender())->Get()->IsSuccess());
 
         env.GetRuntime().Register(CreateDstCreator(
@@ -769,7 +761,6 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             "/Root", env.GetPathId("/Root"), 1, 2, TReplication::ETargetKind::IndexTable,
             "/Root/Source/by_value/indexImplTable", "/Root/Dst/by_value/indexImplTable",
             EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
-        PrepareAttachDst(env);
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrScheme::StatusSuccess, ev->Get()->Error);
         const auto desc = env.GetDescription("/Root/Dst/by_value/indexImplTable");
@@ -780,8 +771,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         if (ConcurrentRecovery) {
             const auto pathId = env.GetPathId("/Root/Dst/by_value/indexImplTable");
             const auto databasePathId = env.GetPathId("/Root");
-            // Recovery and an uncertain pipe retry can overlap on the same
-            // index. Both replacement ALTERs must serialize and finish safely.
+            // Concurrent attachment retries must validate the same imported index.
             for (ui32 i = 0; i < 2; ++i) {
                 env.GetRuntime().Register(CreateDstCreator(
                     env.GetSender(),
@@ -796,8 +786,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                     "/Root/Dst/by_value/indexImplTable",
                     EReplicationMode::ReadOnly,
                     EConsistencyLevel::Row,
-                    false,
-                    pathId));
+                    false));
             }
             for (ui32 i = 0; i < 2; ++i) {
                 const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -1000,12 +989,11 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Basic("/Root/Replicated", EReplicationMode::ReadOnly, EConsistencyLevel::Global);
     }
 
-    void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType, bool enableAsyncIndexReplication = false) {
+    void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType,
+            bool enableAsyncIndexReplication = false, TMaybe<ui32> defaultValue = Nothing()) {
         TFeatureFlags featureFlags;
         featureFlags.SetEnableChangefeedsOnIndexTables(true);
-        if (enableAsyncIndexReplication) {
-            featureFlags.SetEnableAsyncIndexReplication(true);
-        }
+        featureFlags.SetEnableAsyncIndexReplication(enableAsyncIndexReplication);
         TEnv env(featureFlags);
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
@@ -1021,7 +1009,13 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         const TString indexName = "index_by_value";
 
-        env.CreateTableWithIndex("/Root", *MakeTableDescription(tableDesc),
+        auto source = MakeTableDescription(tableDesc);
+        if (defaultValue) {
+            auto* literal = source->MutableColumns(1)->MutableDefaultFromLiteral();
+            literal->mutable_type()->set_type_id(Ydb::Type::UINT32);
+            literal->mutable_value()->set_uint32_value(*defaultValue);
+        }
+        env.CreateTableWithIndex("/Root", *source,
              indexName, TVector<TString>{"value"}, indexType);
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
@@ -1037,6 +1031,16 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         const auto& replicatedDesc = desc.GetPathDescription().GetTable();
 
         CheckTableReplica(tableDesc, replicatedDesc);
+
+        if (defaultValue) {
+            const auto* valueColumn = FindIfPtr(replicatedDesc.GetColumns(), [](const auto& column) {
+                return column.GetName() == "value";
+            });
+            UNIT_ASSERT(valueColumn);
+            UNIT_ASSERT(valueColumn->HasDefaultFromLiteral());
+            UNIT_ASSERT_VALUES_EQUAL(valueColumn->GetDefaultFromLiteral().SerializeAsString(),
+                source->GetColumns(1).GetDefaultFromLiteral().SerializeAsString());
+        }
 
         if (indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync && !enableAsyncIndexReplication) {
             UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.TableIndexesSize(), 0);
@@ -1086,12 +1090,20 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
+    Y_UNIT_TEST(WithSyncIndexAndLiteralDefault) {
+        WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobal, false, ui32(42));
+    }
+
     Y_UNIT_TEST(WithSyncIndexAndIntermediateDir) {
         WithIndex("/Root/Dir/Replicated", NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
     Y_UNIT_TEST(WithAsyncIndex) {
         WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobalAsync, true);
+    }
+
+    Y_UNIT_TEST(WithAsyncIndexAndLiteralDefault) {
+        WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobalAsync, true, ui32(42));
     }
 
     Y_UNIT_TEST(WithAsyncIndexDisabled) {
@@ -1208,8 +1220,13 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     template <typename T>
-    void ExistingDstFamily(const TString& error, T&& modify) {
-        TEnv env;
+    void ExistingDstFamily(const TString& error, T&& modify,
+            NKikimrSchemeOp::EColumnCodec codec = NKikimrSchemeOp::ColumnCodecLZ4,
+            TMaybe<i32> compressionLevel = Nothing())
+    {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableRowTableZstdCompression(codec == NKikimrSchemeOp::ColumnCodecZSTD);
+        TEnv env(flags);
         auto source = MakeTableDescription({
             .Name = "Src",
             .KeyColumns = {"key"},
@@ -1222,7 +1239,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         source->MutableColumns(1)->SetFamilyName("archive");
         auto* family = source->MutablePartitionConfig()->AddColumnFamilies();
         family->SetName("archive");
-        family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+        family->SetColumnCodec(codec);
+        if (compressionLevel) {
+            family->SetColumnCodecLevel(*compressionLevel);
+        }
         auto* data = family->MutableStorageConfig()->MutableData();
         data->SetPreferredPoolKind("test");
         data->SetAllowOtherKinds(false);
@@ -1240,8 +1260,39 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
             "/Root/Src", "/Root/Dst"));
         const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusSchemeError);
-        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status,
+            error ? NKikimrScheme::StatusSchemeError : NKikimrScheme::StatusSuccess, result->Get()->Error);
+        if (error) {
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, error);
+        }
+    }
+
+    Y_UNIT_TEST(ZstdColumnFamilyCompressionLevelMismatch) {
+        for (const i32 level : {0, 7, ZSTD_maxCLevel()}) {
+            ExistingDstFamily("Column family compression level mismatch", [](auto& destination) {
+                destination.MutablePartitionConfig()->MutableColumnFamilies(0)->ClearColumnCodecLevel();
+            }, NKikimrSchemeOp::ColumnCodecZSTD, level);
+        }
+    }
+
+    Y_UNIT_TEST(ZstdColumnFamilyDefaultCompressionLevel) {
+        for (const bool explicitSourceLevel : {false, true}) {
+            ExistingDstFamily({}, [explicitSourceLevel](auto& destination) {
+                auto* family = destination.MutablePartitionConfig()->MutableColumnFamilies(0);
+                if (explicitSourceLevel) {
+                    family->ClearColumnCodecLevel();
+                } else {
+                    family->SetColumnCodecLevel(1);
+                }
+            }, NKikimrSchemeOp::ColumnCodecZSTD,
+                explicitSourceLevel ? TMaybe<i32>(1) : Nothing());
+        }
+    }
+
+    Y_UNIT_TEST(ZstdColumnFamilyCompressionLevelMatches) {
+        for (const i32 level : {0, 7, ZSTD_maxCLevel()}) {
+            ExistingDstFamily({}, [](auto&) {}, NKikimrSchemeOp::ColumnCodecZSTD, level);
+        }
     }
 
     Y_UNIT_TEST(ColumnFamilyCodecMismatch) {
@@ -1377,7 +1428,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Empty replication config", clearConfig, TTestTableDescription{
+        ExistingDst(NKikimrScheme::StatusSchemeError, "replication configuration is missing", clearConfig, TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {

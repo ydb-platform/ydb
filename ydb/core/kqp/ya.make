@@ -68,6 +68,7 @@ RECURSE(
     opt
     provider
     proxy_service
+    query_plan
     rm_service
     runtime
     script_executions

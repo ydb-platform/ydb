@@ -12,17 +12,17 @@ FROM (
         DateTime::GetYear(CAST(o_orderdate AS Timestamp)) AS o_year,
         l_extendedprice * ($to_decimal(1) - l_discount) - ps_supplycost * l_quantity AS amount
     FROM
-        `/Root/part` as part
+        `part` as part
     ,
-        `/Root/supplier` as supplier
+        `supplier` as supplier
     ,
-        `/Root/lineitem` as lineitem
+        `lineitem` as lineitem
     ,
-        `/Root/partsupp` as partsupp
+        `partsupp` as partsupp
     ,
-        `/Root/orders` as orders
+        `orders` as orders
     ,
-        `/Root/nation` as nation
+        `nation` as nation
     WHERE
         s_suppkey == l_suppkey
         AND ps_suppkey == l_suppkey

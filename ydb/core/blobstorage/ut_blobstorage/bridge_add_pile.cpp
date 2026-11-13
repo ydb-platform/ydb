@@ -30,6 +30,31 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeAddPile) {
+    Y_UNIT_TEST(AddedPileSyncersAreLimited) {
+        TEnvironmentSetup env(MakeExpandableSettings());
+        CreatePoolAndGetGroup(env, 4);
+        SetBridgeSyncMaxSyncers(env, 2);
+        auto res = AddThirdPileToConfig(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        StartPileNodes(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId);
+        AddPileAndWait(env, "pile_3");
+
+        TSyncerTracker tracker;
+        tracker.Hold = true;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            return tracker.OnEvent(nodeId, ev);
+        };
+        SwitchPileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitUntil(env, [&] { return tracker.GetNumRunning() >= 2; }, "syncers running");
+        env.Sim(TDuration::Seconds(5)); // the static group gets synced by now, so it takes no slots
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumRunning(), 2);
+        tracker.RunUntil(env, 2, "pile synchronized", [&] {
+            return GetPileState(env, 2) == NKikimrBridge::TClusterState::SYNCHRONIZED;
+        });
+        env.Runtime->FilterFunction = {};
+    }
+
     Y_UNIT_TEST(NativeTwoToThree) {
         TEnvironmentSetup env(MakeExpandableSettings());
         const ui32 groupId = CreatePoolAndGetGroup(env);

@@ -1,8 +1,9 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(5)
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     kqp_join_order_ut.cpp

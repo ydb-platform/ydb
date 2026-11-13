@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/kqp/compile_service/obfuscate)
 
-FORK_SUBTESTS()
-
 SRCS(
     obfuscate_ut.cpp
 )

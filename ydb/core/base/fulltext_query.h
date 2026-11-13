@@ -6,7 +6,16 @@
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 
+#include <optional>
+
 namespace NKikimr::NFulltext {
+
+// LIKE/ILIKE follow legacy Re2::PatternFromLike wildcards and escaping;
+// the other modes treat text as a literal value.
+// ILIKE uses the index's lowercase analyzer, rather than full RE2 case folding;
+// some Unicode fold equivalents therefore have different postings.
+TVector<TString> BuildStringMatchTerms(TStringBuf text, TStringBuf mode, std::optional<char> escape,
+    const Ydb::Table::FulltextIndexSettings::Analyzers& settings);
 
 // A single search term together with its query-syntax modifier.
 // Required == true marks a `+term` (Lucene MUST): every match must contain it.

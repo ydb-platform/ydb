@@ -53,6 +53,9 @@ bool IsRepeatable(const IOperator& op) {
             return CanDuplicateAggregation(CastOperator<TOpAggregate>(op));
         case EOperator::Sort:
             return !CastOperator<TOpSort>(op).LimitCond;
+        case EOperator::Sequencer:
+            // Allocating another sequence value changes the observable result.
+            return false;
         // Conservatively reject operators without an explicit repeatability check.
         default:
             return false;
@@ -267,7 +270,7 @@ TIntrusivePtr<IOperator> TOpRead::CopyImpl(TInfoUnitRegistry& registry, TSubstit
         return nullptr;
     }
     return MakeIntrusive<TOpRead>(Alias, CopyColumns(Columns_, registry, renames), StorageType,
-        TableCallable, nullptr, Limit, RangeInfo, std::nullopt, SortDir, TPhysicalOpProps{}, Pos);
+        TableCallable, nullptr, Limit, RangeInfo, std::nullopt, SortDir, TPhysicalOpProps{}, Pos, RequireSortedRead);
 }
 
 TIntrusivePtr<IOperator> TOpMap::CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const {
@@ -316,15 +319,20 @@ TIntrusivePtr<IOperator> TOpSort::CopyImpl(TInfoUnitRegistry&, TSubstitutions&) 
 }
 
 TIntrusivePtr<IOperator> TOpLimit::CopyImpl(TInfoUnitRegistry&, TSubstitutions&) const {
-    return MakeIntrusive<TOpLimit>(GetInput(), Pos, TPhysicalOpProps{}, LimitCond, OffsetCond, LimitPhase);
+    auto copy = MakeIntrusive<TOpLimit>(GetInput(), Pos, TPhysicalOpProps{}, LimitCond, OffsetCond, LimitPhase);
+    copy->OrderedInput = OrderedInput;
+    return copy;
 }
 
 TIntrusivePtr<IOperator> TOpTableEffect::CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const {
-    TOrderedIUs<TString> returning;
-    for (const auto& [id, name] : ReturningColumns_.Items()) {
-        returning.Append(CopyDefinition(id, registry, renames), name);
+    auto options = Options;
+    options.ReturningColumns = {};
+    for (const auto& [id, name] : Options.ReturningColumns.Items()) {
+        options.ReturningColumns.Append(CopyDefinition(id, registry, renames), name);
     }
-    return MakeIntrusive<TOpTableEffect>(GetInput(), Pos, Table, EffectType, Options, Columns_, std::move(returning));
+    // Input/default columns are uses; the normal copy
+    // renaming pass rebinds them. Returning columns above are fresh definitions.
+    return MakeIntrusive<TOpTableEffect>(GetInput(), Pos, Table, EffectType, std::move(options));
 }
 
 } // namespace NKikimr::NKqp

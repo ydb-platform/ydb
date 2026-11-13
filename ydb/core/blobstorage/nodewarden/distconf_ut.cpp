@@ -2,6 +2,7 @@
 #include <ydb/core/base/nodestate.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
@@ -636,12 +637,30 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         runtime.RegisterService(MakeBlobStorageNodeWardenID(4), childId);
         UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, {keeperId}) == 3; }));
 
+        TActorId childSession;
+        TActorId childProxy;
+        ui32 removedChildDisconnects = 0;
+        UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor*) {
+            auto& nameservice = AppData()->DynamicNameserviceConfig;
+            nameservice = new TDynamicNameserviceConfig;
+            nameservice->MaxStaticNodeId = 4;
+            nameservice->MaxDynamicNodeId = 5;
+            nameservice->MinDynamicNodeId = 5;
+            childProxy = TActivationContext::InterconnectProxy(4);
+        }));
         bool pushDelivered = false;
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             if (nodeId == keeperId.NodeId() && ev->InterconnectSession
                 && ev->GetRecipientRewrite() == keeperId && ev->Sender == childId
                 && ev->GetTypeRewrite() == NStorage::TEvNodeConfigPush::EventType) {
                 pushDelivered = true;
+                childSession = ev->InterconnectSession;
+            }
+            const ui32 type = ev->GetTypeRewrite();
+            if (nodeId == keeperId.NodeId() && ((type == TEvents::TSystem::Poison && childSession
+                    && ev->GetRecipientRewrite() == childSession)
+                    || (type == TEvInterconnect::EvDisconnect && ev->GetRecipientRewrite() == childProxy))) {
+                ++removedChildDisconnects;
             }
             return true;
         };
@@ -678,6 +697,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         const std::vector keepers{keeperId, addedKeeperId};
         UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 3; }));
         CheckStaysConverged(runtime, keepers);
+        UNIT_ASSERT_C(removedChildDisconnects, "a removed static child must still be disconnected");
     }
 
     // two-pile bridged config of 4 nodes: nodes 1 and 4 are in the first pile, nodes 2 and 3 are in the second one; the
@@ -837,9 +857,9 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_C(!state.NodeWardenConfigs.contains(5), "unresolvable local pile was accepted");
         UNIT_ASSERT(FindConvergedRoot(runtime, keepers) == 1);
 
-        // Correcting the node's startup location allows a replacement keeper to accept the same cluster config.
-        runtime.Send(new IEventHandle(invalid, {}, new TEvents::TEvPoison), 5);
-        UNIT_ASSERT(SimUntil(runtime, [&] { return !runtime.GetActor(invalid); }));
+        // Correcting the startup location requires a node restart, including its interconnect sessions.
+        runtime.StopNode(5);
+        runtime.StartNode(5);
         RegisterKeeper(runtime, config, 5, state, {}, &bridge, nullptr, "pile1");
         UNIT_ASSERT(SimUntil(runtime, [&] { return state.NodeWardenConfigs.contains(5); }));
         UNIT_ASSERT_VALUES_EQUAL(state.NodeWardenConfigs.at(5)->GetFingerprint(), config.GetFingerprint());
@@ -1279,6 +1299,33 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_VALUES_EQUAL(trimmedHistory.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(trimmedHistory[0].UnsyncedPilesSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(trimmedHistory[1].UnsyncedPilesSize(), 1);
+    }
+
+    // the cluster converted again after the rollback goes on with the cluster state generations of the one rolled back,
+    // even when the rollback record has been left by an older version not keeping the generation in it
+    Y_UNIT_TEST(ClusterStateGenerationAfterRollback) {
+        auto convert = [](const NKikimrBlobStorage::TStorageConfig& prev) {
+            auto config = prev;
+            config.ClearBridgeRollback();
+            config.MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(1));
+            config.SetGeneration(prev.GetGeneration() + 1);
+            config.MutablePrevConfig()->CopyFrom(prev);
+            if (const auto error = NStorage::TDistributedConfigKeeper::UpdateClusterStateGeneration(&config)) {
+                UNIT_FAIL(*error);
+            }
+            return config.GetClusterState().GetGeneration();
+        };
+
+        auto prev = MakeStorageConfig(3, 7);
+        UNIT_ASSERT_VALUES_EQUAL(convert(prev), 1); // never bridged before
+
+        auto *record = prev.MutableBridgeRollback();
+        record->SetPileName("pile0");
+        record->SetNextStaticGroupId(1);
+        UNIT_ASSERT_VALUES_EQUAL(convert(prev), 8); // older version, the storage config generation bounds the old ones
+
+        record->SetClusterStateGeneration(5);
+        UNIT_ASSERT_VALUES_EQUAL(convert(prev), 6);
     }
 
     // node warden handing out the designated storage config and bridge info to the bridge connection checker
@@ -2419,6 +2466,36 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
 
     Y_UNIT_TEST(StorageQuorumLossStillReleasesRoot) {
         CheckRootAfterNodeLoss(true);
+    }
+
+    Y_UNIT_TEST(ConfigChangeWithoutScepterIsRetryable) {
+        const auto config = MakeStorageConfig(3);
+        TNodeWardenTestState state;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        runtime.StopNode(2);
+        runtime.StopNode(3);
+        const TActorId keeper = RegisterKeeper(runtime, config, 1, state);
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableRemoveBridgePile()->SetPileName("pile1");
+        runtime.Send(new IEventHandle(keeper, edge, request.release()), 1);
+        const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        const auto& record = response->Get()->Record;
+        UNIT_ASSERT_EQUAL_C(record.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE,
+            record.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(record.GetErrorReason(), "No scepter");
+        UNIT_ASSERT(!record.HasScepter());
+
+        std::vector<TActorId> keepers{keeper};
+        for (ui32 nodeId : {2, 3}) {
+            runtime.StartNode(nodeId);
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers).has_value(); }));
+        const auto root = FindConvergedRoot(runtime, keepers);
+        UNIT_ASSERT(QueryKeeper(runtime, keepers[*root - 1]).HasScepter());
     }
 
     Y_UNIT_TEST(OfflineLowerPeerDoesNotBlockBinding) {
@@ -4281,6 +4358,128 @@ selector_config: []
         }
     }
 
+    void CheckStaticVDiskSlainAfterSlotReuse(bool obsoleteOccupant) {
+        TCommitConfirmationFixture fixture;
+        auto *ss = fixture.Config.MutableBlobStorageConfig()->MutableServiceSet();
+        ss->MutableGroups(0)->SetGroupGeneration(2);
+        ss->MutableVDisks(0)->MutableVDiskID()->SetGroupGeneration(2);
+        auto oldVDisk = ss->GetVDisks(0);
+        oldVDisk.MutableVDiskID()->SetGroupGeneration(1);
+        oldVDisk.MutableVDiskLocation()->SetVDiskSlotID(1);
+        oldVDisk.SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+        ss->AddVDisks()->CopyFrom(oldVDisk);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Runtime.FilterFunction = [](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        fixture.Start();
+
+        auto query = [&] {
+            return QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        };
+        auto report = [&](ui32 generation, ui32 slotId) {
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto *command = request->Record.MutableStaticVDiskSlain();
+            command->MutableVDiskId()->CopyFrom(oldVDisk.GetVDiskID());
+            command->MutableVDiskId()->SetGroupGeneration(generation);
+            auto *slot = command->MutableVSlotId();
+            slot->SetNodeId(oldVDisk.GetVDiskLocation().GetNodeID());
+            slot->SetPDiskId(oldVDisk.GetVDiskLocation().GetPDiskID());
+            slot->SetVSlotId(slotId);
+            InvokeKeeper(fixture.Runtime, fixture.Root(), std::move(request));
+        };
+        auto reassign = [&](ui32 activeIndex, ui32 generation, ui32 slotId) {
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto *config = request->Record.MutableUpdateConfig()->MutableConfig();
+            config->CopyFrom(query());
+            auto *serviceSet = config->MutableBlobStorageConfig()->MutableServiceSet();
+            auto replacement = serviceSet->GetVDisks(activeIndex);
+            serviceSet->MutableVDisks(activeIndex)->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+            replacement.MutableVDiskID()->SetGroupGeneration(generation);
+            replacement.MutableVDiskLocation()->SetVDiskSlotID(slotId);
+            serviceSet->AddVDisks()->CopyFrom(replacement);
+            serviceSet->MutableGroups(0)->SetGroupGeneration(generation);
+            serviceSet->MutableGroups(0)->MutableRings(0)->MutableFailDomains(0)->MutableVDiskLocations(0)
+                ->SetVDiskSlotID(slotId);
+            InvokeKeeper(fixture.Runtime, fixture.Root(), std::move(request));
+        };
+
+        // A full VDiskID at another location must not remove the original record.
+        report(1, 9);
+        UNIT_ASSERT_VALUES_EQUAL(query().GetFingerprint(), fixture.Config.GetFingerprint());
+
+        // Remove G, keeping a repeated report for it delayed until its slot is reused.
+        report(1, 1);
+        auto cleaned = query();
+        UNIT_ASSERT_VALUES_EQUAL(cleaned.GetBlobStorageConfig().GetServiceSet().VDisksSize(), 1);
+        report(1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(query().GetFingerprint(), cleaned.GetFingerprint());
+
+        // The freed highest slot can now be allocated to the same position at G+2.
+        reassign(0, 3, 1);
+        if (obsoleteOccupant) {
+            // Retain G+2 at that slot as a destroyed record after another reassignment.
+            reassign(1, 4, 2);
+        }
+
+        const auto beforeDelayedReport = query();
+        const auto& reusedVDisk = beforeDelayedReport.GetBlobStorageConfig().GetServiceSet().GetVDisks(1);
+        UNIT_ASSERT_VALUES_EQUAL(reusedVDisk.GetVDiskID().GetGroupGeneration(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(reusedVDisk.GetVDiskLocation().GetVDiskSlotID(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reusedVDisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY, obsoleteOccupant);
+        report(1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(query().GetFingerprint(), beforeDelayedReport.GetFingerprint());
+
+        if (obsoleteOccupant) {
+            // The report for the actual obsolete occupant still removes exactly that record.
+            report(3, 1);
+            UNIT_ASSERT_VALUES_EQUAL(query().GetBlobStorageConfig().GetServiceSet().VDisksSize(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(StaticVDiskSlainIgnoresReusedActiveSlot) {
+        CheckStaticVDiskSlainAfterSlotReuse(false);
+    }
+
+    Y_UNIT_TEST(StaticVDiskSlainIgnoresReusedObsoleteSlot) {
+        CheckStaticVDiskSlainAfterSlotReuse(true);
+    }
+
+    Y_UNIT_TEST(StaticVDiskSlainIgnoresMissingSlotOnUnusedPDisk) {
+        TCommitConfirmationFixture fixture;
+        auto *ss = fixture.Config.MutableBlobStorageConfig()->MutableServiceSet();
+        ss->MutableGroups(0)->SetGroupGeneration(2);
+        ss->MutableVDisks(0)->MutableVDiskID()->SetGroupGeneration(2);
+        ss->AddPDisks()->CopyFrom(MakeStorageConfig(3, 1, {2}).GetBlobStorageConfig().GetServiceSet().GetPDisks(0));
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Runtime.FilterFunction = [](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        fixture.Start();
+
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableStaticVDiskSlain();
+        command->MutableVDiskId()->CopyFrom(ss->GetVDisks(0).GetVDiskID());
+        command->MutableVDiskId()->SetGroupGeneration(1);
+        auto *slot = command->MutableVSlotId();
+        slot->SetNodeId(2);
+        slot->SetPDiskId(1);
+        slot->SetVSlotId(0);
+        InvokeKeeper(fixture.Runtime, fixture.Root(), std::move(request));
+
+        const auto after = QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(after.GetFingerprint(), fixture.Config.GetFingerprint());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetBlobStorageConfig().GetServiceSet().PDisksSize(), 2);
+    }
+
     bool HandleReplaceEvent(TTestActorSystem& runtime, ui32 nodeId, IEventHandle& ev,
                             TActorId edge, std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult>& response) {
         SetMetadataDiskGuid(nodeId, ev);
@@ -4886,6 +5085,12 @@ selector_config: []
             runtime.StartNode(nodeId);
             fixture.Keepers[nodeId - 1] = RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State);
         }
+        auto push = std::make_unique<NStorage::TEvNodeConfigPush>();
+        push->Record.SetInitial(true);
+        auto *bound = push->Record.AddBoundNodes();
+        bound->MutableNodeId()->CopyFrom(expanded.GetAllNodes(3));
+        bound->MutableMeta()->CopyFrom(NStorage::TStorageConfigMeta(expanded));
+        runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), fixture.Keepers[3], push.release()), 4);
         UNIT_ASSERT(SimUntil(runtime, [&] { return rejectedBinding; }));
         for (ui32 nodeId : {1, 2, 3}) {
             UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetGeneration(), 2);
@@ -6297,6 +6502,103 @@ selector_config: []
         const auto advanced = QueryKeeper(runtime, root).GetQueryConfig().GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(advanced.GetGeneration(), 3);
         CheckDurableConfigConverges(fixture, advanced);
+    }
+
+    void CheckDynamicConfigUnsubscribeKeepsSession(bool pendingSubscription) {
+        TCommitConfirmationFixture fixture(true, 4);
+        fixture.State.RequiredRootNodeId = 1;
+        fixture.Start();
+        auto& runtime = fixture.Runtime;
+        const TActorId keeper = fixture.Keepers[1];
+        const TActorId dynamicPeer = runtime.Register(new TIgnoreActor, 4);
+        TActorId dynamicProxy;
+        UNIT_ASSERT(runtime.WrapInActorContext(keeper, [&](IActor*) {
+            auto& nameservice = AppData()->DynamicNameserviceConfig;
+            nameservice = new TDynamicNameserviceConfig;
+            nameservice->MaxStaticNodeId = 3;
+            nameservice->MaxDynamicNodeId = 4;
+            nameservice->MinDynamicNodeId = 4;
+            dynamicProxy = TActivationContext::InterconnectProxy(4);
+        }));
+
+        TActorId session;
+        bool subscribed = false;
+        bool noQuorum = false;
+        bool holdConnected = pendingSubscription;
+        bool queryDelivered = false;
+        bool queryReplied = false;
+        ui32 sessionCloses = 0;
+        ui32 disconnections = 0;
+        std::vector<std::unique_ptr<IEventHandle>> heldConnected;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            const ui32 type = ev->GetTypeRewrite();
+            if (nodeId == 2 && ev->Sender == dynamicPeer
+                    && type == TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe) {
+                session = ev->InterconnectSession;
+                UNIT_ASSERT(session);
+            }
+            if (holdConnected && nodeId == 2 && type == TEvInterconnect::TEvNodeConnected::EventType
+                    && ev->Get<TEvInterconnect::TEvNodeConnected>()->NodeId == 4) {
+                heldConnected.push_back(std::move(ev));
+                return false;
+            }
+            if (nodeId == 4 && type == NStorage::TEvNodeWardenDynamicConfigPush::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeWardenDynamicConfigPush>()->Record;
+                subscribed |= record.HasConfig();
+                noQuorum |= record.GetNoQuorum();
+            }
+            if (nodeId == 2 && ((type == TEvents::TSystem::Poison && session
+                    && ev->GetRecipientRewrite() == session)
+                    || (type == TEvInterconnect::EvDisconnect && ev->GetRecipientRewrite() == dynamicProxy))) {
+                ++sessionCloses;
+            }
+            if (nodeId == 4 && type == TEvInterconnect::TEvNodeDisconnected::EventType
+                    && ev->Get<TEvInterconnect::TEvNodeDisconnected>()->NodeId == 2) {
+                ++disconnections;
+            }
+            if (nodeId == 2 && ev->Sender == dynamicPeer
+                    && type == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->InterconnectSession, session);
+                queryDelivered = true;
+            }
+            if (nodeId == 4 && type == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                queryReplied = true;
+            }
+            return true;
+        };
+        runtime.Send(new IEventHandle(TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe,
+            IEventHandle::FlagSubscribeOnSession, keeper, dynamicPeer, nullptr, 0), 4);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return subscribed; }));
+        if (pendingSubscription) {
+            UNIT_ASSERT(SimUntil(runtime, [&] { return !heldConnected.empty(); }));
+        } else {
+            SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
+        }
+
+        // Losing the root drops distconf's dynamic-config subscription. Other
+        // users of the same interconnect session must remain connected.
+        runtime.StopNode(1);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return noQuorum; }, TDuration::Seconds(10), 2));
+        holdConnected = false;
+        ReplayDelayedEvents(runtime, heldConnected);
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(1), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sessionCloses, 0);
+        UNIT_ASSERT_VALUES_EQUAL(disconnections, 0);
+
+        auto query = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        query->Record.MutableQueryWorkingRoot();
+        runtime.Send(new IEventHandle(keeper, dynamicPeer, query.release()), 4);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return queryDelivered && queryReplied; }, TDuration::Seconds(5), 2));
+        UNIT_ASSERT_VALUES_EQUAL(sessionCloses, 0);
+        UNIT_ASSERT_VALUES_EQUAL(disconnections, 0);
+    }
+
+    Y_UNIT_TEST(DynamicConfigUnsubscribeKeepsEstablishedSession) {
+        CheckDynamicConfigUnsubscribeKeepsSession(false);
+    }
+
+    Y_UNIT_TEST(DynamicConfigUnsubscribeKeepsPendingSession) {
+        CheckDynamicConfigUnsubscribeKeepsSession(true);
     }
 
     void CheckBindingLivenessPeerCapability(bool selfManagement, bool legacyParent, bool pauseParent = false,
@@ -11245,6 +11547,32 @@ Y_UNIT_TEST_SUITE(TDeriveStorageConfigBridgeTest) {
         UNIT_ASSERT_STRING_CONTAINS(error, "unknown pile name '' for node 2");
         UNIT_ASSERT(!derive({std::nullopt, "a"}, {"a", "b"}, &error));
         UNIT_ASSERT_STRING_CONTAINS(error, "mandatory pile name is missing for node 1");
+    }
+
+    // node warden takes the rate of its syncer quoter from the derived config, so a value lost here is replaced with the
+    // default one as soon as distconf provides the config
+    Y_UNIT_TEST(BridgeSyncRateBytesPerSecond) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableNameserviceConfig();
+        auto *bsFrom = appConfig.MutableBlobStorageConfig();
+        NKikimrBlobStorage::TStorageConfig config;
+        const auto& bsTo = *config.MutableBlobStorageConfig();
+        TString error;
+
+        bsFrom->SetBridgeSyncRateBytesPerSecond(123'000'000);
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(appConfig, &config, &error), error);
+        UNIT_ASSERT_VALUES_EQUAL(bsTo.GetBridgeSyncRateBytesPerSecond(), 123'000'000);
+
+        // zero turns the throttling off, it isn't the same as the value being unset
+        bsFrom->SetBridgeSyncRateBytesPerSecond(0);
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(appConfig, &config, &error), error);
+        UNIT_ASSERT(bsTo.HasBridgeSyncRateBytesPerSecond());
+        UNIT_ASSERT_VALUES_EQUAL(bsTo.GetBridgeSyncRateBytesPerSecond(), 0);
+
+        // the value dropped from the new config doesn't stick from the previous one
+        bsFrom->ClearBridgeSyncRateBytesPerSecond();
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(appConfig, &config, &error), error);
+        UNIT_ASSERT(!bsTo.HasBridgeSyncRateBytesPerSecond());
     }
 
     // parts of static groups get new generations when the pile becomes unsynced; donors and VDisks being destroyed are

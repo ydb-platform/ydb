@@ -1,5 +1,6 @@
 #pragma once
 
+#include "loaded_key_ranges.h"
 #include "portion_interval_tree.h"
 #include "portions_index.h"
 
@@ -149,6 +150,7 @@ private:
     mutable TInstant NextActualizations = TInstant::Zero();
 
     NGranule::NPortionsIndex::TPortionsIndex PortionsIndex;
+    TLoadedKeyRanges LoadedKeyRanges = TLoadedKeyRanges::BuildNothing();
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
     void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool onLoad = false);
@@ -366,7 +368,7 @@ public:
     }
 
     bool IsErasable() const {
-        return Portions.empty() && InsertedPortions.empty();
+        return Portions.empty() && InsertedPortions.empty() && LoadedKeyRanges.CoversAll();
     }
 
     void OnCompactionStarted();
@@ -420,6 +422,14 @@ public:
 
     TInternalPathId GetPathId() const {
         return PathId;
+    }
+
+    const TLoadedKeyRanges& GetLoadedKeyRanges() const {
+        return LoadedKeyRanges;
+    }
+
+    void SetLoadedKeyRanges(TLoadedKeyRanges&& loadedKeyRanges) {
+        LoadedKeyRanges = std::move(loadedKeyRanges);
     }
 
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {

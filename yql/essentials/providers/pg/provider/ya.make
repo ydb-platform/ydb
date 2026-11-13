@@ -10,6 +10,7 @@ SRCS(
     yql_pg_provider.cpp
     yql_pg_provider.h
     yql_pg_provider_impl.h
+    yql_pg_provider_impl.cpp
 )
 
 PEERDIR(

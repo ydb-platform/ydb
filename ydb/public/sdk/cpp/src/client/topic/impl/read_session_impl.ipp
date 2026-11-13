@@ -1692,11 +1692,17 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     NextPartitionStreamId += PartitionStreamIdStep;
     PartitionStreams.insert_or_assign(partitionSessionId, partitionStream);
 
+    std::optional<uint64_t> retainedStartOffset;
+    if (msg.has_retained_start_offset()) {
+        retainedStartOffset = msg.retained_start_offset();
+    }
+
     // Send event to user.
     bool pushRes = EventsQueue->PushEvent(
         partitionStream,
         TReadSessionEvent::TStartPartitionSessionEvent(
-            partitionStream, msg.committed_offset(), msg.partition_offsets().end()),
+            partitionStream, msg.committed_offset(), msg.partition_offsets().start(),
+            msg.partition_offsets().end(), retainedStartOffset),
         deferred);
 
     if (!pushRes) {
@@ -2105,6 +2111,20 @@ template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortSession(TASessionClosedEvent<UseMigrationProtocol>&& closeEvent) {
     TDeferredActions<UseMigrationProtocol> deferred;
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing session to cluster: " << closeEvent.DebugString());
+
+    {
+        // The events queue below drains undelivered data events and defers
+        // OnUserRetrievedEvent for them. The session is being torn down, so
+        // the same data may already have been released by a concurrent path;
+        // mark the session aborting so the accounting guard in
+        // OnUserRetrievedEvent skips the second release.
+        // Only the flag is set here instead of calling AbortImpl: the direct
+        // read path calls this method while holding the direct reader lock,
+        // and AbortImpl would close the DirectReadSessionManager, which
+        // takes the same non-recursive lock.
+        std::lock_guard guard(Lock);
+        Aborting = true;
+    }
 
     EventsQueue->Close(closeEvent, deferred);
 }

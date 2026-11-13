@@ -1386,7 +1386,6 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             })) {
             return; // The current distconf root will retry if Sentinel is warming up.
         }
-        SentinelState->NeedSelfHealStateStorage = false;
         SentinelState->LastStateStorageSelfHeal = Now();
         Send(ev->Sender, MakeDistconfRequest(), 0, ev->Cookie);
     }

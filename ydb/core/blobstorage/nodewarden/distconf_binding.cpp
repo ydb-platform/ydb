@@ -1,5 +1,6 @@
 #include "distconf.h"
 #include "distconf_quorum.h"
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/protos/node_broker.pb.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -790,6 +791,11 @@ namespace NKikimr::NStorage {
             return;
         }
         if (const auto it = SubscribedSessions.find(nodeId); it != SubscribedSessions.end()) {
+            // Dynamic peers are not listed in AllNodeIds. Dropping their distconf
+            // subscription must not close the session used by other actors.
+            const auto& dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
+            const bool isRemovedStaticNode = !AllNodeIds.contains(nodeId)
+                && (!dynamicNameserviceConfig || nodeId <= dynamicNameserviceConfig->MaxStaticNodeId);
             TSessionSubscription& subs = it->second;
             YDB_LOG_DEBUG("UnsubscribeInterconnect",
                 {"marker", "NWDC55"},
@@ -802,16 +808,16 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(jt != SubscriptionCookieMap.end());
                 Y_ABORT_UNLESS(jt->second == nodeId);
                 SubscriptionCookieMap.erase(jt);
-                if (!AllNodeIds.contains(nodeId)) {
+                if (isRemovedStaticNode) {
                     TActivationContext::Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0,
                         TActivationContext::InterconnectProxy(nodeId), {}, nullptr, 0));
                 }
             } else {
                 // we already had TEvNodeConnected, so we have to unsubscribe
                 Y_ABORT_UNLESS(subs.SessionId);
-                ui32 event = AllNodeIds.contains(nodeId)
-                    ? TEvents::TSystem::Unsubscribe
-                    : TEvents::TSystem::Poison;
+                const ui32 event = isRemovedStaticNode
+                    ? TEvents::TSystem::Poison
+                    : TEvents::TSystem::Unsubscribe;
                 TActivationContext::Send(new IEventHandle(event, 0, subs.SessionId, SelfId(), nullptr, 0));
             }
             SubscribedSessions.erase(it);

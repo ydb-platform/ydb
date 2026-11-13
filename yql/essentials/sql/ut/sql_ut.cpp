@@ -16,6 +16,10 @@ struct TCallState {
 
 class TMockTranslator final: public NSQLTranslation::ITranslator {
 public:
+    bool AcceptsProjectSetting(const NYql::TProjectSettings::TPragma&) const final {
+        return false;
+    }
+
     explicit TMockTranslator(TCallState& calls)
         : Calls_(calls)
     {
@@ -65,6 +69,11 @@ NSQLTranslation::TTranslators MakeTranslators(TCallState& calls) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSqlTranslation) {
+Y_UNIT_TEST(DummyTranslatorRejectsProjectSettings) {
+    const auto translator = NSQLTranslation::MakeDummyTranslator("unsupported");
+    UNIT_ASSERT(!translator->AcceptsProjectSetting({.Name = "ClassicDivision", .Value = {"false"}}));
+}
+
 Y_UNIT_TEST(UsesCustomSyntaxTranslator) {
     TCallState calls;
     NSQLTranslation::TTranslatorsRegistry translatorsRegistry = {

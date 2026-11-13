@@ -11,6 +11,8 @@ SRCS(
     bsc_audit.cpp
     bridge.cpp
     bridge_sync_counters.h
+    bridge_storage.cpp
+    bridge_storage.h
     cleanup_stale_storage_entries.cpp
     cluster_balancing.cpp
     cmds_box.cpp
@@ -59,6 +61,7 @@ SRCS(
     mood.h
     mv_object_map.h
     node_report.cpp
+    pile_overrides.cpp
     propose_group_key.cpp
     register_node.cpp
     request_controller_info.cpp

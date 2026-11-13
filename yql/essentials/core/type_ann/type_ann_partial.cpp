@@ -188,7 +188,7 @@ public:
 class TPartialUdfResolver final: public IUdfResolver {
 public:
     TPartialUdfResolver(
-        const IUdfMeta* udfMeta,
+        const TUdfMeta* udfMeta,
         TTypeParser typeParser,
         TTypeWriter typeWriter)
         : UdfMeta_(udfMeta)
@@ -325,7 +325,7 @@ public:
     }
 
 private:
-    const IUdfMeta* UdfMeta_;
+    const TUdfMeta* UdfMeta_;
     const TTypeParser TypeParser_;
     const TTypeWriter TypeWriter_;
 };

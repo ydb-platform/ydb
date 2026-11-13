@@ -42,7 +42,7 @@ namespace NKikimr {
             UNIT_ASSERT(merger.GetSavedHugeBlobs().empty());
             UNIT_ASSERT_VALUES_EQUAL(merger.GetDeletedHugeBlobs().size(), 1); // the slot is freed exactly once
             UNIT_ASSERT(merger.GetDeletedHugeBlobs().front() == blob.HugeLocation);
-            const auto& reads = merger.GetCollectTask().Reads;
+            const std::vector<std::tuple<TDiskPart, ui8, bool>>& reads = merger.GetCollectTask().Reads;
             UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(std::get<1>(reads.front())), 0);
         }

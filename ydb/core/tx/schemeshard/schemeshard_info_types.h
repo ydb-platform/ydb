@@ -3206,16 +3206,13 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
                     space.SSDSystem += blockCount * blockSize; // merged blobs
                 } else {
                     space.SSD += blockCount * blockSize; // merged blobs
-                    space.SSD += (blockCount / 8) * blockSize; // mixed blobs
                 }
                 break;
             case 2: // STORAGE_MEDIA_HYBRID
                 space.HDD += blockCount * blockSize; // merged blobs
-                space.SSD += (blockCount / 8) * blockSize; // mixed blobs
                 break;
             case 3: // STORAGE_MEDIA_HDD
                 space.HDD += blockCount * blockSize; // merged blobs
-                space.SSD += (blockCount / 8) * blockSize; // mixed blobs
                 break;
             case 4: // STORAGE_MEDIA_SSD_NONREPLICATED
                 space.SSDNonrepl += blockCount * blockSize; // blocks are stored directly

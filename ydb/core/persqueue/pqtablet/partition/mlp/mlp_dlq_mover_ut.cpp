@@ -3,6 +3,8 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/library/testlib/helpers.h>
 
+#include <atomic>
+
 namespace NKikimr::NPQ::NMLP {
 
 Y_UNIT_TEST_SUITE(TMLPDLQMoverTests) {
@@ -38,9 +40,11 @@ void MoveToDLQ(const TString& msg, bool shortDlqName = false, bool databasePrefi
 
     setup->Write("/Root/topic1", msg, 0);
 
-    bool dlqMoved = false;
+    std::atomic<bool> dlqMoved = false;
     auto observer = runtime.AddObserver<TEvPQ::TEvMLPDLQMoverResponse>([&](auto& ev) {
-        dlqMoved |= ev->Get()->Status == Ydb::StatusIds::SUCCESS;
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            dlqMoved.store(true);
+        }
     });
 
     {
@@ -74,7 +78,7 @@ void MoveToDLQ(const TString& msg, bool shortDlqName = false, bool databasePrefi
     }
 
 
-    runtime.WaitFor("DLQ move", [&] { return dlqMoved; }, TDuration::Seconds(30));
+    runtime.WaitFor("DLQ move", [&] { return dlqMoved.load(); }, TDuration::Seconds(30));
     {
         CreateReaderActor(runtime, TReaderSettings{
             .DatabasePath = "/Root",

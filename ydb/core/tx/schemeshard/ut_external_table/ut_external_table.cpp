@@ -47,6 +47,24 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathExist);
     }
 
+    Y_UNIT_TEST(PgColumnRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
+        runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        ui64 txId = 100;
+        CreateExternalDataSource(runtime, env, txId++);
+        TestCreateExternalTable(runtime, txId++, "/MyRoot", R"(
+                Name: "ExternalTable"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "key" Type: "pgint4" }
+            )",
+            { { NKikimrScheme::StatusSchemeError, "Type 'pgint4' specified for column 'key' is not supported by storage" } });
+
+        TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathNotExist);
+    }
+
     Y_UNIT_TEST(DropExternalTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));

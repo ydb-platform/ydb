@@ -3,6 +3,11 @@
 
 #include <ydb/core/change_exchange/visitor.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
 
 namespace NKikimr::NDataShard {
 
@@ -26,8 +31,9 @@ public:
 
 } // anonymous
 
-TCdcAggregatedHeartbeats::TCdcAggregatedHeartbeats(THolder<IChangeRecordSerializer> serializer)
+TCdcAggregatedHeartbeats::TCdcAggregatedHeartbeats(THolder<IChangeRecordSerializer> serializer, ui64 sourceDataShardId)
     : Serializer(std::move(serializer))
+    , SourceDataShardId(sourceDataShardId)
 {
 }
 
@@ -77,41 +83,62 @@ TVector<ui64> TCdcAggregatedHeartbeats::ExtractHeartbeats(TVector<NChangeExchang
     return heartbeats;
 }
 
-std::optional<TCdcAggregatedHeartbeats::TToSend> TCdcAggregatedHeartbeats::TakeHeartbeatToSend() {
+TVector<ui64> TCdcAggregatedHeartbeats::SendIfNeeded(const TActorId& owner, ui64 aggregatorTabletId) {
+    TVector<ui64> covered;
+    if (!aggregatorTabletId) {
+        return covered;
+    }
+
     const auto ready = Undelivered ? Held.lower_bound(*Undelivered.begin()) : Held.end();
     if (ready == Held.begin()) {
-        return std::nullopt;
+        return covered;
     }
 
     const auto newest = std::prev(ready);
     if (Sent == newest->first) {
-        return std::nullopt;
+        return covered;
     }
 
-    TToSend result{.Heartbeat = newest->second};
     for (auto it = Held.begin(); it != newest; it = Held.erase(it)) {
-        result.Covered.push_back(it->first);
+        covered.push_back(it->first);
     }
 
+    Owner = owner;
+    AggregatorTabletId = aggregatorTabletId;
     Sent = newest->first;
-    return result;
+    Send(TDuration::Zero());
+
+    return covered;
 }
 
-const NPQ::THeartbeat* TCdcAggregatedHeartbeats::GetSentHeartbeat() const {
-    return Sent ? &Held.at(*Sent) : nullptr;
-}
+TVector<ui64> TCdcAggregatedHeartbeats::OnWriteResult(const TEvWriteHeartbeatResult& result, ui64 cookie) {
+    using EStatus = TEvWriteHeartbeatResult::EStatus;
 
-TVector<ui64> TCdcAggregatedHeartbeats::CompleteSentHeartbeat() {
-    Y_ENSURE(Sent);
-
-    TVector<ui64> remove;
-    const auto end = Held.upper_bound(*Sent);
-    for (auto it = Held.begin(); it != end; it = Held.erase(it)) {
-        remove.push_back(it->first);
+    if (!Sent || cookie != Cookie) {
+        return {};
     }
 
-    Sent.reset();
-    return remove;
+    if (result.Status == EStatus::Written && result.WrittenVersion >= Held.at(*Sent).Version) {
+        return CompleteSent();
+    }
+
+    if (result.Status == EStatus::Rejected) {
+        YDB_LOG_WARN("CdcAggregatorService has rejected the heartbeat",
+            {"eventDetails", result.ToString()});
+        return CompleteSent();
+    }
+
+    YDB_LOG_WARN("CdcAggregatorService has not written the heartbeat, retrying",
+        {"eventDetails", result.ToString()});
+    Send(Backoff.Next());
+
+    return {};
+}
+
+void TCdcAggregatedHeartbeats::OnUndelivered(ui64 cookie) {
+    if (Sent && cookie == Cookie) {
+        Send(Backoff.Next());
+    }
 }
 
 TVector<ui64> TCdcAggregatedHeartbeats::Reset() {
@@ -122,6 +149,33 @@ TVector<ui64> TCdcAggregatedHeartbeats::Reset() {
 
     Held.clear();
     Sent.reset();
+    return remove;
+}
+
+void TCdcAggregatedHeartbeats::Send(TDuration delay) {
+    auto ev = MakeHolder<NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeat>();
+    ev->RecipientTabletId = AggregatorTabletId;
+    ev->SourceDataShardId = SourceDataShardId;
+    ev->Heartbeat = Held.at(*Sent);
+
+    auto* handle = new IEventHandle(NCdcAggregator::MakeCdcAggregatorServiceId(Owner.NodeId()), Owner,
+        ev.Release(), IEventHandle::FlagTrackDelivery, ++Cookie);
+    if (delay) {
+        TActivationContext::Schedule(delay, handle);
+    } else {
+        TActivationContext::Send(handle);
+    }
+}
+
+TVector<ui64> TCdcAggregatedHeartbeats::CompleteSent() {
+    TVector<ui64> remove;
+    const auto end = Held.upper_bound(*Sent);
+    for (auto it = Held.begin(); it != end; it = Held.erase(it)) {
+        remove.push_back(it->first);
+    }
+
+    Sent.reset();
+    Backoff.Reset();
     return remove;
 }
 

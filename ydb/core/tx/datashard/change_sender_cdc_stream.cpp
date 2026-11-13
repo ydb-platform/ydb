@@ -14,7 +14,6 @@
 #include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/util/backoff.h>
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -716,78 +715,27 @@ class TCdcChangeSenderMain
     }
 
     void ReleaseHeartbeatsForAggregationIfNeeded() {
-        if (auto held = AggregatedHeartbeats.Reset()) {
-            RemoveRecords(std::move(held));
-        }
+        RemoveHeartbeatRecords(AggregatedHeartbeats.Reset());
     }
 
     void SendHeartbeatIfNeeded() {
-        if (!Stream.AggregatorTabletId) {
-            return;
-        }
-
-        auto toSend = AggregatedHeartbeats.TakeHeartbeatToSend();
-        if (!toSend) {
-            return;
-        }
-
-        if (toSend->Covered) {
-            RemoveRecords(std::move(toSend->Covered));
-        }
-        ScheduleWriteHeartbeat(toSend->Heartbeat, TDuration::Zero());
+        RemoveHeartbeatRecords(AggregatedHeartbeats.SendIfNeeded(SelfId(), Stream.AggregatorTabletId));
     }
 
-    void ScheduleWriteHeartbeat(const NPQ::THeartbeat& heartbeat, TDuration delay) {
-        auto ev = MakeHolder<NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeat>();
-        ev->RecipientTabletId = Stream.AggregatorTabletId;
-        ev->SourceDataShardId = DataShard.TabletId;
-        ev->Heartbeat = heartbeat;
-
-        auto* handle = new IEventHandle(NCdcAggregator::MakeCdcAggregatorServiceId(SelfId().NodeId()), SelfId(),
-            ev.Release(), IEventHandle::FlagTrackDelivery, ++HeartbeatCookie);
-        if (delay) {
-            TActivationContext::Schedule(delay, handle);
-        } else {
-            TActivationContext::Send(handle);
+    void RemoveHeartbeatRecords(TVector<ui64>&& orders) {
+        if (orders) {
+            RemoveRecords(std::move(orders));
         }
     }
 
     void Handle(NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
-
-        using EStatus = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult::EStatus;
-        const auto& result = *ev->Get();
-        const auto* sent = AggregatedHeartbeats.GetSentHeartbeat();
-        if (!sent || ev->Cookie != HeartbeatCookie) {
-            return;
-        }
-
-        if (result.Status == EStatus::Written && result.WrittenVersion >= sent->Version) {
-            return CompleteSentHeartbeat();
-        }
-
-        if (result.Status == EStatus::Rejected) {
-            YDB_LOG_WARN("CdcAggregatorService has rejected the heartbeat",
-                {"eventDetails", result.ToString()});
-            return CompleteSentHeartbeat();
-        }
-
-        YDB_LOG_WARN("CdcAggregatorService has not written the heartbeat, retrying",
-            {"eventDetails", result.ToString()});
-        ScheduleWriteHeartbeat(*sent, HeartbeatBackoff.Next());
-    }
-
-    void CompleteSentHeartbeat() {
-        RemoveRecords(AggregatedHeartbeats.CompleteSentHeartbeat());
-        HeartbeatBackoff.Reset();
+        RemoveHeartbeatRecords(AggregatedHeartbeats.OnWriteResult(*ev->Get(), ev->Cookie));
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        const auto* sent = AggregatedHeartbeats.GetSentHeartbeat();
-        if (sent && ev->Cookie == HeartbeatCookie) {
-            ScheduleWriteHeartbeat(*sent, HeartbeatBackoff.Next());
-        }
+        AggregatedHeartbeats.OnUndelivered(ev->Cookie);
     }
 
     void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -818,7 +766,7 @@ public:
         , TopicVersion(0)
         , AggregatedHeartbeats(stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated
             ? CreateCdcStreamSerializer(stream, dataShard.TabletId)
-            : THolder<IChangeRecordSerializer>())
+            : THolder<IChangeRecordSerializer>(), dataShard.TabletId)
     {
     }
 
@@ -869,8 +817,6 @@ private:
     THashMap<ui32, ui64> PartitionToShard;
 
     TCdcAggregatedHeartbeats AggregatedHeartbeats;
-    ui64 HeartbeatCookie = 0;
-    TBackoff HeartbeatBackoff = TBackoff(TDuration::MilliSeconds(100), TDuration::Seconds(10));
 
 }; // TCdcChangeSenderMain
 

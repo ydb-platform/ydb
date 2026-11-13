@@ -660,7 +660,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     }
     // KillNode may erase the node, so finish collecting nodes before calling it.
     for (const auto& [nodeId, local] : nodesToKill) {
-        KillNode(nodeId, local, EHiveEventReason::PileUpdate);
+        KillNode(nodeId, local);
     }
     for (auto* node : unimportantNodes) {
         node->Ping();

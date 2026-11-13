@@ -199,11 +199,15 @@ struct TEvBlobStorage {
         EvVSync,
         EvVSyncFull,
         EvVSyncGuid,
+        EvVPhantomFlagStorageListChunks,
+        EvVPhantomFlagStorageReadChunk,
 
         EvVDiskReply = EvPut + 5 * 512,                         /// 268 634 624
         EvVSyncResult,
         EvVSyncFullResult,
         EvVSyncGuidResult,
+        EvVPhantomFlagStorageListChunksResult,
+        EvVPhantomFlagStorageReadChunkResult,
 
         // vdisk <-> controller interface,
         EvCnt = EvPut + 6 * 512,                                /// 268 635 136
@@ -431,6 +435,7 @@ struct TEvBlobStorage {
         EvHugeSpaceStat,
         EvSyncLogSpaceStat,
         EvChunkKeeperSpaceStat,
+        EvPhantomFlagStorageCommitApplied,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -2707,6 +2712,10 @@ struct TEvBlobStorage {
     struct TEvVSyncResult;
     struct TEvVSyncFull;
     struct TEvVSyncFullResult;
+    struct TEvVPhantomFlagStorageListChunks;
+    struct TEvVPhantomFlagStorageListChunksResult;
+    struct TEvVPhantomFlagStorageReadChunk;
+    struct TEvVPhantomFlagStorageReadChunkResult;
     struct TEvVStatus;
     struct TEvVStatusResult;
     struct EvVBaldSyncLog;

@@ -9,6 +9,7 @@
 #include "blobstorage_synclog_private_events.h"
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
@@ -295,6 +296,14 @@ namespace NKikimr {
                 Send(ev->Forward(KeeperId));
             }
 
+            void Handle(const TEvBlobStorage::TEvVPhantomFlagStorageListChunks::TPtr& ev) {
+                Send(ev->Forward(KeeperId));
+            }
+
+            void Handle(const TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TPtr& ev) {
+                Send(ev->Forward(KeeperId));
+            }
+
             void Handle(const TEvLocalSyncData::TPtr& ev) {
                 Send(ev->Forward(KeeperId));
             }
@@ -321,6 +330,8 @@ namespace NKikimr {
                 HFunc(TEvListChunks, Handle)
                 HFunc(TEvSyncLogSpaceStat, Handle)
                 hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
+                hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, Handle)
+                hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, Handle)
                 hFunc(TEvLocalSyncData, Handle);
             )
 

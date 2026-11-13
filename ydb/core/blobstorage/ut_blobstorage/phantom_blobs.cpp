@@ -1,12 +1,17 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
+#include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_events.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
 
 #include <util/random/random.h>
 
 #include <algorithm>
+#include <memory>
 #include <optional>
 #include <random>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 using namespace NKikimr;
 
@@ -950,6 +955,90 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
     Y_UNIT_TEST(TestRandomizedPersistent4Plus2Block) {
         TRandomizedPersistentTest(TBlobStorageGroupType::Erasure4Plus2Block).Run(TDuration::Seconds(120));
+    }
+
+    Y_UNIT_TEST(ReadsPublishedPhantomFlagStorageChunks) {
+        TFeatureFlags featureFlags;
+        featureFlags.SetEnablePhantomFlagStorageReplication(true);
+        TTestCtxBase ctx({
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .FeatureFlags = featureFlags,
+            .PDiskChunkSize = 32_MB,
+            .EnablePhantomFlagStorage = true,
+            .EnablePersistentPhantomFlagStorage = true,
+        });
+
+        std::unordered_map<ui32, TActorId> processors;
+        ctx.Env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (const TEvChunkKeeperDiscover* discover = event->CastAsLocal<TEvChunkKeeperDiscover>()) {
+                if (discover->Subsystem == NKikimrVDiskData::TChunkKeeperEntryPoint::PhantomFlagStorage) {
+                    processors[event->Sender.NodeId()] = event->Sender;
+                }
+            }
+            return true;
+        };
+        ctx.CreateOneGroup();
+        ctx.Env->Runtime->FilterFunction = {};
+
+        using TList = TEvBlobStorage::TEvVPhantomFlagStorageListChunks;
+        using TListResult = TEvBlobStorage::TEvVPhantomFlagStorageListChunksResult;
+        using TRead = TEvBlobStorage::TEvVPhantomFlagStorageReadChunk;
+        using TReadResult = TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult;
+
+        const TIntrusivePtr<TBlobStorageGroupInfo> group = ctx.Env->GetGroupInfo(ctx.GroupId);
+        const TActorId donor = group->GetActorId(0);
+        const TVDiskID donorId = group->GetVDiskId(0);
+        const TVDiskID peerId = group->GetVDiskId(1);
+        UNIT_ASSERT(processors.contains(donor.NodeId()));
+
+        const std::unique_ptr<TListResult> empty = ctx.Env->SyncQuery<TListResult, TList>(donor, peerId, donorId);
+        UNIT_ASSERT_VALUES_EQUAL(empty->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(empty->Record.ChunkIndexesSize(), 0);
+
+        const TLogoBlobID key(740002, 1, 1, 0, 4096, 0);
+        TIngress ingress;
+        ingress.SetKeep(TIngress::IngressMode(group->Type), CollectModeDoNotKeep);
+        const NSyncLog::TLogoBlobRec record(key, ingress.Raw());
+        std::vector<NSyncLog::TPhantomFlagStorageItem> items;
+        items.push_back(NSyncLog::TPhantomFlagStorageItem::CreateFlag(&record));
+        items.push_back(NSyncLog::TPhantomFlagStorageItem::CreateThreshold(1, key));
+        const TActorId writer = ctx.Env->Runtime->AllocateEdgeActor(donor.NodeId());
+        ctx.Env->Runtime->Send(new IEventHandle(processors.at(donor.NodeId()), writer,
+            new NSyncLog::TEvPhantomFlagStorageWriteItems(std::move(items))), donor.NodeId());
+        ctx.Env->Runtime->DestroyActor(writer);
+
+        std::unique_ptr<TListResult> published;
+        for (ui32 attempt = 0; attempt < 20; ++attempt) {
+            ctx.Env->Sim(TDuration::Seconds(1));
+            published = ctx.Env->SyncQuery<TListResult, TList>(donor, peerId, donorId);
+            if (published->Record.GetStatus() == NKikimrProto::OK && published->Record.ChunkIndexesSize()) {
+                break;
+            }
+        }
+        UNIT_ASSERT(published);
+        UNIT_ASSERT_VALUES_EQUAL(published->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(published->Record.ChunkIndexesSize(), 1);
+        const ui32 chunkIndex = published->Record.GetChunkIndexes(0);
+        const TActorId peer = ctx.Env->Runtime->AllocateEdgeActor(group->GetActorId(1).NodeId());
+        ctx.Env->Runtime->Send(new IEventHandle(donor, peer, new TRead(peerId, donorId, chunkIndex)), peer.NodeId());
+        const TReadResult::TPtr read = ctx.Env->WaitForEdgeActorEvent<TReadResult>(
+            peer, true, ctx.Env->Now() + TDuration::Seconds(10));
+        UNIT_ASSERT(read);
+        UNIT_ASSERT_VALUES_EQUAL(read->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(read->Get()->Record.GetChunkIndex(), chunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(read->Get()->Record.GetKeys(), key.AsBinaryString());
+
+        const ui32 missingChunk = 0;
+        const std::unique_ptr<TReadResult> missing = ctx.Env->SyncQuery<TReadResult, TRead>(
+            donor, peerId, donorId, missingChunk);
+        UNIT_ASSERT_VALUES_EQUAL(missing->Record.GetStatus(), NKikimrProto::NOT_FOUND);
+
+        TVDiskID stalePeerId = peerId;
+        ++stalePeerId.GroupGeneration;
+        const std::unique_ptr<TListResult> stale = ctx.Env->SyncQuery<TListResult, TList>(
+            donor, stalePeerId, donorId);
+        UNIT_ASSERT_VALUES_EQUAL(stale->Record.GetStatus(), NKikimrProto::RACE);
     }
 
     #undef TEST_PHANTOM_BLOBS

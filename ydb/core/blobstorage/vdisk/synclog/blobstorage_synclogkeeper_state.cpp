@@ -596,6 +596,10 @@ namespace NKikimr {
             SlCtx->PhantomFlagStorageGroup.SyncedMask() = SyncedMask.to_ullong();
         }
 
+        TActorId TSyncLogKeeperState::GetPhantomFlagStorageProcessorId() const {
+            return PhantomFlagStorageState.GetProcessorId();
+        }
+
         void TSyncLogKeeperState::UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data) {
             SyncLogPtr->UpdatePhantomFlagStorageData(std::move(data));
         }

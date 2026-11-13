@@ -159,11 +159,17 @@ namespace NKikimr {
                                      TEvBlobStorage::EvPhantomFlagStorageCommitData>
         {
             TEvPhantomFlagStorageCommitData(const std::optional<TPhantomFlagStorageData>& data,
-                    std::vector<ui32> retiredChunks);
+                    std::vector<ui32> retiredChunks, bool acknowledgeCommit = false);
 
             std::optional<TPhantomFlagStorageData> Data;
             std::vector<ui32> RetiredChunks;
+            const bool AcknowledgeCommit;
         };
+
+        struct TEvPhantomFlagStorageCommitApplied
+                : public TEventLocal<TEvPhantomFlagStorageCommitApplied,
+                                     TEvBlobStorage::EvPhantomFlagStorageCommitApplied>
+        {};
 
         struct TEvPhantomFlagStorageDrop
                 : public TEventLocal<TEvPhantomFlagStorageDrop,

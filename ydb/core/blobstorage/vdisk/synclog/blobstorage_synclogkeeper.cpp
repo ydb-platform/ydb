@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/vdisk/common/circlebufstream.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_LOGCUTTER
@@ -37,6 +38,8 @@ namespace NKikimr {
             const TActorId SyncLogId;
             // committer actor id, or empty if we don't have commit activity at this moment
             TActorId CommitterId = {};
+            TActorId PendingPhantomFlagStorageCommit;
+            TActorId InFlightPhantomFlagStorageCommit;
             // FirstLsnToKeep reported to LogCutter last time
             TMaybe<ui64> LastReportedFirstLsnToKeep;
 
@@ -87,7 +90,7 @@ namespace NKikimr {
                         SlCtx->PDiskCtx->Dsk->OwnerRound, std::move(v)));
                 }
 
-                if (CommitterId || !KeepState.HasDelayedActions()) {
+                if (CommitterId || (!KeepState.HasDelayedActions() && !PendingPhantomFlagStorageCommit)) {
                     // be fast: already committing or has no actions? Return.
                     return;
                 }
@@ -98,6 +101,7 @@ namespace NKikimr {
                 generateCommit |= PerformMemOverflowAction();
                 generateCommit |= PerformInitialCommit();
                 generateCommit |= KeepState.GetDeleteChunkAndClear();
+                generateCommit |= static_cast<bool>(PendingPhantomFlagStorageCommit);
 
                 if (generateCommit) {
                     Y_VERIFY_S(!CommitterId, SlCtx->VCtx->VDiskLogPrefix);
@@ -105,6 +109,7 @@ namespace NKikimr {
                     const ui64 recoveryLogConfirmedLsn = SlCtx->LsnMngr->GetConfirmedLsnForSyncLog();
                     // create and run committer
                     TSyncLogKeeperCommitData commitData = KeepState.PrepareCommitData(recoveryLogConfirmedLsn);
+                    InFlightPhantomFlagStorageCommit = std::exchange(PendingPhantomFlagStorageCommit, TActorId{});
 
                     YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: start committer; commitData# %s", commitData.ToString().data()));
 
@@ -194,6 +199,10 @@ namespace NKikimr {
                 // commit finished
                 CommitterId = TActorId();
                 const ui64 firstLsnToKeep = KeepState.ApplyCommitResult(msg);
+                if (InFlightPhantomFlagStorageCommit) {
+                    Send(std::exchange(InFlightPhantomFlagStorageCommit, TActorId{}),
+                            new TEvPhantomFlagStorageCommitApplied);
+                }
 
                 // If we have done some work to free up recovery log, the layout
                 // of SyncLog has been changed. Actually we have written some
@@ -225,6 +234,9 @@ namespace NKikimr {
 
                 // committer aborted the commit
                 CommitterId = TActorId();
+                if (InFlightPhantomFlagStorageCommit) {
+                    PendingPhantomFlagStorageCommit = std::exchange(InFlightPhantomFlagStorageCommit, TActorId{});
+                }
                 KeepState.DisposeDiskSyncLog(std::move(msg->AllocatedChunks));
 
                 // start the disposal commit (and any other delayed actions)
@@ -287,6 +299,35 @@ namespace NKikimr {
                 KeepState.RequestPhantomFlagStorageSnapshot(ev);
             }
 
+            void Handle(const TEvBlobStorage::TEvVPhantomFlagStorageListChunks::TPtr& ev) {
+                const TActorId processorId = KeepState.GetPhantomFlagStorageProcessorId();
+                if (processorId) {
+                    Send(ev->Forward(processorId));
+                    return;
+                }
+                const TVDiskID vdiskId = VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID());
+                SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender,
+                        new TEvBlobStorage::TEvVPhantomFlagStorageListChunksResult(NKikimrProto::NODATA, vdiskId),
+                        ev->Cookie, ev->GetChannel(), SlCtx->VCtx, {});
+            }
+
+            void Handle(const TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TPtr& ev) {
+                const TActorId processorId = KeepState.GetPhantomFlagStorageProcessorId();
+                if (processorId) {
+                    Send(ev->Forward(processorId));
+                    return;
+                }
+                const auto& record = ev->Get()->Record;
+                const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
+                auto result = std::make_unique<TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult>(
+                        NKikimrProto::NODATA, vdiskId);
+                if (record.HasChunkIndex()) {
+                    result->Record.SetChunkIndex(record.GetChunkIndex());
+                }
+                SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, result.release(),
+                        ev->Cookie, ev->GetChannel(), SlCtx->VCtx, {});
+            }
+
             void Handle(const TEvPhantomFlagStorageGetSnapshotResult::TPtr& ev) {
                 // This actor only requests PhantomFlagStorage snapshot on restart
                 // to rebuild ThresholdsStructure
@@ -312,6 +353,11 @@ namespace NKikimr {
             void Handle(TEvPhantomFlagStorageCommitData::TPtr ev) {
                 KeepState.UpdatePhantomFlagStorageData(std::move(ev->Get()->Data));
                 KeepState.RetireExtractedChunks(ev->Get()->RetiredChunks);
+                if (ev->Get()->AcknowledgeCommit) {
+                    Y_DEBUG_ABORT_UNLESS(!PendingPhantomFlagStorageCommit && !InFlightPhantomFlagStorageCommit);
+                    PendingPhantomFlagStorageCommit = ev->Sender;
+                    PerformActions(TActivationContext::AsActorContext());
+                }
             }
 
             void UpdateCounters() {
@@ -336,6 +382,8 @@ namespace NKikimr {
                 HFunc(TEvListChunks, Handle)
                 hFunc(TEvPhantomFlagStorageFinishBuilder, Handle)
                 hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
+                hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, Handle)
+                hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, Handle)
                 hFunc(TEvPhantomFlagStorageCommitData, Handle)
                 hFunc(TEvLocalSyncData, Handle)
                 hFunc(TEvSyncLogUpdateNeighbourSyncedLsn, Handle)

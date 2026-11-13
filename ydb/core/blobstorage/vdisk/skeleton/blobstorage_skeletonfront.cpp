@@ -1721,6 +1721,27 @@ namespace NKikimr {
             ctx.Send(ev->Forward(SkeletonId));
         }
 
+        template<class TEventPtr>
+        void HandlePhantomFlagStorage(TEventPtr& ev) {
+            const TActorContext& ctx = TActivationContext::AsActorContext();
+            if (!GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
+                DatabaseAccessDeniedHandle(ev, ctx);
+                return;
+            }
+            Forward(ev, SkeletonId);
+        }
+
+        template<class TEventPtr>
+        void HandlePhantomFlagStorageNotReady(TEventPtr& ev) {
+            Reply(ev, TActivationContext::AsActorContext(), NKikimrProto::NOTREADY,
+                "VDisk is not ready", TActivationContext::Now());
+        }
+
+        template<class TEventPtr>
+        void HandlePhantomFlagStorageError(TEventPtr& ev) {
+            DatabaseErrorHandle(ev, TActivationContext::AsActorContext());
+        }
+
         void HandleCheckReadiness(TEvBlobStorage::TEvVCheckReadiness::TPtr& ev, const TActorContext& ctx) {
             if (GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
                 const auto& record = ev->Get()->Record;
@@ -2125,6 +2146,8 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVSync, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSyncFull, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, DatabaseNotReadyHandle)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, HandlePhantomFlagStorageNotReady)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, HandlePhantomFlagStorageNotReady)
             HFunc(TEvBlobStorage::TEvVCheckReadiness, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVCompact, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVDefrag, DatabaseNotReadyHandle)
@@ -2171,9 +2194,9 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvMonStreamQuery, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSync, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSyncFull, DatabaseNotReadyHandle)
-            // NOTE: Below is the only diff from StateLocalRecoveryInProgress --
-            //       we handle TEvBlobStorage::TEvVSyncGuid
             HFunc(TEvBlobStorage::TEvVSyncGuid, HandleRequestWithoutQoS)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, HandlePhantomFlagStorage)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, HandlePhantomFlagStorage)
             HFunc(TEvBlobStorage::TEvVCheckReadiness, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVCompact, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVDefrag, DatabaseNotReadyHandle)
@@ -2224,6 +2247,8 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVSync, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVSyncFull, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, DatabaseErrorHandle)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, HandlePhantomFlagStorageError)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, HandlePhantomFlagStorageError)
             HFunc(TEvBlobStorage::TEvVCheckReadiness, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVCompact, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVDefrag, DatabaseErrorHandle)
@@ -2403,6 +2428,8 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVSync, HandleRequestWithoutQoS)
             HFunc(TEvBlobStorage::TEvVSyncFull, HandleRequestWithoutQoS)
             HFunc(TEvBlobStorage::TEvVSyncGuid, HandleRequestWithoutQoS)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageListChunks, HandlePhantomFlagStorage)
+            hFunc(TEvBlobStorage::TEvVPhantomFlagStorageReadChunk, HandlePhantomFlagStorage)
             HFunc(TEvBlobStorage::TEvVCheckReadiness, HandleCheckReadiness)
             HFunc(TEvBlobStorage::TEvVCompact, Check)
             HFunc(TEvBlobStorage::TEvVDefrag, Check)

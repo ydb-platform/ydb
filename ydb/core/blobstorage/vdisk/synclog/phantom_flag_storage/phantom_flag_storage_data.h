@@ -6,6 +6,8 @@
 
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 
+#include <optional>
+
 namespace NKikimr::NSyncLog {
 
 using TPhantomFlagStorageDataProto = NKikimrVDiskData::TPhantomFlagStorageData;
@@ -44,6 +46,7 @@ public:
     static TPhantomFlagStorageItem CreateThreshold(ui32 orderNumber, const TLogoBlobID& blobId);
 
     static TPhantomFlagStorageItem DeserializeFromRaw(const char* data);
+    static std::optional<TPhantomFlagStorageItem> TryDeserialize(TStringBuf data);
     void Serialize(TString* buffer) const;
     ui32 SerializedSize() const;
     static void AlignWriteBlock(TString* buffer, ui32 appendBlockSize, ui32 sizeLimit); 

@@ -231,6 +231,29 @@ namespace NKikimr {
     // NErrBuilder -- routines for error results
     ////////////////////////////////////////////////////////////////////////////
     namespace NErrBuilder {
+
+        template<class TRequest>
+        std::unique_ptr<typename TRequest::TResult> PhantomFlagStorageResult(
+                const TRequest& request, NKikimrProto::EReplyStatus status, const TVDiskID& vdiskId) {
+            using TResult = typename TRequest::TResult;
+            std::unique_ptr<TResult> result = std::make_unique<TResult>(status, vdiskId);
+            if constexpr (std::is_same_v<TRequest, TEvBlobStorage::TEvVPhantomFlagStorageReadChunk>) {
+                if (request.Record.HasChunkIndex()) {
+                    result->Record.SetChunkIndex(request.Record.GetChunkIndex());
+                }
+            }
+            return result;
+        }
+
+        template<class TRequest>
+        requires (std::is_same_v<TRequest, TEvBlobStorage::TEvVPhantomFlagStorageListChunks>
+                || std::is_same_v<TRequest, TEvBlobStorage::TEvVPhantomFlagStorageReadChunk>)
+        std::unique_ptr<IEventBase> ErroneousResult(const TVDiskContextPtr&, NKikimrProto::EReplyStatus status,
+                const TString&, TAutoPtr<TEventHandle<TRequest>>& ev, TInstant, const TActorIDPtr&,
+                const TVDiskID& vdiskId, ui64, const TIntrusivePtr<TBlobStorageGroupInfo>&) {
+            return PhantomFlagStorageResult(*ev->Get(), status, vdiskId);
+        }
+
         template <typename TEvPtr>
         static inline std::unique_ptr<IEventBase>
         ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,

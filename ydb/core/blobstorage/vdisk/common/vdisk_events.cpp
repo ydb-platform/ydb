@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 
+#include <util/string/builder.h>
+
 namespace NKikimr {
 
     TEvGetVDiskSpaceReportRequest::TEvGetVDiskSpaceReportRequest() = default;
@@ -122,6 +124,45 @@ namespace NKikimr {
         Record.SetBlockTabletFrom(blockTabletFrom);
         barrierFrom.Serialize(*Record.MutableBarrierFrom());
         Record.SetProtocol(protocol);
+    }
+
+    TEvBlobStorage::TEvVPhantomFlagStorageListChunksResult::TEvVPhantomFlagStorageListChunksResult() = default;
+
+    TEvBlobStorage::TEvVPhantomFlagStorageListChunksResult::TEvVPhantomFlagStorageListChunksResult(
+            NKikimrProto::EReplyStatus status, const TVDiskID& vdiskId) {
+        Record.SetStatus(status);
+        VDiskIDFromVDiskID(vdiskId, Record.MutableVDiskID());
+    }
+
+    TEvBlobStorage::TEvVPhantomFlagStorageListChunks::TEvVPhantomFlagStorageListChunks() = default;
+
+    TEvBlobStorage::TEvVPhantomFlagStorageListChunks::TEvVPhantomFlagStorageListChunks(
+            const TVDiskID& source, const TVDiskID& target) {
+        VDiskIDFromVDiskID(source, Record.MutableSourceVDiskID());
+        VDiskIDFromVDiskID(target, Record.MutableVDiskID());
+    }
+
+    TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult::TEvVPhantomFlagStorageReadChunkResult() = default;
+
+    TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult::TEvVPhantomFlagStorageReadChunkResult(
+            NKikimrProto::EReplyStatus status, const TVDiskID& vdiskId) {
+        Record.SetStatus(status);
+        VDiskIDFromVDiskID(vdiskId, Record.MutableVDiskID());
+    }
+
+    TString TEvBlobStorage::TEvVPhantomFlagStorageReadChunkResult::ToString() const {
+        return TStringBuilder() << "{Status# " << Record.GetStatus()
+            << " VDiskId# " << VDiskIDFromVDiskID(Record.GetVDiskID())
+            << " ChunkIndex# " << Record.GetChunkIndex() << " KeyBytes# " << Record.GetKeys().size() << "}";
+    }
+
+    TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TEvVPhantomFlagStorageReadChunk() = default;
+
+    TEvBlobStorage::TEvVPhantomFlagStorageReadChunk::TEvVPhantomFlagStorageReadChunk(
+            const TVDiskID& source, const TVDiskID& target, ui32 chunkIndex) {
+        VDiskIDFromVDiskID(source, Record.MutableSourceVDiskID());
+        VDiskIDFromVDiskID(target, Record.MutableVDiskID());
+        Record.SetChunkIndex(chunkIndex);
     }
 
     TEvGetSkeletonStateResult::TEvGetSkeletonStateResult(TActorId chunkKeeperActorId)

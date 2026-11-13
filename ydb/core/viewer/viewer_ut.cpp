@@ -4442,17 +4442,23 @@ Y_UNIT_TEST_SUITE(Viewer) {
         bool descriptionAvailable = true;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateResponse) {
-                SetWhiteboardGroupsForTest(reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev), nodeId);
+                auto* event = reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                SetWhiteboardGroupsForTest(event, nodeId);
+                // the second group belongs to a pool of another database
+                (*event)->Get()->Record.MutableBSGroupStateInfo(1)->SetStoragePoolName("other-pool");
             } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse) {
                 SetWhiteboardVDisksForTest(reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev));
             } else if (ev->GetTypeRewrite() == TEvStateStorage::EvBoardInfo) {
                 // A request with a database first resolves the endpoints board of the database and is
                 // rejected when the board is not available, which it is not for the root in this test.
-                auto* event = reinterpret_cast<TEvStateStorage::TEvBoardInfo::TPtr*>(&ev);
-                auto* record = (*event)->Get();
-                if (record->Path == "gpc+/Root") {
-                    using EStatus = TEvStateStorage::TEvBoardInfo::EStatus;
-                    const_cast<EStatus&>(record->Status) = EStatus::Ok;
+                // The status of the event is constant, so the event is replaced with an available one.
+                using EStatus = TEvStateStorage::TEvBoardInfo::EStatus;
+                const auto* info = ev->Get<TEvStateStorage::TEvBoardInfo>();
+                if (info->Path == "gpc+/Root" && info->Status != EStatus::Ok) {
+                    auto available = std::make_unique<TEvStateStorage::TEvBoardInfo>(EStatus::Ok, info->Path);
+                    available->InfoEntries = info->InfoEntries;
+                    ev.Reset(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender, available.release(),
+                        ev->Flags, ev->Cookie));
                 }
             } else if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySetResult) {
                 auto* event = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
@@ -4460,7 +4466,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 if (!resultSet.empty() && CanonizePath(resultSet.front().Path) == "/Root") {
                     TSchemeCacheNavigate::TEntry& entry(resultSet.front());
                     if (descriptionAvailable) {
-                        // the database owns the pool of the groups from SetWhiteboardGroupsForTest
+                        // the database owns the pool of the first group only
                         auto description = MakeIntrusive<TSchemeCacheNavigate::TDomainDescription>();
                         if (entry.DomainDescription) {
                             description->Kind = entry.DomainDescription->Kind;
@@ -4490,8 +4496,17 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 << " the description: " << response->Response->Body;
             NJson::TJsonValue json;
             UNIT_ASSERT_C(NJson::ReadJsonTree(response->Response->Body, &json), context);
-            // both groups are returned in both cases: with the description they belong to the pool of the database
-            UNIT_ASSERT_VALUES_EQUAL_C(json["TotalGroups"].GetUIntegerRobust(), 2, context);
+            std::set<TString> groupIds;
+            for (const auto& group : json["StorageGroups"].GetArray()) {
+                groupIds.insert(group["GroupId"].GetStringRobust());
+            }
+            // with the description only the group of the pool of the database is returned,
+            // without it the group of the other pool is returned as well
+            const std::set<TString> expectedGroupIds = expectDatabaseInfo
+                ? std::set<TString>{"1"}
+                : std::set<TString>{"1", "2"};
+            UNIT_ASSERT_C(groupIds == expectedGroupIds, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["TotalGroups"].GetUIntegerRobust(), expectedGroupIds.size(), context);
             UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "no-database-info"), !expectDatabaseInfo, context);
             UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "filter-not-applied"), !expectDatabaseInfo, context);
         };

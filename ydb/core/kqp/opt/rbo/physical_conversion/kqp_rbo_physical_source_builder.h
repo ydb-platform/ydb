@@ -43,6 +43,14 @@ public:
         return *this;
     }
 
+    // Tell column shards to send all rows of a key of the aggregate over this read
+    // to one compute task, as PRAGMA OptEnableOlapProvideComputeSharding asks.
+    TPhysicalSourceBuilder& WithOlapComputeSharding(const TOlapComputeSharding& computeSharding) {
+        Y_ENSURE(computeSharding.Read == &Read, "Compute sharding keys must belong to this read");
+        OlapComputeSharding = &computeSharding;
+        return *this;
+    }
+
     NPhysicalConvertionUtils::TStageBody BuildPhysicalOp() override;
 
     // The source input of a row read stage, set by BuildPhysicalOp. The body it returns reads the argument,
@@ -59,12 +67,16 @@ private:
     TExprNode::TPtr AddOlapAggregate(TExprNode::TPtr processLambda, TVector<TString>& outputFields) const;
     // Mark the DISTINCT key in the program and list its only output field.
     TExprNode::TPtr AddOlapDistinct(TExprNode::TPtr processLambda, TVector<TString>& outputFields) const;
+    // Make the program output only `outputFields`.
+    TExprNode::TPtr AddOlapExtractMembers(TExprNode::TPtr processLambda, const TVector<TString>& outputFields) const;
     // A program projection that casts `column` to Double into `field`.
     TExprBase BuildOlapDoubleCast(const TString& column, const TTypeAnnotationNode& columnType, const TString& field) const;
     // Rebuild the aggregate's outputs, its keys and partial states, from the program row.
     TExprNode::TPtr BuildOlapAggregateRow(const TProgramFields& fields) const;
     // The intermediate AVG state built from the sum and count in the program row.
     TExprNode::TPtr BuildOlapAverageState(const TOlapAggregation& aggregation, const TProgramFields& fields) const;
+    // Add the compute sharding keys to the read settings.
+    TExprNode::TPtr AddOlapComputeSharding(TExprNode::TPtr settings) const;
 
     TOpRead& Read;
     const TInfoUnitRegistry& Registry;
@@ -73,5 +85,6 @@ private:
     const TOlapAggregate* OlapAggregate = nullptr;
     const TOlapDistinct* OlapDistinct = nullptr;
     ui64 OlapDistinctLimit = 0;
+    const TOlapComputeSharding* OlapComputeSharding = nullptr;
     std::optional<TStageSource> StageSource;
 };

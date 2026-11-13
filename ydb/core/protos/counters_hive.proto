@@ -204,4 +204,5 @@ enum ETxTypes {
     TXTYPE_MON_MOVE_DATA = 74                             [(TxTypeOpts) = {Name: "TxMonMoveData"}];
     TXTYPE_MON_EVENTS = 75                                [(TxTypeOpts) = {Name: "TxMonEvents"}];
     TXTYPE_MON_NODE_INFO = 76                             [(TxTypeOpts) = {Name: "TxMonNodeInfo"}];
+    TXTYPE_REASSIGN_TABLETS = 77                          [(TxTypeOpts) = {Name: "TxReassignTablets"}];
 }

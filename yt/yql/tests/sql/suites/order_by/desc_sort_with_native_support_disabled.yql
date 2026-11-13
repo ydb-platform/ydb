@@ -1,0 +1,6 @@
+USE plato;
+PRAGMA yt.UseNativeDescSort = 'false';
+
+INSERT INTO Output
+SELECT * FROM Input
+ORDER BY key DESC;

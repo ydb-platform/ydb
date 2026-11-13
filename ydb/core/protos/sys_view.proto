@@ -3,6 +3,7 @@ package NKikimrSysView;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/core/protos/labeled_counters.proto";
+import "ydb/core/protos/bridge_storage.proto";
 import "ydb/core/protos/table_metrics_settings.proto";
 import "ydb/core/protos/tablet.proto";
 
@@ -313,6 +314,9 @@ message TGroupInfo {
     // is only what the scan under way has found so far
     optional bool BridgeSyncRemainingBytesComplete = 33;
     optional uint64 BridgeSyncCopyBytesPerSecond = 34; // copy rate into this part over the last minute, in blob bytes
+    // BSC observation time of confirmed progress in the current sync round, in Unix microseconds.
+    optional uint64 BridgeSyncLastProgressTimestamp = 35;
+    optional NKikimrBridge.ESynchronizationStatus BridgeSyncStatus = 36;
 }
 
 message TGroupEntry {

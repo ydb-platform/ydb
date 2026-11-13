@@ -8,6 +8,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
+#include <util/string/join.h>
 
 namespace NKikimr {
 namespace {
@@ -160,6 +161,120 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
 
     Y_UNIT_TEST(GuardianRetriesRegistrationWithStaleSignature) {
         CheckGuardianRegistration(ERegistrationFailure::StaleSignature);
+    }
+
+    // The guardian has registered at the replicas. A follower registers at the first replica, the guardian resolves
+    // the same replicas again and keeps its children, then another follower registers at the second replica. The
+    // follower list for the leader must keep the first follower.
+    Y_UNIT_TEST(ResolveKeepsFollowersOfKeptChildren) {
+        TTestBasicRuntime runtime;
+        SetupStateStorage(runtime, 0);
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId edge = runtime.AllocateEdgeActor();
+        const TActorId leader = runtime.AllocateEdgeActor();
+        const TActorId tabletLeader = runtime.AllocateEdgeActor();
+
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvResolveReplicas(tabletId)));
+        auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+        const auto replicas = resolved->Get()->GetPlainReplicas();
+        UNIT_ASSERT_GE(replicas.size(), 2u);
+
+        THashSet<TActorId> registeredAt;
+        auto updates = runtime.AddObserver<TEvStateStorage::TEvReplicaUpdate>([&](auto& ev) {
+            if (ev->Get()->Record.GetIsGuardian() && ev->Get()->Record.GetTabletID() == tabletId) {
+                registeredAt.insert(ev->Recipient);
+            }
+        });
+        TVector<TActorId> followerList; // the latest list the leader got
+        auto refreshes = runtime.AddObserver<TEvTablet::TEvFollowerListRefresh>([&](auto& ev) {
+            if (ev->Recipient == leader) {
+                followerList = ev->Get()->FollowerList;
+            }
+        });
+        const TActorId guardian = runtime.Register(CreateStateStorageTabletGuardian(tabletId, leader, tabletLeader, 1));
+        runtime.WaitFor("the guardian registered at every replica", [&] {
+            return registeredAt.size() == replicas.size();
+        }, TDuration::Seconds(10));
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        auto registerFollower = [&](const TActorId& replica) {
+            const TActorId follower = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(replica, runtime.AllocateEdgeActor(), new TEvStateStorage::TEvReplicaRegFollower(
+                tabletId, 1, follower, runtime.AllocateEdgeActor(), false, 0, 0)));
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            return follower;
+        };
+        const TActorId x = registerFollower(replicas[0]);
+        UNIT_ASSERT_C(Find(followerList, x) != followerList.end(), JoinSeq(", ", followerList));
+
+        // the same replicas, so the guardian keeps its children
+        runtime.Send(new IEventHandle(guardian, MakeStateStorageProxyID(), resolved->Release().Release()), 0, true);
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+
+        const TActorId y = registerFollower(replicas[1]);
+        UNIT_ASSERT_C(Find(followerList, y) != followerList.end(), JoinSeq(", ", followerList));
+        UNIT_ASSERT_C(Find(followerList, x) != followerList.end(),
+            "the follower of the kept child is lost: " << JoinSeq(", ", followerList));
+    }
+
+    // The guardian has registered at the replicas, and a follower registers at the first replica only. The guardian
+    // resolves the replicas again without the first one, so the child that reported the follower goes away. The
+    // leader must get the list without that follower at once.
+    Y_UNIT_TEST(ResolveDropsFollowersOfRemovedChildren) {
+        TTestBasicRuntime runtime;
+        SetupStateStorage(runtime, 0);
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId edge = runtime.AllocateEdgeActor();
+        const TActorId leader = runtime.AllocateEdgeActor();
+        const TActorId tabletLeader = runtime.AllocateEdgeActor();
+
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvResolveReplicas(tabletId)));
+        auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+        const auto replicas = resolved->Get()->GetPlainReplicas();
+        UNIT_ASSERT_GE(replicas.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(resolved->Get()->ReplicaGroups.size(), 1);
+
+        THashSet<TActorId> registeredAt;
+        auto updates = runtime.AddObserver<TEvStateStorage::TEvReplicaUpdate>([&](auto& ev) {
+            if (ev->Get()->Record.GetIsGuardian() && ev->Get()->Record.GetTabletID() == tabletId) {
+                registeredAt.insert(ev->Recipient);
+            }
+        });
+        TVector<TActorId> followerList; // the latest list the leader got
+        ui32 refreshes = 0;
+        auto refreshObserver = runtime.AddObserver<TEvTablet::TEvFollowerListRefresh>([&](auto& ev) {
+            if (ev->Recipient == leader) {
+                followerList = ev->Get()->FollowerList;
+                ++refreshes;
+            }
+        });
+        const TActorId guardian = runtime.Register(CreateStateStorageTabletGuardian(tabletId, leader, tabletLeader, 1));
+        runtime.WaitFor("the guardian registered at every replica", [&] {
+            return registeredAt.size() == replicas.size();
+        }, TDuration::Seconds(10));
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        const TActorId follower = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(replicas[0], runtime.AllocateEdgeActor(), new TEvStateStorage::TEvReplicaRegFollower(
+            tabletId, 1, follower, runtime.AllocateEdgeActor(), false, 0, 0)));
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_C(Find(followerList, follower) != followerList.end(), JoinSeq(", ", followerList));
+
+        // the same replicas but the first one, so its child goes away along with the follower it reported
+        auto withoutFirst = resolved->Release();
+        auto& groupReplicas = withoutFirst->ReplicaGroups[0].Replicas;
+        groupReplicas.erase(groupReplicas.begin());
+        const ui32 refreshesBefore = refreshes;
+        runtime.Send(new IEventHandle(guardian, MakeStateStorageProxyID(), withoutFirst.Release()), 0, true);
+        runtime.WaitFor("the leader gets the list again", [&] { return refreshes > refreshesBefore; },
+            TDuration::Seconds(1));
+
+        UNIT_ASSERT_C(refreshes > refreshesBefore, "the leader didn't get the list again");
+        UNIT_ASSERT_C(followerList.empty(), "the follower of the removed child is kept: " << JoinSeq(", ", followerList));
     }
 }
 

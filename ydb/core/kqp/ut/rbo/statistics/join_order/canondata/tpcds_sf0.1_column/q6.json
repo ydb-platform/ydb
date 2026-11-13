@@ -3,7 +3,7 @@
   "args":
     [
       {
-        "op_name":"LeftJoin (BlockHash)",
+        "op_name":"InnerJoin (BlockHash)",
         "args":
           [
             {
@@ -11,7 +11,7 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (BlockHash)",
+                    "op_name":"LeftJoin (BlockHash)",
                     "args":
                       [
                         {
@@ -55,26 +55,26 @@
                             ]
                         },
                         {
-                          "op_name":"TableFullScan",
-                          "table":"customer"
+                          "op_name":"HashShuffle",
+                          "args":
+                            [
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"item"
+                              }
+                            ]
                         }
                       ]
                   },
                   {
                     "op_name":"TableFullScan",
-                    "table":"customer_address"
+                    "table":"customer"
                   }
                 ]
             },
             {
-              "op_name":"HashShuffle",
-              "args":
-                [
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"item"
-                  }
-                ]
+              "op_name":"TableFullScan",
+              "table":"customer_address"
             }
           ]
       }

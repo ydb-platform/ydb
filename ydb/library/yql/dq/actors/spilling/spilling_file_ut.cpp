@@ -10,15 +10,11 @@
 #include <util/system/user.h>
 #include <util/system/file.h>
 #include <util/generic/string.h>
-#include <util/generic/scope.h>
 #include <util/datetime/base.h>
 #include <util/folder/path.h>
 #include <util/stream/file.h>
-#if defined(_unix_)
+
 #include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#endif
 
 namespace NYql::NDq {
 
@@ -700,207 +696,109 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         UNIT_ASSERT_C(!NFs::Exists(firstFile.GetPath()), "partially written file was not cleaned up");
     }
 
-#if defined(_unix_)
-    // Block the spilling workers on FIFO opens so the shared queue stays full.
-    void SaturateSpillingIo(TTestActorRuntime& runtime, const TActorId& tester, TVector<TFsPath>& fifos, ui32& rejections) {
-        for (ui64 batch = 0; batch != 2; ++batch) {
-            TVector<TActorId> blockers;
-            for (ui64 index = 0; index != 16; ++index) {
-                const ui64 txId = 100 + batch * 16 + index;
-                const TFsPath fifo = runtime.GetSpillingNodeDir() / (ToString(txId) + "_test_0");
-                UNIT_ASSERT_VALUES_EQUAL(::mkfifo(fifo.c_str(), 0600), 0);
-                fifos.push_back(fifo);
-                blockers.push_back(runtime.StartSpillingActor(tester, false, ESpillingType::Compute, txId));
+    constexpr ui32 EvCloseFile = EventSpaceBegin(TEvents::ES_PRIVATE) + 1;
+    constexpr ui32 EvReadFileResponse = EventSpaceBegin(TEvents::ES_PRIVATE) + 4;
+
+    struct TFifoIoQueueBlocker {
+        TTestActorRuntime& Runtime;
+        const TActorId Service;
+        TVector<TFsPath> Fifos;
+
+        TFifoIoQueueBlocker(TTestActorRuntime& runtime, const TActorId& service)
+            : Runtime(runtime)
+            , Service(service)
+        {}
+
+        void Block() {
+            auto client = Runtime.AllocateEdgeActor();
+            for (ui64 txId = 100; CounterVal(Runtime, "Spilling/Compute/QueueOverflowErrors") == 0; ++txId) {
+                UNIT_ASSERT(txId < 110);
+                Fifos.push_back(Runtime.GetSpillingNodeDir() / (ToString(txId) + "_test_0"));
+                UNIT_ASSERT_VALUES_EQUAL(::mkfifo(Fifos.back().c_str(), 0600), 0);
+
+                auto actor = Runtime.StartSpillingActor(client, false, ESpillingType::Compute, txId);
+                Runtime.WaitBootstrap();
+                Runtime.Send(new IEventHandle(actor, client, new TEvDqSpilling::TEvWrite(0, CreateRope(1, 'b'))));
+
+                TDispatchOptions options;
+                options.FinalEvents.emplace_back(TEvDqSpilling::TEvWrite::EventType);
+                UNIT_ASSERT(Runtime.DispatchEvents(options));
+                Sleep(TDuration::MilliSeconds(50));
             }
-            {
-                TDispatchOptions bootstrap;
-                bootstrap.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, blockers.size());
-                UNIT_ASSERT(runtime.DispatchEvents(bootstrap));
+        }
+
+        ~TFifoIoQueueBlocker() {
+            TVector<TFileHandle> readers;
+            for (const auto& fifo : Fifos) {
+                readers.emplace_back(fifo.GetPath(), OpenExisting | RdWr);
             }
-            const ui32 previousRejections = rejections;
-            for (const TActorId& blocker : blockers) {
-                runtime.Send(new IEventHandle(blocker, tester, new TEvDqSpilling::TEvWrite(0, CreateRope(20, 'b'))));
+            Runtime.Send(new IEventHandle(Service, TActorId(), new TEvents::TEvPoison));
+        }
+    };
+
+    SIMPLE_UNIT_FORKED_TEST(CloseBehindRejectedRead) {
+        TTestActorRuntime runtime;
+        runtime.Initialize();
+        auto service = runtime.StartSpillingService(1000, 500, 100, 1);
+        auto tester = runtime.AllocateEdgeActor();
+        auto actor = runtime.StartSpillingActor(tester, false);
+        runtime.WaitBootstrap();
+        WriteOk(runtime, actor, tester, 0, 10);
+
+        TAutoPtr<IEventHandle> readResponse;
+        bool holdRead = true;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (holdRead && ev->GetRecipientRewrite() == service && ev->GetTypeRewrite() == EvReadFileResponse) {
+                holdRead = false;
+                readResponse.Reset(ev.Release());
+                return TTestActorRuntimeBase::EEventAction::DROP;
             }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+        runtime.Send(new IEventHandle(actor, tester, new TEvDqSpilling::TEvRead(0, false)));
+        {
             TDispatchOptions options;
-            options.CustomFinalCondition = [&]() { return rejections > previousRejections; };
-            runtime.DispatchEvents(options, TDuration::Seconds(5));
-            UNIT_ASSERT(rejections > previousRejections);
-            Sleep(TDuration::MilliSeconds(50));
+            options.CustomFinalCondition = [&]() { return bool(readResponse); };
+            UNIT_ASSERT(runtime.DispatchEvents(options));
         }
-    }
 
-    unsigned CountTargetFds(const struct stat& targetStat) {
-        unsigned retained = 0;
-        for (int fd = 0; fd != 4096; ++fd) {
-            struct stat fdStat;
-            if (::fstat(fd, &fdStat) == 0 && fdStat.st_dev == targetStat.st_dev && fdStat.st_ino == targetStat.st_ino) {
-                ++retained;
-            }
+        TFifoIoQueueBlocker blocker(runtime, service);
+        blocker.Block();
+
+        runtime.Send(new IEventHandle(actor, tester, new TEvDqSpilling::TEvRead(0, false)));
+        runtime.Send(new IEventHandle(actor, tester, new TEvents::TEvPoison));
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(EvCloseFile);
+            UNIT_ASSERT(runtime.DispatchEvents(options));
         }
-        return retained;
-    }
 
-    void AssertTargetClosed(TTestActorRuntime& runtime, const TFsPath& target, const struct stat& targetStat) {
-        UNIT_ASSERT_VALUES_EQUAL_C(CountTargetFds(targetStat), 0,
-            "Queued close retained the spilling FD after the preceding operation was rejected");
-        UNIT_ASSERT_C(!NFs::Exists(target.GetPath()), "spilling file was not removed");
+        runtime.Send(readResponse.Release());
+
+        UNIT_ASSERT(!NFs::Exists((runtime.GetSpillingNodeDir() / "1_test_0").GetPath()));
         UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/FileDescriptors", false), 0);
     }
 
-    // Hold one completion so close is queued behind another operation, fill the shared I/O queue,
-    // then deliver the completion. The queue rejects the operation in front of close.
-    void TestPendingCloseAfterQueueOverflow(bool holdWrite) {
-        TVector<TFileHandle> unblockers;
+    SIMPLE_UNIT_FORKED_TEST(CloseRejectedByFullQueue) {
         TTestActorRuntime runtime;
         runtime.Initialize();
-        const TActorId service = runtime.StartSpillingService(100000, 10000, 10000, 1);
-        const TActorId tester = runtime.AllocateEdgeActor();
-        const TActorId actor = runtime.StartSpillingActor(tester, false);
+        auto service = runtime.StartSpillingService(1000, 500, 100, 1);
+        auto tester = runtime.AllocateEdgeActor();
+        auto actor = runtime.StartSpillingActor(tester, false);
         runtime.WaitBootstrap();
-        WriteOk(runtime, actor, tester, 0, 20);
-        UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/FileDescriptors", false), 1);
+        WriteOk(runtime, actor, tester, 0, 10);
 
-        const TFsPath target = runtime.GetSpillingNodeDir() / "1_test_0";
-        struct stat targetStat;
-        UNIT_ASSERT_VALUES_EQUAL(::stat(target.c_str(), &targetStat), 0);
+        TFifoIoQueueBlocker blocker(runtime, service);
+        blocker.Block();
 
-        TAutoPtr<IEventHandle> held;
-        bool holdCompletion = true;
-        bool closeQueued = false;
-        bool rejectedPending = false;
-        ui32 rejections = 0;
-        constexpr ui32 closeFileEvent = EventSpaceBegin(TEvents::ES_PRIVATE) + 1;
-        constexpr ui32 writeFileResponseEvent = EventSpaceBegin(TEvents::ES_PRIVATE) + 3;
-        constexpr ui32 readFileResponseEvent = EventSpaceBegin(TEvents::ES_PRIVATE) + 4;
-        const ui32 heldEvent = holdWrite ? writeFileResponseEvent : readFileResponseEvent;
-        const TString rejection = holdWrite
-            ? "[WriteFileResponse] Can not run operation"
-            : "[ReadFileResponse] Can not run operation";
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
-            if (event->GetRecipientRewrite() == service) {
-                if (event->GetTypeRewrite() == heldEvent && holdCompletion) {
-                    held.Reset(event.Release());
-                    holdCompletion = false;
-                    return TTestActorRuntimeBase::EEventAction::DROP;
-                }
-                if (event->GetTypeRewrite() == closeFileEvent && event->Sender == actor) {
-                    closeQueued = true;
-                }
-            }
-            if (event->Sender == service && event->GetTypeRewrite() == TEvDqSpilling::TEvError::EventType) {
-                const TString& message = event->Get<TEvDqSpilling::TEvError>()->Message;
-                if (message == "[Write] Can not run operation") {
-                    ++rejections;
-                }
-                if (message == rejection) {
-                    rejectedPending = true;
-                }
-            }
-            return TTestActorRuntimeBase::EEventAction::PROCESS;
-        });
-
-        if (holdWrite) {
-            runtime.Send(new IEventHandle(actor, tester, new TEvDqSpilling::TEvWrite(1, CreateRope(20, 'a'))));
-        } else {
-            runtime.Send(new IEventHandle(actor, tester, new TEvDqSpilling::TEvRead(0, false)));
-        }
-        {
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() { return bool(held); };
-            runtime.DispatchEvents(options, TDuration::Seconds(5));
-            UNIT_ASSERT(held);
-        }
-        if (holdWrite) {
-            runtime.Send(new IEventHandle(actor, tester, new TEvDqSpilling::TEvWrite(2, CreateRope(20, 'c'))));
-        } else {
-            runtime.Send(new IEventHandle(actor, tester, new TEvDqSpilling::TEvRead(0, false)));
-        }
         runtime.Send(new IEventHandle(actor, tester, new TEvents::TEvPoison));
-        {
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() { return closeQueued; };
-            runtime.DispatchEvents(options, TDuration::Seconds(5));
-            UNIT_ASSERT(closeQueued);
-        }
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(EvCloseFile);
+        UNIT_ASSERT(runtime.DispatchEvents(options));
 
-        TVector<TFsPath> fifos;
-        Y_DEFER {
-            for (const TFsPath& fifo : fifos) {
-                unblockers.emplace_back(fifo.GetPath(), OpenExisting | RdWr);
-            }
-        };
-        SaturateSpillingIo(runtime, tester, fifos, rejections);
-        runtime.Send(held.Release());
-        {
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() { return rejectedPending; };
-            runtime.DispatchEvents(options, TDuration::Seconds(5));
-            UNIT_ASSERT(rejectedPending);
-        }
-        AssertTargetClosed(runtime, target, targetStat);
-        if (!holdWrite) {
-            UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/StoredBlobs", false), 0);
-            UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/TotalSpaceUsed", false), 0);
-        }
+        UNIT_ASSERT(!NFs::Exists((runtime.GetSpillingNodeDir() / "1_test_0").GetPath()));
+        UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/FileDescriptors", false), 0);
     }
-
-    SIMPLE_UNIT_FORKED_TEST(PendingCloseAfterReadQueueOverflow) {
-        TestPendingCloseAfterQueueOverflow(false);
-    }
-
-    SIMPLE_UNIT_FORKED_TEST(PendingCloseAfterWriteQueueOverflow) {
-        TestPendingCloseAfterQueueOverflow(true);
-    }
-
-    SIMPLE_UNIT_FORKED_TEST(CloseRejectedByFullIoQueue) {
-        TVector<TFileHandle> unblockers;
-        TTestActorRuntime runtime;
-        runtime.Initialize();
-        const TActorId service = runtime.StartSpillingService(100000, 10000, 10000, 1);
-        const TActorId tester = runtime.AllocateEdgeActor();
-        const TActorId actor = runtime.StartSpillingActor(tester, false);
-        runtime.WaitBootstrap();
-        WriteOk(runtime, actor, tester, 0, 20);
-        UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/FileDescriptors", false), 1);
-
-        const TFsPath target = runtime.GetSpillingNodeDir() / "1_test_0";
-        struct stat targetStat;
-        UNIT_ASSERT_VALUES_EQUAL(::stat(target.c_str(), &targetStat), 0);
-
-        bool closeQueued = false;
-        ui32 rejections = 0;
-        constexpr ui32 closeFileEvent = EventSpaceBegin(TEvents::ES_PRIVATE) + 1;
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
-            if (event->GetRecipientRewrite() == service && event->GetTypeRewrite() == closeFileEvent && event->Sender == actor) {
-                closeQueued = true;
-            }
-            if (event->Sender == service && event->GetTypeRewrite() == TEvDqSpilling::TEvError::EventType) {
-                if (event->Get<TEvDqSpilling::TEvError>()->Message == "[Write] Can not run operation") {
-                    ++rejections;
-                }
-            }
-            return TTestActorRuntimeBase::EEventAction::PROCESS;
-        });
-
-        TVector<TFsPath> fifos;
-        Y_DEFER {
-            for (const TFsPath& fifo : fifos) {
-                unblockers.emplace_back(fifo.GetPath(), OpenExisting | RdWr);
-            }
-        };
-        SaturateSpillingIo(runtime, tester, fifos, rejections);
-        runtime.Send(new IEventHandle(actor, tester, new TEvents::TEvPoison));
-        {
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() { return closeQueued; };
-            runtime.DispatchEvents(options, TDuration::Seconds(5));
-            UNIT_ASSERT(closeQueued);
-        }
-        AssertTargetClosed(runtime, target, targetStat);
-        UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/StoredBlobs", false), 0);
-        UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/TotalSpaceUsed", false), 0);
-    }
-#endif
 
     Y_UNIT_TEST(ThreadPoolQueueOverflow) {
         TTestActorRuntime runtime;

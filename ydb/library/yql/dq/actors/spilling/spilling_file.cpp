@@ -375,10 +375,7 @@ private:
             }
 
             if (!RunOp("CloseFile", std::move(closeOp), fd)) {
-                // AddAndOwn destroys the close operation when the shared queue is full.
-                // Its destructor releases the descriptors; the counters still have to be updated.
                 LOG_E("[CloseFile] Can not run operation");
-                Counters_->GetTypeCounters(fd.SpillingType).QueueOverflowErrors->Inc();
                 FinishClose(it);
             }
         } else {
@@ -556,7 +553,14 @@ private:
         if (RunNextOp(fd)) {
             Send(msg.Client, new TEvDqSpilling::TEvWriteResult(msg.BlobId));
         } else {
-            RejectBlockedQueue(it, msg.Client, "[WriteFileResponse] Can not run operation", tc);
+            TString error = "[WriteFileResponse] Can not run operation";
+            LOG_E(error);
+
+            ReplyError(msg.Client, error, tc);
+            tc.QueueOverflowErrors->Inc();
+            if (fd.CloseAt) {
+                FinishClose(it);
+            }
             return;
         }
     }
@@ -708,7 +712,14 @@ private:
         if (RunNextOp(fd)) {
             Send(msg.Client, new TEvDqSpilling::TEvReadResult(msg.BlobId, std::move(msg.Blob)));
         } else {
-            RejectBlockedQueue(it, msg.Client, "[ReadFileResponse] Can not run operation", tc);
+            TString error = "[ReadFileResponse] Can not run operation";
+            LOG_E(error);
+
+            ReplyError(msg.Client, error, tc);
+            tc.QueueOverflowErrors->Inc();
+            if (fd.CloseAt) {
+                FinishClose(it);
+            }
             return;
         }
     }
@@ -906,36 +917,18 @@ private:
         return RunOp(opName, std::move(op), fd);
     }
 
-    // RunNextOp already dropped the operation the shared queue refused. HasActiveOp is clear,
-    // so nothing else will advance this file. A close waiting behind that operation owns the
-    // descriptors and has to be finished on this thread: the queue has no room to run it.
-    void RejectBlockedQueue(TFilesIt it, const TActorId& client, const TString& error,
-        TSpillingCounters::TTypeCounters& tc)
-    {
-        LOG_E(error);
-        tc.QueueOverflowErrors->Inc();
-        if (it->second.CloseAt) {
-            FinishClose(it);
-        }
-        ReplyError(client, error, tc);
-    }
-
     void FinishClose(TFilesIt it) {
-        auto& fd = it->second;
-        // Destroying a queued close releases and unlinks its files.
-        fd.Ops.clear();
-        fd.HasActiveOp = false;
-
-        auto& tc = Counters_->GetTypeCounters(fd.SpillingType);
-        tc.FileDescriptors->Sub(fd.PartsList.size());
+        auto& tc = Counters_->GetTypeCounters(it->second.SpillingType);
+        tc.FileDescriptors->Sub(it->second.PartsList.size());
 
         ui64 blobs = 0;
-        for (const auto& fp : fd.PartsList) {
+        for (auto& fp : it->second.PartsList) {
             blobs += fp.Blobs.size();
         }
 
         tc.StoredBlobs->Sub(blobs);
-        tc.TotalSpaceUsed->Sub(fd.TotalSize);
+        tc.TotalSpaceUsed->Sub(it->second.TotalSize);
+
         MoveFileToClosed(it);
     }
 
@@ -958,11 +951,7 @@ private:
         TInstant Ts = TInstant::Now();
 
         ~TCloseFileOp() override {
-            // AddAndOwn deletes the operation when the queue is full, without Process().
-            try {
-                Release();
-            } catch (...) {
-            }
+            CloseFiles();
         }
 
         void Process(void*) override {
@@ -974,27 +963,21 @@ private:
 
             A_LOG_D("[CloseFile async] from: " << Client << ", waitTime: " << resp->WaitTime);
 
-            Release();
+            CloseFiles();
             resp->WorkTime = TInstant::Now() - now;
 
             ActorSystem->Send(Service, resp.Release());
         }
 
-        void Release() {
+        void CloseFiles() {
             for (ui64 i = 0; i < FileHandles.size(); ++i) {
-                try {
-                    FileHandles[i].Reset();
+                FileHandles[i].Reset();
 #ifdef REMOVE_FILES
-                    if (!FileNames[i].empty()) {
-                        ::unlink(FileNames[i].c_str());
-                        FileNames[i].clear();
-                    }
+                ::unlink(FileNames[i].c_str());
 #endif
-                } catch (const yexception& e) {
-                    A_LOG_E("[CloseFile async] error while closing file " << FileNames[i] << ": " << e.what());
-                } catch (...) {
-                }
             }
+            FileHandles.clear();
+            FileNames.clear();
         }
     };
 

@@ -3339,6 +3339,16 @@
                 "ColumnId": 21,
                 "ColumnName": "IncludeIndexData",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "CancelRequestedBy",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "CancelRequestTime",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -3365,7 +3375,9 @@
                     18,
                     19,
                     20,
-                    21
+                    21,
+                    22,
+                    23
                 ],
                 "RoomID": 0,
                 "Codec": 0,

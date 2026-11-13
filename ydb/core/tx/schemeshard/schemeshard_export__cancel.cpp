@@ -61,7 +61,9 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         const bool publishingCompletion = exportInfo->IsWorking() && allItemsDone;
         const bool committingS3Export = exportInfo->Kind == TExportInfo::EKind::S3
             && (exportInfo->IsAutoDropping() || publishingCompletion);
-        if (exportInfo->IsFinished() || exportInfo->IsDropping() || committingS3Export) {
+        // An existing cancellation may have been initiated by another caller or
+        // an internal failure. Preserve its attribution and original issue.
+        if (exportInfo->IsFinished() || exportInfo->IsCancelling() || exportInfo->IsDropping() || committingS3Export) {
             Send(Request->Sender, std::move(response), 0, Request->Cookie);
             return true;
         }
@@ -71,6 +73,10 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         );
 
         exportInfo->Issue = "Cancelled manually";
+        exportInfo->CancelRequestTime = TAppData::TimeProvider->Now();
+        if (request.HasUserSID()) {
+            exportInfo->CancelRequestedBy = request.GetUserSID();
+        }
 
         NIceDb::TNiceDb db(txc.DB);
         if (auto uploader = std::exchange(exportInfo->ExportMetadataUploader, {})) {

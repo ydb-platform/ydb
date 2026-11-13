@@ -10,6 +10,8 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/grpc_services/rpc_export_base.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -37,6 +39,7 @@
 #include <library/cpp/testing/hook/hook.h>
 
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
 #include <arrow/api.h>
@@ -59,6 +62,19 @@ namespace {
 
     using NKikimr::EBackupTestDataFormat;
     namespace TEvKesus = NKikimr::NKesus::TEvKesus;
+
+    template <typename TRpc>
+    typename TRpc::TResponse CallOperationRpc(TTestBasicRuntime& runtime,
+            typename TRpc::TRequest request, const TString& userSID = {}) {
+        TMaybe<TString> token;
+        if (userSID) {
+            token = NACLib::TUserToken(userSID, TVector<TString>{}).SerializeAsString();
+        }
+        auto future = NKikimr::NRpcService::DoLocalRpc<TRpc>(
+            std::move(request), "/MyRoot", token, runtime.GetActorSystem(0));
+        runtime.WaitFor("operation RPC response", [&] { return future.HasValue() || future.HasException(); });
+        return future.GetValueSync();
+    }
 
     const char* ExportDataFormatSettings(EBackupTestDataFormat format) {
         switch (format) {
@@ -2419,6 +2435,9 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         const ui64 exportId = StartCompletionMarkerExport();
         Runtime().WaitFor("operation marker upload", [&] { return !markers.empty(); });
         TestCancelExport(Runtime(), 102, "/MyRoot", exportId);
+        const auto entry = TestGetExport(Runtime(), exportId, "/MyRoot").GetResponse().GetEntry();
+        UNIT_ASSERT(!entry.HasCancelRequestedBy());
+        UNIT_ASSERT(!entry.HasCancelRequestTime());
         markers.Stop().Unblock();
         Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
@@ -4355,6 +4374,11 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+        const ui64 exportId = txId;
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+        const auto completed = TestGetExport(Runtime(), exportId, "/MyRoot").GetResponse().GetEntry();
+        UNIT_ASSERT(!completed.HasCancelRequestedBy());
+        UNIT_ASSERT(!completed.HasCancelRequestTime());
     }
 
     struct TWaitExportItemStateDelayFunc {
@@ -4418,6 +4442,12 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
         UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Injected schema upload failure");
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+        const auto cancelled = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+            .GetResponse().GetEntry();
+        UNIT_ASSERT(!cancelled.HasCancelRequestedBy());
+        UNIT_ASSERT(!cancelled.HasCancelRequestTime());
+        UNIT_ASSERT_VALUES_EQUAL(cancelled.GetIssues(0).message(), entry.GetIssues(0).message());
 
         poison.Stop().Unblock();
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
@@ -4488,10 +4518,88 @@ partitioning_settings {
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 
-    Y_UNIT_TEST(CancelledExportEndTime) {
+    Y_UNIT_TEST_QUAD(CancelledExportSameSecond, RebootBeforeRead, ListOperations) {
+        Env();
+        ui64 txId = 100;
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        // Keep the export in preparation so cancellation finishes immediately.
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> proposals(Runtime(), [](auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMkDir;
+        });
+        const ui64 exportId = ++txId;
+        TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_path: "/MyRoot/Table" destination_prefix: "table" }
+            }
+        )", S3Port()));
+        Runtime().WaitFor("export directory proposal", [&] { return !proposals.empty(); });
+
+        const auto requestedAt = TInstant::Seconds(Runtime().GetCurrentTime().Seconds() + 1)
+            + TDuration::MicroSeconds(123456);
+        Runtime().UpdateCurrentTime(requestedAt);
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+        proposals.Stop().clear();
+
+        if constexpr (RebootBeforeRead) {
+            RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        }
+
+        const auto operationId = NKikimr::NOperationId::ProtoToString(
+            NKikimr::NGRpcService::TExportConv::MakeOperationId(exportId, NKikimrExport::TExport::kExportToS3Settings));
+        Ydb::Operations::Operation operation;
+        if constexpr (ListOperations) {
+            using TRpc = NKikimr::NGRpcService::TGrpcRequestNoOperationCall<
+                Ydb::Operations::ListOperationsRequest, Ydb::Operations::ListOperationsResponse>;
+            Ydb::Operations::ListOperationsRequest request;
+            request.set_kind("export/s3");
+            const auto response = CallOperationRpc<TRpc>(Runtime(), request);
+            UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.operations_size(), 1);
+            operation = response.operations(0);
+        } else {
+            using TRpc = NKikimr::NGRpcService::TGrpcRequestOperationCall<
+                Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>;
+            Ydb::Operations::GetOperationRequest request;
+            request.set_id(operationId);
+            operation = CallOperationRpc<TRpc>(Runtime(), request).operation();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(operation.id(), operationId);
+        UNIT_ASSERT(operation.ready());
+        UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT(operation.has_cancel_request_time());
+        UNIT_ASSERT(operation.has_end_time());
+        const auto& cancelledAt = operation.cancel_request_time();
+        const auto& finishedAt = operation.end_time();
+        UNIT_ASSERT_VALUES_EQUAL(cancelledAt.seconds(), requestedAt.Seconds());
+        UNIT_ASSERT_VALUES_EQUAL(finishedAt.seconds(), requestedAt.Seconds());
+        UNIT_ASSERT_C(std::make_pair(cancelledAt.seconds(), cancelledAt.nanos())
+            <= std::make_pair(finishedAt.seconds(), finishedAt.nanos()), operation.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(cancelledAt.nanos(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(finishedAt.nanos(), 0);
+    }
+
+    Y_UNIT_TEST_TWIN(CancelledExportEndTime, Authenticated) {
         Env(); // Init test env
         Runtime().UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
+        const TString creator = "creator@builtin";
+        const TString canceller = "canceller@builtin";
+        const TString retryCaller = "retry@builtin";
+        NACLib::TDiffACL acl;
+        for (const auto& sid : {canceller, retryCaller}) {
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead | NACLib::GenericWrite, sid);
+        }
+        TestModifyACL(Runtime(), ++txId, "/", "MyRoot", acl.SerializeAsString(), "");
+        Env().TestWaitNotification(Runtime(), txId);
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -4520,7 +4628,7 @@ partitioning_settings {
                 destination_prefix: ""
               }
             }
-        )", S3Port()));
+        )", S3Port()), creator);
         const ui64 exportId = txId;
 
         Runtime().AdvanceCurrentTime(TDuration::Seconds(30)); // doing export
@@ -4542,13 +4650,76 @@ partitioning_settings {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+        using TCancelRpc = NKikimr::NGRpcService::TGrpcRequestNoOperationCall<
+            Ydb::Operations::CancelOperationRequest, Ydb::Operations::CancelOperationResponse>;
+        using TGetRpc = NKikimr::NGRpcService::TGrpcRequestOperationCall<
+            Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>;
+        using TListRpc = NKikimr::NGRpcService::TGrpcRequestNoOperationCall<
+            Ydb::Operations::ListOperationsRequest, Ydb::Operations::ListOperationsResponse>;
+        const auto operationId = NKikimr::NOperationId::ProtoToString(
+            NKikimr::NGRpcService::TExportConv::MakeOperationId(exportId, NKikimrExport::TExport::kExportToS3Settings));
+        Ydb::Operations::CancelOperationRequest cancelRequest;
+        cancelRequest.set_id(operationId);
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest, "denied@builtin").status(),
+            Ydb::StatusIds::UNAUTHORIZED);
+        const auto before = TestGetExport(Runtime(), exportId, "/MyRoot").GetResponse().GetEntry();
+        UNIT_ASSERT(!before.HasCancelRequestTime());
+        UNIT_ASSERT(!before.HasCancelRequestedBy());
+
+        // Subsecond request times must use the same whole-second precision as EndTime.
+        Runtime().UpdateCurrentTime(TInstant::Seconds(Runtime().GetCurrentTime().Seconds() + 1)
+            + TDuration::MicroSeconds(123456));
+        const auto beforeCancel = TInstant::Seconds(Runtime().GetCurrentTime().Seconds());
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest,
+            Authenticated ? canceller : TString()).status(), Ydb::StatusIds::SUCCESS);
 
         auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         auto entry = desc.GetResponse().GetEntry();
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(!entry.HasEndTime());
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetUserSID(), creator);
+        UNIT_ASSERT_VALUES_EQUAL(entry.HasCancelRequestedBy(), Authenticated);
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetCancelRequestedBy(), Authenticated ? canceller : TString());
+        UNIT_ASSERT(entry.HasCancelRequestTime());
+        const auto cancelTime = entry.GetCancelRequestTime();
+        UNIT_ASSERT_VALUES_EQUAL(cancelTime.nanos(), 0);
+        const auto acceptedAt = TInstant::Seconds(cancelTime.seconds());
+        UNIT_ASSERT(beforeCancel <= acceptedAt);
+        UNIT_ASSERT(acceptedAt <= Runtime().GetCurrentTime());
+
+        auto checkOperation = [&](const Ydb::Operations::Operation& operation, bool ready) {
+            UNIT_ASSERT_VALUES_EQUAL(operation.id(), operationId);
+            UNIT_ASSERT_VALUES_EQUAL(operation.ready(), ready);
+            UNIT_ASSERT_VALUES_EQUAL(operation.status(), ready ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(operation.created_by(), creator);
+            UNIT_ASSERT_VALUES_EQUAL(operation.cancel_requested_by(), Authenticated ? canceller : TString());
+            UNIT_ASSERT(operation.has_cancel_request_time());
+            UNIT_ASSERT_VALUES_EQUAL(operation.cancel_request_time().seconds(), cancelTime.seconds());
+            UNIT_ASSERT_VALUES_EQUAL(operation.cancel_request_time().nanos(), cancelTime.nanos());
+        };
+        auto checkApi = [&](bool ready) {
+            Ydb::Operations::GetOperationRequest get;
+            get.set_id(operationId);
+            checkOperation(CallOperationRpc<TGetRpc>(Runtime(), get, canceller).operation(), ready);
+            Ydb::Operations::ListOperationsRequest list;
+            list.set_kind("export/s3");
+            const auto response = CallOperationRpc<TListRpc>(Runtime(), list, canceller);
+            UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.operations_size(), 1);
+            checkOperation(response.operations(0), ready);
+        };
+        checkApi(false);
+        Runtime().AdvanceCurrentTime(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest, retryCaller).status(),
+            Ydb::StatusIds::SUCCESS);
+        checkApi(false);
+
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        checkApi(false);
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest, retryCaller).status(),
+            Ydb::StatusIds::SUCCESS);
+        checkApi(false);
 
         Runtime().SetObserverFunc(prevObserver);
         Runtime().Send(delayed.Release(), 0, true);
@@ -4563,6 +4734,12 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+        UNIT_ASSERT_LT(cancelTime.seconds(), entry.GetEndTime().seconds());
+        checkApi(true);
+        UNIT_ASSERT_VALUES_EQUAL(CallOperationRpc<TCancelRpc>(Runtime(), cancelRequest, retryCaller).status(),
+            Ydb::StatusIds::SUCCESS);
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        checkApi(true);
     }
 
     // Based on CompletedExportEndTime

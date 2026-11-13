@@ -3,6 +3,8 @@
 #include "worker.h"
 #include "service.h"
 
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/replication/common/schema_change.h>
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
@@ -20,6 +22,13 @@
 #include <util/generic/scope.h>
 
 #include <util/string/builder.h>
+
+// TSessionInfo is private to service.cpp. Compile the production implementation
+// into this test, renaming its factory to avoid a duplicate exported symbol.
+#define CreateReplicationService CreateReplicationServiceForSessionTest
+#include "service.cpp"
+#undef CreateReplicationService
+#undef YDB_LOG_THIS_FILE_COMPONENT
 
 namespace NKikimr::NReplication::NService {
 
@@ -1630,6 +1639,211 @@ Y_UNIT_TEST_SUITE(Worker) {
 
     Y_UNIT_TEST(ReaderRetryBudgetResetsAfterData) {
         CheckReaderRetryLimit(3);
+    }
+}
+
+
+struct TSessionInfoTestAccess {
+    struct TSnapshot {
+        size_t Workers = 0;
+        size_t WorkersWithHeartbeat = 0;
+        size_t HeartbeatBuckets = 0;
+        size_t HeartbeatMemberships = 0;
+        TRowVersion MinHeartbeat = TRowVersion::Min();
+    };
+
+    static TSnapshot Read(const TSessionInfo& session) {
+        TSnapshot result;
+        result.Workers = session.Workers.size();
+        result.WorkersWithHeartbeat = session.WorkersWithHeartbeat.size();
+        result.HeartbeatBuckets = session.WorkersByHeartbeat.size();
+        for (const auto& [version, workers] : session.WorkersByHeartbeat) {
+            Y_UNUSED(version);
+            result.HeartbeatMemberships += workers.size();
+        }
+        if (!session.WorkersByHeartbeat.empty()) {
+            result.MinHeartbeat = session.WorkersByHeartbeat.begin()->first;
+        }
+        return result;
+    }
+};
+
+namespace {
+
+class TSink: public TActor<TSink> {
+public:
+    TSink()
+        : TActor(&TThis::StateWork)
+    {}
+
+    IActorOps* GetOps() {
+        return this;
+    }
+
+    STATEFN(StateWork) {
+        if (ev->GetTypeRewrite() == TEvents::TEvPoison::EventType) {
+            PassAway();
+        }
+    }
+};
+
+class TSessionFixture {
+    IActorOps* const Ops;
+    TSessionInfo Session;
+
+    static TWorkerId Id(ui64 workerId) {
+        return TWorkerId(1, 1, workerId);
+    }
+
+public:
+    TSessionFixture(IActorOps* ops, const TActorId& controller)
+        : Ops(ops)
+        , Session(controller, 42)
+    {}
+
+    TActorId Add(ui64 workerId) {
+        return Session.RegisterWorker(Ops, Id(workerId), new TSink(), 0, {},
+            NKikimrProto::NMetricsConfig::TMetricsConfig::LEVEL_DEFAULT);
+    }
+
+    void Stop(ui64 workerId, bool byActorId = false) {
+        if (byActorId) {
+            Session.StopWorker(Ops, Session.GetWorkerActorId(Id(workerId)));
+        } else {
+            Session.StopWorker(Ops, Id(workerId));
+        }
+    }
+
+    void Heartbeat(const TActorId& actor, ui64 step) {
+        using TEvent = TEvService::TEvHeartbeat;
+        TEvent::TPtr ev(static_cast<TEventHandle<TEvent>*>(
+            new IEventHandle({}, actor, new TEvent(TRowVersion(step, 0)))));
+        Session.Handle(Ops, ev);
+    }
+
+    auto Snapshot(TStringBuf label) const {
+        const auto state = TSessionInfoTestAccess::Read(Session);
+        Cerr << label << ": workers=" << state.Workers
+            << " heartbeat_workers=" << state.WorkersWithHeartbeat
+            << " heartbeat_buckets=" << state.HeartbeatBuckets
+            << " heartbeat_memberships=" << state.HeartbeatMemberships
+            << " min_heartbeat=" << state.MinHeartbeat << Endl;
+        return state;
+    }
+};
+
+template <typename TTest>
+void WithSession(TTest&& test) {
+    TTestBasicRuntime runtime;
+    TAppPrepare app;
+    runtime.Initialize(app.Unwrap());
+    const auto controller = runtime.AllocateEdgeActor();
+    auto* ops = new TSink();
+    runtime.Register(ops);
+    runtime.RunCall([&] {
+        TSessionFixture fixture(ops->GetOps(), controller);
+        test(fixture);
+        return true;
+    });
+}
+
+void CheckStoppedWorker(bool byActorId) {
+    WithSession([&](TSessionFixture& fixture) {
+        const auto first = fixture.Add(1);
+        const auto second = fixture.Add(2);
+        fixture.Heartbeat(first, 100);
+        fixture.Heartbeat(second, 100);
+        fixture.Stop(1, byActorId);
+        const auto state = fixture.Snapshot(byActorId ? "after Gone" : "after StopWorker");
+        UNIT_ASSERT_VALUES_EQUAL(state.Workers, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(state.WorkersWithHeartbeat, 1,
+            "Stopped worker still participates in heartbeat quorum");
+        UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatMemberships, 1);
+        UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatBuckets, 1);
+    });
+}
+
+void CheckRecreatedWorker(bool byActorId) {
+    WithSession([&](TSessionFixture& fixture) {
+        const auto oldActor = fixture.Add(1);
+        fixture.Heartbeat(oldActor, 100);
+        fixture.Stop(1, byActorId);
+        const auto newActor = fixture.Add(1);
+        UNIT_ASSERT(oldActor != newActor);
+        fixture.Heartbeat(newActor, 200);
+        const auto state = fixture.Snapshot(byActorId ? "after Gone/recreate" : "after Stop/recreate");
+        UNIT_ASSERT_VALUES_EQUAL(state.Workers, 1);
+        UNIT_ASSERT_VALUES_EQUAL(state.WorkersWithHeartbeat, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(state.MinHeartbeat, TRowVersion(200, 0),
+            "Recreated worker retains the previous actor's heartbeat");
+        UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatBuckets, 1);
+        UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatMemberships, 1);
+    });
+}
+
+} // anonymous namespace
+
+Y_UNIT_TEST_SUITE(ReplicationServiceSession) {
+    Y_UNIT_TEST(StopRemovesHeartbeatMembership) {
+        CheckStoppedWorker(false);
+    }
+
+    Y_UNIT_TEST(GoneRemovesHeartbeatMembership) {
+        CheckStoppedWorker(true);
+    }
+
+    Y_UNIT_TEST(StopAndRecreateDoesNotKeepOldHeartbeat) {
+        CheckRecreatedWorker(false);
+    }
+
+    Y_UNIT_TEST(GoneAndRecreateDoesNotKeepOldHeartbeat) {
+        CheckRecreatedWorker(true);
+    }
+
+    Y_UNIT_TEST(RepeatedRecreateDoesNotAccumulateBuckets) {
+        WithSession([](TSessionFixture& fixture) {
+            for (ui64 i = 1; i <= 1000; ++i) {
+                const auto actor = fixture.Add(1);
+                fixture.Heartbeat(actor, 100 * i);
+                fixture.Stop(1, i % 2);
+            }
+            const auto state = fixture.Snapshot("after 1000 worker replacements");
+            UNIT_ASSERT_VALUES_EQUAL(state.Workers, 0);
+            UNIT_ASSERT_VALUES_EQUAL_C(state.HeartbeatBuckets, 0,
+                "Stopped workers retain heartbeat buckets");
+            UNIT_ASSERT_VALUES_EQUAL(state.WorkersWithHeartbeat, 0);
+            UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatMemberships, 0);
+        });
+    }
+
+    Y_UNIT_TEST(HeartbeatUpdateDoesNotAccumulateBuckets) {
+        WithSession([](TSessionFixture& fixture) {
+            const auto actor = fixture.Add(1);
+            fixture.Heartbeat(actor, 100);
+            fixture.Heartbeat(actor, 200);
+            fixture.Heartbeat(actor, 200);
+            fixture.Heartbeat(actor, 150);
+            const auto state = fixture.Snapshot("heartbeat update control");
+            UNIT_ASSERT_VALUES_EQUAL(state.Workers, 1);
+            UNIT_ASSERT_VALUES_EQUAL(state.WorkersWithHeartbeat, 1);
+            UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatBuckets, 1);
+            UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatMemberships, 1);
+            UNIT_ASSERT_VALUES_EQUAL(state.MinHeartbeat, TRowVersion(200, 0));
+        });
+    }
+
+    Y_UNIT_TEST(StopBeforeFirstHeartbeat) {
+        WithSession([](TSessionFixture& fixture) {
+            fixture.Add(1);
+            fixture.Stop(1);
+            fixture.Add(1);
+            fixture.Stop(1, true);
+            const auto state = fixture.Snapshot("stop without heartbeat control");
+            UNIT_ASSERT_VALUES_EQUAL(state.Workers, 0);
+            UNIT_ASSERT_VALUES_EQUAL(state.WorkersWithHeartbeat, 0);
+            UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatBuckets, 0);
+            UNIT_ASSERT_VALUES_EQUAL(state.HeartbeatMemberships, 0);
+        });
     }
 }
 

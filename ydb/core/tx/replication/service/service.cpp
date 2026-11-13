@@ -36,6 +36,8 @@
 namespace NKikimr::NReplication::NService {
 
 class TSessionInfo {
+    friend struct TSessionInfoTestAccess;
+
     using TMetricsConfig = NKikimrProto::NMetricsConfig::TMetricsConfig;
 
     class TWorkerInfo {
@@ -301,6 +303,7 @@ public:
         IndexBuildWorkers.erase(id);
         PendingIndexTxIds.erase(id);
         DataEnded.erase(id);
+        RemoveWorkerHeartbeat(id);
         Workers.erase(it);
     }
 
@@ -315,6 +318,7 @@ public:
         IndexBuildWorkers.erase(it->second);
         PendingIndexTxIds.erase(it->second);
         DataEnded.erase(it->second);
+        RemoveWorkerHeartbeat(it->second);
         Workers.erase(it->second);
 
         PendingStatsValues.erase(it->second);
@@ -537,6 +541,18 @@ public:
     }
 
 private:
+    void RemoveWorkerHeartbeat(const TWorkerId& id) {
+        const auto version = Workers.at(id).Heartbeat;
+        WorkersWithHeartbeat.erase(id);
+        const auto it = WorkersByHeartbeat.find(version);
+        if (it != WorkersByHeartbeat.end()) {
+            it->second.erase(id);
+            if (it->second.empty()) {
+                WorkersByHeartbeat.erase(it);
+            }
+        }
+    }
+
     static void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, ui64>& result) {
         auto ev = MakeHolder<TEvService::TEvTxIdResult>();
 

@@ -12,6 +12,7 @@ PEERDIR(
     library/cpp/protobuf/util
     library/cpp/regex/pcre
     library/cpp/svnversion
+    ydb/core/testlib/audit_helpers
     ydb/core/testlib/default
 )
 
@@ -26,6 +27,7 @@ SRCS(
     console_handshake_ut.cpp
     feature_flags_configurator_ut.cpp
     immediate_controls_configurator_ut.cpp
+    console_audit_configure_database_ut.cpp
     log_settings_configurator_ut.cpp
     modifications_validator_ut.cpp
     net_classifier_updater_ut.cpp

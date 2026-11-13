@@ -30,12 +30,12 @@ public:
         TaskCount->Set(stats.TasksCount);
         InputBytes->Set(stats.InputBytes);
         OutputBytes->Set(stats.OutputBytes);
-        if (stats.HopInputEventsCount && !HopInputEventsCount) {
-            auto queryGroup = HostGroup->GetSubgroup("path", Path);
-            HopInputEventsCount = queryGroup->GetCounter("streaming.query.hop.input_events.rate", true);
-            HopLateEventsCount = queryGroup->GetCounter("streaming.query.hop.late_events.rate", true);
-        }
-        if (HopInputEventsCount) {
+        if (stats.HopInputEventsCount || HopInputEventsCount) {
+            if (!HopInputEventsCount) {
+                auto queryGroup = HostGroup->GetSubgroup("path", Path);
+                HopInputEventsCount = queryGroup->GetCounter("streaming.query.hop.input_events.rate", true);
+                HopLateEventsCount = queryGroup->GetCounter("streaming.query.hop.late_events.rate", true);
+            }
             HopInputEventsCount->Set(stats.HopInputEventsCount);
             HopLateEventsCount->Set(stats.HopLateEventsCount);
         }

@@ -378,12 +378,13 @@ void TestWrite(const TestTableDescription& table) {
     ok = WriteData(runtime, sender, writeId++, tableId, TString(), ydbSchema);
     UNIT_ASSERT(!ok);
 
-    // null column in PK
+    // null column in PK: the test schema does not mark its key columns NOT NULL, and the shard takes nullability
+    // from the schema, so NULL key cells are accepted (a NOT NULL key column still rejects them)
 
     TTestBlobOptions optsNulls;
     optsNulls.NullColumns.emplace("timestamp");
     ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, ydbSchema, optsNulls), ydbSchema);
-    UNIT_ASSERT(!ok);
+    UNIT_ASSERT(ok);
 
     // missing columns
 

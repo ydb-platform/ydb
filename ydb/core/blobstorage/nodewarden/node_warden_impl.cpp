@@ -256,6 +256,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
         hFunc(TEvNodeWardenNotifySyncerFinished, Handle);
+        hFunc(NGroupSyncer::TEvRunMirror3dcRepair, Handle);
+        hFunc(NGroupSyncer::TEvMirror3dcRepairScanResult, Handle);
 
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse, Handle);

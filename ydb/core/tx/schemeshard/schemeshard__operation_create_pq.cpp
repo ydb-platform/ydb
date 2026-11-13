@@ -192,10 +192,6 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
 
     Y_PROTOBUF_SUPPRESS_NODISCARD tabletConfig.SerializeToString(&pqGroupInfo->TabletConfig);
 
-    if (op.HasBootstrapConfig()) {
-        Y_PROTOBUF_SUPPRESS_NODISCARD op.GetBootstrapConfig().SerializeToString(&pqGroupInfo->BootstrapConfig);
-    }
-
     return pqGroupInfo;
 }
 

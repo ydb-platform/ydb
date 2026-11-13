@@ -322,6 +322,7 @@ runs:
           ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
+          --remove-cpu-detect-via-ram
           -DUSE_EAT_MY_DATA
           --add-peerdirs-tests all
           --cleanup-child-processes

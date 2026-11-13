@@ -22,6 +22,21 @@ SRCS(
     mkql_value_builder.cpp
     mkql_computation_pattern_cache.cpp
     presort.cpp
+    mkql_block_item.cpp
+    mkql_computation_list_adapter.cpp
+    mkql_computation_node_list.cpp
+    mkql_computation_pattern_cache_program_key.cpp
+    mkql_key_payload_value_lru_cache.cpp
+    mkql_method_address_helper.cpp
+    mkql_optional_usage_mask.cpp
+    mkql_spiller.cpp
+    mkql_spiller_adapter.cpp
+    mkql_spiller_factory.cpp
+    mkql_validate_impl.cpp
+    mkql_vector_spiller_adapter.cpp
+    mock_spiller_factory_ut.cpp
+    mock_spiller_ut.cpp
+    presort_impl.cpp
 )
 
 PEERDIR(

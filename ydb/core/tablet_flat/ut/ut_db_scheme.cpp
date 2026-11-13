@@ -398,6 +398,50 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TSchemeTiering) {
 
+    Y_UNIT_TEST(GenerationTierIdSnapshotAndAlter) {
+        auto alter = BuildTiered();
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        policy->Generations[1].TierId = HddTier;
+        policy->Generations[2].TierId = HddTier;
+        alter.SetCompactionPolicy(TableId, *policy);
+
+        const TScheme origin = Apply(alter);
+        TScheme restored;
+        TSchemeModifier(restored).Apply(*origin.GetSnapshot());
+        const auto& table = Table(restored);
+        UNIT_ASSERT(*table.CompactionPolicy == *policy);
+        UNIT_ASSERT(!table.CompactionPolicy->Generations[0].TierId);
+        UNIT_ASSERT(table.CompactionPolicy->Generations[1].TierId);
+        UNIT_ASSERT(table.CompactionPolicy->Generations[2].TierId);
+        UNIT_ASSERT_VALUES_EQUAL(*table.CompactionPolicy->Generations[1].TierId, HddTier);
+        UNIT_ASSERT_VALUES_EQUAL(*table.CompactionPolicy->Generations[2].TierId, HddTier);
+
+        // A change to TierId alone must not be ignored as an unchanged policy.
+        policy->Generations[1].TierId.reset();
+        TAlter change;
+        change.SetCompactionPolicy(TableId, *policy);
+        UNIT_ASSERT(TSchemeModifier(restored).Apply(*change.Flush()));
+        UNIT_ASSERT(!Table(restored).CompactionPolicy->Generations[1].TierId);
+        UNIT_ASSERT_VALUES_EQUAL(*Table(restored).CompactionPolicy->Generations[2].TierId, HddTier);
+    }
+
+    Y_UNIT_TEST(InterleavedGenerationTiersRejected) {
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        policy->Generations[1].TierId = HddTier;
+
+        auto create = BuildTiered();
+        create.SetCompactionPolicy(TableId, *policy);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Apply(create), yexception, "contiguous block");
+
+        TScheme scheme = Apply(BuildTiered());
+        const auto original = Table(scheme).CompactionPolicy;
+        TAlter change;
+        change.SetCompactionPolicy(TableId, *policy);
+        const auto changes = change.Flush();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TSchemeModifier(scheme).Apply(*changes), yexception, "contiguous block");
+        UNIT_ASSERT(Table(scheme).CompactionPolicy == original);
+    }
+
     Y_UNIT_TEST(PolicyProtoRoundTrip) {
         for (auto policy : {RelativePolicy(), AbsolutePolicy()}) {
             policy.Unit = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;

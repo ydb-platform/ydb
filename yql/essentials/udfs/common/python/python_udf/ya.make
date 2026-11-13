@@ -4,6 +4,7 @@ YQL_ABI_VERSION(2 45 0)
 
 SRCS(
     python_udf.cpp
+    python_function_factory.cpp
 )
 
 PEERDIR(

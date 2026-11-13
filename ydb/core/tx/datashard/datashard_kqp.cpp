@@ -77,7 +77,8 @@ TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto, ui64 selfS
 
 // returns list of broken locks
 TVector<NKikimrDataEvents::TLock> ValidateLocks(
-    const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks, bool allowAncestorLocks)
+    const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks,
+    bool allowAncestorLocks, bool requireReadOnlyLocks)
 {
     TVector<NKikimrDataEvents::TLock> brokenLocks;
 
@@ -88,6 +89,16 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(
     ui64 selfShardId = sysLocks.SelfShardId();
 
     for (auto& lockProto : txLocks.GetLocks()) {
+        if (requireReadOnlyLocks) {
+            const auto lock = sysLocks.GetRawLock(lockProto.GetLockId());
+            if (lock && lock->IsWriteLock()) {
+                YDB_LOG_TRACE("ValidateLocks: read-only lock has writes",
+                    {"lockId", lockProto.GetLockId()},
+                    {"shardId", selfShardId});
+                brokenLocks.emplace_back(lockProto);
+                continue;
+            }
+        }
         ui32 ourGeneration = 0;
         ui64 ourCounter = 0;
         bool writeSeqNumMismatch = false;
@@ -263,13 +274,13 @@ void KqpSetTxLocksKeys(
 std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(
     TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
     bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets,
-    bool allowAncestorLocks)
+    bool allowAncestorLocks, bool requireReadOnlyLocks)
 {
     if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
         return {true, {}};
     }
 
-    auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, allowAncestorLocks);
+    auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, allowAncestorLocks, requireReadOnlyLocks);
 
     if (!brokenLocks.empty()) {
         return {false, std::move(brokenLocks)};
@@ -318,7 +329,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(
     TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
     bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets,
     TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets,
-    bool allowAncestorLocks)
+    bool allowAncestorLocks, bool requireReadOnlyLocks)
 {
     if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
         return {true, {}};
@@ -341,7 +352,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(
     bool sendLocks = SendLocks(*kqpLocks, selfShardId);
     if (sendLocks) {
         // Note: it is possible to have no locks
-        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, allowAncestorLocks);
+        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, allowAncestorLocks, requireReadOnlyLocks);
 
         if (!brokenLocks.empty()) {
             return {false, std::move(brokenLocks)};
@@ -464,7 +475,8 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(
 }
 
 void KqpFillOutReadSets(
-    TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, TSysLocks& sysLocks, bool allowAncestorLocks)
+    TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks,
+    bool useGenericReadSets, TSysLocks& sysLocks, bool allowAncestorLocks, bool requireReadOnlyLocks)
 {
     TMap<std::pair<ui64, ui64>, NKikimrTxDataShard::TKqpReadset> readsetData;
 
@@ -474,7 +486,7 @@ void KqpFillOutReadSets(
     const ui64 selfShardId = sysLocks.SelfShardId();
 
     if (SendLocks(kqpLocks, selfShardId) && !kqpLocks.GetReceivingShards().empty()) {
-        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, allowAncestorLocks);
+        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, allowAncestorLocks, requireReadOnlyLocks);
 
         NKikimrTxDataShard::TKqpValidateLocksResult validateLocksResult;
         validateLocksResult.SetSuccess(brokenLocks.empty());

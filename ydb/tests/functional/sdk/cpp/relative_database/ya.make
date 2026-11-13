@@ -25,6 +25,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/public/api/grpc
     ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/operation

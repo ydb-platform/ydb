@@ -45,7 +45,9 @@ void TDLQMoverActor::Bootstrap() {
         );
     } else {
         TopicName = Settings.DestinationTopic;
-        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }));
+        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }, {
+            .EnableRelativePaths = false,
+        }));
     }
     YDB_LOG_DEBUG("Dump QUEUE, queueItems",
         {"logPrefix", NPQ_LOG_PREFIX},
@@ -110,7 +112,9 @@ void TDLQMoverActor::Handle(NSQS::TSqsEvents::TEvConfiguration::TPtr& ev) {
     YDB_LOG_DEBUG("SQS topic",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"name", TopicName});
-    RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }));
+    RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }, {
+        .EnableRelativePaths = false,
+    }));
 }
 
 void TDLQMoverActor::CreateWriter() {

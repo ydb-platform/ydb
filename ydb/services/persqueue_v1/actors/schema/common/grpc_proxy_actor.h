@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -62,6 +63,18 @@ protected:
         return AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && !path.StartsWith("sqs://")
             ? this->Request_->NormalizePath(path)
             : TString(path);
+    }
+
+    bool ResolveDeadLetterQueuePath(TString& path) {
+        if (!path.StartsWith("sqs://")) {
+            path = NormalizeTopicPath(path);
+            if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && AppData()->FeatureFlags.GetEnableRelativePaths()
+                && NPQ::NormalizeDlqTopicPath(path, GetDatabase()) != CanonizePath(path)) {
+                ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Dead letter queue must belong to the topic database");
+                return false;
+            }
+        }
+        return true;
     }
 
     void ReplyWithError(Ydb::StatusIds::StatusCode status, const TString& messageText) {

@@ -29,7 +29,8 @@ public:
             .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
             .Path = NormalizeTopicPath(GetProtoRequest()->path()),
-            .UserToken = GetUserToken()
+            .UserToken = GetUserToken(),
+            .EnableRelativePaths = true,
         }));
     }
 

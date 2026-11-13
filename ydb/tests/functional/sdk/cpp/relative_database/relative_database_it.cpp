@@ -3,11 +3,16 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
 
+#include <grpcpp/create_channel.h>
+#include <grpcpp/security/credentials.h>
+
 #include <util/datetime/base.h>
 
+#include <chrono>
 #include <cstdlib>
 #include <string>
 
@@ -113,7 +118,7 @@ namespace NYdb::inline Dev {
             ASSERT_NO_FATAL_FAILURE(CheckSuccess(Await(session.Close())));
         }
 
-        void CheckQuery(TDriver& driver, const std::string& table, const std::string& absoluteTable) {
+        void CheckQuery(TDriver& driver, const std::string& table, const std::string& absoluteTable, const std::string& database) {
             SCOPED_TRACE("Query");
             NQuery::TQueryClient client(driver);
             // A fresh client's GetSession sends CreateSession and waits for AttachSession.
@@ -141,7 +146,17 @@ namespace NYdb::inline Dev {
                     ASSERT_NO_FATAL_FAILURE(CheckSuccess(Await(tx.Rollback())));
                 }
             }
-            ASSERT_NO_FATAL_FAILURE(CheckSuccess(Await(client.DeleteSession(session.GetId()))));
+            auto stub = Ydb::Query::V1::QueryService::NewStub(
+                grpc::CreateChannel(std::getenv("YDB_ENDPOINT"), grpc::InsecureChannelCredentials()));
+            grpc::ClientContext context;
+            context.AddMetadata("x-ydb-database", database);
+            context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(60));
+            Ydb::Query::DeleteSessionRequest request;
+            request.set_session_id(session.GetId());
+            Ydb::Query::DeleteSessionResponse response;
+            const auto status = stub->DeleteSession(&context, request, &response);
+            ASSERT_TRUE(status.ok()) << status.error_message();
+            ASSERT_EQ(response.status(), Ydb::StatusIds::SUCCESS) << response.DebugString();
         }
 
         void CheckScripting(TDriver& driver, const std::string& table, const std::string& absoluteTable) {
@@ -249,7 +264,7 @@ namespace NYdb::inline Dev {
                     "SELECT Key FROM `" + absoluteTable + "`;", NQuery::TTxControl::BeginTx().CommitTx()))));
             }
 
-            ASSERT_NO_FATAL_FAILURE(CheckQuery(driver, table, absoluteTable));
+            ASSERT_NO_FATAL_FAILURE(CheckQuery(driver, table, absoluteTable, GetParam()));
             ASSERT_NO_FATAL_FAILURE(CheckScripting(driver, table, absoluteTable));
             ASSERT_NO_FATAL_FAILURE(CheckScriptOperations(driver, table, absoluteTable));
             // DescribeTableOptions has no public C++ SDK method.

@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
@@ -1134,15 +1135,6 @@ void TConsumerActor::MoveToDLQIfPossible() {
         return;
     }
 
-    auto destinationTopic = [&]() -> TString {
-        auto databasePrefix = TStringBuilder() << Database << "/";
-        if (Config.GetDeadLetterQueue().StartsWith("sqs://") || Config.GetDeadLetterQueue().StartsWith(databasePrefix)) {
-            return Config.GetDeadLetterQueue();
-        } else {
-            return databasePrefix << Config.GetDeadLetterQueue();
-        }
-    };
-
     auto messages = Storage->GetDLQMessages();
     if (!messages.empty()) {
         YDB_LOG_DEBUG("Move",
@@ -1155,7 +1147,7 @@ void TConsumerActor::MoveToDLQIfPossible() {
             .PartitionId = PartitionId,
             .ConsumerName = Config.GetName(),
             .ConsumerGeneration = Config.GetGeneration(),
-            .DestinationTopic = destinationTopic(),
+            .DestinationTopic = NormalizeDlqTopicPath(Config.GetDeadLetterQueue(), Database),
             .Messages = std::move(messages)
         }));
     }

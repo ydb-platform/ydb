@@ -1,5 +1,8 @@
 #include "describer.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
+
 #include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_DESCRIBER
@@ -39,17 +42,20 @@ public:
         Become(&TDescribeActor::StateWork);
         RetryWithSyncVersion = Settings.ForceSyncVersion;
         UsedSyncVersion = Settings.ForceSyncVersion;
-        DoRequest(TopicPaths);
+        DoRequest(TopicPaths, true);
     }
 
-    void DoRequest(const std::unordered_set<TString>& topicPath) {
+    void DoRequest(const std::unordered_set<TString>& topicPath, bool clientPaths = false) {
         YDB_LOG_DEBUG("Create request with",
             {"logPrefix", LOG_PREFIX},
             {"topicPaths", JoinRange(", ", topicPath.begin(), topicPath.end())},
             {"syncVersion", RetryWithSyncVersion});
 
+        const bool relativePaths = Settings.EnableRelativePaths
+            && AppData()->FeatureFlags.GetEnableRelativePaths()
+            && AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
         auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);
-        schemeRequest->DatabaseName = DatabasePath;
+        schemeRequest->DatabaseName = relativePaths ? CanonizePath(DatabasePath) : DatabasePath;
 
         auto addEntry = [&](const TString& topic) {
             auto split = NKikimr::SplitPath(topic);
@@ -63,8 +69,13 @@ public:
         };
 
         for (const auto& topic : topicPath) {
-            auto normalizedPath = NKikimr::NormalizePath(DatabasePath, CanonizePath(topic));
-            PathToOriginalPath[normalizedPath] = topic;
+            auto normalizedPath = relativePaths
+                ? (clientPaths
+                    ? CanonizePath(topic.empty() ? DatabasePath : PrependDomainIfNeeded(DatabasePath, topic))
+                    : topic)
+                : NKikimr::NormalizePath(DatabasePath, CanonizePath(topic));
+            // Retry and CDC paths are already resolved, not new client input.
+            PathToOriginalPath.try_emplace(normalizedPath, topic);
             addEntry(normalizedPath);
         }
 

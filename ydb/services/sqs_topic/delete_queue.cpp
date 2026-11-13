@@ -142,6 +142,7 @@ namespace NKikimr::NSqsTopic::V1 {
                     .PeerName = this->Request_->GetPeerName(),
                     .Path = topicInfo.RealPath,
                     .UserToken = this->GetUserToken(),
+                    .EnableRelativePaths = true,
                 }));
             } else {
                 Ydb::Topic::AlterTopicRequest request;

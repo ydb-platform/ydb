@@ -1,36 +1,47 @@
 #include <ydb/core/persqueue/pqtablet/partition/mlp/mlp_common.h>
 #include <ydb/core/persqueue/public/mlp/ut/common/common.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/library/testlib/helpers.h>
 
 namespace NKikimr::NPQ::NMLP {
 
 Y_UNIT_TEST_SUITE(TMLPDLQMoverTests) {
 
-void MoveToDLQ(const TString& msg, bool shortDlqName = false) {
+void MoveToDLQ(const TString& msg, bool shortDlqName = false, bool databasePrefixedDlqName = false, bool enableRelativePaths = true) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
 
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
 
-    client.CreateTopic("/Root/topic1-dlq", NYdb::NTopic::TCreateTopicSettings()
+    const TString dlq = databasePrefixedDlqName && enableRelativePaths ? "/Root/Root/topic1-dlq" : "/Root/topic1-dlq";
+    if (databasePrefixedDlqName && enableRelativePaths) {
+        setup->GetServer().AnnoyingClient->MkDir("/Root", "Root");
+    }
+    const auto dlqStatus = client.CreateTopic(dlq, NYdb::NTopic::TCreateTopicSettings()
             .BeginAddSharedConsumer("mlp-consumer")
             .EndAddConsumer()).GetValueSync();
+    UNIT_ASSERT_C(dlqStatus.IsSuccess(), dlqStatus.GetIssues().ToString());
 
-    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+    const auto sourceStatus = client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
             .BeginAddSharedConsumer("mlp-consumer")
                 .BeginDeadLetterPolicy()
                     .Enable()
                     .BeginCondition()
                         .MaxProcessingAttempts(1)
                     .EndCondition()
-                    .MoveAction(shortDlqName ? "topic1-dlq" : "/Root/topic1-dlq")
+                    .MoveAction(databasePrefixedDlqName ? "Root/topic1-dlq" : shortDlqName ? "topic1-dlq" : "/Root/topic1-dlq")
                 .EndDeadLetterPolicy()
             .EndAddConsumer()).GetValueSync();
+    UNIT_ASSERT_C(sourceStatus.IsSuccess(), sourceStatus.GetIssues().ToString());
 
     setup->Write("/Root/topic1", msg, 0);
 
-    Sleep(TDuration::Seconds(2));
+    bool dlqMoved = false;
+    auto observer = runtime.AddObserver<TEvPQ::TEvMLPDLQMoverResponse>([&](auto& ev) {
+        dlqMoved |= ev->Get()->Status == Ydb::StatusIds::SUCCESS;
+    });
 
     {
         CreateReaderActor(runtime, TReaderSettings{
@@ -63,38 +74,24 @@ void MoveToDLQ(const TString& msg, bool shortDlqName = false) {
     }
 
 
-    for (size_t i = 0; i < 10; ++i) {
-        Sleep(TDuration::Seconds(1));
-        // The message should appear in DLQ
+    runtime.WaitFor("DLQ move", [&] { return dlqMoved; }, TDuration::Seconds(30));
+    {
         CreateReaderActor(runtime, TReaderSettings{
             .DatabasePath = "/Root",
-            .TopicName = "/Root/topic1-dlq",
+            .TopicName = dlq,
             .Consumer = "mlp-consumer",
         });
         auto response = GetReadResponse(runtime);
-        if (i < 9 && response->Messages.empty()) {
-            continue;
-        }
-
         UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, msg);
-
-        break;
     }
 
-    for (size_t i = 0; i < 10; ++i) {
+    {
         auto result = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
-        if (i < 9 && result->Messages.size() != 0) {
-            Sleep(TDuration::Seconds(1));
-            continue;
-        }
-
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 0);
-
-        break;
     }
 }
 
@@ -104,6 +101,10 @@ Y_UNIT_TEST(MoveToDLQ_ShortDlqTopicName) {
 
 Y_UNIT_TEST(MoveToDLQ_FullDlqTopicName) {
     MoveToDLQ(NUnitTest::RandomString(1_KB), false);
+}
+
+Y_UNIT_TEST_TWIN(MoveToDLQ_DatabasePrefixedDlqTopicName, enableRelativePaths) {
+    MoveToDLQ(NUnitTest::RandomString(1_KB), false, true, enableRelativePaths);
 }
 
 Y_UNIT_TEST(MoveToDLQ_BigMessage) {

@@ -1,5 +1,8 @@
 #include "schema.h"
 
+#include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/testlib/actor_helpers.h>
+
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/testlib/grpc_request/grpc_request.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
@@ -49,6 +52,19 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(CreateTopic) {
+
+Y_UNIT_TEST(PersistedDlqPathsIgnoreRelativePathsFlag) {
+    TActorSystemStub actorSystem;
+    for (bool enabled : {false, true}) {
+        actorSystem.AppData.FeatureFlags.SetEnableRelativePaths(enabled);
+        UNIT_ASSERT_VALUES_EQUAL(NormalizeDlqTopicPath("", "/Root"), "");
+        UNIT_ASSERT_VALUES_EQUAL(NormalizeDlqTopicPath("sqs://account/queue", "/Root"), "sqs://account/queue");
+        UNIT_ASSERT_VALUES_EQUAL(NormalizeDlqTopicPath("/Other/dlq", "/Root"), "/Root/Other/dlq");
+        for (const TString path : {"dlq", "Root/dlq", "/dlq", "/Root/dlq"}) {
+            UNIT_ASSERT_VALUES_EQUAL(NormalizeDlqTopicPath(path, "/Root"), "/Root/dlq");
+        }
+    }
+}
 
 Y_UNIT_TEST(CreateTopicWithNameEqDB) {
 

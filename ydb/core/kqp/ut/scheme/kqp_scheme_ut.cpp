@@ -15,6 +15,7 @@
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
@@ -9923,6 +9924,151 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateAsyncReplicationReportsTrailingSlashInSourcePath) {
+        TKikimrRunner kikimr;
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        TReplicationClient replication(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
+
+        const auto tableQuery = "CREATE TABLE `/Root/table` (Key Uint64, PRIMARY KEY (Key));";
+        const auto table = session.ExecuteSchemeQuery(tableQuery).GetValueSync();
+        UNIT_ASSERT_C(table.IsSuccess(), table.GetIssues().ToString());
+
+        const auto query = Sprintf(R"(
+            --!syntax_v1
+            CREATE ASYNC REPLICATION `/Root/replication` FOR
+                `/Root/table/` AS `/Root/replica`
+            WITH (ENDPOINT = "%s", DATABASE = "/Root");
+        )", kikimr.GetEndpoint().c_str());
+        const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto deadline = TInstant::Now() + TDuration::Minutes(1);
+        while (TInstant::Now() < deadline) {
+            const auto described = replication.DescribeReplication("/Root/replication").ExtractValueSync();
+            UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
+            const auto& desc = described.GetReplicationDescription();
+            if (desc.GetState() == TReplicationDescription::EState::Error) {
+                UNIT_ASSERT_STRING_CONTAINS(desc.GetErrorState().GetIssues().ToOneLineString(),
+                                            "Error: wrong path format '/Root/table/'");
+                return;
+            }
+            Sleep(TDuration::Seconds(1));
+        }
+
+        UNIT_FAIL("Replication did not report the source path error");
+    }
+
+    Y_UNIT_TEST_QUAD(AsyncReplicationYson, Global, BinaryInitial) {
+        TKikimrRunner kikimr;
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const auto service = runtime.Register(NReplication::CreateReplicationService());
+        runtime.RegisterService(NReplication::MakeReplicationServiceId(runtime.GetNodeId(0)), service);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TReplicationClient replication(kikimr.GetDriver());
+        const auto scheme = [&](const TString& query) {
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        const auto execute = [&](const TString& query) {
+            std::optional<TDataQueryResult> result;
+            const auto status = db.RetryOperationSync([&](TSession retrySession) -> TStatus {
+                result.emplace(retrySession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync());
+                if (!result->IsSuccess()) {
+                    const auto code = result->GetStatus();
+                    const bool retryable = code == EStatus::SCHEME_ERROR
+                        || code == EStatus::ABORTED || code == EStatus::OVERLOADED;
+                    UNIT_ASSERT_C(retryable, result->GetIssues().ToString());
+                }
+                return *result;
+            }, TRetryOperationSettings().Idempotent(true).RetryUndefined(true).MaxTimeout(TDuration::Seconds(60)));
+            // Stream creation changes the source schema and can invalidate a
+            // cached query. RetryUndefined lets the SDK retry SCHEME_ERROR too.
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            return std::move(*result);
+        };
+        scheme("CREATE TABLE `/Root/source` (key Uint32, rev Uint32, value Yson, PRIMARY KEY (key));");
+        TVector<TString> values = {
+            R"(<a="first";>42)", "1u", "1.0", R"({plain=1u;meta=<x="nested";>2.0;})",
+            "%nan", "%inf", "%-inf", "#", R"("1u")", R"("nan")", "%true", "[1u;1.0;#;]",
+            R"({yson={update={value="MQ==";};};})",
+            R"("\xff")", R"("\xc0\xaf")", R"("\xe2\x82")", R"("\xed\xa0\x80")",
+            R"({nested=[{value="\xff";};];})", R"({nested=[{"\xff"=1;};];})",
+            R"({"\xed\xa0\x80"=1;})", R"("\xf4\x90\x80\x80")",
+            R"({"ключ"=["строка";"😀";"\x00";];})",
+        };
+        TStringBuilder allBytes;
+        allBytes << '"';
+        for (ui32 byte = 0; byte < 256; ++byte) {
+            allBytes << Sprintf("\\x%02x", byte);
+        }
+        allBytes << '"';
+        values.push_back(allBytes);
+        const auto write = [&](ui32 revision) {
+            TStringBuilder query;
+            query << "UPSERT INTO `/Root/source` (key, rev, value) VALUES ";
+            for (ui32 key = 0; key < values.size(); ++key) {
+                // Change every YSON cell on CDC, keeping each special value in
+                // the data set. The revision is committed with the same row.
+                query << "(" << key << "u," << revision << "u,Yson(@@"
+                    << (revision == 0 && !BinaryInitial ? R"("initial")" : values[(key + revision) % values.size()])
+                    << "@@)),";
+            }
+            query << "(" << values.size() << "u," << revision << "u,NULL),"
+                << "(" << values.size() + 1 << "u," << revision << "u,Yson(@@\"control\"@@));";
+            execute(query);
+        };
+        write(0);
+        const TString consistency = Global
+            ? R"(, CONSISTENCY_LEVEL = "GLOBAL", COMMIT_INTERVAL = Interval("PT1S"))" : "";
+        scheme(Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`
+            WITH (ENDPOINT = '%s', DATABASE = '/Root', INITIAL_SCAN = TRUE%s);
+        )", kikimr.GetEndpoint().c_str(), consistency.c_str()));
+
+        const auto waitAndCheck = [&](ui32 revision) {
+            const auto source = execute("SELECT key, rev, value FROM `/Root/source` ORDER BY key;");
+            TString lastIssues;
+            const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+            while (TInstant::Now() < deadline) {
+                const auto description = replication.DescribeReplication("/Root/replication").ExtractValueSync();
+                UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+                const auto& desc = description.GetReplicationDescription();
+                UNIT_ASSERT_C(desc.GetState() != TReplicationDescription::EState::Error,
+                    desc.GetErrorState().GetIssues().ToString());
+                const auto target = session.ExecuteDataQuery("SELECT key, rev, value FROM `/Root/replica` ORDER BY key;",
+                    TTxControl::BeginTx().CommitTx()).GetValueSync();
+                if (target.IsSuccess() && target.GetResultSet(0).RowsCount() == values.size() + 2) {
+                    TResultSetParser actual(target.GetResultSet(0));
+                    TResultSetParser expected(source.GetResultSet(0));
+                    bool complete = true;
+                    while (actual.TryNextRow()) {
+                        UNIT_ASSERT(expected.TryNextRow());
+                        UNIT_ASSERT_VALUES_EQUAL(actual.ColumnParser("key").GetOptionalUint32(),
+                            expected.ColumnParser("key").GetOptionalUint32());
+                        if (actual.ColumnParser("rev").GetOptionalUint32() != revision) {
+                            complete = false;
+                            break;
+                        }
+                        UNIT_ASSERT_VALUES_EQUAL_C(actual.ColumnParser("value").GetOptionalYson(),
+                            expected.ColumnParser("value").GetOptionalYson(),
+                            TStringBuilder() << "YSON changed at revision " << revision);
+                    }
+                    if (complete) {
+                        UNIT_ASSERT(desc.GetState() == TReplicationDescription::EState::Running);
+                        return;
+                    }
+                }
+                lastIssues = target.GetIssues().ToString();
+                Sleep(TDuration::MilliSeconds(10));
+            }
+            UNIT_FAIL(TStringBuilder() << "Replica did not reach revision " << revision << ": " << lastIssues);
+        };
+        waitAndCheck(0);
+        write(1);
+        waitAndCheck(1);
+    }
+
     Y_UNIT_TEST_TWIN(CreateAsyncReplicationAvailabilityPeriod, UseQueryService) {
         NKikimrConfig::TFeatureFlags flags;
         flags.SetEnableTopicDiskSubDomainQuota(true);
@@ -10362,6 +10508,47 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(desc.GetReplicationDescription().GetConsistencyLevel(), TReplicationDescription::EConsistencyLevel::Global);
             UNIT_ASSERT_VALUES_EQUAL(desc.GetReplicationDescription().GetGlobalConsistency().GetCommitInterval(), TDuration::Seconds(15));
         }
+    }
+
+    Y_UNIT_TEST_TWIN(AsyncReplicationCommitIntervalBoundary, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
+
+        for (const auto* interval : {"-PT1S", "PT0S", "PT0.000001S", "PT0.001S", "PT0.999999S"}) {
+            const auto query = Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://%s/?database=/Root",
+                    CONSISTENCY_LEVEL = "GLOBAL",
+                    COMMIT_INTERVAL = Interval("%s")
+                );
+            )", kikimr.GetEndpoint().c_str(), interval);
+
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "commit_interval must be at least 1 second", interval);
+        }
+
+        const auto query = Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/replication` FOR
+                `/Root/table` AS `/Root/replica`
+            WITH (
+                CONNECTION_STRING = "grpc://%s/?database=/Root",
+                CONSISTENCY_LEVEL = "GLOBAL",
+                COMMIT_INTERVAL = Interval("PT1S")
+            );
+        )", kikimr.GetEndpoint().c_str());
+
+        const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        const auto desc = repl.DescribeReplication("/Root/replication").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(desc.GetStatus(), EStatus::SUCCESS, desc.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetReplicationDescription().GetGlobalConsistency().GetCommitInterval(), TDuration::Seconds(1));
     }
 
     Y_UNIT_TEST(AlterAsyncReplication) {

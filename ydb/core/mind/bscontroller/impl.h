@@ -11,19 +11,7 @@
 #include "self_heal.h"
 #include "storage_pool_stat.h"
 
-<<<<<<< HEAD
-=======
-#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/feature_flags_service.h>
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/blobstorage/base/pdisk_filter.h>
-#include <ydb/core/blobstorage/base/blobstorage_console_events.h>
-#include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
-#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
->>>>>>> e1993d22917 (Treat phantoms-only replicating VDisks as working ones per user request (#55651))
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <util/generic/hash_multi_map.h>

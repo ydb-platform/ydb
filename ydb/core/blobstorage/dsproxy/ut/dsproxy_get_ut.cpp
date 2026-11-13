@@ -28,11 +28,13 @@ do {                            \
 
 Y_UNIT_TEST_SUITE(TDSProxyGetTest) {
 
-<<<<<<< HEAD
-=======
 Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
     for (bool mustRestore : {false, true}) {
         for (const auto [phantomCheck, errorMask] : {std::pair{false, 1u}, {true, 1u}, {true, 7u}}) {
+            // Stable branches use the basic read strategy for phantom checks.
+            if (mustRestore && phantomCheck) {
+                continue;
+            }
             TActorSystemStub actorSystemStub;
             TGroupMock group(0, TErasureType::ErasureMirror3dc, 4, 3, 1);
             const auto info = group.GetInfo();
@@ -99,7 +101,6 @@ Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
     }
 }
 
->>>>>>> e1993d22917 (Treat phantoms-only replicating VDisks as working ones per user request (#55651))
 void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool isVerboseNoDataEnabled, bool checkCrc) {
     TActorSystemStub actorSystemStub;
 

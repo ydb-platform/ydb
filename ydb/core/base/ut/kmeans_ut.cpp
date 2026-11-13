@@ -1,6 +1,7 @@
 #include "kmeans_clusters.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
 #include <library/cpp/testing/unittest/registar.h>

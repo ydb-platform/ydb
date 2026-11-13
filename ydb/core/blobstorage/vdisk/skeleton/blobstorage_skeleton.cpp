@@ -2758,19 +2758,9 @@ namespace NKikimr {
         }
 
         void HandleReplDone(STFUNC_SIG) {
-<<<<<<< HEAD
-            if (ev->Cookie) { // semi-finished replication, only phantom blobs
-                ReplOnlyPhantomsRemain = true;
-            } else {
-                ReplDone = true;
-=======
-            if (ev->Sender != Db->ReplID || RepeatOsirisId) {
-                return;
-            }
             switch (static_cast<EReplDone>(ev->Cookie)) {
                 case EReplDone::Finished:
                     ReplDone = true;
-                    DurabilityReplDone = true;
                     ReplOnlyPhantomsRemain = false;
                     break;
 
@@ -2781,7 +2771,6 @@ namespace NKikimr {
                 case EReplDone::NonPhantomsRemain:
                     ReplOnlyPhantomsRemain = false;
                     break;
->>>>>>> e1993d22917 (Treat phantoms-only replicating VDisks as working ones per user request (#55651))
             }
             UpdateReplState();
         }

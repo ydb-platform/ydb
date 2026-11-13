@@ -1030,12 +1030,7 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
-<<<<<<< HEAD
-=======
-        hFunc(TEvBlobStorage::TEvControllerDDiskInfoListTablets, Handle);
-        hFunc(TEvBlobStorage::TEvControllerDDiskInfoGetTablet, Handle);
         hFunc(TEvFeatureFlags::TEvChanged, Handle);
->>>>>>> e1993d22917 (Treat phantoms-only replicating VDisks as working ones per user request (#55651))
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_ERROR("StateWork unexpected event",

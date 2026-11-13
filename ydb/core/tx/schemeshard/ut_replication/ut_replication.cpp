@@ -1,4 +1,5 @@
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/ydb_convert/replication_description.h>
@@ -346,6 +347,71 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(controllerIds.size(), 4);
+    }
+
+    Y_UNIT_TEST(RejectBatchForceEscalation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        ui32 requests = 0;
+        NKikimrReplication::ESourceCleanupPolicy sourceCleanup = NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP;
+        auto observer = runtime.AddObserver<NKikimr::NReplication::TEvController::TEvDropReplication>([&](auto& ev) {
+            ++requests;
+            sourceCleanup = ev->Get()->Record.GetSourceCleanup();
+            ev.Reset();
+        });
+
+        for (const auto* name : {"Replication1", "Replication2"}) {
+            TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme(name));
+            env.TestWaitNotification(runtime, txId);
+            TestDropReplication(runtime, ++txId, "/MyRoot", name);
+        }
+        const ui64 firstDropTxId = txId - 2;
+        runtime.WaitFor("two pending replication drops", [&] { return requests == 2; });
+
+        const auto edge = runtime.AllocateEdgeActor();
+        enum class EBatchPart { FirstDrop, SecondDrop, CreateDirectory };
+        for (const auto& parts : TVector<TVector<EBatchPart>>{
+            {EBatchPart::FirstDrop, EBatchPart::SecondDrop},
+            {EBatchPart::CreateDirectory, EBatchPart::FirstDrop},
+            {EBatchPart::FirstDrop, EBatchPart::CreateDirectory},
+        }) {
+            auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+            request->Record.SetTxId(++txId);
+            for (const auto part : parts) {
+                auto* tx = request->Record.AddTransaction();
+                tx->SetWorkingDir("/MyRoot");
+                if (part == EBatchPart::CreateDirectory) {
+                    tx->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+                    tx->MutableMkDir()->SetName("Unrelated");
+                } else {
+                    tx->SetOperationType(NKikimrSchemeOp::ESchemeOpDropReplication);
+                    tx->MutableDrop()->SetName(part == EBatchPart::FirstDrop ? "Replication1" : "Replication2");
+                    tx->MutableDrop()->SetReplicationSourceCleanup(NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON);
+                }
+            }
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, edge, request.Release());
+            const auto rejected = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Record.GetStatus(), NKikimrScheme::StatusPreconditionFailed);
+            UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Record.GetTxId(), txId);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Unrelated"), {NLs::PathNotExist});
+            UNIT_ASSERT(sourceCleanup == NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP);
+        }
+
+        auto single = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        single->Record.SetTxId(++txId);
+        auto* tx = single->Record.AddTransaction();
+        tx->SetWorkingDir("/MyRoot");
+        tx->SetOperationType(NKikimrSchemeOp::ESchemeOpDropReplication);
+        tx->MutableDrop()->SetName("Replication1");
+        tx->MutableDrop()->SetReplicationSourceCleanup(NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON);
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, edge, single.Release());
+        const auto accepted = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(accepted->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted);
+        UNIT_ASSERT_VALUES_EQUAL(accepted->Get()->Record.GetTxId(), firstDropTxId);
+        runtime.WaitFor("single FORCE escalation", [&] {
+            return sourceCleanup == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON;
+        });
     }
 
     Y_UNIT_TEST(CreateDropRecreate) {

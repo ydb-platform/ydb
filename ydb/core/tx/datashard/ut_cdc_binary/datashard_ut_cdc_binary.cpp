@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         UNIT_ASSERT_VALUES_EQUAL(record->GetRawKeyPartitionKey(), MD5::Calc(TStringBuf(MakeKeyBytes())));
 
         std::unique_ptr<IChangeRecordSerializer> serializer(CreateChangeRecordSerializer(BinaryOpts(
-            NKikimrSchemeOp::ECdcStreamCompressionUnspecified)));
+            NKikimrSchemeOp::ECdcStreamCompressionNone)));
         TCmdWrite cmd;
         serializer->Serialize(cmd, *record);
         UNIT_ASSERT_STRING_CONTAINS(serializer->DebugString(*record), "binary CDC");
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         UNIT_ASSERT(jsonRaw.StartsWith("{"));
         UNIT_ASSERT_VALUES_EQUAL(jsonChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
 
-        jsonOpts.Compression = NKikimrSchemeOp::ECdcStreamCompressionUnspecified;
+        jsonOpts.Compression = NKikimrSchemeOp::ECdcStreamCompressionNone;
         std::unique_ptr<IChangeRecordSerializer> plain(CreateChangeRecordSerializer(jsonOpts));
         TCmdWrite plainCmd;
         plain->Serialize(plainCmd, *record);
@@ -255,7 +255,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
     Y_UNIT_TEST(RejectsKeyAndTagMismatch) {
         const auto table = MakeTable();
         std::unique_ptr<IChangeRecordSerializer> serializer(CreateChangeRecordSerializer(BinaryOpts(
-            NKikimrSchemeOp::ECdcStreamCompressionUnspecified)));
+            NKikimrSchemeOp::ECdcStreamCompressionNone)));
 
         {
             NKikimrChangeExchange::TDataChange change = MakeUpsert(MakeValueBytes(), 3, 7);

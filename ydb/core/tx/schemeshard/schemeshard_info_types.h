@@ -3387,6 +3387,13 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 Y_ENSURE(success, description);
                 break;
             }
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::THnswIndexDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -3493,6 +3500,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
                 break;
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+                alterData->SpecializedIndexDescription = config.GetHnswIndexDescription();
+                break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
@@ -3564,6 +3574,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::THnswIndexDescription,
         NKikimrSchemeOp::TFulltextIndexDescription,
         NKikimrSchemeOp::TBloomFilter,
         NKikimrSchemeOp::TBloomNGrammFilter> SpecializedIndexDescription;
@@ -3592,14 +3603,10 @@ struct TCdcStreamSettings {
     OPTION(EState, State);
     OPTION(bool, UserSIDs);
     OPTION(bool, TraceIds);
+    OPTION(ECompression, Compression);
+    OPTION(i32, CompressionLevel);
 
     #undef OPTION
-
-    ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionUnspecified;
-    TSelf&& WithCompression(ECompression value) && {
-        Compression = value;
-        return std::move(*this);
-    }
 };
 
 struct TCdcStreamInfo
@@ -3648,6 +3655,9 @@ struct TCdcStreamInfo
             .WithUserSIDs(desc.GetUserSIDs())
             .WithTraceIds(desc.GetTraceIds())
             .WithCompression(desc.GetCompression())
+            .WithCompressionLevel(desc.HasCompressionLevel()
+                ? desc.GetCompressionLevel()
+                : (desc.GetCompression() == NKikimrSchemeOp::ECdcStreamCompressionZstd ? 3 : 0))
         );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
@@ -3674,8 +3684,9 @@ struct TCdcStreamInfo
         }
         desc.SetUserSIDs(UserSIDs);
         desc.SetTraceIds(TraceIds);
-        if (Compression != NKikimrSchemeOp::ECdcStreamCompressionUnspecified) {
-            desc.SetCompression(Compression);
+        desc.SetCompression(Compression);
+        if (CompressionLevel) {
+            desc.SetCompressionLevel(CompressionLevel);
         }
     }
 

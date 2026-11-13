@@ -47,6 +47,7 @@ RECURSE_FOR_TESTS(
     ut_olap
     ut_olap_reboots
     ut_partition_stats
+    ut_pq_configure_bench
     ut_pq_reboots
     ut_reboots
     ut_replication
@@ -357,6 +358,7 @@ GENERATE_ENUM_SERIALIZATION_WITH_HEADER(schemeshard__monitoring.h)  # for ESweep
 
 PEERDIR(
     contrib/libs/protobuf
+    contrib/libs/zstd
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
     library/cpp/iterator

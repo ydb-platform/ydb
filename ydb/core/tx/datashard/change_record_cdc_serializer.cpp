@@ -20,6 +20,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/streams/zstd/zstd.h>
 
 #include <contrib/libs/zstd/include/zstd.h>
 
@@ -33,6 +34,8 @@
 #include <cmath>
 
 namespace NKikimr::NDataShard {
+
+constexpr int DEFAULT_ZSTD_COMPRESSION_LEVEL = 3;
 
 class TBaseSerializer: public IChangeRecordSerializer {
     static NKikimrPQClient::TDataChunk MakeDataChunk() {
@@ -52,6 +55,10 @@ class TBaseSerializer: public IChangeRecordSerializer {
     // that run. Schema snapshots use the library default level.
     static constexpr int CdcZstdDataLevel = -1;
     void ApplyCompression(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
+        // JSON serializers compress in SetJsonData and already honor CompressionLevel.
+        if (data.GetCodec() != 0) {
+            return;
+        }
         if (Opts.Compression != NKikimrSchemeOp::ECdcStreamCompressionZstd) {
             return;
         }
@@ -125,6 +132,10 @@ class TBaseSerializer: public IChangeRecordSerializer {
     TMaybe<ui32> UncompressedSize;
 
 protected:
+    void RememberUncompressedSize(ui32 size) {
+        UncompressedSize = size;
+    }
+
     virtual void FillDataChunk(NKikimrPQClient::TDataChunk& chunk, const TChangeRecord& record) = 0;
 
 public:
@@ -405,10 +416,37 @@ protected:
         return str.Str();
     }
 
+    void SetJsonData(NKikimrPQClient::TDataChunk& data, TString json) {
+        switch (Opts.Compression) {
+        case NKikimrSchemeOp::ECdcStreamCompressionNone:
+            data.SetData(std::move(json));
+            break;
+        case NKikimrSchemeOp::ECdcStreamCompressionZstd: {
+            TString compressed;
+            TStringOutput output(compressed);
+            TZstdCompress compressor(&output, Opts.CompressionLevel ? Opts.CompressionLevel : DEFAULT_ZSTD_COMPRESSION_LEVEL);
+            compressor.Write(json.data(), json.size());
+            compressor.Finish();
+            data.SetCodec(NPersQueueCommon::ZSTD);
+            data.SetData(std::move(compressed));
+            if (json.size() <= static_cast<size_t>(Max<i32>())) {
+                RememberUncompressedSize(static_cast<ui32>(json.size()));
+            }
+            break;
+        }
+        default:
+            Y_ENSURE(false, "Unsupported changefeed compression");
+        }
+    }
+
     void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {
         NJson::TJsonValue json;
         SerializeToJson(json, record);
-        data.SetData(JsonToString(json));
+        if (record.GetKind() == TChangeRecord::EKind::CdcHeartbeat) {
+            data.SetData(JsonToString(json));
+        } else {
+            SetJsonData(data, JsonToString(json));
+        }
     }
 
     virtual void SerializeToJson(NJson::TJsonValue& json, const TChangeRecord& record) = 0;
@@ -560,7 +598,18 @@ protected:
             if (!data.GetAllowOtherKinds() && data.GetPreferredPoolKind()) {
                 definition["data"]["media"] = data.GetPreferredPoolKind();
             }
-            definition["compression"] = family.Codec == NTable::NPage::ECodec::Plain ? "off" : "lz4";
+            switch (family.Codec) {
+                case NTable::NPage::ECodec::Plain:
+                    definition["compression"] = "off";
+                    break;
+                case NTable::NPage::ECodec::LZ4:
+                    definition["compression"] = "lz4";
+                    break;
+                case NTable::NPage::ECodec::ZSTD:
+                    definition["compression"] = "zstd";
+                    definition["compressionLevel"] = family.GetCodecLevel();
+                    break;
+            }
             definition["cacheMode"] = family.CacheMode == NTable::NPage::ECacheMode::Regular
                 ? "regular" : "in_memory";
         }
@@ -852,7 +901,7 @@ protected:
             messageMeta.set_key("__key");
             messageMeta.set_value(JsonToString(json["key"]));
         }
-        data.SetData(JsonToString(json["value"]));
+        SetJsonData(data, JsonToString(json["value"]));
     }
 
 public:

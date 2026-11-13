@@ -92,13 +92,15 @@ bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
 }
 
 bool CompileLibrary(const NSQLTranslation::TTranslators& translators, const TString& alias,
-                    const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize)
+                    const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize,
+                    const TProjectSettings& projectSettings)
 {
     TAstParseResult res;
     if (alias.EndsWith(".yqls")) {
         res = ParseAst(script, /*externalPool=*/nullptr, alias);
     } else if (alias.EndsWith(".sql") || alias.EndsWith(".yql")) {
         NSQLTranslation::TTranslationSettings translationSettings;
+        translationSettings.ProjectSettings = projectSettings;
         translationSettings.SyntaxVersion = 1;
         translationSettings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         res = NSQLTranslation::SqlToYql(translators, script, translationSettings);
@@ -208,7 +210,8 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 }
 
 bool CompileLibraries(const NSQLTranslation::TTranslators& translators, const TUserDataTable& userData,
-                      TExprContext& ctx, TModulesTable& modules, bool optimize)
+                      TExprContext& ctx, TModulesTable& modules, bool optimize,
+                      const TProjectSettings& projectSettings)
 {
     THashMap<TString, TLibraryCohesion> libs;
     for (const auto& data : userData) {
@@ -222,7 +225,7 @@ bool CompileLibraries(const NSQLTranslation::TTranslators& translators, const TU
             }
 
             if (!libraryData.empty()) {
-                if (CompileLibrary(translators, alias, libraryData, ctx, libs[alias], optimize)) {
+                if (CompileLibrary(translators, alias, libraryData, ctx, libs[alias], optimize, projectSettings)) {
                     modules[TModuleResolver::NormalizeModuleName(alias)] = libs[alias].Exports;
                 } else {
                     return false;

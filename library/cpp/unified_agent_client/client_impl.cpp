@@ -967,7 +967,7 @@ namespace NUnifiedAgent::NPrivate {
         Counters->AcknowledgedBytes += bytesCount;
         Counters->InflightMessages -= (messagesCount + skippedMessagesCount);
         Counters->InflightBytes -= (bytesCount + skippedBytesCount);
-        InflightBytes.fetch_sub(bytesCount);
+        InflightBytes.fetch_sub(bytesCount + skippedBytesCount);
         Counters->GrpcInflightMessages -= messagesCount;
         Counters->GrpcInflightBytes -= bytesCount;
         GrpcInflightMessages -= messagesCount;

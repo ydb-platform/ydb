@@ -21,7 +21,7 @@
 namespace NKikimr {
     struct TNodeWardenConfig;
 
-    namespace NBridge {
+    namespace NGroupSyncer {
         struct TSyncerDataStats;
     }
 }
@@ -348,6 +348,15 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxCommonLogChunksSSD;
         TControlWrapper CommonStaticLogChunks;
         TControlWrapper MaxActiveCompactionsPerPDisk;
+
+        struct TReplPDiskRate {
+            ui64 ReadBytesPerSecond;
+            ui64 WriteBytesPerSecond;
+        };
+
+        ui64 ReplTotalRequestBytesPerSecond = 0;
+        ui64 ReplTotalResponseBytesPerSecond = 0;
+        THashMap<NPDisk::EDeviceType, TReplPDiskRate> ReplPDiskRates;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
@@ -878,9 +887,10 @@ namespace NKikimr::NStorage {
         void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr ev);
         void Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse::TPtr ev);
         void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev);
+        void ApplyReplBrokerConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Bridge syncer operation
+        // Group syncer operation
 
         struct TWorkingSyncer {
             const TGroupId BridgeProxyGroupId;
@@ -896,7 +906,7 @@ namespace NKikimr::NStorage {
             ui32 NumFinishOK = 0;
             ui32 NumFinishError = 0;
             std::optional<TString> LastErrorReason;
-            std::shared_ptr<NBridge::TSyncerDataStats> SyncerDataStats;
+            std::shared_ptr<NGroupSyncer::TSyncerDataStats> SyncerDataStats;
 
             ui64 ReportedBytesDone = 0;
             ui64 ReportedBytesTotal = 0;
@@ -904,6 +914,11 @@ namespace NKikimr::NStorage {
             ui64 ReportedBlobsDone = 0;
             ui64 ReportedBlobsTotal = 0;
             ui64 ReportedBlobsError = 0;
+            ui64 ReportedBytesToCopy = 0;
+            ui64 ReportedBytesCopied = 0;
+            bool ReportedScanFinished = false;
+            // a new run starts from zero, while BSC may still have the values of the previous one, so all of them go
+            bool ForceProgressReport = false;
 
             friend std::strong_ordering operator <=>(const TWorkingSyncer& x, const TWorkingSyncer& y) {
                 return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId) <=>

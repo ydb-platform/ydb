@@ -174,6 +174,8 @@ std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::Table
             return NKikimrSchemeOp::EIndexTypeGlobalUnique;
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
             return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalHnsw;
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex:
             return enableFulltextCompact
                 ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
@@ -203,6 +205,7 @@ bool IsLocalTableIndex(Ydb::Table::TableIndex::TypeCase type) {
         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+        case Ydb::Table::TableIndex::kGlobalHnswIndex:
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
         case Ydb::Table::TableIndex::kGlobalJsonIndex:
@@ -311,6 +314,7 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             return true;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalJson:

@@ -26,6 +26,7 @@ SRCS(
     mkql_type_builder_ut.cpp
     mkql_type_ops_ut.cpp
     mkql_unboxed_value_stream_ut.cpp
+    mkql_core_win_frames_collector_test_helper.cpp
     mkql_core_win_frames_collector_ut_part1.cpp
     mkql_core_win_frames_collector_ut_part2.cpp
     mkql_core_win_frames_collector_ut_part3.cpp

@@ -246,6 +246,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto& ev = *Request->Get();
+        if (Self->DatabaseFreeze.GetStage() >= NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC) {
+            return true;
+        }
         const auto& tablePathId = ev.TablePathId;
         const auto& streamPathId = ev.StreamPathId;
         const auto& readVersion = ev.ReadVersion;
@@ -573,6 +576,11 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
+        if (Self->DatabaseFreeze.GetStage() >= NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC) {
+            Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::BAD_REQUEST,
+                "Database is frozen for CDC scan generation");
+            return true;
+        }
 
         YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Handling CDC stream scan request",
             {"tabletId", TabletID()},
@@ -740,4 +748,3 @@ void TDataShard::Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TA
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

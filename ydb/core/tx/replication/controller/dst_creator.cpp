@@ -19,6 +19,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -44,6 +45,18 @@ bool CheckColumnFamilySettings(
             << ", expected: " << static_cast<ui32>(expectedCodec)
             << ", got: " << static_cast<ui32>(actualCodec);
         return false;
+    }
+
+    if (expectedCodec == NKikimrSchemeOp::ColumnCodecZSTD) {
+        const auto expectedLevel = expected.HasColumnCodecLevel() ? expected.GetColumnCodecLevel() : 1;
+        const auto actualLevel = actual.HasColumnCodecLevel() ? actual.GetColumnCodecLevel() : 1;
+        if (expectedLevel != actualLevel) {
+            error = TStringBuilder() << "Column family compression level mismatch"
+                << ": name: " << name
+                << ", expected: " << expectedLevel
+                << ", got: " << actualLevel;
+            return false;
+        }
     }
 
     const auto expectedCacheMode = expected.GetColumnCacheMode();
@@ -73,6 +86,23 @@ bool CheckColumnFamilySettings(
         << ", expected: " << expectedMedia
         << ", got: " << actualMedia;
     return false;
+}
+
+bool AreLiteralDefaultsEqual(
+        const NKikimrSchemeOp::TColumnDescription& expected,
+        const NKikimrSchemeOp::TColumnDescription& actual)
+{
+    if (expected.HasDefaultFromLiteral() != actual.HasDefaultFromLiteral()) {
+        return false;
+    }
+
+    if (!expected.HasDefaultFromLiteral()) {
+        return true;
+    }
+
+    const auto& expectedDefault = expected.GetDefaultFromLiteral();
+    const auto& actualDefault = actual.GetDefaultFromLiteral();
+    return expectedDefault.SerializeAsString() == actualDefault.SerializeAsString();
 }
 
 bool IsImported(const NKikimrSchemeOp::TTableDescription& table) {
@@ -190,6 +220,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 GetTableProfiles();
             } else {
                 Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, NYdb::NTable::TDescribeTableSettings()
+                    .WithSetVal(true)
                     .WithKeyShardBoundary(true)),
                     0,
                     RetryGeneration);
@@ -252,7 +283,22 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
 
         Ydb::Table::CreateTableRequest scheme;
-        result.GetTableDescription().SerializeTo(scheme);
+        const auto description = result.GetTableDescription();
+        description.SerializeTo(scheme);
+
+        // SDK table descriptions do not retain literal defaults when serialized.
+        const auto& source = NYdb::TProtoAccessor::GetProto(description);
+        THashMap<TStringBuf, const Ydb::TypedValue*> literalDefaults;
+        for (const auto& column : source.columns()) {
+            if (column.has_from_literal()) {
+                literalDefaults.emplace(column.name(), &column.from_literal());
+            }
+        }
+        for (auto& column : *scheme.mutable_columns()) {
+            if (const auto it = literalDefaults.find(column.name()); it != literalDefaults.end()) {
+                column.mutable_from_literal()->CopyFrom(*it->second);
+            }
+        }
 
         // filter out unsupported index types
         auto& indexes = *scheme.mutable_indexes();
@@ -278,7 +324,18 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         Ydb::StatusIds::StatusCode status;
         TString error;
 
-        if (!FillTableDescription(TxBody, scheme, TableProfiles, status, error, scheme.indexes_size())) {
+        // Sequences (e.g. for serial columns) are only created by the indexed flavor of the create
+        // operation, so it is required whenever some column defaults from a sequence.
+        bool hasSequences = false;
+        for (const auto& column : scheme.columns()) {
+            if (column.has_from_sequence()) {
+                hasSequences = true;
+                break;
+            }
+        }
+        const bool indexedTable = scheme.indexes_size() || hasSequences;
+
+        if (!FillTableDescription(TxBody, scheme, TableProfiles, status, error, indexedTable)) {
             return Error(NKikimrScheme::StatusSchemeError, error);
         }
 
@@ -290,7 +347,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         TxBody.SetWorkingDir(pathPair.first);
 
         NKikimrSchemeOp::TTableDescription* desc = nullptr;
-        if (scheme.indexes_size()) {
+        if (indexedTable) {
             NeedToCheck = true;
             TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
             TxBody.SetInternal(true);
@@ -629,6 +686,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                     << ": name: " << column.GetName()
                     << ", expected: " << column.GetType()
                     << ", got: " << it->second->GetType();
+                return false;
+            }
+
+            if (!AreLiteralDefaultsEqual(column, *it->second)) {
+                error = TStringBuilder() << "Column literal default mismatch"
+                    << ": name: " << column.GetName();
                 return false;
             }
 

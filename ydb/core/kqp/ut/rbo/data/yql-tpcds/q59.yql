@@ -50,9 +50,9 @@ $wss = (
             END
         ) AS sat_sales
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     WHERE
         d_date_sk == ss_sold_date_sk
     GROUP BY
@@ -86,9 +86,9 @@ FROM (
     FROM
         $wss AS wss
     ,
-        `/Root/test/ds/store`
+        `store`
     ,
-        `/Root/test/ds/date_dim` AS d
+        `date_dim` AS d
     WHERE
         d.d_week_seq == wss.d_week_seq
         AND ss_store_sk == s_store_sk
@@ -109,9 +109,9 @@ FROM (
     FROM
         $wss AS wss
     ,
-        `/Root/test/ds/store`
+        `store`
     ,
-        `/Root/test/ds/date_dim` AS d
+        `date_dim` AS d
     WHERE
         d.d_week_seq == wss.d_week_seq
         AND ss_store_sk == s_store_sk

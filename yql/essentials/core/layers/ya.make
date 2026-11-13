@@ -1,5 +1,11 @@
 YQL_LIBRARY()
-SRCS(layers.cpp)
+SRCS(
+    layers.cpp
+    layers_fwd.cpp
+    layers_integration.cpp
+    remote_layer_provider.cpp
+    utils.cpp
+)
 PEERDIR(
     yql/essentials/ast
     library/cpp/threading/future

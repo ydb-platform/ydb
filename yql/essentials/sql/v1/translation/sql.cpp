@@ -198,6 +198,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore71: // create symlink
         case TRule_sql_stmt_core::kAltSqlStmtCore72: // drop symlink
         case TRule_sql_stmt_core::kAltSqlStmtCore73: // kill session
+        case TRule_sql_stmt_core::kAltSqlStmtCore74: // checksum table
             return false;
         case TRule_sql_stmt_core::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
@@ -362,6 +363,10 @@ bool SplitQueryToStatements(const TLexers& lexers, const TParsers& parsers, cons
 
 class TTranslator: public NSQLTranslation::ITranslator {
 public:
+    bool AcceptsProjectSetting(const NYql::TProjectSettings::TPragma& pragma) const override {
+        return AcceptsSqlProjectSetting(pragma);
+    }
+
     TTranslator(TLexers lexers, TParsers parsers)
         : Lexers_(std::move(lexers))
         , Parsers_(std::move(parsers))

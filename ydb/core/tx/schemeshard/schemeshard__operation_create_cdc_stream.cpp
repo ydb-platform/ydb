@@ -241,13 +241,29 @@ public:
         }
 
         switch (streamDesc.GetCompression()) {
-        case NKikimrSchemeOp::ECdcStreamCompressionUnspecified:
         case NKikimrSchemeOp::ECdcStreamCompressionNone:
+            if (streamDesc.HasCompressionLevel()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "COMPRESSION_LEVEL requires ZSTD compression");
+                return result;
+            }
+            break;
         case NKikimrSchemeOp::ECdcStreamCompressionZstd:
+            if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatProto) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "ZSTD compression is not supported for the PROTO changefeed format");
+                return result;
+            }
+            if (streamDesc.HasCompressionLevel()
+                    && (streamDesc.GetCompressionLevel() < 1 || streamDesc.GetCompressionLevel() > 22)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "ZSTD compression level must be in range [1, 22]");
+                return result;
+            }
             break;
         default:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
-                << "Invalid stream compression: " << static_cast<ui32>(streamDesc.GetCompression()));
+                << "Invalid compression codec: " << static_cast<ui32>(streamDesc.GetCompression()));
             return result;
         }
 

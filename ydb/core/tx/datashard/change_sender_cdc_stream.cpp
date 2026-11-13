@@ -297,6 +297,7 @@ public:
             .UserSIDs = stream.UserSIDs,
             .TraceIds = stream.TraceIds,
             .Compression = stream.Compression,
+            .CompressionLevel = stream.CompressionLevel,
         }))
     {
     }
@@ -782,4 +783,3 @@ IActor* CreateCdcStreamChangeSender(const TDataShardId& dataShard, const TPathId
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

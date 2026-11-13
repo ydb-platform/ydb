@@ -184,6 +184,7 @@ public:
     std::vector<TSelectedPortionInfo> Select(TInternalPathId pathId, const NReader::TReadDescription& readDescription,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override;
     bool ArePortionsLoaded(const TInternalPathId pathId, const TPKRangesFilter& ranges) const override;
+    bool ArePortionsLoadedFrom(const TInternalPathId pathId, const NArrow::TSimpleRow& key) const override;
     bool AreAllPortionsLoaded(const std::optional<TInternalPathId> pathId) const override;
 
     bool IsPortionExists(const TInternalPathId pathId, const ui64 portionId) const {
@@ -199,7 +200,7 @@ public:
 
     virtual bool HasDataInPathId(const TInternalPathId pathId) const override {
         auto g = GetGranuleOptional(pathId);
-        return g && (g->GetPortions().size() || g->GetInsertedPortions().size());
+        return g && !g->IsErasable();
     }
 
     bool IsGranuleExists(const TInternalPathId pathId) const {

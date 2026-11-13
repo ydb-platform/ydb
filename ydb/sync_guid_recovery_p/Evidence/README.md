@@ -1,5 +1,28 @@
 # Checked model results
 
+## State reduction — 2026-11-13
+
+All **14 unchanged cases passed 50 PChecker schedules each: 700 schedules,
+zero bugs**. Scenarios and monitors match base Git SHA
+`cb5d537d24841e6827b95ec9641a78b658c6faf5` (2026-11-13T19:56:45+03:00)
+byte for byte. [state-reduction-results.json](state-reduction-results.json)
+records source hashes, commands/settings and per-case results.
+
+PEx 0.4.1, exact caching, DFS, seed 1:
+
+| Case | Distinct states | Seconds | Reported memory, MB | Result |
+| --- | ---: | ---: | ---: | --- |
+| `tcFreshGroup` | 26,589 | 3.9 | 227.8 | Exhaustive: `correct for any depth`, zero unexplored choices. |
+| `tcMirror3dcFreshGroup` | 58,467 | 8.9 | 575.2 | Exhaustive: `correct for any depth`, zero unexplored choices. |
+
+Before reduction, `tcFreshGroup` reached 132,139 states and the 1 GiB cap after
+24.9 seconds without finishing. Both measurements used the same PEx runtime,
+seed, heap and limits. The other 12 reduced-model cases found no bugs but remain
+**incomplete**: ten hit the 25-second timeout and two hit the 1 GiB memory cap.
+Those capped samples ran up to three cases concurrently; the two exhaustive
+cases ran individually. The 10,000-step bound was enabled with
+`--fail-on-maxsteps` throughout.
+
 ## Repaired model — 2026-11-13
 
 All **14 existing cases passed 50 schedules each: 700 schedules, zero bugs**.

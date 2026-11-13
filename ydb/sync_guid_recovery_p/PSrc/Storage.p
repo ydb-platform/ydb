@@ -241,11 +241,14 @@ machine TRecoveryStorage {
       assert result.Status == SyncDone || result.Status == DisksSynced;
       disks[result.Owner].Cursors[result.Peer] = result.SyncState;
       roundDone += (result.Peer);
+      roundDone = CanonicalDisks(roundDone, diskCount);
       announce eSyncPeerDone, (Owner = result.Owner, Peer = result.Peer, Status = result.Status);
       if (sizeof(roundDone) == sizeof(roundPeers)) {
         disks[roundOwner].Ready = true;
         send driver, eRoundFinished,
           (Owner = roundOwner, HullBlock = disks[roundOwner].HullBlock, Peers = sizeof(roundDone));
+        roundPeers = default(set[int]);
+        roundDone = default(set[int]);
       }
     }
   }
@@ -294,6 +297,11 @@ machine TSyncerJobTask {
   }
   fun ReplyAndDie(status: ESyncStatus) {
     send storage, TEvSyncerJobDone, (Owner = owner, Peer = peer, SyncState = current, Status = status);
+    // Halted machines remain in PEx's state key; the sent payload is independent.
+    storage = default(machine);
+    owner = 0;
+    peer = 0;
+    current = default(TSyncState);
     raise halt;
   }
 }

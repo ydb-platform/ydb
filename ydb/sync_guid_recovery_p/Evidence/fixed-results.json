@@ -1,0 +1,203 @@
+{
+  "checked_at": "2026-11-13T16:57:07.479837+03:00",
+  "checker": "PChecker 3.1.0, randomized bounded exploration (not exhaustive)",
+  "dotnet_sdk": "8.0.428",
+  "dotnet_runtime": "8.0.34",
+  "working_tree_base_sha": "5a1fd318a65b085dc6360af581c4f7c4db51ba5a",
+  "working_tree_base_commit_date": "2026-11-12T20:55:25+03:00",
+  "model_changes_uncommitted": true,
+  "compile_command": "p compile --pproj Recovery.pproj --mode pchecker --outdir /tmp/sync-guid-fixed-build-final",
+  "assembly": "/tmp/sync-guid-fixed-build-final/PChecker/net8.0/SyncGuidRecovery.dll",
+  "check_command": "p check <assembly> --testcase <testcase> --schedules 50 --seed 1 --max-steps 10000 --fail-on-maxsteps --outdir <outdir>",
+  "seed": 1,
+  "schedules_requested_per_case": 50,
+  "max_steps": 10000,
+  "fail_on_maxsteps": true,
+  "total_schedules": 700,
+  "total_bugs": 0,
+  "unchanged_from_base": [
+    "PSpec/Invariants.p",
+    "PTst/Scenarios.p",
+    "PTst/Tests.p"
+  ],
+  "source_sha256": {
+    "PSpec/Invariants.p": "f1cc46a66ebeb0e1852620a2950093094ac9764ddfe2418a465fc07787fba914",
+    "PSrc/Events.p": "f4b141485e0487d8027110bc21e1c576e2c9e33a61fa8ee3868d2d44e4db412c",
+    "PSrc/GuidRecovery.p": "7cd0ca6716958d877fc000fdd6016d7e09b559a8bbd467139171ab8c73d8a621",
+    "PSrc/Quorum.p": "1af340177ba235441d7bdce36384efc710ead3f3ac60e5efdbd7f4fa5b4562de",
+    "PSrc/Storage.p": "a01c5198f5e352106960c9e3bf6b357ea2e3441e3d7eb3e931997a9d98148678",
+    "PTst/Scenarios.p": "ccf8eeee6416d9c211aa9256bf52247228c006cfa5c8fa927a2e0b5f6fc32313",
+    "PTst/Tests.p": "054976f9b68185aff6174d5a928e396816b81e8a025f3bd1ee6ccc0906bac73b"
+  },
+  "logs_directory": "/tmp/sync-guid-fixed-final-checks",
+  "results": [
+    {
+      "testcase": "tcStaleMetadata",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "667",
+        "time_seconds": "5",
+        "memory_max_mb": "0.02"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcDelayedSelfGuid",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "667",
+        "time_seconds": "5.1",
+        "memory_max_mb": "0.02"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcFalseFirstRun",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "619",
+        "time_seconds": "4.51",
+        "memory_max_mb": "0.02"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcNoWipes",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "166",
+        "time_seconds": "1.22",
+        "memory_max_mb": "0.01"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcRetainedSource",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "596",
+        "time_seconds": "4.3",
+        "memory_max_mb": "0.02"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcWipedWithWitnesses",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "150",
+        "time_seconds": "1.31",
+        "memory_max_mb": "0.01"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcFreshGroup",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "86",
+        "time_seconds": "0.71",
+        "memory_max_mb": "0.01"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcMirror3dcStaleMetadata",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "788",
+        "time_seconds": "4.75",
+        "memory_max_mb": "0.02"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcMirror3dcDelayedSelfGuid",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "788",
+        "time_seconds": "5.19",
+        "memory_max_mb": "0.02"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcMirror3dcFalseFirstRun",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "734",
+        "time_seconds": "5.08",
+        "memory_max_mb": "0.02"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcMirror3dcNoWipes",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "182",
+        "time_seconds": "1.32",
+        "memory_max_mb": "0.01"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcMirror3dcRetainedSource",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "714",
+        "time_seconds": "5.17",
+        "memory_max_mb": "0.02"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcMirror3dcWipedWithWitnesses",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "162",
+        "time_seconds": "1.06",
+        "memory_max_mb": "0.01"
+      },
+      "scenario_completed": true
+    },
+    {
+      "testcase": "tcMirror3dcFreshGroup",
+      "exit_code": 0,
+      "statistics": {
+        "bugs": "0",
+        "schedules": "50",
+        "max_depth": "90",
+        "time_seconds": "0.61",
+        "memory_max_mb": "0.01"
+      },
+      "scenario_completed": true
+    }
+  ]
+}

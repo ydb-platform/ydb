@@ -26,6 +26,20 @@ topologies or realm-state transitions were added. These repairs are not a port
 of PR #57055. [Fixed-model results](Evidence/fixed-results.json) are separate
 from the original counterexamples.
 
+## State-space reduction
+
+Survey replies use fixed slots indexed by `VDiskId`; unseen slots are empty and
+`seen` still determines the first quorum. Membership-only sets (`seen`,
+`delivered`, `roundDone`) are rebuilt in disk order because PEx otherwise
+serializes their insertion order. Verdict calculation is order-independent.
+Survey data is cleared after the verdict, and completed recovery/job fields
+are cleared after their final send. `Finished` still ignores late replies.
+
+These changes remove retained arrival histories without reordering any queued
+messages or monitor observations. The 14 scenarios and all monitors are
+unchanged. The metadata monitor still retains completion order, and genuine
+message-queue interleavings remain. See [reduction results](Evidence/state-reduction-results.json).
+
 ## Topologies and quorums
 
 The same implementation and driver run with two configurations:

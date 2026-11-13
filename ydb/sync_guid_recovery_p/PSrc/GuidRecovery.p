@@ -89,19 +89,28 @@ machine TVDiskGuidRecoveryActor {
 
   start state Survey {
     entry (config: (Storage: machine, Owner: int, Local: TLocalGuidInfo, Topology: ETopology)) {
+      var i: int;
       storage = config.Storage;
       owner = config.Owner;
       local = config.Local;
       topology = config.Topology;
+      // Empty slots contribute no evidence; reply order is not protocol state.
+      while (i < DiskCount(topology)) {
+        votes += (i, default(TGuidReply));
+        i = i + 1;
+      }
       send storage, eSurvey, (Source = this, Owner = owner);
     }
     on TEvVDiskGuidObtained do (reply: TGuidReply) {
       if (reply.VDiskId in seen) { return; }
       seen += (reply.VDiskId);
-      votes += (sizeof(votes), reply);
+      seen = CanonicalDisks(seen, DiskCount(topology));
+      votes[reply.VDiskId] = reply;
       announce eSurveyVote, (Owner = owner, Info = reply.Info);
       if (HasGroupQuorum(topology, seen)) {
         outcome = ReachAVerdict(topology, local, votes);
+        votes = default(seq[TGuidReply]);
+        seen = default(set[int]);
         announce eGuidVerdict, (Owner = owner, Decision = outcome.Decision);
         if (outcome.Decision == Inconsistency) { Finish(); }
         if (outcome.Step == ACTION_GenerateGuid) {
@@ -172,6 +181,14 @@ machine TVDiskGuidRecoveryActor {
   }
   fun Finish() {
     send storage, TEvVDiskGuidRecovered, (Owner = owner, Outcome = outcome);
+    // Finished only discards late replies; none of these fields is read again.
+    storage = default(machine);
+    owner = 0;
+    topology = default(ETopology);
+    local = default(TLocalGuidInfo);
+    seen = default(set[int]);
+    votes = default(seq[TGuidReply]);
+    outcome = default(TDecision);
     // A completed/cancelled proxy can still have a reply in flight.
     goto Finished;
   }
@@ -218,6 +235,7 @@ machine SurveyTransport {
         }
         if (hold) { pending += (sizeof(pending), env); return; }
         delivered += (env.Reply.VDiskId);
+        delivered = CanonicalDisks(delivered, DiskCount(topology));
       }
       send env.Target, TEvVDiskGuidObtained, env.Reply;
       if (HasGroupQuorum(topology, delivered)) {
@@ -225,6 +243,10 @@ machine SurveyTransport {
           send buffered.Target, TEvVDiskGuidObtained, buffered.Reply;
         }
         pending = default(seq[TGuidEnvelope]);
+        configured = false;
+        delivered = default(set[int]);
+        mode = default(EScenario);
+        topology = default(ETopology);
       }
     }
   }

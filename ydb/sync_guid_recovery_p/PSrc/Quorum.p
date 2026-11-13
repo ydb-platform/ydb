@@ -3,6 +3,17 @@ fun DiskCount(topology: ETopology): int {
   return 8;
 }
 
+// PEx serializes set insertion order. Keep membership-only disk sets canonical.
+fun CanonicalDisks(disks: set[int], count: int): set[int] {
+  var disk: int;
+  var result: set[int];
+  while (disk < count) {
+    if (disk in disks) { result += (disk); }
+    disk = disk + 1;
+  }
+  return result;
+}
+
 // TQuorumCheckerOrdinary / TQuorumCheckerMirror3dc::CheckQuorumForGroupDomains.
 // One VDisk per fail domain; mirror3dc physical realms are {0,1,2}, {3,4,5}, {6,7,8}.
 fun HasGroupQuorum(topology: ETopology, replies: set[int]): bool {

@@ -28,4 +28,20 @@ All 14 existing cases should find no bugs with unchanged monitors.
 These are bounded randomized checks, not exhaustive verification.
 Saved counterexamples in `Evidence/` belong to the original model, before these repairs.
 
+## PEx
+
+```sh
+p compile --pproj Recovery.pproj --mode pex --outdir PGenerated
+jar=PGenerated/PEx/target/SyncGuidRecovery-jar-with-dependencies.jar
+p check "$jar" --mode pex --testcase tcFreshGroup \
+  --sch-pex dfs --schedules 0 --seed 1 --memout 1 \
+  --max-steps 10000 --fail-on-maxsteps \
+  --checker-args :--state-caching:exact --outdir PCheckerOutput/tcFreshGroup
+```
+
+Change `--testcase` to select another existing case. Require exit code 0,
+`correct for any depth`, and zero unexplored choices. A memory/time limit
+means incomplete exploration. Both `FreshGroup` cases complete after state
+reduction; the other cases remain incomplete in the recorded capped samples.
+
 [Model and C++ correspondence](MODEL.md) · [Recorded results](Evidence/README.md)

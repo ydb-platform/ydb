@@ -810,6 +810,17 @@ void TPDisk::ProcessLogReadQueue() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SysLog writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+std::vector<std::pair<TOwner, ui8>> TPDisk::GetOwnersSizeInUnitsInfo() const {
+    std::vector<std::pair<TOwner, ui8>> ownersSizeInUnitsInfo;
+    ownersSizeInUnitsInfo.reserve(AtomicGet(TotalOwners));
+    for (ui32 owner = 0; owner < OwnerData.size(); ++owner) {
+        if (OwnerData[owner].VDiskId != TVDiskID::InvalidId) {
+            ownersSizeInUnitsInfo.push_back(std::make_pair(owner, OwnerData[owner].GroupSizeInUnits));
+        }
+    }
+    return ownersSizeInUnitsInfo;
+}
+
 void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NWilson::TTraceId *traceId) {
     TGuard<TMutex> guard(StateMutex);
     LoggedNonces = SysLogRecord.Nonces;
@@ -870,13 +881,7 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
         Y_VERIFY_S(success, PCtx->PDiskLogPrefix);
     }
     ui32 compatibilityInfoSize = SerializedCompatibilityInfo->size();
-    std::vector<std::pair<TOwner, ui8>> ownersSizeInUnitsInfo(AtomicGet(TotalOwners));
-
-    for (ui32 owner = 0; owner < OwnerData.size(); ++owner) {
-        if (OwnerData[owner].VDiskId != TVDiskID::InvalidId) {
-            ownersSizeInUnitsInfo.push_back(std::make_pair(owner, OwnerData[owner].GroupSizeInUnits));
-        }
-    }
+    const std::vector<std::pair<TOwner, ui8>> ownersSizeInUnitsInfo = GetOwnersSizeInUnitsInfo();
 
     ui32 ownersSizeInUnitsInfoSize = sizeof(ownersSizeInUnitsInfo[0]) * ownersSizeInUnitsInfo.size();
     static_assert(sizeof(ownersSizeInUnitsInfo[0]) == 2);

@@ -367,6 +367,8 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // SysLog writing
     void WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NWilson::TTraceId *traceId);
+    // (owner, group size in units) pairs of the owners with a VDisk, as the sys log record stores them
+    std::vector<std::pair<TOwner, ui8>> GetOwnersSizeInUnitsInfo() const;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Common log writing
     // firstLsnToKeep, when nonzero, asks for the RED exception only if the record really

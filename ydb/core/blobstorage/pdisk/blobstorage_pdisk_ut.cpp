@@ -6,6 +6,7 @@
 #include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_ut_env.h"
 
+#include <algorithm>
 #include <type_traits>
 #include <library/cpp/logger/record.h>
 #include <library/cpp/logger/stream.h>
@@ -1652,6 +1653,56 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     // A sys log record whose group size in units info declares more bytes than the record holds makes the start of
     // the PDisk fail with a parse error instead of terminating the process
+    Y_UNIT_TEST(GroupSizeInUnitsSurvivesRestart) {
+        TActorTestContext testCtx({});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull(2);
+        TVDiskMock anotherVDisk(&testCtx);
+        anotherVDisk.InitFull(255);
+        const NPDisk::TOwner owner = vdisk.PDiskParams->Owner;
+        const NPDisk::TOwner anotherOwner = anotherVDisk.PDiskParams->Owner;
+
+        // the sys log record holds exactly one pair per VDisk
+        std::vector<std::pair<NPDisk::TOwner, ui8>> expected{{owner, 2}, {anotherOwner, 255}};
+        std::sort(expected.begin(), expected.end());
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+            const std::vector<std::pair<NPDisk::TOwner, ui8>> written = pdisk->GetOwnersSizeInUnitsInfo();
+            UNIT_ASSERT_VALUES_EQUAL(written.size(), expected.size());
+            for (size_t i = 0; i < expected.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(ui32(written[i].first), ui32(expected[i].first));
+                UNIT_ASSERT_VALUES_EQUAL(ui32(written[i].second), ui32(expected[i].second));
+            }
+        });
+
+        testCtx.RestartPDiskSync();
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+            UNIT_ASSERT_VALUES_EQUAL(pdisk->OwnerData[owner].GroupSizeInUnits, 2);
+            UNIT_ASSERT_VALUES_EQUAL(pdisk->OwnerData[anotherOwner].GroupSizeInUnits, 255);
+        });
+    }
+
+    Y_UNIT_TEST(GroupSizeInUnitsAboveMaxIsRejected) {
+        TActorTestContext testCtx({});
+        TVDiskMock vdisk(&testCtx);
+
+        // the sys log record stores the group size in one byte, so a larger one is not accepted
+        testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+                new NPDisk::TEvYardInit(TVDiskMock::OwnerRound.fetch_add(1), vdisk.VDiskID, testCtx.TestCtx.PDiskGuid,
+                    testCtx.Sender, {}, Max<ui32>(), 256),
+                NKikimrProto::ERROR);
+
+        vdisk.InitFull(255);
+        testCtx.TestResponse<NPDisk::TEvYardResizeResult>(
+                new NPDisk::TEvYardResize(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 256),
+                NKikimrProto::ERROR);
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+            UNIT_ASSERT_VALUES_EQUAL(pdisk->OwnerData[vdisk.PDiskParams->Owner].GroupSizeInUnits, 255);
+        });
+        testCtx.TestResponse<NPDisk::TEvYardResizeResult>(
+                new NPDisk::TEvYardResize(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 1),
+                NKikimrProto::OK);
+    }
+
     // Makes the PDisk write a sys log record whose group size in units info declares sizeDelta more bytes than it has,
     // and checks that the next start of the PDisk fails without terminating the process
     void TestSysLogRecordWithBadGroupSizeInUnitsInfoSize(i32 sizeDelta) {

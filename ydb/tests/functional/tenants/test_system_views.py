@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class BaseSystemViews(object):
-    query_stats_interval_seconds = 60
+    query_stats_interval_seconds = 1
 
     @classmethod
     def setup_class(cls):
@@ -215,22 +215,16 @@ class TestPartitionStats(BaseSystemViews):
 
 
 class TestQueryMetrics(BaseSystemViews):
-    query_stats_interval_seconds = 1
-
     def test_case(self):
         self.check_query_metrics_and_stats(1)
 
 
 class TestQueryMetricsUniqueQueries(BaseSystemViews):
-    query_stats_interval_seconds = 1
-
     def test_case(self):
         self.check_query_metrics_and_stats(10)
 
 
 class TestQueryMetricsOneHourRestart(BaseSystemViews):
-    query_stats_interval_seconds = 1
-
     def test_case(self):
         table = os.path.join(self.database, 'table')
         query = "select * from `{}` -- query-metrics-one-hour-restart".format(table)

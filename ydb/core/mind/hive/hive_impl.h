@@ -155,6 +155,12 @@ class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveShar
 public:
     using IActorOps::Register;
 
+    struct TNodePing {
+        TActorId Local;
+        bool SendSettings = false;
+        bool SendCapabilities = false;
+    };
+
 protected:
     friend class THiveBalancer;
     friend class THiveDrain;
@@ -448,7 +454,7 @@ protected:
     TEventPriorityQueue<THive> EventQueue{*this};
     ui64 OperationsLogIndex = 0;
     std::vector<TActorId> ActorsWaitingToMoveTablets;
-    std::queue<TActorId> NodePingQueue;
+    std::queue<TNodePing> NodePingQueue;
     std::unordered_set<TNodeId> NodePingsInProgress;
     TFollowerUpdates PendingFollowerUpdates;
     std::queue<TTabletId> StopTenantTabletsQueue;
@@ -753,8 +759,11 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     ui32 GetDataCenters();
     void AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
-    void QueuePing(const TActorId& local);
-    void SendPing(const TActorId& local, TNodeId id);
+    void QueuePing(TNodePing ping);
+    void SendPing(const TNodePing& nodePing);
+    void FillLocalSettings(NKikimrLocal::THiveSettings* settings) const;
+    // Call when the HiveConfig settings relevant to Local change.
+    void UpdateLocalSettings();
     void RemoveFromPingInProgress(TNodeId node);
     void ProcessNodePingQueue();
     void SendReconnect(const TActorId& local);

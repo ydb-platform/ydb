@@ -70,6 +70,7 @@ public:
     THive& Hive;
     TNodeId Id;
     TActorId Local;
+    NKikimrLocal::TLocalCapabilities Capabilities;
     bool Down;
     bool Freeze;
     bool Drain;
@@ -254,7 +255,7 @@ public:
     bool CanBeDeleted(TInstant now) const;
     void RegisterInDomains();
     void DeregisterInDomains();
-    void Ping();
+    void Ping(bool sendSettings = false, bool sendCapabilities = false);
     void SendReconnect(const TActorId& local);
     void SetDown(bool down);
     void SetFreeze(bool freeze);

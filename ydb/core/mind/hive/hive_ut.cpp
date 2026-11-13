@@ -3960,6 +3960,62 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
     */
 
+    Y_UNIT_TEST(TestLocalIgnoresObsoleteTabletNotifications) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        TActorId oldTablet;
+        TActorId local;
+        auto readyObserver = runtime.AddObserver<TEvTablet::TEvReady>([&](auto& ev) {
+            if (ev->Get()->TabletID != hiveTablet) {
+                oldTablet = ev->Sender;
+                local = ev->GetRecipientRewrite();
+            }
+        });
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500, TTabletTypes::Dummy, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+        UNIT_ASSERT(oldTablet);
+        UNIT_ASSERT(local);
+        readyObserver.Remove();
+
+        TBlockEvents<TEvTablet::TEvReady> blockReady(runtime, [&](const auto& ev) {
+            return ev->Get()->TabletID == tabletId && ev->Sender != oldTablet;
+        });
+        runtime.Send(new IEventHandle(oldTablet, runtime.AllocateEdgeActor(), new TEvents::TEvPoisonPill()));
+        runtime.WaitFor("replacement tablet ready", [&] { return !blockReady.empty(); });
+        const ui32 generation = blockReady.front()->Get()->Generation;
+        UNIT_ASSERT(blockReady.front()->Sender != oldTablet);
+
+        size_t statuses = 0;
+        auto statusObserver = runtime.AddObserver<TEvLocal::TEvTabletStatus>([&](auto& ev) {
+            if (ev->Get()->Record.GetTabletID() == tabletId) {
+                ++statuses;
+            }
+        });
+        auto sendObsoleteNotifications = [&] {
+            // Use the current generation so only actor identity protects the
+            // replacement, both while booting and after it becomes online.
+            runtime.Send(new IEventHandle(local, oldTablet,
+                new TEvTablet::TEvReady(tabletId, generation, TActorId())));
+            runtime.Send(new IEventHandle(local, oldTablet,
+                new TEvTablet::TEvTabletDead(tabletId, TEvTablet::TEvTabletDead::ReasonPill, generation)));
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        };
+        sendObsoleteNotifications();
+        UNIT_ASSERT_VALUES_EQUAL(statuses, 0);
+
+        blockReady.Stop().Unblock();
+        runtime.WaitFor("replacement reported online", [&] { return statuses != 0; });
+        UNIT_ASSERT_VALUES_EQUAL(statuses, 1);
+        sendObsoleteNotifications();
+        UNIT_ASSERT_VALUES_EQUAL(statuses, 1);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+    }
+
     Y_UNIT_TEST(TestFollowers) {
         TTestBasicRuntime runtime(3, false);
         Setup(runtime, true);

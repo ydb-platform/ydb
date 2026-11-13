@@ -8,7 +8,7 @@ You can get the logical plan via {{ ydb-short-name }} [CLI](../../reference/ydb-
 
 This plan allows you to compare the query optimizer's predictions with the execution statistics. If the predictions differ significantly from the actual data at the execution stage, this may indicate that the optimizer has not built the most efficient plan for the current query. In this case, you can use [optimizer hints](hints.md) to create a more efficient plan.
 
-## Query Execution Plan
+## Query Execution Plan {#explain-cli}
 
 To illustrate how to work with the execution plan, consider the following OLTP query that searches for a series by name:
 

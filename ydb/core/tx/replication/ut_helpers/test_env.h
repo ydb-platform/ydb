@@ -82,7 +82,11 @@ class TEnv {
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(Endpoint)
             .SetDatabase(Database);
-        Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+
+        // Synchronous endpoint discovery needs the simulated runtime to dispatch RPCs.
+        RunCall([&] {
+            Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+        });
 
         YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
             Endpoint, UseDatabase ? Database : "", false /* ssl */, "" /* cert */, std::forward<Args>(args)...));
@@ -119,7 +123,9 @@ public:
         TAdaptiveThreadPool threadPool;
         threadPool.Start();
         auto future = NThreading::Async(std::forward<TFunc>(func), threadPool);
-        return GetRuntime().WaitFuture(std::move(future), TDuration::Seconds(60));
+        // External calls progress in wall time, independently of simulated timers.
+        // Rely on the test runner's wall-clock timeout to catch hangs.
+        return GetRuntime().WaitFuture(std::move(future));
     }
 
     TEnv(bool init = true, ERuntimeMode runtimeMode = ERuntimeMode::RealThreads, ui32 nodeCount = 1)
@@ -235,6 +241,11 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(Client.SyncCall(request, reply), NBus::MESSAGE_OK);
         const auto& response = dynamic_cast<NMsgBusProxy::TBusConsoleResponse*>(reply.Get())->Record;
         UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+    }
+
+    template <typename... Args>
+    auto CreateIndexedTable(Args&&... args) {
+        return RunCall([&] { return Client.CreateIndexedTable(std::forward<Args>(args)...); });
     }
 
     template <typename... Args>

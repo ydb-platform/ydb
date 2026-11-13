@@ -260,7 +260,7 @@ ClassicDivision является [scoped](#pragmascope) настройкой.
 Не влияет на операции с числами с  плавающей точкой или `Decimal`.
 CheckedOps является [scoped](#pragmascope) настройкой.
 
-### UnicodeLiterals
+### UnicodeLiterals {#UnicodeLiterals}
 
 `UnicodeLiterals`/`DisableUnicodeLiterals`
 
@@ -314,7 +314,7 @@ WarnUntypedStringLiterals является [scoped](#pragmascope) настрой
 | --- | --- |
 | Положительное число | 5 |
 
-Увеличение лимита на число размерностей [GROUP BY](select/group-by.md#rollup-cube-group-sets).
+Увеличение лимита на число размерностей [GROUP BY](select/group-by.md#rollup).
 
 Использовать нужно аккуратно, так как вычислительная сложность запроса растет экспоненциально по отношению к числу размерностей.
 
@@ -325,7 +325,7 @@ WarnUntypedStringLiterals является [scoped](#pragmascope) настрой
 
 Управление поведением Yson UDF по умолчанию, подробнее см. в [документации по ней](../udf/list/yson.md) и в частности [Yson::Options](../udf/list/yson.md#ysonoptions).
 
-### `yson.AutoConvert`
+### `yson.AutoConvert` {#yson.autoconvert}
 
 | Тип значения | По умолчанию |
 | --- | --- |
@@ -333,7 +333,7 @@ WarnUntypedStringLiterals является [scoped](#pragmascope) настрой
 
 Автоматическое конвертация значений в требуемый тип данных во всех вызовах Yson UDF, в том числе и неявных.
 
-### `yson.Strict`
+### `yson.Strict` {#yson.strict}
 
 | Тип значения | По умолчанию |
 | --- | --- |

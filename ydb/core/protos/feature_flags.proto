@@ -296,7 +296,7 @@ message TFeatureFlags {
     optional bool EnableSnapshotsLocking = 254 [default = true];
     optional bool EnableTicketParserErrorBasedOnPeernameFormat = 255 [default = false];
     optional bool UseRealUserIpForBlackbox = 256 [default = false];
-    optional bool EnableNodeShutdownHints = 257 [default = false];
+    optional bool EnableNodeShutdownHints = 257 [default = true];
     optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
     reserved 259; // ForbidDiscoveryInnerDbPaths
     optional bool EnableStreamingQueryDisposition = 260 [default = false];
@@ -386,7 +386,7 @@ message TFeatureFlags {
     optional bool EnableCheckpointsCompression = 325 [default = false];
     optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
-    optional bool EnableStreamingAggregation = 328 [default = true];
+    optional bool EnableStreamingAggregation = 328 [default = false];
     optional bool EnableTableBackupAsSql = 329 [default = false];
     optional bool EnableRowDispatcherMemoryLimiting = 330 [default = false];
     // Judges a VDisk write by the space color the disk will be in once the Fresh
@@ -448,24 +448,9 @@ message TFeatureFlags {
     optional bool EnableKeyValueRequestInFlightLimit = 363 [default = false];
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
-<<<<<<< HEAD
     optional bool EnableComputeSchedulerMemory = 370 [default = false, (RequireRestart) = true];
-=======
-    optional bool EnableCompileCacheV2 = 369 [default = false];
-    optional bool EnableComputeSchedulerMemory = 370 [default = true, (RequireRestart) = true];
-    optional bool EnableAddColumnGeneratedVirtual = 371 [default = false];
-    optional bool EnableAddColumnGeneratedStored = 372 [default = false];
-    optional bool EnableUnsafeTruncateTable = 373 [default = false];
-    optional bool EnableCsPatternIndexHints = 374 [default = false];
-    // Allows persisting Waiting for column-table imports with unresolved dependencies.
-    // Enable only after the rollback version supports resuming these imports.
-    optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
-    optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
-    optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
-    optional bool EnableMLPConsumerInFlightMutateDisabled = 378 [default = false];
-    optional bool EnableCoroutineCompactionSelector = 379 [default = false];
+    optional bool EnableColumnshardCutHistorySending = 385 [default = false];
     // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
     // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
->>>>>>> e1993d22917 (Treat phantoms-only replicating VDisks as working ones per user request (#55651))
 }

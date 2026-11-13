@@ -48,6 +48,7 @@ SRCS(
     blobstorage_pdisk_ut_context.cpp
     blobstorage_pdisk_ut_env.cpp
     blobstorage_pdisk_ut_helpers.cpp
+    blobstorage_pdisk_ut_log_restart.cpp
     blobstorage_pdisk_ut_races.cpp
     blobstorage_pdisk_ut_run.cpp
     blobstorage_pdisk_ut_sectormap.cpp

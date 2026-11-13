@@ -2992,7 +2992,13 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
     Y_ABORT_UNLESS(txState.TxType != TTxState::TxInvalid);
     Y_ABORT_UNLESS(txState.State != TTxState::Invalid);
     TString extraData;
-    if (txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition) {
+    if (txState.TxType == TTxState::TxDropReplication || txState.TxType == TTxState::TxDropReplicationCascade) {
+        if (txState.ReplicationSourceCleanup != NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP) {
+            NKikimrSchemeOp::TDrop drop;
+            drop.SetReplicationSourceCleanup(txState.ReplicationSourceCleanup);
+            Y_ABORT_UNLESS(drop.SerializeToString(&extraData));
+        }
+    } else if (txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition) {
         Y_ABORT_UNLESS(txState.SplitDescription, "Split Tx must have non-empty split description");
         bool serializeRes = txState.SplitDescription->SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
@@ -7935,7 +7941,8 @@ void TSchemeShard::RestartPipeTx(TTabletId tabletId, const TActorContext& ctx) {
                 {"schemeshard", TabletID()},
             );
 
-            PipeClientCache->Send(ctx, ui64(tabletId),  msg.Type, msg.Data, msgCookie.second);
+            // msg.Materialize() is idempotent
+            PipeClientCache->Send(ctx, ui64(tabletId),  msg.Type, msg.Materialize(), msgCookie.second);
         }
     }
 }
@@ -8394,6 +8401,9 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             descr->SetFamily(colInfo.Family);
             descr->SetNotNull(colInfo.NotNull);
             descr->SetSetNotNullInProgress(colInfo.SetNotNullInProgress);
+            if (colInfo.DefaultKind == ETableColumnDefaultKind::FromSequence) {
+                descr->SetDefaultFromSequence(colInfo.DefaultValue);
+            }
         }
     }
 

@@ -350,10 +350,10 @@ Recommended settings to adjust:
 
 There are multiple options to specify which exactly {{ ydb-short-name }} executables you want to use for the cluster:
 
-* `ydb_version`: automatically download one of the [{{ ydb-short-name }} official releases](../../../downloads/index.md#ydb-server) by version number. For example, `23.4.11`.
+* `ydb_version`: automatically download one of the [{{ ydb-short-name }} official releases](../../../downloads/ydb-open-source-database.md) by version number. For example, `23.4.11`.
 * `ydb_git_version`: automatically compile the {{ ydb-short-name }} executables from the source code, downloaded from [the official GitHub repository](https://github.com/ydb-platform/ydb). The setting's value is a branch, tag, or commit name. For example, `main`.
-* `ydb_archive`: a local filesystem path for a {{ ydb-short-name }} distribution archive [downloaded](../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
-* `ydbd_binary` and `ydb_cli_binary`: local filesystem paths for {{ ydb-short-name }} server and client executables, [downloaded](../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
+* `ydb_archive`: a local filesystem path for a {{ ydb-short-name }} distribution archive [downloaded](../../../downloads/ydb-open-source-database.md) or otherwise prepared in advance.
+* `ydbd_binary` and `ydb_cli_binary`: local filesystem paths for {{ ydb-short-name }} server and client executables, [downloaded](../../../downloads/ydb-open-source-database.md) or otherwise prepared in advance.
 
 Installing a [connector](../../../concepts/query_execution/federated_query/architecture.md#connectors) may be necessary for using [federated queries](../../../concepts/query_execution/federated_query/index.md). The playbook can deploy the [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) to the hosts with dynamic nodes. Use the following settings:
 
@@ -457,7 +457,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 {% endcut %}
 
-As a result of executing the `ydb_platform.ydb.initial_setup` playbook, a {{ ydb-short-name }} cluster will be created. It will contain a [domain](../../../concepts/glossary.md#domain) named with the `ydb_domain` setting (`Root` by default), a [database](../../../concepts/glossary.md#database) named with the `ydb_database_name` setting (`database` by default), and an initial [user](../../../concepts/glossary.md#access-user) named with the `ydb_user` setting (`root` by default).
+As a result of executing the `ydb_platform.ydb.initial_setup` playbook, a {{ ydb-short-name }} cluster will be created. It will contain a domain named with the `ydb_domain` setting (`Root` by default), a [database](../../../concepts/glossary.md#database) named with the `ydb_database_name` setting (`database` by default), and an initial [user](../../../concepts/glossary.md#access-user) named with the `ydb_user` setting (`root` by default).
 
 ## Optional Next Steps
 

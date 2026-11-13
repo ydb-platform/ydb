@@ -113,7 +113,7 @@ table_service_config:
 
 ### Конфигурация директории
 
-#### local_file_config.root {#root}
+#### local_file_config.root {#local-file-config-root}
 
 **Тип:** `string`  
 **По умолчанию:** `""` (временная директория)  
@@ -235,7 +235,7 @@ table_service_config:
 
 {% endnote %}
 
-### Требования к файловой системе
+### Требования к файловой системе {#file-system-requirements}
 
 #### Файловые дескрипторы
 

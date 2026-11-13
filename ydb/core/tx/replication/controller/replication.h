@@ -9,6 +9,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -46,7 +47,8 @@ public:
         Done,
         Removing,
         Paused,
-        Attaching,
+        Attaching, // Deprecated.
+        WaitingImport,
         Error = Max<ui8>()
     };
 
@@ -96,8 +98,6 @@ public:
 
         virtual const TPathId& GetDstPathId() const = 0;
         virtual void SetDstPathId(const TPathId& value) = 0;
-        virtual const TPathId& GetPendingDstPathId() const = 0;
-        virtual void SetPendingDstPathId(const TPathId& value) = 0;
 
         virtual const TString& GetStreamName() const = 0;
         virtual void SetStreamName(const TString& value) = 0;
@@ -181,6 +181,7 @@ public:
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
     const std::optional<TDuration> GetLag() const;
+    void SetLagChangedCallback(std::function<void()> callback);
     const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
     void SetNextTargetId(ui64 value);

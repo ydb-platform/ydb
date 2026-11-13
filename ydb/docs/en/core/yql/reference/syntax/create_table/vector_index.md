@@ -19,7 +19,7 @@ CREATE TABLE `<table_name>` (
 Where:
 
 * `<index_name>` - unique index name for data access
-* `SYNC` - indicates synchronous data writing to the index. This is the only currently available option, and it is used by default.
+* `SYNC` - indicates synchronous data writing to the index. This is the only currently available option, and it is used by default. The `autoupdate=false` parameter disables index updates on table writes.
 * `<index_columns>` - comma-separated list of table columns used for index searches (the last column is used as embedding, others as filtering columns)
 * `<cover_columns>` - list of additional table columns stored in the index to enable retrieval without accessing the main table
 * `<parameter_name>` and `<parameter_value>` - list of key-value parameters:
@@ -29,6 +29,8 @@ Where:
 {% note warning %}
 
 It is recommended to create a vector index after loading data into the table, as an index created on an empty table will have only one cluster and will not speed up the search at all. For more details, see [Updating Vector Indexes](../../../../dev/vector-indexes.md#update).
+
+An index created on an empty table with `autoupdate=false` remains empty after inserting data until you [rebuild it](../alter_table/indexes.md#rebuild-index).
 
 {% endnote %}
 

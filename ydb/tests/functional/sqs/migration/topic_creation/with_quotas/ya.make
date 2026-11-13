@@ -7,4 +7,10 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/sqs/migration/suites/with_quotas.in
 FORK_SUBTESTS()
 SPLIT_FACTOR(20)
 
+IF (SANITIZER_TYPE == "thread")
+    REQUIREMENTS(cpu:1)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
+
 END()

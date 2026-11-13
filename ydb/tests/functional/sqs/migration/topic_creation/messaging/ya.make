@@ -7,4 +7,6 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/sqs/migration/suites/messaging.inc)
 FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
+REQUIREMENTS(cpu:1)
+
 END()

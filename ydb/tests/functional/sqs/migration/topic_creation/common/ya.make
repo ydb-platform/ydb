@@ -10,4 +10,7 @@ SPLIT_FACTOR(60)
 TEST_SRCS(
     ydb/tests/functional/sqs/common/test_garbage_collection.py
 )
+
+REQUIREMENTS(cpu:1)
+
 END()

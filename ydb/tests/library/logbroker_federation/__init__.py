@@ -712,33 +712,50 @@ class LogbrokerFederation(object):
     def _wait_preinstalled_topics_on_clusters(self, timeout_seconds=60, step_seconds=0.5):
         deadline = time.monotonic() + timeout_seconds
         last_error = None
-        while True:
-            try:
-                for cluster_name, cluster_port in self.__cluster_ports.items():
-                    for account in PRE_INSTALLED_ACCOUNTS:
-                        database = "/Root/logbroker-federation/{}".format(account)
-                        driver_config = ydb.DriverConfig(
-                            endpoint="localhost:{}".format(cluster_port),
-                            database=database,
-                        )
-                        with ydb.Driver(driver_config) as driver:
-                            driver.wait(timeout=5)
-                            driver.topic_client.describe_topic("topic")
-                        logger.info(
-                            "Preinstalled topic ready on cluster=%s account=%s",
-                            cluster_name,
-                            account,
-                        )
-                return
-            except Exception as e:
-                last_error = e
-                if time.monotonic() >= deadline:
-                    raise RuntimeError(
-                        "Preinstalled topics did not become ready within {}s: {}".format(
-                            timeout_seconds, last_error
-                        )
-                    ) from last_error
-                time.sleep(step_seconds)
+        pending = {
+            (cluster_name, account)
+            for cluster_name in self.__cluster_ports
+            for account in PRE_INSTALLED_ACCOUNTS
+        }
+        while pending:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError(
+                    "Preinstalled topics did not become ready within {}s: pending={} last={}".format(
+                        timeout_seconds, sorted(pending), last_error
+                    )
+                ) from last_error
+            for cluster_name, account in sorted(pending):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                cluster_port = self.__cluster_ports[cluster_name]
+                consumer = "/logbroker-federation/{}/consumer".format(account)
+                database = "/Root/logbroker-federation/{}".format(account)
+                probe_timeout = min(5.0, remaining)
+                try:
+                    driver_config = ydb.DriverConfig(
+                        endpoint="localhost:{}".format(cluster_port),
+                        database=database,
+                    )
+                    with ydb.Driver(driver_config) as driver:
+                        driver.wait(timeout=probe_timeout)
+                        # TopicClient has no request settings; bound the probe wall.
+                        with futures.ThreadPoolExecutor(max_workers=1) as pool:
+                            fut = pool.submit(
+                                driver.topic_client.describe_consumer, "topic", consumer
+                            )
+                            fut.result(timeout=probe_timeout)
+                    pending.remove((cluster_name, account))
+                    logger.info(
+                        "Preinstalled topic+consumer ready on cluster=%s account=%s",
+                        cluster_name,
+                        account,
+                    )
+                except Exception as e:
+                    last_error = e
+            if pending:
+                time.sleep(min(step_seconds, max(0.0, deadline - time.monotonic())))
 
     def start(self, args=None):
         for name in list(self.__clusters.keys()):

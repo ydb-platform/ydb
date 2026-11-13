@@ -510,7 +510,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             YDB_LOG_VERIFY(rawBytes2 * 2 < rawBytes1,
                 {"f1", rawBytes1},
                 {"f2", rawBytes2});
-            YDB_LOG_VERIFY(bytes2 < bytes1 * 0",
+            YDB_LOG_VERIFY(bytes2 < bytes1 * 0.5,
                 {"f1", bytes1},
                 {"f2", bytes2});
         }
@@ -596,7 +596,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 //                for (auto&& i : stats) {
 //                    YDB_LOG_VERIFY(i.IsArray());
 //                    YDB_LOG_VERIFY(i.GetArraySafe().size() == 0,
-                          {"json", i});
+//                          {"json", i});
 //                }
             }
         }

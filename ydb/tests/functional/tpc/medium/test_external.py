@@ -21,4 +21,7 @@ class TestExternalE1(ExternalSuiteBase, FunctionalTestBase):
 
     @classmethod
     def teardown_class(cls) -> None:
-        cls.run_cli(['workload', 'query', '-p', f'{cls.external_folder}', 'clean'])
+        try:
+            cls.run_cli(['workload', 'query', '-p', f'{cls.external_folder}', 'clean'])
+        finally:
+            super().teardown_class()

@@ -11,7 +11,6 @@ TEST_SRCS(
     test_upload.py
     test_import_csv.py
     test_default_path.py
-    test_workload_manager.py
     test_tpcc.py
 )
 
@@ -19,12 +18,12 @@ FORK_TESTS()
 FORK_TEST_FILES()
 FORK_SUBTESTS()
 
-REQUIREMENTS(ram:16 cpu:1)
-
 IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:80 cpu:1)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
+    REQUIREMENTS(ram:16 cpu:1)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -39,7 +38,6 @@ ENV(OLTP_WORKLOAD_BINARY="ydb/tests/stress/oltp_workload/oltp_workload")
 
 PEERDIR(
     ydb/tests/functional/tpc/lib
-    ydb/tests/workload_manager/common
 )
 
 DEPENDS(

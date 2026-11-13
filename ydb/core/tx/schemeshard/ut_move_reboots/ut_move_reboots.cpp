@@ -513,6 +513,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
     Y_UNIT_TEST(ColumnTableWithLocalBloomIndexes) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
             TPathVersion pathVersion;
             {
                 TInactiveZone inactive(activeZone);

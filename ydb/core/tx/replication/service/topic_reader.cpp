@@ -255,7 +255,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         if (!ev->Get()->Result.IsSuccess()) {
             const auto status = ev->Get()->Result.GetStatus();
             const TString issues = ev->Get()->Result.GetIssues().ToOneLineString();
-            return CheckAndLeave(status, issues, "Failed to commit offset due to fatal error", "Cannot commit offset");
+            return CheckAndLeave(status, issues, "Cannot commit offset", "Failed to commit offset due to fatal error");
         } else {
             YDB_LOG_DEBUG("Handle",
                 {"committedOffset", CommittedOffset},
@@ -299,10 +299,10 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         const auto status = ev->Get()->Result.GetStatus();
         const TString issues = ev->Get()->Result.GetIssues().ToOneLineString();
 
-        return CheckAndLeave(status, issues, "Topic reader has gone due to fatal error", "Cannot read from topic");
+        return CheckAndLeave(status, issues, "Cannot read from topic", "Topic reader has gone due to fatal error");
     }
 
-    void CheckAndLeave(NYdb::EStatus status, const TString& issues, const char* logMessage, const char* errorPrefix) {
+    void CheckAndLeave(NYdb::EStatus status, const TString& issues, const char* errorPrefix, const char* logMessage) {
         switch (status) {
         case NYdb::EStatus::SCHEME_ERROR:
             if (Settings.RetryOnSchemeError_) {

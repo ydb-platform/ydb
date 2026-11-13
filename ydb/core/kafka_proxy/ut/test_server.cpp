@@ -57,6 +57,9 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
         appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetHostname("localhost");
         appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
     }
+    if (settings.EnableMtls) {
+        appConfig.MutableKafkaProxyConfig()->SetMtlsEnable(true);
+    }
 
     appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(settings.EnableQuoting);
     if (!settings.EnableQuoting) {

@@ -971,7 +971,7 @@ void TSnapshotManager::PersistRemoveAllSnapshots(NIceDb::TNiceDb& db) {
     Snapshots.clear();
 }
 
-void TSnapshotManager::Fix_KIKIMR_14259(NTable::TDatabase& db) {
+void TSnapshotManager::CleanupRowVersionsBelowLowWatermark(NTable::TDatabase& db) {
     // Persisted removal ranges already describe unavailable history. Do not
     // destroy retained gaps below the watermark while rebuilding the registry.
     CleanupUnretainedRowVersions(db, TRowVersion::Min(), LowWatermark);

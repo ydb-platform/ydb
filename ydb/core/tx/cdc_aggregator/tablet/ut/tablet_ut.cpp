@@ -122,8 +122,9 @@ public:
     }
 
     TVector<ui64> DescribeSources() {
+        const auto describeResult = DescribeTracking();
         TVector<ui64> sources;
-        for (const auto& source : DescribeTracking().GetSources()) {
+        for (const auto& source : describeResult.GetSources()) {
             sources.push_back(source.GetDataShardId());
         }
         return sources;

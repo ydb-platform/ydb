@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -17,6 +18,11 @@ namespace Ydb::Export {
 }
 
 namespace NKikimr::NSchemeShard {
+
+struct TExportInfo;
+
+THolder<NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot> MakeExportChecksumSnapshotRequest(
+    TExportInfo& info, TRowVersion version, const TString& database);
 
 template <typename T>
 void AddIssue(T& response, const TString& message, NYql::TSeverityIds::ESeverityId severity = NYql::TSeverityIds::S_ERROR) {

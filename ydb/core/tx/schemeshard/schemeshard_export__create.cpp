@@ -69,6 +69,17 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 using namespace NBackup::NFieldsWrappers;
+
+static TPathId ItemPathId(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx) {
+    const TPath itemPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
+
+    if (!itemPath.IsResolved()) {
+        return {};
+    }
+
+    return itemPath.Base()->PathId;
+}
+
 // Erases encryption key from settings, if settings type supports it
 // Returns true if settings changed
 template <class TSettings, class = decltype(std::declval<TSettings>().encryption_settings())> // Function for TSettings that have encryption_settings()
@@ -226,6 +237,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 exportInfo->IncludeIndexData = settings.include_index_data();
             }
             if (enableFeatureFlags) {
+                exportInfo->EnableBackupTableChecksum = AppData()->FeatureFlags.GetEnableBackupTableChecksum();
                 exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
                 exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
             }
@@ -919,16 +931,6 @@ private:
         SubscribeTx(item.WaitTxId);
     }
 
-    static TPathId ItemPathId(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx) {
-        const TPath itemPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
-
-        if (!itemPath.IsResolved()) {
-            return {};
-        }
-
-        return itemPath.Base()->PathId;
-    }
-
     TTxId GetActiveCopyingTxId(const TExportInfo& exportInfo) {
         if (exportInfo.Items.size() < 1) {
             return InvalidTxId;
@@ -1094,13 +1096,31 @@ private:
         return output;
     }
 
+    void RetainChecksumSnapshots(TExportInfo& exportInfo) {
+        if (!exportInfo.EnableBackupTableChecksum || !exportInfo.IsInProgress()) {
+            return;
+        }
+        const auto database = TPath::Init(exportInfo.DomainPathId, Self).PathString();
+        for (ui32 idx : xrange(exportInfo.Items.size())) {
+            const auto pathId = ItemPathId(Self, exportInfo, idx);
+            const auto path = Self->PathsById.FindPtr(pathId);
+            if (!path || !(*path)->StepCreated) {
+                continue;
+            }
+            const TRowVersion version(ui64((*path)->StepCreated), ui64((*path)->CreateTxId));
+            if (auto request = MakeExportChecksumSnapshotRequest(exportInfo, version, database)) {
+                Send(NLongTxService::MakeLongTxServiceID(Self->SelfId().NodeId()), request.Release(), 0, exportInfo.Id);
+            }
+        }
+    }
+
     void Resume(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(Self->Exports.contains(Id));
         TExportInfo::TPtr exportInfo = Self->Exports.at(Id);
 
-        YDB_LOG_DEBUG("TExport::TTxProgress: Resume",
-            {"id", Id},
-        );
+        RetainChecksumSnapshots(*exportInfo);
+
+        YDB_LOG_DEBUG("TExport::TTxProgress: Resume", { "id", Id }, );
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -1809,6 +1829,60 @@ private:
 
 ITransaction* TSchemeShard::CreateTxCreateExport(TEvExport::TEvCreateExportRequest::TPtr& ev) {
     return new TExport::TTxCreate(this, ev);
+}
+
+void TSchemeShard::Handle(
+    NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev, const TActorContext&) {
+    auto info = Exports.Value(ev->Cookie, nullptr);
+    if (!info || !info->IsInProgress() || ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+        return;
+    }
+    const auto it = info->ChecksumSnapshots.find(ev->Get()->Snapshot);
+    if (it != info->ChecksumSnapshots.end()) {
+        it->second.emplace(std::move(ev->Get()->SnapshotHandle));
+    }
+}
+
+void TSchemeShard::Handle(NBackup::TEvTableChecksum::TEvCheckRetentionRequest::TPtr& ev, const TActorContext& ctx) {
+    const auto& request = ev->Get()->Record;
+    auto reply = [&](Ydb::StatusIds::StatusCode status, const TString& error = {}) {
+        auto response = MakeHolder<NBackup::TEvTableChecksum::TEvCheckRetentionResponse>();
+        response->Record.SetRequestId(request.GetRequestId());
+        response->Record.SetStatus(status);
+        response->Record.SetError(error);
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    };
+    const auto it = TxIdToExport.find(TTxId(request.GetBackupTxId()));
+    if (it == TxIdToExport.end()) {
+        return reply(Ydb::StatusIds::PRECONDITION_FAILED, "Export operation is no longer active");
+    }
+    const auto info = Exports.Value(it->second.first, nullptr);
+    const ui32 itemIdx = it->second.second;
+    if (!info || !info->IsInProgress() || itemIdx >= info->Items.size()) {
+        return reply(Ydb::StatusIds::PRECONDITION_FAILED, "Export operation is no longer active");
+    }
+    const auto& item = info->Items[itemIdx];
+    if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable || item.ParentIdx != Max<ui32>() ||
+        item.SourcePathId != TPathId(request.GetTableOwnerId(), request.GetTableId())) {
+        return reply(Ydb::StatusIds::PRECONDITION_FAILED, "Export table does not match the retained snapshot");
+    }
+    const TRowVersion version(request.GetSnapshotStep(), request.GetSnapshotTxId());
+    const auto copyPath = PathsById.FindPtr(ItemPathId(this, *info, itemIdx));
+    if (!copyPath || TRowVersion(ui64((*copyPath)->StepCreated), ui64((*copyPath)->CreateTxId)) != version) {
+        return reply(Ydb::StatusIds::PRECONDITION_FAILED, "Export snapshot version does not match the table copy");
+    }
+    const auto snapshot = info->ChecksumSnapshots.find(version);
+    if (snapshot == info->ChecksumSnapshots.end()) {
+        return reply(Ydb::StatusIds::PRECONDITION_FAILED, "Export snapshot retention is unavailable");
+    }
+    if (!snapshot->second.has_value()) {
+        return reply(Ydb::StatusIds::UNAVAILABLE, "Export snapshot retention is pending");
+    }
+    if (!*snapshot->second) {
+        return reply(Ydb::StatusIds::PRECONDITION_FAILED, "Export snapshot retention has been released");
+    }
+    // Export cannot finish and release this handle before the checksum and metadata are saved
+    reply(Ydb::StatusIds::SUCCESS);
 }
 
 ITransaction* TSchemeShard::CreateTxProgressExport(ui64 id) {

@@ -35,6 +35,7 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
         );
 
         Result = PathDescriber.Describe(ctx);
+        Result->Record.SetSupportsBackupSnapshotRetention(true);
     }
 
     void DoComplete(const TActorContext &ctx) override {

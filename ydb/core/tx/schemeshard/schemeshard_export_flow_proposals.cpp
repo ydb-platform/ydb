@@ -293,6 +293,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));
     task.SetSnapshotStep(exportInfo.SnapshotStep);
     task.SetSnapshotTxId(exportInfo.SnapshotTxId);
+    if (exportInfo.EnableBackupTableChecksum && exportInfo.Kind != TExportInfo::EKind::YT &&
+        item.SourcePathType == NKikimrSchemeOp::EPathTypeTable && item.ParentIdx == Max<ui32>()) {
+        auto& checksum = *task.MutableTableChecksum();
+        checksum.SetDatabase(TPath::Init(exportInfo.DomainPathId, ss).PathString());
+        checksum.SetTablePath(item.SourcePathName);
+    }
 
     switch (exportInfo.Kind) {
     case TExportInfo::EKind::YT:

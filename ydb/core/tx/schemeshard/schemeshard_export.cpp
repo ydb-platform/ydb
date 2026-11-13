@@ -211,7 +211,10 @@ void TSchemeShard::PersistExportPathId(NIceDb::TNiceDb& db, const TExportInfo& e
     );
 }
 
-void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo& exportInfo) {
+void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, TExportInfo& exportInfo) {
+    if (exportInfo.IsFinished()) {
+        exportInfo.ChecksumSnapshots.clear();
+    }
     db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
         NIceDb::TUpdate<Schema::Exports::State>(static_cast<ui8>(exportInfo.State)),
         NIceDb::TUpdate<Schema::Exports::WaitTxId>(exportInfo.WaitTxId),

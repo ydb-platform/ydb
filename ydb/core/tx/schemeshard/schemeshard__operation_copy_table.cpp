@@ -3,6 +3,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_states.h"
 #include "schemeshard_cdc_stream_common.h"
+#include "schemeshard_export_helpers.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_tx_infly.h"
 
@@ -175,6 +176,21 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
+    void RetainExportChecksumSnapshot(TStepId step, TOperationContext& context) {
+        const auto it = context.SS->TxIdToExport.find(OperationId.GetTxId());
+        if (it == context.SS->TxIdToExport.end()) {
+            return;
+        }
+        auto& info = *context.SS->Exports.at(it->second.first);
+        const auto database = TPath::Init(info.DomainPathId, context.SS).PathString();
+        // Retain the copy version before waiting for the copy and backup scans to finish
+        if (auto request = MakeExportChecksumSnapshotRequest(
+                info, TRowVersion(ui64(step), ui64(OperationId.GetTxId())), database)) {
+            context.OnComplete.Send(
+                NLongTxService::MakeLongTxServiceID(context.SS->SelfId().NodeId()), std::move(request), info.Id);
+        }
+    }
+
 public:
     TPropose(TOperationId id)
         : OperationId(id)
@@ -205,6 +221,8 @@ public:
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
+
+        RetainExportChecksumSnapshot(step, context);
 
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         Y_ABORT_UNLESS(table);

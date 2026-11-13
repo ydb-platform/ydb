@@ -601,7 +601,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             {"body", SubstGlobalCopy(content, "\n", "\\n")},
         );
         try {
-            item.Metadata = NBackup::TMetadata::Deserialize(content);
+            item.Metadata = NBackup::TMetadata::Deserialize(content, ImportInfo->ShouldValidateTableChecksum());
         } catch (const std::exception& e) {
             return Reply(Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder() << MetadataKey << ": failed to parse metadata: " << e.what());

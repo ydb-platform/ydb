@@ -369,6 +369,7 @@ PEERDIR(
     ydb/core/audit
     ydb/core/base
     ydb/core/backup/common
+    ydb/core/backup/query
     ydb/core/backup/regexp
     ydb/core/blob_depot
     ydb/core/blobstorage/base

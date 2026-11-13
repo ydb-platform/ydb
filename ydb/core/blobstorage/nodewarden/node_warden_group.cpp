@@ -580,6 +580,7 @@ namespace NKikimr::NStorage {
         ISSUE_METRIC(BlobsDone)
         ISSUE_METRIC(BlobsTotal)
         ISSUE_METRIC(BlobsError)
+        ISSUE_METRIC(ScannedItems)
         ISSUE_METRIC(BytesToCopy)
         ISSUE_METRIC(BytesCopied)
 

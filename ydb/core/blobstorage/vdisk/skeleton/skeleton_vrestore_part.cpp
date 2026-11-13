@@ -15,8 +15,6 @@ namespace {
         TEvVRestorePart::TPtr Ev;
         TLogoBlobID BlobId;
         TInstant Deadline;
-        bool LocalReadDone = false;
-        TEvRecoverBlobResult::TPtr RecoveryResult;
 
         void Reply(NKikimrProto::EReplyStatus status, const TString& error = {},
                 NKikimrBlobStorage::TEvVRestorePartResult::EResponseOrigin origin = NKikimrBlobStorage::TEvVRestorePartResult::VRESTORE_PART_ACTOR) {
@@ -29,10 +27,6 @@ namespace {
         }
 
         void Handle(TEvRecoverBlobResult::TPtr ev) {
-            if (!LocalReadDone) {
-                RecoveryResult = std::move(ev);
-                return;
-            }
             auto& items = ev->Get()->Items;
             if (items.size() != 1 || items.front().BlobId != BlobId.FullID()) {
                 return Reply(NKikimrProto::ERROR, "Invalid TEvRecoverBlobResult");
@@ -57,7 +51,7 @@ namespace {
             auto put = std::make_unique<TEvBlobStorage::TEvVPut>(BlobId, data, SelfVDiskId, true, nullptr,
                 Deadline, NKikimrBlobStorage::AsyncBlob,
                 Cfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER, TWriteSource::RestoredCorruptedBlob);
-            put->Record.SetIssueKeepFlag(item.Keep && !item.DoNotKeep);
+            put->Record.SetIssueKeepFlag(Ev->Get()->Record.GetIssueKeepFlag() || (item.Keep && !item.DoNotKeep));
             put->RewriteBlob = true;
             put->IsInternal = true;
             Send(SkeletonId, put.release(), IEventHandle::FlagTrackDelivery);
@@ -75,30 +69,7 @@ namespace {
                 NMatrix::TVectorType::MakeOneHot(BlobId.PartId() - 1, Top->GType.TotalPartCount()),
                 Top->GType, TDiskPart());
             Send(SkeletonId, recover.release(), IEventHandle::FlagTrackDelivery);
-            auto get = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(SelfVDiskId, Deadline,
-                NKikimrBlobStorage::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, {BlobId});
-            get->SuppressCorruptedBlobRestoration = true;
-            Send(SkeletonId, get.release(), IEventHandle::FlagTrackDelivery);
             Become(&TThis::StateRecover);
-        }
-
-        void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
-            const auto& record = ev->Get()->Record;
-            if (record.GetStatus() != NKikimrProto::OK) {
-                return Reply(record.GetStatus(), record.GetErrorReason(),
-                    NKikimrBlobStorage::TEvVRestorePartResult::SKELETON);
-            }
-            for (const auto& result : record.GetResult()) {
-                if (result.GetStatus() == NKikimrProto::OK
-                        && LogoBlobIDFromLogoBlobID(result.GetBlobID()) == BlobId
-                        && ev->Get()->GetBlobData(result).size() == Top->GType.PartSize(BlobId)) {
-                    return Reply(NKikimrProto::ALREADY);
-                }
-            }
-            LocalReadDone = true;
-            if (RecoveryResult) {
-                Handle(std::move(RecoveryResult));
-            }
         }
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
@@ -163,7 +134,6 @@ namespace {
 
         STRICT_STFUNC(StateRecover,
             hFunc(TEvRecoverBlobResult, Handle);
-            hFunc(TEvBlobStorage::TEvVGetResult, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
             cFunc(TEvents::TSystem::Undelivered, HandleUndelivered);
             cFunc(TEvents::TSystem::Poison, HandlePoison);

@@ -13,6 +13,38 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
+namespace {
+
+struct TVectorBuildRow {
+    NKikimrSchemeOp::EIndexType IndexType;
+    TString CreationConfig;
+
+    template<class TColumn>
+    typename TColumn::Type GetValue() const {
+        if constexpr (std::is_same_v<TColumn, Schema::IndexBuild::IndexType>) {
+            return IndexType;
+        } else if constexpr (std::is_same_v<TColumn, Schema::IndexBuild::CreationConfig>) {
+            return CreationConfig;
+        } else if constexpr (std::is_same_v<TColumn, Schema::IndexBuild::State>) {
+            return typename TColumn::Type(TIndexBuildInfo::EState::Done);
+        } else {
+            return {};
+        }
+    }
+
+    template<class TColumn>
+    bool HaveValue() const {
+        return std::is_same_v<TColumn, Schema::IndexBuild::CreationConfig>;
+    }
+
+    template<class TColumn>
+    typename TColumn::Type GetValueOrDefault(const typename TColumn::Type& fallback = {}) const {
+        return HaveValue<TColumn>() ? GetValue<TColumn>() : fallback;
+    }
+};
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
 
     NKikimrCompaction::TCompactionPolicy CompactionPolicyWithGenerationIds(
@@ -74,6 +106,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
         error.clear();
         UNIT_ASSERT(!TPartitionConfigMerger::VerifyAlterParams(source, invalid, nullptr, false, error));
         UNIT_ASSERT_VALUES_EQUAL(error, "Compaction generation 1: expected GenerationId 1, got 2");
+    }
+
+    Y_UNIT_TEST_FLAG(VectorIndexMismatchedBuildDescriptionIsBroken, Hnsw) {
+        NKikimrSchemeOp::TIndexCreationConfig config;
+        if (Hnsw) {
+            config.MutableVectorIndexKmeansTreeDescription();
+        } else {
+            config.MutableHnswIndexDescription();
+        }
+        const TVectorBuildRow row{Hnsw ? NKikimrSchemeOp::EIndexTypeGlobalHnsw
+            : NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, config.SerializeAsString()};
+        TIndexBuildInfo restored;
+        TIndexBuildInfo::FillFromRow(row, &restored);
+        UNIT_ASSERT(restored.IsBroken);
+        UNIT_ASSERT_STRING_CONTAINS(restored.GetIssue(), "type and description do not match");
+        // Querying diagnostics must not throw a second bad_variant_access.
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetVectorSettings().ByteSizeLong(), 0u);
     }
 
     Y_UNIT_TEST_FLAG(VectorIndexRoutingSettings, Hnsw) {

@@ -2079,8 +2079,7 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
         } else {
             // Local HNSW annotations added by an alter are stored separately
             // from secondary-index maintenance metadata.
-            Y_ENSURE(indexDesc.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw
-                && indexDesc.KeyColumnNamesSize() == 0);
+            Y_ENSURE(indexDesc.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw);
         }
         auto hnswNode = newTableInfo->HnswIndexes.extract(prevPathId);
         if (!hnswNode.empty()) {

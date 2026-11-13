@@ -437,6 +437,10 @@ private:
                 explain = "HNSW index support is disabled (EnableHnswIndex)";
                 return false;
             }
+            if (isHnsw) {
+                explain = "HNSW index implementation is not available yet (SQL support)";
+                return false;
+            }
             const auto& requestedSettings = isHnsw
                 ? index.global_hnsw_index().vector_settings()
                 : index.global_vector_kmeans_tree_index().vector_settings();

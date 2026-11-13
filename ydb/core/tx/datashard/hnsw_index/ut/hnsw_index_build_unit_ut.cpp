@@ -12,7 +12,7 @@
 namespace NKikimr::NDataShard {
 
 Y_UNIT_TEST_SUITE(HnswIndexBuildExecutionPlan) {
-    Y_UNIT_TEST_QUAD(OnlyPostingTablePublicationAddsRestartableUnit, Loaded, Enabled) {
+    Y_UNIT_TEST_QUAD(OnlyPostingTablePublicationAddsBackgroundBuildUnit, Loaded, Enabled) {
         TTestBasicRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
         runtime.GetAppData().FeatureFlags.SetEnableHnswIndex(Enabled);

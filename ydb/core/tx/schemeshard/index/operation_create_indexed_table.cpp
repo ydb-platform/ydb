@@ -253,6 +253,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
                         "HNSW index support is disabled (EnableHnswIndex)")};
                 }
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                    return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
+                        "HNSW index implementation is not available yet (SQL support)")};
+                }
                 TString msg;
                 auto& treeSettings = indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
                     ? *indexDescription.MutableHnswIndexDescription()->MutableSettings()

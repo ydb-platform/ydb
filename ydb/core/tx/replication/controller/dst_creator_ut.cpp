@@ -68,6 +68,66 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         UNIT_ASSERT_C(CheckReplicationConfig(replicatedDesc.GetReplicationConfig(), mode, consistency, error), error);
     }
 
+    // ADOPT_EXISTING: the destination is an ordinary writable table, as a demoted primary is, and
+    // the controller turns it into a replica in place instead of creating one.
+    TTestTableDescription PlainTable(const TString& name) {
+        return TTestTableDescription{
+            .Name = name,
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+    }
+
+    NKikimrScheme::EStatus RunAdoption(TEnv<>& env, bool adoptExisting) {
+        const auto src = PlainTable("Table");
+        env.CreateTable("/Root", *MakeTableDescription(src));
+        env.CreateTable("/Root", *MakeTableDescription(PlainTable("Replica")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.GetDescription("/Root/Replica").GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replica",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, false /* initialScan */,
+            TReplication::EState::Ready, adoptExisting
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        return ev->Get()->Status;
+    }
+
+    Y_UNIT_TEST(AdoptExistingTableInPlace) {
+        TEnv env;
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
+
+        UNIT_ASSERT_VALUES_EQUAL(RunAdoption(env, true), NKikimrScheme::StatusSuccess);
+
+        // Keep the description alive: GetDescription returns by value.
+        auto desc = env.GetDescription("/Root/Replica");
+        const auto& replica = desc.GetPathDescription().GetTable();
+        CheckTableReplica(PlainTable("Table"), replica, EReplicationMode::ReadOnly, EConsistencyLevel::Row);
+        // The attach path requires a completed import of a table it did not create; adopting one
+        // that already holds its data satisfies that by definition.
+        UNIT_ASSERT_VALUES_EQUAL(replica.GetReplicationConfig().GetImportState(),
+            NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+    }
+
+    Y_UNIT_TEST(WithoutAdoptExistingAPlainTableIsRefused) {
+        // Without the mode the same destination is rejected, which is what makes the demote the
+        // operator's explicit decision rather than a side effect of creating a replication.
+        TEnv env;
+        UNIT_ASSERT_VALUES_EQUAL(RunAdoption(env, false), NKikimrScheme::StatusSchemeError);
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.GetDescription("/Root/Replica").GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+    }
+
     void Basic(
             const TString& replicatedPath,
             EReplicationMode mode = EReplicationMode::ReadOnly,

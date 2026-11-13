@@ -714,6 +714,12 @@ const NKikimrReplication::TReplicationLocationConfig& TReplication::GetLocation(
     return Impl->Config.GetLocation();
 }
 
+TReplication::EState InitialReplicationState(const NKikimrReplication::TReplicationConfig& config) {
+    return config.GetInitialScan() || config.GetAdoptExisting()
+        ? TReplication::EState::Ready
+        : TReplication::EState::Paused;
+}
+
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrReplication::TReplicationConfig::TargetCase, stream, value) {

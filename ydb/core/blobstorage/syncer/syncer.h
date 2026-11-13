@@ -14,6 +14,7 @@ namespace NKikimr::NGroupSyncer {
         std::atomic_uint64_t BlobsTotal = 0;
         std::atomic_uint64_t BlobsDone = 0;
         std::atomic_uint64_t BlobsError = 0;
+        std::atomic_uint64_t ScannedItems = 0;
 
         // Bytes of the source blobs the target doesn't have, found by the blob scan of this stage; the scan of a
         // stage before the data one tells how much the data stage is going to copy, as data doesn't get to the target

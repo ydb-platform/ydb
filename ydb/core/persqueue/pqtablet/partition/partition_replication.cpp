@@ -66,44 +66,41 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
 
     ReplicationDataNeedsApply = false;
     const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
-    const auto mirroredOffset = (*PendingReplicationData)->Get()->MirroredOffset;
-
-    const bool versioned = VersionedReplicationEnabled(config);
-    const auto& versionedOffsets = (*PendingReplicationData)->Get()->VersionedOffsetsByConsumers;
-    for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
-        if (versioned) {
-            if (!versionedOffsets.contains(consumer)) {
-                LOG_W("Source consumer has no versioned offset in opt-in mode; ignoring legacy offset",
-                    {"consumer", consumer}, {"offset", offset});
+    if (!VersionedReplicationEnabled(config)) {
+        for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
+            auto* consumerConfig = GetConsumer(config, consumer);
+            if (!consumerConfig || offset > static_cast<ui64>(Max<i64>())) {
+                continue;
             }
-            continue;
-        }
-        auto* consumerConfig = GetConsumer(config, consumer);
-        if (!consumerConfig || offset > static_cast<ui64>(Max<i64>())) {
-            continue;
-        }
 
-        if (consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
-            continue;
-        } else if (consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-            if (auto it = MLPConsumers.find(consumer); it != MLPConsumers.end()) {
-                auto request = MakeHolder<TEvPQ::TEvMLPPurgeRequest>(
-                    TopicName(), consumer, Partition.OriginalPartitionId);
-                request->Record.SetToOffset(offset);
-                Send(it->second.ActorId, request.Release());
+            if (consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+                continue;
+            } else if (consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+                if (auto it = MLPConsumers.find(consumer); it != MLPConsumers.end()) {
+                    auto request = MakeHolder<TEvPQ::TEvMLPPurgeRequest>(
+                        TopicName(), consumer, Partition.OriginalPartitionId);
+                    request->Record.SetToOffset(offset);
+                    Send(it->second.ActorId, request.Release());
+                }
+                continue;
             }
-            continue;
-        }
 
-        auto& userInfo = GetOrCreatePendingUser(consumer);
-        if (const auto* committed = UsersInfoStorage->GetIfExists(consumer)) {
-            userInfo.Offset = Max(userInfo.Offset, committed->Offset);
+            auto& userInfo = GetOrCreatePendingUser(consumer);
+            if (const auto* committed = UsersInfoStorage->GetIfExists(consumer)) {
+                userInfo.Offset = Max(userInfo.Offset, committed->Offset);
+            }
+            userInfo.Offset = Max(userInfo.Offset, static_cast<i64>(offset));
         }
-        userInfo.Offset = Max(userInfo.Offset, static_cast<i64>(offset));
+        return;
     }
 
-    if (!versioned) {
-        return;
+    const auto mirroredOffset = (*PendingReplicationData)->Get()->MirroredOffset;
+    const auto& versionedOffsets = (*PendingReplicationData)->Get()->VersionedOffsetsByConsumers;
+    for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
+        if (!versionedOffsets.contains(consumer)) {
+            LOG_W("Source consumer has no versioned offset in opt-in mode; ignoring legacy offset",
+                {"consumer", consumer}, {"offset", offset});
+        }
     }
     bool applied = false;
     for (const auto& [consumer, offset] : versionedOffsets) {

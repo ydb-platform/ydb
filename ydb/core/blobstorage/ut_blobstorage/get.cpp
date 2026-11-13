@@ -94,11 +94,12 @@ Y_UNIT_TEST_SUITE(Get) {
         const TString data(100, 'a');
         SendPut(test, TLogoBlobID(tabletId, tabletGeneration, 0, 0, data.size(), 0), data, NKikimrProto::OK);
 
-        auto block = std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, tabletGeneration + 1, TInstant::Max());
+        std::unique_ptr<TEvBlobStorage::TEvBlock> block =
+            std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, tabletGeneration + 1, TInstant::Max());
         test.Runtime->WrapInActorContext(test.Edge, [&] {
             SendToBSProxy(test.Edge, test.Info->GroupID, block.release());
         });
-        auto blockResult = test.Runtime->WaitForEdgeActorEvent({test.Edge});
+        std::unique_ptr<IEventHandle> blockResult = test.Runtime->WaitForEdgeActorEvent({test.Edge});
         UNIT_ASSERT_EQUAL(blockResult->Type, TEvBlobStorage::EvBlockResult);
         UNIT_ASSERT_VALUES_EQUAL(blockResult->Get<TEvBlobStorage::TEvBlockResult>()->Status, NKikimrProto::OK);
 
@@ -109,15 +110,15 @@ Y_UNIT_TEST_SUITE(Get) {
         for (ui32 i = 0; i < querySize; ++i) {
             queries[i].Id = TLogoBlobID(tabletId, tabletGeneration, i, 0, data.size(), 0);
         }
-        auto ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, querySize, TInstant::Max(),
+        std::unique_ptr<TEvBlobStorage::TEvGet> ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, querySize, TInstant::Max(),
             NKikimrBlobStorage::AsyncRead);
         ev->ReaderTabletData = TEvBlobStorage::TEvGet::TReaderTabletData(tabletId, tabletGeneration);
         test.Runtime->WrapInActorContext(test.Edge, [&] {
             SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
         });
-        auto handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
+        std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
         UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvGetResult);
-        auto *getResult = handle->Get<TEvBlobStorage::TEvGetResult>();
+        TEvBlobStorage::TEvGetResult *getResult = handle->Get<TEvBlobStorage::TEvGetResult>();
         UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, querySize);
         UNIT_ASSERT_VALUES_EQUAL(getResult->Status, NKikimrProto::BLOCKED);
     }
@@ -132,11 +133,12 @@ Y_UNIT_TEST_SUITE(Get) {
         const TLogoBlobID blobId(tabletId, tabletGeneration, 0, 0, data.size(), 0);
         SendPut(test, blobId, data, NKikimrProto::OK);
 
-        auto block = std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, tabletGeneration + 1, TInstant::Max());
+        std::unique_ptr<TEvBlobStorage::TEvBlock> block =
+            std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, tabletGeneration + 1, TInstant::Max());
         test.Runtime->WrapInActorContext(test.Edge, [&] {
             SendToBSProxy(test.Edge, test.Info->GroupID, block.release());
         });
-        auto blockResult = test.Runtime->WaitForEdgeActorEvent({test.Edge});
+        std::unique_ptr<IEventHandle> blockResult = test.Runtime->WaitForEdgeActorEvent({test.Edge});
         UNIT_ASSERT_EQUAL(blockResult->Type, TEvBlobStorage::EvBlockResult);
         UNIT_ASSERT_VALUES_EQUAL(blockResult->Get<TEvBlobStorage::TEvBlockResult>()->Status, NKikimrProto::OK);
 

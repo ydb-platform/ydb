@@ -352,7 +352,7 @@ public:
 
                         vget->Record.SetSuppressBarrierCheck(IsInternal);
                         if (ReaderTabletData) {
-                            auto *reader = vget->Record.MutableReaderTabletData();
+                            NKikimrBlobStorage::TEvVGet::TTabletData *reader = vget->Record.MutableReaderTabletData();
                             reader->SetId(ReaderTabletData->Id);
                             reader->SetGeneration(ReaderTabletData->Generation);
                         }

@@ -39,7 +39,7 @@ TString EncodeAnchor(const TString& v) {
 }
 
 TPersQueueReadBalancer::TPersQueueReadBalancer(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , TLogPrefix(NKikimrServices::PERSQUEUE_READ_BALANCER)
         , Inited(false)

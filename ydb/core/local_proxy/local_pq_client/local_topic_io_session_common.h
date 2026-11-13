@@ -22,10 +22,10 @@
 namespace NKikimr::NKqp {
 
 template <typename TDerived, typename TRpcProtoIn, typename TRpcProtoOut, typename TEventVariant, typename TCounters>
-class TLocalTopicIoSessionActor: public NActors::TActorBootstrapped<TDerived>, public NActors::IActorExceptionHandler {
+class TLocalTopicIoSessionActor: public NActors::TActorWithExceptionHandler<NActors::TActorBootstrapped<TDerived>> {
     static constexpr TDuration COUNTERS_REFRESH_INTERVAL = TDuration::Seconds(1);
 
-    using TBase = NActors::TActorBootstrapped<TDerived>;
+    using TBase = NActors::TActorWithExceptionHandler<NActors::TActorBootstrapped<TDerived>>;
 
 protected:
     using TEvent = typename TLocalTopicSessionBase<TEventVariant>::TEvent;

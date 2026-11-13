@@ -20,8 +20,7 @@ namespace NFq {
 
 namespace {
 
-class TStateLoadPlanResolverActor final: public NActors::TActorBootstrapped<TStateLoadPlanResolverActor>,
-                                         public NActors::IActorExceptionHandler {
+class TStateLoadPlanResolverActor final: public NActors::TActorWithExceptionHandler<NActors::TActorBootstrapped<TStateLoadPlanResolverActor>> {
     struct TEvPrivate {
         enum EEv: ui32 {
             EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),

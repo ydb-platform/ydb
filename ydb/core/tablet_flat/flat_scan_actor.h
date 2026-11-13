@@ -26,8 +26,7 @@ namespace NTabletFlatExecutor {
 namespace NOps {
 
     class TDriver final
-            : public ::NActors::TActor<TDriver>
-            , public IActorExceptionHandler
+            : public NActors::TActorWithExceptionHandler<::NActors::TActor<TDriver>>
             , private NTable::TFeed
             , private NTable::IDriver
             , private ILoadBlob
@@ -50,7 +49,7 @@ namespace NOps {
         }
 
         TDriver(ui64 serial, TAutoPtr<IScan> scan, TConf args, THolder<TScanSnapshot> snapshot)
-            : TActor(&TDriver::StateBoot)
+            : TActorWithExceptionHandler(&TDriver::StateBoot)
             , NTable::TFeed(scan.Release(), *snapshot->Subset, snapshot->Snapshot)
             , Serial(serial)
             , Args(args)

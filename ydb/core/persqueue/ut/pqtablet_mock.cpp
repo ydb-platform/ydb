@@ -6,7 +6,7 @@
 namespace NKikimr::NPQ::NHelpers {
 
 TPQTabletMock::TPQTabletMock(const TActorId& tablet, TTabletStorageInfo* info) :
-    TActor(&TThis::StateInit)
+    TTabletActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, nullptr)
     , PipeClientCacheConfig(new NTabletPipe::TBoundedClientCacheConfig())
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(PipeClientCacheConfig, GetPipeClientConfig()))

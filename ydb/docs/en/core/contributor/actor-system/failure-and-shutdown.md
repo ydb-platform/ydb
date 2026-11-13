@@ -129,13 +129,33 @@ try {
 }
 ```
 
-An exception escaping a top-level void handler is offered to
-IActorExceptionHandler. If it is not accepted, the runtime terminates. A
-cancellation never enters that catch block.
+An actor opts into exception handling by deriving from
+`TActorWithExceptionHandler<TBase>`, where `TBase` is its existing actor base,
+for example `TActor<TDerived>` or `TActorBootstrapped<TDerived>`. This adds a
+link to the actor inheritance chain, not a separate handler interface.
+`IActor::HasExceptionHandler()` returns false by default; the opt-in base
+returns true. `Receive` checks this virtual method before dispatch and needs
+neither RTTI nor a cached type check.
 
-Actors without IActorExceptionHandler dispatch events outside Receive's catch
+The actor implements `OnUnhandledException(const std::exception&)` and returns
+true for a handled exception or false to rethrow it. Its implementation may be
+private: invocation through the virtual contract does not depend on member
+access. The base's `std::exception_ptr` overload forwards standard exceptions
+to that method and declines other thrown objects. Override that overload to
+handle non-standard exceptions. Cancellation never enters this catch block.
+Overriding a handler method on an ordinary actor alone does not opt into catching.
+
+Actors without an exception handler dispatch events outside Receive's catch
 block. This avoids unwinding the actor handler merely to rethrow an exception
 that cannot be handled. On runtimes that terminate before unwinding an uncaught
 exception, the original actor frames remain available to crash stack collection.
-Actors implementing IActorExceptionHandler retain the catch/handler path; if the
+Actors opting into exception handling retain the catch/handler path; if the
 handler declines the exception, its original frames have already been unwound.
+
+A declined exception is rethrown through the non-inlined virtual method
+`TActor<TDerived>::RethrowUnhandledException()`. The fatal stack therefore
+identifies the CRTP actor type even after its state function has unwound. This
+does not reconstruct the original throw site or its local variables. A subclass
+that reuses `TActor<Base>` is identified as `Base`; actors deriving directly from
+`IActor` use its generic rethrow method. An exception thrown by a standard
+exception handler does not replace the original exception being rethrown.

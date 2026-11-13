@@ -5,7 +5,7 @@
 
 namespace NKikimr {
 
-class TSimpleTablet : public TActor<TSimpleTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TSimpleTablet : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TSimpleTablet>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     TSimpleTablet(const TActorId &tablet, TTabletStorageInfo *info);
 

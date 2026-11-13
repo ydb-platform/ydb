@@ -26,7 +26,7 @@ struct TFakeSchemeShardState : public TThrRefBase {
 
 // The functionality of this class is not full.
 // So anyone is welcome to improve it.
-class TFakeSchemeShard : public TActor<TFakeSchemeShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TFakeSchemeShard : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TFakeSchemeShard>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     using TState = TFakeSchemeShardState;
 
@@ -35,7 +35,7 @@ public:
     }
 
     TFakeSchemeShard(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state)
-        : TActor<TFakeSchemeShard>(&TFakeSchemeShard::StateInit)
+        : TTabletActor(&TFakeSchemeShard::StateInit)
         , NTabletFlatExecutor::TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , State(state)
     {

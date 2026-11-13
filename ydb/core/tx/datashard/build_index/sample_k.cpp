@@ -42,7 +42,7 @@ using namespace NKMeans;
  *   - Contains up to K sampled rows (serialized), with associated probabilities
  */
 
-class TSampleKScan final: public TActor<TSampleKScan>, public IActorExceptionHandler, public NTable::IScan {
+class TSampleKScan final: public NActors::TActorWithExceptionHandler<TActor<TSampleKScan>>, public NTable::IScan {
 protected:
     const TTags ScanTags;
     const TVector<NScheme::TTypeInfo> KeyTypes;
@@ -81,7 +81,7 @@ public:
     TSampleKScan(ui64 tabletId, const TUserTable& table, NKikimrTxDataShard::TEvSampleKRequest& request,
                  const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
                  const TSerializedTableRange& range, std::unique_ptr<IClusters>&& clusters)
-        : TActor(&TThis::StateWork)
+        : TActorWithExceptionHandler(&TThis::StateWork)
         , ScanTags(BuildTags(table, request.GetColumns()))
         , KeyTypes(table.KeyColumnTypes)
         , TableRange(table.Range)

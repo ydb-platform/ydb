@@ -97,7 +97,7 @@ private:
 };
 
 
-class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
+class TPersQueueReadBalancer : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TPersQueueReadBalancer>>,
                                public TTabletExecutedFlat,
                                public TLogPrefix {
     struct TTxPreInit;

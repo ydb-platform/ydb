@@ -24,8 +24,8 @@ namespace {
 
 using namespace NActors;
 
-class TDqPqControlPlaneActor final: public TActor<TDqPqControlPlaneActor>, public IActorExceptionHandler {
-    using TBase = TActor<TDqPqControlPlaneActor>;
+class TDqPqControlPlaneActor final: public NActors::TActorWithExceptionHandler<TActor<TDqPqControlPlaneActor>> {
+    using TBase = NActors::TActorWithExceptionHandler<TActor<TDqPqControlPlaneActor>>;
     using TDescribeResult = NPq::NProto::TEvDescribeConsumerResult;
     using TRetryPolicy = IRetryPolicy<>;
     using TReplyKey = std::pair<TActorId, ui64>;

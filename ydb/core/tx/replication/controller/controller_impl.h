@@ -36,7 +36,7 @@ THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(
     ui64 writeTxId, const TVector<TString>& tables);
 
 class TController
-    : public TActor<TController>
+    : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TController>>
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
 public:

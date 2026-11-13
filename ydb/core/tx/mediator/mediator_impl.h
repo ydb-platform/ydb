@@ -286,7 +286,7 @@ typedef ui64 TCoordinatorId;
 using NTabletFlatExecutor::ITransaction;
 using NActors::TActorContext;
 
-class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TTxMediator : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TTxMediator>>, public NTabletFlatExecutor::TTabletExecutedFlat {
     struct TConfig {
         ui64 CoordinatorsVersion;
         TCoordinators::TPtr CoordinatorSeletor;

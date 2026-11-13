@@ -26,8 +26,8 @@ using namespace NKikimrClient;
 // The connection processes one in-flight Kafka request at a time, so this actor also processes
 // one Produce request at a time.
 //
-class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor>
-                        , public TKafkaExceptionHandler<TKafkaProduceActor> {
+class TKafkaProduceActor: public TKafkaExceptionHandler<TKafkaProduceActor, NActors::TActorBootstrapped<TKafkaProduceActor>>
+{
     struct TPendingRequest;
 
     enum ETopicStatus {

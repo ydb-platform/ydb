@@ -22,8 +22,8 @@ namespace {
 
 using namespace NActors;
 
-class TDqPqInfoAggregationActor: public TActor<TDqPqInfoAggregationActor>, public IActorExceptionHandler {
-    using TBase = TActor<TDqPqInfoAggregationActor>;
+class TDqPqInfoAggregationActor: public NActors::TActorWithExceptionHandler<TActor<TDqPqInfoAggregationActor>> {
+    using TBase = NActors::TActorWithExceptionHandler<TActor<TDqPqInfoAggregationActor>>;
 
     struct TPrivateEvents {
         enum EEv: ui32 {

@@ -11,10 +11,9 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimr::NGRpcService;
 
-class TReadInfoActor : public TRpcOperationRequestActor<TReadInfoActor, TEvPQReadInfoRequest>
-                     , public NActors::IActorExceptionHandler
+class TReadInfoActor : public NActors::TActorWithExceptionHandler<TRpcOperationRequestActor<TReadInfoActor, TEvPQReadInfoRequest>>
                      , public NPQ::TLogPrefix {
-using TBase = TRpcOperationRequestActor<TReadInfoActor, TEvPQReadInfoRequest>;
+using TBase = NActors::TActorWithExceptionHandler<TRpcOperationRequestActor<TReadInfoActor, TEvPQReadInfoRequest>>;
 public:
      TReadInfoActor(
              NKikimr::NGRpcService::TEvPQReadInfoRequest* request, const NPersQueue::TTopicsListController& topicsHandler,

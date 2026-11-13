@@ -15,10 +15,10 @@ namespace NKafka {
 
     It accumulates transaction state (partitions in tx, offsets) and on commit submits transaction to KQP
     */
-    class TTransactionActor : public NActors::TActor<TTransactionActor>
-                            , public TKafkaExceptionHandler<TTransactionActor> {
+    class TTransactionActor : public TKafkaExceptionHandler<TTransactionActor, NActors::TActor<TTransactionActor>>
+    {
 
-        using TBase = NActors::TActor<TTransactionActor>;
+        using TBase = TKafkaExceptionHandler<TTransactionActor, NActors::TActor<TTransactionActor>>;
 
         public:
             struct TPartitionCommit {

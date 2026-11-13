@@ -102,7 +102,7 @@ void RegisterProbes() {
 }   // namespace
 
 TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
-    : TActor(&TThis::StateInit)
+    : TTabletActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , TabletCountersHolder(new TProtobufTabletCounters<ESimpleCounters_descriptor, ECumulativeCounters_descriptor,
           EPercentileCounters_descriptor, ETxTypes_descriptor>())

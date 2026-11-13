@@ -30,8 +30,8 @@ using namespace NKikimr;
 
 extern const TString CHECK_GROUP_GENERATION;
 
-class TKafkaOffsetCommitActor: public NActors::TActorBootstrapped<TKafkaOffsetCommitActor>
-                             , public TKafkaExceptionHandler<TKafkaOffsetCommitActor> {
+class TKafkaOffsetCommitActor: public TKafkaExceptionHandler<TKafkaOffsetCommitActor, NActors::TActorBootstrapped<TKafkaOffsetCommitActor>>
+{
 
 struct TRequestInfo {
     TString TopicName = "";
@@ -43,7 +43,7 @@ struct TRequestInfo {
 };
 
 public:
-    using TBase = NActors::TActorBootstrapped<TKafkaOffsetCommitActor>;
+    using TBase = TKafkaExceptionHandler<TKafkaOffsetCommitActor, NActors::TActorBootstrapped<TKafkaOffsetCommitActor>>;
     TKafkaOffsetCommitActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetCommitRequestData>& message)
         : Context(context)
         , CorrelationId(correlationId)

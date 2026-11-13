@@ -437,7 +437,7 @@ namespace NKikimr {
         }
     };
 
-    class TFakeHive : public TActor<TFakeHive>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    class TFakeHive : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TFakeHive>>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         static std::function<IActor* (const TActorId &, TTabletStorageInfo*)> DefaultGetTabletCreationFunc(ui32 type) {
             Y_UNUSED(type);
@@ -453,7 +453,7 @@ namespace NKikimr {
 
         TFakeHive(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state,
                   TGetTabletCreationFunc getTabletCreationFunc)
-            : TActor<TFakeHive>(&TFakeHive::StateInit)
+            : TTabletActor(&TFakeHive::StateInit)
             , NTabletFlatExecutor::TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
             , State(state)
             , GetTabletCreationFunc(getTabletCreationFunc)

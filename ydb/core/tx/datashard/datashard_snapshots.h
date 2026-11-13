@@ -212,7 +212,7 @@ public:
     void PersistUpdateSnapshotFlags(NIceDb::TNiceDb& db, const TSnapshotKey& key);
     void PersistRemoveAllSnapshots(NIceDb::TNiceDb& db);
 
-    void Fix_KIKIMR_14259(NTable::TDatabase& db);
+    void CleanupRowVersionsBelowLowWatermark(NTable::TDatabase& db);
 
     // Optional additional cleanup of every user table, subject to retention and
     // local acquisitions. A watermark can contain retained points below it; it

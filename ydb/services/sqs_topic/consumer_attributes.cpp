@@ -191,7 +191,9 @@ namespace NKikimr::NSqsTopic::V1 {
 
         if (newConfig.MessageRetentionPeriod.Defined()) {
             ui64 newSeconds = newConfig.MessageRetentionPeriod->Seconds();
-            ui64 existingSeconds = static_cast<ui64>(existingConfig.GetPartitionConfig().GetLifetimeSeconds());
+            const ui64 existingSeconds = existingConsumer.HasAvailabilityPeriodMs()
+                ? existingConsumer.GetAvailabilityPeriodMs() / 1000
+                : static_cast<ui64>(existingConfig.GetPartitionConfig().GetLifetimeSeconds());
             if (existingSeconds != newSeconds) {
                 return std::unexpected(std::format(
                     "MessageRetentionPeriod mismatch: new value is {} seconds, existing value is {} seconds",

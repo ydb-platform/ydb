@@ -52,7 +52,11 @@ def ydb_cluster_configuration(request):
         # the test would not exhibit the behavior we would like it to.
         assert not get_default_feature_flag_value("EnableSeparateDiskSpaceQuotas")
 
-    return dict(extra_feature_flags=extra_feature_flags)
+    return dict(
+        extra_feature_flags=extra_feature_flags,
+        # These tests wait for table storage statistics and quota updates.
+        datashard_config={'stats_report_interval_seconds': 1},
+    )
 
 
 @pytest.fixture(scope="function")

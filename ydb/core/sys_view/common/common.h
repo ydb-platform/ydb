@@ -17,8 +17,8 @@ inline TDuration QueryStatsInterval(const NKikimrConfig::TSysViewConfig& config)
 
 inline NKikimrConfig::TSysViewConfig SysViewConfigForTests() {
     NKikimrConfig::TSysViewConfig config;
-    config.SetQueryStatsIntervalSeconds(5);
-    config.SetLabeledCountersIntervalSeconds(5);
+    config.SetQueryStatsIntervalSeconds(1);
+    config.SetLabeledCountersIntervalSeconds(1);
     return config;
 }
 

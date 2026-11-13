@@ -608,8 +608,8 @@ namespace Tests {
             MERGE_CFG_FROM_SETTINGS(BridgeConfig);
             MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
             // Preserve the short test intervals unless explicitly configured.
-            appData.SysViewConfig.SetQueryStatsIntervalSeconds(5);
-            appData.SysViewConfig.SetLabeledCountersIntervalSeconds(5);
+            appData.SysViewConfig.SetQueryStatsIntervalSeconds(1);
+            appData.SysViewConfig.SetLabeledCountersIntervalSeconds(1);
             MERGE_CFG_FROM_APP_CFG(SysViewConfig);
             MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
             appData.AuditConfig = Settings->AppConfig->GetAuditConfig();

@@ -2,6 +2,7 @@
 #include "cdc_schema_change.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
+#include "datashard_repl_offsets.h"
 #include "execution_unit_ctors.h"
 
 #include <utility>
@@ -28,6 +29,7 @@ TFamilyKey FamilyKey(const TUserTable& table, ui32 id) {
 
 struct TFamilySettings {
     NTable::NPage::ECodec Codec = NTable::NPage::ECodec::Plain;
+    ui32 CodecLevel = 1;
     NTable::NPage::ECacheMode CacheMode = NTable::NPage::ECacheMode::Regular;
     TString DataPoolKind;
 
@@ -43,6 +45,7 @@ TMap<TFamilyKey, TFamilySettings> FamilySettings(const TUserTable& table) {
         const auto& data = family.StorageConfig.GetData();
         const TFamilySettings settings{
             .Codec = family.Codec,
+            .CodecLevel = family.Codec == NTable::NPage::ECodec::ZSTD ? family.GetCodecLevel() : 1,
             .CacheMode = family.CacheMode,
             .DataPoolKind = data.GetAllowOtherKinds() ? TString{} : data.GetPreferredPoolKind(),
         };
@@ -188,11 +191,17 @@ public:
                   const TActorContext &ctx) override;
 
 private:
+    struct TCleanupContext {
+        ui64 TxId = 0;
+        TReplicationSourceOffsetsDb::TCleanupCursor Cursor;
+    };
+
+    TCleanupContext Cleanup;
 };
 
 TAlterTableUnit::TAlterTableUnit(TDataShard &dataShard,
                                  TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::AlterTable, false, dataShard, pipeline)
+    : TExecutionUnit(EExecutionUnitKind::AlterTable, true, dataShard, pipeline)
 {
 }
 
@@ -233,6 +242,45 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     }
 
     auto oldInfo = DataShard.FindUserTable(tableId);
+    using TReplicationConfig = NKikimrSchemeOp::TTableReplicationConfig;
+    if (alterTableTx.HasReplicationConfig()
+        && (alterTableTx.GetReplicationConfig().GetMode() == TReplicationConfig::REPLICATION_MODE_NONE
+            || !oldInfo->IsReplicated())
+        && !oldInfo->IsIncrementalRestore()) {
+        if (oldInfo->IsReplicated()) {
+            // Persist NONE before deleting offsets, so delayed replication writes
+            // cannot recreate them. Keep the schema version until ALTER completes.
+            TUserTable::TPtr stopped = new TUserTable(*oldInfo);
+            stopped->ReplicationConfig.Mode = TReplicationConfig::REPLICATION_MODE_NONE;
+            NKikimrSchemeOp::TTableDescription schema;
+            stopped->GetSchema(schema);
+            stopped->ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
+            stopped->SetSchema(schema);
+            NIceDb::TNiceDb db(txc.DB);
+            DataShard.PersistUserTable(db, tableId.LocalPathId, *stopped);
+            TDataShardLocksDb locksDb(DataShard, txc);
+            DataShard.ReplaceUserTable(tableId, stopped, locksDb);
+            DataShard.ReplicatedTables.erase(tableId);
+            return EExecutionStatus::Reschedule;
+        }
+
+        // Clean offsets left by older versions before enabling replication.
+        if (Cleanup.TxId != op->GetTxId()) {
+            Cleanup = {.TxId = op->GetTxId()};
+        }
+
+        DataShard.ReplicatedTables.erase(tableId);
+        TReplicationSourceOffsetsDb rdb(txc);
+        switch (rdb.RemoveTableBatch(tableId, Cleanup.Cursor)) {
+        case TReplicationSourceOffsetsDb::ECleanupStatus::NotReady:
+            return EExecutionStatus::Restart;
+        case TReplicationSourceOffsetsDb::ECleanupStatus::More:
+            return EExecutionStatus::Reschedule;
+        case TReplicationSourceOffsetsDb::ECleanupStatus::Done:
+            Cleanup = {};
+            break;
+        }
+    }
     auto newInfo = DataShard.AlterUserTable(ctx, txc, alterTableTx);
     TDataShardLocksDb locksDb(DataShard, txc);
     DataShard.ReplaceUserTable(tableId, newInfo, locksDb);

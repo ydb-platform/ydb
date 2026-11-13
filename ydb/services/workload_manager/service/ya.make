@@ -6,7 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/kqp/common
     ydb/core/kqp/common/events
     ydb/core/kqp/runtime

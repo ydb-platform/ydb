@@ -15,6 +15,9 @@ SRCS(
     block_item_comparator.cpp
     block_type_helper.cpp
     memory_pool.cpp
+    block_io_buffer.cpp
+    defs.cpp
+    dispatch_traits.cpp
 )
 
 PEERDIR(

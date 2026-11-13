@@ -114,6 +114,9 @@ static TString ComputeIndexItemSuffix(
             ? parentDescription.GetTable().CdcStreamsSize() + 1 : 1;
 
         for (const auto& index : parentDescription.GetTable().GetTableIndexes()) {
+            if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                continue;
+            }
             const TVector<TString> indexColumns(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end());
 
             const auto implTables = NTableIndex::GetImplTables(index.GetType(), indexColumns);

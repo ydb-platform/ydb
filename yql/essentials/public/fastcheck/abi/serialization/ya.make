@@ -2,6 +2,8 @@ LIBRARY()
 
 SRCS(
     serialization.cpp
+    message.cpp
+    result.cpp
 )
 
 PEERDIR(

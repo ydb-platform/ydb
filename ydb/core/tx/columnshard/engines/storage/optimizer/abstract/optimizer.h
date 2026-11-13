@@ -84,6 +84,14 @@ public:
         return TOptimizationPriority(Level + Level * (i64)percent / 100, InternalLevelWeight + InternalLevelWeight * (i64)percent / 100);
     }
 
+    TOptimizationPriority operator+(const TOptimizationPriority& item) const {
+        return TOptimizationPriority(Level + item.Level, InternalLevelWeight + item.InternalLevelWeight);
+    }
+
+    TOptimizationPriority operator-(const TOptimizationPriority& item) const {
+        return TOptimizationPriority(Level - item.Level, InternalLevelWeight - item.InternalLevelWeight);
+    }
+
     static TOptimizationPriority Normalize(ui64 min, ui64 max, ui64 weight) {
         if (weight < min) {
             return TOptimizationPriority(0, weight);
@@ -181,9 +189,22 @@ private:
     TPositiveControlInteger LocalPortionsCount;
     std::shared_ptr<TCounters> Counters = std::make_shared<TCounters>();
 
+    void UpdatePortionsCount(const ui64 added, const ui64 removed) {
+        LocalPortionsCount.Add(added);
+        LocalPortionsCount.Sub(removed);
+        NodePortionsCounter.Add(added);
+        NodePortionsCounter.Sub(removed);
+        Counters->NodePortionsCount->Set(NodePortionsCounter.Val());
+    }
+
 protected:
     virtual void DoModifyPortions(
         const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) = 0;
+
+    virtual void DoAddLoadedPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add) {
+        DoModifyPortions(add, {});
+    }
+
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual std::shared_ptr<TColumnEngineChanges> DoGetNextOptimizationTask(
@@ -357,12 +378,15 @@ public:
     void ModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
         YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
             {"pathId", PathId});
-        LocalPortionsCount.Add(add.size());
-        LocalPortionsCount.Sub(remove.size());
-        NodePortionsCounter.Add(add.size());
-        NodePortionsCounter.Sub(remove.size());
-        Counters->NodePortionsCount->Set(NodePortionsCounter.Val());
+        UpdatePortionsCount(add.size(), remove.size());
         DoModifyPortions(add, remove);
+    }
+
+    void AddLoadedPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add) {
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"pathId", PathId});
+        UpdatePortionsCount(add.size(), 0);
+        DoAddLoadedPortions(add);
     }
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(

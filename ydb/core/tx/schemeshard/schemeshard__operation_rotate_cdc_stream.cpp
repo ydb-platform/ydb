@@ -1,6 +1,7 @@
 #include "schemeshard__operation_rotate_cdc_stream.h"
 
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_create_cdc_stream.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
 
@@ -19,7 +20,9 @@ public:
     explicit TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages({});
+        IgnoreMessages({
+            TEvHive::TEvCreateTabletReply::EventType,
+        });
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -95,6 +98,10 @@ private:
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
+        case TTxState::CreateParts:
+            return TTxState::ConfigureParts;
+        case TTxState::ConfigureParts:
+            return TTxState::Propose;
         case TTxState::Propose:
             return TTxState::Done;
         default:
@@ -104,6 +111,10 @@ private:
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
+        case TTxState::CreateParts:
+            return MakeHolder<TCreateParts>(OperationId);
+        case TTxState::ConfigureParts:
+            return MakeHolder<TConfigureParts>(OperationId);
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
@@ -315,6 +326,12 @@ public:
         default:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
                 << "Invalid compression codec: " << static_cast<ui32>(newStreamDesc.GetCompression()));
+            return result;
+        }
+
+        if (newStreamDesc.HasHeartbeatMode() || newStreamDesc.HasAggregatorTabletId()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "HeartbeatMode and AggregatorTabletId are assigned by SchemeShard and cannot be set in a request");
             return result;
         }
 

@@ -1237,7 +1237,8 @@ void TNotifyWriteSessionsQuoterStep::Execute(const TActorContext& ctx) {
     auto actorId = MakeWriteSessionsQuoterId();
 
     Partition()->WriteSessionsQuoterNotified = true;
-    ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvNotify(TopicName(), PartitionId().OriginalPartitionId, Partition()->TabletGeneration));
+    ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvNotify(
+        Partition()->Config.GetYdbDatabasePath(), TopicName(), PartitionId().OriginalPartitionId, Partition()->TabletGeneration));
     Done(ctx);
 }
 

@@ -1,10 +1,12 @@
 #pragma once
 #include "json_handlers.h"
 #include "json_pipe_req.h"
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "viewer_tabletinfo.h"
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/util/proto_duration.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -30,6 +32,7 @@ class TJsonCluster : public TViewerPipeClient {
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GroupsResponse;
     // bridge mode only, for the names of the pools in the sync state of piles
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> StoragePoolsResponse;
+    std::optional<TRequestResponse<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>> BridgeStorageResponse;
     std::optional<TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStatsResponse;
 
     int WhiteboardStateRequestsInFlight = 0;
@@ -158,6 +161,10 @@ public:
         }
         if (AppData()->BridgeModeEnabled) {
             StoragePoolsResponse = MakeCachedRequestBSControllerPools();
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
+            request->Record.SetView(NKikimrBridge::TStorageQuery::PILES);
+            BridgeStorageResponse = MakeRequestToTablet<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(
+                GetBSControllerId(), request.release());
         }
         PDisksResponse = MakeCachedRequestBSControllerPDisks();
         VSlotsResponse = MakeCachedRequestBSControllerVSlots();
@@ -981,7 +988,7 @@ private:
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
-        if (ListTenantsResponse->Set(std::move(ev))) {
+        if (ListTenantsResponse && ListTenantsResponse->Set(std::move(ev))) {
             ProcessResponses();
             RequestDone();
         }
@@ -1018,6 +1025,12 @@ private:
     void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
         if (StoragePoolsResponse->Set(std::move(ev))) {
             ProcessResponses();
+            RequestDone();
+        }
+    }
+
+    void Handle(TEvBlobStorage::TEvControllerQueryBridgeStorageResult::TPtr& ev) {
+        if (BridgeStorageResponse && BridgeStorageResponse->Set(std::move(ev))) {
             RequestDone();
         }
     }
@@ -1195,6 +1208,9 @@ private:
             ProcessResponses();
             result = true;
         }
+        if (BridgeStorageResponse && BridgeStorageResponse->Error(error)) {
+            result = true;
+        }
         return result;
     }
 
@@ -1247,6 +1263,7 @@ private:
             hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerQueryBridgeStorageResult, Handle);
             hFunc(TEvHive::TEvResponseHiveNodeStats, Handle);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
             hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
@@ -1290,6 +1307,44 @@ private:
             default:
                 return NKikimrWhiteboard::EFlag::Grey;
         }
+    }
+
+    void FillBridgeDatabaseCounts(NKikimrViewer::TBridgeInfo& bridgeInfo) const {
+        bridgeInfo.SetBridgeDatabasesComplete(false);
+        if (!BridgeStorageResponse || !BridgeStorageResponse->IsOk()) {
+            return;
+        }
+        const auto& response = BridgeStorageResponse->Get()->Record;
+        const auto& config = NodeWardenStorageConfigResponse->Get()->Config;
+        if (response.GetStatus() != Ydb::StatusIds::SUCCESS || !response.HasPiles() ||
+                !response.GetPiles().has_bridge_databases() || !config || !config->HasClusterState() ||
+                response.GetPiles().cluster_state_generation() != config->GetClusterState().GetGeneration()) {
+            return;
+        }
+        const auto& snapshot = response.GetPiles();
+        bridgeInfo.SetBridgeDatabases(snapshot.bridge_databases());
+        bool complete = snapshot.unattributed_storage_pools() == 0;
+        THashMap<TStringBuf, const NKikimrBridge::TDatabaseSyncCounts*> byPile;
+        for (const auto& pile : snapshot.piles()) {
+            if (pile.has_pile_name() && pile.has_bridge_databases()) {
+                byPile.emplace(pile.pile_name(), &pile.bridge_databases());
+            }
+        }
+        for (auto& pile : *bridgeInfo.MutablePiles()) {
+            const auto it = byPile.find(pile.GetName());
+            if (it == byPile.end()) {
+                complete = false;
+                continue;
+            }
+            const auto& counts = *it->second;
+            auto& target = *pile.MutableDatabaseCountsBySyncStatus();
+            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::SYNCED)] = counts.synced();
+            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::SYNCING)] = counts.syncing();
+            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::PENDING)] = counts.pending();
+            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::UNKNOWN)] = counts.unknown();
+            target[NKikimrBridge::ESynchronizationStatus_Name(NKikimrBridge::NOT_REQUIRED)] = counts.not_required();
+        }
+        bridgeInfo.SetBridgeDatabasesComplete(complete);
     }
 
     void FillBridgeInfo(const std::unordered_map<ui32, std::unordered_map<TString, ui32>>& pileToGroupStatus) {
@@ -1471,6 +1526,7 @@ private:
 
         FillBridgeInfo(pileToGroupStatus);
         if (ClusterInfo.HasBridgeInfo()) {
+            FillBridgeDatabaseCounts(*ClusterInfo.MutableBridgeInfo());
             for (auto& pbBridgePileInfo : *ClusterInfo.MutableBridgeInfo()->MutablePiles()) {
                 if (auto it = pileSync.find(pbBridgePileInfo.GetPileId());
                         it != pileSync.end() && it->second.Unsynced) {

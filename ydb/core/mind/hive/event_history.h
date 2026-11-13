@@ -114,6 +114,7 @@ enum class EHiveEventReason : ui64 {
     SpreadNeighbours,
     ExpediencyCheckDisabled,
     ResourceStDevImproved,
+    NamedResourceImproved,
     // boot queue failures, mirror THive::BootState* strings
     LeaderNotRunning,
     AllNodesDead,

@@ -12,6 +12,8 @@
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 namespace NTabletFlatExecutor {
@@ -33,6 +35,7 @@ struct TUserTable : public TThrRefBase {
 
         TUserFamily(const NKikimrSchemeOp::TFamilyDescription& family)
             : ColumnCodec(family.GetColumnCodec())
+            , ColumnCodecLevel(family.HasColumnCodecLevel() ? TMaybe<i32>(family.GetColumnCodecLevel()) : TMaybe<i32>())
             , ColumnCache(family.GetColumnCache())
             , ColumnCacheMode(family.GetColumnCacheMode())
             , StorageConfig(family.GetStorageConfig())
@@ -51,6 +54,12 @@ struct TUserTable : public TThrRefBase {
             if (family.HasColumnCodec()) {
                 ColumnCodec = family.GetColumnCodec();
                 Codec = ToDbCodec(ColumnCodec);
+                if (Codec != ECodec::ZSTD) {
+                    ColumnCodecLevel.Clear();
+                }
+            }
+            if (family.HasColumnCodecLevel()) {
+                ColumnCodecLevel = family.GetColumnCodecLevel();
             }
             if (family.HasColumnCache()) {
                 ColumnCache = family.GetColumnCache();
@@ -109,6 +118,7 @@ struct TUserTable : public TThrRefBase {
         }
 
         NKikimrSchemeOp::EColumnCodec ColumnCodec;
+        TMaybe<i32> ColumnCodecLevel;
         NKikimrSchemeOp::EColumnCache ColumnCache;
         NKikimrSchemeOp::EColumnCacheMode ColumnCacheMode;
         NKikimrSchemeOp::TStorageConfig StorageConfig;
@@ -121,6 +131,10 @@ struct TUserTable : public TThrRefBase {
         ECache Cache;
         ECacheMode CacheMode;
         TStorageRoom::TPtr Room;
+
+        ui32 GetCodecLevel() const {
+            return ColumnCodecLevel.GetOrElse(1);
+        }
 
         ui32 MainChannel() const {
             if (!*Room) {
@@ -242,8 +256,9 @@ struct TUserTable : public TThrRefBase {
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
                     return ECodec::Plain;
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD: // FIXME: not supported
                     return ECodec::LZ4;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
+                    return ECodec::ZSTD;
                 // keep no default
             }
             Y_ENSURE(false, "unexpected");
@@ -358,6 +373,7 @@ struct TUserTable : public TThrRefBase {
         using EMode = NKikimrSchemeOp::ECdcStreamMode;
         using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
         using EState = NKikimrSchemeOp::ECdcStreamState;
+        using ECompression = NKikimrSchemeOp::ECdcStreamCompression;
 
         TString Name;
         EMode Mode;
@@ -369,6 +385,8 @@ struct TUserTable : public TThrRefBase {
         TMaybe<TString> AwsRegion;
         bool UserSIDs = false;
         bool TraceIds = false;
+        ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionNone;
+        i32 CompressionLevel = 0;
 
         TCdcStream() = default;
 
@@ -382,6 +400,8 @@ struct TUserTable : public TThrRefBase {
             , SchemaChanges(streamDesc.GetSchemaChanges())
             , UserSIDs(streamDesc.GetUserSIDs())
             , TraceIds(streamDesc.GetTraceIds())
+            , Compression(streamDesc.GetCompression())
+            , CompressionLevel(streamDesc.HasCompressionLevel() ? streamDesc.GetCompressionLevel() : 0)
         {
             if (const auto& awsRegion = streamDesc.GetAwsRegion()) {
                 AwsRegion = awsRegion;
@@ -490,6 +510,12 @@ struct TUserTable : public TThrRefBase {
     ui32 ShadowTid = 0;
     TString Name;
     TString Path;
+    struct THnswIndexInfo {
+        Ydb::Table::VectorIndexSettings Settings;
+        ui32 VectorColumnTag = 0;
+        ui64 SchemaVersion = 0;
+    };
+    TMap<TPathId, THnswIndexInfo> HnswIndexes;
     TMap<ui32, TStorageRoom::TPtr> Rooms;
     TMap<ui32, TUserFamily> Families;
     TMap<ui32, TUserColumn> Columns;

@@ -54,8 +54,8 @@ void CheckControllerRecoveryWithSuspendedPileDown(bool restartPrimary) {
                         &config.GetSchemeBoardConfig()}) {
                     for (const auto& group : component->GetRingGroups()) {
                         if (group.GetBridgePileId() == 2) {
-                            UNIT_ASSERT_VALUES_EQUAL(group.GetPileState(),
-                                NKikimrConfig::TStateStorageConfig::DISCONNECTED);
+                            UNIT_ASSERT_C(group.GetPileState() == NKikimrConfig::TStateStorageConfig::DISCONNECTED,
+                                group.DebugString());
                         }
                     }
                 }

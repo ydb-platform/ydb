@@ -58,6 +58,8 @@ public:
     void SetPBufferKey(TPBufferKey pBufferKey);
     TPBufferKey GetPBufferKey() const;
     TGuardedSgList& GetSgList();
+    // TWriteBlocksLocalRequest::Checksums for this request.
+    const TBlockChecksums& GetChecksums() const;
 
 private:
     IWriteClientWeakPtr WriteClient;

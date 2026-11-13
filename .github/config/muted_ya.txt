@@ -28,7 +28,6 @@ ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/mind/hive/ut THiveTest.TestResetServerlessComputeResourcesMode
 ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
 ydb/core/tx/columnshard/backup/iscan/ut_retry IScanS3Retry.UploaderReportsResetAfterAcknowledgedBatch
-ydb/core/tx/replication/controller/ut_dst_creator DstCreator.StandbyDropsRestoredVectorIndexes
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapAfterSessionStartWithLaterMessageReportsDataLoss
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTableWithLocalBloomIndexes
 ydb/core/viewer/ut Viewer.TabletMerging

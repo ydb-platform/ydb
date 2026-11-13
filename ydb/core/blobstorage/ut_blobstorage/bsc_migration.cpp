@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(BSCMigration) {
 
         {
             const auto response = ValidateBridgeConversion(env);
-            UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(),
+            UNIT_ASSERT_C(response.GetStatus() ==
                 NKikimrBlobStorage::TEvControllerDistconfResponse::OK, response.DebugString());
         }
 
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(BSCMigration) {
 
         env.RebootTablet(env.TabletId, TDuration::Seconds(5));
         const auto response = ValidateBridgeConversion(env);
-        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(),
+        UNIT_ASSERT_C(response.GetStatus() ==
             NKikimrBlobStorage::TEvControllerDistconfResponse::Error, response.DebugString());
         UNIT_ASSERT_STRING_CONTAINS(response.GetErrorReason(), TStringBuilder() << "GroupId# " << groupId);
     }

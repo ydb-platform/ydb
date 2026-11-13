@@ -794,3 +794,55 @@ ColumnFamilies {
     }
 
 }
+
+Y_UNIT_TEST_SUITE(TExportSettingsTest) {
+    template <typename TSettings>
+    void CheckSettings(TExportInfo::EKind kind) {
+        TSettings settings;
+        settings.add_items()->set_source_path("/Root/first");
+        settings.add_items()->set_source_path("/Root/second");
+        settings.set_number_of_retries(7);
+        TExportInfo info(1, "", kind, settings, TPathId(), "");
+        const auto& cached = info.GetSettings<TSettings>();
+        UNIT_ASSERT_VALUES_EQUAL(cached.items_size(), 2);
+        UNIT_ASSERT(&cached == &info.GetSettings<TSettings>());
+        UNIT_ASSERT(&cached.items(0) == &info.GetSettings<TSettings>().items(0));
+
+        // Responses and metadata preparation must not mutate the cached settings.
+        auto updated = cached;
+        updated.mutable_items(0)->set_source_path("/Root/replaced");
+        UNIT_ASSERT_VALUES_EQUAL(cached.items(0).source_path(), "/Root/first");
+        UNIT_ASSERT(info.SetSettings(std::move(updated)));
+        UNIT_ASSERT_VALUES_EQUAL(info.GetSettings<TSettings>().items(0).source_path(), "/Root/replaced");
+
+        // Reconstruct through the same serialized-settings constructor used on reboot.
+        TExportInfo restored(1, "", kind, info.GetSerializedSettings(), TPathId(), "");
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSettings<TSettings>().SerializeAsString(),
+            info.GetSettings<TSettings>().SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSettings<TSettings>().number_of_retries(), 7);
+    }
+
+    Y_UNIT_TEST(YtSettings) { CheckSettings<Ydb::Export::ExportToYtSettings>(TExportInfo::EKind::YT); }
+    Y_UNIT_TEST(S3Settings) { CheckSettings<Ydb::Export::ExportToS3Settings>(TExportInfo::EKind::S3); }
+    Y_UNIT_TEST(FsSettings) { CheckSettings<Ydb::Export::ExportToFsSettings>(TExportInfo::EKind::FS); }
+
+    template <typename TSettings>
+    void CheckEncryptionKeyRemoval(TExportInfo::EKind kind) {
+        TSettings settings;
+        settings.mutable_encryption_settings()->mutable_symmetric_key()->set_key("secret");
+        TExportInfo info(1, "", kind, settings, TPathId(), "");
+        auto updated = info.GetSettings<TSettings>();
+        updated.mutable_encryption_settings()->clear_symmetric_key();
+        UNIT_ASSERT(info.SetSettings(std::move(updated)));
+        UNIT_ASSERT(!info.GetSettings<TSettings>().encryption_settings().has_symmetric_key());
+        TExportInfo restored(1, "", kind, info.GetSerializedSettings(), TPathId(), "");
+        UNIT_ASSERT(!restored.GetSettings<TSettings>().encryption_settings().has_symmetric_key());
+    }
+
+    Y_UNIT_TEST(S3EncryptionKeyRemoval) {
+        CheckEncryptionKeyRemoval<Ydb::Export::ExportToS3Settings>(TExportInfo::EKind::S3);
+    }
+    Y_UNIT_TEST(FsEncryptionKeyRemoval) {
+        CheckEncryptionKeyRemoval<Ydb::Export::ExportToFsSettings>(TExportInfo::EKind::FS);
+    }
+}

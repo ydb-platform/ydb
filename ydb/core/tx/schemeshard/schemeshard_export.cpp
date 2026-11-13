@@ -131,18 +131,18 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
 
     switch (exportInfo.Kind) {
     case TExportInfo::EKind::YT:
-        Y_ABORT_UNLESS(exprt.MutableExportToYtSettings()->ParseFromString(exportInfo.Settings));
+        exprt.MutableExportToYtSettings()->CopyFrom(exportInfo.GetSettings<Ydb::Export::ExportToYtSettings>());
         exprt.MutableExportToYtSettings()->clear_token();
         break;
 
     case TExportInfo::EKind::S3:
-        Y_ABORT_UNLESS(exprt.MutableExportToS3Settings()->ParseFromString(exportInfo.Settings));
+        exprt.MutableExportToS3Settings()->CopyFrom(exportInfo.GetSettings<Ydb::Export::ExportToS3Settings>());
         exprt.MutableExportToS3Settings()->clear_access_key();
         exprt.MutableExportToS3Settings()->clear_secret_key();
         break;
 
     case TExportInfo::EKind::FS:
-        Y_ABORT_UNLESS(exprt.MutableExportToFsSettings()->ParseFromString(exportInfo.Settings));
+        exprt.MutableExportToFsSettings()->CopyFrom(exportInfo.GetSettings<Ydb::Export::ExportToFsSettings>());
         break;
     }
 }
@@ -151,7 +151,7 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& e
     db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
         NIceDb::TUpdate<Schema::Exports::Uid>(exportInfo.Uid),
         NIceDb::TUpdate<Schema::Exports::Kind>(static_cast<ui8>(exportInfo.Kind)),
-        NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo.Settings),
+        NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo.GetSerializedSettings()),
         NIceDb::TUpdate<Schema::Exports::DomainPathOwnerId>(exportInfo.DomainPathId.OwnerId),
         NIceDb::TUpdate<Schema::Exports::DomainPathId>(exportInfo.DomainPathId.LocalPathId),
         NIceDb::TUpdate<Schema::Exports::Items>(exportInfo.Items.size()),
@@ -223,7 +223,7 @@ void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo& ex
 
 void TSchemeShard::PersistExportMetadata(NIceDb::TNiceDb& db, const TExportInfo& exportInfo) {
     db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
-        NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo.Settings),
+        NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo.GetSerializedSettings()),
         NIceDb::TUpdate<Schema::Exports::ExportMetadata>(exportInfo.ExportMetadata)
     );
 }

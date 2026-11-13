@@ -137,9 +137,6 @@ bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
         case NScheme::NTypeIds::JsonDocument:
             out << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(cell.AsBuf())) << '"';
             break;
-        case NScheme::NTypeIds::Pg:
-            serialized = PgToStream(cell.AsBuf(), column.Type, out, ErrorString);
-            break;
         case NScheme::NTypeIds::Uuid:
             serialized = UuidToStream(cell.AsValue<std::pair<ui64, ui64>>(), out, ErrorString);
             break;

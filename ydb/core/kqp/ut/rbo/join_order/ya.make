@@ -11,8 +11,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/ut/common
-    yql/essentials/sql/pg
-    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg_dummy
 )
 
 DATA(

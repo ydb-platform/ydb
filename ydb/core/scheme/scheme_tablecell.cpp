@@ -743,14 +743,6 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::Decimal:
             res += typeInfo.GetDecimalType().CellValueToString(r.AsValue<std::pair<ui64, i64>>());
             break;
-        case NScheme::NTypeIds::Pg: {
-            auto convert = NPg::PgNativeTextFromNativeBinary(r.AsBuf(), typeInfo.GetPgTypeDesc());
-            if (!convert.Error)
-                res += convert.Str;
-            else
-                res += *convert.Error;
-            break;
-        }
         default:
             res += EscapeC(r.Data(), r.Size());
         }

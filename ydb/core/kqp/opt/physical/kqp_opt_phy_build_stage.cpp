@@ -110,12 +110,6 @@ bool IsLiteralNothing(TExprBase node) {
                     && NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId))
                 );
             }
-            case ETypeAnnotationKind::Pg: {
-                auto pgTypeId = type->Cast<TPgExprType>()->GetId();
-                return NKikimr::IsAllowedKeyType(
-                    NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId))
-                );
-            }
             default:
                 return false;
         }
@@ -145,7 +139,6 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
 
             if (!value.Maybe<TCoDataCtor>()
                 && !value.Maybe<TCoParameter>()
-                && !value.Maybe<TCoPgConst>()
                 && !IsLiteralNothing(value))
             {
                 literalRange = false;

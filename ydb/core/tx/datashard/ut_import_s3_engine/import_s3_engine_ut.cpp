@@ -506,13 +506,10 @@ TString WriteParquetLikeExporter(
 }
 
 // A table with a Utf8 key and a value column of the given type.
-NKikimrSchemeOp::TTableDescription MakeValueTableScheme(NScheme::TTypeId typeId, TMaybe<ui32> pgTypeId) {
+NKikimrSchemeOp::TTableDescription MakeValueTableScheme(NScheme::TTypeId typeId) {
     auto scheme = MakeUtf8TableScheme();
     auto& value = *scheme.MutableColumns(1);
     value.SetTypeId(typeId);
-    if (pgTypeId) {
-        value.MutableTypeInfo()->SetPgTypeId(*pgTypeId);
-    }
     return scheme;
 }
 
@@ -626,7 +623,6 @@ TVector<TString> SomeValues(TStringBuf prefix, ui32 count) {
 // column does not carry.
 struct TValueCase {
     NScheme::TTypeId TypeId;
-    TMaybe<ui32> PgTypeId;
     // Four values of a backup; the last one is at the limit of the type (Valid) or beyond
     // it (Invalid).
     std::shared_ptr<arrow::Array> Valid;
@@ -642,7 +638,6 @@ TValueCase MakeNumericCase(
 {
     return {
         .TypeId = typeId,
-        .PgTypeId = Nothing(),
         .Valid = MakeNumericArray<TArrowType>(type, {0, 1, 2, valid}),
         .Invalid = MakeNumericArray<TArrowType>(type, {0, 1, 2, invalid}),
     };
@@ -652,17 +647,13 @@ TVector<TValueCase> MakeValueCases() {
     using namespace NYql::NUdf;
     using namespace NYql::NDecimal;
 
-    static constexpr ui32 PgTextTypeId = 25;
-
     const TString json = R"({"key":"value"})";
     const TString invalidUtf8 = "\xC3\x28"; // the second byte is not a continuation byte
 
-    const auto makeStringCase = [](NScheme::TTypeId typeId, const TString& valid, const TString& invalid,
-        TMaybe<ui32> pgTypeId = Nothing())
+    const auto makeStringCase = [](NScheme::TTypeId typeId, const TString& valid, const TString& invalid)
     {
         return TValueCase{
             .TypeId = typeId,
-            .PgTypeId = pgTypeId,
             .Valid = MakeStringArray({valid, valid, valid, valid}),
             .Invalid = MakeStringArray({valid, valid, valid, invalid}),
         };
@@ -670,7 +661,6 @@ TVector<TValueCase> MakeValueCases() {
     const auto makeBinaryCase = [](NScheme::TTypeId typeId, const TString& valid, const TString& invalid) {
         return TValueCase{
             .TypeId = typeId,
-            .PgTypeId = Nothing(),
             .Valid = MakeBinaryArray({valid, valid, valid, valid}),
             .Invalid = MakeBinaryArray({valid, valid, valid, invalid}),
         };
@@ -680,7 +670,6 @@ TVector<TValueCase> MakeValueCases() {
     const auto makeBoolCase = [](ui8 invalid) {
         return TValueCase{
             .TypeId = NScheme::NTypeIds::Bool,
-            .PgTypeId = Nothing(),
             .Valid = MakeNumericArray<arrow::UInt8Type>(arrow::uint8(), {0, 1, 0, 1}),
             .Invalid = MakeNumericArray<arrow::UInt8Type>(arrow::uint8(), {0, 1, 0, invalid}),
         };
@@ -693,7 +682,6 @@ TVector<TValueCase> MakeValueCases() {
     const auto makeDecimalCase = [&](TInt128 invalid) {
         return TValueCase{
             .TypeId = NScheme::NTypeIds::Decimal,
-            .PgTypeId = Nothing(),
             .Valid = MakeDecimalArray({0, maxDecimal, -maxDecimal, Inf(), -Inf(), Nan()}),
             .Invalid = MakeDecimalArray({0, maxDecimal, -maxDecimal, invalid}),
         };
@@ -725,7 +713,6 @@ TVector<TValueCase> MakeValueCases() {
         // the stored form is binary, the text of a value is not a valid one
         makeBinaryCase(NScheme::NTypeIds::DyNumber, StoredDyNumber("3.14"), "3.14"),
         makeBinaryCase(NScheme::NTypeIds::JsonDocument, StoredJsonDocument(json), json),
-        makeStringCase(NScheme::NTypeIds::Pg, "valid", invalidUtf8, PgTextTypeId),
     };
 }
 
@@ -2062,7 +2049,7 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             // can still hold invalid values.
             TVector<TString> imported; // types whose invalid value was imported
             for (const auto& valueCase : MakeValueCases()) {
-                const TEngineFixture fixture(MakeValueTableScheme(valueCase.TypeId, valueCase.PgTypeId));
+                const TEngineFixture fixture(MakeValueTableScheme(valueCase.TypeId));
                 const TString typeName = ValueTypeName(fixture.Scheme);
 
                 // Two row groups of two rows: the invalid value is row 1 of row group 1.
@@ -2086,7 +2073,7 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
         { // ParquetAcceptsValuesAtTheLimitsOfTheColumnType
             for (const auto& valueCase : MakeValueCases()) {
-                const TEngineFixture fixture(MakeValueTableScheme(valueCase.TypeId, valueCase.PgTypeId));
+                const TEngineFixture fixture(MakeValueTableScheme(valueCase.TypeId));
                 const TString typeName = ValueTypeName(fixture.Scheme);
 
                 const auto outcome = ImportKeyValueParquet(

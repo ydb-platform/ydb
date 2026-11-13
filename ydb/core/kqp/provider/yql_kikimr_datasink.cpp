@@ -309,11 +309,6 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus HandlePgDropObject(TPgDropObject node, TExprContext& ctx) override {
-        Y_UNUSED(ctx, node);
-        return TStatus::Ok;
-    }
-
     TStatus HandleCreateSecret(TKiCreateSecret node, TExprContext& ctx) override {
         Y_UNUSED(ctx, node);
         return TStatus::Ok;
@@ -388,15 +383,13 @@ private:
                         }
                     }
 
-                    if (!settings.PgFilter) {
-                        if (!settings.Filter) {
-                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table update."));
-                            return TStatus::Error;
-                        }
-                        if (!settings.Update) {
-                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Update option is required for table update."));
-                            return TStatus::Error;
-                        }
+                    if (!settings.Filter) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table update."));
+                        return TStatus::Error;
+                    }
+                    if (!settings.Update) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Update option is required for table update."));
+                        return TStatus::Error;
                     }
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
@@ -408,7 +401,7 @@ private:
                         }
                     }
 
-                    if (!settings.Filter && !settings.PgFilter) {
+                    if (!settings.Filter) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete."));
                         return TStatus::Error;
                     }
@@ -722,10 +715,6 @@ public:
             return true;
         }
 
-        if(node.IsCallable(TPgDropObject::CallableName())) {
-            return true;
-        }
-
         if (node.IsCallable(TKiAnalyzeTable::CallableName())) {
             return true;
         }
@@ -772,14 +761,6 @@ public:
             return true;
         }
 
-        if (input->IsCallable()
-            && input->Content() == "PgCast"
-            && input->ChildrenSize() >= 1
-            && TExprBase(input->Child(0)).Maybe<TCoNull>())
-        {
-            return true;
-        }
-
         if (node.Maybe<TCoAtom>()) {
             return true;
         }
@@ -792,19 +773,11 @@ public:
             return IsEvaluatedDefaultNode(maybeJust.Cast().Input().Ptr());
         }
 
-        if (node.Maybe<TCoPgConst>()) {
-            return true;
-        }
-
         if (node.Maybe<TCoDataCtor>()) {
             return true;
         }
 
         if (node.Maybe<TCoDataType>()) {
-            return true;
-        }
-
-        if (node.Maybe<TCoPgType>()) {
             return true;
         }
 
@@ -818,11 +791,7 @@ public:
 
         static const THashSet<TString> allowedNodes = {
             "Concat", "Just", "Optional", "SafeCast", "AsList",
-            "+", "-", "*", "/", "%", "PgCast"};
-
-        if (input->IsCallable("PgCast") && input->Child(0)->IsCallable("PgConst")) {
-            return true;
-        }
+            "+", "-", "*", "/", "%"};
 
         if (input->IsCallable(allowedNodes)) {
             for (size_t i = 0; i < input->ChildrenSize(); i++) {
@@ -893,23 +862,6 @@ public:
             .Build()
             .Done()
             .Ptr();
-    }
-
-    static TExprNode::TPtr MakePgDropObject(const TExprNode::TPtr& node, const NCommon::TPgObjectSettings& settings,
-                                           const TKikimrKey& key, TExprContext& ctx)
-    {
-        bool missingOk = (settings.IfExists.Cast().Value() == "true");
-
-        return Build<TPgDropObject>(ctx, node->Pos())
-                .World(node->Child(0))
-                .DataSink(node->Child(1))
-                .ObjectId().Build(key.GetPGObjectId())
-                .TypeId().Build(key.GetPGObjectType())
-                .MissingOk<TCoAtom>()
-                    .Value(missingOk)
-                .Build()
-                .Done()
-                .Ptr();
     }
 
     static TExprNode::TPtr MakeCreateSequence(const TExprNode::TPtr& node,
@@ -1198,21 +1150,7 @@ public:
 
                 TVector<TExprBase> columnsToReturn;
                 for (const auto item : settings.ReturningList.Cast()) {
-                    if (item.Maybe<TCoPgResultItem>()) {
-                        auto pgResultNode = item.Cast<TCoPgResultItem>();
-                        const auto value = pgResultNode.ExpandedColumns().Cast<TCoAtom>().Value();
-                        if (value.empty()) {
-                            if (!fillStar()) {
-                                return nullptr;
-                            }
-                            break;
-                        } else {
-                            auto atom = Build<TCoAtom>(ctx, node->Pos())
-                                .Value(value)
-                                .Done();
-                            columnsToReturn.emplace_back(std::move(atom));
-                        }
-                    } else if (auto returningItem = item.Maybe<TCoReturningListItem>()) {
+                    if (auto returningItem = item.Maybe<TCoReturningListItem>()) {
                         columnsToReturn.push_back(returningItem.Cast().ColumnRef());
                     } else if (auto returningStar = item.Maybe<TCoReturningStar>()) {
                         if (!fillStar()) {
@@ -1231,67 +1169,37 @@ public:
                 if (mode == "drop" || mode == "drop_if_exists") {
                     return MakeKiDropTable(node, settings, key, ctx);
                 } else if (mode == "update") {
-                    if (settings.Filter) {
-                        YQL_ENSURE(settings.Update);
-                        return Build<TKiUpdateTable>(ctx, node->Pos())
-                            .World(node->Child(0))
-                            .DataSink(node->Child(1))
-                            .Table().Build(key.GetTablePath())
-                            .Filter(settings.Filter.Cast())
-                            .Update(settings.Update.Cast())
-                            .ReturningColumns(returningColumns)
-                            .IsBatch(
-                                settings.IsBatch
-                                ? ctx.NewAtom(node->Pos(), "true")
-                                : ctx.NewAtom(node->Pos(), "false")
-                            )
-                            .Done()
-                            .Ptr();
-                    } else {
-                        YQL_ENSURE(settings.PgFilter);
-                        return Build<TKiWriteTable>(ctx, node->Pos())
-                            .World(node->Child(0))
-                            .DataSink(node->Child(1))
-                            .Table().Build(key.GetTablePath())
-                            .Input(settings.PgFilter.Cast())
-                            .Mode()
-                                .Value("update_on")
-                            .Build()
-                            .Settings(settings.Other)
-                            .ReturningColumns(returningColumns)
-                            .Done()
-                            .Ptr();
-                    }
+                    YQL_ENSURE(settings.Filter);
+                    YQL_ENSURE(settings.Update);
+                    return Build<TKiUpdateTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Table().Build(key.GetTablePath())
+                        .Filter(settings.Filter.Cast())
+                        .Update(settings.Update.Cast())
+                        .ReturningColumns(returningColumns)
+                        .IsBatch(
+                            settings.IsBatch
+                            ? ctx.NewAtom(node->Pos(), "true")
+                            : ctx.NewAtom(node->Pos(), "false")
+                        )
+                        .Done()
+                        .Ptr();
                 } else if (mode == "delete") {
-                    YQL_ENSURE(settings.Filter || settings.PgFilter);
-                    if (settings.Filter) {
-                        return Build<TKiDeleteTable>(ctx, node->Pos())
-                            .World(node->Child(0))
-                            .DataSink(node->Child(1))
-                            .Table().Build(key.GetTablePath())
-                            .Filter(settings.Filter.Cast())
-                            .ReturningColumns(returningColumns)
-                            .IsBatch(
-                                settings.IsBatch
-                                ? ctx.NewAtom(node->Pos(), "true")
-                                : ctx.NewAtom(node->Pos(), "false")
-                            )
-                            .Done()
-                            .Ptr();
-                    } else {
-                        return Build<TKiWriteTable>(ctx, node->Pos())
-                            .World(node->Child(0))
-                            .DataSink(node->Child(1))
-                            .Table().Build(key.GetTablePath())
-                            .Input(settings.PgFilter.Cast())
-                            .Mode()
-                                .Value("delete_on")
-                            .Build()
-                            .Settings(settings.Other)
-                            .ReturningColumns(returningColumns)
-                            .Done()
-                            .Ptr();
-                    }
+                    YQL_ENSURE(settings.Filter);
+                    return Build<TKiDeleteTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Table().Build(key.GetTablePath())
+                        .Filter(settings.Filter.Cast())
+                        .ReturningColumns(returningColumns)
+                        .IsBatch(
+                            settings.IsBatch
+                            ? ctx.NewAtom(node->Pos(), "true")
+                            : ctx.NewAtom(node->Pos(), "false")
+                        )
+                        .Done()
+                        .Ptr();
                 } else if (mode == "analyze") {
                     auto columns = Build<TCoAtomList>(ctx, node->Pos());
                     TMaybeNode<TExprBase> sampleRate;
@@ -1705,16 +1613,11 @@ public:
             }
 
             case TKikimrKey::Type::PGObject: {
-                NCommon::TPgObjectSettings settings = NCommon::ParsePgObjectSettings(TExprList(node->Child(4)), ctx);
-
-                YQL_ENSURE(settings.Mode);
-                auto mode = settings.Mode.Cast();
-
-                if (mode == "dropIndex") {
-                    return MakePgDropObject(node, settings, key, ctx);
-                } else if (key.GetPGObjectType() == "pgSequence") {
+                if (key.GetPGObjectType() == "pgSequence") {
                     NCommon::TWriteSequenceSettings settings =
                         NCommon::ParseSequenceSettings(TExprList(node->Child(4)), ctx);
+                    YQL_ENSURE(settings.Mode);
+                    auto mode = settings.Mode.Cast();
                     if (mode == "create" || mode == "create_if_not_exists") {
                         return MakeCreateSequence(node, settings, key, ctx);
                     } else if (mode == "drop" || mode == "drop_if_exists") {
@@ -1725,7 +1628,9 @@ public:
                         YQL_ENSURE(false, "unknown Sequence mode \"" << TString(mode) << "\"");
                     }
                 } else {
-                    YQL_ENSURE(false, "unknown PGObject with type: \"" << key.GetPGObjectType() << "\"");
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+                        << "Unsupported object type: " << key.GetPGObjectType()));
+                    return nullptr;
                 }
                 break;
             }
@@ -2221,10 +2126,6 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiDropGroup>(input)) {
         return HandleDropGroup(node.Cast(), ctx);
-    }
-
-    if (auto node = TMaybeNode<TPgDropObject>(input)) {
-        return HandlePgDropObject(node.Cast(), ctx);
     }
 
     if (input->IsCallable(WriteName)) {

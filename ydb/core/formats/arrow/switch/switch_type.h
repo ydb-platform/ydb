@@ -2,14 +2,10 @@
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/scheme/scheme_type_id.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <util/system/yassert.h>
 
-extern "C" {
-#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
-}
 
 namespace NKikimr::NArrow {
 
@@ -77,26 +73,6 @@ template <typename TFunc>
         case NScheme::NTypeIds::StepOrderId:
             break; // Deprecated types
 
-        case NScheme::NTypeIds::Pg:
-            switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
-                case INT2OID:
-                    return callback(TTypeWrapper<arrow::Int16Type>());
-                case INT4OID:
-                    return callback(TTypeWrapper<arrow::Int32Type>());
-                case INT8OID:
-                    return callback(TTypeWrapper<arrow::Int64Type>());
-                case FLOAT4OID:
-                    return callback(TTypeWrapper<arrow::FloatType>());
-                case FLOAT8OID:
-                    return callback(TTypeWrapper<arrow::DoubleType>());
-                case BYTEAOID:
-                    return callback(TTypeWrapper<arrow::BinaryType>());
-                case TEXTOID:
-                    return callback(TTypeWrapper<arrow::StringType>());
-                default:
-                    return false;
-            }
-            break;
     }
     return false;
 }

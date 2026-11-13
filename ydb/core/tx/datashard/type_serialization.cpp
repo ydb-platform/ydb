@@ -1,11 +1,8 @@
 #include "type_serialization.h"
 
 #include <yql/essentials/types/dynumber/dynumber.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
-
-#include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/string/builder.h>
 
@@ -32,12 +29,6 @@ TString DyNumberToString(TStringBuf data) {
     return result;
 }
 
-TString PgToString(TStringBuf data, const NScheme::TTypeInfo& typeInfo) {
-    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeInfo.GetPgTypeDesc());
-    Y_ENSURE(pgResult.Error.Empty());
-    return pgResult.Str;
-}
-
 bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TString& err, const NScheme::TTypeInfo& typeInfo) {
     using namespace NYql::NDecimal;
 
@@ -58,16 +49,6 @@ bool DyNumberToStream(TStringBuf data, IOutputStream& out, TString& err) {
         return false;
     }
     out << *result;
-    return true;
-}
-
-bool PgToStream(TStringBuf data, const NScheme::TTypeInfo& typeInfo, IOutputStream& out, TString& err) {
-    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeInfo.GetPgTypeDesc());
-    if (pgResult.Error) {
-        err = *pgResult.Error;
-        return false;
-    }
-    out << '"' << CGIEscapeRet(pgResult.Str) << '"';
     return true;
 }
 

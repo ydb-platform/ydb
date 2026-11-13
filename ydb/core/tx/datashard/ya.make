@@ -502,9 +502,7 @@ PEERDIR(
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     yql/essentials/core/minsketch
-    yql/essentials/parser/pg_wrapper/interface
     ydb/public/api/protos
-    yql/essentials/parser/pg_wrapper/interface
     ydb/services/lib/sharding
     yql/essentials/types/uuid
     ydb/core/io_formats/cell_maker

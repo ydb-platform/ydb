@@ -8,11 +8,7 @@
 #include <util/datetime/base.h>
 #include <util/string/cast.h>
 
-extern "C" {
-#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
-}
 
 namespace NKikimr {
 namespace NDataShard {
@@ -55,45 +51,6 @@ class TExpirationCondition: public IEraseRowsCondition {
         return WallClockSerialized;
     }
 
-    void ParsePgFromText(const TString& value) const {
-        const auto& result = NPg::PgNativeBinaryFromNativeText(value, Type.GetPgTypeDesc());
-        if (result.Error) {
-            CannotSerialize = true;
-            YDB_LOG_CRIT("Cannot create PG native binary",
-                {"from", value});
-        } else {
-            WallClockSerialized = std::move(result.Str);
-        }
-    }
-
-    TMaybe<TString> GetWallClockPg() const {
-        switch (NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc())) {
-            case DATEOID:
-            case TIMESTAMPOID: {
-                const auto& wallClockIsoString = WallClockInstant.ToString();
-                ParsePgFromText(wallClockIsoString);
-                break;
-            }
-            case INT4OID:
-            case INT8OID: {
-                const auto instantValue = InstantValue(WallClockInstant, Unit);
-                if (!instantValue) {
-                    YDB_LOG_CRIT("Unsupported",
-                        {"unit", static_cast<ui32>(Unit)});
-                    CannotSerialize = true;
-                    return Nothing();
-                }
-                const auto strInstant = ToString(*instantValue);
-                ParsePgFromText(strInstant);
-                break;
-            }
-            default:
-                CannotSerialize = true;
-                YDB_LOG_CRIT("Unsupported PG type");
-        }
-        return WallClockSerialized;
-    }
-
     TMaybe<TString> GetWallClockSerialized() const {
         if (WallClockSerialized) {
             return WallClockSerialized;
@@ -106,8 +63,6 @@ class TExpirationCondition: public IEraseRowsCondition {
         switch (Type.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber:
             return GetWallClockDyNumber();
-        case NScheme::NTypeIds::Pg:
-            return GetWallClockPg();
         default:
             Y_ENSURE(false, "Unreachable");
         }
@@ -169,13 +124,6 @@ class TExpirationCondition: public IEraseRowsCondition {
             // 'value since epoch' mode
             case NScheme::NTypeIds::DyNumber:
                 return value <= *wallClockSerialized;
-            case NScheme::NTypeIds::Pg: {
-                int result = NPg::PgNativeBinaryCompare(
-                    value.data(), value.size(),
-                    wallClockSerialized->data(), wallClockSerialized->size(),
-                    Type.GetPgTypeDesc());
-                return result <= 0;
-            }
             default:
                 Y_ENSURE(false, "Unreachable");
             }
@@ -240,7 +188,6 @@ public:
         case NScheme::NTypeIds::Timestamp64:
             return CheckI64(cell.AsValue<i64>());
         case NScheme::NTypeIds::DyNumber:
-        case NScheme::NTypeIds::Pg:
             return CheckSerialized(cell.AsBuf());
         default:
             return false;

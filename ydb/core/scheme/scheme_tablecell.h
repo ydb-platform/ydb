@@ -353,14 +353,6 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, const NScheme::TTyp
         return (va.second < vb.second) != type.IsDescending() ? -1 : 1;
     }
 
-    case NKikimr::NScheme::NTypeIds::Pg:
-    {
-        auto typeDesc = type.GetPgTypeDesc();
-        Y_ENSURE(typeDesc, "no pg type descriptor");
-        int result = NPg::PgNativeBinaryCompare(a.Data(), a.Size(), b.Data(), b.Size(), typeDesc);
-        return type.IsDescending() ? -result : result;
-    }
-
     default:
         Y_ENSURE(false, "Unknown type");
     };
@@ -509,12 +501,6 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
 
     default:
         break;
-    }
-
-    if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
-        auto typeDesc = info.GetPgTypeDesc();
-        Y_ENSURE(typeDesc, "no pg type descriptor");
-        return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
     }
 
     Y_ENSURE(false, "Type not supported for user columns: " << typeId);

@@ -13,8 +13,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp/ut/common
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/sql/pg
-    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg_dummy
     ydb/library/plan2svg
     ydb/public/lib/ut_helpers
     ydb/library/yql/udfs/statistics_internal
@@ -23,10 +22,6 @@ PEERDIR(
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/hyperloglog
     yql/essentials/udfs/common/url_base
-)
-
-ADDINCL(
-    yql/essentials/parser/pg_wrapper/postgresql/src/include
 )
 
 IF (OS_WINDOWS)

@@ -322,7 +322,6 @@ void PrintUsage(IOutputStream& os) {
             ServerSettings_->SetEnableDataColumnForIndexTable(true);
             ServerSettings_->SetEnableNotNullColumns(true);
             ServerSettings_->SetEnableMoveIndex(true);
-            ServerSettings_->SetEnableTablePgTypes(true);
             ServerSettings_->SetEnableOlapCompression(true);
 
             Server_ = MakeIntrusive<Tests::TServer>(*ServerSettings_);

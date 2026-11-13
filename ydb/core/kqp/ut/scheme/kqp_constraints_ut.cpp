@@ -275,7 +275,6 @@ TKikimrSettings DefaultsSettings(bool compileTimeDefaults, bool addDefaults = tr
     NKikimrConfig::TAppConfig config;
     config.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(compileTimeDefaults);
     config.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(addDefaults);
-    config.MutableFeatureFlags()->SetEnableTablePgTypes(true);
     config.MutableFeatureFlags()->SetEnableGeneratedStored(true);
     config.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
     return TKikimrSettings(config).SetWithSampleTables(false);
@@ -6842,19 +6841,15 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                     from_literal { type { type_id: UINT32 } value { null_flag_value: NULL_VALUE } } }
                 columns { name: "amount" type { optional_type { item { decimal_type { precision: 22 scale: 9 } } } }
                     from_literal { type { decimal_type { precision: 22 scale: 9 } } value { null_flag_value: NULL_VALUE } } }
-                columns { name: "pg_text" type { pg_type { type_name: "pgtext" oid: 25 } }
-                    from_literal { type { pg_type { type_name: "pgtext" oid: 25 } } value { null_flag_value: NULL_VALUE } } }
                 columns { name: "required" type { type_id: INT32 } not_null: true
                     from_literal { type { type_id: INT32 } value { null_flag_value: NULL_VALUE } } }
                 primary_key: "k"
             )", &request));
             if (optionalLiteral) {
                 for (auto& column : *request.mutable_columns()) {
-                    if (!column.from_literal().type().has_pg_type()) {
-                        auto type = column.from_literal().type();
-                        column.mutable_from_literal()->mutable_type()->Clear();
-                        *column.mutable_from_literal()->mutable_type()->mutable_optional_type()->mutable_item() = std::move(type);
-                    }
+                    auto type = column.from_literal().type();
+                    column.mutable_from_literal()->mutable_type()->Clear();
+                    *column.mutable_from_literal()->mutable_type()->mutable_optional_type()->mutable_item() = std::move(type);
                 }
             }
             const auto created = fixture.TableRpc<Ydb::Table::CreateTableResponse>(std::move(request));
@@ -6864,7 +6859,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 .AddMember("k").Int32(0).AddMember("required").Int32(10).EndStruct().EndList();
             const auto bulk = fixture.Kikimr.GetTableClient().BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
             UNIT_ASSERT_C(bulk.IsSuccess(), bulk.GetIssues().ToString());
-            fixture.CheckNoDefault("/Root/TestTable", {"value", "number", "amount", "pg_text"});
+            fixture.CheckNoDefault("/Root/TestTable", {"value", "number", "amount"});
             fixture.CheckNoDefault("/Root/TestTable", {"k", "required"}, true);
             UNIT_ASSERT(fixture.ShowCreateTable("/Root/TestTable").find("DEFAULT NULL") == TString::npos);
             Ydb::Table::DescribeTableRequest describe;
@@ -6883,14 +6878,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             copy.mutable_primary_key()->CopyFrom(schema.primary_key());
             const auto copied = fixture.TableRpc<Ydb::Table::CreateTableResponse>(std::move(copy));
             UNIT_ASSERT_VALUES_EQUAL_C(copied.operation().status(), Ydb::StatusIds::SUCCESS, copied.DebugString());
-            fixture.CheckNoDefault("/Root/Copy", {"value", "number", "amount", "pg_text"});
+            fixture.CheckNoDefault("/Root/Copy", {"value", "number", "amount"});
             fixture.CheckNoDefault("/Root/Copy", {"k", "required"}, true);
             fixture.Exec("DROP TABLE Copy;");
-            Ydb::Table::AlterTableRequest alter;
-            alter.set_path("/Root/TestTable");
-            alter.add_drop_columns("pg_text");
-            const auto altered = fixture.TableRpc<Ydb::Table::AlterTableResponse>(std::move(alter));
-            UNIT_ASSERT_VALUES_EQUAL_C(altered.operation().status(), Ydb::StatusIds::SUCCESS, altered.DebugString());
             fixture.CheckDefaultGeneration("/Root/TestTable", "k, required", "100, 1", false);
             int key = 0;
             for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {

@@ -1,13 +1,9 @@
 #include "flat_tier_predicate.h"
 
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/generic/maybe.h>
 #include <util/string/cast.h>
-#include <util/system/byteorder.h>
-
-#include <type_traits>
 
 namespace NKikimr {
 namespace NTable {
@@ -20,62 +16,12 @@ namespace {
     constexpr i64 MicrosPerSecond = 1000 * MicrosPerMilli;
     constexpr i64 MicrosPerDay = 86400 * MicrosPerSecond;
 
-    enum class EPgKind {
-        Unsupported,
-        Date,
-        Timestamp,
-        Int4,
-        Int8,
-    };
-
-    // Postgres dates and timestamps count from 2000-01-01
-    constexpr i64 PgEpochDays = 10957;
-    constexpr i64 PgEpochMicros = PgEpochDays * MicrosPerDay;
-
-    // Valid Postgres date/timestamp ranges relative to 2000-01-01, the end is exclusive
-    // (see IS_VALID_DATE and IS_VALID_TIMESTAMP in datatype/timestamp.h)
-    constexpr i64 PgMinDate = -2451545;
-    constexpr i64 PgEndDate = 2147483494 - 2451545;
-    constexpr i64 PgMinTimestamp = -211813488000000000ll;
-    constexpr i64 PgEndTimestamp = 9223371331200000000ll;
-
-    // The Postgres binary (send/recv) representation of fixed-width types is big-endian
-    template <typename T>
-    TCell PgCell(T value) {
-        return TCell::Make(HostToInet(static_cast<std::make_unsigned_t<T>>(value)));
-    }
-
-    // Stable PostgreSQL type oids (see catalog/pg_type_d.h)
-    constexpr ui32 PgInt8Oid = 20;
-    constexpr ui32 PgInt4Oid = 23;
-    constexpr ui32 PgDateOid = 1082;
-    constexpr ui32 PgTimestampOid = 1114;
-
-    EPgKind GetPgKind(const NScheme::TTypeInfo& type) {
-        switch (NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc())) {
-            case PgDateOid:
-                return EPgKind::Date;
-            case PgTimestampOid:
-                return EPgKind::Timestamp;
-            case PgInt4Oid:
-                return EPgKind::Int4;
-            case PgInt8Oid:
-                return EPgKind::Int8;
-            default:
-                return EPgKind::Unsupported;
-        }
-    }
-
     bool IsUnitRequired(const NScheme::TTypeInfo& type) {
         switch (type.GetTypeId()) {
             case NScheme::NTypeIds::Uint32:
             case NScheme::NTypeIds::Uint64:
             case NScheme::NTypeIds::DyNumber:
                 return true;
-            case NScheme::NTypeIds::Pg: {
-                const auto kind = GetPgKind(type);
-                return kind == EPgKind::Int4 || kind == EPgKind::Int8;
-            }
             default:
                 return false;
         }
@@ -93,8 +39,6 @@ namespace {
             case NScheme::NTypeIds::Uint64:
             case NScheme::NTypeIds::DyNumber:
                 return true;
-            case NScheme::NTypeIds::Pg:
-                return GetPgKind(type) != EPgKind::Unsupported;
             default:
                 return false;
         }
@@ -190,8 +134,6 @@ namespace {
         Multiple,
         // instant(value) = floor(value / 1000) microseconds (Uint columns in nanoseconds, like TTL)
         NanosWholeMicros,
-        // instant(value) = value nanoseconds (Pg integer columns in nanoseconds, like TTL)
-        NanosExact,
     };
 
     // The smallest (>=) or the largest (<=, <) integer column value satisfying
@@ -203,10 +145,9 @@ namespace {
                 // value * unit <  micros  <=>  value <  ceil(micros / unit)
                 // value * unit >= micros  <=>  value >= ceil(micros / unit)
                 return TWide::Signed(lessOrEqual ? FloorDiv(micros, unitMicros) : CeilDiv(micros, unitMicros));
-            case EScale::NanosWholeMicros:
-            case EScale::NanosExact: {
+            case EScale::NanosWholeMicros: {
                 // value / 1000 <= micros  <=>  value <= micros * 1000 + 999
-                const ui64 extra = scale == EScale::NanosWholeMicros && lessOrEqual ? 999 : 0;
+                const ui64 extra = lessOrEqual ? 999 : 0;
                 if (micros >= 0) {
                     const ui64 us = static_cast<ui64>(micros);
                     if (us > (Max<ui64>() - extra) / 1000) {
@@ -224,7 +165,7 @@ namespace {
     }
 
     // Threshold as a decimal number in the given unit, as row table TTL does for
-    // serialized (DyNumber, Pg integer) columns: seconds and milliseconds are
+    // serialized DyNumber columns: seconds and milliseconds are
     // rounded down, nanoseconds are exact microseconds * 1000
     TString MicrosToUnitFloorString(i64 micros, EUnit unit) {
         if (unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS) {
@@ -448,18 +389,6 @@ namespace {
                 case NScheme::NTypeIds::Datetime64:
                 case NScheme::NTypeIds::Timestamp64:
                     return TCell::Make(value.AsSigned());
-                case NScheme::NTypeIds::Pg:
-                    switch (GetPgKind(Type)) {
-                        case EPgKind::Date:
-                        case EPgKind::Int4:
-                            return PgCell(static_cast<i32>(value.AsSigned()));
-                        case EPgKind::Timestamp:
-                        case EPgKind::Int8:
-                            return PgCell(value.AsSigned());
-                        case EPgKind::Unsupported:
-                            break;
-                    }
-                    break;
                 default:
                     break;
             }
@@ -494,30 +423,6 @@ namespace {
             setInteger(bound, TWide::Signed(min), TWide::Signed(max));
         };
 
-        // Postgres accepts only dates/timestamps within [validMin, validMax] and the special
-        // -infinity/infinity values. A bound outside of the valid range saturates: below it
-        // only -infinity is before the bound, above it only infinity is after the bound
-        auto setPgTemporal = [&](TWide bound, i64 validMin, i64 validMax, i64 minusInfinity, i64 infinity) {
-            result.Kind = EKind::Value;
-            if (CompareWide(bound, TWide::Signed(validMin)) < 0) {
-                if (cmp == ECmp::GreaterOrEqual) {
-                    result.Bound = encodeCell(TWide::Signed(validMin));
-                } else {
-                    result.Cmp = ECmp::LessOrEqual;
-                    result.Bound = encodeCell(TWide::Signed(minusInfinity));
-                }
-            } else if (CompareWide(bound, TWide::Signed(validMax)) > 0) {
-                if (cmp == ECmp::GreaterOrEqual) {
-                    result.Bound = encodeCell(TWide::Signed(infinity));
-                } else {
-                    result.Cmp = ECmp::LessOrEqual;
-                    result.Bound = encodeCell(TWide::Signed(validMax));
-                }
-            } else {
-                result.Bound = encodeCell(bound);
-            }
-        };
-
         auto setSerialized = [&](TMaybe<TString> serialized) {
             Y_DEBUG_ABORT_UNLESS(serialized, "Cannot convert tiering threshold for column type %d",
                 static_cast<int>(Type.GetTypeId()));
@@ -530,9 +435,9 @@ namespace {
             }
         };
 
-        auto unitBound = [&](EScale nanosScale) {
+        auto unitBound = [&]() {
             if (Policy.Unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS) {
-                return IntegerBound(micros, lessOrEqual, nanosScale, 1);
+                return IntegerBound(micros, lessOrEqual, EScale::NanosWholeMicros, 1);
             }
             return IntegerBound(micros, lessOrEqual, EScale::Multiple, UnitMicros(Policy.Unit));
         };
@@ -557,10 +462,10 @@ namespace {
                 setSigned(IntegerBound(micros, lessOrEqual, EScale::Multiple, 1), Min<i64>(), Max<i64>());
                 break;
             case NScheme::NTypeIds::Uint32:
-                setUnsigned(unitBound(EScale::NanosWholeMicros), Max<ui32>());
+                setUnsigned(unitBound(), Max<ui32>());
                 break;
             case NScheme::NTypeIds::Uint64:
-                setUnsigned(unitBound(EScale::NanosWholeMicros), Max<ui64>());
+                setUnsigned(unitBound(), Max<ui64>());
                 break;
             case NScheme::NTypeIds::DyNumber:
                 // DyNumber has arbitrary precision, so any bound is representable. A relative
@@ -570,35 +475,6 @@ namespace {
                     ? MicrosToUnitFloorString(micros, Policy.Unit)
                     : MicrosToUnitExactString(micros, Policy.Unit)));
                 break;
-            case NScheme::NTypeIds::Pg:
-                switch (GetPgKind(Type)) {
-                    case EPgKind::Date: {
-                        // A date denotes the start of its day, Postgres counts days from 2000-01-01
-                        const i64 days = lessOrEqual ? FloorDiv(micros, MicrosPerDay) : CeilDiv(micros, MicrosPerDay);
-                        setPgTemporal(TWide::Signed(days - PgEpochDays), PgMinDate, PgEndDate - 1, Min<i32>(), Max<i32>());
-                        break;
-                    }
-                    case EPgKind::Timestamp:
-                        // Postgres counts microseconds from 2000-01-01
-                        if (micros < Min<i64>() + PgEpochMicros) {
-                            setPgTemporal(TWide::Infinity(-1), PgMinTimestamp, PgEndTimestamp - 1, Min<i64>(), Max<i64>());
-                        } else {
-                            setPgTemporal(TWide::Signed(micros - PgEpochMicros), PgMinTimestamp, PgEndTimestamp - 1, Min<i64>(), Max<i64>());
-                        }
-                        break;
-                    case EPgKind::Int4:
-                    case EPgKind::Int8: {
-                        const bool int4 = GetPgKind(Type) == EPgKind::Int4;
-                        // A bound outside of the integer range is not an error:
-                        // all values are either below or above it
-                        setSigned(unitBound(EScale::NanosExact),
-                            int4 ? Min<i32>() : Min<i64>(), int4 ? Max<i32>() : Max<i64>());
-                        break;
-                    }
-                    case EPgKind::Unsupported:
-                        Y_ENSURE(false, "Unreachable");
-                }
-                break;
             default:
                 Y_ENSURE(false, "Unreachable");
         }
@@ -607,8 +483,6 @@ namespace {
     }
 
     int TTierPredicate::Compare(const TCell& cell, const TThreshold& threshold) const {
-        // TODO(https://github.com/ydb-platform/ydb/issues/56230): Pg cells are compared via
-        // PgNativeBinaryCompare, which allocates on every call.
         // TODO(https://github.com/ydb-platform/ydb/issues/56231): DyNumber cells are compared
         // bytewise, which mis-orders negative numbers with a common mantissa prefix.
         return CompareTypedCells(cell, threshold.Bound, TypeOrder);

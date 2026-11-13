@@ -23,8 +23,6 @@ SRCS(
     yql_kikimr_settings.cpp
     yql_kikimr_settings.h
     yql_kikimr_type_ann.cpp
-    yql_kikimr_type_ann_pg.h
-    yql_kikimr_type_ann_pg.cpp
 )
 
 PEERDIR(
@@ -60,7 +58,6 @@ PEERDIR(
     yql/essentials/core/services
     yql/essentials/core/peephole_opt
     yql/essentials/minikql
-    yql/essentials/parser/pg_wrapper/interface
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/config
     yql/essentials/providers/common/gateway

@@ -16,7 +16,8 @@ PEERDIR(
     ydb/core/base
     ydb/core/kqp/ut/common
     ydb/core/persqueue/ut/common
-    ydb/core/testlib/pg
+    ydb/core/testlib
+    yql/essentials/sql/pg_dummy
     ydb/library/testlib/common
     ydb/public/sdk/cpp/src/client/draft
 )

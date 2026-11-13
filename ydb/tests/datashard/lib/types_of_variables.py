@@ -3,10 +3,6 @@ from datetime import datetime
 import ydb
 
 
-def filter_dict(d, *keys):
-    return {k: v for k, v in d.items() if k in keys}
-
-
 def format_sql_value(value, type_name, unwrap_after_cast: bool = False):
     """
     Format a value for SQL insertion.
@@ -21,10 +17,7 @@ def format_sql_value(value, type_name, unwrap_after_cast: bool = False):
     if type_name == "String" or type_name == "Utf8":
         return f"'{value}'"
 
-    if type_name.startswith("pg"):
-        # make pg_type literal
-        casted_value = f"{type_name}('{value}')"
-    elif type_name in types_requiring_quotes_in_cast:
+    if type_name in types_requiring_quotes_in_cast:
         # Use quoted values for types that require string representation
         casted_value = f"CAST('{value}' AS {type_name})"
     else:
@@ -121,18 +114,12 @@ ttl_types = {
     "Date": generate_date_value,
     "Datetime": generate_datetime_value,
     "Timestamp": lambda i: 2696200000000000 + i * 100000000,
-    "pgint4": lambda i: 2147483000 + i,
-    "pgint8": lambda i: 3742656000 + i,
-    "pgdate": generate_date_value,
-    "pgtimestamp": lambda i: generate_datetime_value(i).strftime("%Y-%m-%d %H:%M:%S"),
 }
 
 ttl_int_types = {
     "DyNumber",
     "Uint32",
     "Uint64",
-    "pgint4",
-    "pgint8",
 }
 
 index_zero_sync = {
@@ -338,71 +325,4 @@ type_to_literal_lambda = {
     "Json": lambda i: f"Json('{{\"another_key\": {i}}}')",
     "JsonDocument": lambda i: f"JsonDocument('{{\"another_doc_key\": {i}}}')",
     "Yson": lambda i: f"Yson('[{i}]')",
-}
-
-#
-# pg types
-#
-
-pk_pg_types = {
-    "pgbool": lambda i: "t" if i > 3 else "f",
-    "pgint2": lambda i: i,
-    "pgint4": lambda i: i,
-    "pgint8": lambda i: i,
-    "pgnumeric": lambda i: f"{i}.123456",
-    "pgbytea": lambda i: f"pgbytea {i}",
-    "pgtext": lambda i: f"pgtext {i}",
-    "pgvarchar": lambda i: f"pgvarchar {i}",
-    "pguuid": lambda i: UUID(f"3{i:03}5678-e89b-12d3-a456-556642440000"),
-    "pgdate": generate_date_value,
-    "pgtimestamp": lambda i: generate_datetime_value(i).strftime("%Y-%m-%d %H:%M:%S"),
-    "pginterval": lambda i: f"{i:02}:21:01",
-}
-
-pk_pg_types_no_bool = filter_dict(
-    pk_pg_types,
-    "pgint2",
-    "pgint4",
-    "pgint8",
-    "pgnumeric",
-    "pgbytea",
-    "pgtext",
-    "pgvarchar",
-    "pguuid",
-    "pgdate",
-    "pgtimestamp",
-    "pginterval",
-)
-
-non_pk_pg_types = {
-    "pgfloat4": lambda i: i + 0.4,
-    "pgfloat8": lambda i: i + 0.6,
-    "pgjson": lambda i: '{{"another_key_pg": {}}}'.format(i),
-    "pgjsonb": lambda i: '{{"another_doc_key_pg": {}}}'.format(i),
-}
-
-#
-# mixed pg and non-pg types for usage in tests
-#
-
-pk_pg_types_mixed = {
-    **pk_pg_types,
-    # add some native types to test type compatibility
-    "Uint32": lambda i: i,
-    "Decimal(15,0)": lambda i: "{}".format(i),
-    "Utf8": lambda i: f"Utf8 {i}",
-}
-
-pk_pg_types_no_bool_mixed = {
-    **pk_pg_types_no_bool,
-    # add some native types to test type compatibility
-    "Uint32": lambda i: i,
-    "Decimal(15,0)": lambda i: "{}".format(i),
-    "Utf8": lambda i: f"Utf8 {i}",
-}
-
-non_pk_pg_types_mixed = {
-    **non_pk_pg_types,
-    # add some native types to test type compatibility
-    "Double": lambda i: i + 0.2,
 }

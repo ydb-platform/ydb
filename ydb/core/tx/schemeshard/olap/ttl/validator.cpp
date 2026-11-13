@@ -61,9 +61,6 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
                 return false;
             }
             break;
-        case NScheme::NTypeIds::Pg:
-            errors.AddError("Unsupported column type for TTL in column tables");
-            return false;
         default:
             break;
     }

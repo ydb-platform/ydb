@@ -9,7 +9,6 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -65,8 +64,6 @@ bool IsValidCellValue(const TCell& cell, const NScheme::TTypeInfo& typeInfo) {
         return NDyNumber::IsValidDyNumber(cell.AsBuf());
     case NScheme::NTypeIds::JsonDocument:
         return NBinaryJson::IsValidBinaryJson(cell.AsBuf());
-    case NScheme::NTypeIds::Pg:
-        return !NPg::PgNativeBinaryValidate(cell.AsBuf(), typeInfo.GetPgTypeDesc());
     default:
         return NFormats::CheckCellValue(cell, typeInfo);
     }

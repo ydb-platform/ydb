@@ -27,12 +27,12 @@ Ydb::Table::ColumnMeta NullDefaultColumn(const TString& typeText, bool notNull, 
     Ydb::Table::ColumnMeta column;
     column.set_name("value");
     column.set_not_null(notNull);
-    if (!notNull && !type.has_pg_type()) {
+    if (!notNull) {
         *column.mutable_type()->mutable_optional_type()->mutable_item() = type;
     } else {
         *column.mutable_type() = type;
     }
-    if (optionalLiteral && !type.has_pg_type()) {
+    if (optionalLiteral) {
         *column.mutable_from_literal()->mutable_type()->mutable_optional_type()->mutable_item() = type;
     } else {
         *column.mutable_from_literal()->mutable_type() = type;
@@ -139,12 +139,6 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         decimal.MutableTypeInfo()->SetDecimalPrecision(22);
         decimal.MutableTypeInfo()->SetDecimalScale(9);
         decimal.AddFamily("family");
-        auto& pg = *request.add_add_columns();
-        pg.SetName("text");
-        pg.SetType("pgvarchar");
-        pg.SetTypeId(NScheme::NTypeIds::Pg);
-        pg.MutableTypeInfo()->SetPgTypeId(1043);
-        pg.MutableTypeInfo()->SetPgTypeMod("(32)");
         request.add_add_column_families()->set_name("family");
         request.set_set_key_bloom_filter(Ydb::FeatureFlag::ENABLED);
         request.mutable_drop_ttl_settings();
@@ -156,8 +150,6 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         UNIT_ASSERT_VALUES_EQUAL(table.GetColumns(0).GetTypeInfo().GetDecimalPrecision(), 22);
         UNIT_ASSERT_VALUES_EQUAL(table.GetColumns(0).GetTypeInfo().GetDecimalScale(), 9);
         UNIT_ASSERT_VALUES_EQUAL(table.GetColumns(0).GetFamilyName(), "family");
-        UNIT_ASSERT_VALUES_EQUAL(table.GetColumns(1).GetTypeInfo().GetPgTypeId(), 1043);
-        UNIT_ASSERT_VALUES_EQUAL(table.GetColumns(1).GetTypeInfo().GetPgTypeMod(), "(32)");
         UNIT_ASSERT(table.GetPartitionConfig().GetEnableFilterByKey());
         UNIT_ASSERT(table.GetTTLSettings().HasDisabled());
         UNIT_ASSERT_VALUES_EQUAL(table.GetDropColumns(0).GetName(), "old");
@@ -178,10 +170,39 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         UNIT_ASSERT(!decimal.GetNotNull());
 
         NKikimrKqp::TKqpColumnMetadataProto pg;
-        UNIT_ASSERT_C(NYql::SetColumnType(context.MakeType<NYql::TPgExprType>(1043), false, pg, error), error);
-        UNIT_ASSERT_VALUES_EQUAL(pg.GetTypeId(), NScheme::NTypeIds::Pg);
-        UNIT_ASSERT_VALUES_EQUAL(pg.GetTypeInfo().GetPgTypeId(), 1043);
-        UNIT_ASSERT(!pg.GetNotNull());
+        UNIT_ASSERT(!NYql::SetColumnType(context.MakeType<NYql::TPgExprType>(1043), false, pg, error));
+    }
+
+    Y_UNIT_TEST(PublicPgColumnRejected) {
+        TActorSystemStub actorSystem;
+        for (const bool optional : {false, true}) {
+            google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta> columns;
+            auto& column = *columns.Add();
+            column.set_name("value");
+            auto* type = optional ? column.mutable_type()->mutable_optional_type()->mutable_item() : column.mutable_type();
+            type->mutable_pg_type()->set_type_name("pgtext");
+            NKikimrSchemeOp::TTableDescription result;
+            auto status = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT(!FillColumnDescription(result, columns, status, error));
+            UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(error, "PostgreSQL types are not supported");
+        }
+    }
+
+    Y_UNIT_TEST(InternalPgColumnRejected) {
+        TActorSystemStub actorSystem;
+        google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto> columns;
+        auto& column = *columns.Add();
+        column.SetName("value");
+        column.SetType("pgtext");
+        column.SetTypeId(NScheme::NTypeIds::Pg);
+        NKikimrSchemeOp::TTableDescription result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+        UNIT_ASSERT(!FillColumnDescription(result, columns, status, error));
+        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(error, "Unsupported column type");
     }
 
     Y_UNIT_TEST(PublicAddedColumnNullabilityValidation) {
@@ -204,7 +225,7 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         TActorSystemStub actorSystem;
         actorSystem.AppData.FeatureFlags.SetEnableNotNullColumns(true);
         for (const TString type : {"type_id: INT32", "type_id: STRING",
-            "decimal_type { precision: 22 scale: 9 }", "pg_type { type_name: 'pgtext' oid: 25 }"})
+            "decimal_type { precision: 22 scale: 9 }"})
         {
             for (const bool notNull : {false, true}) {
                 for (const bool optionalLiteral : {false, true}) {

@@ -144,8 +144,6 @@ TString GetExprStr(const TExprBase& scalar, bool quoteStr = true) {
     TMaybe<TString> literal = Nothing();
     if (auto maybeData = scalar.Maybe<TCoDataCtor>()) {
         literal = TString(maybeData.Cast().Literal());
-    } else if (auto maybeData = scalar.Maybe<TCoPgConst>()) {
-        literal = TString(maybeData.Cast().Value());
     }
 
     if (literal) {
@@ -721,9 +719,6 @@ private:
             default:
                 return str;
             }
-        }
-        if (value.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::Pg) {
-            return value.GetPgText();
         }
         Y_ENSURE(false, TStringBuilder() << "unexpected NKikimrMiniKQL::ETypeKind: " << ETypeKind_Name(value.GetType().GetKind()));
     }
@@ -2292,8 +2287,6 @@ private:
                 res = NUuid::UuidBytesToString(literal.Cast().Literal().StringValue());
             } else if (auto literal = key.Maybe<TCoDataCtor>()) {
                 res = literal.Cast().Literal().StringValue();
-            } else if (auto literal = key.Maybe<TCoPgConst>()) {
-                res = literal.Cast().Value().StringValue();
             } else if (auto literal = key.Maybe<TCoNothing>()) {
                 res = TString("null");
             }

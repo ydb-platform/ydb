@@ -23,7 +23,6 @@ PEERDIR(
 #    ydb/library/mkql_proto/ut/helpers
     ydb/public/api/protos
     yql/essentials/minikql/comp_nodes
-    yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/decimal
 )
 

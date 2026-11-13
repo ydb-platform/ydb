@@ -3,7 +3,6 @@
 #include "flat_part_index_iter_iface.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/absl/flat_hash_set.h>
@@ -504,9 +503,6 @@ TKeyBlocksLayout TKeyBlockIterator::BuildLayout(
         PutU32(canon, type.GetTypeId());
         PutU8(canon, order.IsDescending() ? 1 : 0);
         switch (type.GetTypeId()) {
-            case NScheme::NTypeIds::Pg:
-                PutU32(canon, NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc()));
-                break;
             case NScheme::NTypeIds::Decimal:
                 PutU32(canon, type.GetDecimalType().GetPrecision());
                 PutU32(canon, type.GetDecimalType().GetScale());

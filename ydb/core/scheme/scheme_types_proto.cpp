@@ -2,24 +2,14 @@
 
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 
 namespace NKikimr::NScheme {
 
-TProtoColumnType ProtoColumnTypeFromTypeInfoMod(const TTypeInfo typeInfo, const ::TString& typeMod) {
+TProtoColumnType ProtoColumnTypeFromTypeInfoMod(const TTypeInfo typeInfo, const ::TString&) {
     TProtoColumnType columnType;
     columnType.TypeId = (ui32)typeInfo.GetTypeId();
     switch (typeInfo.GetTypeId()) {
-    case NTypeIds::Pg: {
-        Y_ENSURE(typeInfo.GetPgTypeDesc(), "no pg type descriptor");
-        columnType.TypeInfo = NKikimrProto::TTypeInfo();
-        columnType.TypeInfo->SetPgTypeId(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()));
-        if (typeMod) {
-            columnType.TypeInfo->SetPgTypeMod(typeMod);
-        }
-        break;
-    }
     case NTypeIds::Decimal: {
         columnType.TypeInfo = NKikimrProto::TTypeInfo();
         ProtoFromTypeInfo(typeInfo, {}, *columnType.TypeInfo);
@@ -32,14 +22,6 @@ TProtoColumnType ProtoColumnTypeFromTypeInfoMod(const TTypeInfo typeInfo, const 
 TTypeInfoMod TypeInfoModFromProtoColumnType(ui32 typeId, const NKikimrProto::TTypeInfo* typeInfo) {
     auto type = (TTypeId)typeId;
     switch (type) {
-    case NTypeIds::Pg: {
-        Y_ENSURE(typeInfo, "no type info for pg type");
-        TTypeInfoMod res = {
-            .TypeInfo = {NPg::TypeDescFromPgTypeId(typeInfo->GetPgTypeId())},
-            .TypeMod = (typeInfo->HasPgTypeMod() ? typeInfo->GetPgTypeMod() : TProtoStringType{})
-        };
-        return res;
-    }
     case NTypeIds::Decimal: {
         ui32 precision, scale;
         if (!typeInfo) {
@@ -66,15 +48,10 @@ NKikimrProto::TTypeInfo DefaultDecimalProto() {
 }
 
 
-void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, const TProtoStringType& typeMod, ::NKikimrProto::TTypeInfo& typeInfoProto) {
+void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, const TProtoStringType&, ::NKikimrProto::TTypeInfo& typeInfoProto) {
     Y_ENSURE(NTypeIds::IsParametrizedType(typeInfo.GetTypeId()), "Unexpected typeId " << typeInfo.GetTypeId());
 
     switch (typeInfo.GetTypeId()) {
-    case NScheme::NTypeIds::Pg: {
-        typeInfoProto.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()));
-        typeInfoProto.SetPgTypeMod(typeMod);
-        break;
-    }
     case NScheme::NTypeIds::Decimal: {
         const NScheme::TDecimalType& decimal = typeInfo.GetDecimalType();
         typeInfoProto.SetDecimalPrecision(decimal.GetPrecision());
@@ -88,10 +65,6 @@ void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, const TProtoStringTyp
 
 NScheme::TTypeInfo TypeInfoFromProto(NScheme::TTypeId typeId, const ::NKikimrProto::TTypeInfo& typeInfoProto) {
     switch (typeId) {
-    case NScheme::NTypeIds::Pg: {
-        Y_ENSURE(typeInfoProto.HasPgTypeId());
-        return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(typeInfoProto.GetPgTypeId()));
-    }
     case NScheme::NTypeIds::Decimal: {
         if (!typeInfoProto.HasDecimalPrecision() || !typeInfoProto.HasDecimalScale()) {
             return NScheme::TTypeInfo(NScheme::TDecimalType::Default());
@@ -116,16 +89,6 @@ bool TypeInfoFromProto(const ::Ydb::Type& typeProto, TTypeInfoMod& typeInfoMod, 
         }
         typeInfoMod = {NScheme::TTypeInfo(TDecimalType(precision, scale)), {}};
         return true;
-    } else if (typeProto.has_pg_type()) {
-        const auto& typeName = typeProto.pg_type().type_name();
-        auto pgDesc = NPg::TypeDescFromPgTypeName(typeName);
-        if (!pgDesc) {
-            error = TStringBuilder() << "Unknown pg type " << typeName;
-            return false;
-        }
-
-        typeInfoMod = {NScheme::TTypeInfo(pgDesc), typeProto.pg_type().type_modifier()};
-        return true;
     } else {
         error = TStringBuilder() << "Unexpected type, got proto: " << typeProto.ShortDebugString();
         return false;
@@ -134,10 +97,6 @@ bool TypeInfoFromProto(const ::Ydb::Type& typeProto, TTypeInfoMod& typeInfoMod, 
 
 void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, ::Ydb::Type& typeProto, bool notNull) {
     switch (typeInfo.GetTypeId()) {
-    case NScheme::NTypeIds::Pg: {
-        ProtoFromPgType(typeInfo.GetPgTypeDesc(), *typeProto.mutable_pg_type());
-        break;
-    }
     case NScheme::NTypeIds::Decimal: {
         Ydb::Type& item = notNull ? typeProto : *typeProto.mutable_optional_type()->mutable_item();
         ProtoFromDecimalType(typeInfo.GetDecimalType(), *item.mutable_decimal_type());
@@ -149,11 +108,6 @@ void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, ::Ydb::Type& typeProt
         break;
     }
     }    
-}
-
-void ProtoFromPgType(const NKikimr::NPg::ITypeDesc* pgDesc, ::Ydb::PgType& pgProto) {
-    pgProto.set_type_name(NPg::PgTypeNameFromTypeDesc(pgDesc));
-    pgProto.set_oid(NPg::PgTypeIdFromTypeDesc(pgDesc));                    
 }
 
 void ProtoFromDecimalType(const NScheme::TDecimalType& decimal, ::Ydb::DecimalType& decimalProto) {

@@ -23,7 +23,7 @@ using TTypeInfo = NScheme::TTypeInfo;
 
 struct TDataRow {
     static const TTypeInfo* MakeTypeInfos() {
-        static const TTypeInfo types[27] = {
+        static const TTypeInfo types[20] = {
             TTypeInfo(NTypeIds::Bool),
             TTypeInfo(NTypeIds::Int8),
             TTypeInfo(NTypeIds::Int16),
@@ -44,13 +44,6 @@ struct TDataRow {
             TTypeInfo(NTypeIds::Timestamp),
             TTypeInfo(NTypeIds::Interval),
             TTypeInfo(NTypeIds::JsonDocument),
-            TTypeInfo(NPg::TypeDescFromPgTypeId(INT2OID)),
-            TTypeInfo(NPg::TypeDescFromPgTypeId(INT4OID)),
-            TTypeInfo(NPg::TypeDescFromPgTypeId(INT8OID)),
-            TTypeInfo(NPg::TypeDescFromPgTypeId(FLOAT4OID)),
-            TTypeInfo(NPg::TypeDescFromPgTypeId(FLOAT8OID)),
-            TTypeInfo(NPg::TypeDescFromPgTypeId(BYTEAOID)),
-            TTypeInfo(NPg::TypeDescFromPgTypeId(TEXTOID)),
             // TODO: DyNumber, Decimal
         };
         return types;
@@ -76,13 +69,6 @@ struct TDataRow {
     i64 Timestamp;
     i64 Interval;
     std::string JsonDocument;
-    i16 PgInt2;
-    i32 PgInt4;
-    i64 PgInt8;
-    float PgFloat4;
-    double PgFloat8;
-    std::string PgBytea;
-    std::string PgText;
     //ui64 Decimal[2];
 
     bool operator == (const TDataRow& r) const {
@@ -105,14 +91,7 @@ struct TDataRow {
             (Datetime == r.Datetime) &&
             (Timestamp == r.Timestamp) &&
             (Interval == r.Interval) &&
-            (JsonDocument == r.JsonDocument) &&
-            (PgInt2 == r.PgInt2) &&
-            (PgInt4 == r.PgInt4) &&
-            (PgInt8 == r.PgInt8) &&
-            (PgFloat4 == r.PgFloat4) &&
-            (PgFloat8 == r.PgFloat8) &&
-            (PgBytea == r.PgBytea) &&
-            (PgText == r.PgText);
+            (JsonDocument == r.JsonDocument);
             //(Decimal[0] == r.Decimal[0] && Decimal[1] == r.Decimal[1]);
     }
 
@@ -138,13 +117,6 @@ struct TDataRow {
             arrow::field("ts", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
             arrow::field("ival", arrow::duration(arrow::TimeUnit::TimeUnit::MICRO)),
             arrow::field("json_doc", arrow::binary()),
-            arrow::field("pgint2", arrow::int16()),
-            arrow::field("pgint4", arrow::int32()),
-            arrow::field("pgint8", arrow::int64()),
-            arrow::field("pgfloat4", arrow::float32()),
-            arrow::field("pgfloat8", arrow::float64()),
-            arrow::field("pgbytea", arrow::binary()),
-            arrow::field("pgtext", arrow::utf8()),
             //arrow::field("dec", arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
         };
 
@@ -173,20 +145,13 @@ struct TDataRow {
             {"ts", TTypeInfo(NTypeIds::Timestamp) },
             {"ival", TTypeInfo(NTypeIds::Interval) },
             {"json_doc", TTypeInfo(NTypeIds::JsonDocument) },
-            {"pgint2", TTypeInfo(NPg::TypeDescFromPgTypeId(INT2OID)) },
-            {"pgint4", TTypeInfo(NPg::TypeDescFromPgTypeId(INT4OID)) },
-            {"pgint8", TTypeInfo(NPg::TypeDescFromPgTypeId(INT8OID)) },
-            {"pgfloat4", TTypeInfo(NPg::TypeDescFromPgTypeId(FLOAT4OID)) },
-            {"pgfloat8", TTypeInfo(NPg::TypeDescFromPgTypeId(FLOAT8OID)) },
-            {"pgbytea", TTypeInfo(NPg::TypeDescFromPgTypeId(BYTEAOID)) },
-            {"pgtext", TTypeInfo(NPg::TypeDescFromPgTypeId(TEXTOID)) },
             //{"dec", TTypeInfo(NTypeIds::Decimal) }
         };
         return columns;
     }
 
     NKikimr::TDbTupleRef ToDbTupleRef() const {
-        static TCell Cells[27];
+        static TCell Cells[20];
         Cells[0] = TCell::Make<bool>(Bool);
         Cells[1] = TCell::Make<i8>(Int8);
         Cells[2] = TCell::Make<i16>(Int16);
@@ -207,16 +172,9 @@ struct TDataRow {
         Cells[17] = TCell::Make<i64>(Timestamp);
         Cells[18] = TCell::Make<i64>(Interval);
         Cells[19] = TCell(JsonDocument.data(), JsonDocument.size());
-        Cells[20] = TCell::Make<i16>(PgInt2);
-        Cells[21] = TCell::Make<i32>(PgInt4);
-        Cells[22] = TCell::Make<i64>(PgInt8);
-        Cells[23] = TCell::Make<float>(PgFloat4);
-        Cells[24] = TCell::Make<double>(PgFloat8);
-        Cells[25] = TCell(PgBytea.data(), PgBytea.size());
-        Cells[26] = TCell(PgText.data(), PgText.size());
         //Cells[19] = TCell((const char *)&Decimal[0], 16);
 
-        return NKikimr::TDbTupleRef(MakeTypeInfos(), Cells, 27);
+        return NKikimr::TDbTupleRef(MakeTypeInfos(), Cells, 20);
     }
 
     TOwnedCellVec SerializedCells() const {
@@ -263,13 +221,6 @@ std::vector<TDataRow> ToVector(const std::shared_ptr<T>& table) {
     auto arival = std::static_pointer_cast<arrow::DurationArray>(GetColumn(*table, 18));
 
     auto arjd = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 19));
-    auto arpgi2 = std::static_pointer_cast<arrow::Int16Array>(GetColumn(*table, 20));
-    auto arpgi4 = std::static_pointer_cast<arrow::Int32Array>(GetColumn(*table, 21));
-    auto arpgi8 = std::static_pointer_cast<arrow::Int64Array>(GetColumn(*table, 22));
-    auto arpgf4 = std::static_pointer_cast<arrow::FloatArray>(GetColumn(*table, 23));
-    auto arpgf8 = std::static_pointer_cast<arrow::DoubleArray>(GetColumn(*table, 24));
-    auto arpgb = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 25));
-    auto arpgt = std::static_pointer_cast<arrow::StringArray>(GetColumn(*table, 26));
     //auto ardec = std::static_pointer_cast<arrow::Decimal128Array>(GetColumn(*table, 19));
 
     for (int64_t i = 0; i < table->num_rows(); ++i) {
@@ -281,8 +232,6 @@ std::vector<TDataRow> ToVector(const std::shared_ptr<T>& table) {
             arf32->Value(i), arf64->Value(i),
             arstr->GetString(i), arutf->GetString(i), arj->GetString(i), ary->GetString(i),
             ard->Value(i), ardt->Value(i), arts->Value(i), arival->Value(i), arjd->GetString(i),
-            arpgi2->Value(i), arpgi4->Value(i), arpgi8->Value(i), arpgf4->Value(i), arpgf8->Value(i),
-            arpgb->GetString(i), arpgt->GetString(i)
             //{dec[0], dec[1]}
         };
         rows.emplace_back(std::move(r));
@@ -324,13 +273,6 @@ public:
         UNIT_ASSERT(Bival.Append(row.Interval).ok());
 
         UNIT_ASSERT(Bjd.Append(row.JsonDocument).ok());
-        UNIT_ASSERT(Bpgi2.Append(row.PgInt2).ok());
-        UNIT_ASSERT(Bpgi4.Append(row.PgInt4).ok());
-        UNIT_ASSERT(Bpgi8.Append(row.PgInt8).ok());
-        UNIT_ASSERT(Bpgf4.Append(row.PgFloat4).ok());
-        UNIT_ASSERT(Bpgf8.Append(row.PgFloat8).ok());
-        UNIT_ASSERT(Bpgb.Append(row.PgBytea).ok());
-        UNIT_ASSERT(Bpgt.Append(row.PgText).ok());
         //UNIT_ASSERT(Bdec.Append((const char *)&row.Decimal).ok());
     }
 
@@ -358,13 +300,6 @@ public:
         std::shared_ptr<arrow::DurationArray> arival;
 
         std::shared_ptr<arrow::BinaryArray> arjd;
-        std::shared_ptr<arrow::Int16Array> arpgi2;
-        std::shared_ptr<arrow::Int32Array> arpgi4;
-        std::shared_ptr<arrow::Int64Array> arpgi8;
-        std::shared_ptr<arrow::FloatArray> arpgf4;
-        std::shared_ptr<arrow::DoubleArray> arpgf8;
-        std::shared_ptr<arrow::BinaryArray> arpgb;
-        std::shared_ptr<arrow::StringArray> arpgt;
         //std::shared_ptr<arrow::Decimal128Array> ardec;
 
         UNIT_ASSERT(Bbool.Finish(&arbool).ok());
@@ -390,13 +325,6 @@ public:
         UNIT_ASSERT(Bival.Finish(&arival).ok());
 
         UNIT_ASSERT(Bjd.Finish(&arjd).ok());
-        UNIT_ASSERT(Bpgi2.Finish(&arpgi2).ok());
-        UNIT_ASSERT(Bpgi4.Finish(&arpgi4).ok());
-        UNIT_ASSERT(Bpgi8.Finish(&arpgi8).ok());
-        UNIT_ASSERT(Bpgf4.Finish(&arpgf4).ok());
-        UNIT_ASSERT(Bpgf8.Finish(&arpgf8).ok());
-        UNIT_ASSERT(Bpgb.Finish(&arpgb).ok());
-        UNIT_ASSERT(Bpgt.Finish(&arpgt).ok());
         //UNIT_ASSERT(Bdec.Finish(&ardec).ok());
 
         std::shared_ptr<arrow::Schema> schema = TDataRow::MakeArrowSchema();
@@ -407,8 +335,6 @@ public:
             arf32, arf64,
             arstr, arutf, arj, ary,
             ard, ardt, arts, arival, arjd,
-            arpgi2, arpgi4, arpgi8, arpgf4, arpgf8,
-            arpgb, arpgt
             //ardec
         });
     }
@@ -442,13 +368,6 @@ private:
     arrow::TimestampBuilder Bts;
     arrow::DurationBuilder Bival;
     arrow::BinaryBuilder Bjd;
-    arrow::Int16Builder Bpgi2;
-    arrow::Int32Builder Bpgi4;
-    arrow::Int64Builder Bpgi8;
-    arrow::FloatBuilder Bpgf4;
-    arrow::DoubleBuilder Bpgf8;
-    arrow::BinaryBuilder Bpgb;
-    arrow::StringBuilder Bpgt;
     //arrow::Decimal128Builder Bdec;
 };
 
@@ -469,14 +388,10 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
 
 std::vector<TDataRow> TestRows() {
     std::vector<TDataRow> rows = {
-        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1", "u1", "{\"j\":1}", "{y:1}", 0, 0, 0, 0, "{\"jd\":1}",
-            -5, -5, -5, -5.1f, -5.1, "s5", "u5"},
-        {false, 2, 2, 2, 2, 2, 2, 2, 2, 2.0f, 2.0, "s2", "u2", "{\"j\":2}", "{y:2}", 0, 0, 0, 0, "{\"jd\":1}",
-            -3, -3, -3, -3.1f, -3.1, "s3", "u3"},
-        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3", "u3", "{\"j\":3}", "{y:3}", 0, 0, 0, 0, "{\"jd\":1}",
-            -2, -2, -2, -2.1f, -2.1, "s2", "u2"},
-        {false, -4, -4, -4, -4, 4, 4, 4, 4, 4.0f, 4.0, "s4", "u4", "{\"j\":4}", "{y:4}", 0, 0, 0, 0, "{\"jd\":1}",
-            -7, -7, -7, -7.1f, -7.1, "s7", "u7"},
+        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1", "u1", "{\"j\":1}", "{y:1}", 0, 0, 0, 0, "{\"jd\":1}"},
+        {false, 2, 2, 2, 2, 2, 2, 2, 2, 2.0f, 2.0, "s2", "u2", "{\"j\":2}", "{y:2}", 0, 0, 0, 0, "{\"jd\":1}"},
+        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3", "u3", "{\"j\":3}", "{y:3}", 0, 0, 0, 0, "{\"jd\":1}"},
+        {false, -4, -4, -4, -4, 4, 4, 4, 4, 4.0f, 4.0, "s4", "u4", "{\"j\":4}", "{y:4}", 0, 0, 0, 0, "{\"jd\":1}"},
     };
     return rows;
 }
@@ -489,8 +404,7 @@ std::shared_ptr<arrow::Table> MakeTable1000() {
         i16 b = (i%100)/10;
         i32 c = i%10;
         builder.AddRow(
-            TDataRow{false, a, b, c, i, 1, 1, 1, 1, 1.0f, 1.0, "", "", "", "", 0, 0, 0, 0, {0,0},
-                0, 0, 0, 0.0f, 0.0, "", ""});
+            TDataRow{false, a, b, c, i, 1, 1, 1, 1, 1.0f, 1.0, "", "", "", "", 0, 0, 0, 0, {0,0}});
     }
 
     auto table = builder.Finish();

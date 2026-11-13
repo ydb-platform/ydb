@@ -51,8 +51,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/interactive/common
     ydb/services/metadata/abstract
     ydb/services/workload_manager/ut/common
-    yql/essentials/parser/pg_wrapper
-    yql/essentials/sql/pg
+    yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/stat
     yql/essentials/udfs/common/yson2
 )

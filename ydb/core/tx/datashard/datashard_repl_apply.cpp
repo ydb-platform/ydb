@@ -11,11 +11,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host_counters.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
 
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
-#include <yql/essentials/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
-
 #include <util/string/escape.h>
-#include <util/system/byteorder.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -24,18 +20,14 @@ using namespace NTabletFlatExecutor;
 
 namespace {
 
-    template<bool BE, typename T>
+    template<typename T>
     static bool CellToInt64(const NKikimr::TCell& cell, i64& value) {
         TString err;
         T typed = 0;
         if (!cell.ToValue<T>(typed, err)) {
             return false;
         }
-        if constexpr(BE) {
-            value = (i64)InetToHost(typed);
-        } else {
-            value = (i64)typed;
-        }
+        value = (i64)typed;
         return true;
     }
 
@@ -47,31 +39,17 @@ namespace {
 
         switch (type.GetTypeId()) {
             case NScheme::NTypeIds::Int64:
-                return CellToInt64<false, i64>(cell, value);
+                return CellToInt64<i64>(cell, value);
             case NScheme::NTypeIds::Uint64:
-                return CellToInt64<false, ui64>(cell, value);
+                return CellToInt64<ui64>(cell, value);
             case NScheme::NTypeIds::Int32:
-                return CellToInt64<false, i32>(cell, value);
+                return CellToInt64<i32>(cell, value);
             case NScheme::NTypeIds::Uint32:
-                return CellToInt64<false, ui32>(cell, value);
+                return CellToInt64<ui32>(cell, value);
             case NScheme::NTypeIds::Int16:
-                return CellToInt64<false, i16>(cell, value);
+                return CellToInt64<i16>(cell, value);
             case NScheme::NTypeIds::Uint16:
-                return CellToInt64<false, ui16>(cell, value);
-            case NScheme::NTypeIds::Pg: {
-                // A PostgreSQL serial column is a pg integer with a native sequence behind it.
-                // Fixed-width pg values are stored in the network (big-endian) byte order.
-                switch (NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc())) {
-                    case INT2OID:
-                        return CellToInt64<true, i16>(cell, value);
-                    case INT4OID:
-                        return CellToInt64<true, i32>(cell, value);
-                    case INT8OID:
-                        return CellToInt64<true, i64>(cell, value);
-                    default:
-                        return false;
-                }
-            }
+                return CellToInt64<ui16>(cell, value);
             default:
                 return false;
         }

@@ -26,10 +26,6 @@ ttl_types = {
     "Uint32": lambda i: i,
     "Uint64": lambda i: i,
     "Date": lambda i: i,
-    "pgint4": lambda i: i,
-    "pgint8": lambda i: i,
-    "pgdate": lambda i: datetime.fromtimestamp(i).strftime("%Y-%m-%d"),
-    "pgtimestamp": lambda i: datetime.fromtimestamp(i).strftime("%Y-%m-%d %H:%M:%S"),
 }
 
 

@@ -44,12 +44,6 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
         for(const auto& it : itTable.second.Columns) {
             const auto& col = it.second;
             switch (col.PType.GetTypeId()) {
-            case NScheme::NTypeIds::Pg: {
-                NKikimrProto::TTypeInfo typeInfo;
-                NScheme::ProtoFromTypeInfo(col.PType, col.PTypeMod, typeInfo);
-                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.Null, col.SetNotNullInProgress);
-                break;
-            }
             case NScheme::NTypeIds::Decimal: {
                 NKikimrProto::TTypeInfo typeInfo;
                 NScheme::ProtoFromTypeInfo(col.PType, {}, typeInfo);

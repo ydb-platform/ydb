@@ -3,7 +3,6 @@
 #include "scheme_types_defs.h"
 
 #include "scheme_decimal_type.h"
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 #include <util/digest/murmur.h>
 #include <util/generic/algorithm.h>

@@ -7,7 +7,7 @@
 
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 
-#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -194,9 +194,7 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     settings.InferSyntaxVersion = true;
     settings.DefaultCluster = Cluster;
     settings.ClusterMapping = {
-        {Cluster, TString(NYql::KikimrProviderName)},
-        {"pg_catalog", TString(NYql::PgProviderName)},
-        {"information_schema", TString(NYql::PgProviderName)}
+        {Cluster, TString(NYql::KikimrProviderName)}
     };
     auto tablePathPrefix = KqpTablePathPrefix;
     if (!KqpTablePathPrefix.empty()) {
@@ -321,7 +319,7 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         NSQLTranslation::TTranslators translators(
             nullptr,
             NSQLTranslationV1::MakeTranslator(lexers, parsers),
-            NSQLTranslationPG::MakeTranslator()
+            nullptr
         );
 
         auto ast = NSQLTranslation::SqlToYql(translators, queryText, settings, nullptr, &stmtParseInfo, effectiveSettings);
@@ -367,7 +365,7 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
     NSQLTranslation::TTranslators translators(
         nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator()
+        nullptr
     );
 
     if (isSql) {

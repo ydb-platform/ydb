@@ -6,6 +6,14 @@ namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TypesProto) {
 
+    Y_UNIT_TEST(LegacyPgMetadataRejected) {
+        ::NKikimrProto::TTypeInfo typeInfoProto;
+        UNIT_ASSERT(typeInfoProto.ParseFromString(TString("\x08\x17", 2)));
+
+        UNIT_ASSERT_EXCEPTION(NScheme::TypeInfoFromProto(NScheme::NTypeIds::Pg, typeInfoProto), yexception);
+        UNIT_ASSERT_EXCEPTION(NScheme::TypeInfoModFromProtoColumnType(NScheme::NTypeIds::Pg, &typeInfoProto), yexception);
+    }
+
     Y_UNIT_TEST(DecimalNoTypeInfo) {
         ::NKikimrProto::TTypeInfo typeInfoProto;
 

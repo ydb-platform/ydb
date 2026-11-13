@@ -772,7 +772,6 @@ namespace NSchemeShardUT_Private {
     void SendTEvPeriodicTopicStats(TTestActorRuntime& runtime, ui64 topicId, ui64 generation, ui64 round, ui64 dataSize, ui64 usedReserveSize);
     void WriteToTopic(TTestActorRuntime& runtime, const TString& path, ui32& msgSeqNo, const TString& message);
     void UpdateRow(TTestActorRuntime& runtime, const TString& table, const ui32 key, const TString& value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
-    void UpdateRowPg(TTestActorRuntime& runtime, const TString& table, const ui32 key, ui32 value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
     void UploadRow(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values);
     void UploadRow(TTestActorRuntime& runtime, const NKikimrScheme::TEvDescribeSchemeResult& tableDesc, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values);
     void WriteOp(TTestActorRuntime& runtime, ui64 schemeshardId, const ui64 txId, const TString& tablePath, int partitionIdx, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const std::vector<ui32>& columnIds, TSerializedCellMatrix&& data, bool successIsExpected);

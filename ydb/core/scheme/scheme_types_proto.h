@@ -5,10 +5,6 @@
 #include <ydb/core/scheme_types/scheme_decimal_type.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
-namespace NKikimr::NPg {
-    struct ITypeDesc;
-}
-
 namespace NKikimr::NScheme {
 
 struct TProtoColumnType {
@@ -33,7 +29,6 @@ NScheme::TTypeInfo TypeInfoFromProto(NScheme::TTypeId typeId, const ::NKikimrPro
 bool TypeInfoFromProto(const ::Ydb::Type& typeProto, TTypeInfoMod& typeInfo, ::TString& error);
 
 void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, ::Ydb::Type& typeProto, bool notNull = true);
-void ProtoFromPgType(const NKikimr::NPg::ITypeDesc* pgDesc, ::Ydb::PgType& pgProto);
 void ProtoFromDecimalType(const NScheme::TDecimalType& decimal, ::Ydb::DecimalType& decimalProto);
 
 } // namespace NKikimr::NScheme

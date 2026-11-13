@@ -6,10 +6,6 @@
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 
-extern "C" {
-#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
-}
-
 namespace NKikimr {
 namespace NKqp {
     using namespace NYdb;
@@ -162,9 +158,6 @@ namespace NKqp {
         TStringBuilder str;
         str << Name << ' ';
         switch (TypeInfo.GetTypeId()) {
-        case NScheme::NTypeIds::Pg:
-            str << NPg::PgTypeNameFromTypeDesc(TypeInfo.GetPgTypeDesc());
-            break;
         case NScheme::NTypeIds::Decimal: {
             TTypeBuilder builder;
             builder.Decimal(TDecimalType(TypeInfo.GetDecimalType().GetPrecision(), TypeInfo.GetDecimalType().GetScale()));
@@ -298,25 +291,6 @@ namespace NKqp {
         case NScheme::NTypeIds::Decimal:
         case NScheme::NTypeIds::Uuid:
             return arrow::field(name, std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE), nullable);
-        case NScheme::NTypeIds::Pg:
-            switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
-                case INT2OID:
-                    return arrow::field(name, arrow::int16(), true);
-                case INT4OID:
-                    return arrow::field(name, arrow::int32(), true);
-                case INT8OID:
-                    return arrow::field(name, arrow::int64(), true);
-                case FLOAT4OID:
-                    return arrow::field(name, arrow::float32(), true);
-                case FLOAT8OID:
-                    return arrow::field(name, arrow::float64(), true);
-                case BYTEAOID:
-                    return arrow::field(name, arrow::binary(), true);
-                case TEXTOID:
-                    return arrow::field(name, arrow::utf8(), true);
-                default:
-                    Y_FAIL("TODO: support pg");
-            }
         }
         return nullptr;
     }

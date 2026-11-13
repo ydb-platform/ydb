@@ -12,10 +12,6 @@
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 
-extern "C" {
-#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
-}
-
 namespace NKikHouse {
 namespace NSerialization {
 
@@ -483,25 +479,6 @@ public:
         CONVERT(ActorId,        String);
         CONVERT(StepOrderId,    String);
 
-        case NScheme::NTypeIds::Pg:
-            switch (NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc())) {
-                case INT2OID:
-                    return Get("Int16");
-                case INT4OID:
-                    return Get("Int32");
-                case INT8OID:
-                    return Get("Int64");
-                case FLOAT4OID:
-                    return Get("Float");
-                case FLOAT8OID:
-                    return Get("Double");
-                case BYTEAOID:
-                    return Get("String");
-                case TEXTOID:
-                    return Get("String");
-                default:
-                    throw yexception() << "Unsupported pg type";
-            }
         default:
             throw yexception() << "Unsupported type: " << type.GetTypeId();
         }
@@ -562,10 +539,7 @@ size_t AddValue(const TMutableColumnPtr& column, const TCell& cell, NScheme::TTy
         AddNull(column);
     } else {
         auto typeId = type.GetTypeId();
-        if (typeId == NScheme::NTypeIds::Pg) {
-            // TODO: support pg types
-            Y_ABORT_UNLESS(false, "pg types are not supported");
-        } else if (typeId == NScheme::NTypeIds::Decimal) {
+        if (typeId == NScheme::NTypeIds::Decimal) {
             AddDecimal(column, cell);
         } else {
             column->insertData(cell.Data(), cell.Size());

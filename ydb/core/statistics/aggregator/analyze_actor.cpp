@@ -438,7 +438,7 @@ void TAnalyzeActor::HandleNavigateResult() {
     }
 
     auto addColumn = [&](const TSysTables::TTableColumnInfo& colInfo) {
-        Columns.emplace_back(colInfo.Id, colInfo.PType, colInfo.PTypeMod, colInfo.Name);
+        Columns.emplace_back(colInfo.Id, colInfo.PType, colInfo.Name);
     };
     if (!RequestedColumnTags.empty()) {
         for (const auto& colTag : RequestedColumnTags) {
@@ -461,7 +461,7 @@ void TAnalyzeActor::HandleNavigateResult() {
         PendingTasks.push(TColumnStatEvalTask{
             .ColumnIdx = i,
             .SimpleStatEval = std::make_unique<TSimpleColumnStatisticEval>(
-                col.Type, col.PgTypeMod),
+                col.Type),
         });
     }
     if (SamplingRequested() && !IsColumnTable) {

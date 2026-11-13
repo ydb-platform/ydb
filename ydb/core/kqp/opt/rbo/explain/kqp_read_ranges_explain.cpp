@@ -62,10 +62,6 @@ std::optional<TString> FormatLiteralValue(const TExprNode::TPtr& node) {
         return NormalizeLiteralText(TString(data.Cast().Literal().Value()));
     }
 
-    if (auto pg = TExprBase(node).Maybe<TCoPgConst>()) {
-        return NormalizeLiteralText(TString(pg.Cast().Value().Value()));
-    }
-
     return std::nullopt;
 }
 
@@ -245,7 +241,7 @@ std::optional<TExplainRanges> ParseRangesForExplain(const TExprNode::TPtr& node)
         return std::nullopt;
     }
 
-    if (node->IsCallable("RangeFinalize") || node->IsCallable("RangeToPg")) {
+    if (node->IsCallable("RangeFinalize")) {
         return ParseRangesForExplain(node->HeadPtr());
     }
 

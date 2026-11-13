@@ -28,13 +28,6 @@ TString ParseSamplingKey(
         if (TString error = NScheme::HasUnexpectedValueSize(cells[i], keyTypes[i])) {
             return error;
         }
-        if (!cells[i].IsNull() && keyTypes[i].GetTypeId() == NScheme::NTypeIds::Pg) {
-            if (auto error = NPg::PgNativeBinaryValidate(
-                    TStringBuf(cells[i].Data(), cells[i].Size()), keyTypes[i].GetPgTypeDesc()))
-            {
-                return *error;
-            }
-        }
     }
     return {};
 }

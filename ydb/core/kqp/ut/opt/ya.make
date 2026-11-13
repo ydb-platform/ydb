@@ -29,13 +29,8 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
-    yql/essentials/sql/pg
-    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/re2
-)
-
-ADDINCL(
-    yql/essentials/parser/pg_wrapper/postgresql/src/include
 )
 
 NO_COMPILER_WARNINGS()

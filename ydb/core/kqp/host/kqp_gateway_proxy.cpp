@@ -2739,11 +2739,11 @@ public:
             }
             if (settings.SequenceSettings.DataType) {
                 if (settings.SequenceSettings.DataType == "int8") {
-                    seqDesc->SetDataType("pgint8");
+                    seqDesc->SetDataType("Int64");
                 } else if (settings.SequenceSettings.DataType == "int4") {
-                    seqDesc->SetDataType("pgint4");
+                    seqDesc->SetDataType("Int32");
                 } else if (settings.SequenceSettings.DataType == "int2") {
-                    seqDesc->SetDataType("pgint2");
+                    seqDesc->SetDataType("Int16");
                 }
             }
 
@@ -2854,11 +2854,11 @@ public:
             }
             if (settings.SequenceSettings.DataType) {
                 if (settings.SequenceSettings.DataType == "int8") {
-                    seqDesc->SetDataType("pgint8");
+                    seqDesc->SetDataType("Int64");
                 } else if (settings.SequenceSettings.DataType == "int4") {
-                    seqDesc->SetDataType("pgint4");
+                    seqDesc->SetDataType("Int32");
                 } else if (settings.SequenceSettings.DataType == "int2") {
-                    seqDesc->SetDataType("pgint2");
+                    seqDesc->SetDataType("Int16");
                 }
             }
 

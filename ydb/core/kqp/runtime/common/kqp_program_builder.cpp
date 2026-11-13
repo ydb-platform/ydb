@@ -23,10 +23,6 @@ TType* GetRowType(const TProgramBuilder& builder, const TArrayRef<TKqpTableColum
                     type = TOptionalType::Create(type, builder.GetTypeEnvironment());
                 break;
             }
-            case NKikimr::NScheme::NTypeIds::Pg: {
-                type = TPgType::Create(NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()), builder.GetTypeEnvironment());
-                break;
-            }
             default: {
                 type = TDataType::Create(column.Type, builder.GetTypeEnvironment());
                 if (!column.NotNull)

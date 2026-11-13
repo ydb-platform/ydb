@@ -4,7 +4,6 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 #include <util/stream/output.h>
 
@@ -69,8 +68,6 @@ inline ui32 GetFixedSize(const TTypeInfo& typeInfo) {
 #define KIKIMR_TYPE_MACRO(typeEnum, typeType, ...) case NTypeIds::typeEnum: return typeType::GetFixedSize();
     KIKIMR_FOREACH_TYPE(KIKIMR_TYPE_MACRO)
 #undef KIKIMR_TYPE_MACRO
-    case NTypeIds::Pg:
-        return NPg::TypeDescGetStoredSize(typeInfo.GetPgTypeDesc());
     default:
         return 0;
     }

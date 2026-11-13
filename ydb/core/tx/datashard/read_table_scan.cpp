@@ -9,7 +9,6 @@
 
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 //#include <ydb/library/actors/interconnect/interconnect.h>
 
 //#include <util/generic/cast.h>
@@ -187,15 +186,6 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
             return false;
         }
         val.set_text_value(*number);
-        break;
-    }
-    case NScheme::NTypeIds::Pg: {
-        auto result = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), type.GetPgTypeDesc());
-        if (result.Error) {
-            err = Sprintf("Failed to add cell to Ydb::Value: %s", (*result.Error).c_str());
-            return false;
-        }
-        val.set_text_value(result.Str);
         break;
     }
     default:
@@ -376,23 +366,13 @@ private:
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
                 col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
 
-            if (col.GetTypeId() == NScheme::NTypeIds::Pg) {
-                auto* pg = meta->mutable_type()->mutable_pg_type();
-                auto typeDesc = typeInfoMod.TypeInfo.GetPgTypeDesc();
-                pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-                pg->set_type_modifier(typeInfoMod.TypeMod);
-                pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
-                pg->set_typlen(0);
-                pg->set_typmod(0);
+            bool notNullResp = AllowNotNull && col.GetNotNull();
+            auto id = static_cast<NYql::NProto::TypeIds>(col.GetTypeId());
+            auto xType = notNullResp ? meta->mutable_type() : meta->mutable_type()->mutable_optional_type()->mutable_item();
+            if (id == NYql::NProto::Decimal) {
+                NScheme::ProtoFromDecimalType(typeInfoMod.TypeInfo.GetDecimalType(), *xType->mutable_decimal_type());
             } else {
-                bool notNullResp = AllowNotNull && col.GetNotNull();
-                auto id = static_cast<NYql::NProto::TypeIds>(col.GetTypeId());
-                auto xType = notNullResp ? meta->mutable_type() : meta->mutable_type()->mutable_optional_type()->mutable_item();
-                if (id == NYql::NProto::Decimal) {
-                    NScheme::ProtoFromDecimalType(typeInfoMod.TypeInfo.GetDecimalType(), *xType->mutable_decimal_type());
-                } else {
-                    xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
-                }
+                xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
             }
         }
         res.set_truncated(true);

@@ -1885,14 +1885,6 @@ public:
         try {
             const auto& parameters = QueryState->GetYdbParameters();
             QueryState->QueryData->ParseParameters(parameters);
-            if (QueryState->CompileResult && QueryState->CompileResult->GetAst() && QueryState->CompileResult->GetAst()->PgAutoParamValues) {
-                const auto& params = dynamic_cast<TKqpAutoParamBuilder*>(QueryState->CompileResult->GetAst()->PgAutoParamValues.Get())->Values;
-                for(const auto& [name, param] : params) {
-                    if (!parameters.contains(name)) {
-                        QueryState->QueryData->AddTypedValueParam(name, param);
-                    }
-                }
-            }
         } catch(const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         } catch(const TMemoryLimitExceededException&) {

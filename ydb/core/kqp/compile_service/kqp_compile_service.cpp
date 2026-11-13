@@ -922,8 +922,6 @@ private:
                 {"sender", compileRequest.Sender},
                 {"queryUid", compileResult->Uid});
 
-            compileResult->GetAst()->PgAutoParamValues = std::move(queryAst.Ast->PgAutoParamValues);
-
             ReplyFromCache(compileRequest.Sender, compileResult, ctx, compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
             return;
         }
@@ -1617,22 +1615,14 @@ void TKqpQueryCache::InsertQuery(const TKqpCompileResult::TConstPtr& compileResu
 
 TKqpQueryId TKqpQueryCache::GetQueryIdWithAst(const TKqpQueryId& query, const NYql::TAstParseResult& ast) {
     Y_ABORT_UNLESS(ast.Root);
-    std::shared_ptr<std::map<TString, Ydb::Type>> astPgParams;
-    if (query.QueryParameterTypes || ast.PgAutoParamValues) {
-        astPgParams = std::make_shared<std::map<TString, Ydb::Type>>();
-        if (query.QueryParameterTypes) {
-            for (const auto& [name, param] : *query.QueryParameterTypes) {
-                astPgParams->insert({name, param});
-            }
-        }
-        if (ast.PgAutoParamValues) {
-            const auto& params = dynamic_cast<TKqpAutoParamBuilder*>(ast.PgAutoParamValues.Get())->Values;
-            for (const auto& [name, param] : params) {
-                astPgParams->insert({name, param.Gettype()});
-            }
+    std::shared_ptr<std::map<TString, Ydb::Type>> astParams;
+    if (query.QueryParameterTypes) {
+        astParams = std::make_shared<std::map<TString, Ydb::Type>>();
+        for (const auto& [name, param] : *query.QueryParameterTypes) {
+            astParams->insert({name, param});
         }
     }
-    return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, query.UserSid, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings};
+    return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, query.UserSid, ast.Root->ToString(), query.Settings, astParams, query.GUCSettings};
 }
 
 //

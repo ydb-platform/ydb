@@ -204,7 +204,6 @@ struct TPlanProps {
     TStageGraph StageGraph;
     TSubplans Subplans;
     TColumnLineage ColumnLineage;
-    bool PgSyntax = false;
     // Logical query-block phase and write order, preserved through RBO rules.
     ui64 PhysicalTxGroup = 0;
     ui64 EffectPriority = 0;

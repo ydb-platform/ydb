@@ -84,8 +84,6 @@ struct TKikimrData {
         DataSinkNames.insert(TKiExecDataQuery::CallableName());
         DataSinkNames.insert(TKiEffects::CallableName());
         DataSinkNames.insert(TKiReturningList::CallableName());
-        DataSinkNames.insert(TKiCreateSequence::CallableName());
-        DataSinkNames.insert(TKiDropSequence::CallableName());
         DataSinkNames.insert(TKiAlterSequence::CallableName());
         DataSinkNames.insert(TKiAnalyzeTable::CallableName());
         DataSinkNames.insert(TKiCreateBackupCollection::CallableName());
@@ -543,10 +541,6 @@ bool TKikimrKey::Extract(const TExprNode& key) {
     } else if (tagName == "sequence") {
         KeyType = Type::Sequence;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
-    } else if (tagName == "pgObject") {
-        KeyType = Type::PGObject;
-        Target = key.Child(0)->Child(1)->Child(0)->Content();
-        ObjectType = key.Child(0)->Child(2)->Child(0)->Content();
     } else if (tagName == "backupCollection" || tagName == "backup" || tagName == "restore") {
         KeyType = Type::BackupCollection;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
@@ -1052,7 +1046,6 @@ void Serialize(const TTranslationSettings& settings, NYql::NProto::TTranslationS
     serializedSettings.SetPathPrefix(settings.PathPrefix);
     serializedSettings.SetSyntaxVersion(settings.SyntaxVersion);
     serializedSettings.SetAnsiLexer(settings.AnsiLexer);
-    serializedSettings.SetPgParser(settings.PgParser);
 
     auto* pragmas = serializedSettings.MutablePragmas();
     pragmas->Clear();

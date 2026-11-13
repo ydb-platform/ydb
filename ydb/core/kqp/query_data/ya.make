@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/protobuf/util
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/library/operation_id/protos
     ydb/library/actors/core

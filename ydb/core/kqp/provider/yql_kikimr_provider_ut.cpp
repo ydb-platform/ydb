@@ -1,3 +1,4 @@
+#include "rewrite_io_utils.h"
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_settings.h"
 
@@ -62,6 +63,24 @@ void Find(const TAstNode* node, const std::function<bool(const TAstNode*)>& pred
     }
 }
 
+TExprNode::TPtr RewriteViewQuery(TExprContext& ctx, const TViewPersistedData& viewData) {
+    const TPositionHandle pos;
+    auto key = ctx.NewCallable(pos, "Key", {ctx.NewList(pos, {
+        ctx.NewAtom(pos, "table"), ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "/Root/View")})
+    })});
+    auto read = ctx.NewCallable(pos, "Read!", {
+        ctx.NewWorld(pos),
+        ctx.NewCallable(pos, "DataSource", {ctx.NewAtom(pos, "kikimr"), ctx.NewAtom(pos, "plato")}),
+        key,
+        ctx.NewCallable(pos, "Void", {}),
+        ctx.NewList(pos, {})
+    });
+    auto right = ctx.NewCallable(pos, "Right!", {read});
+    NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
+        EKikimrQueryType::Query, "plato", viewData.QueryText, NSQLTranslation::EBindingsMode::DISABLED, {});
+    return RewriteReadFromView(right, ctx, settingsBuilder, {}, viewData);
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KikimrProvider) {
@@ -73,6 +92,32 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
         NSQLTranslation::Deserialize(serializedSettings, settings);
 
         UNIT_ASSERT_VALUES_EQUAL(settings.SyntaxVersion, 1);
+    }
+
+    Y_UNIT_TEST(NativeViewCapturedContext) {
+        TExprContext ctx;
+        TViewPersistedData viewData;
+        viewData.QueryText = "SELECT 1;";
+        NSQLTranslation::TTranslationSettings settings;
+        settings.SyntaxVersion = 1;
+        settings.AnsiLexer = true;
+        NSQLTranslation::Serialize(settings, viewData.CapturedContext);
+
+        auto query = RewriteViewQuery(ctx, viewData);
+        UNIT_ASSERT_C(query, ctx.IssueManager.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(PgViewSyntaxRejected) {
+        for (const bool capturedPgParser : {false, true}) {
+            TExprContext ctx;
+            TViewPersistedData viewData;
+            viewData.QueryText = capturedPgParser ? "SELECT 1;" : "--!syntax_pg\nSELECT 1;";
+            viewData.CapturedContext.SetSyntaxVersion(1);
+            viewData.CapturedContext.SetPgParser(capturedPgParser);
+
+            UNIT_ASSERT(!RewriteViewQuery(ctx, viewData));
+            UNIT_ASSERT_STRING_CONTAINS(ctx.IssueManager.GetIssues().ToString(), "PG syntax is disabled");
+        }
     }
 
     Y_UNIT_TEST(SystemColumnsMatchCoreScheme) {

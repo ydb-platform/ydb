@@ -44,7 +44,7 @@ std::optional<TSubplanCall> MatchCorrelatedCall(const TExpression& conjunct, con
 }
 
 // Predicates on the subplan's own columns stay on its input, the rest become join conditions.
-bool PullUpFilter(const TOpFilter& filter, const TUnorderedIUs& outerIUs, const TSubstitutions& captures, bool pgSyntax, TPulledUpSubplan& subplan) {
+bool PullUpFilter(const TOpFilter& filter, const TUnorderedIUs& outerIUs, const TSubstitutions& captures, TPulledUpSubplan& subplan) {
     const auto& innerIUs = subplan.Input->GetOutputIUs();
     auto available = innerIUs;
     available.UnionWith(outerIUs);
@@ -81,7 +81,7 @@ bool PullUpFilter(const TOpFilter& filter, const TUnorderedIUs& outerIUs, const 
     }
 
     if (!localPredicates.empty()) {
-        subplan.Input = MakeIntrusive<TOpFilter>(subplan.Input, filter.Pos, MakeConjunction(localPredicates, pgSyntax));
+        subplan.Input = MakeIntrusive<TOpFilter>(subplan.Input, filter.Pos, MakeConjunction(localPredicates));
     }
     return true;
 }
@@ -121,7 +121,7 @@ std::optional<TPulledUpSubplan> TryPullUpSubplan(const TSubplanEntry& entry, con
     TPulledUpSubplan subplan{input, {}, {}};
     for (auto* op : chain | std::views::reverse) {
         if (op->Kind == EOperator::Filter) {
-            if (!PullUpFilter(CastOperator<TOpFilter>(*op), outerIUs, captures, props.PgSyntax, subplan)) {
+            if (!PullUpFilter(CastOperator<TOpFilter>(*op), outerIUs, captures, subplan)) {
                 return std::nullopt;
             }
             continue;
@@ -224,7 +224,7 @@ TIntrusivePtr<IOperator> TPullUpCorrelatedPredicateRule::SimpleMatchAndApply(con
         if (conjuncts.empty()) {
             return join;
         }
-        return MakeIntrusive<TOpFilter>(join, filter->Pos, MakeConjunction(conjuncts, props.PgSyntax));
+        return MakeIntrusive<TOpFilter>(join, filter->Pos, MakeConjunction(conjuncts));
     }
 
     return input;

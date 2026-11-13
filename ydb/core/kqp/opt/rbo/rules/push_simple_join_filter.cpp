@@ -95,12 +95,12 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     }
 
     if (pushLeft.size()) {
-        auto leftExpr = MakeConjunction(pushLeft, props.PgSyntax);
+        auto leftExpr = MakeConjunction(pushLeft);
         join->SetLeftInput(MakeIntrusive<TOpFilter>(join->GetLeftInput(), input->Pos, leftExpr));
     }
 
     if (pushRight.size()) {
-        auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
+        auto rightExpr = MakeConjunction(pushRight);
         join->SetRightInput(MakeIntrusive<TOpFilter>(join->GetRightInput(), input->Pos, rightExpr));
     }
 

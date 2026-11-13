@@ -502,7 +502,7 @@ class TYtBuffer: public IBuffer {
         int id,
         bool useTypeV3,
         TString& buffer,
-        TString& error)
+        TString&)
     {
         if (cell.IsNull()) {
             return MakeUnversionedNullValue(id);

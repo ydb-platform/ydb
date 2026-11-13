@@ -557,7 +557,7 @@ TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TE
     return TExpression(nullExpr, ctx);
 }
 
-TExpression MakeConjunction(const TVector<TExpression>& vec, bool) {
+TExpression MakeConjunction(const TVector<TExpression>& vec) {
     Y_ENSURE(vec.size());
 
     // Fetch context and plan properties from one of the conjuncts

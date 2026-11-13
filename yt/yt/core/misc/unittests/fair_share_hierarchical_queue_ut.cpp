@@ -210,6 +210,96 @@ TEST_F(TFairShareHierarchicalSlotQueueTest, PriorityOrder)
     EXPECT_EQ(slot->GetLevels()[1].GetWeight(), 0.8);
 }
 
+TEST_F(TFairShareHierarchicalSlotQueueTest, ZeroWeightUnregisteredSlot)
+{
+    auto idleSlot = Queue_->CreateSlot(
+        /*size*/ 1,
+        /*resources*/ {},
+        {{"Idle", 0.0}, {"unweighted", 1.0}});
+    auto userSlot = Queue_->CreateSlot(
+        /*size*/ 1,
+        /*resources*/ {},
+        {{"UserBatch", 1.0}, {"unweighted", 1.0}});
+
+    auto checkPriority = [&] {
+        EXPECT_EQ(HierarchicalScheduler_->GetBucket({"Idle"}), nullptr);
+        for (bool isSlot : {false, true}) {
+            EXPECT_TRUE(std::is_gt(HierarchicalScheduler_->CompareSlots(
+                idleSlot,
+                userSlot,
+                isSlot,
+                CompareByEnqueueTime<TTestTag>)));
+            EXPECT_TRUE(std::is_lt(HierarchicalScheduler_->CompareSlots(
+                userSlot,
+                idleSlot,
+                isSlot,
+                CompareByEnqueueTime<TTestTag>)));
+        }
+    };
+
+    checkPriority();
+    Queue_->EnqueueSlot(userSlot)
+        .ThrowOnError();
+    Queue_->AccountSlot(userSlot, /*requestSize*/ 1);
+    // Probe selection compares an unregistered Idle slot with existing consumption.
+    checkPriority();
+}
+
+TEST_F(TFairShareHierarchicalSlotQueueTest, ZeroWeightMissingSubtree)
+{
+    auto idleSlot = Queue_->CreateSlot(
+        /*size*/ 1,
+        /*resources*/ {},
+        {{"idle1", 0.0}, {"unweighted", 1.0}});
+    auto busySlot = Queue_->EnqueueSlot(
+        /*size*/ 1,
+        /*resources*/ {},
+        {{"idle2", 0.0}, {"unweighted", 1.0}})
+        .ValueOrThrow();
+    Queue_->AccountSlot(busySlot, /*requestSize*/ 1);
+
+    EXPECT_EQ(HierarchicalScheduler_->GetBucket({"idle1"}), nullptr);
+    for (bool isSlot : {false, true}) {
+        EXPECT_TRUE(std::is_lt(HierarchicalScheduler_->CompareConsumptions(
+            idleSlot,
+            busySlot,
+            isSlot)));
+        EXPECT_TRUE(std::is_gt(HierarchicalScheduler_->CompareConsumptions(
+            busySlot,
+            idleSlot,
+            isSlot)));
+    }
+}
+
+TEST_F(TFairShareHierarchicalSlotQueueTest, ZeroWeightParentPreservesChildWeights)
+{
+    auto lowWeightSlot = Queue_->EnqueueSlot(
+        /*size*/ 1,
+        /*resources*/ {},
+        {{"Idle", 0.0}, {"low", 1.0}})
+        .ValueOrThrow();
+    auto highWeightSlot = Queue_->EnqueueSlot(
+        /*size*/ 1,
+        /*resources*/ {},
+        {{"Idle", 0.0}, {"high", 2.0}})
+        .ValueOrThrow();
+    Queue_->AccountSlot(lowWeightSlot, /*requestSize*/ 1);
+    Queue_->AccountSlot(highWeightSlot, /*requestSize*/ 1);
+
+    for (bool isSlot : {false, true}) {
+        EXPECT_TRUE(std::is_gt(HierarchicalScheduler_->CompareSlots(
+            lowWeightSlot,
+            highWeightSlot,
+            isSlot,
+            CompareByEnqueueTime<TTestTag>)));
+        EXPECT_TRUE(std::is_lt(HierarchicalScheduler_->CompareSlots(
+            highWeightSlot,
+            lowWeightSlot,
+            isSlot,
+            CompareByEnqueueTime<TTestTag>)));
+    }
+}
+
 TEST_F(TFairShareHierarchicalSlotQueueTest, Preemption)
 {
     std::vector<TFairShareHierarchyLevel<TTestTag>> lowPriorityLevels = {

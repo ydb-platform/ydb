@@ -149,7 +149,7 @@ namespace NYdb::inline Dev {
             auto stub = Ydb::Query::V1::QueryService::NewStub(
                 grpc::CreateChannel(std::getenv("YDB_ENDPOINT"), grpc::InsecureChannelCredentials()));
             grpc::ClientContext context;
-            context.AddMetadata("x-ydb-database", database);
+            context.AddMetadata("x-ydb-database", TString(database));
             context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(60));
             Ydb::Query::DeleteSessionRequest request;
             request.set_session_id(session.GetId());

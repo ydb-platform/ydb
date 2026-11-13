@@ -5,7 +5,6 @@ import pytest
 from datetime import datetime, timedelta
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.library.common.wait_for import wait_for
-from ydb.tests.datashard.lib.create_table import create_ttl_sql_request
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.test_pg_base import TestPgBase
 from ydb.tests.datashard.lib.types_of_variables import (
@@ -38,6 +37,11 @@ ttl_types = {
 
 
 class TestTTLBase(TestBase):
+    @classmethod
+    def get_scheme_shard_config(cls):
+        # The database TTL quota does not change the scheduler wakeup period.
+        return {"cond_erase_run_interval_seconds": 1}
+
     def do_test_ttl(
         self,
         table_name: str,
@@ -50,18 +54,33 @@ class TestTTLBase(TestBase):
     ):
         self.ttl_time_sec(1)
         dml = DMLOperations(self)
-        dml.create_table(table_name, pk_types, all_types, index, ttl, unique, sync)
-        dml.query(f"ALTER TABLE `{table_name}` RESET (TTL)")
-        dml.query(
-            create_ttl_sql_request(
-                f"ttl_{ttl}",
-                {"PT0S": ""},
-                "SECONDS" if ttl in ttl_int_types else "",
-                table_name,
-            )
-        )
+        dml.create_table(table_name, pk_types, all_types, index, ttl, unique, sync, enable_ttl=False)
+        self.enable_ttl(table_name, ttl)
         self.insert(table_name, pk_types, all_types, index, ttl)
         self.select(table_name, pk_types, all_types, index, dml)
+
+    def enable_ttl(self, table_name, ttl):
+        # Configure the per-table interval before the first scheduler pass; otherwise
+        # an early pass could postpone deletion of future rows by the default hour.
+        column_unit = "UNIT_SECONDS" if ttl in ttl_int_types else "UNIT_AUTO"
+        self.ydbcli_db_schema_exec(self.cluster.nodes[1], f"""
+            ModifyScheme {{
+                OperationType: ESchemeOpAlterTable
+                WorkingDir: "/Root"
+                AlterTable {{
+                    Name: "{table_name}"
+                    TTLSettings {{
+                        Enabled {{
+                            ColumnName: "ttl_{ttl}"
+                            ColumnUnit: {column_unit}
+                            ExpireAfterSeconds: 0
+                            Tiers {{ ApplyAfterSeconds: 0 Delete {{}} }}
+                            SysSettings {{ RunInterval: 1000000 }}
+                        }}
+                    }}
+                }}
+            }}
+        """)
 
     def insert(
         self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str

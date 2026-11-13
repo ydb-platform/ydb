@@ -11,6 +11,7 @@ PY_SRCS(
     yaml_configurator.py
     process_profiles.py
     config_client.py
+    config_yaml.py
     blobstorage_init.py
     kube/__init__.py
     kube/api.py

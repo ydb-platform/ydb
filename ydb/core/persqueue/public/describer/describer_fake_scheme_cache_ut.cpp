@@ -116,6 +116,29 @@ struct TDescribeEnv {
 
 Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
 
+    Y_UNIT_TEST(FccPathsUseFlagAndAllowLegacyOptOut) {
+        for (bool enabled : {false, true}) {
+            for (bool legacy : {false, true}) {
+                const TString expected = enabled && !legacy ? "/Root/Db/Root/Db/topic" : "/Root/Db/topic";
+                TDescribeEnv env([&](ui32, TNavigate& request, TNavigate::TEntry& entry) {
+                    UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root/Db");
+                    UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), expected);
+                    FillOkTopic(entry, 42);
+                });
+                env.Runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+                env.Runtime.GetAppData().FeatureFlags.SetEnableRelativePaths(enabled);
+                NDescriber::TDescribeSettings settings{};
+                if (legacy) {
+                    settings.EnableRelativePaths = false;
+                }
+                env.StartDescribe({"Root/Db/topic"}, settings, "/Root/Db");
+                auto response = env.WaitResponse();
+                UNIT_ASSERT_VALUES_EQUAL(response->Topics.at("Root/Db/topic").Status, NDescriber::EStatus::Success);
+                UNIT_ASSERT_VALUES_EQUAL(response->Topics.at("Root/Db/topic").RealPath, expected);
+            }
+        }
+    }
+
     Y_UNIT_TEST(AccessDeniedFromSchemeCache) {
         TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
             entry.Status = TNavigate::EStatus::AccessDenied;

@@ -42,6 +42,19 @@ void DoCreateStream(
     const bool initialScan,
     const bool internal = false);
 
+class TConfigureParts: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TConfigureParts"; }
+
+    explicit TConfigureParts(TOperationId id);
+
+    bool ProgressState(TOperationContext& context) override;
+
+private:
+    const TOperationId OperationId;
+
+}; // TConfigureParts
+
 struct TCdcPqPartParams {
     ui32 TotalGroupCount = 0;
     ui32 PartitionPerTablet = 2;

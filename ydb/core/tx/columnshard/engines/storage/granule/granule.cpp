@@ -235,7 +235,7 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
         }
         portions.emplace_back(i.second);
     }
-    OptimizerPlanner->ModifyPortions(std::move(portions), {});
+    OptimizerPlanner->AddLoadedPortions(portions);
 }
 
 /*

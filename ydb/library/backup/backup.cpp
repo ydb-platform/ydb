@@ -42,6 +42,8 @@
 #include <library/cpp/regex/pcre/regexp.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
+#include <algorithm>
+
 #include <util/datetime/base.h>
 #include <util/folder/dirut.h>
 #include <util/folder/path.h>
@@ -419,6 +421,56 @@ TString BuildQuotedIdentifierList(const std::vector<std::string>& names) {
     return JoinSeq(", ", quoted);
 }
 
+// Which cells of the saved key tuple are NULL.
+std::vector<bool> NullCellsOf(const TValue& key) {
+    std::vector<bool> result;
+    TValueParser parser(key);
+    parser.OpenTuple();
+    while (parser.TryNextElement()) {
+        bool isNull = false;
+        if (parser.GetKind() == TTypeParser::ETypeKind::Optional) {
+            parser.OpenOptional();
+            isNull = parser.IsNull();
+            parser.CloseOptional();
+        }
+        result.push_back(isNull);
+    }
+    parser.CloseTuple();
+    return result;
+}
+
+// Builds the "key > $pk" condition for resuming a read after a saved key with NULL cells, where $pk is the saved
+// key tuple. NULL is the smallest value, the same as in ORDER BY. A plain tuple comparison "(k0, k1) > $pk" evaluates
+// to NULL as soon as a compared cell on either side is NULL, and WHERE drops such rows: a retry that resumed after
+// such a key would silently skip the rest of the table. So the comparison is expanded by hand, and since the saved
+// cells are known here, each one gets a plain comparison or a NULL test (KQP turns both into key ranges):
+//   gt(k, p) = k > $pk.i      or, for a NULL cell,  k IS NOT NULL
+//   eq(k, p) = k = $pk.i      or, for a NULL cell,  k IS NULL
+//   key > $pk = gt(k0, p0) OR (eq(k0, p0) AND gt(k1, p1)) OR (eq(k0, p0) AND eq(k1, p1) AND gt(k2, p2)) ...
+// A NULL cell of the row makes "k > p" and "k = p" NULL, which WHERE treats as false: correct, since NULL is neither
+// greater than nor equal to a non-NULL saved cell.
+TString BuildResumeCondition(const std::vector<std::string>& pkColumns, const std::vector<bool>& savedCellIsNull) {
+    Y_ENSURE(pkColumns.size() == savedCellIsNull.size());
+    TVector<TString> alternatives;
+    TVector<TString> equalPrefix;
+    for (size_t i = 0; i < pkColumns.size(); ++i) {
+        const TString column = TStringBuilder() << '`' << pkColumns[i] << '`';
+        const TString saved = TStringBuilder() << "$pk." << i;
+        TVector<TString> conditions = equalPrefix;
+        if (savedCellIsNull[i]) {
+            conditions.push_back(TStringBuilder() << column << " IS NOT NULL");
+            equalPrefix.push_back(TStringBuilder() << column << " IS NULL");
+        } else {
+            conditions.push_back(TStringBuilder() << column << " > " << saved);
+            equalPrefix.push_back(TStringBuilder() << column << " = " << saved);
+        }
+        alternatives.push_back(TStringBuilder() << '(' << JoinSeq(" AND ", conditions) << ')');
+    }
+    return JoinSeq(" OR ", alternatives);
+}
+
+} // anonymous namespace
+
 std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescription& desc,
         const TString& fullTablePath, TMaybe<TValue> lastWrittenPK)
 {
@@ -440,7 +492,19 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
     query << "SELECT " << BuildQuotedIdentifierList(columnNames)
         << " FROM `" << fullTablePath << '`';
     if (lastWrittenPK) {
-        query << " WHERE (" << quotedPkList << ") > $pk";
+        const auto& pkColumns = desc.GetPrimaryKeyColumns();
+        const auto nullCells = NullCellsOf(*lastWrittenPK);
+        Y_ENSURE(nullCells.size() == pkColumns.size());
+        const bool hasNullCell = std::find(nullCells.begin(), nullCells.end(), true) != nullCells.end();
+        if (pkColumns.size() > 1 && !hasNullCell) {
+            // the usual case: a tuple comparison, which KQP turns into a key range
+            query << " WHERE (" << quotedPkList << ") > $pk";
+        } else {
+            // A saved key with NULL cells needs the comparison expanded per column, see BuildResumeCondition.
+            // A single-column key is expanded as well: in YQL "(a) > $pk" is the scalar a compared with a tuple,
+            // which does not compile.
+            query << " WHERE " << BuildResumeCondition(pkColumns, nullCells);
+        }
     }
     // lastWrittenPK is only a valid resume point if every attempt, including the first,
     // returns rows in PK order - otherwise a retry can both skip and duplicate rows.
@@ -450,6 +514,8 @@ std::pair<TString, TParams> BuildSelectQueryAndParams(const NTable::TTableDescri
     query << ';';
     return {query.Str(), paramsBuilder.Build()};
 }
+
+namespace {
 
 TMaybe<TValue> TryExecuteQueryRead(NQuery::TQueryClient& client, const NTable::TTableDescription& desc,
         const TString& fullTablePath, const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32* fileCounter)

@@ -20,9 +20,11 @@ message TStorageQuery {
     bool NotSynced = 4; // incomplete database summaries only
     repeated string PoolNames = 7;
     bool FilterPools = 8;
-    TStoragePoolId StoragePoolId = 9;
+    repeated TStoragePoolId StoragePoolIds = 9;
     repeated ESynchronizationStatus Statuses = 10;
     optional EStorageMode StorageMode = 11;
+    // DATABASES only: return separate summaries for each storage pool and pile.
+    bool GroupByStoragePool = 12;
 }
 
 message TStorageState {
@@ -47,10 +49,13 @@ message TPileSynchronizationResult {
     google.protobuf.Timestamp observed_at = 3;
     // Pools whose database cannot be identified; excluded from totals.
     uint64 unattributed_storage_pools = 4;
+    // Known storage-owning databases whose pools are all bridged; shared storage counts once.
+    // Omitted for pool-filtered reports. Serverless databases without own storage pools do not increase this count.
+    optional uint64 bridge_databases = 5;
 }
 
 message TDatabaseSynchronizationResult {
-    // Storage-owning databases, not all logical serverless databases.
+    // Storage owners, or individual pools when GroupByStoragePool is requested.
     repeated TDatabaseSynchronization databases = 1;
     uint64 cluster_state_generation = 2;
     google.protobuf.Timestamp observed_at = 3;
@@ -114,6 +119,9 @@ message TPileSynchronization {
     // Unset: unknown placement; empty: the real pile named "".
     optional string pile_name = 1;
     TDatabaseSyncCounts databases = 2;
+    // Same classification as databases, restricted to fully bridged storage owners.
+    // Shared storage counts once. Omitted for pool-filtered reports.
+    TDatabaseSyncCounts bridge_databases = 3;
 }
 
 // Last error; may remain while synchronization is running.

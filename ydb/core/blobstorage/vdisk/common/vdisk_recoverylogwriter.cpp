@@ -24,45 +24,29 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             struct TItem {
                 ::NMonitoring::TDynamicCounters::TCounterPtr Msgs;
                 ::NMonitoring::TDynamicCounters::TCounterPtr Bytes;
-
-                TItem()
-                    : Msgs()
-                    , Bytes()
-                {}
-
-                TItem(const TString &prefix, const TString& name, TIntrusivePtr<::NMonitoring::TDynamicCounters> mon) {
-                    Msgs = mon->GetCounter(prefix + name + "Msgs", true, NMonGroup::GetVDiskCounterVisibility());
-                    Bytes = mon->GetCounter(prefix + name + "Bytes", true, NMonGroup::GetVDiskCounterVisibility());
-                }
-
-                void Update(i64 size) {
-                    ++*Msgs;
-                    *Bytes += size;
-                }
             };
 
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
             TVector<TItem> Counters;
 
-            TCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> mon) {
-                auto group = mon->GetSubgroup("subsystem", "logrecs");
-                LogRecords = group->GetCounter("LogRecords", true);
-                Counters.reserve(static_cast<size_t>(TLogSignature::Max));
-                TString prefix("Log");
-
-                for (int i = static_cast<int>(TLogSignature::First);
-                     i < static_cast<int>(TLogSignature::Max); i++) {
-                    TLogSignature s(i);
-                    if (s == TLogSignature::First) {
-                        Counters.emplace_back(TItem());
-                    } else {
-                        Counters.emplace_back(TItem(prefix, s.ToString(), group));
-                    }
-                }
+            TCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> mon)
+                : Group(mon->GetSubgroup("subsystem", "logrecs"))
+                , Counters(static_cast<size_t>(TLogSignature::Max))
+            {
+                LogRecords = Group->GetCounter("LogRecords", true);
             }
 
             void Update(TLogSignature signature, i64 size) {
                 ++*LogRecords;
-                Counters[static_cast<int>(signature)].Update(size);
+                auto& item = Counters[static_cast<int>(signature)];
+                // Registers on the first record, so signatures a VDisk never logs are not exported.
+                if (!item.Msgs) {
+                    const TString name = "Log" + signature.ToString();
+                    item.Msgs = Group->GetCounter(name + "Msgs", true, NMonGroup::GetVDiskCounterVisibility());
+                    item.Bytes = Group->GetCounter(name + "Bytes", true, NMonGroup::GetVDiskCounterVisibility());
+                }
+                ++*item.Msgs;
+                *item.Bytes += size;
             }
         };
 

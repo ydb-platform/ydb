@@ -25,7 +25,7 @@ enum class TNativeTypeCode : std::uint8_t {
     Double,
     LongDouble,
     Bool,
-    Instant
+    Instant,
 };
 
 using TInvoker = std::function<bool(const void* data, std::size_t length)>;

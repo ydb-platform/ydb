@@ -145,6 +145,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         CheckNativeExtraction<float, i32, true>(-1.0f);
         CheckNativeExtraction<float, ui32, false>(-1.0f);
         CheckNativeExtraction<float, i64, false>(std::ldexp(1.0f, 63));
+
         CheckNativeExtraction<float, bool, true>(0.0f);
         CheckNativeExtraction<float, bool, true>(1.0f);
         CheckNativeExtraction<double, bool, true>(0.0);

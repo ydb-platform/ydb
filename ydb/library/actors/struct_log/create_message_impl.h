@@ -218,7 +218,7 @@ public:
     // Support YDB_LOG_ macro syntax
     template <typename T, typename K = TKeyName>
     TCreateMessageArg(K&& name, const T& value) {
-        AddValueToCurrentMessage(std::move(name), value);
+        AddValueToCurrentMessage(std::forward<K>(name), value);
     }
 
     TCreateMessageArg(const TStructuredMessage& message);

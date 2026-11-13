@@ -164,6 +164,26 @@ public:
         }
     }
 
+    void RestoreHnswMetadata(TTransactionContext& txc) {
+        // Modern split initialization receives the logical schema from SchemeShard.
+        // Local graph annotations belong to the source DataShard's persisted schema.
+        const auto& source = Ev->Get()->Record.GetUserTableScheme();
+        const ui64 tableId = source.HasPathId() ? source.GetPathId().GetLocalId() : source.GetId_Deprecated();
+        TUserTable::TPtr updated;
+        for (const auto& index : source.GetTableIndexes()) {
+            if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalHnsw) { continue; }
+            if (!updated) { updated = new TUserTable(*Self->TableInfos.at(tableId)); }
+            const TPathId id(index.GetPathOwnerId(), index.GetLocalPathId());
+            if (updated->Indexes.contains(id)) { updated->DropIndex(id); }
+            updated->AddIndex(index);
+        }
+        if (updated) {
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistUserTable(db, tableId, *updated);
+            Self->SetUserTable(TPathId(Self->GetPathOwnerId(), tableId), std::move(updated));
+        }
+    }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Ev->Get()->Record;
 
@@ -188,6 +208,8 @@ public:
 
         if (!Self->DstSplitSchemaInitialized) {
             LegacyInitSchema(txc);
+        } else {
+            RestoreHnswMetadata(txc);
         }
 
         bool restoreLegacyRemovedRowVersions = false;
@@ -497,7 +519,11 @@ public:
         TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes = tableInfo->KeyColumnTypes;
 
         auto* replTable = Self->EnsureReplicatedTable(msg->PathId);
-        Y_ENSURE(replTable);
+        if (!replTable) {
+            // An older source may send offsets after replication was disabled.
+            // Keep the receipt bookkeeping without recreating replication state.
+            return true;
+        }
 
         if (Self->SrcTabletToRange.empty()) {
             for (const auto& srcRange : Self->DstSplitDescription->GetSourceRanges()) {

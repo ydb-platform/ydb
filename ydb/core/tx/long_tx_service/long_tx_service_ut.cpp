@@ -358,7 +358,152 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         UNIT_ASSERT_GE(disconnectCount, 3);
     }
 
-    void RunSimpleSnapshotsTest(size_t nodesCount, bool hasTable, bool manySnapshots = false) {
+    Y_UNIT_TEST(ExplicitSnapshotRegistrationWindow) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
+        appConfig.MutableLongTxServiceConfig()->SetLocalSnapshotPromotionTimeSeconds(5);
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, 1), appConfig);
+        StartSchemeCache(runtime);
+        SimulateSleep(runtime, TDuration::Seconds(10));
+        const auto service = MakeLongTxServiceID(runtime.GetNodeId(0));
+
+        struct TCase {
+            ui64 AgeMs;
+            Ydb::StatusIds::StatusCode Status;
+        };
+
+        const TCase cases[] = {
+            { 5001, Ydb::StatusIds::PRECONDITION_FAILED },
+            { 5000, Ydb::StatusIds::SUCCESS },
+            { 4999, Ydb::StatusIds::SUCCESS },
+        };
+        for (const auto& test : cases) {
+            const auto sender = runtime.AllocateEdgeActor();
+            TRowVersion requested;
+            // Set the age at delivery so mailbox latency cannot shift the boundary.
+            auto observer = runtime.AddObserver<TEvLongTxService::TEvAcquireReadSnapshot>([&](auto& ev) {
+                if (ev->Sender == sender) {
+                    requested = TRowVersion(runtime.GetCurrentTime().MilliSeconds() - test.AgeMs, 123);
+                    ev->Get()->Snapshot = requested;
+                }
+            });
+            runtime.Send(
+                new IEventHandle(service, sender, new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1")), 0, true);
+            const auto response = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+            const auto& result = *response->Get();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, test.Status, result.Issues.ToString());
+            if (test.Status == Ydb::StatusIds::SUCCESS) {
+                UNIT_ASSERT_VALUES_EQUAL(result.Snapshot, requested);
+                UNIT_ASSERT(result.SnapshotHandle);
+            } else {
+                UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), "outside the safe registration window");
+                UNIT_ASSERT(!result.SnapshotHandle);
+            }
+        }
+        for (const TRowVersion version : { TRowVersion(0, 1), TRowVersion(Max<ui64>(), 1) }) {
+            const auto sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(service, sender,
+                             new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {}, version)), 0, true);
+            const auto response = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT(!response->Get()->SnapshotHandle);
+        }
+    }
+
+    Y_UNIT_TEST(ExplicitSnapshotRetentionRequiresLocking) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(false);
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, 1), appConfig);
+        StartSchemeCache(runtime);
+        SimulateSleep(runtime, TDuration::Seconds(1));
+        const auto service = MakeLongTxServiceID(runtime.GetNodeId(0));
+        const auto sender = runtime.AllocateEdgeActor();
+        const TRowVersion version(runtime.GetCurrentTime().MilliSeconds(), 123);
+        runtime.Send(new IEventHandle(
+                         service, sender, new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {}, version)), 0, true);
+        const auto rejected = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Status, Ydb::StatusIds::UNSUPPORTED);
+        UNIT_ASSERT_STRING_CONTAINS(rejected->Get()->Issues.ToString(), "requires snapshots locking");
+        UNIT_ASSERT(!rejected->Get()->SnapshotHandle);
+
+        // Ordinary acquisition retains its existing locking-disabled behavior.
+        runtime.Send(new IEventHandle(service, sender, new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1")), 0, true);
+        const auto acquired = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(acquired->Get()->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(!acquired->Get()->SnapshotHandle);
+    }
+
+    Y_UNIT_TEST(DuplicateAcquisitionDoesNotReturnAnUnregisteredHandle) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, 1), appConfig);
+        StartSchemeCache(runtime);
+        SimulateSleep(runtime, TDuration::Seconds(1));
+        const auto service = MakeLongTxServiceID(runtime.GetNodeId(0));
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto otherSender = runtime.AllocateEdgeActor();
+        // Queue all requests before dispatch so they acquire the same version.
+        runtime.Send(
+            new IEventHandle(service, sender, new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1"), 0, 11), 0, true);
+        runtime.Send(
+            new IEventHandle(service, sender, new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1"), 0, 12), 0, true);
+        runtime.Send(new IEventHandle(
+                         service, otherSender, new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1"), 0, 13), 0, true);
+
+        auto acquired = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+        auto rejected = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+        auto other = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(otherSender);
+        UNIT_ASSERT_VALUES_EQUAL(acquired->Cookie, 11);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Cookie, 12);
+        UNIT_ASSERT_VALUES_EQUAL(other->Cookie, 13);
+        UNIT_ASSERT_VALUES_EQUAL(acquired->Get()->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(acquired->Get()->SnapshotHandle);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(rejected->Get()->Issues.ToString(), "already registered");
+        UNIT_ASSERT(!rejected->Get()->SnapshotHandle);
+        UNIT_ASSERT_VALUES_EQUAL(other->Get()->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(other->Get()->SnapshotHandle);
+        UNIT_ASSERT_VALUES_EQUAL(acquired->Get()->Snapshot, other->Get()->Snapshot);
+        acquired->Get()->SnapshotHandle.Reset();
+        UNIT_ASSERT(other->Get()->SnapshotHandle);
+    }
+
+    Y_UNIT_TEST(SnapshotHandlesFollowStorageLifetime) {
+        TLocalSnapshotsStorage storage;
+        const TRowVersion version(1000, 1);
+        const TActorId sender(1, 0, 111, 0);
+        TLocalSnapshotInfo first(version, sender, {});
+        NKqp::TSnapshotHandle original(first.AliveFlag);
+        UNIT_ASSERT(storage.Insert(std::move(first)));
+        original.Reset();
+
+        // Re-registration also replaces an inactive entry before maintenance removes it.
+        TLocalSnapshotInfo replacement(version, sender, {});
+        NKqp::TSnapshotHandle current(replacement.AliveFlag);
+        UNIT_ASSERT(storage.Insert(std::move(replacement)));
+        UNIT_ASSERT(current);
+        original.Reset();
+        UNIT_ASSERT(current);
+
+        TLocalSnapshotInfo otherInfo(version.Next(), sender, {});
+        NKqp::TSnapshotHandle other(otherInfo.AliveFlag);
+        UNIT_ASSERT(storage.Insert(std::move(otherInfo)));
+        storage.Clear();
+        UNIT_ASSERT(!current);
+        UNIT_ASSERT(!other);
+        const auto view = storage.ViewPromotedUpToStep(Max<ui64>());
+        UNIT_ASSERT(view.begin() == view.end());
+
+        TLocalSnapshotInfo restoredInfo(version, sender, {});
+        NKqp::TSnapshotHandle restored(restoredInfo.AliveFlag);
+        UNIT_ASSERT(storage.Insert(std::move(restoredInfo)));
+        current.Reset();
+        other.Reset();
+        UNIT_ASSERT(restored);
+    }
+
+    void RunSimpleSnapshotsTest(
+        size_t nodesCount, bool hasTable, bool manySnapshots = false, bool explicitVersion = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
         appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(2);
@@ -402,15 +547,27 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         for (ui32 i = 0; i < snapshotsCount; ++i) {
             const TActorId sender = runtime.AllocateEdgeActor(0);
             snapshotSenders.emplace_back(sender);
-            runtime.Send(
-                new IEventHandle(service1, sender,
-                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", hasTable ? TVector<::NKikimr::TTableId>{table} : TVector<::NKikimr::TTableId>{})),
-                0, true);
+            auto request = MakeHolder<TEvLongTxService::TEvAcquireReadSnapshot>(
+                "/dc-1", hasTable ? TVector<::NKikimr::TTableId>{ table } : TVector<::NKikimr::TTableId>{});
+            const TRowVersion requestedVersion(runtime.GetCurrentTime().MilliSeconds(), 123);
+            if (explicitVersion) {
+                request->Snapshot = requestedVersion;
+            }
+            runtime.Send(new IEventHandle(service1, sender, request.Release()), 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
             auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
             handles.emplace_back(std::move(msg->SnapshotHandle));
             snapshots.emplace_back(msg->Snapshot);
+            if (explicitVersion) {
+                UNIT_ASSERT_VALUES_EQUAL(msg->Snapshot, requestedVersion);
+                // A duplicate must not hand out an unregistered handle or release the existing one
+                runtime.Send(new IEventHandle(service1, sender, new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1",
+                                                                    { table }, requestedVersion)), 0, true);
+                const auto duplicate =
+                    runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(duplicate->Get()->Status, Ydb::StatusIds::BAD_REQUEST);
+            }
         }
 
         SimulateSleep(runtime, TDuration::Seconds(2));
@@ -495,6 +652,10 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
     Y_UNIT_TEST_TWIN(SimpleSnapshotsSingleNode, HasTable) {
         RunSimpleSnapshotsTest(1, HasTable);
+    }
+
+    Y_UNIT_TEST_TWIN(ExplicitSnapshotsManyNodes, HasTable) {
+        RunSimpleSnapshotsTest(4, HasTable, false, true);
     }
 
     Y_UNIT_TEST_TWIN(SimpleSnapshotsManyNodes, HasTable) {

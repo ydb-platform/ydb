@@ -223,7 +223,6 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(parts.size(), 6);
         for (const auto& part : parts) {
-            UNIT_ASSERT_VALUES_EQUAL(part.HasUnknownPlacement, part.Label() == unloadedArchive->Label);
             if (part.Label() == coldPart->Label) {
                 UNIT_ASSERT_VALUES_EQUAL(part.TierId, 42);
                 UNIT_ASSERT_VALUES_EQUAL(part.Level, 2);
@@ -303,7 +302,7 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
         UNIT_ASSERT(context->IsCurrent(inventory));
     }
 
-    Y_UNIT_TEST(UnloadedUnknownPlacementKeepsCapAndGarbageConservative) {
+    Y_UNIT_TEST(UnloadedNormalizedPlacementKeepsGarbageConservative) {
         TFixture f;
         const auto unloaded = f.Cold(10);
         auto policy = NLocalDb::CreateDefaultUserTablePolicy();
@@ -318,78 +317,12 @@ Y_UNIT_TEST_SUITE(TCompactionContextTest) {
         UNIT_ASSERT_VALUES_EQUAL(context->Remaining.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(context->Remaining.front().TierId, 0);
         UNIT_ASSERT_VALUES_EQUAL(context->Remaining.front().Level, 255);
-        UNIT_ASSERT(context->Remaining.front().HasUnknownPlacement);
-
-        TCompactionTierCap exact(f.Layout.RowScheme()->Keys, context->Remaining, {0, 42, 7});
-        TCompactionTierCap parallel(f.Layout.RowScheme()->Keys, context->Remaining, {0, 42, 7}, true);
-        const auto key = TCell::Make(ui32(20));
-        // Its logical tier is default, but the conflicting recorded placement
-        // cannot prove that the key is absent from an intermediate tier.
-        UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 0, 7), 42);
-        UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 0, 7), 42);
-        exact.Reset();
-        parallel.Reset();
-        UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 7, 0), 42);
-        UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 7, 0), 42);
 
         auto garbage = MakeCompactionGarbageConf(f.Layout.RowScheme()->Keys, context->Remaining, false);
         UNIT_ASSERT(!garbage.Final);
         UNIT_ASSERT(garbage.UnderlayMask);
         UNIT_ASSERT(Has(*garbage.UnderlayMask, 0));
         UNIT_ASSERT(Has(*garbage.UnderlayMask, Max<ui32>()));
-    }
-
-    Y_UNIT_TEST(DefaultUnloadedRemainingSourcesDoNotBlockExactTierJumps) {
-        TFixture f;
-        const auto unloaded = f.Cold(10);
-        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
-        UNIT_ASSERT(policy->Generations.size() >= 3);
-        policy->Generations[1].TierId = 42;
-        policy->Generations[2].TierId = 7;
-        const TVector<TIntrusiveConstPtr<TColdPart>> coldParts{unloaded};
-
-        for (ui32 level : {ui32(255), ui32(1)}) {
-            TCompactionState state;
-            state.PartLevels[unloaded->Label] = level;
-            const auto inventory = DescribeCompactionParts({}, coldParts, state, *policy);
-            UNIT_ASSERT_VALUES_EQUAL(inventory.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(inventory.front().TierId, 0);
-            UNIT_ASSERT_VALUES_EQUAL(inventory.front().Level, level);
-            UNIT_ASSERT(!inventory.front().HasUnknownPlacement);
-
-            TCompactionTierCap exact(f.Layout.RowScheme()->Keys, inventory, {0, 42, 7});
-            TCompactionTierCap parallel(f.Layout.RowScheme()->Keys, inventory, {0, 42, 7}, true);
-            const auto key = TCell::Make(ui32(20));
-            UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 0, 7), 7);
-            UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 0, 7), 42);
-            exact.Reset();
-            parallel.Reset();
-            UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 7, 0), 0);
-            UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 7, 0), 42);
-        }
-    }
-
-    Y_UNIT_TEST(UnloadedPlacementUncertaintyInvalidatesContext) {
-        TFixture f;
-        const auto unloaded = f.Cold(10);
-        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
-        UNIT_ASSERT(policy->Generations.size() >= 2);
-        policy->Generations[1].TierId = 42;
-        TCompactionState state;
-        state.PartLevels[unloaded->Label] = 2;
-        const TVector<TIntrusiveConstPtr<TColdPart>> coldParts{unloaded};
-        const auto inventory = DescribeCompactionParts({}, coldParts, state, *policy);
-        auto context = MakeContext(inventory, {});
-        UNIT_ASSERT(context->IsCurrent(inventory));
-        UNIT_ASSERT(inventory.front().HasUnknownPlacement);
-
-        state.PartLevels[unloaded->Label] = 255;
-        const auto updated = DescribeCompactionParts({}, coldParts, state, *policy);
-        UNIT_ASSERT_VALUES_EQUAL(updated.front().Level, inventory.front().Level);
-        UNIT_ASSERT_VALUES_EQUAL(updated.front().TierId, inventory.front().TierId);
-        UNIT_ASSERT_VALUES_EQUAL(updated.front().ColdPart.Get(), inventory.front().ColdPart.Get());
-        UNIT_ASSERT(!updated.front().HasUnknownPlacement);
-        UNIT_ASSERT(!context->IsCurrent(updated));
     }
 
     Y_UNIT_TEST(ExtraSourcesExtendBothIntervalBounds) {
@@ -732,33 +665,6 @@ Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
         UNIT_ASSERT(Has(*mask, Max<ui32>()));
     }
 
-    Y_UNIT_TEST(FiltersByTierAndGeneration) {
-        TFixture f;
-        auto one = f.Part(10, 10, 10);
-        auto two = f.Part(20, 20, 20);
-        auto three = f.Part(30, 30, 30);
-        const TVector<TCompactionPartInfo> remaining{{one, 2, 42}, {two, 3, 42}, {three, 4, 7}};
-        auto mask = MakeCompactionKeySpace(f.Layout.RowScheme()->Keys, remaining, 42, 3);
-        UNIT_ASSERT(!Has(*mask, 10));
-        UNIT_ASSERT(Has(*mask, 20));
-        UNIT_ASSERT(!Has(*mask, 30));
-    }
-
-    Y_UNIT_TEST(UnknownUnloadedPlacementIsIncludedInEveryTierAndGenerationMask) {
-        TFixture f;
-        const auto unloaded = f.Cold(10);
-        const TVector<TCompactionPartInfo> remaining{{unloaded, 255, 0, true}};
-        for (ui32 tierId : {ui32(0), ui32(42), ui32(7)}) {
-            auto mask = MakeCompactionKeySpace(f.Layout.RowScheme()->Keys, remaining, tierId, 2);
-            UNIT_ASSERT(Has(*mask, 0));
-            UNIT_ASSERT(Has(*mask, Max<ui32>()));
-        }
-
-        const TVector<TCompactionPartInfo> defaultRemaining{{unloaded, 255, 0}};
-        auto mask = MakeCompactionKeySpace(f.Layout.RowScheme()->Keys, defaultRemaining, 42, 2);
-        UNIT_ASSERT(!Has(*mask, 20));
-    }
-
     Y_UNIT_TEST(IndependentCursorsCanResetSeparately) {
         TFixture f;
         auto part = f.Part(10);
@@ -775,122 +681,6 @@ Y_UNIT_TEST_SUITE(TCompactionKeySpaceTest) {
         first->Reset();
         UNIT_ASSERT(Has(*second, 30));
         UNIT_ASSERT(Has(*first, 10));
-    }
-
-    Y_UNIT_TEST(CapStopsInBothDirectionsUsingPhysicalTierOrder) {
-        TFixture f;
-        const TVector<TCompactionPartInfo> remaining{{f.Part(10), 3, 42}};
-        TCompactionTierCap cap(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7});
-        const auto key = TCell::Make(ui32(20));
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 0, 7), 42);
-        cap.Reset();
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 7, 0), 42);
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 42, 42), 42);
-    }
-
-    Y_UNIT_TEST(CapSkipsOnlyProvenEmptyIntermediateTiers) {
-        TFixture f;
-        const TVector<TCompactionPartInfo> remaining{{f.Part(10, 10, 10), 2, 42},
-            {f.Part(20, 30, 30), 3, 42}};
-        TCompactionTierCap cap(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7});
-        const auto key = TCell::Make(ui32(20));
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 0, 7), 7);
-        cap.Reset();
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 7, 0), 0);
-        const auto present = TCell::Make(ui32(30));
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&present, 1}, 0, 7), 42);
-    }
-
-    Y_UNIT_TEST(CapIncludesEveryGenerationAndUnknownMetadata) {
-        TFixture f;
-        const TVector<TCompactionPartInfo> remaining{{f.Part(10, 10, 10), 2, 42},
-            {f.Part(20, 20, 20), 3, 42}, {f.Cold(30), 4, 7}};
-        TCompactionTierCap cap(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7, 9});
-        const auto key = TCell::Make(ui32(20));
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 0, 9), 42);
-        const auto absent = TCell::Make(ui32(30));
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&absent, 1}, 0, 9), 7);
-    }
-
-    Y_UNIT_TEST(CapChecksAllGenerationsInBothDirections) {
-        TFixture f;
-        const TVector<TCompactionPartInfo> remaining{
-            {f.Part(80, 1, 1), 1, 0}, {f.Part(70, 2, 2), 2, 0},
-            {f.Part(60, 10, 10), 3, 42}, {f.Part(50, 50, 50), 4, 42},
-            {f.Part(40, 30, 30), 5, 7}, {f.Part(30, 50, 50), 6, 7},
-            {f.Part(20, 70, 70), 7, 9}, {f.Part(10, 80, 80), 8, 9},
-        };
-        TCompactionTierCap cap(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7, 9});
-        struct TCase {
-            ui32 Key;
-            ui32 CoolingTier;
-            ui32 WarmingTier;
-        };
-        const TCase cases[] = {
-            {10, 42, 42},
-            {30, 7, 7},
-            // The same key in both intermediate tiers stops at the nearest one.
-            {50, 42, 7},
-            {90, 9, 0},
-        };
-        for (const auto& test : cases) {
-            const auto key = TCell::Make(test.Key);
-            cap.Reset();
-            UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 0, 9), test.CoolingTier);
-            cap.Reset();
-            UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 9, 0), test.WarmingTier);
-        }
-    }
-
-    Y_UNIT_TEST(ParallelCapCoversKeysThatAnotherCompactionMayRelocate) {
-        TFixture f;
-        const TVector<TCompactionPartInfo> remaining{{f.Part(10, 20, 20), 1, 0}};
-        TCompactionTierCap exact(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7});
-        TCompactionTierCap parallel(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7}, true);
-        const auto key = TCell::Make(ui32(20));
-
-        // Although the intermediate tier is empty now, a concurrent operation
-        // may put this remaining key there before the current scan publishes.
-        UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 0, 7), 7);
-        UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 0, 7), 42);
-        exact.Reset();
-        parallel.Reset();
-        UNIT_ASSERT_VALUES_EQUAL(exact.LimitTier({&key, 1}, 7, 0), 0);
-        UNIT_ASSERT_VALUES_EQUAL(parallel.LimitTier({&key, 1}, 7, 0), 42);
-    }
-
-    Y_UNIT_TEST(ParallelCapStillSkipsWhenNoRemainingSourceCanContainTheKey) {
-        TFixture f;
-        const TVector<TCompactionPartInfo> remaining{{f.Part(10, 10, 10), 1, 0},
-            {f.Part(20, 30, 30), 3, 7}};
-        TCompactionTierCap cap(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7}, true);
-        const auto key = TCell::Make(ui32(20));
-
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 0, 7), 7);
-        cap.Reset();
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 7, 0), 0);
-    }
-
-    Y_UNIT_TEST(UnknownConcurrentKeysStopAtTheFirstIntermediateTier) {
-        TFixture f;
-        TCompactionTierCap cap(f.Layout.RowScheme()->Keys, {}, {0, 42, 7, 9}, true, true);
-        const auto key = TCell::Make(ui32(20));
-
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 0, 9), 42);
-        cap.Reset();
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 9, 0), 7);
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 42, 7), 7);
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier({&key, 1}, 7, 7), 7);
-    }
-
-    Y_UNIT_TEST(CapRejectsAmbiguousOrUnknownTierOrders) {
-        TFixture f;
-        const TVector<TCompactionPartInfo> remaining{{f.Part(10), 3, 42}};
-        UNIT_ASSERT_EXCEPTION(TCompactionTierCap(f.Layout.RowScheme()->Keys, remaining, {0, 42, 0}), yexception);
-        UNIT_ASSERT_EXCEPTION(TCompactionTierCap(f.Layout.RowScheme()->Keys, remaining, {0, 7}), yexception);
-        TCompactionTierCap cap(f.Layout.RowScheme()->Keys, remaining, {0, 42, 7});
-        const auto key = TCell::Make(ui32(20));
-        UNIT_ASSERT_EXCEPTION(cap.LimitTier({&key, 1}, 0, 99), yexception);
     }
 
     Y_UNIT_TEST(GarbageConfCoversAllRemainingTiersAndEpochs) {

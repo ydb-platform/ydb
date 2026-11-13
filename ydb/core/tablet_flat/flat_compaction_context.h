@@ -14,11 +14,9 @@ namespace NKikimr::NTable {
 
     // Runtime placement of one table-owned part view. ColdPart means that its
     // metadata has not been loaded; table inventory assigns it to the default tier.
-    // A conflicting saved binding is retained as unknown placement for key masks.
     struct TCompactionPartInfo {
         TCompactionPartInfo(TPartView part, ui32 level, ui32 tierId);
-        TCompactionPartInfo(TIntrusiveConstPtr<TColdPart> part, ui32 level, ui32 tierId,
-            bool hasUnknownPlacement = false);
+        TCompactionPartInfo(TIntrusiveConstPtr<TColdPart> part, ui32 level, ui32 tierId);
 
         const TLogoBlobID& Label() const;
         TEpoch Epoch() const;
@@ -28,14 +26,10 @@ namespace NKikimr::NTable {
         TIntrusiveConstPtr<TColdPart> ColdPart;
         ui32 Level;
         ui32 TierId;
-        // A saved non-default binding was normalized without loading the part.
-        // Its keys must be considered present in every tier and generation mask.
-        bool HasUnknownPlacement = false;
     };
 
     // Preserve unloaded parts' existing default-generation placement, but move
     // references to non-default generations to the final default level (255).
-    // DescribeCompactionParts also marks the latter as unknown placement.
     ui32 ResolveColdPartLevel(ui32 level, const NLocalDb::TCompactionPolicy& policy);
 
     // Resolve placement using the existing part -> level -> generation binding.
@@ -109,13 +103,11 @@ namespace NKikimr::NTable {
 
     // Each call creates an independent cursor, pinning the selected metadata.
     // Missing bounds/bloom and unloaded parts conservatively mean "maybe".
-    // Unknown placement includes a part in every tier and generation mask.
     // Bloom prefixes containing PG columns are ignored because equal PG values
     // may have different binary encodings.
     THolder<NPage::IKeySpace> MakeCompactionKeySpace(
         TIntrusiveConstPtr<TKeyCellDefaults> keys,
-        TConstArrayRef<TCompactionPartInfo> parts,
-        std::optional<ui32> tierId = {}, std::optional<ui32> level = {});
+        TConstArrayRef<TCompactionPartInfo> parts);
 
     struct TCompactionGarbageConf {
         bool Final = false;
@@ -128,24 +120,5 @@ namespace NKikimr::NTable {
     TCompactionGarbageConf MakeCompactionGarbageConf(
         TIntrusiveConstPtr<TKeyCellDefaults> keys,
         TConstArrayRef<TCompactionPartInfo> remaining, bool keepEraseMarkers);
-
-    class TCompactionTierCap {
-    public:
-        // The strategy supplies the physical tier order. Family ids are never
-        // sorted numerically; level 255 is not interpreted as a coldest tier.
-        // Parallel operations use the union of remaining keys in every tier;
-        // unknown memory sources conservatively stop at the first intermediate tier.
-        TCompactionTierCap(TIntrusiveConstPtr<TKeyCellDefaults> keys,
-            TConstArrayRef<TCompactionPartInfo> remaining, TVector<ui32> tierOrder,
-            bool useConservativeMasks = false, bool hasUnknownRemaining = false);
-
-        void Reset();
-        ui32 LimitTier(TCellsRef key, ui32 sourceTier, ui32 desiredTier);
-
-    private:
-        TVector<ui32> TierOrder;
-        TVector<THolder<NPage::IKeySpace>> Masks;
-        const bool HasUnknownRemaining;
-    };
 
 }

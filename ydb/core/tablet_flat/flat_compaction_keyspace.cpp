@@ -3,18 +3,13 @@
 #include "flat_bloom_hash.h"
 #include "flat_part_slice.h"
 
-#include <util/generic/hash_set.h>
-
-#include <algorithm>
-
 namespace NKikimr::NTable {
 namespace {
 
     class TCompactionKeySpace final : public NPage::IKeySpace {
     public:
         TCompactionKeySpace(TIntrusiveConstPtr<TKeyCellDefaults> keys,
-                TConstArrayRef<TCompactionPartInfo> parts,
-                std::optional<ui32> tierId, std::optional<ui32> level)
+                TConstArrayRef<TCompactionPartInfo> parts)
             : Keys(std::move(keys))
         {
             Y_ENSURE(Keys, "Compaction key space requires a key schema");
@@ -28,13 +23,9 @@ namespace {
             }
             Parts.reserve(parts.size());
             for (const auto& part : parts) {
-                if (part.HasUnknownPlacement ||
-                    ((!tierId || part.TierId == *tierId) && (!level || part.Level == *level)))
-                {
-                    Y_ENSURE(bool(part.Part) != bool(part.ColdPart),
-                        "Compaction key space requires exactly one part representation");
-                    Parts.emplace_back(part);
-                }
+                Y_ENSURE(bool(part.Part) != bool(part.ColdPart),
+                    "Compaction key space requires exactly one part representation");
+                Parts.emplace_back(part);
             }
         }
 
@@ -106,10 +97,9 @@ namespace {
 
 THolder<NPage::IKeySpace> MakeCompactionKeySpace(
         TIntrusiveConstPtr<TKeyCellDefaults> keys,
-        TConstArrayRef<TCompactionPartInfo> parts,
-        std::optional<ui32> tierId, std::optional<ui32> level)
+        TConstArrayRef<TCompactionPartInfo> parts)
 {
-    return MakeHolder<TCompactionKeySpace>(std::move(keys), parts, tierId, level);
+    return MakeHolder<TCompactionKeySpace>(std::move(keys), parts);
 }
 
 TCompactionGarbageConf MakeCompactionGarbageConf(
@@ -127,64 +117,6 @@ TCompactionGarbageConf MakeCompactionGarbageConf(
         result.UnderlayMask = MakeCompactionKeySpace(std::move(keys), remaining);
     }
     return result;
-}
-
-TCompactionTierCap::TCompactionTierCap(TIntrusiveConstPtr<TKeyCellDefaults> keys,
-        TConstArrayRef<TCompactionPartInfo> remaining, TVector<ui32> tierOrder,
-        bool useConservativeMasks, bool hasUnknownRemaining)
-    : TierOrder(std::move(tierOrder))
-    , HasUnknownRemaining(hasUnknownRemaining)
-{
-    Y_ENSURE(!TierOrder.empty(), "Compaction tier order must not be empty");
-    THashSet<ui32> tiers;
-    for (ui32 tierId : TierOrder) {
-        Y_ENSURE(tiers.insert(tierId).second, "Compaction tier order contains a duplicate tier");
-    }
-    for (const auto& part : remaining) {
-        Y_ENSURE(tiers.contains(part.TierId),
-            "Compaction tier order does not contain a remaining part's tier");
-    }
-
-    Masks.reserve(TierOrder.size());
-    for (ui32 tierId : TierOrder) {
-        // A concurrent TAC may move a remaining key to another tier. Its
-        // replacement cannot add keys to this pinned union of disk sources.
-        Masks.push_back(MakeCompactionKeySpace(keys, remaining,
-            useConservativeMasks ? std::nullopt : std::optional<ui32>(tierId)));
-    }
-}
-
-void TCompactionTierCap::Reset()
-{
-    for (auto& mask : Masks) {
-        mask->Reset();
-    }
-}
-
-ui32 TCompactionTierCap::LimitTier(TCellsRef key, ui32 sourceTier, ui32 desiredTier)
-{
-    const auto source = std::find(TierOrder.begin(), TierOrder.end(), sourceTier);
-    const auto desired = std::find(TierOrder.begin(), TierOrder.end(), desiredTier);
-    Y_ENSURE(source != TierOrder.end(), "Compaction source tier is not in the tier order");
-    Y_ENSURE(desired != TierOrder.end(), "Compaction desired tier is not in the tier order");
-
-    const size_t sourceIndex = source - TierOrder.begin();
-    const size_t desiredIndex = desired - TierOrder.begin();
-    if (sourceIndex < desiredIndex) {
-        for (size_t index = sourceIndex + 1; index < desiredIndex; ++index) {
-            if (HasUnknownRemaining || Masks[index]->HasKey(key)) {
-                return TierOrder[index];
-            }
-        }
-    } else {
-        for (size_t index = sourceIndex; index > desiredIndex + 1;) {
-            --index;
-            if (HasUnknownRemaining || Masks[index]->HasKey(key)) {
-                return TierOrder[index];
-            }
-        }
-    }
-    return desiredTier;
 }
 
 }

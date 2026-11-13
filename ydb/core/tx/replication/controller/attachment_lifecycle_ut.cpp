@@ -2510,6 +2510,27 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         )").GetValueSync();
         UNIT_ASSERT_C(cdc.IsSuccess(), cdc.GetIssues().ToString());
 
+        // Prepare the destination metadata restored by import on this branch.
+        const ui64 schemeShardId = env.GetSchemeshardId("/Root/replica1");
+        const ui64 txId = 100499;
+        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShardId);
+        auto& tx = *request->Record.AddTransaction();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        tx.SetInternal(true);
+        env.GetPathId("/Root/replica1").ToProto(tx.MutableAlterTable()->MutablePathId());
+        auto& config = *tx.MutableAlterTable()->MutableReplicationConfig();
+        config.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        config.SetConsistencyLevel(GlobalConsistency
+            ? NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
+            : NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
+        config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
+        const auto prepared = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            schemeShardId, std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL_C(prepared->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted,
+            prepared->Get()->Record.GetReason());
+        env.Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(schemeShardId,
+            new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(txId));
+
         const auto info = StartReplication(
             env, 1, "root@builtin", GlobalConsistency, false,
             NKikimrSchemeOp::EIndexTypeGlobal, false, false);
@@ -2517,6 +2538,8 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         UNIT_ASSERT_C(WaitFor([&] {
             return SourceStreamsReady(env, info, 1);
         }), "Source stream setup did not finish before resuming replication");
+        const auto description = DescribeReplication(env, info);
+        CompleteDestinationImport(env, info, description->Get()->Record.GetTargets(0).GetId());
 
         const auto resumed = session.ExecuteSchemeQuery(R"(
             ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = "STANDBY");

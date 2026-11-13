@@ -28,7 +28,6 @@ ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.FetchThrottledAtM
 ydb/core/persqueue/ut TPartitionTests.ReplicationDataIgnoresReplicationConsumerWithoutRetryingPersist
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
-ydb/core/tx/columnshard/export/actor/ut TExportActorLifecycle.RetriesExportAfterS3ThrottlingMidUpload
 ydb/core/tx/replication/controller/ut_schema_change BootstrapImport.SourceWithIndex+Materialized+DirectImport
 ydb/core/tx/replication/controller/ut_schema_change BootstrapImport.SourceWithIndex+Materialized-DirectImport
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.PublicForceEscalatesPendingDrop-Cascade

@@ -1,3 +1,6 @@
+SIZE(LARGE)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 TEST_SRCS(
     ydb/tests/functional/sqs/with_quotas/test_quoting.py
 )
@@ -7,11 +10,8 @@ DATA(
 )
 
 IF (SANITIZER_TYPE == "thread")
-    SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:32 cpu:1)
 ELSE()
-    SIZE(MEDIUM)
     REQUIREMENTS(cpu:2)
 ENDIF()
 

@@ -1575,4 +1575,70 @@ Y_UNIT_TEST_SUITE(FindFirstOffsetAtOrAfterTimestamp) {
     }
 }
 
+Y_UNIT_TEST_SUITE(BatchUnpackMalformed) {
+    TBatch MakePackedBatch(ui32 blobCount) {
+        TBatch batch(0, 0);
+        for (ui32 i = 0; i < blobCount; ++i) {
+            batch.AddBlob(MakeSimpleBlob("src", i + 1, TString(1 + i, 'a' + i)));
+        }
+        batch.Pack();
+        return batch;
+    }
+
+    size_t SkipChunks(const TBuffer& data, ui32 count) {
+        size_t pos = 0;
+        for (ui32 i = 0; i < count; ++i) {
+            pos += sizeof(ui32) + ReadUnaligned<ui32>(data.Data() + pos);
+        }
+        return pos;
+    }
+
+    // YDBBUGS-1116: a corrupted trailing cumulative-offset word of a VarLen
+    // chunk used to produce a wild offsets pointer and a SEGV inside
+    // TVarLenDecoder::TChunkIterator::Next.
+    Y_UNIT_TEST(UnpackThrowsOnCorruptedVarLenDataSize) {
+        auto batch = MakePackedBatch(5);
+
+        // Chunks: [order][SourceId][SeqNo][Data]...
+        // The last word of the SourceId chunk is its trailing data size.
+        const size_t sourceIdChunkPos = SkipChunks(batch.PackedData, 1);
+        const ui32 sourceIdChunkSize = ReadUnaligned<ui32>(batch.PackedData.Data() + sourceIdChunkPos);
+        WriteUnaligned<ui32>(
+            batch.PackedData.Data() + sourceIdChunkPos + sizeof(ui32) + sourceIdChunkSize - sizeof(ui32),
+            Max<ui32>() - 3);
+
+        TVector<TClientBlob> result;
+        UNIT_ASSERT_EXCEPTION(batch.UnpackTo(&result), yexception);
+    }
+
+    // YDBBUGS-1116: non-monotonic cumulative offsets used to underflow the
+    // value size in TVarLenDecoder::TChunkIterator::Next.
+    Y_UNIT_TEST(UnpackThrowsOnCorruptedDataChunkOffsets) {
+        auto batch = MakePackedBatch(4);
+        const ui32 blobCount = 4;
+
+        // Chunks: [order][SourceId][SeqNo][Data]...
+        // The Data chunk ends with blobCount cumulative offsets.
+        const size_t dataChunkPos = SkipChunks(batch.PackedData, 3);
+        const ui32 dataChunkSize = ReadUnaligned<ui32>(batch.PackedData.Data() + dataChunkPos);
+        const size_t offsetsPos = dataChunkPos + sizeof(ui32) + dataChunkSize - blobCount * sizeof(ui32);
+        // Decrease the third cumulative offset: offsets become non-monotonic.
+        WriteUnaligned<ui32>(batch.PackedData.Data() + offsetsPos + 2 * sizeof(ui32), 0);
+
+        TVector<TClientBlob> result;
+        UNIT_ASSERT_EXCEPTION(batch.UnpackTo(&result), yexception);
+    }
+
+    // YDBBUGS-1116: a header claiming more client blobs than the chunks
+    // encode used to read all chunk iterators past their ends.
+    Y_UNIT_TEST(UnpackThrowsOnHeaderBlobCountMismatch) {
+        auto batch = MakePackedBatch(3);
+
+        batch.Header.SetClientBlobCount(1'000'000);
+
+        TVector<TClientBlob> result;
+        UNIT_ASSERT_EXCEPTION(batch.UnpackTo(&result), yexception);
+    }
+}
+
 } // namespace NKikimr::NPQ

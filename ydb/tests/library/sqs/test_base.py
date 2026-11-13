@@ -515,6 +515,19 @@ class KikimrSqsTestBase(object):
         )
         return self.queue_url
 
+    def _wait_for_queue_ready(self, queue_url, timeout=30):
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                return self._sqs_api.get_queue_attributes(queue_url)
+            except RuntimeError as error:
+                if not any(code in str(error) for code in (
+                    "The specified queue doesn't exist", 'NonExistentQueue',
+                    '<Code>ThrottlingException</Code>',
+                )) or time.monotonic() >= deadline:
+                    raise
+            time.sleep(0.1)
+
     def _send_message_and_assert(self, queue_url, msg_body, seq_no=None, group_id=None, attributes=None, delay_seconds=None):
         attributes = {} if attributes is None else attributes
         send_msg_result = self._sqs_api.send_message(

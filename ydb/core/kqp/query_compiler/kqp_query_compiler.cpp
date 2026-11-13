@@ -9,7 +9,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/query_compiler/kqp_mkql_compiler.h>
 #include <ydb/core/kqp/query_compiler/kqp_olap_compiler.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/query_data/kqp_request_predictor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>

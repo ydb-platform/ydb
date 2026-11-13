@@ -528,6 +528,8 @@ message TCmsConfig {
     optional TLogConfig LogConfig = 7;
     optional TSentinelConfig SentinelConfig = 8;
     optional bool DisableMaintenance = 9;
+    // Time after a state storage replica starts before other rings may be restarted, in microseconds.
+    optional uint64 StateStorageRestartCooldown = 10 [default = 120000000];
 }
 
 message TPDiskID {

@@ -2,10 +2,6 @@ UNITTEST_FOR(ydb/core/blobstorage/pdisk)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    ENV(VALGRIND_OPTS=--max-stackframe=16000000)
-ENDIF()
-
 REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SPLIT_FACTOR(20)

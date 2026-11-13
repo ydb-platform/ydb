@@ -21,6 +21,9 @@
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/tx/scheme_board/cache.h>
+#include <ydb/core/tx/scheme_board/events_internal.h>
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
 
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -1867,7 +1870,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT(runtime.GetLocalServiceId(replicaC, 0));
     }
 
-    Y_UNIT_TEST(TestRecoveredSuspendedPileDoesNotBlockStateStorage) {
+    Y_UNIT_TEST(TestRecoveredSuspendedPileDoesNotBlockMetadata) {
         TTestBasicRuntime runtime(2, false);
         const TActorId nodeWarden = SetupNodeWardenOnly(runtime, false, true);
         runtime.SetScheduledEventFilter([](auto&, auto&, auto, auto&) {
@@ -1953,6 +1956,61 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT_VALUES_EQUAL(locked->Get()->Status, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(locked->Get()->CurrentGeneration, 1);
         UNIT_ASSERT(locked->Get()->Locked);
+
+        // A fresh scheme lookup must synchronize with the live pile alone, just like tablet boot.
+        // Publish a known path so an absent description cannot hide a partial SchemeBoard sync.
+        const auto boardInfo = BuildSchemeBoardInfo(config->GetSchemeBoardConfig());
+        const auto replica = boardInfo->RingGroups.front().Rings.front().Replicas.front();
+        const ui64 schemeShardId = MakeTabletID(false, 0x840000);
+        using namespace NSchemeBoard;
+        runtime.Send(new IEventHandle(replica, sender, new NInternalEvents::TEvHandshakeRequest(schemeShardId, 1)));
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<NInternalEvents::TEvHandshakeResponse>(sender, TDuration::Seconds(10)));
+
+        NKikimrScheme::TEvDescribeSchemeResult describe;
+        describe.SetStatus(NKikimrScheme::StatusSuccess);
+        describe.SetPath("/Root/database");
+        describe.SetPathOwnerId(schemeShardId);
+        describe.SetPathId(2);
+        auto* self = describe.MutablePathDescription()->MutableSelf();
+        self->SetName("database");
+        self->SetSchemeshardId(schemeShardId);
+        self->SetPathId(2);
+        self->SetParentPathId(1);
+        self->SetPathVersion(1);
+        self->SetPathType(NKikimrSchemeOp::EPathTypeDir);
+        self->SetCreateFinished(true);
+        auto* domain = describe.MutablePathDescription()->MutableDomainDescription()->MutableDomainKey();
+        domain->SetSchemeShard(schemeShardId);
+        domain->SetPathId(1);
+        auto description = MakeOpaquePathDescription("", describe);
+        auto update = std::make_unique<NInternalEvents::TEvUpdateBuilder>(schemeShardId, 1, description);
+        update->SetDescribeSchemeResultSerialized(std::move(description.DescribeSchemeResultSerialized));
+        update->Record.SetNeedAck(true);
+        runtime.Send(new IEventHandle(replica, sender, update.release()));
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<NSchemeshardEvents::TEvUpdateAck>(sender, TDuration::Seconds(10)));
+        runtime.Send(new IEventHandle(replica, sender, new NInternalEvents::TEvCommitRequest(schemeShardId, 1)));
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<NInternalEvents::TEvCommitResponse>(sender, TDuration::Seconds(10)));
+
+        auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>();
+        cacheConfig->Counters = new ::NMonitoring::TDynamicCounters;
+        cacheConfig->Roots.emplace_back(0, schemeShardId, "Root");
+        const auto schemeCache = runtime.Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
+        runtime.EnableScheduleForActor(schemeCache, true);
+        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto& entry = navigate->ResultSet.emplace_back();
+        entry.Path = {"Root", "database"};
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        entry.SyncVersion = true;
+        runtime.Send(new IEventHandle(schemeCache, sender,
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.Release())));
+        const auto result = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender,
+            TDuration::Seconds(10));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Request->ResultSet.size(), 1);
+        const auto& resolved = result->Get()->Request->ResultSet.front();
+        UNIT_ASSERT(resolved.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+        UNIT_ASSERT_VALUES_EQUAL(resolved.TableId.PathId.OwnerId, schemeShardId);
+        UNIT_ASSERT_VALUES_EQUAL(resolved.TableId.PathId.LocalPathId, 2);
         UNIT_ASSERT_VALUES_EQUAL(config->SerializeAsString(), originalConfig);
 
         auto synchronized = std::make_shared<NKikimrBlobStorage::TStorageConfig>(*config);

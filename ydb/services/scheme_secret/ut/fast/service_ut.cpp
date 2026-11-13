@@ -51,6 +51,27 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         }
     }
 
+    Y_UNIT_TEST(RevisionIsCoherentWithValueIncludingEqualValueAlter) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString name = "/Root/revision-secret";
+        CreateSchemaSecret(name, "first", session);
+        const auto first = ResolveSecret(name, kikimr).GetFuture().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(first.SecretRevisions.size(), 1);
+        UNIT_ASSERT(first.SecretRevisions[0].OwnerId && first.SecretRevisions[0].LocalPathId);
+        UNIT_ASSERT_VALUES_EQUAL(first.SecretRevisions[0].Version, 0);
+        for (const auto& value : {TString("first"), TString("second")}) {
+            AlterSchemaSecret(name, value, session);
+            const auto next = ResolveSecret(name, kikimr).GetFuture().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(next.SecretValues[0], value);
+            UNIT_ASSERT_VALUES_EQUAL(next.SecretRevisions.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(next.SecretRevisions[0].OwnerId, first.SecretRevisions[0].OwnerId);
+            UNIT_ASSERT_VALUES_EQUAL(next.SecretRevisions[0].LocalPathId, first.SecretRevisions[0].LocalPathId);
+            UNIT_ASSERT_GT(next.SecretRevisions[0].Version, first.SecretRevisions[0].Version);
+        }
+    }
+
     Y_UNIT_TEST(GetUnexistingValue) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);

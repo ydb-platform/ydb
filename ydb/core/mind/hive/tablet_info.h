@@ -151,6 +151,9 @@ public:
 
 protected:
     TMetrics ResourceValues; // current values of various metrics
+    ui64 ProtoMetricsRevision = 0;
+    ui64 PersistedProtoMetricsRevision = 0;
+    void MarkProtoMetricsDirty();
     TTabletMetricsAggregates ResourceMetricsAggregates;
     TResourceNormalizedValues ResourceNormalizedValues;
 
@@ -284,6 +287,20 @@ public:
         return ResourceValues;
     }
 
+    bool IsProtoMetricsDirty() const {
+        return ProtoMetricsRevision != PersistedProtoMetricsRevision;
+    }
+
+    ui64 GetProtoMetricsRevision() const {
+        return ProtoMetricsRevision;
+    }
+
+    void ConfirmProtoMetricsPersistence(ui64 revision) {
+        if (ProtoMetricsRevision == revision) {
+            PersistedProtoMetricsRevision = revision;
+        }
+    }
+
     void InitTabletMetrics() {
         UpdateResourceUsage({});
     }
@@ -298,6 +315,7 @@ public:
 
     // ONLY for use in unit tests
     TMetrics& GetMutableResourceValues() {
+        MarkProtoMetricsDirty();
         return ResourceValues;
     }
 

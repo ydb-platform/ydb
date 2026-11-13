@@ -1,13 +1,12 @@
 UNITTEST_FOR(ydb/library/actors/subsystems)
 
 FORK_SUBTESTS()
+# CI smoke: RAM must not raise the default CPU requirement from 1 to 4.
+REQUIREMENTS(ram:32)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     SPLIT_FACTOR(20)
-    REQUIREMENTS(
-        ram:32
-    )
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

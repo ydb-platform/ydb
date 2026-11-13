@@ -392,6 +392,56 @@ Y_UNIT_TEST_SUITE(BootstrapperTest) {
         UNIT_ASSERT_C(gen1 < gen2, "Unexpected gen1# " << gen1 << " not before gen2# " << gen2);
     }
 
+    Y_UNIT_TEST(RepeatedBootBSErrorsDelayNextBoot) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        auto sender = runtime.AllocateEdgeActor();
+
+        const TActorId boot = StartSimpleTabletBootstrapper(runtime);
+
+        // the first boots fail on the block, as when blob storage doesn't answer
+        const ui32 numFailedBoots = 3;
+        std::vector<TInstant> failedAt;
+        std::vector<TDuration> nextBootAfter;
+        auto blockResultObserver = runtime.AddObserver<TEvBlobStorage::TEvBlockResult>(
+            [&](TEvBlobStorage::TEvBlockResult::TPtr& ev) {
+                if (failedAt.size() < numFailedBoots) {
+                    ev->Get()->Status = NKikimrProto::ERROR;
+                }
+            });
+        auto deadObserver = runtime.AddObserver<TEvTablet::TEvTabletDead>(
+            [&](TEvTablet::TEvTabletDead::TPtr& ev) {
+                if (ev->GetRecipientRewrite() == boot) {
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Reason, TEvTablet::TEvTabletDead::ReasonBootBSError);
+                    failedAt.push_back(runtime.GetCurrentTime());
+                }
+            });
+        auto blockObserver = runtime.AddObserver<TEvBlobStorage::TEvBlock>(
+            [&](TEvBlobStorage::TEvBlock::TPtr&) {
+                if (nextBootAfter.size() < failedAt.size()) {
+                    nextBootAfter.push_back(runtime.GetCurrentTime() - failedAt.back());
+                }
+            });
+
+        auto client = runtime.ConnectToPipe(TTestTxConfig::TxTablet0, sender, 0, NTabletPipe::TClientRetryPolicy::WithRetries());
+        {
+            Cerr << "... waiting for pipe to connect" << Endl;
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::OK);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(failedAt.size(), numFailedBoots);
+        UNIT_ASSERT_VALUES_EQUAL(nextBootAfter.size(), numFailedBoots);
+        // the sleep is from a half of WatchThreshold up to the whole of it
+        const TDuration minSleep = TBootstrapperInfo(nullptr).WatchThreshold / 2;
+        // the first failure may be a race with another generation, so the tablet boots again at once
+        UNIT_ASSERT_C(nextBootAfter[0] < minSleep, "delay# " << nextBootAfter[0]);
+        for (size_t i = 1; i < nextBootAfter.size(); ++i) {
+            UNIT_ASSERT_C(nextBootAfter[i] >= minSleep, "i# " << i << " delay# " << nextBootAfter[i]);
+        }
+        Y_UNUSED(client);
+    }
+
     Y_UNIT_TEST(KeepExistingTablet) {
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);

@@ -238,7 +238,15 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             }
         });
 
-        ExecSQL(runtime, sender, "SELECT SUM(value) FROM `/Root/table-1` WHERE key > 0u;");
+        const TString sql = "SELECT SUM(value) FROM `/Root/table-1` WHERE key > 0u;";
+        ExecSQL(runtime, sender, sql, TWilsonTablet::TabletDetailed - 1);
+        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 3u);
+        UNIT_ASSERT(FindSpan(*uploader, "Read table"));
+        UNIT_ASSERT(!FindSpan(*uploader, "Read table: hand off shard result"));
+        ClearUploader(*uploader);
+        replies.clear();
+
+        ExecSQL(runtime, sender, sql, TWilsonTablet::TabletDetailed);
         UNIT_ASSERT(uploader->BuildTraceTrees());
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 3u);
 

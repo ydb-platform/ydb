@@ -1084,9 +1084,9 @@ public:
             return;
         }
 
-        // DataShard carries the reply's send span in the event handle.
+        // Trace the handoff only at levels that include DataShard's reply send span.
         NWilson::TSpan handoffSpan;
-        constexpr ui8 traceLevel = TComponentTracingLevels::TQueryProcessor::Detailed;
+        constexpr ui8 traceLevel = TWilsonTablet::TabletDetailed;
         if (ReadActorSpan && ReadResultSpans < NQueryTraceSettings::MAX_READ_RESULT_SPANS
                 && ev->TraceId && !ev->TraceId.IsRoot() && ev->TraceId.GetTimeToLive()
                 && ev->TraceId.GetVerbosity() >= traceLevel && ev->TraceId.IsWilsonTrace()

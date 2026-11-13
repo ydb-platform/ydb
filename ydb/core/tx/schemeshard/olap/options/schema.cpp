@@ -4,6 +4,10 @@ namespace NKikimr::NSchemeShard {
 
 bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate, IErrorCollector& /*errors*/) {
     SchemeNeedActualization = schemaUpdate.GetSchemeNeedActualization();
+    if (schemaUpdate.GetTieringNeedActualization()) {
+        TieringNeedActualization = *schemaUpdate.GetTieringNeedActualization();
+    }
+
     if (!!schemaUpdate.GetScanReaderPolicyName()) {
         ScanReaderPolicyName = *schemaUpdate.GetScanReaderPolicyName();
     }
@@ -30,6 +34,10 @@ bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate
 
 void TOlapOptionsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     SchemeNeedActualization = tableSchema.GetOptions().GetSchemeNeedActualization();
+    if (tableSchema.GetOptions().HasTieringNeedActualization()) {
+        TieringNeedActualization = tableSchema.GetOptions().GetTieringNeedActualization();
+    }
+
     if (tableSchema.GetOptions().HasScanReaderPolicyName()) {
         ScanReaderPolicyName = tableSchema.GetOptions().GetScanReaderPolicyName();
     }
@@ -58,6 +66,10 @@ void TOlapOptionsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
 
 void TOlapOptionsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
     tableSchema.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
+    if (TieringNeedActualization) {
+        tableSchema.MutableOptions()->SetTieringNeedActualization(*TieringNeedActualization);
+    }
+
     if (ScanReaderPolicyName) {
         tableSchema.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
     }

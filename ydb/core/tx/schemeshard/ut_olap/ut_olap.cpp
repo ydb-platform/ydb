@@ -637,7 +637,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     KeyColumnNames: "timestamp"
                     Columns { Name: "data" Type: ")" << type << "\" } }",
                 {{NKikimrScheme::StatusSchemeError, TStringBuilder() << "Type '" << type
-                    << "' specified for column 'data' is not supported by storage"}});
+                    << "' specified for column 'data' is not supported for column tables"}});
             TestAlterColumnTable(runtime, ++txId, "/MyRoot",
                 TStringBuilder() << "Name: \"ColumnTable\" AlterSchema { AddColumns " << column << " }", {rejected});
             TestAlterOlapStore(runtime, ++txId, "/MyRoot",

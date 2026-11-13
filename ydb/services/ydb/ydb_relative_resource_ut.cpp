@@ -2,6 +2,7 @@
 
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -9,6 +10,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <chrono>
 #include <google/protobuf/util/message_differencer.h>
@@ -201,6 +203,64 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     auto coordinationSession = startSessionResult.ExtractResult();
     AssertSuccess(coordinationSession.Close().GetValueSync());
     AssertSuccess(coordinationClient.DropNode("relative_dir/coordination").GetValueSync());
+
+    AssertSuccess(schemeClient.MakeDirectory("mydb").GetValueSync());
+    NYdb::NTopic::TTopicClient topicClient(driver);
+    // The database name is not a cluster-root prefix and must remain part of the resource path.
+    const TString topicPath = "mydb/topic";
+    NYdb::NTopic::TCreateTopicSettings topicSettings;
+    topicSettings.BeginConfigurePartitioningSettings().MinActivePartitions(1).EndConfigurePartitioningSettings();
+    AssertSuccess(topicClient.CreateTopic(topicPath, topicSettings).GetValueSync());
+    auto topicStub = Ydb::Topic::V1::TopicService::NewStub(
+        grpc::CreateChannel(fixture.Endpoint, grpc::InsecureChannelCredentials()));
+    ui32 writeIndex = 0;
+    for (const auto& database : TVector<TString>{"/Root/mydb", "mydb"}) {
+        auto spellingDriver = fixture.CreateDriver(database);
+        NYdb::NTopic::TTopicClient spellingTopic(spellingDriver);
+        for (const auto& path : TVector<TString>{"/Root/mydb/mydb/topic", topicPath}) {
+            const auto describe = [&](auto& stub, auto& request, auto& response, auto method) {
+                grpc::ClientContext context;
+                context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+                context.AddMetadata("x-ydb-database", database);
+                request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
+                request.set_path(path);
+                const auto status = (stub.*method)(&context, request, &response);
+                UNIT_ASSERT_C(status.ok(), database << ": " << path << ": " << status.error_message());
+                UNIT_ASSERT_C(response.operation().status() == Ydb::StatusIds::SUCCESS,
+                    database << ": " << path << ": " << response.DebugString());
+            };
+            Ydb::Topic::DescribeTopicRequest topicRequest;
+            Ydb::Topic::DescribeTopicResponse topicResponse;
+            describe(*topicStub, topicRequest, topicResponse, &Ydb::Topic::V1::TopicService::Stub::DescribeTopic);
+            Ydb::Topic::DescribeTopicResult topicResult;
+            UNIT_ASSERT(topicResponse.operation().result().UnpackTo(&topicResult));
+            UNIT_ASSERT_VALUES_EQUAL(topicResult.partitions_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(topicResult.partitions(0).partition_id(), 0);
+
+            Ydb::Topic::DescribePartitionRequest partitionRequest;
+            partitionRequest.set_partition_id(0);
+            partitionRequest.set_include_location(true);
+            Ydb::Topic::DescribePartitionResponse partitionResponse;
+            describe(*topicStub, partitionRequest, partitionResponse, &Ydb::Topic::V1::TopicService::Stub::DescribePartition);
+            Ydb::Topic::DescribePartitionResult partitionResult;
+            UNIT_ASSERT(partitionResponse.operation().result().UnpackTo(&partitionResult));
+            UNIT_ASSERT_VALUES_EQUAL(partitionResult.partition().partition_id(), 0);
+
+            AssertSuccess(spellingTopic.DescribeTopic(path).GetValueSync());
+            auto writeSession = spellingTopic.CreateSimpleBlockingWriteSession(
+                NYdb::NTopic::TWriteSessionSettings()
+                    .Path(path)
+                    .ProducerId("relative-database-test-" + ToString(writeIndex++))
+                    .PartitionId(0)
+                    .DirectWriteToPartition(true)
+                    .Codec(NYdb::NTopic::ECodec::RAW));
+            UNIT_ASSERT_C(writeSession->Write(NYdb::NTopic::TWriteMessage("message"), nullptr, TDuration::Seconds(30)),
+                database << ": " << path);
+            UNIT_ASSERT_C(writeSession->Close(TDuration::Seconds(30)), database << ": " << path);
+        }
+    }
+    AssertSuccess(topicClient.DropTopic(topicPath).GetValueSync());
+    AssertSuccess(schemeClient.RemoveDirectory("mydb").GetValueSync());
 
     AssertSuccess(session.DropTable("relative_dir/relative_path_test").GetValueSync());
     AssertSuccess(session.DropTable("relative_dir/copied_once").GetValueSync());

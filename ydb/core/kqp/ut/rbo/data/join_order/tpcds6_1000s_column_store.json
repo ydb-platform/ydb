@@ -107,14 +107,8 @@
               "args":
                 [
                   {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"item"
-                        }
-                      ]
+                    "op_name":"TableFullScan",
+                    "table":"item"
                   }
                 ]
             }

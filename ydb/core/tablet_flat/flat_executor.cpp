@@ -192,8 +192,8 @@ TActorContext TExecutor::OwnerCtx() const {
 void TExecutor::Registered(TActorSystem *sys, const TActorId&)
 {
     Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_EXECUTOR);
-    Broker = new TBroker(this, Emitter);
-    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
+    Broker = new TBroker(this, Emitter, Owner->TabletID(), FollowerId);
+    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId, FollowerId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
     auto& icb = *AppData()->Icb;
@@ -986,6 +986,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     Become(&TThis::StateBoot);
     Stats->IsActive = false;
     Stats->FollowerId = 0;
+    FollowerId = 0; // a follower promoted to leader, broker and scans owner must become the leader
 
     TEvTablet::TEvBoot *msg = ev->Get();
     Generation0 = msg->Generation;
@@ -4142,11 +4143,23 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     if (results) {
         auto *snap = proto.MutableIntroducedParts();
+        const auto& levels = logicResult.Changes.NewPartLevels;
+        Y_ENSURE(levels.empty() || levels.size() == results.size(),
+            "Compaction levels do not cover all output parts");
 
         for (const auto &result : results) {
             const auto &newPart = result.Part;
 
-            TPageCollectionProtoHelper::Snap(snap, newPart, tableId, logicResult.Changes.NewPartsLevel);
+            ui32 level = logicResult.Changes.NewPartsLevel;
+            if (!levels.empty()) {
+                const auto* partLevel = levels.FindPtr(newPart->Label);
+                Y_ENSURE(partLevel, "Compaction levels do not cover all output parts: missing level for part " << newPart->Label);
+                level = *partLevel;
+            }
+            TPageCollectionProtoHelper::Snap(snap, newPart, tableId, level);
+            if (!levels.empty()) {
+                snap->MutableBundles(snap->BundlesSize() - 1)->SetCompactionLevel(level);
+            }
             TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), newPart);
         }
     }

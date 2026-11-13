@@ -15,6 +15,7 @@ PEERDIR(
 
 SRCS(
     blobstorage_hullreplwritesst_ut.cpp
+    ut/blobstorage_repl_eta_ut.cpp
     blobstorage_replrecoverymachine_ut.cpp
 )
 

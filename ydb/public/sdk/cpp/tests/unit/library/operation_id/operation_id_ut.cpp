@@ -19,6 +19,21 @@ TEST(OperationIdTest, ConvertKindOnly) {
     ASSERT_EQ(newProto.GetProto().data_size(), 0);
 }
 
+TEST(OperationIdTest, ReassignTablets) {
+    NKikimr::NOperationId::TOperationId id;
+    id.SetKind(NKikimr::NOperationId::TOperationId::REASSIGN_TABLETS);
+    id.AddOptionalValue("hive_id", "72075186224037888");
+    id.AddOptionalValue("hive_generation", "3");
+    id.AddOptionalValue("reassign_id", "123");
+    const auto encoded = id.ToString();
+    ASSERT_EQ(encoded, "ydb://reassigntablets/17?hive_id=72075186224037888&hive_generation=3&reassign_id=123");
+    const NKikimr::NOperationId::TOperationId decoded(encoded);
+    ASSERT_EQ(decoded.GetKind(), id.GetKind());
+    ASSERT_EQ(*decoded.GetValue("hive_id").at(0), "72075186224037888");
+    ASSERT_EQ(*decoded.GetValue("hive_generation").at(0), "3");
+    ASSERT_EQ(*decoded.GetValue("reassign_id").at(0), "123");
+}
+
 TEST(OperationIdTest, PreparedQueryIdCompatibleFormatter) {
     Ydb::TOperationId opId;
     opId.set_kind(Ydb::TOperationId::PREPARED_QUERY_ID);

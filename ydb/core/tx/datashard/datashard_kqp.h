@@ -27,18 +27,18 @@ void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
 std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(
     TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
     bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets,
-    bool allowAncestorLocks);
+    bool allowAncestorLocks, bool requireReadOnlyLocks);
 std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(
     TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
     bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets,
     TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets,
-    bool allowAncestorLocks);
+    bool allowAncestorLocks, bool requireReadOnlyLocks);
 void KqpFillOutReadSets(
     TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks* kqpLocks,
     NKikimrTx::TReadSetData::EDecision decision, ui64 origin);
 void KqpFillOutReadSets(
     TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks,
-    bool useGenericReadSets, TSysLocks& sysLocks, bool allowAncestorLocks);
+    bool useGenericReadSets, TSysLocks& sysLocks, bool allowAncestorLocks, bool requireReadOnlyLocks);
 
 
 bool KqpLocksHasArbiter(const NKikimrDataEvents::TKqpLocks* kqpLocks);

@@ -57,6 +57,7 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
         , LogicalMessageCount(logicalMessageCount)
         , IsBatch(isBatch) {
     Y_ENSURE(PartitionKey.size() <= 256);
+    Y_ENSURE(ExplicitHashKey.size() <= Max<ui8>());
     Y_ENSURE(LogicalMessageCount >= 1 && LogicalMessageCount <= MAX_LOGICAL_MESSAGE_COUNT);
 }
 

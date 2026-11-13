@@ -1867,6 +1867,108 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT(runtime.GetLocalServiceId(replicaC, 0));
     }
 
+    Y_UNIT_TEST(TestRecoveredSuspendedPileDoesNotBlockStateStorage) {
+        TTestBasicRuntime runtime(2, false);
+        const TActorId nodeWarden = SetupNodeWardenOnly(runtime, false, true);
+        runtime.SetScheduledEventFilter([](auto&, auto&, auto, auto&) {
+            return true;
+        });
+        const ui64 tabletId = MakeBSControllerID();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+        auto* clusterState = config->MutableClusterState();
+        clusterState->SetGeneration(7);
+        clusterState->SetGuid(17);
+        clusterState->SetPrimaryPile(1);
+        clusterState->SetPromotedPile(1);
+        clusterState->AddPerPileState(NKikimrBridge::TClusterState::SYNCHRONIZED);
+        clusterState->AddPerPileState(NKikimrBridge::TClusterState::SUSPENDED);
+        auto fill = [&](NKikimrConfig::TStateStorageConfig* stateStorage) {
+            stateStorage->SetStateStorageVersion(1);
+            stateStorage->SetClusterStateGeneration(clusterState->GetGeneration());
+            stateStorage->SetClusterStateGuid(clusterState->GetGuid());
+            for (ui32 pile = 0; pile < 2; ++pile) {
+                auto* group = stateStorage->AddRingGroups();
+                group->SetBridgePileId(pile + 1);
+                group->SetRingGroupActorIdOffset(pile);
+                group->SetNToSelect(1);
+                // Persisted configurations made by older binaries describe SUSPENDED as SYNCHRONIZED.
+                group->SetPileState(pile ? NKikimrConfig::TStateStorageConfig::SYNCHRONIZED
+                    : NKikimrConfig::TStateStorageConfig::PRIMARY);
+                group->AddRing()->AddNode(runtime.GetNodeId(pile));
+            }
+        };
+        fill(config->MutableStateStorageConfig());
+        fill(config->MutableStateStorageBoardConfig());
+        fill(config->MutableSchemeBoardConfig());
+        const TString originalConfig = config->SerializeAsString();
+
+        auto applyConfig = [&](const std::shared_ptr<NKikimrBlobStorage::TStorageConfig>& current) {
+            auto bridgeInfo = std::make_shared<TBridgeInfo>();
+            bridgeInfo->Piles.resize(2);
+            for (ui32 pile = 0; pile < 2; ++pile) {
+                auto& info = bridgeInfo->Piles[pile];
+                info.BridgePileId = TBridgePileId::FromPileIndex(pile);
+                info.State = current->GetClusterState().GetPerPileState(pile);
+                info.StaticNodeIds.push_back(runtime.GetNodeId(pile));
+                bridgeInfo->StaticNodeIdToPile.emplace(runtime.GetNodeId(pile), &info);
+            }
+            bridgeInfo->Piles[0].IsPrimary = true;
+            bridgeInfo->PrimaryPile = bridgeInfo->SelfNodePile = &bridgeInfo->Piles[0];
+            runtime.Send(new IEventHandle(nodeWarden, sender,
+                new TEvNodeWardenStorageConfig(current, true, std::move(bridgeInfo))));
+            runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+                return ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenStorageConfigConfirm;
+            }, {sender});
+        };
+        auto checkReplicas = [&](IEventBase* request, size_t expectedGroups) {
+            runtime.Send(new IEventHandle(MakeStateStorageProxyID(), sender, request));
+            auto response = runtime.GrabEdgeEventRethrow<TEvStateStorage::TEvResolveReplicasList>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->ReplicaGroups.size(), expectedGroups);
+            for (ui32 pile = 0; pile < expectedGroups; ++pile) {
+                const auto& group = response->Get()->ReplicaGroups[pile];
+                UNIT_ASSERT(group.State == (pile ? ERingGroupState::SYNCHRONIZED : ERingGroupState::PRIMARY));
+                UNIT_ASSERT_VALUES_EQUAL(group.Replicas.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(group.Replicas.front().NodeId(), runtime.GetNodeId(pile));
+            }
+        };
+        auto checkAllReplicas = [&](size_t expectedGroups) {
+            checkReplicas(new TEvStateStorage::TEvResolveReplicas(tabletId), expectedGroups);
+            checkReplicas(new TEvStateStorage::TEvResolveBoard("/Root/database"), expectedGroups);
+            checkReplicas(new TEvStateStorage::TEvResolveSchemeBoard("/Root/database"), expectedGroups);
+        };
+
+        // The second node has no NodeWarden or replicas. Boot must use the live pile alone.
+        applyConfig(config);
+        checkAllReplicas(1);
+        TEvStateStorage::TProxyOptions options(TEvStateStorage::TProxyOptions::SigSync);
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), sender,
+            new TEvStateStorage::TEvLookup(tabletId, 0, options)));
+        auto lookup = runtime.GrabEdgeEventRethrow<TEvStateStorage::TEvInfo>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(lookup->Get()->Status, NKikimrProto::NODATA);
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), sender,
+            new TEvStateStorage::TEvLock(tabletId, 0, sender, 1, lookup->Get()->Signature, options)));
+        auto locked = runtime.GrabEdgeEventRethrow<TEvStateStorage::TEvInfo>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(locked->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(locked->Get()->CurrentGeneration, 1);
+        UNIT_ASSERT(locked->Get()->Locked);
+        UNIT_ASSERT_VALUES_EQUAL(config->SerializeAsString(), originalConfig);
+
+        auto synchronized = std::make_shared<NKikimrBlobStorage::TStorageConfig>(*config);
+        synchronized->MutableClusterState()->SetPerPileState(1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        synchronized->MutableClusterState()->SetGeneration(8);
+        synchronized->MutableClusterState()->SetGuid(18);
+        for (auto* stateStorage : {synchronized->MutableStateStorageConfig(),
+                synchronized->MutableStateStorageBoardConfig(), synchronized->MutableSchemeBoardConfig()}) {
+            stateStorage->SetClusterStateGeneration(8);
+            stateStorage->SetClusterStateGuid(18);
+        }
+        applyConfig(synchronized);
+        checkAllReplicas(2);
+        UNIT_ASSERT_VALUES_EQUAL(config->SerializeAsString(), originalConfig);
+    }
+
     class TNoReplyPDiskActor : public TActorBootstrapped<TNoReplyPDiskActor> {
         const TActorId Observer;
 

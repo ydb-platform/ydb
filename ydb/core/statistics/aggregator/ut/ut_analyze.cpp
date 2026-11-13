@@ -1487,7 +1487,8 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
         env.RunInThreadPool([&] {
-            NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings().Database("/Root/Database"));
+            NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+                .Database("/Root/Database").DiscoveryMode(NYdb::EDiscoveryMode::Off));
             auto sessionResult = client.CreateSession().GetValueSync();
             UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
             auto session = sessionResult.GetSession();

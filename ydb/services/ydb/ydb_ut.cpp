@@ -3304,6 +3304,7 @@ tx_meta {
             {51, "data51"},
             {52, "data52"}
         };
+        TString id;
         {
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);

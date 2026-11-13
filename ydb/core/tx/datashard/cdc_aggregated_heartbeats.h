@@ -36,8 +36,7 @@ public:
 private:
     void SendIfReady();
     void Send(TDuration delay);
-    void CompleteSent();
-    void Remove(TVector<ui64>&& orders);
+    void RemoveHeld(TMap<ui64, NPQ::THeartbeat>::iterator end);
 
     THolder<IChangeRecordSerializer> Serializer;
     const TDataShardId DataShard;

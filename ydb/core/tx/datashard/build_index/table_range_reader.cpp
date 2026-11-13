@@ -879,8 +879,9 @@ private:
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         const ui64 tabletId = ev->Get()->TabletId;
+        const bool isDeleted = ev->Get()->IsDeleted;
 
-        TVector<std::pair<ui64, ui32>> toRetry;
+        TVector<std::pair<ui64, ui32>> affected;
         for (const auto& [internalId, state] : Requests) {
             if (state->Waiting) {
                 continue;
@@ -888,7 +889,7 @@ private:
             for (ui32 i = 0; i < state->Shards.size(); ++i) {
                 const TShardRead& shard = state->Shards[i];
                 if (!shard.Finished && shard.TabletId == tabletId) {
-                    toRetry.emplace_back(internalId, i);
+                    affected.emplace_back(internalId, i);
                 }
             }
         }
@@ -896,15 +897,23 @@ private:
         YDB_LOG_WARN("TableRangeReader: delivery problem",
             {"selfId", SelfId()},
             {"tabletId", tabletId},
-            {"shards", toRetry.size()});
+            {"deleted", isDeleted},
+            {"shards", affected.size()});
 
-        for (const auto& [internalId, shardIndex] : toRetry) {
+        for (const auto& [internalId, shardIndex] : affected) {
             auto it = Requests.find(internalId);
             if (it == Requests.end()) {
                 continue;
             }
             TRequestState& state = *it->second;
             if (shardIndex >= state.Shards.size()) {
+                continue;
+            }
+
+            if (isDeleted) {
+                // The tablet is merged and deleted, restart the request
+                RestartRequest(internalId, TStringBuilder()
+                    << "shard " << tabletId << " is deleted");
                 continue;
             }
 

@@ -1,6 +1,7 @@
 #include "defs.h"
 #include "ut_helpers.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/datashard/build_index/table_range_reader.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/testlib/test_client.h>
@@ -231,6 +232,84 @@ Y_UNIT_TEST_SUITE(TTableRangeReaderTest) {
         auto response = runtime.GrabEdgeEventRethrow<TEvReadTableRangeResponse>(readerSender, TDuration::Seconds(30));
         UNIT_ASSERT_C(response->Get()->Success, response->Get()->Issues.ToOneLineString());
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->RequestId, 31u);
+
+        auto rows = CollectRows(*response->Get());
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 5u);
+        for (size_t i = 0; i < rows.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(rows[i].first, static_cast<ui32>(i + 1));
+        }
+    }
+
+    // A split deletes the source tablet. The pipe cache may notice that before
+    // any read response is produced and report the delivery problem as
+    // "deleted": retrying the same tablet would loop forever, so the reader must
+    // re-resolve the partitioning and re-read the range from the new shards.
+    Y_UNIT_TEST(RefreshesPartitioningOnDeletedTablet) {
+        TPortManager pm;
+        TActorId sender;
+        TServer::TPtr server = StartServer(pm, sender);
+        auto& runtime = *server->GetRuntime();
+
+        InitReaderTable(server, sender);
+
+        TActorId reader = StartReader(runtime);
+        auto readerSender = runtime.AllocateEdgeActor();
+
+        // Cache the partitioning of the single shard that is about to split.
+        auto before = DoRead(runtime, reader, readerSender, MakeReadRequest(60, {}, {}));
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(*before->Get()), 5u);
+
+        auto shards = GetTableShards(server, sender, kReaderTable);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        // Split would fail otherwise :(
+        SetSplitMergePartCountLimit(&runtime, -1);
+
+        auto splitSender = runtime.AllocateEdgeActor();
+        ui64 txId = AsyncSplitTable(server, splitSender, kReaderTable, shards.at(0), 3);
+        WaitTxNotification(server, splitSender, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetTableShards(server, sender, kReaderTable).size(), 2u);
+
+        // Never deliver anything to the cached, now deleted, tablet: the pipe
+        // cache is assumed to report the deletion instead. Retrying the same
+        // tablet can never succeed, only a fresh partitioning can.
+        size_t schemeRequests = 0;
+        size_t rejectedReads = 0;
+        TActorId deletedTablet;
+        runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+            const ui32 type = event->GetTypeRewrite();
+            if (type == TEvTxProxySchemeCache::TEvNavigateKeySet::EventType ||
+                type == TEvTxProxySchemeCache::TEvResolveKeySet::EventType) {
+                ++schemeRequests;
+            }
+            if (type != TEvDataShard::TEvRead::EventType) {
+                return false;
+            }
+            if (!deletedTablet) {
+                // The first read goes to the tablet cached before the split.
+                deletedTablet = event->Recipient;
+            }
+            if (event->Recipient != deletedTablet) {
+                return false;
+            }
+            ++rejectedReads;
+            return true;
+        });
+
+        runtime.Send(new IEventHandle(reader, readerSender, MakeReadRequest(61, {}, {}).Release()));
+        runtime.WaitFor("read to the deleted tablet", [&] { return rejectedReads != 0; }, TDuration::Seconds(10));
+
+        runtime.Send(new IEventHandle(reader, readerSender,
+            new TEvPipeCache::TEvDeliveryProblem(shards.at(0), false, true, /* isDeleted */ true)));
+
+        auto response = runtime.GrabEdgeEventRethrow<TEvReadTableRangeResponse>(readerSender, TDuration::Seconds(30));
+        UNIT_ASSERT_C(response, "request was never completed");
+        UNIT_ASSERT_C(response->Get()->Success, response->Get()->Issues.ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->RequestId, 61u);
+
+        // The request was restarted against a freshly resolved partitioning.
+        UNIT_ASSERT_GT(schemeRequests, 0u);
 
         auto rows = CollectRows(*response->Get());
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 5u);

@@ -7,7 +7,6 @@
 
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 
-#include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -16,126 +15,6 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
 namespace NKikimr::NKqp {
-
-TKqpAutoParamBuilder::TKqpAutoParamBuilder()
-    : TypeProxy(*this)
-    , DataProxy(*this)
-{}
-
-ui32 TKqpAutoParamBuilder::Size() const {
-    return Values.size();
-}
-
-bool TKqpAutoParamBuilder::Contains(const TString& name) const {
-    return Values.contains(name);
-}
-
-NYql::IAutoParamTypeBuilder& TKqpAutoParamBuilder::Add(const TString& name) {
-    auto [it, inserted] = Values.emplace(name, Ydb::TypedValue{});
-    CurrentParam = &it->second;
-    TypeProxy.CurrentType = CurrentParam->mutable_type();
-    DataProxy.CurrentValue = CurrentParam->mutable_value();
-    return TypeProxy;
-}
-
-TKqpAutoParamBuilder::TTypeProxy::TTypeProxy(TKqpAutoParamBuilder& owner)
-    : Owner(owner)
-{}
-
-void TKqpAutoParamBuilder::TTypeProxy::Push() {
-    Stack.push_back(CurrentType);
-}
-
-void TKqpAutoParamBuilder::TTypeProxy::Pop() {
-    CurrentType = Stack.back();
-    Stack.pop_back();
-}
-
-void TKqpAutoParamBuilder::TTypeProxy::Pg(const TString& name) {
-    auto oid = NYql::NPg::LookupType(name).TypeId;
-    CurrentType->mutable_pg_type()->set_oid(oid);
-}
-
-void TKqpAutoParamBuilder::TTypeProxy::BeginList() {
-    Push();
-    CurrentType = CurrentType->mutable_list_type()->mutable_item();
-}
-
-void TKqpAutoParamBuilder::TTypeProxy::EndList() {
-    Pop();
-}
-
-void TKqpAutoParamBuilder::TTypeProxy::BeginTuple() {
-}
-
-void TKqpAutoParamBuilder::TTypeProxy::EndTuple() {
-}
-
-void TKqpAutoParamBuilder::TTypeProxy::BeforeItem() {
-    Push();
-    CurrentType = CurrentType->mutable_tuple_type()->add_elements();
-}
-
-void TKqpAutoParamBuilder::TTypeProxy::AfterItem() {
-    Pop();
-}
-
-NYql::IAutoParamDataBuilder& TKqpAutoParamBuilder::TTypeProxy::FinishType() {
-    CurrentType = nullptr;
-    return Owner.DataProxy;
-}
-
-TKqpAutoParamBuilder::TDataProxy::TDataProxy(TKqpAutoParamBuilder& owner)
-    : Owner(owner)
-{}
-
-void TKqpAutoParamBuilder::TDataProxy::Pg(const TMaybe<TString>& value) {
-    if (!value) {
-        CurrentValue->set_null_flag_value(NProtoBuf::NULL_VALUE);
-    } else {
-        CurrentValue->set_text_value(*value);
-    }
-}
-
-void TKqpAutoParamBuilder::TDataProxy::Push() {
-    Stack.push_back(CurrentValue);
-}
-
-void TKqpAutoParamBuilder::TDataProxy::Pop() {
-    CurrentValue = Stack.back();
-    Stack.pop_back();
-}
-
-void TKqpAutoParamBuilder::TDataProxy::BeginList() {
-}
-
-void TKqpAutoParamBuilder::TDataProxy::EndList() {
-}
-
-void TKqpAutoParamBuilder::TDataProxy::BeginTuple() {
-}
-
-void TKqpAutoParamBuilder::TDataProxy::EndTuple() {
-}
-
-void TKqpAutoParamBuilder::TDataProxy::BeforeItem() {
-    Push();
-    CurrentValue = CurrentValue->mutable_items()->Add();
-}
-
-void TKqpAutoParamBuilder::TDataProxy::AfterItem() {
-    Pop();
-}
-
-NYql::IAutoParamBuilder& TKqpAutoParamBuilder::TDataProxy::FinishData() {
-    Owner.CurrentParam = nullptr;
-    CurrentValue = nullptr;
-    return Owner;
-}
-
-NYql::IAutoParamBuilderPtr TKqpAutoParamBuilderFactory::MakeBuilder() {
-    return MakeIntrusive<TKqpAutoParamBuilder>();
-}
 
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
     switch (type) {
@@ -305,8 +184,6 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         }
 
         auto settings = settingsBuilder.Build(ctx);
-        TKqpAutoParamBuilderFactory autoParamBuilderFactory;
-        settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
         NYql::TStmtParseInfo stmtParseInfo;
 
         NSQLTranslationV1::TLexers lexers;
@@ -374,8 +251,6 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         }
 
         auto settings = settingsBuilder.Build(ctx);
-        TKqpAutoParamBuilderFactory autoParamBuilderFactory;
-        settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
         auto parsedSettings = settings;
         NYql::TIssues settingsIssues;
         if (!ParseTranslationSettings(queryText, parsedSettings, settingsIssues)) {

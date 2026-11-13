@@ -403,10 +403,6 @@ private:
             {
                 return TStatus::Ok;
             }
-            case TKikimrKey::Type::PGObject:
-            {
-                return TStatus::Ok;
-            }
             case TKikimrKey::Type::Replication:
             {
                 return TStatus::Ok;
@@ -2721,46 +2717,6 @@ private:
                 return TStatus::Error;
             }
         }
-        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
-        return TStatus::Ok;
-    }
-
-    virtual TStatus HandleCreateSequence(TKiCreateSequence node, TExprContext& ctx) override {
-        if(!CheckSequenceSettings(node.SequenceSettings(), ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!node.Settings().Empty()) {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "Unsupported sequence settings"));
-            return TStatus::Error;
-        }
-
-        if (TString(node.Temporary()) == "true") {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "Temporary sequences are currently not supported"));
-            return TStatus::Error;
-        }
-
-        TString valueType = TString(node.ValueType());
-        if (valueType != "int8" && valueType != "int4" && valueType != "int2") {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "Unsupported value type for sequence: " << valueType));
-            return TStatus::Error;
-        }
-
-        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
-        return TStatus::Ok;
-    }
-
-    virtual TStatus HandleDropSequence(TKiDropSequence node, TExprContext& ctx) override {
-        for (const auto& setting : node.Settings()) {
-            auto name = setting.Name().Value();
-            ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                TStringBuilder() << "Unknown drop sequence setting: " << name));
-            return TStatus::Error;
-        }
-
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

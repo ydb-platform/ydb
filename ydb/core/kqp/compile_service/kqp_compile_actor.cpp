@@ -462,7 +462,6 @@ private:
 
         switch (QueryId.Settings.Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
-                prepareSettings.UsePgParser = false;
                 prepareSettings.SyntaxVersion = 1;
                 break;
 

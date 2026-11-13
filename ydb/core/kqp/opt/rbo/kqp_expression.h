@@ -157,7 +157,7 @@ TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TE
 
 // Make a conjunction from a list of conjuncts. Expression context and plan properies will be extracted
 // from one of the conjuncts.
-TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax = false);
+TExpression MakeConjunction(const TVector<TExpression>& vec);
 
 // Negate a predicate
 TExpression MakeNegation(const TExpression& expr);

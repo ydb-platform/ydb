@@ -67,8 +67,6 @@ private:
     virtual TStatus HandleDataQueryBlock(NNodes::TKiDataQueryBlock node, TExprContext& ctx) = 0;
     virtual TStatus HandleEffects(NNodes::TKiEffects node, TExprContext& ctx) = 0;
 
-    virtual TStatus HandleCreateSequence(NNodes::TKiCreateSequence node, TExprContext& ctx) = 0;
-    virtual TStatus HandleDropSequence(NNodes::TKiDropSequence node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterSequence(NNodes::TKiAlterSequence node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext& ctx) = 0;
@@ -101,7 +99,6 @@ public:
         Object,
         Topic,
         Permission,
-        PGObject,
         Replication,
         BackupCollection,
         Sequence,
@@ -197,19 +194,6 @@ public:
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Permission);
         return Target;
-    }
-
-    const TString& GetPGObjectId() const {
-        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
-        Y_DEBUG_ABORT_UNLESS(KeyType == Type::PGObject);
-        return Target;
-    }
-
-    const TString& GetPGObjectType() const {
-        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
-        Y_DEBUG_ABORT_UNLESS(ObjectType.Defined());
-        Y_DEBUG_ABORT_UNLESS(KeyType == Type::PGObject);
-        return *ObjectType;
     }
 
     TBackupCollectionDescription GetBackupCollectionPath() const {

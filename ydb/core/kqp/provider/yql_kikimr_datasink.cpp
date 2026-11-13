@@ -181,18 +181,6 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus HandleCreateSequence(NNodes::TKiCreateSequence node, TExprContext& ctx) override {
-        Y_UNUSED(ctx);
-        Y_UNUSED(node);
-        return TStatus::Ok;
-    }
-
-    TStatus HandleDropSequence(NNodes::TKiDropSequence node, TExprContext& ctx) override {
-        Y_UNUSED(ctx);
-        Y_UNUSED(node);
-        return TStatus::Ok;
-    }
-
     TStatus HandleAlterSequence(NNodes::TKiAlterSequence node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(node);
@@ -475,8 +463,6 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::Permission:
                 return TStatus::Ok;
-            case TKikimrKey::Type::PGObject:
-                return TStatus::Ok;
             case TKikimrKey::Type::Replication:
                 return TStatus::Ok;
             case TKikimrKey::Type::Transfer:
@@ -689,9 +675,7 @@ public:
             return true;
         }
 
-        if (node.IsCallable(TKiCreateSequence::CallableName())
-            || node.IsCallable(TKiDropSequence::CallableName())
-            || node.IsCallable(TKiAlterSequence::CallableName())) {
+        if (node.IsCallable(TKiAlterSequence::CallableName())) {
             return true;
         }
 
@@ -864,62 +848,6 @@ public:
             .Ptr();
     }
 
-    static TExprNode::TPtr MakeCreateSequence(const TExprNode::TPtr& node,
-            const NCommon::TWriteSequenceSettings& settings, const TKikimrKey& key, TExprContext& ctx)
-    {
-        YQL_ENSURE(settings.Mode);
-        if (node->Child(3)->Content() != "Void") {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating sequence with data is not supported."));
-            return nullptr;
-        }
-
-        auto valueType = settings.ValueType.IsValid()
-            ? settings.ValueType.Cast()
-            : Build<TCoAtom>(ctx, node->Pos()).Value("int8").Done();
-
-        auto temporary = settings.Temporary.IsValid()
-            ? settings.Temporary.Cast()
-            : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
-
-        if (temporary.Value() == "true") {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating temporary sequence data is not supported."));
-            return nullptr;
-        }
-
-        auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");
-
-        return Build<TKiCreateSequence>(ctx, node->Pos())
-            .World(node->Child(0))
-            .DataSink(node->Child(1))
-            .Sequence().Build(key.GetPGObjectId())
-            .ValueType(valueType)
-            .Temporary(temporary)
-            .ExistingOk<TCoAtom>()
-                .Value(existringOk)
-                .Build()
-            .SequenceSettings(settings.SequenceSettings.Cast())
-            .Settings(settings.Other)
-            .Done()
-            .Ptr();
-    }
-
-    static TExprNode::TPtr MakeDropSequence(const TExprNode::TPtr& node,
-            const NCommon::TWriteSequenceSettings& settings, const TKikimrKey& key, TExprContext& ctx)
-    {
-        bool missingOk = (settings.Mode.Cast().Value() == "drop_if_exists");
-
-        return Build<TKiDropSequence>(ctx, node->Pos())
-            .World(node->Child(0))
-            .DataSink(node->Child(1))
-            .Sequence().Build(key.GetPGObjectId())
-            .Settings(settings.Other)
-            .MissingOk<TCoAtom>()
-                .Value(missingOk)
-            .Build()
-            .Done()
-            .Ptr();
-    }
-
     static TExprNode::TPtr MakeAlterSequence(const TExprNode::TPtr& node,
             const NCommon::TWriteSequenceSettings& settings, const TKikimrKey& key, TExprContext& ctx)
     {
@@ -935,21 +863,10 @@ public:
             ? settings.ValueType.Cast()
             : Build<TCoAtom>(ctx, node->Pos()).Value("Null").Done();
 
-        TString sequence;
-
-        if (key.GetKeyType() == TKikimrKey::Type::Sequence) {
-            sequence = key.GetSequencePath();
-        } else if (key.GetKeyType() == TKikimrKey::Type::PGObject) {
-            sequence = key.GetPGObjectId();
-        } else {
-            YQL_ENSURE(false, "Invalid key type for sequence");
-        }
-
-
         return Build<TKiAlterSequence>(ctx, node->Pos())
             .World(node->Child(0))
             .DataSink(node->Child(1))
-            .Sequence().Build(sequence)
+            .Sequence().Build(key.GetSequencePath())
             .ValueType(valueType)
             .SequenceSettings(settings.SequenceSettings.Cast())
             .Settings(settings.Other)
@@ -1612,29 +1529,6 @@ public:
                 break;
             }
 
-            case TKikimrKey::Type::PGObject: {
-                if (key.GetPGObjectType() == "pgSequence") {
-                    NCommon::TWriteSequenceSettings settings =
-                        NCommon::ParseSequenceSettings(TExprList(node->Child(4)), ctx);
-                    YQL_ENSURE(settings.Mode);
-                    auto mode = settings.Mode.Cast();
-                    if (mode == "create" || mode == "create_if_not_exists") {
-                        return MakeCreateSequence(node, settings, key, ctx);
-                    } else if (mode == "drop" || mode == "drop_if_exists") {
-                        return MakeDropSequence(node, settings, key, ctx);
-                    } else if (mode == "alter" || mode == "alter_if_exists") {
-                        return MakeAlterSequence(node, settings, key, ctx);
-                    } else {
-                        YQL_ENSURE(false, "unknown Sequence mode \"" << TString(mode) << "\"");
-                    }
-                } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
-                        << "Unsupported object type: " << key.GetPGObjectType()));
-                    return nullptr;
-                }
-                break;
-            }
-
             case TKikimrKey::Type::Replication: {
                 auto settings = NCommon::ParseWriteReplicationSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
@@ -2154,14 +2048,6 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiReturningList>()) {
         return HandleReturningList(node.Cast(), ctx);
-    }
-
-    if (auto node = callable.Maybe<TKiCreateSequence>()) {
-        return HandleCreateSequence(node.Cast(), ctx);
-    }
-
-    if (auto node = callable.Maybe<TKiDropSequence>()) {
-        return HandleDropSequence(node.Cast(), ctx);
     }
 
     if (auto node = callable.Maybe<TKiAlterSequence>()) {

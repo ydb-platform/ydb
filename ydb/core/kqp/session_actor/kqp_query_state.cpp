@@ -176,10 +176,7 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr comp
         }
     }
     for (const auto& param : PreparedQuery->GetParameters()) {
-        const auto& ast = CompileResult->GetAst();
-        if (!ast || !ast->PgAutoParamValues || !ast->PgAutoParamValues->Contains(param.GetName())) {
-            ResultParams.push_back(param);
-        }
+        ResultParams.push_back(param);
     }
     return true;
 }

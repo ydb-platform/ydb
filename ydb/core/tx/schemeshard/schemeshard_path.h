@@ -108,8 +108,6 @@ public:
         const TChecker& ImportsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
         const TChecker& IsExternalTable(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsExternalDataSource(EStatus status = EStatus::StatusNameConflict) const;
-        // Check there are no uncles or cousins with same name
-        const TChecker& IsNameUniqGrandParentLevel(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsView(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir = false, EStatus status = EStatus::StatusPreconditionFailed) const;
         const TChecker& IsResourcePool(EStatus status = EStatus::StatusNameConflict) const;

@@ -425,22 +425,6 @@ namespace {
         return result;
     }
 
-    TCreateSequenceSettings ParseCreateSequenceSettings(TKiCreateSequence createSequence) {
-        TCreateSequenceSettings createSequenceSettings;
-        createSequenceSettings.Name = TString(createSequence.Sequence());
-        createSequenceSettings.Temporary = TString(createSequence.Temporary()) == "true" ? true : false;
-        createSequenceSettings.SequenceSettings = ParseSequenceSettings(createSequence.SequenceSettings());
-        createSequenceSettings.SequenceSettings.DataType = TString(createSequence.ValueType());
-
-        return createSequenceSettings;
-    }
-
-    TDropSequenceSettings ParseDropSequenceSettings(TKiDropSequence dropSequence) {
-        return TDropSequenceSettings{
-            .Name = TString(dropSequence.Sequence())
-        };
-    }
-
     TAlterSequenceSettings ParseAlterSequenceSettings(TKiAlterSequence alterSequence) {
         TAlterSequenceSettings alterSequenceSettings;
         alterSequenceSettings.Name = TString(alterSequence.Sequence());
@@ -3530,47 +3514,6 @@ public:
                     auto resultNode = ctx.NewWorld(input->Pos());
                     return resultNode;
                 });
-        }
-
-        if (auto maybeCreateSequence = TMaybeNode<TKiCreateSequence>(input)) {
-            auto requireStatus = RequireChild(*input, 0);
-            if (requireStatus.Level != TStatus::Ok) {
-                return SyncStatus(requireStatus);
-            }
-
-            auto cluster = TString(maybeCreateSequence.Cast().DataSink().Cluster());
-            TCreateSequenceSettings createSequenceSettings = ParseCreateSequenceSettings(maybeCreateSequence.Cast());
-            bool existingOk = (maybeCreateSequence.ExistingOk().Cast().Value() == "1");
-
-            auto future = Gateway->CreateSequence(cluster, createSequenceSettings, existingOk);
-
-            return WrapFuture(future,
-                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
-                Y_UNUSED(res);
-                auto resultNode = ctx.NewWorld(input->Pos());
-                return resultNode;
-            }, "Executing CREATE SEQUENCE");
-        }
-
-        if (auto maybeDropSequence = TMaybeNode<TKiDropSequence>(input)) {
-            auto requireStatus = RequireChild(*input, 0);
-            if (requireStatus.Level != TStatus::Ok) {
-                return SyncStatus(requireStatus);
-            }
-
-            auto cluster = TString(maybeDropSequence.Cast().DataSink().Cluster());
-            TDropSequenceSettings dropSequenceSettings = ParseDropSequenceSettings(maybeDropSequence.Cast());
-
-            bool missingOk = (maybeDropSequence.MissingOk().Cast().Value() == "1");
-
-            auto future = Gateway->DropSequence(cluster, dropSequenceSettings, missingOk);
-
-            return WrapFuture(future,
-                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
-                Y_UNUSED(res);
-                auto resultNode = ctx.NewWorld(input->Pos());
-                return resultNode;
-            }, "Executing DROP SEQUENCE");
         }
 
         if (auto maybeAlterSequence = TMaybeNode<TKiAlterSequence>(input)) {

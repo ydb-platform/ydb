@@ -429,7 +429,7 @@ TIntrusivePtr<IOperator> TEliminateDependentJoinDomainRule::SimpleMatchAndApply(
     TIntrusivePtr<IOperator> newBody = MakeIntrusive<TOpMap>(correlatedInput, filter->Pos, bindingElements);
     // Keep rest conj in filter, if all domain columns binded into eq prdicates, we can eliminate a filter.
     if (!restConjuncts.empty()) {
-        newBody = MakeIntrusive<TOpFilter>(newBody, filter->Pos, MakeConjunction(restConjuncts, props.PgSyntax));
+        newBody = MakeIntrusive<TOpFilter>(newBody, filter->Pos, MakeConjunction(restConjuncts));
     }
 
     // If nothing remaining we can return map/filter.

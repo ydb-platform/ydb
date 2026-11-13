@@ -42,11 +42,11 @@ TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TInt
     }
 
     filter->SetInput(map->GetInput());
-    filter->SetFilterExpression(MakeConjunction(pushedFilters, props.PgSyntax));
+    filter->SetFilterExpression(MakeConjunction(pushedFilters));
     map->SetInput(filter);
 
     if (remainingFilters.size()) {
-        auto pushedFilterExpr = MakeConjunction(remainingFilters, props.PgSyntax);
+        auto pushedFilterExpr = MakeConjunction(remainingFilters);
         return MakeIntrusive<TOpFilter>(map, map->Pos, pushedFilterExpr);
     } else {
         return map;

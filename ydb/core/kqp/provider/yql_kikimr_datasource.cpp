@@ -154,8 +154,6 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::Permission:
                 return TStatus::Ok;
-            case TKikimrKey::Type::PGObject:
-                return TStatus::Ok;
             case TKikimrKey::Type::Replication:
                 return TStatus::Ok;
             case TKikimrKey::Type::Transfer:

@@ -152,10 +152,6 @@ public:
                         .NotResolved();
                 }
 
-                if (settings.pg_mode()) {
-                    checks.IsNameUniqGrandParentLevel();
-                }
-
                 checks
                     .IsValidLeafName(/*userToken*/ nullptr)
                     .DirChildrenLimit();

@@ -188,7 +188,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     }
 
     if (pushLeft.size()) {
-        auto leftExpr = MakeConjunction(pushLeft, props.PgSyntax);
+        auto leftExpr = MakeConjunction(pushLeft);
         join->SetLeftInput(MakeIntrusive<TOpFilter>(join->GetLeftInput(), input->Pos, leftExpr));
     }
 
@@ -203,20 +203,20 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
                 }
             }
             if (!predicatesForRightSide.empty()) {
-                auto rightExpr = MakeConjunction(predicatesForRightSide, props.PgSyntax);
+                auto rightExpr = MakeConjunction(predicatesForRightSide);
                 join->SetRightInput(MakeIntrusive<TOpFilter>(join->GetRightInput(), input->Pos, rightExpr));
                 join->JoinKind = "Inner";
             } else if (!pushLeft.size()) {
                 return input;
             }
         } else {
-            auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
+            auto rightExpr = MakeConjunction(pushRight);
             join->SetRightInput(MakeIntrusive<TOpFilter>(join->GetRightInput(), input->Pos, rightExpr));
         }
     }
 
     if (topLevelPreds.size()) {
-        auto topFilterExpr = MakeConjunction(topLevelPreds, props.PgSyntax);
+        auto topFilterExpr = MakeConjunction(topLevelPreds);
         return MakeIntrusive<TOpFilter>(join, input->Pos, topFilterExpr);
     }
 

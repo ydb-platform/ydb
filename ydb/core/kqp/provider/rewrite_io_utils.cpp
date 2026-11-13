@@ -30,6 +30,7 @@ TExprNode::TPtr CompileViewQuery(
     auto translationSettings = settingsBuilder.Build(ctx);
     translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
     NSQLTranslation::Deserialize(viewData.CapturedContext, translationSettings);
+    translationSettings.PGDisable = true;
 
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();

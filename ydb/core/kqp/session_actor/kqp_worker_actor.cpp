@@ -592,7 +592,6 @@ private:
 
         switch (QueryState->RequestEv->GetSyntax()) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
-                execSettings.UsePgParser = false;
                 execSettings.SyntaxVersion = 1;
                 break;
             default:
@@ -610,7 +609,6 @@ private:
                 IKqpHost::TExecSettings execSettings;
                 switch (QueryState->RequestEv->GetSyntax()) {
                     case Ydb::Query::Syntax::SYNTAX_YQL_V1:
-                        execSettings.UsePgParser = false;
                         execSettings.SyntaxVersion = 1;
                         break;
 

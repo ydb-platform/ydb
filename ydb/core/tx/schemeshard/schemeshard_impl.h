@@ -305,6 +305,7 @@ public:
     ui32 CondEraseResponseBatchSize = 100;
     TDuration CondEraseResponseBatchMaxTime = TDuration::MilliSeconds(100);
     ui32 MaxTTLShardsInFlight = 0;
+    TDuration CondEraseRunInterval = TDuration::Minutes(1);
 
     TDbRefMap<TTableIndexInfo::TPtr> Indexes{"Indexes", this, DbRefMaps};
     TDbRefMap<TCdcStreamInfo::TPtr> CdcStreams{"CdcStreams", this, DbRefMaps};

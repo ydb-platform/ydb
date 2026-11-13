@@ -17,7 +17,7 @@ class DMLOperations():
     def transactional(self, process):
         return self.query_object.transactional(process)
 
-    def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
+    def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str, enable_ttl: bool = True):
         columns = {
             "pk_": pk_types.keys(),
             "col_": all_types.keys(),
@@ -33,7 +33,7 @@ class DMLOperations():
         sql_create_table = create_table_sql_request(
             table_name, columns, pk_columns, index_columns, unique, sync)
         self.query(sql_create_table)
-        if ttl != "":
+        if ttl != "" and enable_ttl:
             sql_ttl = create_ttl_sql_request(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl in ttl_int_types else "", table_name)
             self.query(sql_ttl)
 

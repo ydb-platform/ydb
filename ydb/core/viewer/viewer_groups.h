@@ -2,6 +2,7 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer_helper.h"
+#include <ydb/core/base/auth.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
@@ -166,6 +167,7 @@ public:
 
     TString Filter;
     std::unordered_set<TString> DatabaseStoragePools;
+    bool DatabaseStoragePoolsApplied = false;
     std::unordered_set<TString> FilterStoragePools;
     std::unordered_set<TGroupId> FilterGroupIds;
     std::unordered_set<TNodeId> FilterNodeIds;
@@ -774,7 +776,7 @@ public:
     }
 
     bool CanShowBridgeSync() {
-        return !IsStrictDatabaseOnlyRequest() || DatabaseStoragePoolsApplied;
+        return !IsStrictDatabaseOnlyToken(AppData(), GetRequest().GetUserTokenObject()) || DatabaseStoragePoolsApplied;
     }
 
     bool NeedFilter = false;
@@ -1058,6 +1060,7 @@ public:
                     }
                 }
                 GroupView.swap(groupView);
+                DatabaseStoragePoolsApplied = true;
                 DatabaseStoragePools.clear();
                 FoundGroups = TotalGroups = GroupView.size();
                 GroupsByGroupId.clear();

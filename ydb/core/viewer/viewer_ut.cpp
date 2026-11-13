@@ -1,6 +1,7 @@
 #include "ut/ut_utils.h"
 #include <ydb/core/mon/ut_utils/ut_utils.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>

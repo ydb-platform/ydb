@@ -99,6 +99,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             return nullptr;
         }
 
+        // Async indexes are omitted from materialized data and must be built after restore.
+        auto* indexes = indexedTable.MutableIndexDescription();
+        for (int i = 0; i < indexes->size();) {
+            if (indexes->Get(i).GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                indexes->DeleteSubrange(i, 1);
+            } else {
+                ++i;
+            }
+        }
+
         if (item.ReplicationConfig) {
             auto config = *item.ReplicationConfig;
             config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);

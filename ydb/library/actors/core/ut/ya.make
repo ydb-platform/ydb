@@ -40,12 +40,14 @@ SRCS(
     metric_system_ut.cpp
     log_mon_ut.cpp
     log_contract_ut.cpp
+    log_metrics_ut.cpp
     log_ut.cpp
     mon_ut.cpp
     node_location_ut.cpp
     scheduler_actor_ut.cpp
     scheduler_cookie_ut.cpp
     subsystem_ut.cpp
+    stats_subsystem_ut.cpp
     mailbox_lockfree_ut.cpp
     servicemap_ut.cpp
     struct_log_ut.cpp

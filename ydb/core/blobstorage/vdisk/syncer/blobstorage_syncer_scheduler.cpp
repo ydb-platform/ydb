@@ -328,8 +328,17 @@ namespace NKikimr {
             SyncerData->Neighbors->ApplyChanges(vDiskId, peerSyncState, interval);
             ActualizeUnsyncedDisksNum();
             const ui32 orderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
-            if (StartupDataSyncPeers.erase(orderNumber) && StartupDataSyncPeers.empty()) {
-                ReportStartupDataSyncDone(ctx);
+            if (NSyncer::TPeerSyncState::Good(peerSyncState.LastSyncStatus)) {
+                StartupDataSyncPeers.erase(orderNumber);
+                TBlobStorageGroupInfo::TGroupVDisks synced(&GInfo->GetTopology());
+                for (const auto& peer : *SyncerData->Neighbors) {
+                    if (!peer.Myself && !StartupDataSyncPeers.contains(peer.OrderNumber)) {
+                        synced |= TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology(), peer.VDiskIdShort);
+                    }
+                }
+                if (StartupDataSyncPeers.empty() || GInfo->GetTopology().GetQuorumChecker().CheckQuorumForGroup(synced)) {
+                    ReportStartupDataSyncDone(ctx);
+                }
             }
             SchedulerQueue.push(&(*SyncerData->Neighbors)[vDiskId]);
             Schedule(ctx);
@@ -480,6 +489,11 @@ namespace NKikimr {
 
         void Handle(TEvLocalStatus::TPtr &ev, const TActorContext &ctx) {
             std::unique_ptr<TEvLocalStatusResult> result(new TEvLocalStatusResult());
+            // GUID recovery alone does not establish metadata coverage.
+            if (!StartupDataSyncDoneReported) {
+                result->Record.SetReplicated(false);
+                result->Record.SetDurabilityReplicated(false);
+            }
             NKikimrBlobStorage::TSyncerStatus *rec = result->Record.MutableSyncerStatus();
             rec->SetPhase(NKikimrBlobStorage::TSyncerStatus::PhaseStandardMode);
             for (const auto &x: *SyncerData->Neighbors) {

@@ -71,8 +71,7 @@ def prepared_root_db(ydb_cluster, ydb_root, ydb_endpoint):
     # prepare root database
     driver_config = ydb.DriverConfig(ydb_endpoint, ydb_root, credentials=cluster_admin)
     with ydb.Driver(driver_config) as driver:
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.SessionPool(driver) as pool, pool.checkout() as session:
             session.execute_scheme("create user clusteradmin password '1234'")
 
 
@@ -84,8 +83,7 @@ def prepared_tenant_db(ydb_cluster, ydb_endpoint, ydb_database_module_scope):
     database_path = ydb_database_module_scope
     driver_config = ydb.DriverConfig(ydb_endpoint, database_path, credentials=cluster_admin)
     with ydb.Driver(driver_config) as driver:
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.SessionPool(driver) as pool, pool.checkout() as session:
             # setup for database admins, first
             session.execute_scheme("create user dbadmin password '1234'")
             session.execute_scheme('create group dbadmins')
@@ -129,8 +127,7 @@ def test_user_can_change_password_for_himself(ydb_endpoint, prepared_root_db, pr
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
 
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.SessionPool(driver) as pool, pool.checkout() as session:
             session.execute_scheme(f"alter user {subject_user} password '4321'")
 
     user_auth_token = login_user(ydb_endpoint, database_path, subject_user, '4321')
@@ -139,8 +136,7 @@ def test_user_can_change_password_for_himself(ydb_endpoint, prepared_root_db, pr
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
 
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.SessionPool(driver) as pool, pool.checkout() as session:
             password_hash = """{
                 "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
                 "salt": "U+tzBtgo06EBQCjlARA6Jg==",
@@ -189,8 +185,7 @@ def test_database_admin_cant_change_database_admin_group(ydb_endpoint, prepared_
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
 
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.SessionPool(driver) as pool, pool.checkout() as session:
             with pytest.raises(ydb.issues.Error) as exc_info:
                 session.execute_scheme(query)
 
@@ -212,8 +207,7 @@ def test_database_admin_cant_change_database_admin_user(ydb_endpoint, prepared_r
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
 
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.SessionPool(driver) as pool, pool.checkout() as session:
             with pytest.raises(ydb.issues.Error) as exc_info:
                 session.execute_scheme(query)
 
@@ -231,6 +225,5 @@ def test_database_admin_can_create_user(ydb_endpoint, prepared_root_db, prepared
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
 
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.SessionPool(driver) as pool, pool.checkout() as session:
             session.execute_scheme("create user testuser password '1234'")

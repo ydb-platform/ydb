@@ -318,6 +318,8 @@ enum ESimpleCounters {
     COUNTER_PARTITIONS_WITH_DEFERRED_SPLIT_MERGE = 244 [(CounterOpts) = {Name: "PartitionsWithDeferredSplitMerge"}];
     COUNTER_TABLES_WITH_DEFERRED_SPLIT_MERGE = 245 [(CounterOpts) = {Name: "TablesWithDeferredSplitMerge"}];
 
+    COUNTER_CDC_AGGREGATOR_COUNT = 246                    [(CounterOpts) = {Name: "CdcAggregators"}];
+
 }
 
 enum ECumulativeCounters {

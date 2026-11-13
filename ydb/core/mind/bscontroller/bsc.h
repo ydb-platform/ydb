@@ -5,7 +5,7 @@
 namespace NKikimr {
 
     enum EBlobStorageControllerInterfaceVersion : ui32 {
-        BSC_INTERFACE_VERSION = 6, // current interface version
+        BSC_INTERFACE_VERSION = 7, // current interface version
 
         // features of BSC
         BSC_INTERFACE_REPLACE_CONFIG = 1, // version that supports TEvControllerReplaceConfigRequest
@@ -14,6 +14,7 @@ namespace NKikimr {
         BSC_INTERFACE_BRIDGE_PILE_OPS = 4, // ValidateAddBridgePile and pending pile operations in ClusterStateDetails
         BSC_INTERFACE_REMOVE_BRIDGE_PILE = 5, // ValidateRemoveBridgePile and pending REMOVE pile operation
         BSC_INTERFACE_BRIDGE_ROLLBACK = 6, // ValidateBridgeRollback and pending ROLLBACK pile operation
+        BSC_INTERFACE_BRIDGE_CONVERSION = 7, // ValidateBridgeConversion before converting the StorageConfig
     };
 
 IActor* CreateFlatBsController(const TActorId &tablet, TTabletStorageInfo *info);

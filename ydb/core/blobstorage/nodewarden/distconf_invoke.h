@@ -173,6 +173,7 @@ namespace NKikimr::NStorage {
             ADD_BRIDGE_PILE, // BSC validates addition of the pile, then ProposedStorageConfig gets proposed
             REMOVE_BRIDGE_PILE, // BSC validates removal of the pile, then ProposedStorageConfig gets proposed
             BRIDGE_ROLLBACK, // BSC validates the rollback of the bridged cluster, then ProposedStorageConfig gets proposed
+            BRIDGE_CONVERSION, // BSC validates conversion, then ProposedStorageConfig gets proposed
         } ControllerOp = EControllerOp::UNSET;
 
         // for the operations BSC validates before ProposedStorageConfig gets proposed: the interface version BSC needs,

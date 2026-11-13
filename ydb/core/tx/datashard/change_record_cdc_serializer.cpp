@@ -23,18 +23,18 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
-#include <contrib/libs/zstd/include/zstd.h>
 #include <util/charset/utf8.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
-#include <util/generic/ylimits.h>
 #include <util/stream/str.h>
 #include <util/string/printf.h>
 
 #include <cmath>
 
 namespace NKikimr::NDataShard {
+
+constexpr int DEFAULT_ZSTD_COMPRESSION_LEVEL = 3;
 
 class TBaseSerializer: public IChangeRecordSerializer {
     static NKikimrPQClient::TDataChunk MakeDataChunk() {
@@ -43,78 +43,15 @@ class TBaseSerializer: public IChangeRecordSerializer {
         return data;
     }
 
-    // Heartbeats stay raw. A data row below CdcZstdMinPayloadBytes stays raw.
-    // Anything we do compress is written with one ZSTD_compress2 into a context
-    // owned by this serializer. The raw bytes stay in place when zstd does not
-    // make them shorter.
-    //
-    // Negative levels select the fast strategy and use the magnitude as the
-    // search step. ZSTD_minCLevel() is -128 KiB, so a 1 KiB run is stored as
-    // literals and the frame grows. Level -1 still visits every byte and shrinks
-    // that run. Schema snapshots use the library default level.
-    static constexpr int CdcZstdDataLevel = -1;
-    void ApplyCompression(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
-        if (Opts.Compression != NKikimrSchemeOp::ECdcStreamCompressionZstd) {
-            return;
-        }
-        if (record.GetKind() == TChangeRecord::EKind::CdcHeartbeat) {
-            return;
-        }
-        // JSON fills the chunk before this runs. A codec other than raw means
-        // the payload is already compressed.
-        if (data.GetCodec() != 0) {
-            return;
-        }
-
-        const auto& payload = data.GetData();
-        const bool schema = record.GetKind() == TChangeRecord::EKind::CdcSchemaChange;
-        if (!schema && payload.size() < CdcZstdMinPayloadBytes) {
-            return;
-        }
-        if (payload.size() > static_cast<size_t>(Max<i32>())) {
-            return;
-        }
-
-        if (!CCtx_) {
-            CCtx_ = ZSTD_createCCtx();
-            Y_ENSURE(CCtx_, "failed to allocate a zstd compression context");
-        }
-        // A stored level wins. Without one, data rows use the fast level that
-        // still shrinks a 1 KiB run, and schema snapshots use the library default.
-        const int level = Opts.CompressionLevel
-            ? Opts.CompressionLevel
-            : (schema ? ZSTD_defaultCLevel() : CdcZstdDataLevel);
-        if (ZSTD_isError(ZSTD_CCtx_setParameter(CCtx_, ZSTD_c_compressionLevel, level))) {
-            return;
-        }
-        const size_t bound = ZSTD_compressBound(payload.size());
-        if (bound == 0) {
-            return;
-        }
-
-        TString compressed = TString::Uninitialized(bound);
-        const size_t written = ZSTD_compress2(
-            CCtx_, compressed.begin(), compressed.size(), payload.data(), payload.size());
-        if (ZSTD_isError(written) || written >= payload.size()) {
-            return;
-        }
-        compressed.resize(written);
-        data.SetCodec(NPersQueueCommon::ZSTD);
-        UncompressedSize = static_cast<ui32>(payload.size());
-        data.SetData(std::move(compressed));
-    }
-
     void SerializeDataChange(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
-        ApplyCompression(data, record);
         cmd.SetData(data.SerializeAsString());
     }
 
     void SerializeSchemaChange(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
-        ApplyCompression(data, record);
 
         auto& schemaChange = *cmd.MutableSchemaChange();
         schemaChange.SetStep(record.GetStep());
@@ -125,7 +62,6 @@ class TBaseSerializer: public IChangeRecordSerializer {
     void SerializeHeartbeat(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
-        ApplyCompression(data, record);
 
         auto& heartbeat = *cmd.MutableHeartbeat();
         heartbeat.SetStep(record.GetStep());
@@ -133,9 +69,28 @@ class TBaseSerializer: public IChangeRecordSerializer {
         heartbeat.SetData(data.SerializeAsString());
     }
 
-    TMaybe<ui32> UncompressedSize;
-
 protected:
+    // Heartbeats stay raw and are not passed here. An unset level uses 3.
+    void SetCodedPayload(NKikimrPQClient::TDataChunk& data, TString payload) const {
+        switch (Opts.Compression) {
+        case NKikimrSchemeOp::ECdcStreamCompressionNone:
+            data.SetData(std::move(payload));
+            break;
+        case NKikimrSchemeOp::ECdcStreamCompressionZstd: {
+            TString compressed;
+            TStringOutput output(compressed);
+            TZstdCompress compressor(&output, Opts.CompressionLevel ? Opts.CompressionLevel : DEFAULT_ZSTD_COMPRESSION_LEVEL);
+            compressor.Write(payload.data(), payload.size());
+            compressor.Finish();
+            data.SetCodec(NPersQueueCommon::ZSTD);
+            data.SetData(std::move(compressed));
+            break;
+        }
+        default:
+            Y_ENSURE(false, "Unsupported changefeed compression");
+        }
+    }
+
     virtual void FillDataChunk(NKikimrPQClient::TDataChunk& chunk, const TChangeRecord& record) = 0;
 
 public:
@@ -143,41 +98,24 @@ public:
         : Opts(opts)
     {}
 
-    ~TBaseSerializer() override {
-        if (CCtx_) {
-            ZSTD_freeCCtx(CCtx_);
-        }
-    }
-
-    TBaseSerializer(const TBaseSerializer&) = delete;
-    TBaseSerializer& operator=(const TBaseSerializer&) = delete;
-
     void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {
-        UncompressedSize.Clear();
         cmd.SetSeqNo(record.GetSeqNo());
         cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
         switch (record.GetKind()) {
         case TChangeRecord::EKind::CdcDataChange:
-            SerializeDataChange(cmd, record);
-            break;
+            return SerializeDataChange(cmd, record);
         case TChangeRecord::EKind::CdcSchemaChange:
-            SerializeSchemaChange(cmd, record);
-            break;
+            return SerializeSchemaChange(cmd, record);
         case TChangeRecord::EKind::CdcHeartbeat:
-            SerializeHeartbeat(cmd, record);
-            break;
+            return SerializeHeartbeat(cmd, record);
         case TChangeRecord::EKind::AsyncIndex:
         case TChangeRecord::EKind::IncrementalRestore:
             Y_ENSURE(false, "Unexpected");
-        }
-        if (UncompressedSize.Defined()) {
-            cmd.SetUncompressedSize(static_cast<i32>(*UncompressedSize));
         }
     }
 
 protected:
     const TChangeRecordSerializerOpts Opts;
-    ZSTD_CCtx* CCtx_ = nullptr;
 
 }; // TBaseSerializer
 
@@ -417,17 +355,7 @@ protected:
     }
 
     void SetJsonData(NKikimrPQClient::TDataChunk& data, TString json) const {
-        switch (Opts.Compression) {
-        case NKikimrSchemeOp::ECdcStreamCompressionNone:
-        case NKikimrSchemeOp::ECdcStreamCompressionZstd:
-            // ApplyCompression owns zstd so JSON and binary share one policy:
-            // skip heartbeats and short rows, and keep the raw bytes when the
-            // frame does not shrink them.
-            data.SetData(std::move(json));
-            break;
-        default:
-            Y_ENSURE(false, "Unsupported changefeed compression");
-        }
+        SetCodedPayload(data, std::move(json));
     }
 
     void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {
@@ -1011,7 +939,7 @@ class TBinaryCdcSerializer: public TBaseSerializer {
             TBinaryCdcWriter writer;
             writer.Start(header, 8 + sizeof(ui32) + json.size());
             writer.SetSchemaJson(json);
-            data.SetData(writer.Finish());
+            SetCodedPayload(data, writer.Finish());
             return;
         }
         case TChangeRecord::EKind::CdcHeartbeat: {
@@ -1183,7 +1111,7 @@ class TBinaryCdcSerializer: public TBaseSerializer {
         if (!trace.empty()) {
             writer.SetTrace(trace);
         }
-        data.SetData(writer.Finish());
+        SetCodedPayload(data, writer.Finish());
     }
 
     TUserTable::TCPtr CachedTable;

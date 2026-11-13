@@ -82,14 +82,11 @@ TStoredPayload ReadPayload(const NKikimrClient::TPersQueuePartitionRequest::TCmd
 
     TStoredPayload stored;
     stored.Codec = chunk.GetCodec();
+    UNIT_ASSERT(!cmd.HasUncompressedSize());
     if (stored.Codec == static_cast<i64>(NPersQueueCommon::ZSTD)) {
         stored.Payload = ZstdDecompress(chunk.GetData());
-        UNIT_ASSERT(cmd.HasUncompressedSize());
-        UNIT_ASSERT_VALUES_EQUAL(cmd.GetUncompressedSize(), static_cast<i32>(stored.Payload.size()));
-        UNIT_ASSERT(chunk.GetData().size() < stored.Payload.size());
     } else {
         UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::RAW));
-        UNIT_ASSERT(!cmd.HasUncompressedSize());
         stored.Payload = chunk.GetData();
     }
     return stored;
@@ -152,7 +149,7 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
         UNIT_ASSERT(reader.Rest().empty());
     }
 
-    Y_UNIT_TEST(LeavesIncompressibleAndTinyRecordsRaw) {
+    Y_UNIT_TEST(CompressesDataRowsAndLeavesHeartbeatsRaw) {
         const TString value = "q7mN2pLx9VcR4sT8wY1aZ6bH3kJ0eF5unQ8rG2tP6yM1cB9vL4xS7hW0jK5fA3dE";
         auto table = MakeTable();
         auto upsert = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
@@ -171,7 +168,6 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
             .WithTxId(20)
             .Build();
 
-        // These payloads are under CdcZstdMinPayloadBytes, and a heartbeat is never compressed.
         auto serializer = MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary, false,
             NKikimrSchemeOp::ECdcStreamCompressionZstd);
         NKikimrClient::TPersQueuePartitionRequest::TCmdWrite upsertCmd;
@@ -181,8 +177,10 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
         serializer->Serialize(eraseCmd, *erase);
         serializer->Serialize(heartbeatCmd, *heartbeat);
 
-        UNIT_ASSERT_VALUES_EQUAL(ReadPayload(upsertCmd).Codec, static_cast<i64>(NPersQueueCommon::RAW));
-        UNIT_ASSERT_VALUES_EQUAL(ReadPayload(eraseCmd).Codec, static_cast<i64>(NPersQueueCommon::RAW));
+        const auto upsertStored = ReadPayload(upsertCmd);
+        UNIT_ASSERT_VALUES_EQUAL(upsertStored.Codec, static_cast<i64>(NPersQueueCommon::ZSTD));
+        UNIT_ASSERT(upsertStored.Payload.Contains(value));
+        UNIT_ASSERT_VALUES_EQUAL(ReadPayload(eraseCmd).Codec, static_cast<i64>(NPersQueueCommon::ZSTD));
         const auto beat = ReadPayload(heartbeatCmd);
         UNIT_ASSERT_VALUES_EQUAL(beat.Codec, static_cast<i64>(NPersQueueCommon::RAW));
 
@@ -242,10 +240,9 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
         const auto stored = ReadPayload(cmd);
         UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::ZSTD));
         UNIT_ASSERT(stored.Payload.Contains("aaaa"));
-        UNIT_ASSERT(stored.Payload.size() >= CdcZstdMinPayloadBytes);
     }
 
-    Y_UNIT_TEST(JsonShortRecordStaysRawWhenZstdRequested) {
+    Y_UNIT_TEST(JsonShortRecordCompressesWhenZstdRequested) {
         auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
             .WithOrder(1)
             .WithSchema(MakeTable())
@@ -256,12 +253,11 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
         MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatJson, false,
             NKikimrSchemeOp::ECdcStreamCompressionZstd)->Serialize(cmd, *record);
         const auto stored = ReadPayload(cmd);
-        UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::RAW));
-        UNIT_ASSERT(stored.Payload.size() < CdcZstdMinPayloadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::ZSTD));
         UNIT_ASSERT(stored.Payload.Contains("hi"));
     }
 
-    Y_UNIT_TEST(SkipsZstdBelowMinPayload) {
+    Y_UNIT_TEST(CompressesShortBinaryRow) {
         const TString value(128, 'a');
         auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
             .WithOrder(1)
@@ -273,12 +269,11 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
         MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary, false,
             NKikimrSchemeOp::ECdcStreamCompressionZstd)->Serialize(cmd, *record);
         const auto stored = ReadPayload(cmd);
-        UNIT_ASSERT(stored.Payload.size() < CdcZstdMinPayloadBytes);
-        UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::RAW));
+        UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::ZSTD));
         UNIT_ASSERT(stored.Payload.Contains(value));
     }
 
-    Y_UNIT_TEST(LeavesLongIncompressibleRaw) {
+    Y_UNIT_TEST(CompressesIncompressibleBinaryRow) {
         TString value(1024, '\0');
         ui32 state = 0xA5A5A5A5u;
         for (size_t i = 0; i < value.size(); ++i) {
@@ -295,8 +290,8 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
         MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary, false,
             NKikimrSchemeOp::ECdcStreamCompressionZstd)->Serialize(cmd, *record);
         const auto stored = ReadPayload(cmd);
-        UNIT_ASSERT(stored.Payload.size() >= CdcZstdMinPayloadBytes);
-        UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::RAW));
+        UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::ZSTD));
+        UNIT_ASSERT(stored.Payload.Contains(value));
     }
 
     Y_UNIT_TEST(SerializerReusesColumnMapAcrossRows) {

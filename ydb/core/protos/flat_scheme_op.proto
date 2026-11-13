@@ -1212,8 +1212,6 @@ message TCdcStreamDescription {
     optional bool SchemaChanges = 12;
     optional bool UserSIDs = 13;
     optional bool TraceIds = 14;
-    // Codec of the stored change record. NONE keeps the record as-is.
-    // ZSTD stores zstd when the compressed bytes are shorter than the record.
     optional ECdcStreamCompression Compression = 15 [default = ECdcStreamCompressionNone];
     optional int32 CompressionLevel = 16;
     optional ECdcStreamHeartbeatMode HeartbeatMode = 17;

@@ -177,7 +177,6 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
         # do the same again to ensure that this process will not stop
         for i in range(2):
             self.fill_queue_with_messages(150, True)
-            time.sleep(2)
             self.wait_fifo_table_empty('Deduplication')
 
     @pytest.mark.parametrize('random_groups_max_count', [30, 200])
@@ -192,7 +191,6 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
 
             read_result = self._read_messages_and_assert(self.queue_url, 500, matcher=ReadResponseMatcher().with_n_or_more_messages(1), visibility_timeout=1000, wait_timeout=1)
 
-            time.sleep(2)
             self.wait_fifo_table_empty('Reads')
 
             # delete received messages

@@ -111,7 +111,7 @@ public:
     }
 
     TString Reassign(TList<TString> options, TString* error = nullptr) {
-        TList<TString> command = {"admin", "database", "reassign-tablets"};
+        TList<TString> command = {"admin", "cluster", "reassign-tablets"};
         command.insert(command.end(), options.begin(), options.end());
         return Run(std::move(command), error);
     }
@@ -138,8 +138,8 @@ Y_UNIT_TEST_SUITE(ReassignTabletsCli) {
         expected.set_percent(25);
         expected.set_async(true);
         NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(Reassign({"--storage-pool", "test-pool", "--group", "123",
-            "--max-in-flight", "4", "--percent", "25", "--async", "--format", "proto-json-base64"}), &json));
+        UNIT_ASSERT(NJson::ReadJsonTree(Reassign({"--storage-pool", "test-pool", "--group-id", "123",
+            "--max-in-flight", "4", "--percent", "25", "--on-restart", "--format", "proto-json-base64"}), &json));
         UNIT_ASSERT_VALUES_EQUAL(json["id"].GetString(), OperationId);
         UNIT_ASSERT(!json["ready"].GetBoolean());
         UNIT_ASSERT_VALUES_EQUAL(json["metadata"]["selectedTablets"].GetString(), "12");
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(ReassignTabletsCli) {
         expected.clear_storage_pool();
         expected.set_group(123);
         expected.set_percent(0);
-        Reassign({"--group", "123", "--percent", "0"});
+        Reassign({"--group-id", "123", "--percent", "0"});
         UNIT_ASSERT_VALUES_EQUAL(Service<TTabletService>().Calls.load(), 1);
     }
 
@@ -174,11 +174,11 @@ Y_UNIT_TEST_SUITE(ReassignTabletsCli) {
 
     Y_UNIT_TEST_F(InvalidOptionsDoNotSendRequests, TReassignTabletsFixture) {
         const TVector<TList<TString>> options = {
-            {}, {"--group", "0"}, {"--storage-pool", ""},
+            {}, {"--group-id", "0"}, {"--storage-pool", ""},
             {"--storage-pool", "test-pool", "--max-in-flight", "0"},
             {"--storage-pool", "test-pool", "--percent", "101"},
             {"--storage-pool", "test-pool", "--percent", "-1"},
-            {"--group", "4294967296"},
+            {"--group-id", "4294967296"},
             {"--storage-pool", "test-pool", "unexpected"},
         };
         for (const auto& option : options) {
@@ -187,6 +187,15 @@ Y_UNIT_TEST_SUITE(ReassignTabletsCli) {
             Reassign(option, &error);
             UNIT_ASSERT(!error.empty());
         }
+        UNIT_ASSERT_VALUES_EQUAL(Service<TTabletService>().Calls.load(), 0);
+    }
+
+    Y_UNIT_TEST_F(DatabaseIsRequiredToSelectHive, TReassignTabletsFixture) {
+        ExpectFail();
+        TString error;
+        RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "reassign-tablets", "--storage-pool", "test-pool"},
+            {{"YDB_TOKEN", AdminToken}}, {}, &error);
+        UNIT_ASSERT_STRING_CONTAINS(error, "Missing required option 'database'");
         UNIT_ASSERT_VALUES_EQUAL(Service<TTabletService>().Calls.load(), 0);
     }
 
@@ -212,6 +221,9 @@ Y_UNIT_TEST_SUITE(ReassignTabletsCli) {
         UNIT_ASSERT_STRING_CONTAINS(output, "false");
         auto& service = Service<TOperationService>();
         service.Ready = true;
+        const auto completedOutput = Run({"operation", "get", OperationId});
+        UNIT_ASSERT_STRING_CONTAINS(completedOutput, "true");
+        UNIT_ASSERT_STRING_CONTAINS(completedOutput, "SUCCESS");
         NJson::TJsonValue json;
         UNIT_ASSERT(NJson::ReadJsonTree(Run({"operation", "get", OperationId, "--format", "proto-json-base64"}), &json));
         UNIT_ASSERT(json["ready"].GetBoolean());
@@ -222,7 +234,7 @@ Y_UNIT_TEST_SUITE(ReassignTabletsCli) {
         TString error;
         Run({"operation", "get", OperationId}, &error);
         UNIT_ASSERT_STRING_CONTAINS(error, "Reassignment operation expired");
-        UNIT_ASSERT_VALUES_EQUAL(service.GetCalls.load(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(service.GetCalls.load(), 4);
     }
 
     Y_UNIT_TEST_F(CancelUsesOperationId, TReassignTabletsFixture) {

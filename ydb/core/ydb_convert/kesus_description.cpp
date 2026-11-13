@@ -6,7 +6,62 @@
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 
+#include <util/generic/hash_set.h>
+#include <util/string/builder.h>
+
 namespace NKikimr {
+
+namespace {
+
+bool ValidateRateLimiterMetric(const Ydb::RateLimiter::MeteringConfig::Metric& metric, TString& error) {
+    static const THashSet<TString> supportedFields{
+        "version", "schema", "cloud_id", "folder_id", "resource_id", "source_id", "database",
+    };
+    for (const auto& [key, field] : metric.metric_fields().fields()) {
+        if (!supportedFields.contains(key)) {
+            error = TStringBuilder() << "Unsupported key for metric. Key: " << key << ".";
+            return false;
+        }
+        if (!field.has_string_value()) {
+            error = TStringBuilder() << "Unsupported type for metric. Key: " << key << ".";
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+bool ValidateRateLimiterResourceProperties(
+    const Ydb::RateLimiter::Resource& resource,
+    bool canConfigureMetering,
+    Ydb::StatusIds::StatusCode& status,
+    TString& error)
+{
+    status = Ydb::StatusIds::SUCCESS;
+    error.clear();
+    if (resource.type_case() == Ydb::RateLimiter::Resource::TYPE_NOT_SET) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "No resource properties.";
+        return false;
+    }
+    if (resource.has_metering_config()) {
+        if (!canConfigureMetering) {
+            status = Ydb::StatusIds::UNAUTHORIZED;
+            error = "Setting metering is allowed only for administrators";
+            return false;
+        }
+        const auto& metering = resource.metering_config();
+        if ((metering.has_provisioned() && !ValidateRateLimiterMetric(metering.provisioned(), error))
+            || (metering.has_on_demand() && !ValidateRateLimiterMetric(metering.on_demand(), error))
+            || (metering.has_overshoot() && !ValidateRateLimiterMetric(metering.overshoot(), error)))
+        {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            return false;
+        }
+    }
+    return true;
+}
 
 void FillKesusDescription(
     NKikimrSchemeOp::TKesusDescription& out,

@@ -2058,8 +2058,6 @@ bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrCompaction::TCo
         }
     }
 
-    // TODO(DataTiering): validate generation TierId references against the merged
-    // ColumnFamilies in VerifyCreateParams when tier-aware placement is integrated.
     return NLocalDb::ValidateCompactionPolicy(NLocalDb::TCompactionPolicy(policy), err);
 }
 

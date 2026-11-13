@@ -322,7 +322,7 @@ class TestStorageCounters:
             )
 
 
-def test_serverless_counters(ydb_cluster, ydb_endpoint, ydb_root, ydb_safe_test_name):
+def test_serverless_counters(ydb_cluster, ydb_endpoint, ydb_root, ydb_safe_test_name, request):
     hostel_db = os.path.join(ydb_root, "hostel_db", ydb_safe_test_name)
     ydb_cluster.create_hostel_database(
         hostel_db,
@@ -347,9 +347,11 @@ def test_serverless_counters(ydb_cluster, ydb_endpoint, ydb_root, ydb_safe_test_
 
     driver_config = ydb.DriverConfig(ydb_endpoint, serverless_db, auth_token='root@builtin')
     driver = ydb.Driver(driver_config)
+    request.addfinalizer(driver.stop)
     driver.wait(120)
 
     session = driver.table_client.session().create()
+    request.addfinalizer(session.delete)
 
     session.create_table(
         os.path.join(serverless_db, "table") ,

@@ -17,10 +17,11 @@ namespace {
         Y_DEFER { runtime.Stop(); };
 
         const ui32 nodeId = 1;
-        auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block, 1u, 8u);
+        TIntrusivePtr<TBlobStorageGroupInfo> info =
+            MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block, 1u, 8u);
         const TVDiskID selfId = info->GetVDiskId(0);
         const TVDiskID targetId = info->GetVDiskId(1);
-        auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(),
+        TIntrusivePtr<TVDiskContext> vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(),
             MakeIntrusive<::NMonitoring::TDynamicCounters>(), selfId, nullptr, NPDisk::DEVICE_TYPE_SSD);
 
         const TActorId proxy = runtime.Register(CreateAnubisProxy(vctx, info, TVDiskIdShort(targetId), 0), nodeId);
@@ -37,12 +38,12 @@ namespace {
         if (otherGeneration) {
             ++answerId.GroupGeneration;
         }
-        auto result = std::make_unique<TEvBlobStorage::TEvVGetResult>();
+        std::unique_ptr<TEvBlobStorage::TEvVGetResult> result = std::make_unique<TEvBlobStorage::TEvVGetResult>();
         result->Record.SetStatus(NKikimrProto::OK);
         VDiskIDFromVDiskID(answerId, result->Record.MutableVDiskID());
         runtime.Send(new IEventHandle(proxy, TActorId(), result.release()), nodeId);
 
-        auto ev = runtime.WaitForEdgeActorEvent<TEvAnubisVGetResult>(edge);
+        std::unique_ptr<TEventHandle<TEvAnubisVGetResult>> ev = runtime.WaitForEdgeActorEvent<TEvAnubisVGetResult>(edge);
         UNIT_ASSERT(ev->Get()->VDiskIdShort == TVDiskIdShort(targetId));
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Ev->Get()->Record.GetStatus(), expectedStatus);
     }

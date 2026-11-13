@@ -23,8 +23,10 @@ public:
 
     TStatus Transform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final {
         const auto name = input->Content();
-        bool unsupported = input->IsCallable() && (name.StartsWith("Pg") || name.StartsWith("BlockPg") || name == "ToPg" || name == "FromPg" ||
-                                                  name == "BlockToPg" || name == "BlockFromPg" || name == "RangeToPg");
+        bool unsupported = input->IsCallable() && (name.StartsWith("Pg") || name.StartsWith("BlockPg") || name == "ToPg" ||
+            name == "BlockToPg" || name == "BlockFromPg" || name == "RangeToPg" ||
+            (name == "FromPg" && input->ChildrenSize() == 1 && input->Head().GetTypeAnn() &&
+                input->Head().GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg));
         TStatus status = TStatus::Ok;
         if (!unsupported) {
             status = Inner_->Transform(input, output, ctx);

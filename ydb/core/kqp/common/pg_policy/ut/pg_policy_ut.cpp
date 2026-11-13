@@ -138,6 +138,15 @@ Y_UNIT_TEST(KqpPolicySupportsNativeTypes) {
     UNIT_ASSERT_VALUES_EQUAL(expr->GetTypeAnn()->GetKind(), NYql::ETypeAnnotationKind::Data);
 }
 
+Y_UNIT_TEST(KqpPolicySupportsFromPgWithNativeArgument) {
+    for (TStringBuf expression : {"(FromPg (Bool 'true))", "(FromPg (Int32 '1))"}) {
+        NYql::TExprContext ctx;
+        auto expr = Annotate(expression, ctx, true);
+        UNIT_ASSERT_C(expr, TStringBuilder() << expression << ": " << ctx.IssueManager.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(expr->GetTypeAnn()->GetKind(), NYql::ETypeAnnotationKind::Data);
+    }
+}
+
 } // Y_UNIT_TEST_SUITE(TKqpPgPolicy)
 
 } // namespace NKikimr::NKqp

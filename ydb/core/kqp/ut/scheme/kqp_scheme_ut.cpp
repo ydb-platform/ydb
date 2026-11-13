@@ -16678,9 +16678,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `" << testTableStore.GetName() << "` ADD COLUMN new_column pgfloat4;";
 
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::BAD_REQUEST, alterResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(alterResult.GetIssues().ToString(),
-                "PostgreSQL types are not supported");
+                "Type 'pgfloat4' specified for column 'new_column' is not supported for column tables");
         }
 
         {
@@ -17690,9 +17690,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             .AddNullableColumn("val", TPgType(typeName))
             .SetPrimaryKeyColumn("id");
         auto result = testHelper.GetSession().CreateTable("/Root/ColumnTableTest", tableBuilder.Build()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-            TStringBuilder() << "Type '" << typeName << "' specified for column 'val' is not supported for column tables");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported column type for column: val");
     }
 
     Y_UNIT_TEST(PgInt2Column) {
@@ -17732,8 +17731,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
         auto result = testHelper.GetSession().ExecuteSchemeQuery(testTable.BuildQuery()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "is not supported for column tables");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "PostgreSQL types are not supported");
     }
 
     Y_UNIT_TEST(BackupReturnsOperationId) {

@@ -6866,7 +6866,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             UNIT_ASSERT_C(bulk.IsSuccess(), bulk.GetIssues().ToString());
             fixture.CheckNoDefault("/Root/TestTable", {"value", "number", "amount", "pg_text"});
             fixture.CheckNoDefault("/Root/TestTable", {"k", "required"}, true);
-            fixture.CheckDefaultGeneration("/Root/TestTable", "k, required", "100, 1", false);
             UNIT_ASSERT(fixture.ShowCreateTable("/Root/TestTable").find("DEFAULT NULL") == TString::npos);
             Ydb::Table::DescribeTableRequest describe;
             describe.set_path("/Root/TestTable");
@@ -6887,6 +6886,12 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             fixture.CheckNoDefault("/Root/Copy", {"value", "number", "amount", "pg_text"});
             fixture.CheckNoDefault("/Root/Copy", {"k", "required"}, true);
             fixture.Exec("DROP TABLE Copy;");
+            Ydb::Table::AlterTableRequest alter;
+            alter.set_path("/Root/TestTable");
+            alter.add_drop_columns("pg_text");
+            const auto altered = fixture.TableRpc<Ydb::Table::AlterTableResponse>(std::move(alter));
+            UNIT_ASSERT_VALUES_EQUAL_C(altered.operation().status(), Ydb::StatusIds::SUCCESS, altered.DebugString());
+            fixture.CheckDefaultGeneration("/Root/TestTable", "k, required", "100, 1", false);
             int key = 0;
             for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
                 fixture.Exec(TStringBuilder() << operation << " INTO TestTable (k, required, value) VALUES (" << ++key << ", 42, 'saved');");

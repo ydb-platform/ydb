@@ -363,12 +363,16 @@ namespace NInternal {
         const TVector<const NScheme::TSchemeEntry*>& entries
     ) {
         TVector<const NScheme::TSchemeEntry*> withoutDependents;
+        // Replications and transfers might need a secret to finish their removal, so secrets go after them.
+        TVector<const NScheme::TSchemeEntry*> secrets;
         // The name of a descendant is "<parent name>/<child name>...", so it always contains more '/' than its parent.
         std::map<size_t, TVector<const NScheme::TSchemeEntry*>, std::greater<size_t>> withDependentsBySlashCount;
         for (const auto* entry : entries) {
             if (MightHaveDependents(entry->Type)) {
                 const size_t slashCount = std::count(entry->Name.begin(), entry->Name.end(), '/');
                 withDependentsBySlashCount[slashCount].push_back(entry);
+            } else if (entry->Type == ESchemeEntryType::Secret) {
+                secrets.push_back(entry);
             } else {
                 withoutDependents.push_back(entry);
             }
@@ -377,6 +381,9 @@ namespace NInternal {
         TVector<TVector<const NScheme::TSchemeEntry*>> batches;
         if (!withoutDependents.empty()) {
             batches.push_back(std::move(withoutDependents));
+        }
+        if (!secrets.empty()) {
+            batches.push_back(std::move(secrets));
         }
         for (auto& [slashCount, batch] : withDependentsBySlashCount) {
             batches.push_back(std::move(batch));

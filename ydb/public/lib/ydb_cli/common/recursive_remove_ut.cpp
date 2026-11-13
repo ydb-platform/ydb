@@ -136,6 +136,71 @@ Y_UNIT_TEST(ChildrenBeforeParent) {
     UNIT_ASSERT_C(notRemoved.empty(), "not removed: " << JoinSeq(", ", notRemoved));
 }
 
+Y_UNIT_TEST(SecretsAfterReplications) {
+    TVector<TSchemeEntry> entries = {
+        CreateSchemeEntry(ESchemeEntryType::Directory, "/Root/dir"),
+        CreateSchemeEntry(ESchemeEntryType::Directory, "/Root/dir/a"),
+        CreateSchemeEntry(ESchemeEntryType::Directory, "/Root/dir/a/b"),
+        CreateSchemeEntry(ESchemeEntryType::Secret, "/Root/dir/secret"),
+        CreateSchemeEntry(ESchemeEntryType::Secret, "/Root/dir/a/b/secret"),
+        CreateSchemeEntry(ESchemeEntryType::Replication, "/Root/dir/a/replication"),
+        CreateSchemeEntry(ESchemeEntryType::Transfer, "/Root/dir/a/b/transfer"),
+    };
+    for (auto& table : CreateTables("/Root/dir/a", 10)) {
+        entries.push_back(std::move(table));
+    }
+
+    std::mutex mutex;
+    TSet<TString> notRemovedReplications = {"/Root/dir/a/replication", "/Root/dir/a/b/transfer"};
+    TVector<TString> violations;
+    NInternal::TRemover remover = [&](const TSchemeEntry& entry) {
+        const TString name(entry.Name);
+        {
+            std::lock_guard lock(mutex);
+            if (entry.Type == ESchemeEntryType::Secret && !notRemovedReplications.empty()) {
+                violations.push_back(TStringBuilder() << name << " is removed before " << JoinSeq(", ", notRemovedReplications));
+            }
+        }
+        // slow replication removal lets secrets of the same batch overtake it
+        const bool isReplication = entry.Type == ESchemeEntryType::Replication || entry.Type == ESchemeEntryType::Transfer;
+        Sleep(TDuration::MilliSeconds(isReplication ? 50 : 1));
+        std::lock_guard lock(mutex);
+        notRemovedReplications.erase(name);
+        return Success();
+    };
+
+    const auto result = NInternal::RemovePathsRecursive(entries.begin(), entries.end(), remover, nullptr, 16);
+
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_C(violations.empty(), JoinSeq("\n", violations));
+}
+
+Y_UNIT_TEST(SecretsAreKeptIfReplicationRemovalFails) {
+    TVector<TSchemeEntry> entries = CreateTables("/Root/dir", 10);
+    entries.push_back(CreateSchemeEntry(ESchemeEntryType::Replication, "/Root/dir/replication"));
+    entries.push_back(CreateSchemeEntry(ESchemeEntryType::Secret, "/Root/dir/secret"));
+    entries.push_back(CreateSchemeEntry(ESchemeEntryType::Secret, "/Root/dir/nested/secret"));
+
+    std::mutex mutex;
+    TSet<TString> removed;
+    NInternal::TRemover remover = [&](const TSchemeEntry& entry) {
+        if (entry.Type == ESchemeEntryType::Replication) {
+            // slow failure lets secrets of the same batch be taken by other threads
+            Sleep(TDuration::MilliSeconds(50));
+            return TStatus(EStatus::GENERIC_ERROR, {});
+        }
+        std::lock_guard lock(mutex);
+        removed.insert(TString(entry.Name));
+        return Success();
+    };
+
+    const auto result = NInternal::RemovePathsRecursive(entries.begin(), entries.end(), remover, nullptr, 16);
+
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+    UNIT_ASSERT(!removed.contains("/Root/dir/secret"));
+    UNIT_ASSERT(!removed.contains("/Root/dir/nested/secret"));
+}
+
 Y_UNIT_TEST(UsesRequestedNumberOfThreads) {
     const ui32 threads = 4;
     const auto entries = CreateTables("/Root/dir", 20);

@@ -66,7 +66,8 @@ namespace NInternal {
 
     // Splits the entries into batches that must be removed one after another;
     // the entries of one batch do not depend on each other and can be removed in parallel.
-    // The first batch holds all objects that nothing depends on (tables, topics, external tables, ...).
+    // The first batch holds all objects that nothing depends on (tables, topics, external tables, replications, ...).
+    // The second one holds secrets: replications and transfers might need them to finish their removal.
     // The others hold containers (directories, column stores, backup collections) and external data sources,
     // one batch per path depth from the deepest one up, so every container is removed after all its descendants.
     TVector<TVector<const NScheme::TSchemeEntry*>> SplitIntoRemoveBatches(

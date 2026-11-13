@@ -38,7 +38,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             {"worker", Worker});
 
         Y_ABORT_UNLESS(!ReadSession);
-        Send(YdbProxy, new TEvYdbProxy::TEvCreateTopicReaderRequest(Settings));
+        Send(*YdbProxy, new TEvYdbProxy::TEvCreateTopicReaderRequest(Settings));
     }
 
     void Handle(TEvYdbProxy::TEvCreateTopicReaderResponse::TPtr& ev) {
@@ -224,7 +224,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
 
-        if (!YdbProxy || !ReadSessionId) {
+        if (!*YdbProxy || !ReadSessionId) {
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         }
 
@@ -248,7 +248,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         CommittedOffset = offset;
         CommitInFlight = CommittedOffset;
-        Send(YdbProxy, CreateCommitOffsetRequest().release());
+        Send(*YdbProxy, CreateCommitOffsetRequest().release());
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
@@ -375,13 +375,14 @@ public:
         return NKikimrServices::TActivity::REPLICATION_REMOTE_TOPIC_READER;
     }
 
-    explicit TRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts,
+    explicit TRemoteTopicReader(std::shared_ptr<const TActorId> ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts,
         EAuthFailurePolicy authFailurePolicy)
         : TActor(&TThis::StateWork)
-        , YdbProxy(ydbProxy)
+        , YdbProxy(std::move(ydbProxy))
         , Settings(opts)
         , AuthFailurePolicy(authFailurePolicy)
     {
+        Y_ABORT_UNLESS(YdbProxy);
         const auto& base = Settings.GetBase();
         Y_ABORT_UNLESS(base.Topics_.size() == 1);
         Y_ABORT_UNLESS(base.Topics_.at(0).PartitionIds_.size() == 1);
@@ -419,7 +420,7 @@ private:
     };
 
 
-    const TActorId YdbProxy;
+    const std::shared_ptr<const TActorId> YdbProxy;
     const TEvYdbProxy::TTopicReaderSettings Settings;
     const EAuthFailurePolicy AuthFailurePolicy;
     mutable TMaybe<TString> LogPrefix;
@@ -447,7 +448,13 @@ private:
 IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts,
     EAuthFailurePolicy authFailurePolicy)
 {
-    return new TRemoteTopicReader(ydbProxy, opts, authFailurePolicy);
+    return CreateRemoteTopicReader(std::make_shared<const TActorId>(ydbProxy), opts, authFailurePolicy);
+}
+
+IActor* CreateRemoteTopicReader(std::shared_ptr<const TActorId> ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts,
+    EAuthFailurePolicy authFailurePolicy)
+{
+    return new TRemoteTopicReader(std::move(ydbProxy), opts, authFailurePolicy);
 }
 
 } //NKikimr::NReplication::NService

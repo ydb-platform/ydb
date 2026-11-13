@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/tx/replication/ydb_proxy
     ydb/core/tx/replication/ydb_proxy/local_proxy
     ydb/core/wrappers
+    ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/services
 )

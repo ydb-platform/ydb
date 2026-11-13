@@ -2119,6 +2119,7 @@ public:
 
                 // Switch to repeatable read at the same version
                 SetMvccSnapshot(state.ReadVersion, /* isRepeatable */ true);
+                state.SnapshotAcquired |= Self->GetSnapshotManager().IsSnapshotRetentionEnabled();
 
                 // We may have had repeatable read conflicts, promote them
                 PromoteRepeatableReadConflicts();
@@ -2206,7 +2207,8 @@ public:
                 }
 
                 if (!snapshotFound) {
-                    bool isMvccReadable = state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
+                    bool isMvccReadable = Self->GetSnapshotManager().IsSnapshotReadable(txc.DB,
+                        TTableId(state.PathId), state.ReadVersion, state.SnapshotAcquired);
                     if (!isMvccReadable) {
                         SetStatusError(
                             Result->Record,
@@ -2927,7 +2929,8 @@ private:
             }
 
             if (!snapshotFound) {
-                bool isMvccReadable = state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
+                bool isMvccReadable = Self->GetSnapshotManager().IsSnapshotReadable(txc.DB,
+                    TTableId(state.PathId), state.ReadVersion, state.SnapshotAcquired);
                 if (!isMvccReadable) {
                     SetStatusError(
                         Result->Record,
@@ -3391,7 +3394,10 @@ public:
                     if (!snapshotFound) {
                         bool snapshotUnavailable = false;
 
-                        if (state.ReadVersion < Self->GetSnapshotManager().GetLowWatermark() || state.ReadVersion.Step == Max<ui64>()) {
+                        if (!Self->GetSnapshotManager().IsSnapshotReadable(txc.DB,
+                                TTableId(state.PathId), state.ReadVersion)
+                            || state.ReadVersion.Step == Max<ui64>())
+                        {
                             snapshotUnavailable = true;
                         }
 
@@ -3478,6 +3484,12 @@ public:
 
                 // We don't want this read to interact with other operations
                 setUsingSnapshotFlag = true;
+            }
+
+            if (state.PathId.OwnerId == Self->GetPathOwnerId() && !state.IsHeadRead && !Self->IsFollower()) {
+                // Admission and local protection happen in the same transaction.
+                // The iterator outlives its initial pipeline operation.
+                state.SnapshotAcquired = Self->GetSnapshotManager().IsSnapshotRetentionEnabled();
             }
 
             Op = new TReadOperation(Self, ctx.Now(), LocalReadId);
@@ -3729,7 +3741,8 @@ public:
             }
 
             if (!snapshotFound) {
-                bool isMvccReadable = state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
+                bool isMvccReadable = Self->GetSnapshotManager().IsSnapshotReadable(txc.DB,
+                    TTableId(state.PathId), state.ReadVersion, state.SnapshotAcquired);
                 if (!isMvccReadable) {
                     SetStatusError(
                         Result->Record,

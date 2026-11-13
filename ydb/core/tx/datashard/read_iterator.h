@@ -174,6 +174,9 @@ public:
     std::vector<NTable::TTag> Columns;
     TRowVersion ReadVersion;
     bool IsHeadRead;
+    // Set after admission with snapshot retention enabled. The iterator keeps
+    // this version alive even while waiting for quota or after registry release.
+    bool SnapshotAcquired = false;
     ui64 LockId = 0;
     ui32 LockNodeId = 0;
     ui64 QuerySpanId = 0;

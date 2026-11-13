@@ -20,6 +20,8 @@ SRCS(
     rpc_alter_table.cpp
     rpc_begin_transaction.cpp
     rpc_bridge.cpp
+    rpc_bridge_get_cluster_state.cpp
+    rpc_bridge_storage.cpp
     rpc_bridge_mode.cpp
     rpc_cluster_state.cpp
     rpc_cms.cpp
@@ -206,7 +208,9 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
-    ydb/core/kqp/opt
+    ydb/core/kqp/common/events
+    ydb/core/kqp/query_plan
+    ydb/core/kqp/script_executions/common
     ydb/core/local_indexes/bloom
     ydb/core/persqueue/deferred_publish
     ydb/core/protos

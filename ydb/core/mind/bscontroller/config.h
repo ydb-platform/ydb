@@ -162,16 +162,27 @@ namespace NKikimr {
             // without touching group generation.
             THashSet<TBoxStoragePoolId> HeapAllocatorNumLeadingDisksChanged;
 
-            bool ResetDataCenterStates = false;
-            std::expected<void, TString> ApplyDataCenterStates(bool suppressFailModelChecking);
+            std::expected<void, TString> ApplyDataCenterStates(bool suppressFailModelChecking, bool suppressDegradedGroupsChecking);
 
             bool PushStaticGroupsToSelfHeal = false;
 
             TBridgeInfo::TPtr BridgeInfo;
             std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
 
+            // Storage pool pile overrides this transaction follows instead of the adopted ones. It is set by a dry run
+            // of the operation BSC is going to execute after it gets the StorageConfig being proposed, and hence after
+            // it adopts the overrides of that config.
+            const TStoragePoolPileOverrideRules *PileOverrideRules = nullptr;
+
+            const TStoragePoolPileOverrideRules *GetPileOverrideRules() const {
+                // the adopted rules, not the ones of the StorageConfig being proposed: BSC keeps following them until it
+                // adopts the new ones, which happens separately from this transaction
+                return PileOverrideRules ? PileOverrideRules : Self.GetPileOverrideRules();
+            }
+
             TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const {
-                return Self.ResolveStoragePoolForPile(id, StoragePools.Get().at(id), pileId, BridgeInfo.get(), StorageConfig.get());
+                return Self.ResolveStoragePoolForPile(id, StoragePools.Get().at(id), pileId, BridgeInfo.get(),
+                    GetPileOverrideRules());
             }
 
             THashMap<TVSlotId, ui64> PDiskGuidsForDeletedVSlots;
@@ -448,8 +459,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TMoveDDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd, TStatus& status);
-            void ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates& cmd, TStatus& status);
-            void ExecuteStep(const NKikimrBlobStorage::TDefineFailRealmStates& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDefineGroupState& cmd, TStatus& status);
 
             template<typename TCallback>
             void ForEachStoragePoolGroup(TBoxStoragePoolId storagePoolId, TCallback&& callback);

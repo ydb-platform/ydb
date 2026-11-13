@@ -2032,7 +2032,9 @@ void TProducer::RunUserEventLoop() {
 
 bool TProducer::IsFederation(const std::string& endpoint) {
     std::string_view host = GetHost(endpoint);
-    return host == "logbroker.yandex.net" || host == "logbroker-prestable.yandex.net";
+    return host == "logbroker.yandex.net" ||
+           host == "logbroker-prestable.yandex.net" ||
+           host.ends_with(".lbk.logbroker.yandex.net");
 }
 
 void TProducer::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSession, std::optional<TSessionClosedEvent> sessionClosedEvent) {

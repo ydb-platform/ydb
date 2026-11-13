@@ -1,77 +1,75 @@
 {
-    "test.test[Annotations]": [
+    "test.test[Annotations-Results]": [
         {
-            "uri": "file://test.test_Annotations_/results.txt"
+            "uri": "file://test.test_Annotations-Results_/results.txt"
         }
     ],
-    "test.test[BytesDecodeModeStrict]": [
+    "test.test[BytesDecodeModeStrict-Results]": [
         {
-            "uri": "file://test.test_BytesDecodeModeStrict_/results.txt"
+            "uri": "file://test.test_BytesDecodeModeStrict-Results_/results.txt"
         }
     ],
-    "test.test[Cleanup]": [
+    "test.test[Cleanup-Results]": [
         {
-            "uri": "file://test.test_Cleanup_/results.txt"
+            "uri": "file://test.test_Cleanup-Results_/results.txt"
         }
     ],
-    "test.test[CustomYsonConverter]": [
+    "test.test[CustomYsonConverter-Results]": [
         {
-            "uri": "file://test.test_CustomYsonConverter_/results.txt"
+            "uri": "file://test.test_CustomYsonConverter-Results_/results.txt"
         }
     ],
-    "test.test[Data]": [
+    "test.test[Data-Results]": [
         {
-            "uri": "file://test.test_Data_/results.txt"
+            "uri": "file://test.test_Data-Results_/results.txt"
         }
     ],
-    "test.test[Excepthook]": [
+    "test.test[Excepthook-Results]": [
         {
-            "uri": "file://test.test_Excepthook_/extracted"
+            "uri": "file://test.test_Excepthook-Results_/extracted"
         }
     ],
-    "test.test[GreedyInputContainers]": [
+    "test.test[GreedyInputContainers-Results]": [
         {
-            "uri": "file://test.test_GreedyInputContainers_/results.txt"
+            "uri": "file://test.test_GreedyInputContainers-Results_/results.txt"
         }
     ],
-    "test.test[LinearDynamicFail1]": [
+    "test.test[Linear-Results]": [
         {
-            "uri": "file://test.test_LinearDynamicFail1_/extracted"
+            "uri": "file://test.test_Linear-Results_/results.txt"
         }
     ],
-    "test.test[LinearDynamicFail2]": [
+    "test.test[LinearDynamic-Results]": [
         {
-            "uri": "file://test.test_LinearDynamicFail2_/extracted"
+            "uri": "file://test.test_LinearDynamic-Results_/results.txt"
         }
     ],
-    "test.test[LinearDynamicFail3]": [
+    "test.test[LinearDynamicFail1-Results]": [
         {
-            "uri": "file://test.test_LinearDynamicFail3_/extracted"
+            "uri": "file://test.test_LinearDynamicFail1-Results_/extracted"
         }
     ],
-    "test.test[LinearDynamic]": [
+    "test.test[LinearDynamicFail2-Results]": [
         {
-            "uri": "file://test.test_LinearDynamic_/results.txt"
+            "uri": "file://test.test_LinearDynamicFail2-Results_/extracted"
         }
     ],
-    "test.test[Linear]": [
+    "test.test[LinearDynamicFail3-Results]": [
+        "<tmp_path>/program.sql:<main>: Error: <main>:41:14: Linear value is not consumed"
+    ],
+    "test.test[OptionalNested-Results]": [
         {
-            "uri": "file://test.test_Linear_/results.txt"
+            "uri": "file://test.test_OptionalNested-Results_/extracted"
         }
     ],
-    "test.test[OptionalNested]": [
+    "test.test[Switch-Results]": [
         {
-            "uri": "file://test.test_OptionalNested_/extracted"
+            "uri": "file://test.test_Switch-Results_/results.txt"
         }
     ],
-    "test.test[Switch]": [
+    "test.test[Tagged-Results]": [
         {
-            "uri": "file://test.test_Switch_/results.txt"
-        }
-    ],
-    "test.test[Tagged]": [
-        {
-            "uri": "file://test.test_Tagged_/results.txt"
+            "uri": "file://test.test_Tagged-Results_/results.txt"
         }
     ]
 }

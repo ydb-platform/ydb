@@ -1163,6 +1163,29 @@ TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadState(TTransactionContex
         }
     }
 
+    if (!AppData()->BridgeModeEnabled) {
+        // piles are not used without bridge mode; the cluster prepared for bridge mode has been rolled back, and nodes
+        // registered then (or restarted with the pile name before this NodeBroker was) lose their pile names, so that
+        // they don't keep them through lease extensions and block the nodes when the cluster is prepared again
+        THashSet<ui32> updated(dbChanges.NewVersionUpdateNodes.begin(), dbChanges.NewVersionUpdateNodes.end());
+        for (auto *nodes : {&Nodes, &ExpiredNodes}) {
+            for (auto& [id, node] : *nodes) {
+                if (!node.Location.GetBridgePileName()) {
+                    continue;
+                }
+                YDB_LOG_NOTICE_CTX(ctx, "TNodeBroker::DbLoadState: dropping pile name of the node without bridge mode",
+                    {"dbLogPrefix", DbLogPrefix()},
+                    {"nodeId", id},
+                    {"location", node.Location});
+                node.Location = WithBridgePileName(node.Location, std::nullopt);
+                node.Version = Epoch.Version + 1;
+                if (updated.insert(id).second) {
+                    dbChanges.NewVersionUpdateNodes.push_back(id);
+                }
+            }
+        }
+    }
+
     if (!dbChanges.NewVersionUpdateNodes.empty()) {
         UpdateEpochVersion();
         dbChanges.UpdateEpoch = true;
@@ -1655,9 +1678,8 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false),
                     IEventHandle::FlagTrackDelivery);
             } else {
-                if (GetBridgePileName()) {
-                    Error = "Bridge pile specified while bridge mode is disabled";
-                }
+                // a pile name without bridge mode is refused when registering, unless the node has it already (the
+                // node then still runs with the bridge config the cluster was prepared for bridge mode with)
                 ResolveTenant(ctx);
             }
         }
@@ -1913,6 +1935,17 @@ TStringBuf TNodeBroker::TDirtyState::LogPrefix() const {
 
 TStringBuf TNodeBroker::TDirtyState::DbLogPrefix() const {
     return "[DB]";
+}
+
+TNodeLocation TNodeBroker::WithBridgePileName(const TNodeLocation& location, const std::optional<TString>& pileName) {
+    NActorsInterconnect::TNodeLocation proto;
+    location.Serialize(&proto, false);
+    if (pileName) {
+        proto.SetBridgePileName(*pileName);
+    } else {
+        proto.ClearBridgePileName();
+    }
+    return TNodeLocation(proto);
 }
 
 TNodeBroker::TNodeInfo::TNodeInfo(ui32 nodeId, ENodeState state, ui64 version, const TNodeInfoSchema& schema)

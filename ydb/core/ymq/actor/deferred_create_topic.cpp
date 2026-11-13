@@ -192,7 +192,7 @@ private:
         if (retentionMs < minRetentionMs) {
             retentionMs = minRetentionMs;
         }
-        params.PartitionLifetimeSeconds = Max<ui64>(1, retentionMs / 1000);
+        params.MessageRetentionPeriod = Max<ui64>(1, retentionMs / 1000);
         params.HasContentBasedDeduplication = LoadedAttrs_.HasContentBasedDeduplication;
         params.ContentBasedDeduplication = LoadedAttrs_.ContentBasedDeduplication;
         params.DefaultDelayMessageTimeMs = LoadedAttrs_.DelayMs;

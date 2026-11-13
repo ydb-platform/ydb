@@ -1,8 +1,0 @@
-<tmp_path>/program.sql:<main>: Error: Execution
-
-    <tmp_path>/program.sql:<main>:12:1: Error: Execution of node: Result
-    	SELECT $serialize($merge(ReservoirSampling::Create("cde", 123ul), $merge(ReservoirSampling::Create("abc", 123ul), ReservoirSampling::Create("cde", 123ul))));
-	^
-        <tmp_path>/program.sql:<main>:12:1: Error: ReservoirSampling: Got dirty resource
-        	SELECT $serialize($merge(ReservoirSampling::Create("cde", 123ul), $merge(ReservoirSampling::Create("abc", 123ul), ReservoirSampling::Create("cde", 123ul))));
-	^

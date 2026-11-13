@@ -8,6 +8,23 @@ namespace NKikimr::NPersQueueTests {
 
 Y_UNIT_TEST_SUITE(TPartitionWriterCacheActorTests) {
 
+Y_UNIT_TEST_F(ForwardsWriteSessionQuotaWaitTime, TPartitionWriterCacheActorFixture)
+{
+    for (const auto waitTime : {TDuration::Zero(), TDuration::MilliSeconds(1234)}) {
+        bool ownershipRequested = false;
+        auto observer = Ctx->Runtime->AddObserver<TEvPersQueue::TEvRequest>([&](auto& ev) {
+            const auto& request = ev->Get()->Record.GetPartitionRequest();
+            if (request.HasCmdGetOwnership()) {
+                ownershipRequested = true;
+                UNIT_ASSERT_VALUES_EQUAL(request.GetCmdGetOwnership().GetQuotaWaitTimeMs(), waitTime.MilliSeconds());
+            }
+        });
+
+        CreatePartitionWriterCacheActor({.WriteSessionQuotaWaitTime = waitTime});
+        UNIT_ASSERT_C(ownershipRequested, "Writer must send an ownership request to the tablet");
+    }
+}
+
 Y_UNIT_TEST_F(WriteReplyOrder, TPartitionWriterCacheActorFixture)
 {
     TActorId partitionWriterCache = CreatePartitionWriterCacheActor();

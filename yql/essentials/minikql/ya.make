@@ -1,5 +1,11 @@
 YQL_LIBRARY()
 
+IF (MKQL_DISABLE_UDF_SERVICE_DISPATCH)
+    CFLAGS(
+        GLOBAL -DMKQL_DISABLE_UDF_SERVICE_DISPATCH
+    )
+ENDIF()
+
 SRCS(
     compact_hash.cpp
     compact_hash.h
@@ -57,6 +63,7 @@ SRCS(
     primes.h
     watermark_tracker.cpp
     watermark_tracker.h
+    mkql_udf_service.cpp
 )
 
 PEERDIR(
@@ -80,6 +87,7 @@ PEERDIR(
     yql/essentials/public/issue
     yql/essentials/public/langver
     yql/essentials/public/udf
+    yql/essentials/public/udf/service/dispatch
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     yql/essentials/types/uuid

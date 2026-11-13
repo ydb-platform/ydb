@@ -3,6 +3,8 @@
 #include <ydb/core/kqp/opt/rbo/copy_logical_subtree.h>
 #include <ydb/core/kqp/opt/rbo/rules/decorrelation/dependent_join_pushdown.h>
 
+#include <yql/essentials/core/yql_expr_optimize.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp {
@@ -848,6 +850,71 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
             }
             UNIT_ASSERT_VALUES_EQUAL(hubs.size(), 2);
             NTests::AssertIdInvariants(*result, f.Props);
+        }
+    }
+
+    Y_UNIT_TEST(GenericInExistsInlinesIntoMap) {
+        for (const bool exists : {false, true}) {
+            for (const bool correlated : {false, true}) {
+                for (const bool nullable : {false, true}) {
+                    NTests::TIdTestContext f;
+                    const auto lookup = f.Id(), value = f.Id(), call = f.Id(), output = f.Id();
+                    auto left = f.Read({lookup});
+                    f.SetType(*left, nullable ? TUnorderedIUs{lookup} : TUnorderedIUs{});
+                    TIntrusivePtr<IOperator> right = f.Read({value});
+                    if (correlated) {
+                        TDependencyIUs captures;
+                        captures.Add(f.Id(), TCapturedIU{lookup, left->GetIUType(lookup, f.ExprCtx)});
+                        right = MakeIntrusive<TOpAddDependencies>(std::move(right), f.Pos, std::move(captures));
+                    }
+                    f.SetType(*right, nullable ? TUnorderedIUs{value} : TUnorderedIUs{});
+                    if (exists) {
+                        f.Props.Subplans.Add(call, std::move(right), ESubplanType::EXISTS);
+                    } else {
+                        // A nullable lookup makes the query type the IN result Bool?.
+                        f.Props.Subplans.Add(call, std::move(right), ESubplanType::IN_SUBPLAN, {lookup}, value, nullable);
+                    }
+                    f.Props.Subplans.RefreshDependencies(call);
+
+                    // The projection returns the subplan result as a column.
+                    TMapIUs elements;
+                    elements.Add(output, f.Column(call));
+                    TIntrusivePtr<IOperator> map = MakeIntrusive<TOpMap>(std::move(left), f.Pos, std::move(elements));
+                    const auto* original = map.get();
+
+                    TInlineGenericInExistsSubplanRule generic;
+                    UNIT_ASSERT(generic.QuickMatch(map, f.Props));
+                    auto result = generic.SimpleMatchAndApply(map, f.RboCtx, f.Props);
+
+                    UNIT_ASSERT(result.get() != original);
+                    UNIT_ASSERT(result->Kind == EOperator::Map);
+                    const auto& newMap = CastOperator<TOpMap>(*result);
+                    UNIT_ASSERT(newMap.GetMapElements().Keys() == TUnorderedIUs{output});
+                    UNIT_ASSERT(newMap.GetInput()->GetOutputIUs().Contains(call));
+                    UNIT_ASSERT(!f.Props.Subplans.Contains(call));
+
+                    size_t dependentJoins = 0;
+                    for (const auto& item : IterateSubtree(result.get())) {
+                        dependentJoins += item.Current->Kind == EOperator::DependentJoin;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(dependentJoins, correlated ? 1 : 0);
+
+                    // Only a Bool? IN result can be NULL.
+                    const TMapElement* definition = nullptr;
+                    for (const auto& item : IterateSubtree(result.get())) {
+                        if (item.Current != result.get() && item.Current->Kind == EOperator::Map) {
+                            if (const auto* element = CastOperator<TOpMap>(*item.Current).FindOutputElement(call)) {
+                                definition = element;
+                            }
+                        }
+                    }
+                    UNIT_ASSERT(definition);
+                    const bool canBeNull = FindNode(definition->GetExpression().GetExpressionBody(),
+                        [](const TExprNode::TPtr& node) { return node->IsCallable("Nothing"); }) != nullptr;
+                    UNIT_ASSERT_VALUES_EQUAL(canBeNull, !exists && nullable);
+                    NTests::AssertIdInvariants(*result, f.Props);
+                }
+            }
         }
     }
 }

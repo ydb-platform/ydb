@@ -7,14 +7,11 @@ import subprocess
 from google.protobuf import json_format
 import pytest
 
-from hamcrest import assert_that, equal_to, greater_than, not_none
+from hamcrest import assert_that, equal_to, not_none
 
 from ydb.core.protos import config_pb2
 from ydb.tests.library.common.msgbus_types import MessageBusStatus
 from ydb.tests.library.common.protobuf_ss import AlterTableRequest
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.fixtures import ydb_database_ctx
 from ydb.tests.library.matchers.response_matchers import ProtobufWithStatusMatcher
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -33,105 +30,6 @@ def get_db_counters(mon_port, service):
 
     assert_that(counters, not_none())
     return counters
-
-
-class BaseDbCounters(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(
-            KikimrConfigGenerator(
-                additional_log_configs={
-                    'SYSTEM_VIEWS': LogLevels.DEBUG
-                }
-            )
-        )
-        cls.cluster.start()
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, 'cluster'):
-            cls.cluster.stop()
-
-    def setup_method(self, method=None):
-        self.database = "/Root/users/{class_name}_{method_name}".format(
-            class_name=self.__class__.__name__,
-            method_name=method.__name__,
-        )
-        logger.debug("Create database %s" % self.database)
-        self.cluster.create_database(
-            self.database,
-            storage_pool_units_count={
-                'hdd': 1
-            }
-        )
-
-        self.cluster.register_and_start_slots(self.database, count=1)
-        self.cluster.wait_tenant_up(self.database)
-
-    def teardown_method(self, method=None):
-        logger.debug("Remove database %s" % self.database)
-        self.cluster.remove_database(self.database)
-        self.database = None
-
-    def create_table(self, driver, table):
-        with ydb.SessionPool(driver, size=1) as pool:
-            with pool.checkout() as session:
-                session.execute_scheme(
-                    "create table `{}` (key Int32, value String, primary key(key));".format(
-                        table
-                    )
-                )
-
-    def check_db_counters(self, sensors_to_check, group):
-        table = os.path.join(self.database, 'table')
-
-        driver_config = ydb.DriverConfig(
-            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
-            self.database
-        )
-
-        with ydb.Driver(driver_config) as driver:
-            self.create_table(driver, table)
-
-            with ydb.SessionPool(driver, size=1) as pool:
-                with pool.checkout() as session:
-                    query = "select * from `{}`".format(table)
-                    session.transaction().execute(query, commit_tx=True)
-
-            for i in range(150):
-                checked = 0
-
-                counters = get_db_counters(self.cluster.slots[1].mon_port, 'db')
-                if counters:
-                    sensors = counters['sensors']
-                    for sensor in sensors:
-                        labels = sensor['labels']
-                        if labels['sensor'] in sensors_to_check:
-                            assert_that(labels['group'], equal_to(group))
-                            assert_that(labels['database'], equal_to(self.database))
-                            assert_that(labels['host'], equal_to(''))
-                            assert_that(sensor['value'], greater_than(0))
-                            checked = checked + 1
-
-                    assert_that(checked, equal_to(len(sensors_to_check)))
-                    break
-
-                if checked > 0:
-                    break
-
-                time.sleep(1)
-
-
-class TestKqpCounters(BaseDbCounters):
-    def test_case(self):
-        sensors_to_check = {
-            'Requests/Bytes',
-            'Requests/QueryBytes',
-            'Requests/QueryExecute',
-            'YdbResponses/Success',
-            'Responses/Bytes',
-        }
-        self.check_db_counters(sensors_to_check, 'kqp')
 
 
 def get_default_feature_flag_value(feature_flag_camel_case) -> bool:

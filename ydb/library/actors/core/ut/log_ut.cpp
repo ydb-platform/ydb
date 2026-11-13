@@ -851,13 +851,11 @@ Y_UNIT_TEST_SUITE(TWriteLogSink) {
     public:
         std::vector<TLogMessage> Calls;
 
-        bool Write(const TLogMessage& message) override {
+        void Write(const TLogMessage& message) override {
             Calls.push_back(message);
-            return true;
         }
 
-        void Stop() override {
-        }
+        void Stop() override {}
     };
 
     Y_UNIT_TEST(WriteMessage) {

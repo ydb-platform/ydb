@@ -124,6 +124,7 @@ PEERDIR(
     library/cpp/string_utils/base64
     library/cpp/svnversion
     library/cpp/time_provider
+    library/cpp/threading/atomic_shared_ptr
     library/cpp/threading/future
     library/cpp/threading/queue
 )

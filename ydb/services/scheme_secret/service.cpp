@@ -559,14 +559,16 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
     return true;
 }
 
-const IRetryPolicy<>::TPtr DEFAULT_RETRY_POLICY = MakeShortRetryPolicy();
-
-IRetryPolicy<>::TPtr TDescribeSecretSettings::GetRetryPolicy() const {
-    if (RetryPolicy) {
-        return RetryPolicy;
+IRetryPolicy<>::TPtr ConvertEnumToRetryPolicy(ERetryPolicy policy) {
+    switch (policy) {
+        case ERetryPolicy::ShortRetries:
+            return MakeShortRetryPolicy();
+        case ERetryPolicy::LongRetries:
+            return MakeLongRetryPolicy();
+        case ERetryPolicy::NoRetries:
+            return IRetryPolicy<>::GetNoRetryPolicy();
     }
-
-    return DEFAULT_RETRY_POLICY;
+    Y_UNREACHABLE();
 }
 
 bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& requestId,
@@ -576,7 +578,7 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& request
     Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
 
     if (!requestIt->second.SchemeCacheRetryState) {
-        const auto retryPolicy = requestIt->second.Request->Settings.GetRetryPolicy();
+        const auto retryPolicy = ConvertEnumToRetryPolicy(requestIt->second.Request->Settings.RetryPolicy);
         requestIt->second.SchemeCacheRetryState = retryPolicy->CreateRetryState();
     }
 
@@ -598,10 +600,9 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeShardRetry(const ui64& request
     const auto requestIt = RequestsInFlight.find(requestId);
     Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
 
-    const auto retryPolicy = requestIt->second.Request->Settings.GetRetryPolicy();
-
     auto& retryState = requestIt->second.SchemeShardRetryStates[secretPath];
     if (!retryState) {
+        const auto retryPolicy = ConvertEnumToRetryPolicy(requestIt->second.Request->Settings.RetryPolicy);
         retryState = retryPolicy->CreateRetryState();
     }
 

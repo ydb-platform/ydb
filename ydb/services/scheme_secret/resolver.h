@@ -14,12 +14,16 @@
 
 namespace NKikimr::NSecret {
 
-struct TDescribeSecretSettings {
-    // Common policy for SchemeShard and SchemeCache, nullptr means ShortRetryPolicy
-    IRetryPolicy<>::TPtr RetryPolicy;
+enum class ERetryPolicy {
+    ShortRetries,
+    LongRetries,
+    NoRetries
+};
 
-    // Pointer should be aсquired through this method
-    IRetryPolicy<>::TPtr GetRetryPolicy() const;
+struct TDescribeSecretSettings {
+    // Common policy for SchemeShard and SchemeCache
+    ERetryPolicy RetryPolicy = ERetryPolicy::ShortRetries;
+
 };
 
 IRetryPolicy<>::TPtr MakeShortRetryPolicy();

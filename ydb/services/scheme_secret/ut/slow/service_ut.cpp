@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsServiceSlow) {
         CreateSchemaSecret(secretName, "secret-value", session);
 
         TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = MakeShortRetryPolicy();
+        describeSettings.RetryPolicy = ERetryPolicy::ShortRetries;
         auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, describeSettings);
         AssertBadRequest(
             promise,

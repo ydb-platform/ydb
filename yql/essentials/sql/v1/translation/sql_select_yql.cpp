@@ -574,12 +574,6 @@ private:
     }
 
     TSourceResult Build(const TRule_select_core& rule, TYqlSelectArgs&& select) {
-        auto sourceAliases = YqlSelectSourceAliases_ ? *YqlSelectSourceAliases_ : THashSet<TString>{};
-        auto* outerAliases = std::exchange(YqlSelectSourceAliases_, &sourceAliases);
-        Y_DEFER {
-            YqlSelectSourceAliases_ = outerAliases;
-        };
-
         TYqlSetItemArgs setItem;
 
         if (rule.HasBlock1()) {
@@ -1151,10 +1145,6 @@ private:
             return Unsupported("sample_clause | tablesample_clause");
         }
 
-        if (YqlSelectSourceAliases_ && source->Alias) {
-            YqlSelectSourceAliases_->insert(source->Alias->Name);
-        }
-
         return source;
     }
 
@@ -1175,7 +1165,6 @@ private:
             case NSQLv1Generated::TRule_single_source::kAltSingleSource2: {
                 TYqlSelect that(*this);
                 that.CurrentCTE_ = Nothing();
-                that.YqlSelectSourceAliases_ = nullptr;
                 return that.Build(rule.GetAlt_single_source2().GetRule_select_stmt2())
                     .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             }

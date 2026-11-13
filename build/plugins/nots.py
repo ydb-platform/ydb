@@ -543,18 +543,55 @@ def _PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
     _prepare_deps_configure(unit)
 
 
+def _configure_tarballs_platform(unit):
+    os_name = next(
+        (
+            name
+            for flag, name in (("HOST_OS_LINUX", "linux"), ("HOST_OS_DARWIN", "darwin"), ("HOST_OS_WINDOWS", "win32"))
+            if unit.get(flag) == "yes"
+        ),
+        None,
+    )
+    cpu = next(
+        (
+            name
+            for flag, name in (("HOST_ARCH_X86_64", "x64"), ("HOST_ARCH_ARM64", "arm64"), ("HOST_ARCH_X86", "ia32"))
+            if unit.get(flag) == "yes"
+        ),
+        None,
+    )
+    if not os_name or not cpu:
+        return None
+    # A C++ MUSL target flag does not describe the libc of the Node.js/pnpm
+    # executable in the action. Keep libc-specific archives when it is unknown.
+    platform = (os_name, cpu, "unknown")
+    unit.set(["_PREPARE_DEPS_PLATFORM_ARG", "--tarballs-platform " + " ".join(platform)])
+    return platform
+
+
 def _prepare_deps_configure(unit: ymake.Unit) -> None:
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
-    from lib.nots.package_manager.common_config import common_config_inputs
+    from lib.nots.package_manager.common_config import common_config_inputs, load_effective_pnpm_config
     from lib.nots.package_manager.utils import b_rooted, build_ws_config_path, s_rooted
 
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
-    ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps, local_cli)
-    ins.extend(s_rooted(p) for p in common_config_inputs(pj, pm.sources_root))
+    effective_config = load_effective_pnpm_config(pj, pm.sources_root)
+    config_path, _, settings = effective_config
+    if config_path:
+        __set_append(unit, "_MAKEFILE_INCLUDE_LIKE_DEPS", "${ARCADIA_ROOT}/" + config_path)
+    platform = _configure_tarballs_platform(unit)
+    ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(
+        unit.get("_TARBALLS_STORE"),
+        has_deps,
+        local_cli,
+        platform=platform,
+        supported_architectures=settings.get("supportedArchitectures"),
+    )
+    ins.extend(s_rooted(p) for p in common_config_inputs(pj, pm.sources_root, effective_config))
     outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
     if use_hermetic_node_modules:
         from lib.nots.package_manager import constants
@@ -574,7 +611,7 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
             unit.set(["_PREPARE_DEPS_BUNDLE_ARGS", "$_TS_OUTPUT_PREFIX_ARG"])
             outs.append(b_rooted(os.path.join(pm.module_path, constants.PREPARED_NODE_MODULES_BUNDLE_FILENAME)))
 
-    local_peers = pm.get_local_peers_from_package_json()
+    local_peers = pm.get_local_peers_from_package_json(pj, settings)
     if local_peers:
         unit.onpeerdir(local_peers)
         # build_workspace imports catalogs from prepared direct peer workspaces.

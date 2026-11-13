@@ -177,6 +177,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
                 throw TNeedGlobalTxId();
             }
             params.Txc->DB.UpdateTx(localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId);
+            self->UpdateHnswIndex(localTableId, NTable::ERowOp::Erase, keyCells.GetCells(), {}, params.Txc->DB, params.MvccVersion, params.GlobalTxId);
             self->GetConflictsCache().GetTableCache(localTableId).AddUncommittedWrite(keyCells.GetCells(), params.GlobalTxId, params.Txc->DB);
             if (!commitAdded && userDb) {
                 // Make sure we see our own changes on further iterations
@@ -185,6 +186,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             }
         } else {
             params.Txc->DB.Update(localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion);
+            self->UpdateHnswIndex(localTableId, NTable::ERowOp::Erase, keyCells.GetCells(), {}, params.Txc->DB, params.MvccVersion);
             self->GetConflictsCache().GetTableCache(localTableId).RemoveUncommittedWrites(keyCells.GetCells(), params.Txc->DB);
         }
     }
@@ -244,6 +246,12 @@ bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
 
     Result = MakeHolder<TEvDataShard::TEvEraseRowsResponse>();
     Result->Record.SetTabletID(self->TabletID());
+
+    if (self->IsUserTableWriteBlocked()) {
+        Result->Record.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
+        Result->Record.SetErrorDescription("Database or table is frozen for writes");
+        return true;
+    }
 
     const auto params = TExecuteParams::ForExecute(this, &txc, mvccVersion, globalTxId, &volatileReadDependencies);
     NKikimrTxDataShard::TEvEraseRowsResponse::EStatus status;

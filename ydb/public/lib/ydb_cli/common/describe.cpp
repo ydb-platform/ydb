@@ -362,6 +362,12 @@ void PrintColumnFamilies(const NTable::TTableDescription& tableDescription, IOut
             case NTable::EColumnFamilyCompression::LZ4:
                 compression = "LZ4";
                 break;
+            case NTable::EColumnFamilyCompression::ZSTD:
+                compression = "ZSTD";
+                if (auto level = family.GetCompressionLevel()) {
+                    compression += TStringBuilder() << "(" << *level << ")";
+                }
+                break;
             default:
                 compression = TStringBuilder() << "unknown("
                     << static_cast<size_t>(family.GetCompression().value()) << ")";

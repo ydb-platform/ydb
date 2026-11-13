@@ -33,6 +33,8 @@ class IYdbExternalMetadataClientCache;
 
 namespace NKikimr::NKqp {
 
+class IKqpStreamingQueryControllerFactory;
+
 NYql::IYtGateway::TPtr MakeYtGateway(
     const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig);
 
@@ -99,6 +101,7 @@ struct TKqpFederatedQuerySetup {
     NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
     TScriptExecutionSettings ScriptExecutionSettings = {};
     NFq::TCheckpointProviderIntegrations CheckpointProviderIntegrations = {};
+    std::shared_ptr<IKqpStreamingQueryControllerFactory> StreamingQueryControllerFactory = {};
 };
 
 struct IKqpFederatedQuerySetupFactory {

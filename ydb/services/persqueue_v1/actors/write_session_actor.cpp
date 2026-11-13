@@ -15,6 +15,7 @@
 #include <ydb/core/persqueue/public/codecs/pqv1.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/deferred_publish/constants.h>
@@ -702,6 +703,49 @@ void TWriteSessionActor<Protocol>::DiscoverPartition(const NActors::TActorContex
         ctx.Send(PartitionChooser,  new TEvents::TEvPoison());
     }
 
+    if (ExpectedGeneration) {
+        State = ES_WAIT_WRITE_SESSION_QUOTA;
+        ctx.Send(
+            NPQ::MakeWriteSessionsQuoterId(),
+            new TEvWriteSessionsQuoter::TEvAcquireQuota(
+                InitialPQTabletConfig.GetYdbDatabasePath(),
+                FullConverter->GetClientsideName(),
+                PreferedPartition,
+                *ExpectedGeneration),
+            0,
+            0,
+            InitSpan.GetTraceId()
+        );
+        return;
+    }
+
+    CreatePartitionChooser(ctx);
+}
+
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(TEvWriteSessionsQuoter::TEvQuotaAcquired::TPtr& ev, const TActorContext& ctx) {
+    if (State != ES_WAIT_WRITE_SESSION_QUOTA) {
+        return;
+    }
+    WriteSessionQuotaWaitTime = ev->Get()->QuotaWaitTime;
+    CreatePartitionChooser(ctx);
+}
+
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(TEvWriteSessionsQuoter::TEvQuotaDeclined::TPtr&, const TActorContext& ctx) {
+    if (State != ES_WAIT_WRITE_SESSION_QUOTA) {
+        return;
+    }
+
+    LOG_E("Write session quota declined");
+
+    CloseSession("Write session quota declined: partition or generation is unavailable",
+                 PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
+}
+
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::CreatePartitionChooser(const TActorContext& ctx) {
+    State = ES_WAIT_PARTITION;
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
     AFL_ENSURE(PQGroupInfo);
     const auto& config = PQGroupInfo->Description;
@@ -775,6 +819,7 @@ bool TWriteSessionActor<Protocol>::CreatePartitionWriterCache(const TActorContex
     opts.WithSourceId(SourceId);
     opts.WithInitialSeqNo(InitialSeqNo);
     opts.WithExpectedGeneration(ExpectedGeneration);
+    opts.WithWriteSessionQuotaWaitTime(WriteSessionQuotaWaitTime);
 
     if constexpr (Protocol == EProtocol::Topic) {
         for (const auto& item : InitRequest.write_session_meta()) {

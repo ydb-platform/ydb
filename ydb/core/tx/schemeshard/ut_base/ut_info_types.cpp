@@ -3,8 +3,10 @@
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <util/string/printf.h>
 #include <util/string/strip.h>
 
+#include <optional>
 #include <source_location>
 
 using namespace NKikimr;
@@ -12,6 +14,67 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
+
+    NKikimrCompaction::TCompactionPolicy CompactionPolicyWithGenerationIds(
+            const TVector<std::optional<ui32>>& ids) {
+        NKikimrCompaction::TCompactionPolicy policy;
+        for (const auto id : ids) {
+            auto* generation = policy.AddGeneration();
+            if (id) {
+                generation->SetGenerationId(*id);
+            }
+        }
+        return policy;
+    }
+
+    Y_UNIT_TEST(CompactionPolicyRejectsInvalidGenerationIds) {
+        struct TCase {
+            TVector<std::optional<ui32>> Ids;
+            ui32 Index;
+            ui32 ActualId;
+        };
+        const TCase cases[] = {
+            {{1}, 0, 1},
+            {{0, 0}, 1, 0},
+            {{0, 2}, 1, 2},
+            {{0, 2, 1}, 1, 2},
+            {{0, std::nullopt}, 1, 0},
+        };
+        for (const auto& test : cases) {
+            const auto policy = CompactionPolicyWithGenerationIds(test.Ids);
+            TString error;
+            UNIT_ASSERT(!TPartitionConfigMerger::VerifyCompactionPolicy(policy, error));
+            UNIT_ASSERT_VALUES_EQUAL(error, Sprintf(
+                "Compaction generation %u: expected GenerationId %u, got %u",
+                test.Index, test.Index, test.ActualId));
+        }
+    }
+
+    Y_UNIT_TEST(CompactionPolicyAcceptsSequentialGenerationIds) {
+        for (const bool omitFirstId : {false, true}) {
+            auto policy = CompactionPolicyWithGenerationIds({0, 1, 2});
+            if (omitFirstId) {
+                policy.MutableGeneration(0)->ClearGenerationId();
+            }
+            TString error;
+            UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCompactionPolicy(policy, error), error);
+        }
+    }
+
+    Y_UNIT_TEST(CreateAndAlterRejectInvalidCompactionGenerationIds) {
+        NKikimrSchemeOp::TPartitionConfig source;
+        source.MutableCompactionPolicy()->CopyFrom(CompactionPolicyWithGenerationIds({0, 1, 2}));
+        TString error;
+        UNIT_ASSERT_C(TPartitionConfigMerger::VerifyCreateParams(source, nullptr, false, error), error);
+
+        auto invalid = source;
+        invalid.MutableCompactionPolicy()->MutableGeneration(1)->SetGenerationId(2);
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyCreateParams(invalid, nullptr, false, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "Compaction generation 1: expected GenerationId 1, got 2");
+        error.clear();
+        UNIT_ASSERT(!TPartitionConfigMerger::VerifyAlterParams(source, invalid, nullptr, false, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "Compaction generation 1: expected GenerationId 1, got 2");
+    }
 
     Y_UNIT_TEST_FLAG(VectorIndexDescriptionPersistence, Hnsw) {
         NKikimrSchemeOp::TIndexCreationConfig config;

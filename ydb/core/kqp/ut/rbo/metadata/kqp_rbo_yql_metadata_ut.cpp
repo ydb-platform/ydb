@@ -67,6 +67,10 @@ using namespace NYql::NNodes;
 using namespace NStat;
 using namespace NKikimr::NKqp::NYqlTests;
 
+void AssertLogicalCardinality(ELogicalCardinality actual, ELogicalCardinality expected) {
+    UNIT_ASSERT_VALUES_EQUAL(ui32(actual), ui32(expected));
+}
+
 size_t CountOperatorInTraversal(TOpRoot& root, const IOperator* expected) {
     size_t count = 0;
     for (const auto& item : root) {
@@ -79,7 +83,7 @@ TString LoadTPCHYqlQuery(ui32 queryId) {
     const TString toDecimal = R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
     const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
     return toDecimal + "\n" + toDecimalMax + "\n"
-        + GetFullPath(BenchmarkQueryPath[EBenchType::TPCH], ToString(queryId) + ".yql");
+        + ReadBenchmarkQuery(EBenchType::TPCH, queryId);
 }
 
 } // namespace
@@ -546,6 +550,218 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(map->Props.Metadata);
         UNIT_ASSERT(map->Props.Metadata->KeyColumns == TOrderedIUs<>{id});
         UNIT_ASSERT(map->Props.Metadata->ShuffledByColumns == TOrderedIUs<>{id});
+    }
+
+    Y_UNIT_TEST(LogicalCardinalityLimits) {
+        using C = ELogicalCardinality;
+        struct TCase {
+            C Input;
+            std::optional<ui64> Limit; // nullopt represents a runtime expression
+            std::optional<ui64> Offset;
+            C Complete;
+            C Intermediate;
+        };
+        const TCase cases[] = {
+            {C::One, 0, 0, C::Zero, C::Zero},
+            {C::One, 1, 1, C::Zero, C::Zero},
+            {C::One, 2, 0, C::One, C::One},
+            {C::One, std::nullopt, 0, C::ZeroOrOne, C::ZeroOrOne},
+            {C::One, 1, std::nullopt, C::ZeroOrOne, C::ZeroOrOne},
+            {C::Zero, std::nullopt, std::nullopt, C::Zero, C::Zero},
+            {C::ZeroOrOne, 2, 1, C::Zero, C::Zero},
+            {C::ZeroOrMore, 0, std::nullopt, C::Zero, C::Zero},
+            {C::ZeroOrMore, 1, 0, C::ZeroOrOne, C::ZeroOrMore},
+            {C::ZeroOrMore, 2, 0, C::ZeroOrMore, C::ZeroOrMore},
+            {C::OneOrMore, 1, 0, C::One, C::OneOrMore},
+            {C::OneOrMore, 2, 0, C::OneOrMore, C::OneOrMore},
+            {C::OneOrMore, 1, 1, C::ZeroOrOne, C::ZeroOrMore},
+            {C::OneOrMore, 2, std::nullopt, C::ZeroOrMore, C::ZeroOrMore},
+            {C::OneOrMore, std::nullopt, 0, C::ZeroOrMore, C::ZeroOrMore},
+        };
+        NTests::TIdTestContext f;
+        const auto parameter = f.Column(f.Id("parameter"));
+        for (const auto& test : cases) {
+            for (const TString type : {"Uint32", "Uint64"}) {
+                const auto expression = [&](std::optional<ui64> value) {
+                    return value ? MakeConstant(type, ToString(*value), f.Pos, &f.ExprCtx) : parameter;
+                };
+                auto input = f.Read({});
+                input->Props.Metadata.emplace();
+                input->Props.Metadata->LogicalCard = test.Input;
+                for (const auto phase : {EOpPhase::Undefined, EOpPhase::Final, EOpPhase::Intermediate}) {
+                    const auto expected = phase == EOpPhase::Intermediate ? test.Intermediate : test.Complete;
+                    TOpLimit limit(input, f.Pos, expression(test.Limit), expression(test.Offset), phase);
+                    limit.ComputeMetadata(f.RboCtx, f.Props);
+                    AssertLogicalCardinality(limit.Props.Metadata->LogicalCard, expected);
+                    if (test.Offset == std::optional<ui64>{0}) {
+                        TOpLimit noOffset(input, f.Pos, expression(test.Limit), phase);
+                        noOffset.ComputeMetadata(f.RboCtx, f.Props);
+                        AssertLogicalCardinality(noOffset.Props.Metadata->LogicalCard, expected);
+                        TOpSort top(input, f.Pos, TSortIUs{}, expression(test.Limit));
+                        top.SetSortPhase(phase);
+                        top.ComputeMetadata(f.RboCtx, f.Props);
+                        AssertLogicalCardinality(top.Props.Metadata->LogicalCard, expected);
+                    }
+                }
+            }
+        }
+        UNIT_ASSERT(f.Constant().IsLiteralOne());
+        const auto maxCount = MakeConstant("Uint64", "18446744073709551615", f.Pos, &f.ExprCtx);
+        UNIT_ASSERT_VALUES_EQUAL(*maxCount.GetUnsignedLiteral(), Max<ui64>());
+        auto input = f.Read({});
+        TOpLimit limit(input, f.Pos, f.Constant(), EOpPhase::Undefined);
+        TOpSort top(input, f.Pos, TSortIUs{}, f.Constant());
+        limit.ComputeMetadata(f.RboCtx, f.Props);
+        top.ComputeMetadata(f.RboCtx, f.Props);
+        UNIT_ASSERT(!limit.Props.Metadata);
+        UNIT_ASSERT(!top.Props.Metadata);
+    }
+
+    Y_UNIT_TEST(LogicalCardinalityLimitBoundsContainConcreteResults) {
+        using C = ELogicalCardinality;
+        const auto contains = [](C card, ui64 rows) {
+            switch (card) {
+                case C::Zero: return rows == 0;
+                case C::One: return rows == 1;
+                case C::ZeroOrOne: return rows <= 1;
+                case C::OneOrMore: return rows >= 1;
+                case C::ZeroOrMore: return true;
+            }
+            return false;
+        };
+        NTests::TIdTestContext f;
+        const auto parameter = f.Column(f.Id("parameter"));
+        for (const auto card : {C::Zero, C::One, C::ZeroOrOne, C::OneOrMore, C::ZeroOrMore}) {
+            auto input = f.Read({});
+            input->Props.Metadata.emplace();
+            input->Props.Metadata->LogicalCard = card;
+            // -1 is unknown at compilation time. Enumerate actual runtime
+            // counts independently, including two-partition intermediate limits.
+            for (int count = -1; count <= 2; ++count) {
+                for (int offset = -1; offset <= 2; ++offset) {
+                    const auto expression = [&](int value) {
+                        return value < 0 ? parameter : MakeConstant("Uint64", ToString(value), f.Pos, &f.ExprCtx);
+                    };
+                    for (const auto phase : {EOpPhase::Undefined, EOpPhase::Intermediate}) {
+                        TOpLimit limit(input, f.Pos, expression(count), expression(offset), phase);
+                        limit.ComputeMetadata(f.RboCtx, f.Props);
+                        for (ui64 a = 0; a <= 4; ++a) {
+                            for (ui64 b = 0; b <= 4; ++b) {
+                                if (!contains(card, a + b)) {
+                                    continue;
+                                }
+                                for (ui64 n = 0; n <= 3; ++n) {
+                                    for (ui64 skip = 0; skip <= 3; ++skip) {
+                                        if ((count >= 0 && n != ui64(count)) || (offset >= 0 && skip != ui64(offset))) {
+                                            continue;
+                                        }
+                                        const auto execute = [&](ui64 rows) { return Min(rows > skip ? rows - skip : 0, n); };
+                                        const auto rows = phase == EOpPhase::Intermediate ? execute(a) + execute(b) : execute(a + b);
+                                        UNIT_ASSERT_C(contains(limit.Props.Metadata->LogicalCard, rows),
+                                            "input=" << ui32(card) << " limit=" << count << " offset=" << offset
+                                            << " partitions=" << a << "," << b << " rows=" << rows);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(LogicalCardinalityAggregationPhasesAndGroupingSets) {
+        using C = ELogicalCardinality;
+        NTests::TIdTestContext f;
+        const auto key = f.Id("key"), value = f.Id("value");
+        for (const auto card : {C::Zero, C::One, C::ZeroOrOne, C::OneOrMore, C::ZeroOrMore}) {
+            auto input = f.Read({key, value});
+            input->Props.Metadata.emplace();
+            input->Props.Metadata->LogicalCard = card;
+            for (const auto phase : {EOpPhase::Undefined, EOpPhase::Final, EOpPhase::Intermediate}) {
+                TAggregationIUs scalarTraits;
+                scalarTraits.Add(f.Id("scalar"), TOpAggregationTraits{value, "max"});
+                auto scalar = MakeIntrusive<TOpAggregate>(input, scalarTraits, TOrderedIUs<>{}, phase, false, f.Pos);
+                scalar->ComputeMetadata(f.RboCtx, f.Props);
+                AssertLogicalCardinality(scalar->Props.Metadata->LogicalCard, phase == EOpPhase::Intermediate ? card : C::One);
+                TAggregationIUs groupedTraits;
+                groupedTraits.Add(f.Id("grouped"), TOpAggregationTraits{value, "max"});
+                auto grouped = MakeIntrusive<TOpAggregate>(input, groupedTraits, TOrderedIUs<>{key}, phase, false, f.Pos);
+                grouped->ComputeMetadata(f.RboCtx, f.Props);
+                AssertLogicalCardinality(grouped->Props.Metadata->LogicalCard, card);
+
+                TOpGroupingSets single(grouped, {{key}}, {}, f.Pos);
+                single.ComputeMetadata(f.RboCtx, f.Props);
+                AssertLogicalCardinality(single.Props.Metadata->LogicalCard, card);
+                TOpGroupingSets mixed(grouped, {{key}, {}}, {}, f.Pos);
+                mixed.ComputeMetadata(f.RboCtx, f.Props);
+                const auto expected = phase != EOpPhase::Intermediate
+                    ? (card == C::Zero ? C::One : C::OneOrMore)
+                    : (card == C::Zero ? C::Zero : card == C::One || card == C::OneOrMore ? C::OneOrMore : C::ZeroOrMore);
+                AssertLogicalCardinality(mixed.Props.Metadata->LogicalCard, expected);
+                TOpGroupingSets emptySets(grouped, {{}, {}}, {}, f.Pos);
+                emptySets.ComputeMetadata(f.RboCtx, f.Props);
+                AssertLogicalCardinality(emptySets.Props.Metadata->LogicalCard,
+                    phase == EOpPhase::Intermediate ? expected : C::OneOrMore);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(LogicalCardinalityLookupJoins) {
+        using C = ELogicalCardinality;
+        NTests::TIdTestContext f;
+        auto& table = f.Tables->GetOrAddTable(f.KqpCtx.Cluster, "/Root", "/Root/table");
+        table.Metadata = MakeIntrusive<TKikimrTableMetadata>();
+        table.Metadata->DoesExist = true;
+        table.Metadata->KeyColumnNames = {"key", "subkey"};
+        const auto key = f.Id("key");
+        for (const auto card : {C::Zero, C::One, C::ZeroOrOne, C::OneOrMore, C::ZeroOrMore}) {
+            auto input = f.Read({key});
+            input->Props.Metadata.emplace();
+            input->Props.Metadata->LogicalCard = card;
+            for (const TString kind : {"Inner", "Left", "LeftSemi", "LeftOnly"}) {
+                auto lookup = MakeIntrusive<TOpTableLookup>(input, f.Pos, input->TableCallable,
+                    TUnorderedIUs{}, TOpTableLookup::TLookupKeys{{key, "key"}}, kind, std::nullopt);
+                lookup->ComputeMetadata(f.RboCtx, f.Props);
+                AssertLogicalCardinality(lookup->Props.Metadata->LogicalCard, card == C::Zero ? C::Zero : C::ZeroOrMore);
+                TOpIndexLookupJoin join(lookup, f.Pos, kind, TJoinIUs{});
+                join.ComputeMetadata(f.RboCtx, f.Props);
+                AssertLogicalCardinality(join.Props.Metadata->LogicalCard, C::ZeroOrMore);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(LogicalCardinalityScalarSubqueryLimitKeepsOuterRow) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto scheme = tableSession.ExecuteSchemeQuery(
+            "CREATE TABLE `/Root/t` (key Uint64, PRIMARY KEY(key));").GetValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const TString order : {"", " ORDER BY cnt"}) {
+            const TString query = TStringBuilder() << R"(
+                PRAGMA YqlSelect = 'force';
+                DECLARE $n AS Uint64;
+                DECLARE $skip AS Uint64;
+                SELECT (SELECT COUNT(*) AS cnt FROM `/Root/t`
+            )" << order << " LIMIT $n OFFSET $skip) AS value;";
+            for (const ui64 count : {0, 1, 2}) {
+                for (const ui64 offset : {0, 1}) {
+                    const auto params = TParamsBuilder()
+                        .AddParam("$n").Uint64(count).Build()
+                        .AddParam("$skip").Uint64(offset).Build().Build();
+                    const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).GetValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                    UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)),
+                        count && !offset ? "[[[0u]]]" : "[[#]]");
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(GlobalAggregateStatisticsEstimateOneRow) {

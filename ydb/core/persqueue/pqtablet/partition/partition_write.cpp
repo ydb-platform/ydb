@@ -161,6 +161,9 @@ THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THas
 void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ctx) {
     LOG_T("TPartition::HandleOnWrite TEvChangeOwner");
 
+    WriteInitThrottledMs.Update(ev->Get()->WriteSessionQuotaWaitTime.MilliSeconds(), ctx.Now());
+    WriteInitSessions.Update(1, ctx.Now());
+
     bool res = OwnerPipes.insert(ev->Get()->PipeClient).second;
     PQ_ENSURE(res);
     WaitToChangeOwner.push_back(ev->Release());

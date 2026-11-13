@@ -39,6 +39,8 @@
 #include <algorithm>
 #include <type_traits>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXPORT
+
 namespace NKikimr::NSchemeShard {
 
 namespace {

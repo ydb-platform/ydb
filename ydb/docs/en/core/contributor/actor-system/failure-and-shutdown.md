@@ -132,3 +132,10 @@ try {
 An exception escaping a top-level void handler is offered to
 IActorExceptionHandler. If it is not accepted, the runtime terminates. A
 cancellation never enters that catch block.
+
+Actors without IActorExceptionHandler dispatch events outside Receive's catch
+block. This avoids unwinding the actor handler merely to rethrow an exception
+that cannot be handled. On runtimes that terminate before unwinding an uncaught
+exception, the original actor frames remain available to crash stack collection.
+Actors implementing IActorExceptionHandler retain the catch/handler path; if the
+handler declines the exception, its original frames have already been unwound.

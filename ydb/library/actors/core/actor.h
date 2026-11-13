@@ -807,7 +807,8 @@ namespace NActors {
         }
 
     private:
-        bool OnUnhandledExceptionSafe(const std::exception_ptr& exc);
+        void DispatchEvent(TAutoPtr<IEventHandle>& ev);
+        bool OnUnhandledExceptionSafe(IActorExceptionHandler& handler, const std::exception_ptr& exc);
 
     protected:
         void SetEnoughCpu(bool isEnough);

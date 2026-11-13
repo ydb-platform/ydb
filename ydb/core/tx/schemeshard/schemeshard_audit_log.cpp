@@ -248,6 +248,11 @@ struct TXxportRecord {
 };
 
 void AuditLogXxport(TXxportRecord&& record) {
+    if (record.Status == "ERROR" && record.Reason.empty()) {
+        record.Reason = TStringBuilder() << record.OperationName << " failed with status "
+            << Ydb::StatusIds::StatusCode_Name(record.DetailedStatus);
+    }
+
     AUDIT_LOG(
         AUDIT_PART("component", SchemeshardComponentName)
 

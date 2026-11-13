@@ -395,7 +395,7 @@ namespace NKikimr::NBsController {
         // groups which would be added at commit anyway, so it may be called at any point of the transaction.
         void TBlobStorageController::PropagateGroupContentChanged(TConfigState& state) {
             // virtual group state reported to node wardens may change without explicit group content change (for
-            // instance, when decommission starts or BlobDepot creation fails), deliver it with new generation
+            // instance, when decommission starts, BlobDepot creation fails, or its backend changes), deliver it with new generation
             for (const auto& [base, overlay] : state.Groups.Diff()) {
                 if (base && overlay->second && base->second->GetReportedVirtualGroupState() !=
                         overlay->second->GetReportedVirtualGroupState()) {
@@ -1292,6 +1292,15 @@ namespace NKikimr::NBsController {
             }
         }
 
+        bool TBlobStorageController::TGroupInfo::IsExternalStorage() const {
+            NKikimrBlobDepot::TBlobDepotConfig config;
+            if (BlobDepotConfig) {
+                Y_ABORT_UNLESS(config.ParseFromString(*BlobDepotConfig));
+            }
+
+            return config.HasS3BackendSettings();
+        }
+
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id,
                 const THostConfigInfo &hostConfig) {
             pb->SetHostConfigId(id);
@@ -1717,6 +1726,9 @@ namespace NKikimr::NBsController {
             group->SetGroupID(groupInfo.ID.GetRawId());
             group->SetGroupGeneration(groupInfo.Generation);
             group->SetStoragePoolName(poolInfo.Name);
+            group->SetStoragePoolKind(poolInfo.Kind);
+
+            group->SetIsExternalStorage(groupInfo.IsExternalStorage());
 
             group->SetEncryptionMode(groupInfo.EncryptionMode.GetOrElse(0));
             group->SetLifeCyclePhase(groupInfo.LifeCyclePhase.GetOrElse(0));

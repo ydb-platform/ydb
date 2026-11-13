@@ -123,6 +123,16 @@ struct TTestContext {
         Runtime->Send(new IEventHandle(TabletActorId, TabletActorId, new TKikimrEvents::TEvPoisonPill));
     }
 
+    void StartTablet(const TIntrusivePtr<TTabletStorageInfo>& info) {
+        auto setupInfo = MakeIntrusive<TTabletSetupInfo>(
+            &CreateKeyValueFlat, TMailboxType::Simple, ui32(0), TMailboxType::Simple, ui32(0));
+        TabletActorId = Runtime->Register(CreateTablet({}, info.Get(), setupInfo.Get(), 0), 0);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        Runtime->DispatchEvents(options);
+    }
+
     void StartReassignedTablet(bool repeatCurrentGroup = false) {
         auto info = CreateReassignedTabletInfo(TabletId, TTabletTypes::KeyValue, TErasureType::ErasureNone, 2181038080, 2181038081, 3);
         if (repeatCurrentGroup) {
@@ -133,13 +143,8 @@ struct TTestContext {
                 channel.History.insert(channel.History.begin(), first);
             }
         }
-        auto setupInfo = MakeIntrusive<TTabletSetupInfo>(
-            &CreateKeyValueFlat, TMailboxType::Simple, ui32(0), TMailboxType::Simple, ui32(0));
-        TabletActorId = Runtime->Register(CreateTablet({}, info.Get(), setupInfo.Get(), 0), 0);
 
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-        Runtime->DispatchEvents(options);
+        StartTablet(info);
     }
 
     void SendMoveData(const std::vector<ui32>& groups) {
@@ -481,6 +486,83 @@ void CmdCopyRange(const TString &from, const bool includeFrom, const TString &to
     });
 }
 
+struct TStorageUsageAccessor : NKeyValue::TKeyValueFlat {
+    static THashMap<ui32, ui64> Get(const NKeyValue::TKeyValueFlat& tablet) {
+        return (tablet.*(&TStorageUsageAccessor::State)).GetStorageUsageByGroup();
+    }
+};
+
+void CheckStorageUsage(TTestContext& tc, const THashMap<ui32, ui64>& expected) {
+    const auto actorId = ResolveTablet(*tc.Runtime, tc.TabletId);
+    const auto* tablet = dynamic_cast<NKeyValue::TKeyValueFlat*>(tc.Runtime->FindActor(actorId));
+    UNIT_ASSERT(tablet);
+    const auto usage = TStorageUsageAccessor::Get(*tablet);
+    UNIT_ASSERT_VALUES_EQUAL(usage.size(), expected.size());
+    for (const auto& [group, bytes] : expected) {
+        const auto* actual = usage.FindPtr(group);
+        UNIT_ASSERT_C(actual, "Missing storage usage for group " << group);
+        UNIT_ASSERT_VALUES_EQUAL_C(*actual, bytes, "Group " << group);
+    }
+}
+
+Y_UNIT_TEST(StorageUsageAfterChannelReassignments) {
+    constexpr ui32 firstGroup = 2181038080;
+    constexpr ui32 secondGroup = 2181038081;
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare([](TTestActorRuntime&) {});
+
+    const TString inlineValue = "inline";
+    const TString secondValue(2048, 'b');
+    const TString thirdValue(4096, 'c');
+    CmdWrite("old", tc.Value, NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CmdWrite("inline", inlineValue, NKikimrClient::TKeyValueRequest::INLINE,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CheckStorageUsage(tc, {{firstGroup, tc.Value.size() + inlineValue.size()}});
+
+    auto info = CreateInitialTabletInfo(tc.TabletId, TTabletTypes::KeyValue, TErasureType::ErasureNone, firstGroup);
+    for (auto& channel : info->Channels) {
+        if (channel.Channel >= NKeyValue::BLOB_CHANNEL) {
+            channel.History.emplace_back(3, secondGroup);
+        }
+    }
+
+    tc.PoisonTablet();
+    tc.StartTablet(info);
+    CmdWrite("second", secondValue, NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CheckStorageUsage(tc, {{firstGroup, tc.Value.size() + inlineValue.size()}, {secondGroup, secondValue.size()}});
+
+    auto reverseInfo = MakeIntrusive<TTabletStorageInfo>(tc.TabletId, TTabletTypes::KeyValue);
+    reverseInfo->Channels = info->Channels;
+    for (auto& channel : reverseInfo->Channels) {
+        if (channel.Channel >= NKeyValue::BLOB_CHANNEL) {
+            channel.History.emplace_back(4, firstGroup);
+        }
+    }
+
+    tc.PoisonTablet();
+    tc.StartTablet(reverseInfo);
+    CmdWrite("third", thirdValue, NKikimrClient::TKeyValueRequest::MAIN,
+        NKikimrClient::TKeyValueRequest::REALTIME, tc);
+    CheckStorageUsage(tc, {{firstGroup, tc.Value.size() + thirdValue.size() + inlineValue.size()},
+        {secondGroup, secondValue.size()}});
+
+    CmdDeleteRange("old", true, "old", true, tc);
+    tc.PoisonTablet();
+    tc.StartTablet(reverseInfo);
+    CmdRead({"second", "third", "inline"}, NKikimrClient::TKeyValueRequest::REALTIME,
+        {secondValue, thirdValue, inlineValue}, {}, tc);
+    CheckStorageUsage(tc, {{firstGroup, thirdValue.size() + inlineValue.size()}, {secondGroup, secondValue.size()}});
+
+    CmdDeleteRange("second", true, "second", true, tc);
+    CheckStorageUsage(tc, {{firstGroup, thirdValue.size() + inlineValue.size()}});
+    CmdDeleteRange("third", true, "third", true, tc);
+    CmdDeleteRange("inline", true, "inline", true, tc);
+    CheckStorageUsage(tc, {});
+}
+
 Y_UNIT_TEST(ReassignGroups) {
     TTestContext tc;
     TFinalizer finalizer(tc);
@@ -538,14 +620,24 @@ Y_UNIT_TEST(MoveDataReferencedByTwoKeys) {
 
     CmdWrite("key", tc.Value, NKikimrClient::TKeyValueRequest::MAIN, NKikimrClient::TKeyValueRequest::REALTIME, tc);
     CmdCopyRange("key", true, "key", true, "_", "", tc);
+    CheckStorageUsage(tc, {{2181038080, tc.Value.size()}});
 
     tc.PoisonTablet();
     tc.StartReassignedTablet();
 
     tc.ExecuteMoveData();
+    CheckStorageUsage(tc, {{2181038081, tc.Value.size()}});
 
     CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, {tc.Value}, {}, tc);
     CmdRead({"_key"}, NKikimrClient::TKeyValueRequest::REALTIME, {tc.Value}, {}, tc);
+    CmdDeleteRange("key", true, "key", true, tc);
+    CheckStorageUsage(tc, {{2181038081, tc.Value.size()}});
+    tc.PoisonTablet();
+    tc.StartReassignedTablet();
+    CmdRead({"_key"}, NKikimrClient::TKeyValueRequest::REALTIME, {tc.Value}, {}, tc);
+    CheckStorageUsage(tc, {{2181038081, tc.Value.size()}});
+    CmdDeleteRange("_key", true, "_key", true, tc);
+    CheckStorageUsage(tc, {});
 }
 
 Y_UNIT_TEST(MoveDataRecordOfTwoBlobs) {
@@ -571,15 +663,21 @@ Y_UNIT_TEST(MoveDataRecordOfSameBlobs) {
 
     CmdWrite("key", tc.Value, NKikimrClient::TKeyValueRequest::MAIN, NKikimrClient::TKeyValueRequest::REALTIME, tc);
     CmdConcat({"key", "key", "key", "key"}, "key2", true, tc);
+    CheckStorageUsage(tc, {{2181038080, tc.Value.size()}});
 
     tc.PoisonTablet();
     tc.StartReassignedTablet();
 
     tc.ExecuteMoveData();
+    CheckStorageUsage(tc, {{2181038081, tc.Value.size()}});
 
     TString concatValue = TString(4 * tc.Value.size(), 'a');
     CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, {tc.Value}, {}, tc);
     CmdRead({"key2"}, NKikimrClient::TKeyValueRequest::REALTIME, {concatValue}, {}, tc);
+    CmdDeleteRange("key", true, "key", true, tc);
+    CheckStorageUsage(tc, {{2181038081, tc.Value.size()}});
+    CmdDeleteRange("key2", true, "key2", true, tc);
+    CheckStorageUsage(tc, {});
 }
 
 Y_UNIT_TEST(MoveDataBlobDeletedBeforeMove) {

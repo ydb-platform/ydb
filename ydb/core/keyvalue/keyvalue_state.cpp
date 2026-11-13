@@ -13,6 +13,8 @@
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/generic/algorithm.h>
@@ -179,6 +181,8 @@ void TKeyValueState::Clear() {
     CollectOperation.Reset(nullptr);
     IsCollectEventSent = false;
     ChannelDataUsage.fill(0);
+    GroupDataUsage.clear();
+    DiskQuotaExceeded = false;
     UsedChannels.reset();
 
     TabletId = 0;
@@ -198,6 +202,10 @@ void TKeyValueState::Clear() {
         ClearTabletCounters();
         CountStarting();
     }
+}
+
+void TKeyValueState::PersistState(ISimpleDb& db) {
+    THelpers::DbUpdateState(StoredState, DiskQuotaExceeded, db);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -395,6 +403,17 @@ void TKeyValueState::CountRequestIncoming(TRequestType::EType requestType) {
     }
 }
 
+THashMap<ui32, ui64> TKeyValueState::GetStorageUsageByGroup() const {
+    auto usage = GroupDataUsage;
+    if (const ui64 inlineBytes = ChannelDataUsage[0]) {
+        const ui32 group = TabletInfo->GroupFor(0, ExecutorGeneration);
+        Y_ABORT_UNLESS(group != Max<ui32>());
+        usage[group] += inlineBytes;
+    }
+
+    return usage;
+}
+
 void TKeyValueState::CountTrashRecord(const TLogoBlobID& id) {
     CountUncommittedTrashRecord(id);
     TabletCounters->Simple()[COUNTER_RECORD_COUNT] -= 1;
@@ -403,6 +422,13 @@ void TKeyValueState::CountTrashRecord(const TLogoBlobID& id) {
     ResourceMetrics->StorageUser.Set(bytes.Get());
     Y_ABORT_UNLESS(id.Channel() < ChannelDataUsage.size());
     ChannelDataUsage[id.Channel()] -= id.BlobSize();
+    const ui32 group = TabletInfo->GroupFor(id);
+    auto it = GroupDataUsage.find(group);
+    Y_ABORT_UNLESS(it != GroupDataUsage.end() && it->second >= id.BlobSize());
+    it->second -= id.BlobSize();
+    if (!it->second) {
+        GroupDataUsage.erase(it);
+    }
 }
 
 void TKeyValueState::CountWriteRecord(const TLogoBlobID& id) {
@@ -411,6 +437,11 @@ void TKeyValueState::CountWriteRecord(const TLogoBlobID& id) {
     ResourceMetrics->StorageUser.Set(TabletCounters->Simple()[COUNTER_RECORD_BYTES].Get());
     Y_ABORT_UNLESS(id.Channel() < ChannelDataUsage.size());
     ChannelDataUsage[id.Channel()] += id.BlobSize();
+    if (id.Channel()) {
+        const ui32 group = TabletInfo->GroupFor(id);
+        Y_ABORT_UNLESS(group != Max<ui32>());
+        GroupDataUsage[group] += id.BlobSize();
+    }
 }
 
 void TKeyValueState::CountDeleteInline(ui32 sizeBytes) {
@@ -609,6 +640,12 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             Y_ABORT_UNLESS(data->CheckChecksum());
             Y_ABORT_UNLESS(data->DataHeader.ItemType == EIT_STATE);
             StoredState = *data;
+            if (value.size() > sizeof(TKeyValueStoredStateData)) {
+                const ui8 exceeded = value[sizeof(TKeyValueStoredStateData)];
+                Y_ABORT_UNLESS(exceeded <= 1);
+                DiskQuotaExceeded = exceeded != 0;
+            }
+
             break;
         }
         case EIT_VACUUM_GENERATION: {
@@ -780,7 +817,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
 
     THelpers::DbEraseCollect(db);
     if (IsEmptyDbStart) {
-        THelpers::DbUpdateState(StoredState, db);
+        PersistState(db);
     }
 
     // corner case, if no CollectGarbage events were sent
@@ -815,7 +852,7 @@ void TKeyValueState::RegisterInitialGCCompletionExecute(ISimpleDb &db, const TAc
     Y_ABORT_UNLESS(ExecutorGeneration);
     StoredState.SetCollectGeneration(ExecutorGeneration - 1);
     StoredState.SetCollectStep(Max<ui32>());
-    THelpers::DbUpdateState(StoredState, db);
+    PersistState(db);
 }
 
 void TKeyValueState::RegisterInitialGCCompletionComplete(const TActorContext &ctx, const TTabletStorageInfo *info) {
@@ -1899,7 +1936,7 @@ bool TKeyValueState::IncrementGeneration(THolder<TIntermediate> &intermediate, I
     Y_ABORT_UNLESS(nextGeneration > StoredState.GetUserGeneration());
     StoredState.SetUserGeneration(nextGeneration);
 
-    THelpers::DbUpdateState(StoredState, db);
+    PersistState(db);
 
     intermediate->Response.MutableIncrementGenerationResult()->SetGeneration(nextGeneration);
     intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -3585,6 +3622,15 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
         return false;
     }
 
+    if (DiskQuotaExceeded && AnyOf(request.commands(), [](const auto& cmd) { return !cmd.has_delete_range(); })) {
+        const TString message = "Database disk quota exceeded";
+        const auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED, message);
+        NYql::IssueToMessage(issue, intermediate->ExecuteTransactionResponse.add_issues());
+        ReplyError<TEvKeyValue::TEvExecuteTransactionResponse>(ctx, message,
+            NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED, intermediate);
+        return false;
+    }
+
     TPrepareResult result = PrepareCommands(request, intermediate, info, ctx, *ev->Get());
 
     if (result.WithError) {
@@ -4041,6 +4087,13 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     }
 
     if (CheckGeneration(ctx, request, intermediate)) {
+        return false;
+    }
+
+    if (DiskQuotaExceeded && (request.CmdWriteSize() || request.CmdPatchSize() || request.CmdRenameSize()
+            || request.CmdCopyRangeSize() || request.CmdConcatSize())) {
+        ReplyError(ctx, "Database disk quota exceeded", NMsgBusProxy::MSTATUS_REJECTED,
+            NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED, intermediate);
         return false;
     }
 

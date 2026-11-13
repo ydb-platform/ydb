@@ -28,6 +28,7 @@ namespace TEvKeyValue {
         EvUpdateWeights,
         EvCompleteGC,
         EvVacuumRequest,
+        EvStorageUsageReport,
 
         EvRead = EvRequest + 16,
         EvReadRange,
@@ -55,6 +56,9 @@ namespace TEvKeyValue {
     static_assert(
         EvEnd < EventSpaceEnd(TKikimrEvents::ES_KEYVALUE),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_KEYVALUE)");
+
+    struct TEvStorageUsageReport : TEventPB<TEvStorageUsageReport,
+            NKikimrKeyValue::StorageUsageReport, EvStorageUsageReport> {};
 
     struct TEvReadResponse;
 
@@ -217,6 +221,8 @@ namespace TEvKeyValue {
                 return NMsgBusProxy::MSTATUS_TIMEOUT;
             case NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR:
                 return NMsgBusProxy::MSTATUS_INTERNALERROR;
+            case NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED:
+                return NMsgBusProxy::MSTATUS_REJECTED;
             case NKikimrKeyValue::Statuses::RSTATUS_BLOCKED:
                 return NMsgBusProxy::MSTATUS_ERROR;
             default:

@@ -350,19 +350,35 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::Handle(TEvNodeWardenQueryGroupInfo::TPtr ev) {
         const auto& r = ev->Get()->Record;
+        if (r.GetResolve() && !EjectedGroups.contains(r.GetGroupId()) &&
+                TGroupID(r.GetGroupId()).ConfigurationType() != EGroupConfigurationType::Static) {
+            auto& group = Groups[r.GetGroupId()];
+            if (!group.Group || group.Group->GetGroupGeneration() != group.MaxKnownGeneration ||
+                    !group.Group->HasIsExternalStorage() || !group.Group->HasStoragePoolKind()) {
+                RequestGroupConfig(r.GetGroupId(), group);
+            }
+        }
+
         auto res = std::make_unique<TEvNodeWardenGroupInfo>();
         auto& record = res->Record;
-        if (const auto it = Groups.find(r.GetGroupId()); it != Groups.end() && it->second.Group) {
-            record.MutableGroup()->CopyFrom(*it->second.Group);
+        if (const auto it = Groups.find(r.GetGroupId()); it != Groups.end()) {
+            const auto& group = it->second;
+            if (group.Group && (!r.GetResolve() || group.Group->GetGroupGeneration() == group.MaxKnownGeneration)) {
+                record.MutableGroup()->CopyFrom(*group.Group);
+            }
         }
-        THashSet<TGroupId> groupsAdded;
-        for (const auto& [key, value] : LocalVDisks) {
-            if (const auto& r = value.RuntimeData; r && !r->DonorMode && !r->DDisk) {
-                if (const auto& groupId = r->GroupInfo->GroupID; groupsAdded.insert(groupId).second) {
-                    record.AddStartedGroupIds(groupId.GetRawId());
+
+        if (!r.GetResolve()) {
+            THashSet<TGroupId> groupsAdded;
+            for (const auto& [key, value] : LocalVDisks) {
+                if (const auto& r = value.RuntimeData; r && !r->DonorMode && !r->DDisk) {
+                    if (const auto& groupId = r->GroupInfo->GroupID; groupsAdded.insert(groupId).second) {
+                        record.AddStartedGroupIds(groupId.GetRawId());
+                    }
                 }
             }
         }
+
         Send(ev->Sender, res.release(), 0, ev->Cookie);
     }
 

@@ -24,6 +24,7 @@
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/storage_pools.h>
+#include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
@@ -2092,10 +2093,14 @@ struct TRtmrVolumeInfo: TSimpleRefCount<TRtmrVolumeInfo> {
     THashMap<TShardIdx, TRtmrPartitionInfo::TPtr> Partitions;
 };
 
+const TString* GetPoolKind(const TChannelBind& channelBind, const TStoragePools& pools);
+
 struct TSolomonPartitionInfo: TSimpleRefCount<TSolomonPartitionInfo> {
     using TPtr = TIntrusivePtr<TSolomonPartitionInfo>;
     ui64 PartitionId;
     TTabletId TabletId;
+
+    NKikimrSubDomains::TKeyValuePartitionUsage StorageUsage;
 
     TSolomonPartitionInfo(ui64 partId, TTabletId tabletId = InvalidTabletId)
         : PartitionId(partId)
@@ -2195,6 +2200,8 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
             ui64 DataSize = 0;
             ui64 UsedReserveSize = 0;
         } Topics;
+
+        ui64 KeyValueBytes = 0;
 
         struct TStoragePoolUsage {
             ui64 DataSize = 0;
@@ -2642,7 +2649,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     bool CheckQuotas(IQuotaCounters* counters);
 
     ui64 TotalDiskSpaceUsage() {
-        return DiskSpaceUsage.Tables.TotalSize + (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() ? GetPQAccountStorage() : 0);
+        return DiskSpaceUsage.Tables.TotalSize + DiskSpaceUsage.KeyValueBytes + (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() ? GetPQAccountStorage() : 0);
     }
 
     ui64 DiskSpaceQuotasAvailable() {
@@ -2820,6 +2827,9 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {});
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& delta);
     void AggrSmallBlobsUsage(IQuotaCounters* counters, i64 bytesDelta, i64 countDelta);
+
+    void UpdateKeyValueUsage(const NKikimrSubDomains::TKeyValuePartitionUsage& next,
+                             const NKikimrSubDomains::TKeyValuePartitionUsage& previous = {});
 
     void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {});
 

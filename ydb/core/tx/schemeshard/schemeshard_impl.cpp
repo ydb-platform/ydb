@@ -4318,7 +4318,7 @@ void TSchemeShard::PersistSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId, con
     }
 }
 
-void TSchemeShard::PersistRemoveSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId) {
+void TSchemeShard::PersistRemoveSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId, const TActorContext& ctx) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
     auto it = SolomonVolumes.find(pathId);
@@ -4336,10 +4336,13 @@ void TSchemeShard::PersistRemoveSolomonVolume(NIceDb::TNiceDb &db, TPathId pathI
             db.Table<Schema::AlterSolomonVolumes>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
         }
 
+        auto domain = ResolveDomainInfo(pathId);
         for (const auto& part : solomonVol->Partitions) {
+            domain->UpdateKeyValueUsage({}, part.second->StorageUsage);
             db.Table<Schema::SolomonPartitions>().Key(pathId.LocalPathId, part.first.GetLocalId()).Delete();
         }
 
+        CheckDiskQuotasAndPublish(db, ResolvePathIdForDomain(pathId), *domain, ctx);
         SolomonVolumes.erase(pathId);
     }
 
@@ -4892,11 +4895,15 @@ void TSchemeShard::UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, con
         - static_cast<i64>(oldPartitionStats.SmallBlobsCount);
     subDomainInfo->AggrSmallBlobsUsage(this, smallBlobsBytesDelta, smallBlobsCountDelta);
 
-    if (subDomainInfo->CheckQuotas(this)) {
-        PersistSubDomainState(db, subDomainId, *subDomainInfo);
+    CheckDiskQuotasAndPublish(db, subDomainId, *subDomainInfo, ctx);
+}
+
+void TSchemeShard::CheckDiskQuotasAndPublish(NIceDb::TNiceDb& db, TPathId domainId, TSubDomainInfo& domain, const TActorContext& ctx) {
+    if (domain.CheckQuotas(this)) {
+        PersistSubDomainState(db, domainId, domain);
         // Publish is done in a separate transaction, so we may call this directly
         TDeque<TPathId> toPublish;
-        toPublish.push_back(subDomainId);
+        toPublish.push_back(domainId);
         PublishToSchemeBoard(TTxId(), std::move(toPublish), ctx);
     }
 }
@@ -6347,6 +6354,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunShred, Handle);
         HFuncTraced(TEvSchemeShard::TEvTenantShredRequest, Handle);
         HFuncTraced(TEvDataShard::TEvVacuumResult, Handle);
+        HFuncTraced(TEvKeyValue::TEvStorageUsageReport, Handle);
         HFuncTraced(TEvKeyValue::TEvVacuumResponse, Handle);
         HFuncTraced(TEvPrivate::TEvAddNewShardToShred, Handle);
         HFuncTraced(TEvSchemeShard::TEvTenantShredResponse, Handle);
@@ -6785,7 +6793,7 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             PersistRemoveKesusInfo(db, node->PathId);
             break;
         case TPathElement::EPathType::EPathTypeSolomonVolume:
-            PersistRemoveSolomonVolume(db, node->PathId);
+            PersistRemoveSolomonVolume(db, node->PathId, ctx);
             break;
         case TPathElement::EPathType::EPathTypeColumnStore:
             PersistOlapStoreRemove(db, node->PathId);

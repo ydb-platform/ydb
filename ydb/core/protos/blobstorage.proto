@@ -1451,6 +1451,7 @@ message TEvControllerDatabaseSpaceState {
 
 message TEvNodeWardenQueryGroupInfo {
     optional uint32 GroupId = 1;
+    optional bool Resolve = 2 [default = false]; // request missing metadata from BSC; the caller retries the query
 }
 
 message TEvNodeWardenGroupInfo {

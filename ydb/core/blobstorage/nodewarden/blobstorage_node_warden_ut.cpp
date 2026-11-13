@@ -4065,6 +4065,15 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             return result;
         }
 
+        NKikimrBlobStorage::TEvNodeWardenGroupInfo QueryGroupInfo(ui32 groupId, bool resolve = false) {
+            const TActorId edge = Runtime.AllocateEdgeActor(NodeId);
+            auto event = std::make_unique<TEvNodeWardenQueryGroupInfo>(groupId);
+            event->Record.SetResolve(resolve);
+            Runtime.Send(new IEventHandle(NodeWardenId, edge, event.release()), NodeId);
+            const auto response = Runtime.WaitForEdgeActorEvent<TEvNodeWardenGroupInfo>(edge, false);
+            return response->Get()->Record;
+        }
+
         void SimulateForwardedRequest() {
             Runtime.WrapInActorContext(NodeWardenId, [this](IActor* wardenActor) {
                 auto& warden = *dynamic_cast<NStorage::TNodeWarden*>(wardenActor);
@@ -4083,6 +4092,118 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             });
         }
     };
+
+    Y_UNIT_TEST(TestGroupStorageMetadataRefreshAtSameGeneration) {
+        TStaticGroupProxyTestSetup setup(100);
+        setup.Bootstrap();
+        auto group = setup.QueryGroupInfo(setup.StaticGroupId).GetGroup();
+        const ui32 groupId = TGroupID(EGroupConfigurationType::Dynamic, 1, 3).GetRaw();
+        group.SetGroupID(groupId);
+        UNIT_ASSERT(!group.HasIsExternalStorage());
+        UNIT_ASSERT(!group.HasStoragePoolKind());
+        const auto apply = [&](bool fromController) {
+            setup.Runtime.WrapInActorContext(setup.NodeWardenId, [&](IActor* actor) {
+                auto& warden = *static_cast<NStorage::TNodeWarden*>(actor);
+                warden.ApplyGroupInfo(group.GetGroupID(), group.GetGroupGeneration(), &group, fromController, !fromController);
+            });
+        };
+
+        apply(true);
+        group.SetIsExternalStorage(false);
+        group.SetStoragePoolKind("ssd");
+        apply(true);
+        auto metadata = setup.QueryGroupInfo(groupId, true).GetGroup();
+        UNIT_ASSERT(metadata.HasIsExternalStorage());
+        UNIT_ASSERT(!metadata.GetIsExternalStorage());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetStoragePoolKind(), "ssd");
+
+        group.SetIsExternalStorage(true);
+        group.SetStoragePoolKind("external");
+        apply(true);
+        metadata = setup.QueryGroupInfo(groupId, true).GetGroup();
+        UNIT_ASSERT(metadata.GetIsExternalStorage());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetStoragePoolKind(), "external");
+
+        group.SetIsExternalStorage(false);
+        group.SetStoragePoolKind("stale-pool");
+        apply(false);
+        group.SetGroupGeneration(0);
+        apply(true);
+        group.SetGroupGeneration(1);
+        group.ClearIsExternalStorage();
+        group.ClearStoragePoolKind();
+        apply(true);
+        metadata = setup.QueryGroupInfo(groupId, true).GetGroup();
+        UNIT_ASSERT(metadata.HasIsExternalStorage());
+        UNIT_ASSERT(metadata.GetIsExternalStorage());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetStoragePoolKind(), "external");
+    }
+
+    Y_UNIT_TEST(TestGroupInfoResolveIsOptInAndDeduplicated) {
+        TStaticGroupProxyTestSetup setup(100);
+        setup.Bootstrap();
+        const ui32 groupId = TGroupID(EGroupConfigurationType::Dynamic, 1, 1).GetRaw();
+        UNIT_ASSERT(!setup.QueryGroupInfo(groupId).HasGroup());
+        setup.Runtime.WrapInActorContext(setup.NodeWardenId, [&](IActor* actor) {
+            const auto& warden = *static_cast<NStorage::TNodeWarden*>(actor);
+            UNIT_ASSERT(!warden.Groups.contains(groupId));
+        });
+
+        UNIT_ASSERT(!setup.QueryGroupInfo(groupId, true).HasGroup());
+        TActorId resolver;
+        setup.Runtime.WrapInActorContext(setup.NodeWardenId, [&](IActor* actor) {
+            const auto& group = static_cast<NStorage::TNodeWarden*>(actor)->Groups.at(groupId);
+            UNIT_ASSERT(group.GetGroupRequestPending);
+            UNIT_ASSERT(group.GroupResolver);
+            resolver = group.GroupResolver;
+        });
+
+        UNIT_ASSERT(!setup.QueryGroupInfo(groupId, true).HasGroup());
+        setup.Runtime.WrapInActorContext(setup.NodeWardenId, [&](IActor* actor) {
+            const auto& group = static_cast<NStorage::TNodeWarden*>(actor)->Groups.at(groupId);
+            UNIT_ASSERT(group.GetGroupRequestPending);
+            UNIT_ASSERT_VALUES_EQUAL(group.GroupResolver, resolver);
+        });
+
+        const ui32 unknownStaticGroupId = TGroupID(EGroupConfigurationType::Static, 1, 2).GetRaw();
+        UNIT_ASSERT(!setup.QueryGroupInfo(unknownStaticGroupId, true).HasGroup());
+        setup.Runtime.WrapInActorContext(setup.NodeWardenId, [&](IActor* actor) {
+            const auto& warden = *static_cast<NStorage::TNodeWarden*>(actor);
+            UNIT_ASSERT(!warden.Groups.contains(unknownStaticGroupId));
+        });
+    }
+
+    Y_UNIT_TEST(TestGroupInfoResolveRefreshesLegacyMetadata) {
+        TStaticGroupProxyTestSetup setup(100);
+        setup.Bootstrap();
+        auto metadata = setup.QueryGroupInfo(setup.StaticGroupId).GetGroup();
+        const ui32 groupId = TGroupID(EGroupConfigurationType::Dynamic, 1, 2).GetRaw();
+        metadata.SetGroupID(groupId);
+        setup.Runtime.WrapInActorContext(setup.NodeWardenId, [&](IActor* actor) {
+            auto& warden = *static_cast<NStorage::TNodeWarden*>(actor);
+            warden.ApplyGroupInfo(groupId, metadata.GetGroupGeneration(), &metadata, true, false);
+        });
+
+        const auto legacy = setup.QueryGroupInfo(groupId, true);
+        UNIT_ASSERT(legacy.HasGroup());
+        UNIT_ASSERT(!legacy.GetGroup().HasIsExternalStorage());
+        setup.Runtime.WrapInActorContext(setup.NodeWardenId, [&](IActor* actor) {
+            auto& warden = *static_cast<NStorage::TNodeWarden*>(actor);
+            UNIT_ASSERT(warden.Groups.at(groupId).GetGroupRequestPending);
+            metadata.SetIsExternalStorage(false);
+            metadata.SetStoragePoolKind("ssd");
+            warden.ApplyGroupInfo(groupId, metadata.GetGroupGeneration(), &metadata, true, false);
+        });
+
+        const auto resolved = setup.QueryGroupInfo(groupId, true);
+        UNIT_ASSERT(resolved.GetGroup().HasIsExternalStorage());
+        UNIT_ASSERT_VALUES_EQUAL(resolved.GetGroup().GetStoragePoolKind(), "ssd");
+        setup.Runtime.WrapInActorContext(setup.NodeWardenId, [&](IActor* actor) {
+            const auto& group = static_cast<NStorage::TNodeWarden*>(actor)->Groups.at(groupId);
+            UNIT_ASSERT(!group.GetGroupRequestPending);
+            UNIT_ASSERT(!group.GroupResolver);
+        });
+    }
 
     Y_UNIT_TEST(TestDynamicNodeLazyStaticGroupProxyCreation) {
         // MaxStaticNodeId = 0 means node 1 is a dynamic node

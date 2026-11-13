@@ -138,6 +138,8 @@ message TGroupInfo {
     optional uint32 BridgePileId = 20;
     optional bool DDisk = 21; // is this a Direct Block Group?
     optional TGroupState.EState Mirror3dcState = 22;
+    optional bool IsExternalStorage = 23; // true when the group's BlobDepot uses S3; absent on older controllers
+    optional string StoragePoolKind = 24;
 }
 
 // VDiskStatus ordering is assumed to be lower for bad statuses and higher for good ones

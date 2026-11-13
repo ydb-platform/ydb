@@ -1040,10 +1040,12 @@ public:
             }
         }
 
+        bool IsExternalStorage() const;
+
         // the part of group information reported to node wardens which is changed by virtual group machinery; group
         // generation has to be bumped whenever it changes, otherwise nodes would get different infos of the same generation
         auto GetReportedVirtualGroupState() const {
-            return std::make_tuple(GetReportedBlobDepotId(), DecommitStatus);
+            return std::make_tuple(GetReportedBlobDepotId(), DecommitStatus, IsExternalStorage());
         }
 
         // is this an unbridged group having both physical and virtual parts (it is being decommitted or recommissioned);

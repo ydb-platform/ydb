@@ -328,6 +328,7 @@ protected:
     bool IsCollectEventSent;
     bool InitWithoutCollect;
     std::array<ui64, 256> ChannelDataUsage;
+    THashMap<ui32, ui64> GroupDataUsage;
     std::bitset<256> UsedChannels;
     THolder<TChannelBalancer::TWeightManager> WeightManager;
 
@@ -398,6 +399,10 @@ public:
     TKeyValueState();
     void SetTabletInfo(TTabletStorageInfo* tabletInfo);
     void Clear();
+    void PersistState(ISimpleDb& db);
+    bool DiskQuotaExceeded = false;
+
+    THashMap<ui32, ui64> GetStorageUsageByGroup() const;
     void SetupTabletCounters(TAutoPtr<TTabletCountersBase> counters);
     void ClearTabletCounters();
     TAutoPtr<TTabletCountersBase> TakeTabletCounters();
@@ -729,6 +734,10 @@ public:
 
         if (errorDescription) {
             response->Record.set_msg(errorDescription);
+        }
+
+        if constexpr (std::is_same_v<TResponse, TEvKeyValue::TEvExecuteTransactionResponse>) {
+            response->Record.mutable_issues()->Swap(intermediate->ExecuteTransactionResponse.mutable_issues());
         }
 
         ResourceMetrics->Network.Increment(response->Record.ByteSize());

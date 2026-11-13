@@ -9,6 +9,10 @@ SRCS(
     events.proto
 )
 
+PEERDIR(
+    ydb/public/api/protos
+)
+
 EXCLUDE_TAGS(GO_PROTO)
 
 END()

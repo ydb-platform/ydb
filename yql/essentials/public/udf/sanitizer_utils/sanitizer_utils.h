@@ -3,12 +3,17 @@
 #include <cstddef>
 
 #include <util/system/compiler.h>
+#include <util/system/sanitizers.h>
 
+// Declare runtime entry points without depending on sanitizer headers unavailable on Windows.
+extern "C" {
 #if defined(_asan_enabled_)
-    #include <sanitizer/asan_interface.h>
+    void __asan_poison_memory_region(const volatile void* addr, size_t size);
+    void __asan_unpoison_memory_region(const volatile void* addr, size_t size);
 #elif defined(_msan_enabled_)
-    #include <sanitizer/msan_interface.h>
+    void __msan_copy_shadow(const volatile void* destination, const volatile void* source, size_t size);
 #endif
+}
 
 #if defined(_asan_enabled_) || defined(_msan_enabled_)
     #include <util/generic/scope.h>

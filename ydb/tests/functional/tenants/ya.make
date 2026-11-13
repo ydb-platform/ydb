@@ -18,7 +18,7 @@ TEST_SRCS(
 )
 
 # Diagnostic run: one chunk per collected test case.
-SPLIT_FACTOR(167)
+SPLIT_FACTOR(166)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)
 

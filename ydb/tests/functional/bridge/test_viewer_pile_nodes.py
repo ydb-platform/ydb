@@ -53,6 +53,23 @@ class TestViewerPileNodes(BridgeKiKiMRTest):
                 raise AssertionError(f"Viewer on node {node.node_id} returned {actual}, expected {expected}")
             time.sleep(1)
 
+    def test_node_pile_name_with_system_state(self):
+        node = self.pile_nodes["r1"][0]
+        response = requests.get(
+            f"http://{node.host}:{node.mon_port}/viewer/json/nodes",
+            params={"fields_required": "NodeId,PileName,SystemState"}, timeout=30,
+        )
+        response.raise_for_status()
+
+        nodes = response.json()["Nodes"]
+        assert nodes
+        pile_names = set()
+        for item in nodes:
+            pile_name = item["PileName"]
+            assert pile_name == item["SystemState"]["Location"]["BridgePileName"]
+            pile_names.add(pile_name)
+        assert pile_names == set(self.pile_names)
+
     def test_pile_node_counts(self):
         nodes_per_pile = self.nodes_count // len(self.pile_names)
         storage_node = self.pile_nodes["r1"][0]

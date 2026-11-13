@@ -848,6 +848,7 @@ RESOURCE(
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/helpers
+    ydb/library/actors/http
     library/cpp/archive
     library/cpp/json
     library/cpp/mime/types

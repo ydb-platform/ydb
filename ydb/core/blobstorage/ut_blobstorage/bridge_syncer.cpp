@@ -1493,6 +1493,134 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
         TestLateSyncerCompletion(ECompletionRace::ReregisterAfterCompletion);
     }
 
+    Y_UNIT_TEST(ProgressAfterGroupGenerationChange) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 18,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = [](ui32 nodeId) { return GetConvertedClusterLocation(nodeId, true); },
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto initial = GetGroupInfo(env, groupId);
+        const ui32 sourceGroupId = initial.GetBridgeGroupState().GetPile(0).GetGroupId();
+        const ui32 targetGroupId = initial.GetBridgeGroupState().GetPile(1).GetGroupId();
+        auto& runtime = env.Runtime;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldFinishes;
+        THashSet<const IEventHandle*> released;
+        bool controlProgress = false;
+        const IEventHandle *injected = nullptr;
+        TActorId progressSender;
+        TActorId progressRecipient;
+        runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (released.erase(ev.get()) || ev.get() == injected) {
+                injected = nullptr;
+                return true;
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType &&
+                    ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->TargetGroupId.GetRawId() == targetGroupId) {
+                heldFinishes.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerUpdateSyncerState::EventType) {
+                for (const auto& syncer : ev->Get<TEvBlobStorage::TEvControllerUpdateSyncerState>()->Record.GetSyncers()) {
+                    if (syncer.GetTargetGroupId() == targetGroupId) {
+                        progressSender = ev->Sender;
+                        progressRecipient = ev->GetRecipientRewrite();
+                        return !controlProgress;
+                    }
+                }
+            }
+            return true;
+        };
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        for (;;) {
+            WaitUntil(env, [&] { return !heldFinishes.empty(); }, "target syncer completion");
+            if (GetGroupInfo(env, groupId).GetBridgeGroupState().GetPile(1).GetStage() ==
+                    NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA) {
+                break;
+            }
+            for (auto& [nodeId, ev] : std::exchange(heldFinishes, {})) {
+                released.insert(ev.get());
+                runtime->Send(ev.release(), nodeId);
+            }
+        }
+        env.Sim(TDuration::Seconds(11));
+        UNIT_ASSERT(progressSender);
+        const ui32 assignedNodeId = progressSender.NodeId();
+        controlProgress = true;
+        const auto before = GetGroupInfo(env, groupId);
+        auto report = NKikimrBlobStorage::TEvControllerUpdateSyncerState::TSyncer();
+        report.SetBridgeProxyGroupId(groupId);
+        report.SetBridgeProxyGroupGeneration(before.GetGroupGeneration());
+        report.SetSourceGroupId(sourceGroupId);
+        report.SetTargetGroupId(targetGroupId);
+        auto sendProgress = [&](bool withCounters, ui64 copiedMiB = 0) {
+            auto update = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
+            auto *item = update->Record.AddSyncers();
+            item->CopyFrom(report);
+            if (withCounters) {
+                item->SetBytesDone(copiedMiB << 20);
+                item->SetBytesCopied(copiedMiB << 20);
+                item->SetBlobsDone(copiedMiB);
+                item->SetScannedItems(copiedMiB);
+            }
+            auto ev = std::make_unique<IEventHandle>(progressRecipient, progressSender, update.release());
+            injected = ev.get();
+            runtime->Send(ev.release(), env.Settings.ControllerNodeId);
+        };
+        auto lastProgress = [&] {
+            const auto info = QueryGroupSystemView(env, targetGroupId, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(info.GetBridgeSyncStage(), "WRITE_KEEP_BARRIER_DONOTKEEP_DATA");
+            UNIT_ASSERT(info.HasBridgeSyncLastProgressTimestamp());
+            return info.GetBridgeSyncLastProgressTimestamp();
+        };
+        sendProgress(true);
+        const ui64 baselineProgress = lastProgress();
+        sendProgress(true, 900);
+        const ui64 oldProgress = lastProgress();
+        UNIT_ASSERT_GT(oldProgress, baselineProgress);
+
+        ReassignOneDisk(env, targetGroupId);
+        const auto after = GetGroupInfo(env, groupId);
+        UNIT_ASSERT_GT(after.GetGroupGeneration(), before.GetGroupGeneration());
+        const auto& oldPile = before.GetBridgeGroupState().GetPile(1);
+        const auto& newPile = after.GetBridgeGroupState().GetPile(1);
+        UNIT_ASSERT_VALUES_EQUAL(newPile.GetGroupId(), oldPile.GetGroupId());
+        UNIT_ASSERT(newPile.GetStage() == oldPile.GetStage());
+        UNIT_ASSERT_VALUES_EQUAL(newPile.GetBecameUnsyncedGeneration(), oldPile.GetBecameUnsyncedGeneration());
+        WaitUntil(env, [&] {
+            for (const auto& [nodeId, ev] : heldFinishes) {
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                if (msg->BridgeProxyGroupGeneration == after.GetGroupGeneration()) {
+                    UNIT_ASSERT_VALUES_EQUAL(nodeId, assignedNodeId);
+                    UNIT_ASSERT_VALUES_EQUAL(msg->SourceGroupId.GetRawId(), sourceGroupId);
+                    return true;
+                }
+            }
+            return false;
+        }, "replacement syncer completion");
+        report.SetBridgeProxyGroupGeneration(after.GetGroupGeneration());
+        sendProgress(false);
+        UNIT_ASSERT_VALUES_EQUAL(lastProgress(), oldProgress);
+        sendProgress(true);
+        UNIT_ASSERT_VALUES_EQUAL(lastProgress(), oldProgress);
+        sendProgress(true, 50);
+        const ui64 newProgress = lastProgress();
+        UNIT_ASSERT_GT(newProgress, oldProgress);
+        for (ui64 copiedMiB : {50, 25, 50}) {
+            sendProgress(true, copiedMiB);
+            UNIT_ASSERT_VALUES_EQUAL(lastProgress(), newProgress);
+        }
+        sendProgress(true, 100);
+        UNIT_ASSERT_GT(lastProgress(), newProgress);
+        runtime->FilterFunction = {};
+    }
+
     // A stage change of one part bumps the generation of the whole group, and a syncer of another part can do nothing with
     // the old one. BSC has to tell its node without waiting for a report, which the syncer may have nothing to fill with.
     Y_UNIT_TEST(RunningSyncerLearnsNewGenerationAtOnce) {

@@ -35,10 +35,11 @@ struct TGetClusterStateSettings: public TOperationRequestSettings<TGetClusterSta
 };
 
 struct TConvertToBridgeSettings: public TOperationRequestSettings<TConvertToBridgeSettings> {
-    //! Leave existing storage pools and their groups non-bridged (static storage groups are still converted); they are
-    //! not replicated to added piles until converted separately. Requires the bridge config to enable non-uniform
-    //! storage.
+    //! Leave existing storage pools and their groups non-bridged; they are not replicated to added piles until
+    //! converted separately. Requires the bridge config to enable non-uniform storage.
     FLUENT_SETTING_DEFAULT(bool, SkipStoragePoolConversion, false);
+    //! Leave existing static storage groups ordinary. Requires the bridge config to enable non-uniform storage.
+    FLUENT_SETTING_DEFAULT(bool, SkipStaticGroupConversion, false);
 };
 
 struct TAddPileSettings: public TOperationRequestSettings<TAddPileSettings> {};
@@ -55,6 +56,11 @@ struct TRollbackSettings : public TOperationRequestSettings<TRollbackSettings> {
 
 struct TSetDatabaseBridgeModeSettings: public TOperationRequestSettings<TSetDatabaseBridgeModeSettings> {
     //! With ordinary mode, retain data copies in this pile. Empty selects copies automatically.
+    FLUENT_SETTING_DEFAULT(std::string, RetainPileName, {});
+};
+
+struct TSetStaticGroupBridgeModeSettings: public TOperationRequestSettings<TSetStaticGroupBridgeModeSettings> {
+    //! With ordinary mode, retain data copies in this pile. Empty selects copies automatically per group.
     FLUENT_SETTING_DEFAULT(std::string, RetainPileName, {});
 };
 
@@ -521,6 +527,10 @@ public:
     // Atomically change bridge mode of databasePath. For serverless databases, select their shared database.
     // Requires cluster administrator privileges and non-uniform storage; data synchronization and cleanup continue in the background.
     TAsyncStatus SetDatabaseBridgeMode(const std::string& databasePath, bool bridgeMode, const TSetDatabaseBridgeModeSettings& settings = {});
+
+    // Atomically change the desired bridge mode of every static BlobStorage group.
+    // Requires cluster administrator privileges and non-uniform storage; synchronization and cleanup continue in the background.
+    TAsyncStatus SetStaticGroupBridgeMode(bool bridgeMode, const TSetStaticGroupBridgeModeSettings& settings = {});
 
 private:
     class TImpl;

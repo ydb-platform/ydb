@@ -1386,6 +1386,40 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         checkPoolErasure(2, TBlobStorageGroupType::ErasureNone);
     }
 
+    Y_UNIT_TEST(OrdinaryStaticGroupDiagnostics) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const auto response = SetStaticGroupBridgeMode(env, false, "pile_2");
+        UNIT_ASSERT_EQUAL_C(response.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            response.GetErrorReason());
+        WaitUntil(env, [&] { return HasOnlyPart(env, GetGroupInfo(env, 0), 1); }, "ordinary static group");
+        const auto info = GetGroupInfo(env, 0);
+        const auto physical = NBridge::GetGroupPile(info.GetBridgeGroupState(), TBridgePileId::FromPileIndex(1))->GetGroupId();
+
+        NKikimrBridge::TStorageQuery query;
+        query.SetView(NKikimrBridge::TStorageQuery::GROUPS);
+        query.SetPileName("pile_2");
+        const auto retained = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(retained.GetStatus() == Ydb::StatusIds::SUCCESS, retained.DebugString());
+        size_t count = 0;
+        for (const auto& row : retained.GetGroups().groups()) {
+            if (!row.has_storage_pool()) {
+                ++count;
+                UNIT_ASSERT_VALUES_EQUAL(row.group_id(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(row.physical_group_id(), physical);
+                UNIT_ASSERT_VALUES_EQUAL(row.pile_name(), "pile_2");
+                UNIT_ASSERT(row.sync_status() == NKikimrBridge::NOT_REQUIRED);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(count, 1);
+        query.SetPileName("pile_1");
+        const auto other = QueryStorageDiagnostics(env, query);
+        for (const auto& row : other.GetGroups().groups()) {
+            UNIT_ASSERT(row.has_storage_pool());
+        }
+    }
+
     // BridgeMode of pools may be changed only in the cluster supporting both kinds of them
     Y_UNIT_TEST(RequiresNonUniformStorage) {
         TEnvironmentSetup env(MakeUnbridgedSettings());

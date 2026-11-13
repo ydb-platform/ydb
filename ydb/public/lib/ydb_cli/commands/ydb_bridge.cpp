@@ -55,6 +55,7 @@ TCommandBridge::TCommandBridge(bool allowEmptyDatabase)
     AddCommand(std::make_unique<TCommandBridgeDestroyPile>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeRollback>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeSetDatabaseMode>());
+    AddCommand(std::make_unique<TCommandBridgeSetStaticGroupMode>());
 }
 
 TCommandBridgeSetDatabaseMode::TCommandBridgeSetDatabaseMode()
@@ -102,6 +103,51 @@ int TCommandBridgeSetDatabaseMode::Run(TConfig& config) {
         .RetainPileName(RetainPile)).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     Cout << "Database bridge mode updated successfully. Data synchronization and cleanup continue in the background." << Endl;
+    return EXIT_SUCCESS;
+}
+
+TCommandBridgeSetStaticGroupMode::TCommandBridgeSetStaticGroupMode()
+    : TYdbCommand("set-static-group-mode", {}, "Change bridge mode of every static storage group. "
+        "Requires bridge_config.enable_non_uniform_storage=true. Existing group ids and data are preserved. "
+        "StateStorage and boards remain bridged. Ordinary static groups lose cross-pile availability.")
+{
+    CompletionDescription = "Change bridge mode of static storage groups";
+}
+
+void TCommandBridgeSetStaticGroupMode::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.AllowEmptyDatabase = true;
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<mode>", "bridged: enable bridge replication across all provisioned piles; "
+        "data synchronization continues in the background.\n"
+        "ordinary: disable bridge replication; redundant copies are deleted in the background.");
+    config.Opts->GetOpts().GetFreeArgSpec(0)
+        .Completer(NLastGetopt::NComp::Choice({{"bridged", "Enable bridge replication"},
+                                             {"ordinary", "Disable bridge replication"}}));
+    config.Opts->AddLongOption("retain-pile", "With mode ordinary, keep data in this pile, which must already have synchronized copies. "
+            "By default, select copies automatically; they may be in different piles. Does not relocate existing ordinary data.")
+        .RequiredArgument("PILE_NAME").StoreResult(&RetainPile);
+}
+
+void TCommandBridgeSetStaticGroupMode::Parse(TConfig& config) {
+    TYdbCommand::Parse(config);
+    const auto mode = config.ParseResult->GetFreeArgs()[0];
+    if (mode != "bridged" && mode != "ordinary") {
+        throw TMisuseException() << "Invalid mode \"" << mode << "\". Use bridged or ordinary.";
+    }
+    Bridged = mode == "bridged";
+    if (config.ParseResult->Has("retain-pile") && Bridged) {
+        throw TMisuseException() << "--retain-pile requires mode ordinary.";
+    }
+}
+
+int TCommandBridgeSetStaticGroupMode::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    NBridge::TBridgeClient client(driver);
+    auto result = client.SetStaticGroupBridgeMode(Bridged, NBridge::TSetStaticGroupBridgeModeSettings()
+        .RetainPileName(RetainPile)).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    Cout << "Static group bridge mode updated successfully. Data synchronization and cleanup continue in the background." << Endl;
     return EXIT_SUCCESS;
 }
 
@@ -388,8 +434,8 @@ int TCommandBridgeJoinPile::Run(TConfig& config) {
 
 TCommandBridgeConvert::TCommandBridgeConvert(bool allowEmptyDatabase)
     : TYdbCommand("convert", {}, "Convert a non-bridged cluster into a bridged one with a single pile. All nodes must "
-        "already run with a single-pile bridge config. By default, existing storage pools and their groups are "
-        "converted in the background.")
+        "already run with a single-pile bridge config. By default, existing storage pools and static storage groups "
+        "are converted, with storage-pool conversion continuing in the background.")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
     CompletionDescription = "Convert a non-bridged cluster into a bridged one with a single pile";
@@ -402,8 +448,13 @@ void TCommandBridgeConvert::Config(TConfig& config) {
     config.Opts->AddLongOption("skip-storage-pool-conversion",
             "Leave existing storage pools and their groups non-bridged. They will not be replicated to added piles "
             "until converted separately (ydb admin cluster bridge set-database-mode bridged --database-path PATH). "
-            "Static storage groups are still converted to bridge mode. Requires bridge_config.enable_non_uniform_storage=true.")
+            "Requires bridge_config.enable_non_uniform_storage=true.")
         .StoreTrue(&SkipStoragePoolConversion);
+    config.Opts->AddLongOption("skip-static-group-conversion",
+            "Leave existing static storage groups ordinary. StateStorage and boards are still converted. "
+            "Convert static groups later with ydb admin cluster bridge set-static-group-mode bridged. "
+            "Requires bridge_config.enable_non_uniform_storage=true.")
+        .StoreTrue(&SkipStaticGroupConversion);
 }
 
 void TCommandBridgeConvert::Parse(TConfig& config) {
@@ -415,7 +466,8 @@ int TCommandBridgeConvert::Run(TConfig& config) {
     auto client = NYdb::NBridge::TBridgeClient(driver);
 
     auto result = client.ConvertToBridge(NYdb::NBridge::TConvertToBridgeSettings()
-        .SkipStoragePoolConversion(SkipStoragePoolConversion)).GetValueSync();
+        .SkipStoragePoolConversion(SkipStoragePoolConversion)
+        .SkipStaticGroupConversion(SkipStaticGroupConversion)).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster converted to bridge mode successfully." << Endl;

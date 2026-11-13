@@ -926,7 +926,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
     }
 
     // conversion of existing pools and their groups may be skipped, which activates non-uniform storage along with the
-    // conversion; static groups become inline piles anyway
+    // conversion; static groups may be left ordinary independently
     Y_UNIT_TEST(SkipStoragePoolConversion) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
         env.CreatePool();

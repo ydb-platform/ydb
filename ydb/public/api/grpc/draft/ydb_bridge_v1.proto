@@ -14,6 +14,9 @@ service BridgeService {
     // Change bridge mode of the specified database.
     rpc SetDatabaseBridgeMode(Ydb.Bridge.SetDatabaseBridgeModeRequest) returns (Ydb.Bridge.SetDatabaseBridgeModeResponse);
 
+    // Change bridge mode of every static BlobStorage group.
+    rpc SetStaticGroupBridgeMode(Ydb.Bridge.SetStaticGroupBridgeModeRequest) returns (Ydb.Bridge.SetStaticGroupBridgeModeResponse);
+
     // Get current cluster state
     // Useful for monitoring and decision-making before state changes
     rpc GetClusterState(Ydb.Bridge.GetClusterStateRequest) returns (Ydb.Bridge.GetClusterStateResponse);

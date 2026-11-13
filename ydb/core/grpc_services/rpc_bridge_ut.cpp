@@ -452,6 +452,89 @@ Y_UNIT_TEST_SUITE(BridgeDatabaseMode) {
     }
 }
 
+namespace {
+
+using TStaticModeRpc = TGrpcRequestOperationCall<Ydb::Bridge::SetStaticGroupBridgeModeRequest,
+    Ydb::Bridge::SetStaticGroupBridgeModeResponse>;
+
+struct TStaticModeSetup {
+    TTestBasicRuntime Runtime;
+    TActorId Edge;
+    TActorId Rpc;
+
+    TStaticModeSetup() {
+        Runtime.Initialize(TAppPrepare().Unwrap());
+        Edge = Runtime.AllocateEdgeActor();
+        Runtime.RegisterService(MakeBlobStorageNodeWardenID(Runtime.GetNodeId(0)), Edge);
+    }
+
+    auto Start(std::optional<bool> bridged, const TString& retain = {}) {
+        Ydb::Bridge::SetStaticGroupBridgeModeRequest request;
+        NRpcService::SetRequestSyncOperationMode(request);
+        if (bridged) {
+            request.set_bridge_mode(*bridged);
+        }
+        request.set_retain_pile_name(retain);
+        auto promise = NThreading::NewPromise<TStaticModeRpc::TResponse>();
+        using TCb = NRpcService::TPromiseWrapper<TStaticModeRpc::TResponse>;
+        auto ctx = std::make_unique<NRpcService::TLocalRpcCtx<TStaticModeRpc, TCb>>(
+            std::move(request), TCb(promise), "/Root", Nothing(), Nothing(), false);
+        Runtime.Register(new TStartRequest(std::move(ctx), DoSetStaticGroupBridgeMode));
+        return promise.GetFuture();
+    }
+
+    auto GrabInvoke() {
+        auto invoke = Runtime.GrabEdgeEvent<NStorage::TEvNodeConfigInvokeOnRoot>(Edge);
+        Rpc = invoke->Sender;
+        return invoke;
+    }
+
+    void Reply(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::EStatus status) {
+        auto response = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+        response->Record.SetStatus(status);
+        response->Record.SetErrorReason("injected failure");
+        Runtime.Send(new IEventHandle(Rpc, Edge, response.release()), 0, true);
+    }
+};
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(BridgeStaticGroupModeRpc) {
+    Y_UNIT_TEST(RequiresAdministrator) {
+        TStaticModeSetup setup;
+        setup.Runtime.GetAppData().AdministrationAllowedSIDs = {"admin"};
+        auto future = setup.Start(true);
+        UNIT_ASSERT_VALUES_EQUAL(setup.Runtime.WaitFuture(future).operation().status(), Ydb::StatusIds::UNAUTHORIZED);
+    }
+
+    Y_UNIT_TEST(RequiresExplicitModeAndOrdinaryRetention) {
+        TStaticModeSetup setup;
+        auto noMode = setup.Start(std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(setup.Runtime.WaitFuture(noMode).operation().status(), Ydb::StatusIds::BAD_REQUEST);
+        auto invalid = setup.Start(true, "secondary");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Runtime.WaitFuture(invalid).operation().status(), Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(MapsCommandAndResult) {
+        TStaticModeSetup setup;
+        auto future = setup.Start(false, "secondary");
+        auto invoke = setup.GrabInvoke();
+        const auto& command = invoke->Get()->Record.GetSetStaticGroupBridgeMode();
+        UNIT_ASSERT(!command.GetBridgeMode());
+        UNIT_ASSERT_VALUES_EQUAL(command.GetRetainPileName(), "secondary");
+        setup.Reply(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+        UNIT_ASSERT_VALUES_EQUAL(setup.Runtime.WaitFuture(future).operation().status(), Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(MapsInvokeFailure) {
+        TStaticModeSetup setup;
+        auto future = setup.Start(true);
+        setup.GrabInvoke();
+        setup.Reply(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(setup.Runtime.WaitFuture(future).operation().status(), Ydb::StatusIds::GENERIC_ERROR);
+    }
+}
+
 Y_UNIT_TEST_SUITE(BridgeRpcLifecycle) {
     Y_UNIT_TEST(InvalidQuorumDoesNotDelayServerStop) {
         TSetup setup;

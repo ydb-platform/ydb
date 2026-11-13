@@ -106,6 +106,7 @@ namespace NKikimr::NStorage {
                EvRetryConfigPropagation,
                EvScatterTaskTimeout,
                EvUpdateBridgeFeatureRequirement,
+               EvStaticGroupModeCheck,
                EvHalt,
             };
 
@@ -675,6 +676,11 @@ namespace NKikimr::NStorage {
             bool advancesConflictingGeneration = false, bool recoveryProposition = false);
 
         void CheckForConfigUpdate();
+        bool UpdateStaticGroupBridgeMode(NKikimrBlobStorage::TStorageConfig *config);
+        void HandleStaticGroupModeCheck();
+        THashMap<TGroupId, TMonotonic> StaticGroupPartDropSince;
+        bool StaticGroupModeCheckScheduled = false;
+        static constexpr TDuration StaticGroupPartDropDelay = TDuration::Seconds(30);
 
         static std::optional<TString> TransformConfigBeforeCommit(NKikimrBlobStorage::TStorageConfig *config);
         static std::optional<TString> CheckSynchronizedPiles(NKikimrBlobStorage::TStorageConfig *config);
@@ -711,6 +717,11 @@ namespace NKikimr::NStorage {
         // its groups; baseConfig provides PDisks already known to BSC.
         std::optional<TString> AddBridgePileToConfig(NKikimrBlobStorage::TStorageConfig *config, TBridgePileId pileId,
             const NKikimrBlobStorage::TBaseConfig *baseConfig);
+
+        // Allocate missing parts of desired-bridged static groups in the specified piles. Group ids are never reused.
+        std::optional<TString> AllocateStaticGroupParts(NKikimrBlobStorage::TStorageConfig *config,
+            const std::vector<TBridgePileId>& pileIds, const NKikimrBlobStorage::TBaseConfig *baseConfig,
+            bool bumpGenerations);
 
         // Finish removal of DISCONNECTED pile from the cluster in the config, when BSC has deleted parts of its groups in
         // the pile: drop parts of bridged static groups (their VDisks are destroyed by their nodes) and state storage ring
@@ -997,10 +1008,12 @@ namespace NKikimr::NStorage {
         // the bridged cluster may be rolled back: groups lose their bridge state while nodes run, the cluster state goes
         // away
         BridgeFeatureLevelRollback = 5,
+        // static groups may be ordinary while other static groups or pools are bridged
+        BridgeFeatureLevelNonUniformStaticGroups = 6,
     };
 
     // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
-    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelRollback;
+    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelNonUniformStaticGroups;
 
     inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
@@ -1034,10 +1047,11 @@ namespace NKikimr::NStorage {
         const NKikimrConfig::TBridgeConfig *currentBridgeConfig, bool *pileListChanged);
 
     // Turn the config of ordinary (not bridged) cluster into the config of the single-pile bridged one: add ClusterState
-    // and make every static group an inline pile of itself. BSC converts existing pools and their groups afterwards
-    // unless their conversion is skipped, which activates non-uniform storage.
+    // and optionally make every static group an inline pile of itself. BSC converts existing pools and their groups
+    // afterwards unless their conversion is skipped. Skipping either kind activates non-uniform storage.
     std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config,
-        const NKikimrConfig::TBridgeConfig& bridgeConfig, bool skipStoragePoolConversion = false);
+        const NKikimrConfig::TBridgeConfig& bridgeConfig, bool skipStoragePoolConversion = false,
+        bool skipStaticGroupConversion = false);
 
     // Roll the bridged cluster back, first step: make every bridged static group an ordinary one; each one has to be the
     // inline pile in the pile, holding all the data of the group. Their generations are bumped.
@@ -1051,6 +1065,9 @@ namespace NKikimr::NStorage {
     // destroyed have older generations and keep them.
     void UpdateStaticVDiskGenerations(NKikimrBlobStorage::TNodeWardenServiceSet *ss,
         const THashMap<TGroupId, ui32>& newGenerations);
+
+    // Fence all current physical parts and logical static bridge groups, updating pile references and VDisks to match.
+    void BumpStaticBridgeGroupGenerations(NKikimrBlobStorage::TNodeWardenServiceSet *ss);
 
     // Make parts of bridged static groups in the piles unsynced as of the cluster state generation provided: they are
     // synced from the very beginning, and generations of all the parts and of their bridge proxy groups are bumped, so

@@ -129,10 +129,17 @@ class BridgeClient(object):
         response.operation.result.Unpack(result)
         return result
 
-    def convert_to_bridge(self, skip_storage_pool_conversion=False):
+    def convert_to_bridge(self, skip_storage_pool_conversion=False, skip_static_group_conversion=False):
         request = bridge_api.ConvertToBridgeRequest()
         request.skip_storage_pool_conversion = skip_storage_pool_conversion
+        request.skip_static_group_conversion = skip_static_group_conversion
         return self.invoke(request, 'ConvertToBridge')
+
+    def set_static_group_bridge_mode(self, bridge_mode, retain_pile_name=""):
+        request = bridge_api.SetStaticGroupBridgeModeRequest()
+        request.bridge_mode = bridge_mode
+        request.retain_pile_name = retain_pile_name
+        return self.invoke(request, 'SetStaticGroupBridgeMode')
 
     def add_pile(self, pile_name):
         request = bridge_api.AddPileRequest()

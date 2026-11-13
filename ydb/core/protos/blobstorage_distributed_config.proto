@@ -364,12 +364,20 @@ message TEvNodeConfigInvokeOnRoot {
         repeated NActorsProto.TTraceId TraceId = 1;
     }
 
-    // Convert ordinary (not bridged) cluster into the single-pile bridged one: set up ClusterState and turn static
-    // groups into inline piles; groups managed by BSC are converted by BSC itself afterwards.
+    // Convert ordinary (not bridged) cluster into the single-pile bridged one: set up ClusterState and, unless skipped,
+    // turn static groups into inline piles; groups managed by BSC are converted by BSC itself afterwards.
     message TConvertToBridge {
         // existing pools and groups managed by BSC are left non-bridged (they may be converted one by one later), and
         // non-uniform storage gets activated along with the conversion; BridgeConfig must enable it then
         bool SkipStoragePoolConversion = 1;
+        // existing static groups are left ordinary; BridgeConfig must enable non-uniform storage then as well
+        bool SkipStaticGroupConversion = 2;
+    }
+
+    // Change the desired mode of all static groups atomically. Physical conversion and cleanup continue in background.
+    message TSetStaticGroupBridgeMode {
+        bool BridgeMode = 1;
+        string RetainPileName = 2;
     }
 
     // Sent by BSC when it has converted all of its groups into bridged ones (and no groups remain that can't be
@@ -445,6 +453,7 @@ message TEvNodeConfigInvokeOnRoot {
         TQueryPileConnectivity QueryPileConnectivity = 31;
         TQueryBridgeRollbackStatus QueryBridgeRollbackStatus = 32;
         TRollbackBridge RollbackBridge = 33;
+        TSetStaticGroupBridgeMode SetStaticGroupBridgeMode = 34;
     }
 }
 

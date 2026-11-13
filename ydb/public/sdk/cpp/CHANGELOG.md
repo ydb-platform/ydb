@@ -1,3 +1,5 @@
+* Added draft `TBridgeClient::SetStaticGroupBridgeMode()` to change all static BlobStorage groups between bridged and ordinary modes. `TSetStaticGroupBridgeModeSettings::RetainPileName()` selects the pile to retain in ordinary mode. `TConvertToBridgeSettings::SkipStaticGroupConversion()` leaves static groups ordinary during cluster conversion.
+
 ## v3.27.0
 
 * Fixed static login credentials failing permanently when the initial Login operation returns a transient service error.

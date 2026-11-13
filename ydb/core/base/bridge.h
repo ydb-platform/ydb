@@ -200,6 +200,11 @@ namespace NKikimr {
                 : TBridgePileId();
         }
 
+        // Desired mode of static BlobStorage groups. Older configurations have no explicit mode and are bridged.
+        inline bool IsStaticGroupBridged(const NKikimrBridge::TClusterStateDetails& details) {
+            return !details.HasStaticGroupBridgeMode() || details.GetStaticGroupBridgeMode();
+        }
+
         // The bridged cluster is being rolled back to ordinary one (see TPendingPileOperation.ROLLBACK).
         inline bool IsRollbackPending(const NKikimrBridge::TClusterStateDetails& details) {
             return details.HasPendingPileOperation() && details.GetPendingPileOperation().GetKind() ==
@@ -271,8 +276,8 @@ namespace NKikimr {
         TBridgePileId GetInlinePileId();
         void MakeInlinePileGroupState(NKikimrBridge::TGroupState *state, TGroupId groupId, ui32 generation,
             TBridgePileId bridgePileId = GetInlinePileId());
-        // make the group (with its id and generation already filled in) an inline pile
-        void MakeInlinePile(NKikimrBlobStorage::TGroupInfo *group);
+        // make the group (with its id and generation already filled in) an inline pile in the designated pile
+        void MakeInlinePile(NKikimrBlobStorage::TGroupInfo *group, TBridgePileId bridgePileId = GetInlinePileId());
 
         // Generate initial cluster state: every pile is synchronized, the first one is the primary. Single-pile state is
         // also the implicit one of the cluster that has not been converted to bridged one yet.

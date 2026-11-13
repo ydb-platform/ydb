@@ -217,6 +217,8 @@ namespace NKikimr::NStorage {
 
         void ConvertToBridge(const TQuery::TConvertToBridge& cmd);
         void RollbackBridge(const TQuery::TRollbackBridge& cmd);
+        void SetStaticGroupBridgeMode(const TQuery::TSetStaticGroupBridgeMode& cmd);
+        void SetStaticGroupBridgeModeWithBaseConfig();
 
         // check that every node runs with BridgeConfig (and supports bridge features of minFeatureLevel, when it is set),
         // then invoke the callback; every static node listed in requiredNodeIds must report it, while nodes listed in

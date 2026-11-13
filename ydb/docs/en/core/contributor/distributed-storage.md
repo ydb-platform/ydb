@@ -86,6 +86,12 @@ The composition of each group is not constant and may change while the system is
 
 As a rule, groups of two adjacent generations differ by no more than one slot.
 
+#### Static groups in non-uniform bridge clusters
+
+Static BlobStorage groups are converted to bridged groups by default, but cluster conversion can leave them ordinary. With non-uniform storage enabled, their desired mode can also be changed independently of database pools. Making static groups ordinary retains one synchronized copy per group and removes redundant copies in the background; making them bridged again allocates and synchronizes missing parts. Ordinary static groups do not acquire parts in piles added later. StateStorage, StateStorageBoard, and SchemeBoard remain bridged regardless of this setting.
+
+An ordinary static group's retained copy is required for storage and configuration quorum. Its pile must not be disconnected or removed; make the group bridged and synchronized again before such operations.
+
 #### Per-pile allocation overrides
 
 In a bridged cluster, `blob_storage_config.storage_pool_pile_overrides` selects allocation settings by pile name. Rules are stored in the distributed storage configuration, separately from pool definitions. BSC applies them to physical pile groups, including inline groups, when allocating or repairing groups and when Console resends `DefineStoragePool`, for example to increase the group count. Overrides do not rewrite the base pool definition. Ordinary groups spanning piles and DDisk groups do not use these overrides.

@@ -1,4 +1,5 @@
 * Fixed a crash when searching documentation in interactive AI mode.
+* Added `ydb admin cluster bridge set-static-group-mode` to change static storage groups between bridged and ordinary modes, optionally retaining a selected pile, and `--skip-static-group-conversion` to `ydb admin cluster bridge convert`. StateStorage and boards remain bridged.
 * `export s3`, `export nfs` and `export yt` now honor `__omit_backup = "true"`; `tools dump` honors it for tables and changefeeds. S3 export/import now skip async replication changefeeds.
 * Added `ydb admin cluster bridge rollback` to roll a converted cluster back to ordinary mode. `ydb admin cluster bridge list piles` shows its progress.
 * Added `--expected-generation` option to `ydb admin cluster bridge update` to apply a cluster state update only if the cluster state still has the given generation.

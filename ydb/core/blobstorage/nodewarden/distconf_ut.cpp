@@ -2215,8 +2215,8 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT(!NStorage::ValidateConfig(config));
     }
 
-    // conversion of storage pools may be skipped, then there is nothing for BSC to convert, and the cluster supports
-    // both kinds of storage from the very beginning; static groups become inline piles anyway
+    // conversion of storage pools may be skipped independently of static groups, then the cluster supports both kinds
+    // of storage from the very beginning
     Y_UNIT_TEST(ConvertStorageConfigSkippingStoragePools) {
         auto initial = MakeStorageConfig(17, 1, {1, 2, 3, 4, 5, 6, 7, 8}, TBlobStorageGroupType::Erasure4Plus2Block);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&initial);
@@ -2263,6 +2263,39 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         config.MutableClusterStateDetails()->MutablePileRegistry()->AddPiles()->SetName("pile1");
         error = NStorage::ValidateConfig(config);
         UNIT_ASSERT_C(!error, error.value_or(TString()));
+    }
+
+    Y_UNIT_TEST(ConvertStorageConfigSkippingStaticGroups) {
+        for (bool skipPools : {false, true}) {
+            auto config = MakeStorageConfig(17, 1, {1, 2, 3, 4, 5, 6, 7, 8}, TBlobStorageGroupType::Erasure4Plus2Block);
+            auto initial = config;
+            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&initial);
+            NKikimrConfig::TBridgeConfig bridgeConfig;
+            bridgeConfig.AddPiles()->SetName("pile0");
+            bridgeConfig.SetEnableNonUniformStorage(true);
+            const auto generation = config.GetBlobStorageConfig().GetServiceSet().GetGroups(0).GetGroupGeneration();
+            auto error = NStorage::ConvertStorageConfigToBridge(&config, bridgeConfig, skipPools, true);
+            UNIT_ASSERT_C(!error, error.value_or(TString()));
+            config.SetGeneration(initial.GetGeneration() + 1);
+            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+            error = NStorage::ValidateConfigUpdate(initial, config);
+            UNIT_ASSERT_C(!error, error.value_or(TString()));
+
+            const auto& details = config.GetClusterStateDetails();
+            UNIT_ASSERT_VALUES_EQUAL(details.GetBscConversionPending(), !skipPools);
+            UNIT_ASSERT(details.GetNonUniformStorageEnabled());
+            UNIT_ASSERT(!NBridge::IsStaticGroupBridged(details));
+            UNIT_ASSERT_GE(NStorage::GetRequiredBridgeFeatureLevel(config), NStorage::BridgeFeatureLevelNonUniformStaticGroups);
+            const auto& group = config.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+            UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), generation);
+            UNIT_ASSERT(!group.HasBridgeGroupState());
+            UNIT_ASSERT(!group.HasBridgePileId());
+            UNIT_ASSERT(!group.HasBridgeProxyGroupId());
+
+            bool pileListChanged = false;
+            error = NStorage::UpdatePileRegistry(bridgeConfig, &config, &bridgeConfig, &bridgeConfig, &pileListChanged);
+            UNIT_ASSERT_C(!error, error.value_or(TString()));
+        }
     }
 
     // removal of the pile drops parts of bridged static groups in the pile (their VDisks are destroyed by the nodes) and

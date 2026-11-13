@@ -348,6 +348,7 @@ public:
     TAsyncStatus ConvertToBridge(const TConvertToBridgeSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::ConvertToBridgeRequest>(settings);
         request.set_skip_storage_pool_conversion(settings.SkipStoragePoolConversion_);
+        request.set_skip_static_group_conversion(settings.SkipStaticGroupConversion_);
 
         return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ConvertToBridgeRequest, Ydb::Bridge::ConvertToBridgeResponse>(
             std::move(request),
@@ -374,6 +375,17 @@ public:
         return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::SetDatabaseBridgeModeRequest, Ydb::Bridge::SetDatabaseBridgeModeResponse>(
             std::move(request),
             &Ydb::Bridge::V1::BridgeService::Stub::AsyncSetDatabaseBridgeMode,
+            TRpcRequestSettings::Make(settings));
+    }
+
+    TAsyncStatus SetStaticGroupBridgeMode(bool bridgeMode, const TSetStaticGroupBridgeModeSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::SetStaticGroupBridgeModeRequest>(settings);
+        request.set_bridge_mode(bridgeMode);
+        request.set_retain_pile_name(settings.RetainPileName_);
+
+        return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::SetStaticGroupBridgeModeRequest, Ydb::Bridge::SetStaticGroupBridgeModeResponse>(
+            std::move(request),
+            &Ydb::Bridge::V1::BridgeService::Stub::AsyncSetStaticGroupBridgeMode,
             TRpcRequestSettings::Make(settings));
     }
 
@@ -479,6 +491,10 @@ TAsyncStatus TBridgeClient::AddPile(const std::string& pileName, const TAddPileS
 TAsyncStatus TBridgeClient::SetDatabaseBridgeMode(const std::string& databasePath, bool bridgeMode,
                                                   const TSetDatabaseBridgeModeSettings& settings) {
     return Impl_->SetDatabaseBridgeMode(databasePath, bridgeMode, settings);
+}
+
+TAsyncStatus TBridgeClient::SetStaticGroupBridgeMode(bool bridgeMode, const TSetStaticGroupBridgeModeSettings& settings) {
+    return Impl_->SetStaticGroupBridgeMode(bridgeMode, settings);
 }
 
 TAsyncStatus TBridgeClient::RemovePile(const std::string& pileName, const TRemovePileSettings& settings) {

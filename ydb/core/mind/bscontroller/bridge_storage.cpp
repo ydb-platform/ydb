@@ -492,7 +492,7 @@ namespace NKikimr::NBsController {
                         TGroupId::FromProto(&proto, &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId) != id) {
                     continue; // physical parts are represented through their logical group
                 }
-                if (proto.HasBridgeGroupState()) {
+                if (NBridge::IsStaticGroupBridged(StorageConfig->GetClusterStateDetails()) && proto.HasBridgeGroupState()) {
                     const NBridgeStorage::TGroupContext context(&proto.GetBridgeGroupState());
                     for (const auto* pile : piles) {
                         if (!budget.Visit()) {
@@ -512,7 +512,20 @@ namespace NKikimr::NBsController {
                 if (statusMask && !(statusMask & (1u << NKikimrBridge::NOT_REQUIRED))) {
                     continue;
                 }
-                const auto& members = group.Info->GetDynamicInfo().ServiceIdForOrderNumber;
+                const auto* actualGroup = &group;
+                const auto* actualProto = &proto;
+                if (proto.HasBridgeGroupState()) {
+                    const auto authorityPileId = NBridge::GetAuthorityPileId(proto.GetBridgeGroupState());
+                    const auto* part = NBridge::GetGroupPile(proto.GetBridgeGroupState(), authorityPileId);
+                    if (part) {
+                        const auto it = StaticGroups.find(TGroupId::FromValue(part->GetGroupId()));
+                        if (it != StaticGroups.end() && it->second.Info && it->second.Info->Group) {
+                            actualGroup = &it->second;
+                            actualProto = &*it->second.Info->Group;
+                        }
+                    }
+                }
+                const auto& members = actualGroup->Info->GetDynamicInfo().ServiceIdForOrderNumber;
                 std::set<TBridgePileId> placement;
                 bool complete = !members.empty();
                 for (const auto& member : members) {
@@ -540,7 +553,7 @@ namespace NKikimr::NBsController {
                     }
                 }
                 for (const auto* pile : actualPiles) {
-                    if (!budget.Visit() || !NBridgeStorage::AppendGroup({id.GetRawId(), id.GetRawId(), nullptr,
+                    if (!budget.Visit() || !NBridgeStorage::AppendGroup({id.GetRawId(), actualProto->GetGroupID(), nullptr,
                             pile ? std::optional<TStringBuf>(pile->Name) : std::nullopt, {.State = NKikimrBridge::NOT_REQUIRED}},
                             budget, *report.MutableGroups())) {
                         return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));

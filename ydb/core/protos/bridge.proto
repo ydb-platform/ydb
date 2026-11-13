@@ -98,6 +98,10 @@ message TClusterStateDetails {
     // was started with), so that a notification of BSC delivered late can't finish the conversion following a rollback;
     // 0 for conversions started by older versions
     uint64 BscConversionId = 8;
+
+    // desired mode of static BlobStorage groups; absent means bridged for compatibility with older configurations.
+    // Physical bridge state may remain while groups are being made ordinary or bridged again.
+    optional bool StaticGroupBridgeMode = 9;
 }
 
 // left in the storage config by the rollback of the bridged cluster to ordinary one

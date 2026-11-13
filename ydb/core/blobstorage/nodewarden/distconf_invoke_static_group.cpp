@@ -251,6 +251,8 @@ namespace NKikimr::NStorage {
         BaseConfig.emplace(std::move(ev->Get()->BaseConfig));
         if (BridgePileOpPileId) {
             AddBridgePileWithBaseConfig();
+        } else if (std::get_if<TInvokeExternalOperation>(&Query)->Command.HasSetStaticGroupBridgeMode()) {
+            SetStaticGroupBridgeModeWithBaseConfig();
         } else {
             CheckReassignGroupDisk();
         }

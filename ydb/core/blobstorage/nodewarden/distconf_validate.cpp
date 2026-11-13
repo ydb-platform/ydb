@@ -55,7 +55,7 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
             const NKikimrBlobStorage::TNodeWardenServiceSet& proposed, const THashSet<ui32>& invalidatedNodeIds,
-            const THashSet<TBridgePileId>& removedPileIds) {
+            const THashSet<TBridgePileId>& removedPileIds, const THashSet<ui32>& removedStaticGroupIds) {
         THashMap<std::tuple<ui32, ui32>, std::tuple<TString, ui64>> pdisks;
         for (const auto& pdisk : current.GetPDisks()) {
             if (const auto [_, inserted] = pdisks.try_emplace(std::tuple(pdisk.GetNodeID(), pdisk.GetPDiskID()),
@@ -80,7 +80,8 @@ namespace NKikimr::NStorage {
         }
 
         THashMap<ui32, ui32> currentGroupGens;
-        THashSet<ui32> removedPartGroupIds; // parts of bridged groups in the piles being removed, they go away with VDisks
+        // Parts in removed piles and redundant parts of static groups being made ordinary go away with their VDisks.
+        THashSet<ui32> removedPartGroupIds = removedStaticGroupIds;
         for (const auto& group : current.GetGroups()) {
             currentGroupGens.emplace(group.GetGroupID(), group.GetGroupGeneration());
             const auto bridgePileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
@@ -177,10 +178,10 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> ValidateConfigUpdate(const NKikimrConfig::TBlobStorageConfig& current,
             const NKikimrConfig::TBlobStorageConfig& proposed, const THashSet<ui32>& invalidatedNodeIds,
-            const THashSet<TBridgePileId>& removedPileIds) {
+            const THashSet<TBridgePileId>& removedPileIds, const THashSet<ui32>& removedStaticGroupIds) {
         if (current.HasServiceSet() && proposed.HasServiceSet()) {
             if (auto error = ValidateConfigUpdate(current.GetServiceSet(), proposed.GetServiceSet(), invalidatedNodeIds,
-                    removedPileIds)) {
+                    removedPileIds, removedStaticGroupIds)) {
                 return error;
             }
         } else if (current.HasServiceSet()) {
@@ -241,9 +242,37 @@ namespace NKikimr::NStorage {
             }
         }
 
+        THashSet<ui32> removedStaticGroupIds;
+        if (!NBridge::IsStaticGroupBridged(proposed.GetClusterStateDetails())) {
+            THashMap<ui32, const NKikimrBlobStorage::TGroupInfo*> proposedGroups;
+            for (const auto& group : proposed.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                proposedGroups.emplace(group.GetGroupID(), &group);
+            }
+            for (const auto& group : current.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                if (!group.HasBridgeGroupState()) {
+                    continue;
+                }
+                const auto it = proposedGroups.find(group.GetGroupID());
+                if (it == proposedGroups.end() || !it->second->HasBridgeGroupState()) {
+                    continue;
+                }
+                const auto& proposedState = it->second->GetBridgeGroupState();
+                const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(proposedState);
+                if (!authorityPileId) {
+                    continue;
+                }
+                NBridge::ForEachGroupPile(group.GetBridgeGroupState(), [&](TBridgePileId pileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
+                    if (pileId != authorityPileId) {
+                        removedStaticGroupIds.insert(pile.GetGroupId());
+                    }
+                });
+            }
+        }
+
         if (current.HasBlobStorageConfig() && proposed.HasBlobStorageConfig()) {
             if (auto error = ValidateConfigUpdate(current.GetBlobStorageConfig(), proposed.GetBlobStorageConfig(),
-                    invalidatedNodeIds, removedPileIds)) {
+                    invalidatedNodeIds, removedPileIds, removedStaticGroupIds)) {
                 return error;
             }
         } else if (current.HasBlobStorageConfig()) {
@@ -554,12 +583,18 @@ namespace NKikimr::NStorage {
         }
 
         if (const auto& details = config.GetClusterStateDetails(); details.GetNonUniformStorageEnabled()) {
-            if (!config.HasClusterState() || details.GetBscConversionPending()) {
-                return "non-uniform storage requires a bridged cluster with BSC conversion complete";
+            if (!config.HasClusterState() || (details.GetBscConversionPending() &&
+                    NBridge::IsStaticGroupBridged(details))) {
+                return "non-uniform storage requires a bridged cluster with BSC conversion complete, unless static groups"
+                    " were deliberately left ordinary";
             }
             if (GetRequiredBridgeFeatureLevel(config) < BridgeFeatureLevelNonUniformStorage) {
                 return "non-uniform storage requires the corresponding bridge feature level";
             }
+        }
+        if (config.HasClusterState() && !NBridge::IsStaticGroupBridged(config.GetClusterStateDetails()) &&
+                GetRequiredBridgeFeatureLevel(config) < BridgeFeatureLevelNonUniformStaticGroups) {
+            return "ordinary static groups require the corresponding bridge feature level";
         }
 
         if (const auto& details = config.GetClusterStateDetails(); details.HasPileRegistry()) {
@@ -592,10 +627,12 @@ namespace NKikimr::NStorage {
         }
 
         if (config.HasClusterState()) {
-            // bridged static group has its part in every pile, except for INACTIVE ones
+            // A desired-bridged static group has its part in every pile, except for INACTIVE ones. Ordinary groups may
+            // have only their retained part, and groups being made ordinary may still have redundant parts.
             const auto& clusterState = config.GetClusterState();
+            const bool staticGroupBridged = NBridge::IsStaticGroupBridged(config.GetClusterStateDetails());
             for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
-                if (!group.HasBridgeGroupState()) {
+                if (!staticGroupBridged || !group.HasBridgeGroupState()) {
                     continue;
                 }
                 const auto& state = group.GetBridgeGroupState();

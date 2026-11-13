@@ -27,6 +27,7 @@ class TestBridgeConversion(object):
     erasure = Erasure.BLOCK_4_2
     nodes_count = 8
     skip_storage_pool_conversion = False
+    skip_static_group_conversion = False
 
     @classmethod
     def setup_class(cls):
@@ -88,7 +89,8 @@ class TestBridgeConversion(object):
         return response.operation.status, result
 
     def convert(self):
-        response = self.bridge_client.convert_to_bridge(self.skip_storage_pool_conversion)
+        response = self.bridge_client.convert_to_bridge(
+            self.skip_storage_pool_conversion, self.skip_static_group_conversion)
         logger.debug("ConvertToBridge response: %s", response)
         return response.operation
 
@@ -120,7 +122,7 @@ class TestBridgeConversion(object):
         cfg = self.fetch_config()
         cfg["metadata"]["version"] += 1
         cfg["config"]["bridge_config"] = {"piles": [{"name": PILE_NAME}]}
-        if self.skip_storage_pool_conversion:
+        if self.skip_storage_pool_conversion or self.skip_static_group_conversion:
             cfg["config"]["bridge_config"]["enable_non_uniform_storage"] = True
         expected_version = cfg["metadata"]["version"]
         response = self.cluster.config_client.replace_config(yaml.dump(cfg))
@@ -193,3 +195,7 @@ class TestBridgeConversion(object):
 
 class TestBridgeConversionSkippingStoragePools(TestBridgeConversion):
     skip_storage_pool_conversion = True
+
+
+class TestBridgeConversionSkippingStaticGroups(TestBridgeConversion):
+    skip_static_group_conversion = True

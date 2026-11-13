@@ -30,6 +30,18 @@ private:
     TString RetainPile;
 };
 
+class TCommandBridgeSetStaticGroupMode : public TYdbCommand {
+public:
+    TCommandBridgeSetStaticGroupMode();
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool Bridged = false;
+    TString RetainPile;
+};
+
 class TCommandBridgeUpdate : public TYdbCommand {
 public:
     TCommandBridgeUpdate(bool allowEmptyDatabase);
@@ -142,6 +154,7 @@ public:
 private:
     bool AllowEmptyDatabase = false;
     bool SkipStoragePoolConversion = false;
+    bool SkipStaticGroupConversion = false;
 };
 
 class TCommandBridgeProvisionPile : public TYdbCommand {

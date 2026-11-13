@@ -591,6 +591,7 @@ namespace NKikimr::NStorage {
             fFunc(TEvPrivate::EvRootProbeTimeout, HandleRootProbeTimeout);
             fFunc(TEvPrivate::EvBindingTimeout, HandleBindingTimeout);
             fFunc(TEvPrivate::EvRetryConfigPropagation, HandleRetryConfigPropagation);
+            cFunc(TEvPrivate::EvStaticGroupModeCheck, HandleStaticGroupModeCheck);
             cFunc(TEvPrivate::EvHalt, HandleHalt);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {

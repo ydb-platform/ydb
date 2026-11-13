@@ -31,6 +31,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         bridge_stale_parts.cpp
         bridge_syncer.cpp
         bridge_static_sync_lifetime.cpp
+        bridge_static_group_mode.cpp
         bridge_rejoin.cpp
     )
 

@@ -15,6 +15,9 @@ using TEvUpdateClusterStateRequest =
 using TEvConvertToBridgeRequest =
     TGrpcRequestOperationCall<Ydb::Bridge::ConvertToBridgeRequest,
         Ydb::Bridge::ConvertToBridgeResponse>;
+using TEvSetStaticGroupBridgeModeRequest =
+    TGrpcRequestOperationCall<Ydb::Bridge::SetStaticGroupBridgeModeRequest,
+        Ydb::Bridge::SetStaticGroupBridgeModeResponse>;
 using TEvAddPileRequest =
     TGrpcRequestOperationCall<Ydb::Bridge::AddPileRequest,
         Ydb::Bridge::AddPileResponse>;
@@ -388,7 +391,38 @@ public:
     using TInvokeOnRootRequest::TInvokeOnRootRequest;
 
     void FillCommand(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot& record) {
-        record.MutableConvertToBridge()->SetSkipStoragePoolConversion(GetProtoRequest()->skip_storage_pool_conversion());
+        auto *cmd = record.MutableConvertToBridge();
+        cmd->SetSkipStoragePoolConversion(GetProtoRequest()->skip_storage_pool_conversion());
+        cmd->SetSkipStaticGroupConversion(GetProtoRequest()->skip_static_group_conversion());
+    }
+};
+
+class TSetStaticGroupBridgeModeRequest : public TInvokeOnRootRequest<TSetStaticGroupBridgeModeRequest,
+    TEvSetStaticGroupBridgeModeRequest, Ydb::Bridge::SetStaticGroupBridgeModeResult> {
+public:
+    using TInvokeOnRootRequest::TInvokeOnRootRequest;
+
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
+        if (!TInvokeOnRootRequest::ValidateRequest(status, issues)) {
+            return false;
+        }
+        const auto& request = *GetProtoRequest();
+        if (!request.has_bridge_mode()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            issues.AddIssue("bridge_mode must be specified");
+        } else if (request.bridge_mode() && !request.retain_pile_name().empty()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            issues.AddIssue("retain_pile_name requires ordinary storage (bridge_mode=false)");
+        } else {
+            return true;
+        }
+        return false;
+    }
+
+    void FillCommand(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot& record) {
+        auto *cmd = record.MutableSetStaticGroupBridgeMode();
+        cmd->SetBridgeMode(GetProtoRequest()->bridge_mode());
+        cmd->SetRetainPileName(GetProtoRequest()->retain_pile_name());
     }
 };
 
@@ -571,6 +605,10 @@ void DoUpdateClusterState(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvi
 
 void DoConvertToBridge(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TConvertToBridgeRequest(p.release()));
+}
+
+void DoSetStaticGroupBridgeMode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TSetStaticGroupBridgeModeRequest(p.release()));
 }
 
 void DoAddPile(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {

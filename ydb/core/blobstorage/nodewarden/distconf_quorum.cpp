@@ -277,13 +277,18 @@ namespace NKikimr::NStorage {
                     Y_DEBUG_ABORT();
                     return false;
                 }
+                const bool staticBridged = NBridge::IsStaticGroupBridged(config.GetClusterStateDetails());
+                const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(state);
                 NBridge::ForEachGroupPile(state, [&](TBridgePileId bridgePileId,
                         const NKikimrBridge::TGroupState::TPile& pile) {
                     const auto pileState = cs.GetPerPileState(bridgePileId.GetPileIndex());
+                    if (!staticBridged && bridgePileId == authorityPileId) {
+                        return; // the retained ordinary part is always required, even when its pile is disconnected
+                    }
                     bridgedGroups[TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId)] =
                         singleBridgePileId
                             ? bridgePileId == singleBridgePileId
-                            : NBridge::PileStateTraits(pileState).RequiresConfigQuorum;
+                            : staticBridged && NBridge::PileStateTraits(pileState).RequiresConfigQuorum;
                 });
             }
             const bool hasOwnVDisks = !info->IsBridged() || info->IsInlinePile(); // bridge proxy group doesn't have them

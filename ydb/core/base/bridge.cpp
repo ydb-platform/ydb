@@ -188,11 +188,11 @@ namespace NKikimr {
             pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
         }
 
-        void MakeInlinePile(NKikimrBlobStorage::TGroupInfo *group) {
+        void MakeInlinePile(NKikimrBlobStorage::TGroupInfo *group, TBridgePileId bridgePileId) {
             const auto groupId = TGroupId::FromProto(group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
-            MakeInlinePileGroupState(group->MutableBridgeGroupState(), groupId, group->GetGroupGeneration());
+            MakeInlinePileGroupState(group->MutableBridgeGroupState(), groupId, group->GetGroupGeneration(), bridgePileId);
             groupId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
-            GetInlinePileId().CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+            bridgePileId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
         }
 
         NKikimrBridge::TClusterState MakeInitialClusterState(size_t numPiles) {

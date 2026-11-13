@@ -162,9 +162,20 @@ namespace NBridgeTest {
     }
 
     inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult ConvertToBridge(TEnvironmentSetup& env,
-            bool skipStoragePoolConversion = false) {
+            bool skipStoragePoolConversion = false, bool skipStaticGroupConversion = false) {
         return InvokeDistconf(env, [&](auto& record) {
-            record.MutableConvertToBridge()->SetSkipStoragePoolConversion(skipStoragePoolConversion);
+            auto *cmd = record.MutableConvertToBridge();
+            cmd->SetSkipStoragePoolConversion(skipStoragePoolConversion);
+            cmd->SetSkipStaticGroupConversion(skipStaticGroupConversion);
+        });
+    }
+
+    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult SetStaticGroupBridgeMode(TEnvironmentSetup& env,
+            bool bridgeMode, const TString& retainPileName = {}) {
+        return InvokeDistconf(env, [&](auto& record) {
+            auto *cmd = record.MutableSetStaticGroupBridgeMode();
+            cmd->SetBridgeMode(bridgeMode);
+            cmd->SetRetainPileName(retainPileName);
         });
     }
 
@@ -509,23 +520,24 @@ namespace NBridgeTest {
     }
 
     // create cluster with dynamic groups and convert it into single-pile bridged one; returns the first group id, which
-    // some data is written to; groups of BSC stay non-bridged when skipStoragePoolConversion is set, which requires
-    // non-uniform storage to be enabled in the bridge config
+    // some data is written to; each kind of storage may be left ordinary, which requires non-uniform storage in the config
     inline ui32 ConvertCluster(TEnvironmentSetup& env, TDataChecker& checker, ui32 numGroups = 1,
-            bool skipStoragePoolConversion = false) {
+            bool skipStoragePoolConversion = false, bool skipStaticGroupConversion = false) {
         const ui32 groupId = CreatePoolAndGetGroup(env, numGroups);
 
         checker.Write(groupId);
-        env.Runtime->GetAppDataBridgeConfig().SetEnableNonUniformStorage(skipStoragePoolConversion);
+        env.Runtime->GetAppDataBridgeConfig().SetEnableNonUniformStorage(
+            skipStoragePoolConversion || skipStaticGroupConversion);
         RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
 
-        const auto res = ConvertToBridge(env, skipStoragePoolConversion);
+        const auto res = ConvertToBridge(env, skipStoragePoolConversion, skipStaticGroupConversion);
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
         env.Sim(TDuration::Minutes(1));
         const auto config = QueryStorageConfig(env);
         const auto& details = config.GetClusterStateDetails();
         UNIT_ASSERT(!details.GetBscConversionPending());
-        UNIT_ASSERT_VALUES_EQUAL(details.GetNonUniformStorageEnabled(), skipStoragePoolConversion);
+        UNIT_ASSERT_VALUES_EQUAL(details.GetNonUniformStorageEnabled(),
+            skipStoragePoolConversion || skipStaticGroupConversion);
         return groupId;
     }
 

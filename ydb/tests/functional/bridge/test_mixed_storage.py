@@ -115,6 +115,26 @@ class TestMixedStorageDatabases(BridgeKiKiMRTest):
             self.cluster.alter_database(f"/Root/{kind}", storage_units_to_add={kind: 1})
         retry_assertions(lambda: self.check_pools(2), timeout_seconds=120)
 
+    def test_static_group_bridge_mode(self):
+        self.execute("bridged", "CREATE TABLE static_mode_data (id Uint64, value Utf8, PRIMARY KEY(id));", scheme=True)
+        self.execute("bridged", 'UPSERT INTO static_mode_data (id, value) VALUES (1u, "before");')
+        node = self.cluster.nodes[1]
+        env = os.environ.copy()
+        env['YDB_TOKEN'] = 'root@builtin'
+        cli = [self.configurator.get_ydb_cli_path(), '-e', f'grpc://{node.host}:{node.port}', '-y']
+        operation = ['admin', 'cluster', 'bridge', 'set-static-group-mode']
+
+        result = subprocess.run(cli + operation + ['ordinary', '--retain-pile', 'r1'],
+                                capture_output=True, env=env, timeout=120)
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        self.execute("bridged", 'UPSERT INTO static_mode_data (id, value) VALUES (2u, "ordinary");')
+
+        result = subprocess.run(cli + operation + ['bridged'], capture_output=True, env=env, timeout=120)
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        self.execute("bridged", 'UPSERT INTO static_mode_data (id, value) VALUES (3u, "bridged");')
+        rows = self.execute("bridged", "SELECT id, value FROM static_mode_data ORDER BY id;")[0].rows
+        assert [(row.id, row.value) for row in rows] == [(1, "before"), (2, "ordinary"), (3, "bridged")]
+
     def test_database_bridge_mode(self):
         self.execute("bridged", "CREATE TABLE data (id Uint64, value Utf8, PRIMARY KEY(id));", scheme=True)
         self.execute("bridged", 'UPSERT INTO data (id, value) VALUES (1u, "before-conversion");')

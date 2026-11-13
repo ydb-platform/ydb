@@ -29,6 +29,21 @@ message SetDatabaseBridgeModeResponse {
 
 message SetDatabaseBridgeModeResult {}
 
+// Atomically change the desired bridge mode of every static BlobStorage group.
+// Requires administrator privileges and non-uniform storage; synchronization and cleanup continue in the background.
+message SetStaticGroupBridgeModeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    optional bool bridge_mode = 2; // Required: true for bridged storage, false for ordinary storage.
+    // With bridge_mode=false, retain data copies in this pile. Empty selects copies automatically per group.
+    string retain_pile_name = 3;
+}
+
+message SetStaticGroupBridgeModeResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message SetStaticGroupBridgeModeResult {}
+
 message GetClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
@@ -299,14 +314,16 @@ message UpdateClusterStateResult {
 }
 
 // Convert a running non-bridged cluster into a bridged one with a single pile. All nodes of the cluster must already
-// run with a single-pile bridge config. By default, existing storage pools and their groups are converted in the
-// background after the call succeeds; see GetClusterStateResult.conversion_in_progress.
+// run with a single-pile bridge config. By default, existing static groups and storage pools are converted, with pool
+// conversion continuing in the background; see GetClusterStateResult.conversion_in_progress.
 message ConvertToBridgeRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // Leave existing storage pools and their groups non-bridged; they are not replicated to added piles until converted
-    // separately. Static storage groups are still converted to bridge mode. The bridge config must enable non-uniform
-    // storage, which gets activated along with the conversion.
+    // separately. The bridge config must enable non-uniform storage, which gets activated along with the conversion.
     bool skip_storage_pool_conversion = 2;
+    // Leave existing static storage groups ordinary. StateStorage and boards are still converted. The bridge config
+    // must enable non-uniform storage, which gets activated along with the conversion.
+    bool skip_static_group_conversion = 3;
 }
 
 message ConvertToBridgeResponse {

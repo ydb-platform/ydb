@@ -89,6 +89,10 @@ public:
     TDiagnosticReply<Ydb::Bridge::ListDatabaseSynchronizationRequest, Ydb::Bridge::ListDatabaseSynchronizationResult> Databases;
     TDiagnosticReply<Ydb::Bridge::ListGroupSynchronizationRequest, Ydb::Bridge::ListGroupSynchronizationResult> Groups;
     std::atomic<size_t> ModeCalls{0};
+    std::atomic<size_t> StaticModeCalls{0};
+    std::atomic<size_t> ConvertCalls{0};
+    bool SkipStoragePoolConversion = false;
+    bool SkipStaticGroupConversion = false;
     std::atomic<size_t> JoinCalls{0};
     std::atomic<size_t> ProvisionCalls{0};
     std::atomic<size_t> DestroyCalls{0};
@@ -139,6 +143,24 @@ public:
         CHECK_EXP(request->database_path() == "/Root/app", "RPC must contain the explicit target database");
         CHECK_EXP(request->has_bridge_mode() && request->bridge_mode() == Bridged, "Incorrect database bridge mode");
         CHECK_EXP(request->retain_pile_name() == RetainPile, "Incorrect pile to retain");
+        return ReplySuccess(context, response);
+    }
+
+    grpc::Status SetStaticGroupBridgeMode(grpc::ServerContext* context,
+                                          const Ydb::Bridge::SetStaticGroupBridgeModeRequest* request,
+                                          Ydb::Bridge::SetStaticGroupBridgeModeResponse* response) override {
+        ++StaticModeCalls;
+        CHECK_EXP(request->has_bridge_mode() && request->bridge_mode() == Bridged, "Incorrect static group bridge mode");
+        CHECK_EXP(request->retain_pile_name() == RetainPile, "Incorrect static group retained pile");
+        return ReplySuccess(context, response);
+    }
+
+    grpc::Status ConvertToBridge(grpc::ServerContext* context,
+                                 const Ydb::Bridge::ConvertToBridgeRequest* request,
+                                 Ydb::Bridge::ConvertToBridgeResponse* response) override {
+        ++ConvertCalls;
+        CHECK_EXP(request->skip_storage_pool_conversion() == SkipStoragePoolConversion, "Incorrect pool conversion flag");
+        CHECK_EXP(request->skip_static_group_conversion() == SkipStaticGroupConversion, "Incorrect static conversion flag");
         return ReplySuccess(context, response);
     }
 
@@ -794,6 +816,35 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeLogin>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeDiscovery>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 0);
+    }
+
+    Y_UNIT_TEST_F(StaticGroupModePassesRetainedPileWithoutConnectionDatabase, TBridgeCliFixture) {
+        Service<TBridgeDiscovery>().Database.clear();
+        Service<TBridgeService>().Database.clear();
+        Service<TBridgeService>().Bridged = false;
+        Service<TBridgeService>().RetainPile = "secondary";
+        const auto output = RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-static-group-mode",
+                "ordinary", "--retain-pile", "secondary"}, {{"YDB_TOKEN", "bridge-admin-token"}});
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().StaticModeCalls.load(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(output, "continue in the background");
+    }
+
+    Y_UNIT_TEST_F(StaticGroupModeRejectsInvalidOptions, TBridgeCliFixture) {
+        ExpectFail();
+        RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-static-group-mode", "unknown"});
+        ExpectFail();
+        RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-static-group-mode", "bridged",
+                "--retain-pile", "secondary"});
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().StaticModeCalls.load(), 0);
+    }
+
+    Y_UNIT_TEST_F(ConvertPassesIndependentConversionFlags, TBridgeCliFixture) {
+        Service<TBridgeService>().SkipStoragePoolConversion = true;
+        Service<TBridgeService>().SkipStaticGroupConversion = true;
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "-y", "admin", "cluster", "bridge", "convert",
+                "--skip-storage-pool-conversion", "--skip-static-group-conversion"},
+               {{"YDB_TOKEN", "bridge-admin-token"}});
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ConvertCalls.load(), 1);
     }
 
     Y_UNIT_TEST_F(JoinPileSupportsLegacyRejoinAlias, TBridgeCliFixture) {

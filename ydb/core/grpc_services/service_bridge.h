@@ -18,5 +18,6 @@ namespace NKikimr::NGRpcService {
     void DoGetRollbackStatus(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
     void DoRollback(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
     void DoSetDatabaseBridgeMode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+    void DoSetStaticGroupBridgeMode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 
 } // NKikimr::NGRpcService

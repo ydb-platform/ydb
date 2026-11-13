@@ -258,6 +258,15 @@ namespace NKikimr::NStorage {
         // validate state update
         auto *state = bridgeProxyGroup->MutableBridgeGroupState();
         const auto& newState = cmd.GetBridgeGroupInfo().GetBridgeGroupState();
+        if (!NBridge::IsStaticGroupBridged(config.GetClusterStateDetails())) {
+            const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(*state);
+            for (size_t i = 0; i < newState.PileSize(); ++i) {
+                const auto pileId = TBridgePileId::FromPileIndex(i);
+                if (pileId != authorityPileId && newState.GetPile(i).GetStage() != NKikimrBridge::TGroupState::BLOCKS) {
+                    throw TExError() << "can't synchronize a static group part being made ordinary";
+                }
+            }
+        }
         if (state->PileSize() != newState.PileSize()) {
             throw TExError() << "can't change number of piles in TGroupInfo.BridgeGroupState";
         }
@@ -337,14 +346,197 @@ namespace NKikimr::NStorage {
             requiredNodeIds.insert(node.GetNodeId());
         }
         const bool skipStoragePoolConversion = cmd.GetSkipStoragePoolConversion();
-        RequireBridgeCapability(BridgeFeatureLevel, std::move(requiredNodeIds), {}, [this, skipStoragePoolConversion] {
+        const bool skipStaticGroupConversion = cmd.GetSkipStaticGroupConversion();
+        RequireBridgeCapability(BridgeFeatureLevel, std::move(requiredNodeIds), {},
+                [this, skipStoragePoolConversion, skipStaticGroupConversion] {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
             if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig,
-                    skipStoragePoolConversion)) {
+                    skipStoragePoolConversion, skipStaticGroupConversion)) {
                 throw TExError() << *error;
             }
             StartProposition(&config);
         });
+    }
+
+    void TInvokeRequestHandlerActor::SetStaticGroupBridgeMode(const TQuery::TSetStaticGroupBridgeMode& cmd) {
+        RunCommonChecks();
+        NeedBridgeMode();
+
+        const auto& config = *Self->StorageConfig;
+        const auto& details = config.GetClusterStateDetails();
+        if (!Self->SelfManagementEnabled) {
+            throw TExError() << "Self-management must be enabled to change static group bridge mode";
+        } else if (!details.GetNonUniformStorageEnabled()) {
+            throw TExError() << "Static group bridge mode change requires bridge_config.enable_non_uniform_storage";
+        } else if (details.HasPendingPileOperation()) {
+            throw TExError() << "Static group bridge mode can't be changed while the set of piles is being changed";
+        } else if (cmd.GetBridgeMode() && !cmd.GetRetainPileName().empty()) {
+            throw TExError() << "RetainPileName requires ordinary static groups";
+        } else if (NBridge::IsStaticGroupBridged(details) == cmd.GetBridgeMode()) {
+            return Finish(TResult::OK, std::nullopt);
+        }
+
+        THashSet<ui32> requiredNodeIds;
+        for (const auto& node : config.GetAllNodes()) {
+            requiredNodeIds.insert(node.GetNodeId());
+        }
+        RequireBridgeCapability(BridgeFeatureLevelNonUniformStaticGroups, std::move(requiredNodeIds), {}, [this] {
+            if (std::get_if<TInvokeExternalOperation>(&Query)->Command.GetSetStaticGroupBridgeMode().GetBridgeMode()) {
+                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryBaseConfig);
+            } else {
+                SetStaticGroupBridgeModeWithBaseConfig();
+            }
+        });
+    }
+
+    void TInvokeRequestHandlerActor::SetStaticGroupBridgeModeWithBaseConfig() {
+        RunCommonChecks();
+        const auto& cmd = std::get_if<TInvokeExternalOperation>(&Query)->Command.GetSetStaticGroupBridgeMode();
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        auto *details = config.MutableClusterStateDetails();
+        const auto registry = Self->GetConfigPileRegistry(config);
+        Y_ABORT_UNLESS(registry && Self->BridgeInfo);
+
+        std::optional<TBridgePileId> retainPileId;
+        if (!cmd.GetRetainPileName().empty()) {
+            const TBridgePileId resolved = NBridge::ResolvePileId(*registry, cmd.GetRetainPileName());
+            if (!resolved) {
+                throw TExError() << "Pile '" << cmd.GetRetainPileName() << "' is not listed in BridgeConfig";
+            }
+            retainPileId = resolved;
+        }
+
+        auto *ss = config.MutableBlobStorageConfig()->MutableServiceSet();
+        THashMap<TGroupId, TBridgePileId> authorities;
+        if (cmd.GetBridgeMode()) {
+            THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> nodes;
+            for (const auto& node : config.GetAllNodes()) {
+                nodes.emplace(node.GetNodeId(), &node);
+            }
+            for (auto& group : *ss->MutableGroups()) {
+                if (!group.HasBridgeGroupState()) {
+                    if (group.HasBridgePileId() || group.HasBridgeProxyGroupId()) {
+                        continue; // a physical part of another static group
+                    }
+                    const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                    TBridgePileId pileId;
+                    for (const auto& ring : group.GetRings()) {
+                        for (const auto& domain : ring.GetFailDomains()) {
+                            for (const auto& location : domain.GetVDiskLocations()) {
+                                const auto it = nodes.find(location.GetNodeID());
+                                if (it == nodes.end()) {
+                                    throw TExError() << "Static GroupId# " << groupId << " has VDisk on an unknown node";
+                                }
+                                const auto current = ResolveNodePileId(registry, TNodeLocation(it->second->GetLocation()));
+                                if (!current || (pileId && current != pileId)) {
+                                    throw TExError() << "Static GroupId# " << groupId
+                                        << " resides in several piles or in no pile, it can't be made bridged";
+                                }
+                                pileId = *current;
+                            }
+                        }
+                    }
+                    if (!pileId) {
+                        throw TExError() << "Static GroupId# " << groupId << " has no VDisks";
+                    }
+                    NBridge::MakeInlinePile(&group, pileId);
+                    authorities.emplace(groupId, pileId);
+                    continue;
+                }
+
+                const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                const auto& state = group.GetBridgeGroupState();
+                TBridgePileId pileId = TBridgePileId::FromProto(&state,
+                    &NKikimrBridge::TGroupState::GetAuthorityPileId);
+                if (!pileId && TGroupId::FromProto(&group,
+                        &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId) == groupId) {
+                    pileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
+                }
+                if (!pileId && Self->BridgeInfo->PrimaryPile) {
+                    pileId = Self->BridgeInfo->PrimaryPile->BridgePileId;
+                }
+                auto usable = [&](TBridgePileId id) {
+                    const auto *part = NBridge::GetGroupPile(state, id);
+                    return part && part->GetStage() == NKikimrBridge::TGroupState::SYNCED;
+                };
+                if (!usable(pileId)) {
+                    pileId = {};
+                    NBridge::FindGroupPile(state, [&](TBridgePileId id, const auto&) {
+                        if (usable(id)) {
+                            pileId = id;
+                            return true;
+                        }
+                        return false;
+                    });
+                }
+                if (!pileId) {
+                    throw TExError() << "Static GroupId# " << groupId << " has no synchronized part to rely on";
+                }
+                authorities.emplace(groupId, pileId);
+            }
+
+            std::vector<TBridgePileId> pileIds;
+            for (const auto& pile : Self->BridgeInfo->Piles) {
+                if (pile.State != NKikimrBridge::TClusterState::INACTIVE) {
+                    pileIds.push_back(pile.BridgePileId);
+                }
+            }
+            details->SetStaticGroupBridgeMode(true);
+            if (auto error = Self->AllocateStaticGroupParts(&config, pileIds, &BaseConfig.value(), false)) {
+                throw TExError() << *error;
+            }
+            ss = config.MutableBlobStorageConfig()->MutableServiceSet(); // allocation may have changed the service set
+            for (auto& group : *ss->MutableGroups()) {
+                if (!group.HasBridgeGroupState()) {
+                    continue;
+                }
+                const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                if (const auto it = authorities.find(groupId); it != authorities.end()) {
+                    it->second.CopyToProto(group.MutableBridgeGroupState(),
+                        &NKikimrBridge::TGroupState::SetAuthorityPileId);
+                }
+            }
+        } else {
+            for (auto& group : *ss->MutableGroups()) {
+                if (!group.HasBridgeGroupState()) {
+                    continue;
+                }
+                const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                auto *state = group.MutableBridgeGroupState();
+                const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(*state);
+                TBridgePileId pileId;
+                if (retainPileId) {
+                    pileId = *retainPileId;
+                } else if (authorityPileId) {
+                    pileId = authorityPileId;
+                } else if (TGroupId::FromProto(&group,
+                        &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId) == groupId) {
+                    pileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
+                } else if (Self->BridgeInfo->PrimaryPile) {
+                    pileId = Self->BridgeInfo->PrimaryPile->BridgePileId;
+                }
+                const auto *part = NBridge::GetGroupPile(*state, pileId);
+                const auto *pile = Self->BridgeInfo->FindPile(pileId);
+                if (!part || !pile) {
+                    throw TExError() << "Static GroupId# " << groupId << " has no part in the retained pile";
+                } else if (part->GetStage() != NKikimrBridge::TGroupState::SYNCED ||
+                        (pileId != authorityPileId && pile->State != NKikimrBridge::TClusterState::SYNCHRONIZED) ||
+                        !NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
+                    throw TExError() << "Static GroupId# " << groupId << " part in pile '" << pile->Name
+                        << "' is not synchronized";
+                } else if (pileId == authorityPileId && !state->GetAuthorityPileId()) {
+                    continue; // the group already has only its implicitly authoritative part
+                }
+                pileId.CopyToProto(state, &NKikimrBridge::TGroupState::SetAuthorityPileId);
+            }
+            details->SetStaticGroupBridgeMode(false);
+        }
+
+        auto *pileRegistry = details->MutablePileRegistry();
+        pileRegistry->SetRequiredFeatureLevel(Max<ui32>(pileRegistry->GetRequiredFeatureLevel(),
+            BridgeFeatureLevelNonUniformStaticGroups));
+        BumpStaticBridgeGroupGenerations(ss);
+        StartProposition(&config);
     }
 
     void TInvokeRequestHandlerActor::RollbackBridge(const TQuery::TRollbackBridge& cmd) {
@@ -648,6 +840,12 @@ namespace NKikimr::NStorage {
         for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
             groupPiles.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
                 TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId));
+            if (!NBridge::IsStaticGroupBridged(config.GetClusterStateDetails()) && group.HasBridgeGroupState() &&
+                    NBridge::GetGroupPile(group.GetBridgeGroupState(), pileId) &&
+                    NBridge::GetAuthorityPileId(group.GetBridgeGroupState()) == pileId) {
+                throw TExError() << "Static GroupId# " << group.GetGroupID()
+                    << " relies on its part in the pile solely, its data would be lost";
+            }
         }
         for (const auto& vdisk : config.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
             const auto groupId = VDiskIDFromVDiskID(vdisk.GetVDiskID()).GroupID;

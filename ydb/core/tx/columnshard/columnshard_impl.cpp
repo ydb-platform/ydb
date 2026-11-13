@@ -1640,12 +1640,12 @@ private:
 
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
         TMemoryProfileGuard mpg("TAccessorsParsingTask::Execute");
-        std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>> accessors;
-        accessors.reserve(Portions.size());
+        std::vector<std::shared_ptr<const NOlap::TPortionChunks>> chunks;
+        chunks.reserve(Portions.size());
         for (auto&& i : Portions) {
-            accessors.emplace_back(i.BuildAccessor());
+            chunks.emplace_back(i.BuildAccessor()->GetChunksPtr());
         }
-        FetchCallback->OnAccessorsFetched(std::move(accessors));
+        FetchCallback->OnAccessorsFetched(std::move(chunks));
     }
 
     virtual void DoOnCannotExecute(const TString& reason) override {

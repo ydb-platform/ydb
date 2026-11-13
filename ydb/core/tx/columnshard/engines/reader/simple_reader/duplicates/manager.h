@@ -16,6 +16,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/range_treap/range_treap.h>
 
+#include <library/cpp/cache/cache.h>
+
 namespace NKikimr::NOlap::NReader::NSimple {
 class TSpecialReadContext;
 class IDataSource;

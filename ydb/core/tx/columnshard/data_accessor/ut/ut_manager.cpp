@@ -82,7 +82,7 @@ public:
         auto callback = ev->Get()->ExtractCallback();
         auto addresses = ev->Get()->ExtractAddresses();
 
-        THashMap<TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>> objectAddresses;
+        THashMap<TGlobalPortionAddress, std::shared_ptr<const TPortionChunks>> objectAddresses;
         THashSet<TGlobalPortionAddress> removedAddresses;
 
         if (WithRemovedAddresses) {

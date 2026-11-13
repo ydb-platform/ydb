@@ -67,12 +67,17 @@ private:
                 return AccessorsCallback->GetAbortionFlag() && AccessorsCallback->GetAbortionFlag()->Val();
             }
 
-            virtual void DoOnResultReady(THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>>&& objectAddresses,
+            const THashMap<ui64, TPortionInfo::TConstPtr> Portions;
+
+            virtual void DoOnResultReady(THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<const TPortionChunks>>&& objectAddresses,
                 THashSet<NGeneralCache::TGlobalPortionAddress>&& removedAddresses,
                 ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<NGeneralCache::TPortionsMetadataCachePolicy>&& errorAddresses) override {
                 THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> objects;
-                for (auto&& i : objectAddresses) {
-                    objects.emplace(i.first.GetPortionId(), std::move(i.second));
+                for (auto&& [address, chunks] : objectAddresses) {
+                    const auto portion = Portions.FindPtr(address.GetPortionId());
+                    AFL_VERIFY(portion)("portion_id", address.GetPortionId());
+                    AFL_VERIFY((*portion)->GetAddress() == address.GetInternalPortionAddress());
+                    objects.emplace(address.GetPortionId(), std::make_shared<TPortionDataAccessor>(*portion, std::move(chunks)));
                 }
                 TDataAccessorsResult result;
                 result.AddData(std::move(objects));
@@ -84,29 +89,38 @@ private:
             }
 
         public:
-            TAdapterCallback(const std::shared_ptr<IDataAccessorRequestsSubscriber>& accCallback, const ui64 requestId)
+            TAdapterCallback(const std::shared_ptr<IDataAccessorRequestsSubscriber>& accCallback, const ui64 requestId,
+                THashMap<ui64, TPortionInfo::TConstPtr>&& portions)
                 : AccessorsCallback(accCallback)
                 , RequestId(requestId)
+                , Portions(std::move(portions))
             {
             }
         };
 
+        THashMap<ui64, TPortionInfo::TConstPtr> portions = request->GetPortions();
         NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::AskObjects(request->GetConsumer(),
             request->BuildAddresses(GetTabletActorId()),
-            std::make_shared<TAdapterCallback>(request->ExtractSubscriber(), request->GetRequestId()));
+            std::make_shared<TAdapterCallback>(request->ExtractSubscriber(), request->GetRequestId(), std::move(portions)));
     }
 
     virtual void DoAddPortion(const std::shared_ptr<TPortionDataAccessor>& accessor) override {
-        THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>> add;
+        THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<const TPortionChunks>> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
-        NGeneralCache::TGlobalPortionAddress address(GetTabletActorId(), accessor->GetPortionInfo().GetAddress());
-        add.emplace(address, std::move(accessor));
+        auto chunks = accessor->GetChunksPtr();
+        AFL_VERIFY(chunks);
+        const auto portionAddress = accessor->GetPortionInfo().GetAddress();
+        if (chunks->GetAddress() != portionAddress) {
+            std::const_pointer_cast<TPortionChunks>(chunks)->ResetAddress(portionAddress);
+        }
+        NGeneralCache::TGlobalPortionAddress address(GetTabletActorId(), portionAddress);
+        add.emplace(address, std::move(chunks));
         NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(
             GetTabletActorId(), std::move(add), std::move(remove));
     }
 
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portion) override {
-        THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>> add;
+        THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<const TPortionChunks>> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
         remove.emplace(NGeneralCache::TGlobalPortionAddress(GetTabletActorId(), portion->GetAddress()));
         NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(

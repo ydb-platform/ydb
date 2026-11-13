@@ -155,7 +155,8 @@ public:
     bool FinishLoading(const bool portionsLoaded = true);
     void AddPortionLoadedOnStart(TGranuleMeta& granule, const TPortionInfo::TPtr& portion);
     // a batch of TDeferredPortionLoader: skips the portions already in memory
-    void AddPortionsLoadedInBatch(const TInternalPathId pathId, const std::vector<TPortionInfo::TPtr>& portions);
+    void AddPortionsLoadedInBatch(
+        const TInternalPathId pathId, const std::vector<TPortionInfo::TPtr>& portions, TLoadedKeyRanges&& loadedKeyRanges);
 
     void PrefetchPortionsMetadata();
     bool StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction);

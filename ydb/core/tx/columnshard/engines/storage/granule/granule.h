@@ -372,7 +372,8 @@ public:
     void UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion);
     void AddPortionsToOptimizer(const std::vector<std::shared_ptr<TPortionInfo>>& activePortions);
     // One batch of deferred loading, in the order of the index; returns the committed portions it added
-    std::vector<std::shared_ptr<TPortionInfo>> AddPortionsLoadedInBatch(const std::vector<std::shared_ptr<TPortionInfo>>& portions);
+    std::vector<std::shared_ptr<TPortionInfo>> AddPortionsLoadedInBatch(
+        const std::vector<std::shared_ptr<TPortionInfo>>& portions, TLoadedKeyRanges&& loadedKeyRanges);
     // the portions without a remove snapshot
     std::vector<std::shared_ptr<TPortionInfo>> GetActivePortions() const;
 

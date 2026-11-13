@@ -454,8 +454,9 @@ void TColumnEngineForLogs::AddPortionLoadedOnStart(TGranuleMeta& granule, const 
     }
 }
 
-void TColumnEngineForLogs::AddPortionsLoadedInBatch(const TInternalPathId pathId, const std::vector<TPortionInfo::TPtr>& portions) {
-    for (const auto& portion : GetGranulePtrVerified(pathId)->AddPortionsLoadedInBatch(portions)) {
+void TColumnEngineForLogs::AddPortionsLoadedInBatch(
+    const TInternalPathId pathId, const std::vector<TPortionInfo::TPtr>& portions, TLoadedKeyRanges&& loadedKeyRanges) {
+    for (const auto& portion : GetGranulePtrVerified(pathId)->AddPortionsLoadedInBatch(portions, std::move(loadedKeyRanges))) {
         RegisterPortion(portion);
     }
 }

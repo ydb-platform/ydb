@@ -84,15 +84,14 @@ bool TDeferredPortionLoader::OnBatchLoaded(TBatch&& batch) {
     ++BatchesLoaded;
     TablesToLoad.pop_front();
     auto& engine = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
-    engine.AddPortionsLoadedInBatch(batch.PathId, batch.Portions);
-    const auto granule = engine.GetGranulePtrVerified(batch.PathId);
     if (!batch.LastKey) {
+        engine.AddPortionsLoadedInBatch(batch.PathId, batch.Portions, NOlap::TLoadedKeyRanges::BuildEverything());
         NextBatchBelow.erase(batch.PathId);
-        granule->SetLoadedKeyRanges(NOlap::TLoadedKeyRanges::BuildEverything());
     } else {
         // the batch ends with every portion whose last key is LastKey
         AFL_VERIFY(!batch.Portions.empty());
-        granule->SetLoadedKeyRanges(NOlap::TLoadedKeyRanges::BuildFrom(batch.Portions.back()->GetMeta().IndexKeyEnd()));
+        engine.AddPortionsLoadedInBatch(
+            batch.PathId, batch.Portions, NOlap::TLoadedKeyRanges::BuildFrom(batch.Portions.back()->GetMeta().IndexKeyEnd()));
         NextBatchBelow.insert_or_assign(batch.PathId, std::move(*batch.LastKey));
         TablesToLoad.emplace_back(batch.PathId);
     }

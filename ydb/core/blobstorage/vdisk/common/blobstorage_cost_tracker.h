@@ -389,11 +389,7 @@ public:
         CountRequest(cost);
     }
 
-<<<<<<< HEAD
     template<class TEvent>
-=======
-    template<CReadDiskOperation TEvent>
->>>>>>> bbdbd322902 (Register per-VDisk counters on first use (#59309))
     void CountDefragRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
         MonGroup->DefragDiskCost() += cost;

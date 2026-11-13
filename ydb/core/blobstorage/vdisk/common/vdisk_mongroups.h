@@ -915,37 +915,7 @@ public:                                                                         
         ///////////////////////////////////////////////////////////////////////////////////
         class TCostTrackerGroup : public TBase {
         public:
-<<<<<<< HEAD
             GROUP_CONSTRUCTOR(TCostTrackerGroup)
-=======
-            class TDiskCostGroup : public TBase {
-            public:
-                GROUP_CONSTRUCTOR(TDiskCostGroup)
-                {
-                    COUNTER_INIT(UserDiskCost, true);
-                    COUNTER_INIT(CompactionDiskCost, true);
-                    COUNTER_INIT(ScrubDiskCost, true);
-                    COUNTER_INIT(InternalDiskCost, true);
-                }
-
-                COUNTER_DEF(UserDiskCost);
-                COUNTER_DEF(CompactionDiskCost);
-                COUNTER_DEF(ScrubDiskCost);
-                COUNTER_DEF(DefragDiskCost);
-                COUNTER_DEF(InternalDiskCost);
-
-                // Only the read group calls this: CountDefragRequest takes read operations only.
-                void InitDefragDiskCost() {
-                    COUNTER_INIT(DefragDiskCost, true);
-                }
-            };
-
-            TCostTrackerGroup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
-                    const TString& name, const TString& value)
-                : TBase(counters, name, value)
-                , ReadDiskCost(GroupCounters, "operation", "read")
-                , WriteDiskCost(GroupCounters, "operation", "write")
->>>>>>> bbdbd322902 (Register per-VDisk counters on first use (#59309))
             {
                 COUNTER_INIT(UserDiskCost, true);
                 COUNTER_INIT(CompactionDiskCost, true);
@@ -954,7 +924,6 @@ public:                                                                         
                 COUNTER_INIT(InternalDiskCost, true);
                 COUNTER_INIT(DiskTimeAvailableCtr, false);
                 COUNTER_INIT(DiskTimeFairShareNs, false);
-                ReadDiskCost.InitDefragDiskCost();
             }
 
             COUNTER_DEF(UserDiskCost);

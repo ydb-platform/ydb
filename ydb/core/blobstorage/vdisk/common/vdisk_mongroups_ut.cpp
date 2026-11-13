@@ -183,35 +183,8 @@ Y_UNIT_TEST_SUITE(TVDiskMonitoring) {
             UNIT_ASSERT(front.VDiskState() == NKikimrWhiteboard::PDiskError);
             UNIT_ASSERT_VALUES_EQUAL(counters->FindCounter("VDiskState_OK")->Val(), 0);
             UNIT_ASSERT_VALUES_EQUAL(counters->FindCounter("VDiskState_PDiskError")->Val(), 1);
-<<<<<<< HEAD
-            UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), extended ? 8 : 6);
-=======
             UNIT_ASSERT(!counters->FindCounter("VDiskState_Initial"));
-            UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), extended ? 6 : 4);
-        }
-    }
-
-    Y_UNIT_TEST(LatencyHistogramCountReplacesRegularCompletedCounter) {
-        for (bool extended : {false, true}) {
-            TMonitoringContext context(extended);
-            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-            auto asyncCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-            NVDiskMon::THistograms mon(counters, asyncCounters, NPDisk::DEVICE_TYPE_ROT);
-            auto histogram = mon.GetHistogram(NKikimrBlobStorage::FastRead);
-            histogram->Collect(TDuration::MilliSeconds(1), 123);
-            histogram->Collect(TDuration::Seconds(120), 456);
-            auto latency = counters->FindSubgroup("handleclass", "GetFast")
-                ->FindSubgroup("subsystem", "latency_histo");
-            auto snapshot = latency->FindHistogram("LatencyMs")->Snapshot();
-            ui64 count = 0;
-            for (ui32 i = 0; i < snapshot->Count(); ++i) {
-                count += snapshot->Value(i);
-            }
-            UNIT_ASSERT_VALUES_EQUAL(count, 2);
-            UNIT_ASSERT_VALUES_EQUAL(latency->FindCounter("LatencyCompletedCount")->Val(), count);
-            UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), extended ? 54 : 51);
-            UNIT_ASSERT_VALUES_EQUAL(CountSeries(asyncCounters), extended ? 56 : 52);
->>>>>>> bbdbd322902 (Register per-VDisk counters on first use (#59309))
+            UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), extended ? 4 : 2);
         }
     }
 
@@ -231,10 +204,7 @@ Y_UNIT_TEST_SUITE(TVDiskMonitoring) {
                 "ScrubDiskCost", "DefragDiskCost", "InternalDiskCost"}) {
             UNIT_ASSERT_C(exported.Contains(TString(name) + "{"), name);
         }
-<<<<<<< HEAD
-        UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), 41);
-=======
-        UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), 36);
+        UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), 32);
     }
 
     Y_UNIT_TEST(CapacityAlertRegistersEnteredColorsOnly) {
@@ -260,7 +230,6 @@ Y_UNIT_TEST_SUITE(TVDiskMonitoring) {
         UNIT_ASSERT(!counters->FindCounter("ThrottlingDryRun"));
         mon.ThrottlingDryRun() = 1;
         UNIT_ASSERT_VALUES_EQUAL(counters->FindCounter("ThrottlingDryRun")->Val(), 1);
->>>>>>> bbdbd322902 (Register per-VDisk counters on first use (#59309))
     }
 }
 

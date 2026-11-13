@@ -57,12 +57,17 @@ concept HasIndexPopulationMode = requires(const T& t) {
 };
 
 bool PrepareNextBuildableIndex(const TImportInfo& importInfo, ui32 itemIdx, TItem& item) {
-    if (!NeedToBuildIndexes(importInfo, itemIdx) || !item.Table) {
+    if (!item.Table) {
         return false;
     }
 
-    while (item.NextIndexIdx < item.Table->indexes_size() &&
-           NTableIndex::IsLocalTableIndex(item.Table->indexes(item.NextIndexIdx).type_case())) {
+    const bool buildIndexes = NeedToBuildIndexes(importInfo, itemIdx);
+    while (item.NextIndexIdx < item.Table->indexes_size()) {
+        const auto& index = item.Table->indexes(item.NextIndexIdx);
+        if (!NTableIndex::IsLocalTableIndex(index.type_case())
+                && (buildIndexes || index.has_global_async_index())) {
+            break;
+        }
         ++item.NextIndexIdx;
     }
 

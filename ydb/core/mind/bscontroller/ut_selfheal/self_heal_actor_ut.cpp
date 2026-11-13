@@ -87,9 +87,10 @@ TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlob
 
 TActorId ValidateCmd(const TActorId& parentId, TTestActorSystem& runtime, ui32 groupId, ui32 groupGeneration,
         ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool isSelfHealReasonDecommit = false) {
-    TSchedulerCookieHolder timeout(ISchedulerCookie::Make2Way());
-    runtime.Schedule(TDuration::Minutes(1), new IEventHandle(parentId, {}, new TEvents::TEvWakeup), timeout.Get(), 1);
-    auto res = runtime.WaitForEdgeActorEvent({parentId});
+    const TActorId timeoutId = runtime.AllocateEdgeActor(1);
+    runtime.Schedule(TDuration::Minutes(1), new IEventHandle(timeoutId, {}, new TEvents::TEvWakeup), nullptr, 1);
+    auto res = runtime.WaitForEdgeActorEvent({parentId, timeoutId});
+    runtime.DestroyActor(timeoutId);
     UNIT_ASSERT_EQUAL(res->GetTypeRewrite(), TEvBlobStorage::TEvControllerConfigRequest::EventType);
     auto *m = res->Get<TEvBlobStorage::TEvControllerConfigRequest>();
     UNIT_ASSERT(m->SelfHeal);

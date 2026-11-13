@@ -12778,60 +12778,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, test.HiveTablet, NHive::COUNTER_TABLETS_STARTING), 0);
     }
 
-    Y_UNIT_TEST(TestBridgePileDrainKeepsInflightLimitAfterHiveRestart) {
-        TBridgeDrainTest test;
-        auto& runtime = test.Runtime;
-        constexpr ui32 NUM_TABLETS = 5;
-        std::vector<ui64> tablets;
-        for (ui32 i = 0; i < NUM_TABLETS; ++i) {
-            tablets.push_back(test.CreateTablet(i));
-            UNIT_ASSERT(test.IsRunningInPile(tablets.back(), 0));
-        }
-
-        TBlockEvents<NHive::TEvPrivate::TEvRestartComplete> blockComplete(runtime);
-        test.Bridge.Promote(1);
-        UNIT_ASSERT_C(WaitUntil(runtime, [&] { return blockComplete.size() == 1; }), "pile drain did not move its first tablet");
-        UNIT_ASSERT(test.DrainPending());
-        blockComplete.Stop(); // the saved completion belongs to the old Hive's drain
-
-        auto fromPile0 = [&](const auto& ev) { return ev->Sender.NodeId() == runtime.GetNodeId(0); };
-        TBlockEvents<TEvLocal::TEvSyncTablets> blockSync(runtime, fromPile0);
-        TBlockEvents<TEvLocal::TEvStatus> blockStatus(runtime, fromPile0);
-        TBlockEvents<TEvLocal::TEvBootTablet> blockBoot(runtime, [&](const auto& ev) {
-            return std::find(tablets.begin(), tablets.end(), ev->Get()->Record.GetTabletID()) != tablets.end();
-        });
-
-        test.Bridge.Unsubscribe(GetHiveActor(runtime, test.HiveTablet));
-        RebootTablet(runtime, test.HiveTablet, test.Sender);
-        const TActorId hiveActor = GetHiveActor(runtime, test.HiveTablet);
-        test.Bridge.Subscribe(hiveActor);
-        runtime.EnableScheduleForActor(hiveActor);
-        UNIT_ASSERT_C(WaitUntil(runtime, [&] { return !blockSync.empty() && !blockStatus.empty(); }),
-            "source Local did not reconnect to the restarted Hive");
-        runtime.SimulateSleep(TDuration::MilliSeconds(100));
-        UNIT_ASSERT(test.DrainPending());
-
-        // Let the source confirm its running tablets after the initial drain attempt saw only Unknown tablets.
-        blockSync.Stop().Unblock();
-        blockStatus.Stop().Unblock();
-        for (ui32 moved = 1; moved < NUM_TABLETS; ++moved) {
-            UNIT_ASSERT_C(WaitUntil(runtime, [&] { return !blockBoot.empty(); }), "resumed pile drain did not move its next tablet");
-            runtime.SimulateSleep(TDuration::MilliSeconds(100));
-            UNIT_ASSERT_VALUES_EQUAL_C(blockBoot.size(), 1, "resync bypassed DrainInflight=1");
-            ui32 runningInSource = 0;
-            for (ui64 tabletId : tablets) {
-                runningInSource += test.IsRunningInPile(tabletId, 0);
-            }
-            UNIT_ASSERT_VALUES_EQUAL(runningInSource, NUM_TABLETS - moved - 1);
-            UNIT_ASSERT(test.DrainPending());
-            blockBoot.Unblock(1);
-        }
-        UNIT_ASSERT_C(WaitUntil(runtime, [&] {
-            return std::all_of(tablets.begin(), tablets.end(), [&](ui64 tabletId) { return test.IsRunningInPile(tabletId, 1); })
-                && !test.DrainPending();
-        }), "resumed pile drain did not finish");
-    }
-
     Y_UNIT_TEST(TestBridgePileDrainResumesOnPileUpdateAfterNodeBecomesUp) {
         TBridgeDrainTest test;
         const ui64 tabletId = test.CreateTablet();

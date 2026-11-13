@@ -606,24 +606,32 @@ void FireDescribeWakeup(TTestContext& tc, TDuration delay = TDuration::Seconds(1
 struct TSecretDescriberEnv {
     using TEvResolveSecret = NSecret::TDescribeSchemaSecretsService::TEvResolveSecret;
 
-    TTestContext Context;
     TControllableMirrorFactory Factory;
     THolder<TEvTxProxySchemeCache::TEvNavigateKeySet> Navigation;
     TActorId NavigationSender;
+    size_t NavigationCount = 0;
     TActorId SecretService;
     THolder<TEvResolveSecret> SecretRequest;
     NKikimrPQ::TMirrorPartitionConfig Config = MakeMirrorConfig();
+    TTestContext Context;
 
     TSecretDescriberEnv() {
         Context.Prepare();
         Context.Runtime->SetScheduledLimit(10000);
+        PQTabletPrepare({}, {}, Context);
+        Context.Runtime->GetAppData(0).PersQueueMirrorReaderFactory = &Factory;
+        Context.Runtime->GetAppData(0).FeatureFlags.SetEnableMirroredTopicSplitMerge(true);
         Context.Runtime->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
         Context.Runtime->RegisterService(MakeSchemeCacheID(), Context.Runtime->AllocateEdgeActor());
         SecretService = Context.Runtime->AllocateEdgeActor();
         Context.Runtime->RegisterService(
             NSecret::MakeDescribeSchemaSecretServiceId(Context.Runtime->GetNodeId(0)), SecretService);
         Context.Runtime->SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvPQ::TEvInitCredentials::EventType) {
+                Context.Runtime->EnableScheduleForActor(ev->Recipient);
+            }
             if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySet::EventType) {
+                ++NavigationCount;
                 NavigationSender = ev->Sender;
                 Navigation = ev->Release<TEvTxProxySchemeCache::TEvNavigateKeySet>();
                 return TTestActorRuntimeBase::EEventAction::DROP;
@@ -631,7 +639,22 @@ struct TSecretDescriberEnv {
             return TTestActorRuntimeBase::EEventAction::PROCESS;
         });
         Config.MutableCredentials()->SetOauthTokenSecretName("/Root/describe-secret");
-        StartDescriber(Context, Factory, Config, "/Root", "/Root/dst-topic");
+        UpdateTopicPath("dst-topic");
+    }
+
+    void UpdateTopicPath(const TString& topic) {
+        const auto expectedNavigations = NavigationCount + 1;
+        Navigation = nullptr;
+        SendBalancerUpdate(Context, {
+            .Partitions = {{0, {Context.TabletId, 1}}},
+            .Strategy = NKikimrPQ::TPQTabletConfig::CAN_SPLIT,
+            .Path = "/Root/" + topic,
+            .Database = "/Root",
+            .MirrorFrom = Config,
+        });
+        Context.Runtime->WaitFor("mirror topic owner lookup", [&] { return bool(Navigation); }, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(NavigationCount, expectedNavigations);
+        UNIT_ASSERT_VALUES_EQUAL(Navigation->Request->ResultSet.at(0).Path, (TVector<TString>{"Root", topic}));
     }
 
     void ResolveOwner() {
@@ -660,7 +683,7 @@ struct TSecretDescriberEnv {
         UNIT_ASSERT_VALUES_EQUAL(Factory.CredCalls, 1u);
         UNIT_ASSERT_VALUES_EQUAL(Factory.CredTokens.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(Factory.CredTokens.front(), value);
-        FireDescribeWakeup(Context);
+        Context.Runtime->WaitFor("mirror description", [&] { return Factory.DescribeCalls != 0; }, TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_EQUAL(Factory.DescribeCalls, 1u);
         UNIT_ASSERT_VALUES_EQUAL(Factory.LastDescribeConfig.GetCredentials().SerializeAsString(),
             Config.GetCredentials().SerializeAsString());
@@ -906,6 +929,7 @@ Y_UNIT_TEST(DuplicateInitCredentialsIsIgnoredWhileInflight) {
 
 Y_UNIT_TEST(SecretCredentialsAreResolvedForDescribeWithoutPersistingValue) {
     TSecretDescriberEnv env;
+    env.UpdateTopicPath("updated-topic");
     env.ResolveOwner();
     env.ResolveSecretAndExpectDescription("resolved-oauth");
 }

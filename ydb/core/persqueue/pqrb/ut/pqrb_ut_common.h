@@ -82,6 +82,9 @@ struct TBalancerUpdate {
     absl::flat_hash_map<ui32, TVector<ui32>> ChildPartitionIds;
     ui32 NextPartitionId = 0;
     ui32 ReceiveAttemptIdPeriodMs = 0;
+    TString Path;
+    TString Database;
+    TMaybe<NKikimrPQ::TMirrorPartitionConfig> MirrorFrom;
 };
 
 inline ui32 NextBalancerVersion() {
@@ -100,7 +103,7 @@ inline void SendBalancerUpdate(TTestContext& tc, TBalancerUpdate params) {
     record.SetPathId(1);
     record.SetVersion(params.Version);
     record.SetTopicName(params.Topic);
-    record.SetPath("/Root/" + params.Topic);
+    record.SetPath(params.Path ? params.Path : "/Root/" + params.Topic);
     record.SetSchemeShardId(params.SsId);
     if (params.NextPartitionId) {
         record.SetNextPartitionId(params.NextPartitionId);
@@ -143,6 +146,12 @@ inline void SendBalancerUpdate(TTestContext& tc, TBalancerUpdate params) {
         strategy->SetPartitionStrategyType(params.Strategy);
         strategy->SetMinPartitionCount(1);
         strategy->SetMaxPartitionCount(params.MaxPartitionCount);
+    }
+    if (params.Database) {
+        record.MutableTabletConfig()->SetYdbDatabasePath(params.Database);
+    }
+    if (params.MirrorFrom) {
+        record.MutableTabletConfig()->MutablePartitionConfig()->MutableMirrorFrom()->CopyFrom(*params.MirrorFrom);
     }
 
     if (params.Consumers.empty()) {

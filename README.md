@@ -32,7 +32,7 @@ Basic YDB features:
 - Independent horizontal scalability of storage and compute layers.
 - ACID transactions across multiple nodes and tables with strict consistency.
 - Rich [SQL dialect (YQL)](https://ydb.tech/docs/en/yql/reference/) for data manipulation and schema definition.
-- [PostgreSQL-compatible mode](https://ydb.tech/docs/en/postgresql/intro) for table operations and [Kafka-compatible mode](https://ydb.tech/docs/en/reference/kafka-api/) for topics.
+- [Kafka-compatible mode](https://ydb.tech/docs/en/reference/kafka-api/) for topics.
 - YDB clusters can be deployed with [Ansible](https://ydb.tech/docs/en/devops/ansible/), [Kubernetes](https://ydb.tech/docs/en/devops/kubernetes/), or [manually](https://ydb.tech/docs/en/devops/manual/).
 
 ### Fault-tolerant Configurations

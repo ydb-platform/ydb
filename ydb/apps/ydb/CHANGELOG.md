@@ -269,7 +269,6 @@ Also now you can load test YDB topics, using wide transactions that span over al
 * Added location printing for errors in `ydb tools restore` command
 * Diffs in `ydb workload` benchmarks are now printed prettier
 * Fixed progress bar in `ydb workload import` command
-* Added pg syntax to tpch and tpcds benchmarks
 * Fixed a bug where restoring from a backup using --import-data could fail if the partitioning of the table was changed
 * In the `ydb topic write` command the `--codec` option now has default value `RAW`.
 * Added log events for `ydb tools dump` and `ydb tools restore` commands
@@ -345,7 +344,6 @@ Also now you can load test YDB topics, using wide transactions that span over al
 ### Features
 
 * Added configuration management commands for the cluster `ydb admin config` and `ydb admin volatile-config`.
-* Added support for loading PostgreSQL-compatible data types by [ydb import file csv|tsv|json](reference/ydb-cli/export-import/import-file.md) command. Only for row-oriented tables.
 * Added support for directory load from an S3-compatible storage in the [ydb import s3](reference/ydb-cli/export-import/import-s3.md) command. Currently only available on Linux and Mac OS.
 * Added support for outputting the results of [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) and [ydb scripting yql](reference/ydb-cli/scripting-yql.md) commands in the [Apache Parquet](https://parquet.apache.org/docs/) format.
 * In the [ydb workload](reference/ydb-cli/commands/workload/index.md) commands, the `--executer` option has been added, which allows to specify which type of queries to use.
@@ -357,13 +355,10 @@ Also now you can load test YDB topics, using wide transactions that span over al
 
 * Fixed an error displaying tables in `pretty` format with [Unicode](https://en.wikipedia.org/wiki/Unicode) characters.
 
-* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](postgresql/import.md#pg-convert).
-
 ## 2.7.0 ##
 
 ### Features
 
-* Added the [ydb tools pg-convert](postgresql/import.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
 * Added the `ydb workload query` load testing command, which loads the database with [script execution queries](reference/ydb-cli/yql.md) in multiple threads.
 * Added a command `ydb scheme permissions list` to list permissions.
 * In the commands [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md), and [ydb scripting yql](reference/ydb-cli/scripting-yql.md), the `--flame-graph` option has been added, specifying the path to the file in which you need to save the visualization of query execution statistics.

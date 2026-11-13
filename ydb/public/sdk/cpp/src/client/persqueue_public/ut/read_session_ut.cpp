@@ -7,14 +7,20 @@
 #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/read_session.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/testing/gmock_in_unittest/gmock.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/future/core/future.h>
 
 #include <util/stream/zlib.h>
 
+#include <array>
 #include <future>
+#include <memory>
+#include <thread>
+#include <utility>
 
 using namespace NYdb;
 using namespace NYdb::NPersQueue;
@@ -89,6 +95,7 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
         UNIT_ASSERT(connectTimeoutCallback);
         UNIT_ASSERT(!connectDelay || connectDelayOperationContext);
 
+        Contexts = {connectContext, connectTimeoutContext, connectDelayOperationContext};
         OnCreateProcessor(++CreateCallsCount);
     }
 
@@ -188,6 +195,7 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
     }
 
     std::atomic<size_t> CreateCallsCount = 0;
+    std::array<std::weak_ptr<NYdbGrpc::IQueueClientContext>, 3> Contexts;
 
 private:
     TAdaptiveLock Lock;
@@ -905,7 +913,139 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
     }
 }
 
+template <typename TClient, typename TReadSettings>
+void CheckClosedReadSessions(const TReadSettings& baseSettings) {
+    for (const auto& [terminalError, timeout] : {std::pair{false, TDuration::Zero()},
+                                               std::pair{true, TDuration::Zero()},
+                                               std::pair{true, TDuration::Seconds(5)}}) {
+        TDriver driver(TDriverConfig().SetEndpoint("localhost:1").SetDatabase("/Root").SetNetworkThreadsNum(2));
+        auto client = std::make_unique<TClient>(driver);
+        auto settings = baseSettings;
+        auto closed = NThreading::NewPromise<EStatus>();
+        if (terminalError) {
+            settings.RetryPolicy(NTopic::IRetryPolicy::GetNoRetryPolicy()).ClientTimeout(TDuration::MilliSeconds(100));
+            settings.EventHandlers_.SessionClosedHandler([closed](const NTopic::TSessionClosedEvent& event) mutable {
+                closed.SetValue(event.GetStatus());
+            });
+        }
+        auto session = client->CreateReadSession(settings);
+        if (terminalError) {
+            UNIT_ASSERT(closed.GetFuture().Wait(TDuration::Seconds(10)));
+            UNIT_ASSERT(closed.GetFuture().GetValueSync() != EStatus::SUCCESS);
+        }
+        session->Close(timeout);
+        session->Close(timeout);
+        auto stopped = NThreading::NewPromise();
+        std::thread stopper([&driver, stopped]() mutable {
+            driver.Stop(true);
+            stopped.SetValue();
+        });
+        const bool ready = stopped.GetFuture().Wait(TDuration::Seconds(5));
+        session.reset();
+        client.reset();
+        stopper.join();
+        UNIT_ASSERT_C(ready, "Closed session blocks driver.Stop(true): terminal=" << terminalError << ", timeout=" << timeout);
+    }
+}
+
+namespace NYdb::inline Dev::NTopic::NTests {
+class TDirectReadSessionImplTestSetup {
+public:
+    enum class EFailure { Connect, Read, Start };
+
+    static void CheckTerminalCallback(EFailure failure) {
+        struct TControlCallbacks : IDirectReadSessionControlCallbacks {
+            MOCK_METHOD(void, AbortSession, (TSessionClosedEvent&&), (override));
+        };
+        auto counters = MakeIntrusive<TReaderCounters>();
+        MakeCountersNotNull(*counters);
+        TReadSessionSettings settings;
+        settings.Counters(counters).RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
+        auto callbacks = std::make_shared<TControlCallbacks>();
+        auto factory = std::make_shared<::TMockProcessorFactory<TDirectReadClientMessage, TDirectReadServerMessage>>();
+        auto context = MakeWithCallbackContext<TDirectReadSession>(0, "", settings, callbacks,
+            std::make_shared<::TReadSessionImplTestSetup::TFakeContext>(), factory, TLog{});
+        auto session = context->TryGet();
+        EStatus deliveredStatus = EStatus::SUCCESS;
+        EXPECT_CALL(*callbacks, AbortSession(_)).WillOnce([&](TSessionClosedEvent&& event) {
+            deliveredStatus = event.GetStatus();
+            session->Close();
+            context->Cancel();
+        });
+        EXPECT_CALL(*factory, OnCreateProcessor(1)).WillOnce([&](size_t) {
+            if (failure == EFailure::Connect) {
+                factory->FailCreation(EStatus::UNAVAILABLE);
+            }
+        });
+        session->Start();
+        factory->Wait();
+        if (failure != EFailure::Connect) {
+            TDeferredActions<false> deferred;
+            if (auto borrowed = context->LockShared()) {
+                if (failure == EFailure::Read) {
+                    borrowed->State = TDirectReadSession::EState::WORKING;
+                    borrowed->OnReadDone(NYdbGrpc::TGrpcStatus(grpc::StatusCode::UNAVAILABLE, "Read failed"), borrowed->ConnectionGeneration, deferred);
+                } else {
+                    TDirectReadPartitionSession partition{.Location = {0, 1}, .State = TDirectReadPartitionSession::EState::STARTING};
+                    with_lock (borrowed->Lock) {
+                        borrowed->DelayStartRequestImpl(partition, TPlainStatus(EStatus::UNAVAILABLE, "Start failed"), deferred);
+                    }
+                }
+            }
+        }
+        context->Cancel();
+        factory->Validate();
+        UNIT_ASSERT_VALUES_EQUAL(deliveredStatus, failure == EFailure::Read ? EStatus::TRANSPORT_UNAVAILABLE : EStatus::UNAVAILABLE);
+    }
+};
+} // namespace NYdb::NTopic::NTests
+
 Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
+    Y_UNIT_TEST(TopicClosedReadSessionDoesNotBlockDriverStop) {
+        CheckClosedReadSessions<NTopic::TTopicClient>(NTopic::TReadSessionSettings()
+            .ConsumerName("c").AppendTopics(NTopic::TTopicReadSettings("/Root/topic")));
+    }
+
+    Y_UNIT_TEST(PersQueueClosedReadSessionDoesNotBlockDriverStop) {
+        CheckClosedReadSessions<NPersQueue::TPersQueueClient>(NPersQueue::TReadSessionSettings()
+            .DisableClusterDiscovery(true).ConsumerName("c").AppendTopics(NPersQueue::TTopicReadSettings("/Root/topic")));
+    }
+
+    Y_UNIT_TEST(ReconnectAfterAbort) {
+        NTopic::TSingleClusterReadSessionImpl<false> topic(NTopic::TReadSessionSettings{}, "", "", "", TLog{}, nullptr, nullptr, nullptr, 1, 1);
+        NTopic::TSingleClusterReadSessionImpl<true> pq(NPersQueue::TReadSessionSettings{}, "", "", "", TLog{}, nullptr, nullptr, nullptr, 1, 1);
+        topic.Abort();
+        pq.Abort();
+        UNIT_ASSERT(!topic.Reconnect(TPlainStatus{}));
+        UNIT_ASSERT(!pq.Reconnect(TPlainStatus{}));
+    }
+
+    Y_UNIT_TEST(AbortSessionReleasesContexts) {
+        TReadSessionImplTestSetup setup;
+        auto session = setup.GetSession();
+        std::weak_ptr<NYdbGrpc::IQueueClientContext> root = setup.FakeContext;
+        setup.FakeContext.reset();
+        EXPECT_CALL(*setup.MockProcessorFactory, OnCreateProcessor(1));
+        UNIT_ASSERT(session->Reconnect(TPlainStatus(EStatus::UNAVAILABLE, "Retry")));
+        for (const auto& context : setup.MockProcessorFactory->Contexts) {
+            UNIT_ASSERT(!context.expired());
+        }
+        setup.MockProcessorFactory->Validate();
+        session->AbortSession(EStatus::ABORTED, "Terminal error");
+        UNIT_ASSERT(root.expired());
+        for (const auto& context : setup.MockProcessorFactory->Contexts) {
+            UNIT_ASSERT(context.expired());
+        }
+        UNIT_ASSERT(!session->Reconnect(TPlainStatus{}));
+    }
+
+    Y_UNIT_TEST(DirectTerminalCallbacksCanCloseReader) {
+        using TSetup = NTopic::NTests::TDirectReadSessionImplTestSetup;
+        for (auto failure : {TSetup::EFailure::Connect, TSetup::EFailure::Read, TSetup::EFailure::Start}) {
+            TSetup::CheckTerminalCallback(failure);
+        }
+    }
+
     void SuccessfulInitImpl(bool thenTimeout) {
         TReadSessionImplTestSetup setup;
         setup.Settings

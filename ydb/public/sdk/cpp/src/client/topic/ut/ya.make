@@ -50,7 +50,6 @@ END()
 
 RECURSE_FOR_TESTS(
     replication
-    session_lifecycle
     with_direct_read_ut
     slow
 )

@@ -168,11 +168,6 @@ namespace {
             if (SnapshotState == ESnapshotState::Initial) {
                 SnapshotState = ESnapshotState::Acquiring;
                 if (IsExportSnapshot()) {
-                    if (!AppData()->FeatureFlags.GetEnableSnapshotsLocking() ||
-                        !AppData()->FeatureFlags.GetEnableDataShardSnapshotLocking()) {
-                        return ReplyError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "Table checksums require EnableSnapshotsLocking and EnableDataShardSnapshotLocking");
-                    }
                     CheckExportRetentionSupport();
                     return;
                 }
@@ -239,11 +234,20 @@ namespace {
             }
             SnapshotState = ESnapshotState::Initial;
             const auto status = static_cast<Ydb::StatusIds::StatusCode>(result.GetStatus());
+            if (status == Ydb::StatusIds::UNSUPPORTED) {
+                Send(ReplyTo, new TEvTableChecksum::TEvRetentionUnsupported());
+                return PassAway();
+            }
             if (status != Ydb::StatusIds::SUCCESS) {
                 if (!Retry(status)) {
                     ReplyError(status, result.GetError());
                 }
                 return;
+            }
+            if (!AppData()->FeatureFlags.GetEnableSnapshotsLocking() ||
+                !AppData()->FeatureFlags.GetEnableDataShardSnapshotLocking()) {
+                return ReplyError(Ydb::StatusIds::PRECONDITION_FAILED,
+                    "Table checksums require EnableSnapshotsLocking and EnableDataShardSnapshotLocking");
             }
             // SchemeShard holds the original registration until the backup has saved the checksum
             SnapshotState = ESnapshotState::Retained;

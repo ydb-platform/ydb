@@ -3069,6 +3069,55 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         CheckCompletionMarkerContents(id);
     }
 
+    Y_UNIT_TEST_TWIN(TableChecksumDisabledOnRecovery, RetentionEnabled) {
+        Env();
+        auto& runtime = Runtime();
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableBackupTableChecksum(true);
+        flags.SetEnableSnapshotsLocking(true);
+        flags.SetEnableDataShardSnapshotLocking(true);
+
+        const auto service = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NLongTxService::MakeLongTxServiceID(runtime.GetNodeId()), service);
+        ui32 acquisitions = 0;
+        auto snapshots =
+            runtime.template AddObserver<NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot>([&](auto& ev) {
+                ++acquisitions;
+                UNIT_ASSERT(ev->Get()->Snapshot);
+                auto response = MakeHolder<NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult>(
+                    ev->Get()->DatabaseName, *ev->Get()->Snapshot,
+                    NKqp::TSnapshotHandle(std::make_shared<std::atomic<bool>>(true)), NLWTrace::TOrbit{});
+                runtime.Send(new IEventHandle(ev->Sender, service, response.Release(), 0, ev->Cookie), 0, true);
+                ev.Reset();
+            });
+        ui32 unsupportedReplies = 0;
+        auto responses =
+            runtime.template AddObserver<NBackup::TEvTableChecksum::TEvCheckRetentionResponse>([&](auto& ev) {
+                unsupportedReplies += ev->Get()->Record.GetStatus() == static_cast<ui32>(Ydb::StatusIds::UNSUPPORTED);
+            });
+        TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(runtime);
+        const auto id = StartCompletionMarkerExport(true, true);
+        runtime.WaitFor("data uploaded before checksum calculation", [&] {
+            return !starts.empty() && HasS3File("/backup/table/data_00.csv") && HasS3File("/backup/table/data_01.csv");
+        });
+        UNIT_ASSERT(!HasS3File("/backup/table/metadata.json"));
+        UNIT_ASSERT_VALUES_EQUAL(acquisitions, 1);
+
+        flags.SetEnableBackupTableChecksum(false);
+        flags.SetEnableSnapshotsLocking(RetentionEnabled);
+        flags.SetEnableDataShardSnapshotLocking(RetentionEnabled);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        starts.Stop().Unblock();
+        Env().TestWaitNotification(runtime, id);
+        TestGetExport(runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        UNIT_ASSERT_VALUES_EQUAL(unsupportedReplies, 1);
+        UNIT_ASSERT_VALUES_EQUAL(acquisitions, 1);
+        const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/backup/table/metadata.json"), true);
+        UNIT_ASSERT(!metadata.GetTableChecksum().has_value());
+        CheckCompletionMarkerContents(id);
+    }
+
     Y_UNIT_TEST(TableChecksumMetadataRecovery) {
         RunTableChecksumMetadataRecovery(false);
     }

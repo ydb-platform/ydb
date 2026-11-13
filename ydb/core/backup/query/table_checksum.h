@@ -23,7 +23,7 @@ struct TEvTableChecksum {
 
     struct TEvStart : NActors::TEventLocal<TEvStart, EvStart> {};
 
-    // Only a successful capability probe of an older SchemeShard may skip the checksum
+    // Skip checksum calculation for a legacy SchemeShard or an explicit owner opt-out
     struct TEvRetentionUnsupported : NActors::TEventLocal<TEvRetentionUnsupported, EvRetentionUnsupported> {};
 
     struct TEvCheckRetentionRequest : TEventPB<TEvCheckRetentionRequest,

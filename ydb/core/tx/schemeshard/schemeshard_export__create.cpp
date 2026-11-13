@@ -1871,6 +1871,9 @@ void TSchemeShard::Handle(NBackup::TEvTableChecksum::TEvCheckRetentionRequest::T
     if (!copyPath || TRowVersion(ui64((*copyPath)->StepCreated), ui64((*copyPath)->CreateTxId)) != version) {
         return reply(Ydb::StatusIds::PRECONDITION_FAILED, "Export snapshot version does not match the table copy");
     }
+    if (!info->EnableBackupTableChecksum) {
+        return reply(Ydb::StatusIds::UNSUPPORTED, "Table checksums are disabled for this export");
+    }
     const auto snapshot = info->ChecksumSnapshots.find(version);
     if (snapshot == info->ChecksumSnapshots.end()) {
         return reply(Ydb::StatusIds::PRECONDITION_FAILED, "Export snapshot retention is unavailable");

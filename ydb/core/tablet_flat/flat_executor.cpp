@@ -192,8 +192,8 @@ TActorContext TExecutor::OwnerCtx() const {
 void TExecutor::Registered(TActorSystem *sys, const TActorId&)
 {
     Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_EXECUTOR);
-    Broker = new TBroker(this, Emitter);
-    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
+    Broker = new TBroker(this, Emitter, Owner->TabletID(), FollowerId);
+    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId, FollowerId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
     auto& icb = *AppData()->Icb;
@@ -986,6 +986,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     Become(&TThis::StateBoot);
     Stats->IsActive = false;
     Stats->FollowerId = 0;
+    FollowerId = 0; // a follower promoted to leader, broker and scans owner must become the leader
 
     TEvTablet::TEvBoot *msg = ev->Get();
     Generation0 = msg->Generation;

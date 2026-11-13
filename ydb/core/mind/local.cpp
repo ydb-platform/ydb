@@ -8,6 +8,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
@@ -138,6 +139,23 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     ui64 MemLimit = 0;
     double NodeUsage = 0;
     double CpuUsage = 0; // Sum of CPU usage in all pools / Number of CPUs
+
+    // Resource broker queue usage, reported to Hive as named resources
+    struct TQueueUsageValue {
+        ui64 Value = 0;
+        bool Transferable = true; // nothing is running yet
+
+        bool operator==(const TQueueUsageValue&) const = default;
+    };
+    // Usage reported for online tablets: tablet -> resource name -> value. Names stay (with zero value) after
+    // the usage is gone, and everything is resent periodically and on reconnect: Hive keeps a reported value
+    // until it is changed, so a lost update (e.g. acked by Hive but not persisted before its restart) has to be
+    // repaired by a resend.
+    std::unordered_map<TTabletId, THashMap<TString, TQueueUsageValue>> ReportedQueueUsage;
+    TInstant LastQueueUsageResend;
+    constexpr static TDuration QUEUE_USAGE_RESEND_INTERVAL = TDuration::Seconds(60);
+    // Queue limits (only for queues limited by CPU): resource name -> limit
+    TMap<TString, ui64> QueueLimits;
 
     bool SentDrainNode = false;
     bool DrainResultReceived = false;
@@ -344,8 +362,37 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         HandlePipeDestroyed(ctx);
     }
 
+    static void SetNamedResource(NKikimrTabletBase::TMetrics& metrics, const TString& name, ui64 value, bool transferable = true) {
+        NKikimrTabletBase::TNamedResource* resource = nullptr;
+        for (auto& r : *metrics.MutableNamedResources()) {
+            if (r.GetName() == name) {
+                resource = &r;
+                break;
+            }
+        }
+        if (resource == nullptr) {
+            resource = metrics.AddNamedResources();
+            resource->SetName(name);
+        }
+        resource->SetValue(value);
+        if (transferable) {
+            resource->ClearTransferable(); // the default
+        } else {
+            resource->SetTransferable(false);
+        }
+    }
+
     void FillResourceMaximum(NKikimrTabletBase::TMetrics* record) {
         record->CopyFrom(ResourceLimit);
+        for (const auto& [name, limit] : QueueLimits) {
+            bool overridden = false;
+            for (const auto& r : record->GetNamedResources()) {
+                overridden |= (r.GetName() == name);
+            }
+            if (!overridden) {
+                SetNamedResource(*record, name, limit);
+            }
+        }
         if (!record->HasCPU()) {
             if (UserPoolLimit != 0) {
                 record->SetCPU(UserPoolLimit);
@@ -463,6 +510,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             NTabletPipe::SendData(ctx, HivePipeClient, eventSyncTablets.Release());
 
             Connected = true;
+            LastQueueUsageResend = TInstant::Zero(); // resend all queue usage with the next update
             YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing: connected to hive");
             for (const auto& tabletEntries : RetainedCutHistory) {
                 for (const auto& e : tabletEntries.second) {
@@ -678,6 +726,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                     it->second.ResourceValues.AddGroupWriteIops()->CopyFrom(v);
                 }
             }
+            for (const auto& v : metrics.GetNamedResources()) {
+                SetNamedResource(it->second.ResourceValues, v.GetName(), v.GetValue(), v.GetTransferable());
+            }
             auto after = it->second.ResourceValues.ByteSize();
             if (after == 0 && before == 0 && !UpdatedTabletMetrics.contains(tabletId)) {
                 return;
@@ -826,7 +877,104 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         auto req = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
         req->Record.MutableFieldsRequired()->Assign(REQUIRED_FIELDS.begin(), REQUIRED_FIELDS.end());
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), req.release());
+        Send(NResourceBroker::MakeResourceBrokerID(), new NResourceBroker::TEvResourceBroker::TEvQueueUsageRequest());
         Schedule(UPDATE_SYSTEM_USAGE_INTERVAL, new TEvPrivate::TEvUpdateSystemUsage());
+    }
+
+    void Handle(NResourceBroker::TEvResourceBroker::TEvQueueUsageResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& queues = ev->Get()->Queues;
+
+        TMap<TString, ui64> queueLimits;
+        std::unordered_map<TTabletId, THashMap<TString, TQueueUsageValue>> currentUsage;
+        for (const auto& queue : queues) {
+            TString name = NResourceBroker::MakeQueueResourceName(queue.Name);
+            if (queue.Limit != Max<ui64>()) {
+                queueLimits[name] = queue.Limit;
+            }
+            for (const auto& tablet : queue.Tablets) {
+                TTabletId tabletId(tablet.TabletId, tablet.FollowerId);
+                if (!OnlineTablets.contains(tabletId)) {
+                    continue; // will be reported once the tablet is online
+                }
+                currentUsage[tabletId][name] = TQueueUsageValue{
+                    .Value = tablet.Waiting + tablet.Running,
+                    .Transferable = tablet.Running == 0, // a move would restart running tasks
+                };
+            }
+        }
+
+        if (queueLimits != QueueLimits) {
+            QueueLimits = std::move(queueLimits);
+            YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar: resource broker queue limits changed");
+            if (Connected) {
+                SendStatusOk(ctx);
+            }
+        }
+
+        bool changed = false;
+        auto reportChange = [&](const TTabletId& tabletId, const TString& name, const TQueueUsageValue& value) {
+            auto it = OnlineTablets.find(tabletId);
+            if (it == OnlineTablets.end()) {
+                return;
+            }
+            SetNamedResource(it->second.ResourceValues, name, value.Value, value.Transferable);
+            // same bookkeeping as for TEvTabletMetrics
+            if (!TabletMetricsAckCookiesSupported) {
+                auto [legacy, inserted] = LegacyPendingTabletMetrics.emplace(tabletId, 1);
+                if (!inserted) {
+                    legacy->second = 2;
+                }
+            }
+            auto uit = UpdatedTabletMetrics.find(tabletId);
+            if (uit == UpdatedTabletMetrics.end()) {
+                UpdatedTabletMetrics.emplace(tabletId, TUpdatedTabletMetrics{});
+            } else if (uit->second.InFlight) {
+                uit->second.UpdatedAfterSend = true;
+            }
+            changed = true;
+        };
+
+        // Tablets which went offline are forgotten, see also the (re)start of a tablet
+        std::erase_if(ReportedQueueUsage, [&](const auto& item) { return !OnlineTablets.contains(item.first); });
+
+        // Usage which disappeared becomes zero, but the name stays for the resend
+        for (auto& [tabletId, reported] : ReportedQueueUsage) {
+            auto current = currentUsage.find(tabletId);
+            for (auto& [name, value] : reported) {
+                if (current == currentUsage.end() || !current->second.contains(name)) {
+                    if (value != TQueueUsageValue{}) {
+                        value = TQueueUsageValue{};
+                        reportChange(tabletId, name, value);
+                    }
+                }
+            }
+        }
+
+        // New and changed usage
+        for (auto& [tabletId, usage] : currentUsage) {
+            auto& reported = ReportedQueueUsage[tabletId];
+            for (auto& [name, value] : usage) {
+                auto& prev = reported[name];
+                if (prev != value) {
+                    prev = value;
+                    reportChange(tabletId, name, value);
+                }
+            }
+        }
+
+        // Periodic resend of everything, including zeros
+        if (Connected && ctx.Now() - LastQueueUsageResend >= QUEUE_USAGE_RESEND_INTERVAL) {
+            LastQueueUsageResend = ctx.Now();
+            for (const auto& [tabletId, reported] : ReportedQueueUsage) {
+                for (const auto& [name, value] : reported) {
+                    reportChange(tabletId, name, value);
+                }
+            }
+        }
+
+        if (changed && Connected) {
+            ScheduleSendTabletMetrics(ctx);
+        }
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev, const TActorContext& ctx) {
@@ -908,6 +1056,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             OnlineTabletsByActor[onlineIt->second.Tablet] = tabletId;
         }
         EraseTablet(InbootTablets, InbootTabletsByActor, inbootIt);
+        // Hive only has estimates for a (re)started tablet until it is reported, so everything has to be reported again
+        ReportedQueueUsage.erase(tabletId);
     }
 
     void Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorContext&) {
@@ -1249,6 +1399,7 @@ public:
             HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain);
             HFunc(TEvHive::TEvDrainNodeResult, HandleDrainNodeResult);
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
+            HFunc(NResourceBroker::TEvResourceBroker::TEvQueueUsageResponse, Handle);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             default:
                 YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TLocalNodeRegistrar: Unhandled in StateWork",

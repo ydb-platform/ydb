@@ -183,6 +183,37 @@ Y_UNIT_TEST_SUITE(VRestorePart) {
         UNIT_ASSERT(!fixture.Read(8, 3));
     }
 
+    Y_UNIT_TEST(Mirror3dcRepairSyncerPropagatesKeep) {
+        TFixture fixture;
+        fixture.PutLocalPart(0, 1);
+        fixture.PutLocalPart(3, 1);
+        fixture.PutLocalPart(1, 2);
+        fixture.PutLocalPart(4, 2);
+        fixture.VDiskResponses[0] = {.Status = NKikimrProto::OK, .PartId = 1, .Data = fixture.Data};
+
+        auto previousFilter = fixture.Env.Runtime->FilterFunction;
+        fixture.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvBlobStorage::TEvAssimilateResult::EventType) {
+                for (auto& blob : event->Get<TEvBlobStorage::TEvAssimilateResult>()->Blobs) {
+                    if (blob.Id == fixture.FullId) {
+                        blob.Keep = true;
+                    }
+                }
+            }
+            return previousFilter(node, event);
+        };
+        TActorId edge = fixture.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        TInstant deadline = fixture.Env.Runtime->GetClock() + TDuration::Minutes(1);
+        fixture.Env.Runtime->Register(NGroupSyncer::CreateMirror3dcRepairSyncer(fixture.Info, edge), 1);
+        NGroupSyncer::TEvMirror3dcRepairScanResult::TPtr result =
+            fixture.Env.WaitForEdgeActorEvent<NGroupSyncer::TEvMirror3dcRepairScanResult>(edge, true, deadline + TDuration::Seconds(1));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        fixture.CheckWritten(2, 3, true);
+        UNIT_ASSERT(!fixture.Read(5, 3));
+        UNIT_ASSERT(!fixture.Read(8, 3));
+    }
+
     Y_UNIT_TEST(NodeWardenStartsRepairSyncer) {
         TFixture fixture;
         fixture.PutLocalPart(0, 1);

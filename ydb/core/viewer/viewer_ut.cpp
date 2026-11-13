@@ -3217,10 +3217,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(NJson::ReadJsonTree(result->Response->Body, &json), context);
         UNIT_ASSERT_VALUES_EQUAL_C(vslotsResponses > 0, expectVSlots, context);
         bool hasVSlotsError = false;
+        bool hasFilterNotApplied = false;
         for (const auto& problem : json["Problems"].GetArray()) {
             hasVSlotsError |= problem.GetString() == "bsc-storage-slots-no-data";
+            hasFilterNotApplied |= problem.GetString() == "filter-not-applied";
         }
         UNIT_ASSERT_VALUES_EQUAL_C(hasVSlotsError, expectVSlots && !vslotsAvailable, context);
+        // with the data the storage filter needs received, the filter is applied, the pools of a database included
+        UNIT_ASSERT_C(hasVSlotsError || !hasFilterNotApplied, context);
         UNIT_ASSERT_VALUES_EQUAL_C(json["TotalNodes"].GetString(), ToString(expectedNodeIds.size()), context);
         UNIT_ASSERT_VALUES_EQUAL_C(json["FoundNodes"].GetString(), ToString(expectedNodeIds.size()), context);
         UNIT_ASSERT_C(!json["NeedFilter"].GetBoolean(), context);

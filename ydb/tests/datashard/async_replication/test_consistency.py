@@ -226,6 +226,7 @@ class TestAuthenticationRecovery(MulticlusterTestBase):
         for node in destination_cluster.nodes.values():
             node.start()
         source.query(f"UPSERT INTO `{path}` (key,value) VALUES (2u,'while-failed');")
+
         def has_error():
             try:
                 return "error" in self.describe(destination_cluster, replication)

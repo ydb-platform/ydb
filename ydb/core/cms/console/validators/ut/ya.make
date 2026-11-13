@@ -4,6 +4,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/library/yaml_config
 )
 
 SRCS(

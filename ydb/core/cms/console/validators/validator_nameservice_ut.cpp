@@ -1,6 +1,8 @@
 #include "validator_nameservice.h"
 #include "validator_ut_common.h"
 
+#include <ydb/library/yaml_config/yaml_config_parser.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NConsole {
@@ -71,13 +73,43 @@ Y_UNIT_TEST_SUITE(NameserviceConfigValidatorTests) {
         CheckConfig(oldCfg, newCfg, false);
     }
 
-    Y_UNIT_TEST(TestLongWalleDC) {
-        NKikimrConfig::TStaticNameserviceConfig oldCfg = MakeDefaultNameserviceConfig();
-        NKikimrConfig::TStaticNameserviceConfig newCfg = MakeDefaultNameserviceConfig();
-        UpdateNode(1, "host1", 101, "rhost1", "addr1", "dc11", newCfg);
-        CheckConfig(oldCfg, newCfg, true);
-        UpdateNode(1, "host1", 101, "rhost1", "addr1", "dc111", newCfg);
-        CheckConfig(oldCfg, newCfg, false);
+    Y_UNIT_TEST(TestLongDC) {
+        const auto oldCfg = MakeDefaultNameserviceConfig();
+        for (bool walleLocation : {false, true}) {
+            auto newCfg = oldCfg;
+            auto* node = newCfg.MutableNode(0);
+            node->ClearWalleLocation();
+            auto* location = walleLocation ? node->MutableWalleLocation() : node->MutableLocation();
+            for (const TString dc : {"dc11", "dc111", "ABCDEF"}) {
+                location->SetDataCenter(dc);
+                NKikimrConfig::TAppConfig appConfig;
+                appConfig.MutableNameserviceConfig()->CopyFrom(newCfg);
+                NTests::CheckConfig<TNameserviceConfigValidator>(appConfig, true, 0);
+                CheckConfig(oldCfg, newCfg, true);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestLongDCInHosts) {
+        const auto config = NYaml::Parse(R"(
+self_management_config:
+  enabled: true
+  erasure_species: none
+  pdisk_type: NVME
+host_configs:
+  - nvme: [disk1]
+hosts:
+  - host: host1
+    location:
+      data_center: ABCDEF
+      rack: rack1
+      body: 1
+)");
+        const auto& nameservice = config.GetNameserviceConfig();
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.NodeSize(), 1);
+        UNIT_ASSERT(!nameservice.GetNode(0).HasWalleLocation());
+        UNIT_ASSERT_VALUES_EQUAL(nameservice.GetNode(0).GetLocation().GetDataCenter(), "ABCDEF");
+        CheckConfig(nameservice, true);
     }
 
     Y_UNIT_TEST(TestModifyClusterUUID) {

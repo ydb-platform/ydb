@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import signal
@@ -19,6 +20,7 @@ from yatest.common import process
 from library.python import port_manager
 from library.python.testing.recipe import set_env
 
+from ydb.public.tools.lib.cmds import _verify_process_command, _wait_for_process_exit
 from ydb.tests.library.harness.kikimr_port_allocator import KikimrPortManagerPortAllocator
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -73,8 +75,21 @@ def _exec_queries(pool, queries):
         pool.execute_with_retries(q)
 
 
+def _write_process_state(path, processes):
+    temporary_path = path + ".tmp"
+    with open(temporary_path, "w") as stream:
+        json.dump({"processes": processes}, stream)
+    os.replace(temporary_path, path)
+
+
 class LogbrokerFederation(object):
-    def __init__(self, ydb_cluster_names=("cluster_a", "cluster_b"), MockFederationDiscovery: bool = False):
+
+    def __init__(
+        self,
+        ydb_cluster_names=("cluster_a", "cluster_b"),
+        MockFederationDiscovery: bool = False,
+        process_state_file=None,
+    ):
         logger.info("Setup federation recipe")
         assert len(ydb_cluster_names) > 0
         self.__clusters = {}
@@ -82,6 +97,8 @@ class LogbrokerFederation(object):
         self.__port_allocators = {}
         self.__port_manager = port_manager.PortManager()
         self.__cm_pid = None
+        self.__cm_command = None
+        self.__process_state_file = process_state_file
         self.__cm_stderr_file = None
         self.__cm_endpoint = None
         self.__mock_federation_discovery = MockFederationDiscovery
@@ -92,6 +109,61 @@ class LogbrokerFederation(object):
         for name in ydb_cluster_names:
             self.__clusters[name] = None
             self.__port_allocators[name] = KikimrPortManagerPortAllocator(self.__port_manager)
+
+    def _save_process_state(self):
+        if self.__process_state_file is None:
+            return
+
+        processes = []
+        for name, cluster in self.__clusters.items():
+            if cluster is None:
+                continue
+            for role, nodes in (("node", cluster.nodes), ("slot", cluster.slots)):
+                for node_id, node in nodes.items():
+                    if node.daemon is not None:
+                        processes.append(
+                            {
+                                "name": f"{name}/{role}_{node_id}",
+                                "pid": node.pid,
+                                "command": node.command,
+                            }
+                        )
+        if self.__cm_pid is not None:
+            processes.append({"name": "CM", "pid": self.__cm_pid, "command": self.__cm_command})
+        _write_process_state(self.__process_state_file, processes)
+
+    @staticmethod
+    def stop_from_file(path):
+        try:
+            with open(path) as stream:
+                state = json.load(stream)
+        except FileNotFoundError:
+            return
+
+        remaining = []
+        errors = []
+        # Stop CM before the clusters, and dynamic nodes before their static nodes.
+        for item in reversed(state["processes"]):
+            try:
+                pid = item["pid"]
+                if not isinstance(pid, int) or pid <= 0:
+                    raise ValueError(f"Invalid PID: {pid!r}")
+                _verify_process_command(pid, item["command"])
+                logger.info("Stopping %s, pid = %s", item["name"], pid)
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                _wait_for_process_exit(pid)
+            except Exception as error:
+                remaining.append(item)
+                errors.append(f"{item['name']}: {error}")
+                logger.exception("Failed to stop %s", item["name"])
+
+        if remaining:
+            _write_process_state(path, list(reversed(remaining)))
+            raise RuntimeError("Failed to stop federation processes: " + "; ".join(errors))
+        os.remove(path)
 
     @property
     def cm_endpoint(self):
@@ -210,9 +282,11 @@ class LogbrokerFederation(object):
         configurator.yaml_config['pqconfig']['quoting_config']['enable_quoting'] = True
 
         cluster = kikimr_cluster_factory(configurator)
-        cluster.start()
-
         self.__clusters[name] = cluster
+        try:
+            cluster.start()
+        finally:
+            self._save_process_state()
         node = list(cluster.nodes.values())[0]
         grpc_port = node.grpc_port
         self.__cluster_ports[name] = grpc_port
@@ -231,10 +305,13 @@ class LogbrokerFederation(object):
                 "/Root/logbroker-federation/{}".format(account),
                 storage_pool_units_count={'hdd': 1},
             )
-            slots = cluster.register_and_start_slots(
-                "/Root/logbroker-federation/{}".format(account),
-                count=1,
-            )
+            try:
+                slots = cluster.register_and_start_slots(
+                    "/Root/logbroker-federation/{}".format(account),
+                    count=1,
+                )
+            finally:
+                self._save_process_state()
 
             if account in PRE_INSTALLED_ACCOUNTS:
                 kafka_port = slots[0].kafka_api_port
@@ -673,7 +750,10 @@ class LogbrokerFederation(object):
             stderr=self.__cm_stderr_file,
             wait=False,
         )
+        self.__cm_pid = init_daemon.process.pid
+        self.__cm_command = command
         try:
+            self._save_process_state()
             self._wait_for_cm_tables(meta_port, init_daemon)
         finally:
             try:
@@ -681,6 +761,9 @@ class LogbrokerFederation(object):
             except ProcessLookupError:
                 pass
             init_daemon.process.wait(timeout=10)
+            self.__cm_pid = None
+            self.__cm_command = None
+            self._save_process_state()
 
         self._pre_init_cm(meta_port)
 
@@ -696,6 +779,7 @@ class LogbrokerFederation(object):
                     wait=False,
                 )
                 self.__cm_pid = daemon.process.pid
+                self.__cm_command = command
                 break
             except Exception as e:
                 logger.error("Exception when trying to launch CM: {}".format(e))
@@ -703,6 +787,7 @@ class LogbrokerFederation(object):
                 retries_count -= 1
         assert retries_count, "Failed to start CM"
         assert self.__cm_pid is not None
+        self._save_process_state()
 
         self.__cm_endpoint = cm_endpoint
 
@@ -710,6 +795,7 @@ class LogbrokerFederation(object):
         logger.info("CM started on port {}".format(grpc_port))
 
     def start(self, args=None):
+        self._save_process_state()
         for name in list(self.__clusters.keys()):
             cluster, port = self._start_single_ydb(name)
             self._setup_ydb_cluster(name, cluster, port)

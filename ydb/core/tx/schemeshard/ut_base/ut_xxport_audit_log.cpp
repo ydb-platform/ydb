@@ -42,7 +42,7 @@ public:
             UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "reason=" << reason);
         } else if (status != Ydb::StatusIds::SUCCESS) {
             UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "reason=" << operation
-                << " failed with status " << Ydb::StatusIds::StatusCode_Name(status));
+                << " failed: reason not provided (status " << Ydb::StatusIds::StatusCode_Name(status) << ")");
         } else {
             UNIT_ASSERT(line.find("reason=") == std::string::npos);
         }
@@ -91,6 +91,42 @@ void CheckEnd(const TString& operation, TLog log) {
     }
 }
 
+template <typename TInfo, typename TLog>
+void CheckEndItemIssues(const TString& operation, TLog log) {
+    using EState = typename TInfo::EState;
+    struct TCase {
+        EState State;
+        TString Reason;
+        TVector<TString> ItemIssues;
+        TString ExpectedReason;
+    };
+    const TVector<TCase> cases = {
+        {EState::Cancelled, {}, {"", "First item failed", "Second item failed"}, "First item failed"},
+        {EState::Cancelled, "Cancelled manually", {"Item failed"}, "Cancelled manually"},
+        {EState::Cancelled, {}, {"", ""}, {}},
+        {EState::Done, {}, {"Earlier item failure"}, {}},
+        {EState::Done, "Original diagnostic", {"Earlier item failure"}, "Original diagnostic"},
+    };
+
+    TFixture fixture;
+    for (const auto& test : cases) {
+        TInfo info(++fixture.Id, {}, TInfo::EKind::S3, TString(),
+            TPath::Resolve("/MyRoot", fixture.SchemeShard).Base()->PathId, {});
+        info.State = test.State;
+        info.Issue = test.Reason;
+        info.Items.resize(test.ItemIssues.size());
+        for (size_t i = 0; i < test.ItemIssues.size(); ++i) {
+            info.Items[i].Issue = test.ItemIssues[i];
+        }
+        fixture.Runtime.RunCall([&] {
+            log(info, fixture.SchemeShard);
+            return true;
+        });
+        fixture.Check(operation, test.State == EState::Done
+            ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED, test.ExpectedReason);
+    }
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardXxportAuditLog) {
@@ -108,5 +144,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardXxportAuditLog) {
 
     Y_UNIT_TEST(ImportEnd) {
         CheckEnd<TImportInfo>("IMPORT END", AuditLogImportEnd);
+    }
+
+    Y_UNIT_TEST(ExportEndItemIssues) {
+        CheckEndItemIssues<TExportInfo>("EXPORT END", AuditLogExportEnd);
+    }
+
+    Y_UNIT_TEST(ImportEndItemIssues) {
+        CheckEndItemIssues<TImportInfo>("IMPORT END", AuditLogImportEnd);
     }
 }

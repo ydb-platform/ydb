@@ -1050,7 +1050,9 @@ public:
                     const auto src = CanonizePath(ChildPath(SplitPath(base->GetSrcPath()), index.GetName()));
                     bool exists = false;
                     for (const auto* target : replication->GetTargets()) {
-                        exists |= CanonizePath(target->GetSrcPath()) == src;
+                        // A dropped index may still have a target awaiting cleanup.
+                        exists |= target->GetDstState() != TReplication::EDstState::Removing
+                            && CanonizePath(target->GetSrcPath()) == src;
                     }
                     if (exists) {
                         continue;

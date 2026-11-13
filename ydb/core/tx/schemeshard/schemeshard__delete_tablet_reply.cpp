@@ -137,6 +137,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             case ETabletType::TestShard:
                 Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Sub(1);
                 break;
+            case ETabletType::CdcAggregator:
+                Self->TabletCounters->Simple()[COUNTER_CDC_AGGREGATOR_COUNT].Sub(1);
+                break;
             default:
                 Y_FAIL_S("Unknown TabletType"
                          << ", ShardIdx " << ShardIdx

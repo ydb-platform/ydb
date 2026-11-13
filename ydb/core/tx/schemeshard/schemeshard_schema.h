@@ -1924,6 +1924,7 @@ struct Schema : NIceDb::Schema {
         struct TraceIds: Column<12, NScheme::NTypeIds::Bool> {};
         struct Compression: Column<13, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamCompression; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamCompressionNone; };
         struct CompressionLevel: Column<14, NScheme::NTypeIds::Int32> {};
+        struct HeartbeatMode: Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamHeartbeatMode; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect; };
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1940,7 +1941,8 @@ struct Schema : NIceDb::Schema {
             UserSIDs,
             TraceIds,
             Compression,
-            CompressionLevel
+            CompressionLevel,
+            HeartbeatMode
         >;
     };
 
@@ -1959,6 +1961,7 @@ struct Schema : NIceDb::Schema {
         struct TraceIds: Column<12, NScheme::NTypeIds::Bool> {};
         struct Compression: Column<13, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamCompression; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamCompressionNone; };
         struct CompressionLevel: Column<14, NScheme::NTypeIds::Int32> {};
+        struct HeartbeatMode: Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamHeartbeatMode; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect; };
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1975,7 +1978,8 @@ struct Schema : NIceDb::Schema {
             UserSIDs,
             TraceIds,
             Compression,
-            CompressionLevel
+            CompressionLevel,
+            HeartbeatMode
         >;
     };
 

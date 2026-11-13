@@ -730,8 +730,8 @@ class SessionPool:
         if self._should_stop.is_set():
             self._destroy(session)
             return False
-        await session.keep_alive(self._req_settings)
         try:
+            await session.keep_alive(self._req_settings)
             await self.release(typing.cast(Session, session))
         except BaseException:  # pylint: disable=W0703
             self._destroy(session)

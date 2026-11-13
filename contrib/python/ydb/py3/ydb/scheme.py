@@ -37,6 +37,7 @@ class SchemeEntryType(enum.IntEnum):
     TRANSFER = 23
     SYS_VIEW = 24
     SECRET = 25
+    STREAMING_QUERY = 26
 
     @classmethod
     def _missing_(cls, value):
@@ -172,6 +173,14 @@ class SchemeEntryType(enum.IntEnum):
         """
         return entry == SchemeEntryType.SECRET
 
+    @staticmethod
+    def is_streaming_query(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a streaming query and False otherwise
+        """
+        return entry == SchemeEntryType.STREAMING_QUERY
+
 
 class SchemeEntry(object):
     __slots__ = (
@@ -303,6 +312,12 @@ class SchemeEntry(object):
         :return: True if scheme entry is a secret and False otherwise
         """
         return SchemeEntryType.is_secret(self.type)
+
+    def is_streaming_query(self):
+        """
+        :return: True if scheme entry is a streaming query and False otherwise
+        """
+        return SchemeEntryType.is_streaming_query(self.type)
 
 
 class Directory(SchemeEntry):

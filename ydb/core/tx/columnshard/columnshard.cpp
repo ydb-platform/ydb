@@ -6,6 +6,7 @@
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor2.h"
 #include "hooks/abstract/abstract.h"
+#include "maintenance/move_data/move_data.h"
 #include "resource_subscriber/actor.h"
 #include "transactions/locks/read_finished.h"
 
@@ -34,6 +35,8 @@ IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info) {
 namespace NKikimr::NColumnShard {
 
 void TColumnShard::CleanupActors(const TActorContext& ctx) {
+    // The driver holds a raw pointer to this tablet, so it must not outlive it.
+    TMoveDataDriver::Stop(*this, ctx);
     if (BackgroundSessionsManager) {
         BackgroundSessionsManager->Stop();
     }

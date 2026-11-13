@@ -3569,6 +3569,7 @@ struct TCdcStreamSettings {
     using EMode = NKikimrSchemeOp::ECdcStreamMode;
     using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
     using EState = NKikimrSchemeOp::ECdcStreamState;
+    using EHeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatMode;
 
     #define OPTION(type, name) \
         TSelf&& With##name(type value) && { \
@@ -3586,6 +3587,7 @@ struct TCdcStreamSettings {
     OPTION(EState, State);
     OPTION(bool, UserSIDs);
     OPTION(bool, TraceIds);
+    OPTION(EHeartbeatMode, HeartbeatMode);
 
     #undef OPTION
 };
@@ -3635,6 +3637,7 @@ struct TCdcStreamInfo
             .WithAwsRegion(desc.GetAwsRegion())
             .WithUserSIDs(desc.GetUserSIDs())
             .WithTraceIds(desc.GetTraceIds())
+            .WithHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect)
         );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
@@ -3661,6 +3664,7 @@ struct TCdcStreamInfo
         }
         desc.SetUserSIDs(UserSIDs);
         desc.SetTraceIds(TraceIds);
+        desc.SetHeartbeatMode(HeartbeatMode);
     }
 
     void FinishAlter() {
@@ -3668,12 +3672,14 @@ struct TCdcStreamInfo
 
         AlterVersion = AlterData->AlterVersion;
         static_cast<TCdcStreamSettings&>(*this) = static_cast<TCdcStreamSettings&>(*AlterData);
+        AggregatorShardIdx = AlterData->AggregatorShardIdx;
 
         AlterData.Reset();
     }
 
     ui64 AlterVersion = 1;
     TCdcStreamInfo::TPtr AlterData = nullptr;
+    TShardIdx AggregatorShardIdx = InvalidShardIdx;
 
     TMap<TShardIdx, TShardStatus> ScanShards;
     THashSet<TShardIdx> PendingShards;

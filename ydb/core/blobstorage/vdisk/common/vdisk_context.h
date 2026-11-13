@@ -59,7 +59,6 @@ namespace NKikimr {
         TMemoryConsumer CompIndexFresh;
         TMemoryConsumer CompData;
         TMemoryConsumer CompIndex;
-        TMemoryConsumer IteratorsCache;
         TMemoryConsumer Replication;
         TMemoryConsumer SyncLogCache;
         TActorSystem *ActorSystem;

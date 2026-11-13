@@ -3,6 +3,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/util/proto_duration.h>
@@ -510,12 +511,37 @@ public:
 
         Strategy->Proccess(*desc.MutableConfig(), owner);
 
+        if (desc.GetConfig().GetAdoptExisting()) {
+            // Adopting demotes tables the replication did not create, bypassing every protection a
+            // replica table has, so it needs a real cluster administrator. "All users are admins by
+            // default" does not count, as for an index implementation table alter.
+            if (!IsAdministrator(AppData(), context.UserToken.Get()) || AppData()->AdministrationAllowedSIDs.empty()) {
+                result->SetError(NKikimrScheme::StatusAccessDenied,
+                    "Adopting existing tables into a replication requires a cluster administrator");
+                return result;
+            }
+            if (desc.GetConfig().HasTransferSpecific()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "ADOPT_EXISTING is not supported for a transfer");
+                return result;
+            }
+            if (desc.GetConfig().HasInitialScan() && desc.GetConfig().GetInitialScan()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "ADOPT_EXISTING cannot be combined with INITIAL_SCAN = TRUE: an adopted table"
+                    " already holds its data");
+                return result;
+            }
+            // The destination data is already in place, so there is nothing to scan and nothing to
+            // import: the replication starts working as soon as the tables are demoted.
+            desc.MutableConfig()->SetInitialScan(false);
+        }
+
         if (desc.GetConfig().HasTransferSpecific()) {
             desc.MutableConfig()->ClearInitialScan();
         } else if (!desc.GetConfig().HasInitialScan()) {
             desc.MutableConfig()->SetInitialScan(AppData()->ReplicationConfig.GetInitialScan());
         }
-        if (desc.GetConfig().GetInitialScan()) {
+        if (desc.GetConfig().GetInitialScan() || desc.GetConfig().GetAdoptExisting()) {
             desc.MutableState()->MutableStandBy();
         } else {
             desc.MutableState()->MutablePaused();

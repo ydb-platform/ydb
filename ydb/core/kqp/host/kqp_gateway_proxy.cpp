@@ -3192,6 +3192,9 @@ public:
             if (const auto& consistency = settings.Settings.GlobalConsistency) {
                 consistency->Serialize(*config.MutableConsistencySettings()->MutableGlobal());
             }
+            if (const auto& adoptExisting = settings.Settings.AdoptExisting) {
+                config.SetAdoptExisting(*adoptExisting);
+            }
             if (const auto& initialScan = settings.Settings.InitialScan) {
                 config.SetInitialScan(*initialScan);
             }

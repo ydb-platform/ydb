@@ -213,4 +213,9 @@ private:
 
 }; // TReplication
 
+// The state a replication is created in. One without an initial scan waits paused until its
+// destination tables have been filled and handed over; an adopted one has nothing to wait for,
+// because its tables already hold the data, so it starts working once they are demoted.
+TReplication::EState InitialReplicationState(const NKikimrReplication::TReplicationConfig& config);
+
 }

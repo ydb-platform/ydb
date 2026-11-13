@@ -5164,6 +5164,31 @@ Y_UNIT_TEST(AlterTableAlterIndexSetLocalBloomFppIsCorrect) {
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
+Y_UNIT_TEST(CreateAsyncReplicationAdoptExistingIsCorrect) {
+    const auto result = SqlToYql(R"(
+        USE ydb;
+        CREATE ASYNC REPLICATION r FOR `src` AS `dst`
+        WITH (CONNECTION_STRING = "grpc://localhost:2135/?database=/local", ADOPT_EXISTING = TRUE);
+    )");
+    UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    UNIT_ASSERT_C(result.Root->ToString().Contains("adopt_existing"), result.Root->ToString());
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationAdoptExistingRequiresBool) {
+    ExpectFailWithError(R"(
+        USE ydb;
+        CREATE ASYNC REPLICATION r FOR `src` AS `dst`
+        WITH (CONNECTION_STRING = "grpc://localhost:2135/?database=/local", ADOPT_EXISTING = "yes");
+    )", "<main>:4:94: Error: Literal of Bool type is expected for ADOPT_EXISTING\n");
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationAdoptExistingIsNotSupported) {
+    ExpectFailWithError(R"(
+        USE ydb;
+        ALTER ASYNC REPLICATION r SET (ADOPT_EXISTING = TRUE);
+    )", "<main>:3:57: Error: ADOPT_EXISTING is not supported in ALTER\n");
+}
+
 Y_UNIT_TEST(AlterTableAlterIndexResetReadReplicasSettingsIsNotSupported) {
     ExpectFailWithError("USE ydb;   ALTER TABLE table ALTER INDEX index RESET (READ_REPLICAS_SETTINGS)",
                         "<main>:1:55: Error: READ_REPLICAS_SETTINGS reset is not supported\n");

@@ -163,6 +163,11 @@ message TReplicationConfig {
         TTransferSpecific TransferSpecific = 8;
     }
 
+    // Adopt the destination tables as they already are instead of creating them: the controller
+    // demotes each one to a read-only replica in place, so no data is copied. Implies no initial
+    // scan, and is admitted from a cluster administrator only.
+    optional bool AdoptExisting = 13 [default = false];
+
     reserved 6; // InitialSync
 }
 

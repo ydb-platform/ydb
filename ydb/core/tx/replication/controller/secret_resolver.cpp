@@ -59,7 +59,7 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
                 userToken,
                 Database,
                 actorSystem,
-                {.RetryPolicy = NSecret::MakeLongRetryPolicy()});
+                {.RetryPolicy = NSecret::ERetryPolicy::LongRetries});
             future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
                 actorSystem->Send(replyActorId, new NKqp::TEvDescribeSecretsResponse(result.GetValue()));
             });

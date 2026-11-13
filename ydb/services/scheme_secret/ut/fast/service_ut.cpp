@@ -460,7 +460,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(secretName, secretValue, session);
 
         TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = MakeShortRetryPolicy();
+        describeSettings.RetryPolicy = ERetryPolicy::ShortRetries;
         auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, std::move(describeSettings));
         AssertSecretValue(secretValue, promise);
     }
@@ -510,7 +510,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         }
 
         TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = MakeShortRetryPolicy();
+        describeSettings.RetryPolicy = ERetryPolicy::ShortRetries;
         auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, describeSettings);
         AssertSecretValues(secretValues, promise);
     }
@@ -542,7 +542,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         }
 
         TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = MakeShortRetryPolicy();
+        describeSettings.RetryPolicy = ERetryPolicy::ShortRetries;
         auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, describeSettings);
         AssertSecretValues(secretValues, promise);
     }
@@ -573,7 +573,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         }
 
         TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = MakeShortRetryPolicy();
+        describeSettings.RetryPolicy = ERetryPolicy::ShortRetries;
         auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, describeSettings);
         AssertSecretValues(secretValues, promise);
     }
@@ -598,7 +598,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(secretName, "secret-value", session);
 
         TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = MakeLongRetryPolicy();
+        describeSettings.RetryPolicy = ERetryPolicy::LongRetries;
         auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, describeSettings);
         AssertBadRequest(promise, "<main>: Error: Secret `/Root/secret-name` not found\n");
     }
@@ -621,7 +621,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(secretName, "secret-value", session);
 
         TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = IRetryPolicy<>::GetNoRetryPolicy();
+        describeSettings.RetryPolicy = ERetryPolicy::NoRetries;
         auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, describeSettings);
         AssertBadRequest(
             promise,

@@ -61,7 +61,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::StartLoad() {
-        Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Self->Token}}, [&](TCoroTx::TContextBase& tx) {
+        Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Self->Token}}, NKikimrBlobDepot::TXTYPE_DATA_LOAD, [&](TCoroTx::TContextBase& tx) {
             TLoadCycleAccounting accounting(LoadTotalCycles);
 
             switch (RunLoadTrashLoop(tx, accounting, TrashLoadFrom)) {
@@ -249,7 +249,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         TrashLoadState = ETrashLoadState::Loading;
-        Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Self->Token}}, [&](TCoroTx::TContextBase& tx) {
+        Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Self->Token}}, NKikimrBlobDepot::TXTYPE_DATA_LOAD, [&](TCoroTx::TContextBase& tx) {
             TLoadCycleAccounting accounting(LoadTotalCycles);
             const auto result = RunLoadTrashLoop(tx, accounting, TrashLoadFrom);
             FinishLoadTx(accounting, tx);

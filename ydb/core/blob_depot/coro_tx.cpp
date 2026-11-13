@@ -116,14 +116,17 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    TCoroTx::TCoroTx(TBlobDepot *self, TTokens&& tokens, std::function<void(TCoroTx::TContextBase&)> body)
+    TCoroTx::TCoroTx(TBlobDepot *self, TTokens&& tokens, NKikimrBlobDepot::ETxTypes txType,
+            std::function<void(TCoroTx::TContextBase&)> body)
         : TTransactionBase(self)
         , Context(std::make_unique<TContext>(std::move(tokens), std::move(body)))
+        , TxType(txType)
     {}
 
     TCoroTx::TCoroTx(TCoroTx& predecessor)
         : TTransactionBase(predecessor.Self)
         , Context(std::move(predecessor.Context))
+        , TxType(predecessor.TxType)
     {}
 
     TCoroTx::~TCoroTx()

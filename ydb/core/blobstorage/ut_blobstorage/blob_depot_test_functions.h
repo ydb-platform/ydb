@@ -11,6 +11,9 @@
 
 #include "blob_depot_event_managers.h"
 
+inline const TString DecommitBlobDepotPool = "decommit_blob_depot_pool"; // where DecommitGroup puts BlobDepot channels
+void DecommitGroup(TBlobDepotTestEnvironment& tenv, ui32 groupId);
+
 void TestBasicPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId);
 
 void TestBasicRange(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId);

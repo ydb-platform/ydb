@@ -1,6 +1,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/scheme_cache_stub.h>
 #include <ydb/core/blob_depot/events.h>
+#include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -61,6 +63,27 @@ void RebootBlobDepotTablet(TEnvironmentSetup& env, ui64 blobDepotTabletId) {
     runtime.Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(blobDepotTabletId, TActorId())), sender.NodeId());
     env.Sim(TDuration::MilliSeconds(100));
     runtime.DestroyActor(sender);
+}
+
+// RoCompleted + RwCompleted of a tx type, e.g. txName = "BlobDepot/TTxPrepare"
+ui64 GetTxCompleted(TEnvironmentSetup& env, ui64 tabletId, const TString& txName) {
+    const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+    env.Runtime->SendToPipe(tabletId, edge, new TEvTablet::TEvGetCounters, 0, TTestActorSystem::GetPipeConfigWithRetries());
+    const auto ev = env.WaitForEdgeActorEvent<TEvTablet::TEvGetCountersResponse>(edge, true,
+        env.Runtime->GetClock() + TDuration::Seconds(10));
+    UNIT_ASSERT_C(ev, "no counters from tablet " << tabletId);
+    const TString ro = txName + "/RoCompleted";
+    const TString rw = txName + "/RwCompleted";
+    ui64 completed = 0;
+    ui32 found = 0;
+    for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
+        if (counter.GetName() == ro || counter.GetName() == rw) {
+            completed += counter.GetValue();
+            ++found;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL_C(found, 2, "no completed counters for " << txName);
+    return completed;
 }
 
 void LoadSeed(ui32& seed) {
@@ -811,6 +834,49 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
 
             ++tabletId;
         }
+    }
+
+    Y_UNIT_TEST(DecommitTxTypeCounters) {
+        TActorId assimilator; // read by the filter below, so it must outlive tenv
+        TBlobDepotTestEnvironment tenv;
+        auto& env = *tenv.Env;
+        const ui32 groupId = tenv.RegularGroups[0];
+
+        constexpr ui64 tabletId = 100500;
+        TBSState state;
+        state[tabletId];
+        TBlobInfo blob(tenv.DataGen(100), tabletId, 1);
+        VerifiedPut(env, 1, groupId, blob, state);
+
+        // the assimilator never gets its copy reads back, so decommit stays at BlobsFinished: agents are served and each
+        // resolve runs TTxPrepare
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilate) {
+                assimilator = ev->Sender;
+            }
+            return ev->GetTypeRewrite() != TEvBlobStorage::EvGetResult || ev->GetRecipientRewrite() != assimilator;
+        };
+        SetupSchemeCacheStub(env, {DecommitBlobDepotPool});
+        DecommitGroup(tenv, groupId);
+
+        std::optional<ui64> blobDepotTabletId;
+        for (ui32 i = 0; i < 60 && !(blobDepotTabletId = TryGetBlobDepotTabletId(env, groupId)); ++i) {
+            env.Sim(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(blobDepotTabletId);
+
+        ui64 prepared = 0;
+        for (ui32 i = 0; i < 60 && !prepared; ++i) {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            SendTEvGet(env, edge, groupId, blob.Id);
+            if (!env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, true, env.Runtime->GetClock() + TDuration::Seconds(1))) {
+                env.Runtime->DestroyActor(edge); // a late reply must not reach an edge actor that is not waiting
+            }
+            prepared = GetTxCompleted(env, *blobDepotTabletId, "BlobDepot/TTxPrepare");
+        }
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_C(prepared, "no TTxPrepare counted for the decommitting group");
+        UNIT_ASSERT(GetTxCompleted(env, *blobDepotTabletId, "BlobDepot/TTxDataLoad"));
     }
 
     // the agent of the virtual group with no physical group behind it has nothing to assimilate; it answers with error

@@ -147,6 +147,10 @@ protected:
 
     template <>
     void RemoveRecords(TVector<ui64>&& records) {
+        if (records.empty()) {
+            return;
+        }
+
         OnRecordsRemoved(records);
         ActorOps->Send(GetChangeServer(), new TEvChangeExchange::TEvRemoveRecords(std::move(records)));
     }

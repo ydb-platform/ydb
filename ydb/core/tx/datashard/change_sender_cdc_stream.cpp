@@ -533,7 +533,8 @@ class TCdcChangeSenderMain
 
         Stream = TUserTable::TCdcStream(entry.CdcStreamInfo->Description);
         if (AggregatedHeartbeats) {
-            AggregatedHeartbeats->OnStreamResolved(Stream.AggregatorTabletId);
+            AggregatedHeartbeats->SetAggregatorTabletId(Stream.AggregatorTabletId);
+            RemoveRecords(AggregatedHeartbeats->SendIfReady());
         }
 
         Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
@@ -676,6 +677,7 @@ class TCdcChangeSenderMain
             {"eventDetails", ev->Get()->ToString()});
         if (AggregatedHeartbeats) {
             ForgetRecords(AggregatedHeartbeats->OnRecordsReceived(ev->Get()->Records));
+            RemoveRecords(AggregatedHeartbeats->SendIfReady());
         }
         ProcessRecords(std::move(ev->Get()->Records));
     }
@@ -685,6 +687,7 @@ class TCdcChangeSenderMain
             {"eventDetails", ev->Get()->ToString()});
         if (AggregatedHeartbeats) {
             AggregatedHeartbeats->OnRecordsRemoved(ev->Get()->Records);
+            RemoveRecords(AggregatedHeartbeats->SendIfReady());
         }
         ForgetRecords(std::move(ev->Get()->Records));
     }
@@ -693,6 +696,9 @@ class TCdcChangeSenderMain
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
+        if (AggregatedHeartbeats) {
+            RemoveRecords(AggregatedHeartbeats->SendIfReady());
+        }
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
@@ -708,7 +714,7 @@ class TCdcChangeSenderMain
 
         RemoveRecords();
         if (AggregatedHeartbeats) {
-            AggregatedHeartbeats->RemoveAll();
+            RemoveRecords(AggregatedHeartbeats->RemoveAll());
         }
         PassAway();
     }
@@ -723,7 +729,7 @@ class TCdcChangeSenderMain
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
         if (AggregatedHeartbeats) {
-            AggregatedHeartbeats->OnWriteResult(*ev->Get(), ev->Cookie);
+            RemoveRecords(AggregatedHeartbeats->OnWriteResult(*ev->Get(), ev->Cookie));
         }
     }
 
@@ -761,7 +767,7 @@ public:
         , TopicVersion(0)
     {
         if (stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated) {
-            AggregatedHeartbeats.emplace(CreateCdcStreamSerializer(stream, dataShard.TabletId), dataShard);
+            AggregatedHeartbeats.emplace(CreateCdcStreamSerializer(stream, dataShard.TabletId), dataShard.TabletId);
         }
     }
 

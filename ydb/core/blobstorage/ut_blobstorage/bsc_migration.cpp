@@ -95,8 +95,8 @@ Y_UNIT_TEST_SUITE(BSCMigration) {
         auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
         request->Record.MutableProgram()->MutableProgram()->SetText(TStringBuilder()
             << "((return (AsList (UpdateRow 'Group "
-            << "'(('ID (Uint32 '" << groupId << "))) "
-            << "'(('DecommitStatus (Uint32 '4)))))))");
+            << "'('('ID (Uint32 '" << groupId << "))) "
+            << "'('('DecommitStatus (Uint32 '4)))))))");
         env.Runtime->SendToPipe(env.TabletId, sender, request.release(), 0,
             TTestActorSystem::GetPipeConfigWithRetries());
         const auto updateResponse = env.WaitForEdgeActorEvent<TEvTablet::TEvLocalMKQLResponse>(sender);

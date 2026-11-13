@@ -3792,7 +3792,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             return json;
         };
         const auto json = get("");
-        UNIT_ASSERT_VALUES_EQUAL(json["Version"].GetUInteger(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(json["Version"].GetUInteger(), 18);
         const auto& groups = json["StorageGroups"].GetArray();
         UNIT_ASSERT_VALUES_EQUAL(groups.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(groups[0]["BridgeSyncStatus"].GetString(), "SYNCING");
@@ -3927,7 +3927,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
 
         const auto flat = get("?fields_required=BridgeSyncStatus");
-        UNIT_ASSERT_VALUES_EQUAL(flat["Version"].GetUInteger(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(flat["Version"].GetUInteger(), 18);
         const TStorageGroups::TFieldsType required(flat["FieldsRequired"].GetString().c_str());
         UNIT_ASSERT(required.test(+EGroupFields::BridgeSyncStatus));
         const auto& groups = flat["StorageGroups"].GetArray();

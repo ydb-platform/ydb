@@ -1,10 +1,9 @@
 #include "cdc_aggregated_heartbeats.h"
-#include "change_record.h"
 
-#include <ydb/core/change_exchange/visitor.h>
+#include <ydb/core/persqueue/common/heartbeat.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
-#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -14,19 +13,38 @@ namespace NKikimr::NDataShard {
 
 namespace {
 
-struct THeartbeatSerializer: public NChangeExchange::TBaseVisitor {
-    IChangeRecordSerializer& Serializer;
-    NKikimrClient::TPersQueuePartitionRequest::TCmdWrite Cmd;
+using IChangeRecord = NChangeExchange::IChangeRecord;
+using TEvWriteHeartbeat = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeat;
+using TEvWriteHeartbeatResult = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult;
 
-    explicit THeartbeatSerializer(IChangeRecordSerializer& serializer)
-        : Serializer(serializer)
-    {
+std::optional<ui64> FindHeartbeatToSend(const TMap<ui64, IChangeRecord::TPtr>& heartbeats, const TSet<ui64>& pendingRecords) {
+    const ui64 firstPending = pendingRecords ? *pendingRecords.begin() : Max<ui64>();
+    const auto firstBlocked = heartbeats.lower_bound(firstPending);
+    if (firstBlocked == heartbeats.begin()) {
+        return std::nullopt;
     }
+    return std::prev(firstBlocked)->first;
+}
 
-    void Visit(const TChangeRecord& record) override {
-        Serializer.Serialize(Cmd, record);
+TVector<ui64> EraseUpTo(TMap<ui64, IChangeRecord::TPtr>& heartbeats, ui64 upTo) {
+    TVector<ui64> orders;
+    const auto end = heartbeats.upper_bound(upTo);
+    for (auto it = heartbeats.begin(); it != end; it = heartbeats.erase(it)) {
+        orders.push_back(it->first);
     }
-};
+    return orders;
+}
+
+bool IsWritten(const TEvWriteHeartbeatResult& result, const IChangeRecord& heartbeat) {
+    return result.Status == TEvWriteHeartbeatResult::EStatus::Written
+        && result.WrittenVersion >= TRowVersion(heartbeat.GetStep(), heartbeat.GetTxId());
+}
+
+NPQ::THeartbeat MakeHeartbeat(IChangeRecordSerializer& serializer, const IChangeRecord& record) {
+    NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
+    serializer.Serialize(cmd, record);
+    return NPQ::THeartbeat::Parse(cmd.GetHeartbeat());
+}
 
 } // anonymous
 
@@ -36,108 +54,122 @@ TCdcAggregatedHeartbeats::TCdcAggregatedHeartbeats(THolder<IChangeRecordSerializ
 {
 }
 
-void TCdcAggregatedHeartbeats::SetAggregatorTabletId(ui64 aggregatorTabletId) {
-    AggregatorTabletId = aggregatorTabletId;
+void TCdcAggregatedHeartbeats::SetAggregator(ui64 tabletId) {
+    AggregatorTabletId = tabletId;
+    SendReadyHeartbeat();
 }
 
-void TCdcAggregatedHeartbeats::TrackRecords(const TVector<TRecordInfo>& records) {
+void TCdcAggregatedHeartbeats::RegisterPendingRecordIds(const TVector<TRecordInfo>& records) {
     for (const auto& record : records) {
-        Undelivered.insert(record.Order);
+        PendingRecords.insert(record.Order);
     }
 }
 
-TVector<ui64> TCdcAggregatedHeartbeats::ExtractHeartbeats(TVector<NChangeExchange::IChangeRecord::TPtr>& records) {
-    TVector<ui64> heartbeats;
-    TVector<NChangeExchange::IChangeRecord::TPtr> rest(Reserve(records.size()));
+void TCdcAggregatedHeartbeats::RemovePendingRecordIds(const TVector<ui64>& orders) {
+    for (const auto order : orders) {
+        PendingRecords.erase(order);
+    }
+    SendReadyHeartbeat();
+}
+
+std::pair<TVector<IChangeRecord::TPtr>, TVector<ui64>> TCdcAggregatedHeartbeats::BufferHeartbeats(TVector<IChangeRecord::TPtr> records) {
+    TVector<IChangeRecord::TPtr> passed;
+    TVector<ui64> buffered;
     for (auto& record : records) {
-        if (record->GetKind() != NChangeExchange::IChangeRecord::EKind::CdcHeartbeat) {
-            rest.push_back(std::move(record));
+        if (record->GetKind() != IChangeRecord::EKind::CdcHeartbeat) {
+            passed.push_back(std::move(record));
             continue;
         }
 
-        THeartbeatSerializer visitor(*Serializer);
-        record->Accept(visitor);
-        Undelivered.erase(record->GetOrder());
-        Held.emplace(record->GetOrder(), NPQ::THeartbeat::Parse(visitor.Cmd.GetHeartbeat()));
-        heartbeats.push_back(record->GetOrder());
+        const ui64 order = record->GetOrder();
+        PendingRecords.erase(order);
+        PendingHeartbeats.emplace(order, std::move(record));
+        buffered.push_back(order);
     }
 
-    records = std::move(rest);
-    return heartbeats;
+    SendReadyHeartbeat();
+    return {std::move(passed), std::move(buffered)};
 }
 
-void TCdcAggregatedHeartbeats::UntrackRecords(const TVector<ui64>& orders) {
-    for (const auto order : orders) {
-        Undelivered.erase(order);
-    }
-}
-
-TVector<ui64> TCdcAggregatedHeartbeats::SendReadyHeartbeat() {
-    const auto ready = Undelivered ? Held.lower_bound(*Undelivered.begin()) : Held.end();
-    if (!AggregatorTabletId || ready == Held.begin() || Sent == std::prev(ready)->first) {
+TVector<ui64> TCdcAggregatedHeartbeats::HandleCdcAggregatorServiceReply(TAutoPtr<IEventHandle>& ev) {
+    if (!InFlight) {
         return {};
     }
 
-    auto covered = RemoveHeld(std::prev(ready));
-    Sent = Held.begin()->first;
-    Send(TDuration::Zero());
-    return covered;
-}
-
-TVector<ui64> TCdcAggregatedHeartbeats::HandleWriteResult(const TEvWriteHeartbeatResult& result, ui64 cookie) {
-    using EStatus = TEvWriteHeartbeatResult::EStatus;
-    if (!Sent || cookie != Cookie) {
-        return {};
-    }
-
-    if (result.Status != EStatus::Written || result.WrittenVersion < Held.at(*Sent).Version) {
-        YDB_LOG_WARN("CdcAggregatorService has not written the heartbeat",
-            {"eventDetails", result.ToString()});
-        if (result.Status != EStatus::Rejected) {
-            Send(Backoff.Next());
-            return {};
+    switch (ev->GetTypeRewrite()) {
+    case TEvWriteHeartbeatResult::EventType: {
+        const auto& result = *ev->Get<TEvWriteHeartbeatResult>();
+        const bool written = IsWritten(result, *PendingHeartbeats.at(*InFlight));
+        if (!written) {
+            YDB_LOG_WARN("CdcAggregatorService has not written the heartbeat",
+                {"eventDetails", result.ToString()});
         }
+
+        if (written || result.Status == TEvWriteHeartbeatResult::EStatus::Rejected) {
+            return CompleteInFlight();
+        }
+        return RetryInFlight();
+    }
+    case TEvents::TEvUndelivered::EventType:
+        if (ev->Get<TEvents::TEvUndelivered>()->SourceType == TEvWriteHeartbeat::EventType) {
+            return RetryInFlight();
+        }
+        break;
+    }
+    return {};
+}
+
+TVector<ui64> TCdcAggregatedHeartbeats::Clear() {
+    InFlight.reset();
+    PendingRecords.clear();
+    return EraseUpTo(PendingHeartbeats, Max<ui64>());
+}
+
+void TCdcAggregatedHeartbeats::SendReadyHeartbeat() {
+    if (!AggregatorTabletId || InFlight) {
+        return;
     }
 
-    auto confirmed = RemoveHeld(Held.upper_bound(*Sent));
-    Sent.reset();
+    InFlight = FindHeartbeatToSend(PendingHeartbeats, PendingRecords);
+    if (InFlight) {
+        Send(TDuration::Zero());
+    }
+}
+
+TVector<ui64> TCdcAggregatedHeartbeats::CompleteInFlight() {
+    auto completed = EraseUpTo(PendingHeartbeats, *InFlight);
+    InFlight.reset();
     Backoff.Reset();
-    return confirmed;
+    SendReadyHeartbeat();
+    return completed;
 }
 
-void TCdcAggregatedHeartbeats::RetryHeartbeat(ui64 cookie) {
-    if (Sent && cookie == Cookie) {
-        Send(Backoff.Next());
+TVector<ui64> TCdcAggregatedHeartbeats::RetryInFlight() {
+    TVector<ui64> covered;
+    const auto newest = FindHeartbeatToSend(PendingHeartbeats, PendingRecords);
+    if (newest && *newest > *InFlight) {
+        covered = EraseUpTo(PendingHeartbeats, *newest - 1);
+        InFlight = newest;
     }
-}
 
-TVector<ui64> TCdcAggregatedHeartbeats::ReleaseHeartbeats() {
-    Sent.reset();
-    return RemoveHeld(Held.end());
+    Send(Backoff.Next());
+    return covered;
 }
 
 void TCdcAggregatedHeartbeats::Send(TDuration delay) {
     const auto& ctx = TActivationContext::AsActorContext();
-    auto ev = MakeHolder<NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeat>();
+    auto ev = MakeHolder<TEvWriteHeartbeat>();
     ev->RecipientTabletId = AggregatorTabletId;
     ev->SourceDataShardId = SourceDataShardId;
-    ev->Heartbeat = Held.at(*Sent);
+    ev->Heartbeat = MakeHeartbeat(*Serializer, *PendingHeartbeats.at(*InFlight));
 
     auto* handle = new IEventHandle(NCdcAggregator::MakeCdcAggregatorServiceId(ctx.SelfID.NodeId()), ctx.SelfID,
-        ev.Release(), IEventHandle::FlagTrackDelivery, ++Cookie);
+        ev.Release(), IEventHandle::FlagTrackDelivery);
     if (delay) {
         TActivationContext::Schedule(delay, handle);
     } else {
         TActivationContext::Send(handle);
     }
-}
-
-TVector<ui64> TCdcAggregatedHeartbeats::RemoveHeld(TMap<ui64, NPQ::THeartbeat>::iterator end) {
-    TVector<ui64> orders;
-    for (auto it = Held.begin(); it != end; it = Held.erase(it)) {
-        orders.push_back(it->first);
-    }
-    return orders;
 }
 
 } // namespace NKikimr::NDataShard

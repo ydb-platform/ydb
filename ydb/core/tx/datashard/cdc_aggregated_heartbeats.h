@@ -4,9 +4,9 @@
 
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/change_exchange/change_record.h>
-#include <ydb/core/persqueue/common/heartbeat.h>
 #include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/util/backoff.h>
+#include <ydb/library/actors/core/event.h>
 
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
@@ -14,38 +14,37 @@
 #include <util/generic/vector.h>
 
 #include <optional>
+#include <utility>
 
 namespace NKikimr::NDataShard {
 
 class TCdcAggregatedHeartbeats {
-public:
+    using IChangeRecord = NChangeExchange::IChangeRecord;
     using TRecordInfo = NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo;
-    using TEvWriteHeartbeatResult = NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult;
 
+public:
     explicit TCdcAggregatedHeartbeats(THolder<IChangeRecordSerializer> serializer, ui64 sourceDataShardId);
 
-    void SetAggregatorTabletId(ui64 aggregatorTabletId);
-    void TrackRecords(const TVector<TRecordInfo>& records);
-    TVector<ui64> ExtractHeartbeats(TVector<NChangeExchange::IChangeRecord::TPtr>& records);
-    void UntrackRecords(const TVector<ui64>& orders);
-    TVector<ui64> SendReadyHeartbeat();
-    TVector<ui64> HandleWriteResult(const TEvWriteHeartbeatResult& result, ui64 cookie);
-    void RetryHeartbeat(ui64 cookie);
-    TVector<ui64> ReleaseHeartbeats();
+    void SetAggregator(ui64 tabletId);
+    void RegisterPendingRecordIds(const TVector<TRecordInfo>& records);
+    void RemovePendingRecordIds(const TVector<ui64>& orders);
+    std::pair<TVector<IChangeRecord::TPtr>, TVector<ui64>> BufferHeartbeats(TVector<IChangeRecord::TPtr> records);
+    TVector<ui64> HandleCdcAggregatorServiceReply(TAutoPtr<IEventHandle>& ev);
+    TVector<ui64> Clear();
 
 private:
+    void SendReadyHeartbeat();
+    TVector<ui64> CompleteInFlight();
+    TVector<ui64> RetryInFlight();
     void Send(TDuration delay);
-    TVector<ui64> RemoveHeld(TMap<ui64, NPQ::THeartbeat>::iterator end);
 
     THolder<IChangeRecordSerializer> Serializer;
     const ui64 SourceDataShardId;
-
-    TSet<ui64> Undelivered;
-    TMap<ui64, NPQ::THeartbeat> Held;
-    std::optional<ui64> Sent;
-
     ui64 AggregatorTabletId = 0;
-    ui64 Cookie = 0;
+
+    TSet<ui64> PendingRecords;
+    TMap<ui64, IChangeRecord::TPtr> PendingHeartbeats;
+    std::optional<ui64> InFlight;
     TBackoff Backoff = TBackoff(TDuration::MilliSeconds(100), TDuration::Seconds(10));
 };
 

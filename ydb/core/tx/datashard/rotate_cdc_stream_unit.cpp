@@ -65,7 +65,7 @@ public:
         }
 
         AddSender.Reset(new TEvChangeExchange::TEvAddSender(
-            pathId, newStreamPathId, TUserTable::TCdcStream(newStreamDesc)
+            pathId, newStreamPathId, TEvChangeExchange::TCdcStreamSender{TUserTable::TCdcStream(newStreamDesc)}
         ));
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);

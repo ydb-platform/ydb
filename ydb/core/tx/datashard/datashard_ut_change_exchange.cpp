@@ -6313,12 +6313,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
 
         auto setAggregatedSender = runtime.AddObserver<TEvChangeExchange::TEvAddSender>([&](auto& ev) {
-            if (auto& stream = ev->Get()->CdcStream) {
-                stream->HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated;
+            if (auto* sender = std::get_if<TEvChangeExchange::TCdcStreamSender>(&ev->Get()->Params)) {
+                sender->Stream.HeartbeatMode = NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated;
             }
         });
 
-        // Tracked deliveries need a registered recipient before the observer can intercept them.
         runtime.RegisterService(NCdcAggregator::MakeCdcAggregatorServiceId(runtime.GetNodeId(0)), runtime.AllocateEdgeActor());
         TBlockEvents<TEvWriteHeartbeat> heartbeats(runtime);
         auto answerHeartbeats = [&]() {
@@ -6348,7 +6347,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":10},"key":[1]})",
         });
 
-        WaitFor(runtime, [&]{ return heartbeats.size() > 1; }, "heartbeat resend");
+        SimulateSleep(server, TDuration::Seconds(3));
+        UNIT_ASSERT_VALUES_EQUAL(heartbeats.size(), 1);
+        answerHeartbeats();
+        WaitFor(runtime, [&]{ return !heartbeats.empty(); }, "next heartbeat");
         answerHeartbeats();
 
         TRowVersion dataVersion = TRowVersion::Min();
@@ -6373,13 +6375,15 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         writeResponses.Stop().Unblock();
-        answerHeartbeats();
 
-        WaitFor(runtime, [&]{
-            return AnyOf(heartbeats, [&](const auto& ev) {
-                return ev->Get()->Heartbeat.Version >= dataVersion;
-            });
-        }, "heartbeat after data");
+        bool writtenAfterData = false;
+        for (int i = 0; i < 5 && !writtenAfterData; ++i) {
+            SimulateSleep(server, TDuration::Seconds(3));
+            for (const auto& version : answerHeartbeats()) {
+                writtenAfterData |= version >= dataVersion;
+            }
+        }
+        UNIT_ASSERT_C(writtenAfterData, "No heartbeat after data " << dataVersion);
 
         WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"update":{"value":10},"key":[1]})",

@@ -1,22 +1,24 @@
 #include "change_exchange.h"
 
+#include <util/generic/overloaded.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NDataShard {
 
-/// TEvAddSender
-TEvChangeExchange::TEvAddSender::TEvAddSender(const TTableId& userTableId, TEvChangeExchange::ESenderType type, const TPathId& pathId)
-    : UserTableId(userTableId)
-    , Type(type)
-    , PathId(pathId)
-{
+TEvChangeExchange::ESenderType GetSenderType(const TEvChangeExchange::TSenderParams& params) {
+    using ESenderType = TEvChangeExchange::ESenderType;
+    return std::visit(TOverloaded{
+        [](const TEvChangeExchange::TAsyncIndexSender&) { return ESenderType::AsyncIndex; },
+        [](const TEvChangeExchange::TCdcStreamSender&) { return ESenderType::CdcStream; },
+    }, params);
 }
 
-TEvChangeExchange::TEvAddSender::TEvAddSender(const TTableId& userTableId, const TPathId& streamPathId, const TUserTable::TCdcStream& stream)
+/// TEvAddSender
+TEvChangeExchange::TEvAddSender::TEvAddSender(const TTableId& userTableId, const TPathId& pathId, TSenderParams params)
     : UserTableId(userTableId)
-    , Type(ESenderType::CdcStream)
-    , PathId(streamPathId)
-    , CdcStream(stream)
+    , Type(GetSenderType(params))
+    , PathId(pathId)
+    , Params(std::move(params))
 {
 }
 

@@ -9,7 +9,7 @@
 
 #include <util/generic/vector.h>
 
-#include <optional>
+#include <variant>
 
 namespace NKikimr::NDataShard {
 
@@ -54,14 +54,22 @@ struct TEvChangeExchange {
         CdcStream,
     };
 
+    struct TAsyncIndexSender {
+    };
+
+    struct TCdcStreamSender {
+        TUserTable::TCdcStream Stream;
+    };
+
+    using TSenderParams = std::variant<TAsyncIndexSender, TCdcStreamSender>;
+
     struct TEvAddSender: public TEventLocal<TEvAddSender, EvAddSender> {
         TTableId UserTableId;
         ESenderType Type;
         TPathId PathId;
-        std::optional<TUserTable::TCdcStream> CdcStream;
+        TSenderParams Params;
 
-        explicit TEvAddSender(const TTableId& userTableId, ESenderType type, const TPathId& pathId);
-        explicit TEvAddSender(const TTableId& userTableId, const TPathId& streamPathId, const TUserTable::TCdcStream& stream);
+        explicit TEvAddSender(const TTableId& userTableId, const TPathId& pathId, TSenderParams params);
         TString ToString() const override;
     };
 
@@ -76,6 +84,8 @@ struct TEvChangeExchange {
     };
 
 }; // TEvChangeExchange
+
+TEvChangeExchange::ESenderType GetSenderType(const TEvChangeExchange::TSenderParams& params);
 
 IActor* CreateChangeSender(const TDataShard* self);
 IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards);

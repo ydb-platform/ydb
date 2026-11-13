@@ -116,22 +116,6 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         }
     }
 
-    class TSerializer: public NChangeExchange::TBaseVisitor {
-        IChangeRecordSerializer& Serializer;
-        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& Cmd;
-
-    public:
-        explicit TSerializer(IChangeRecordSerializer& serializer, NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd)
-            : Serializer(serializer)
-            , Cmd(cmd)
-        {
-        }
-
-        void Visit(const TChangeRecord& record) override {
-            Serializer.Serialize(Cmd, record);
-        }
-    };
-
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
@@ -149,8 +133,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             cmd.SetSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
             cmd.SetIgnoreQuotaDeadline(true);
 
-            TSerializer serializer(*Serializer, cmd);
-            record.Accept(serializer);
+            Serializer->Serialize(cmd, record);
 
             Pending.push_back(seqNo);
         }
@@ -526,6 +509,9 @@ class TCdcChangeSenderMain
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
             YDB_LOG_DEBUG("CDC stream is planned to drop, waiting for remove sender command");
 
+            if (AggregatedHeartbeats) {
+                RemoveRecords(AggregatedHeartbeats->Clear());
+            }
             RemoveRecords();
             KillSenders();
             return Become(&TThis::StatePendingRemove);
@@ -533,8 +519,7 @@ class TCdcChangeSenderMain
 
         Stream = TUserTable::TCdcStream(entry.CdcStreamInfo->Description);
         if (AggregatedHeartbeats) {
-            AggregatedHeartbeats->SetAggregatorTabletId(Stream.AggregatorTabletId);
-            RemoveRecords(AggregatedHeartbeats->SendReadyHeartbeat());
+            AggregatedHeartbeats->SetAggregator(Stream.AggregatorTabletId);
         }
 
         Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
@@ -667,7 +652,7 @@ class TCdcChangeSenderMain
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
         if (AggregatedHeartbeats) {
-            AggregatedHeartbeats->TrackRecords(ev->Get()->Records);
+            AggregatedHeartbeats->RegisterPendingRecordIds(ev->Get()->Records);
         }
         EnqueueRecords(std::move(ev->Get()->Records));
     }
@@ -676,8 +661,9 @@ class TCdcChangeSenderMain
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
         if (AggregatedHeartbeats) {
-            ForgetRecords(AggregatedHeartbeats->ExtractHeartbeats(ev->Get()->Records));
-            RemoveRecords(AggregatedHeartbeats->SendReadyHeartbeat());
+            auto [passed, buffered] = AggregatedHeartbeats->BufferHeartbeats(std::move(ev->Get()->Records));
+            ForgetRecords(std::move(buffered));
+            return ProcessRecords(std::move(passed));
         }
         ProcessRecords(std::move(ev->Get()->Records));
     }
@@ -686,8 +672,7 @@ class TCdcChangeSenderMain
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
         if (AggregatedHeartbeats) {
-            AggregatedHeartbeats->UntrackRecords(ev->Get()->Records);
-            RemoveRecords(AggregatedHeartbeats->SendReadyHeartbeat());
+            AggregatedHeartbeats->RemovePendingRecordIds(ev->Get()->Records);
         }
         ForgetRecords(std::move(ev->Get()->Records));
     }
@@ -696,9 +681,6 @@ class TCdcChangeSenderMain
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
-        if (AggregatedHeartbeats) {
-            RemoveRecords(AggregatedHeartbeats->SendReadyHeartbeat());
-        }
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
@@ -712,30 +694,22 @@ class TCdcChangeSenderMain
             {"eventDetails", ev->Get()->ToString()});
         Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
-        RemoveRecords();
         if (AggregatedHeartbeats) {
-            RemoveRecords(AggregatedHeartbeats->ReleaseHeartbeats());
+            RemoveRecords(AggregatedHeartbeats->Clear());
         }
+        RemoveRecords();
         PassAway();
     }
 
     void OnRecordsRemoved(const TVector<ui64>& orders) override {
         if (AggregatedHeartbeats) {
-            AggregatedHeartbeats->UntrackRecords(orders);
+            AggregatedHeartbeats->RemovePendingRecordIds(orders);
         }
     }
 
-    void Handle(NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"eventDetails", ev->Get()->ToString()});
+    void HandleCdcAggregatorServiceReply(TAutoPtr<IEventHandle>& ev) {
         if (AggregatedHeartbeats) {
-            RemoveRecords(AggregatedHeartbeats->HandleWriteResult(*ev->Get(), ev->Cookie));
-        }
-    }
-
-    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        if (AggregatedHeartbeats) {
-            AggregatedHeartbeats->RetryHeartbeat(ev->Cookie);
+            RemoveRecords(AggregatedHeartbeats->HandleCdcAggregatorServiceReply(ev));
         }
     }
 
@@ -789,8 +763,8 @@ public:
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvGone, Handle);
-            hFunc(NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult, Handle);
-            hFunc(TEvents::TEvUndelivered, Handle);
+            fFunc(NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult::EventType, HandleCdcAggregatorServiceReply);
+            fFunc(TEvents::TEvUndelivered::EventType, HandleCdcAggregatorServiceReply);
             HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import copy
 import os
 import random
@@ -9,8 +9,6 @@ import threading
 import socket
 import collections
 import itertools
-import queue
-import traceback
 import ydb
 from ydb.tests.stress.common.instrumented_pools import InstrumentedQuerySessionPool
 from library.python.monlib.metric_registry import MetricRegistry
@@ -243,10 +241,10 @@ class WorkloadStats(object):
 
 
 class YdbQueue(object):
-    def __init__(self, idx, database, stats, driver, pool, mode, in_memory, blob_min_size=BLOB_MIN_SIZE):
+    def __init__(self, idx, database, stats, driver, pool, mode, in_memory, blob_min_size=BLOB_MIN_SIZE, table_name=None):
         self.working_dir = os.path.join(database, socket.gethostname().split('.')[0].replace('-', '_') + f"_{mode}_" + str(idx))
         self.copies_dir = os.path.join(self.working_dir, 'copies')
-        self.table_name = self.table_name_with_timestamp()
+        self.table_name = table_name if table_name is not None else self.table_name_with_timestamp()
         self.queries = {}
         self.pool = pool
         self.driver = driver
@@ -261,7 +259,8 @@ class YdbQueue(object):
         self.mode = mode
         self.in_memory = in_memory
         print("Working dir %s" % self.working_dir)
-        self.prepare_new_queue(self.table_name)
+        if table_name is None:
+            self.prepare_new_queue(self.table_name)
         # a queue with tables to drop
         self.drop_queue = collections.deque()
         # a set with keys that are ready to be removed
@@ -534,50 +533,31 @@ class YdbQueue(object):
         self.send_query("BATCH DELETE FROM `{}` WHERE `timestamp` <= $timestamp;".format(self.table_name), parameters, EventKind.BATCH_DELETE)
 
 
-class Workload:
-    def __init__(self, endpoint, database, duration, mode, blob_min_size=BLOB_MIN_SIZE):
-        self.database = database
-        self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
-        # Wait for the driver to connect before issuing any requests; otherwise the
-        # very first scheme call races the connection setup and fails with
-        # ConnectionLost, which is easy to hit when many workloads start at once.
-        self.driver.wait(timeout=30, fail_fast=True)
-        self.pool = InstrumentedQuerySessionPool(self.driver, size=10, unique_suffix=mode)
+class WorkloadWorker:
+    def __init__(self, workload, blob_min_size, table_names=None):
         self.round_size = 1000
-        self.duration = duration
-        self.delayed_events = queue.Queue()
-        self.workload_stats = WorkloadStats(*EventKind.list())
-        # TODO: run both modes in parallel?
-        self.mode = mode
-        self.blob_min_size = blob_min_size
-        self.ydb_queues = [
-            YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode, False, self.blob_min_size)
-            for idx in range(2)
-        ]
+        self.duration = workload.duration
+        self.workload_stats = workload.workload_stats
+        self.mode = workload.mode
+        self.stop_event = workload.stop_event
+        in_memory_modes = [False, False]
         if self.mode == "row":
-            self.ydb_queues.append(
-                YdbQueue(len(self.ydb_queues), database, self.workload_stats, self.driver, self.pool, self.mode, True, self.blob_min_size))
-        self.pool_semaphore = threading.BoundedSemaphore(value=1)
-        self.worker_exception = []
+            in_memory_modes.append(True)
+        self.ydb_queues = [
+            YdbQueue(idx, workload.database, self.workload_stats, workload.driver, workload.pool,
+                     self.mode, in_memory, blob_min_size, table_names[idx] if table_names is not None else None)
+            for idx, in_memory in enumerate(in_memory_modes)
+        ]
 
     def random_points(self, size=1):
         return set([random.randint(0, self.round_size) for _ in range(size)])
-
-    def wrapper(self, f):
-        try:
-            if len(self.worker_exception) == 0:
-                f()
-        except Exception as e:
-            self.worker_exception.append(traceback.format_exc(e))
-        finally:
-            self.pool_semaphore.release()
 
     def loop(self):
         started_at = time.time()
         round_id_it = itertools.count(start=1)
         queue_it = itertools.cycle(self.ydb_queues)
 
-        while time.time() - started_at < self.duration:
+        while not self.stop_event.is_set() and time.time() - started_at < self.duration:
 
             for ydb_queue in self.ydb_queues:
                 yield ydb_queue.list_working_dir
@@ -607,7 +587,7 @@ class Workload:
             print("Round schedule %s" % schedule)
             for step_id in range(self.round_size):
 
-                if time.time() - started_at > self.duration:
+                if self.stop_event.is_set() or time.time() - started_at > self.duration:
                     break
 
                 ydb_queue = next(queue_it)
@@ -627,20 +607,48 @@ class Workload:
                     schedule.popleft()
                     yield getattr(ydb_queue, op)
 
+    def start(self):
+        for operation in self.loop():
+            if self.stop_event.is_set():
+                break
+            operation()
+
+
+class Workload:
+    def __init__(self, endpoint, database, duration, mode):
+        self.database = database
+        self.duration = duration
+        self.mode = mode
+        self.stop_event = threading.Event()
+        self.workload_stats = WorkloadStats(*EventKind.list())
+        self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
+        self.driver.wait(timeout=30, fail_fast=True)
+        self.pool = InstrumentedQuerySessionPool(self.driver, size=10, unique_suffix=mode)
+        self.workers = []
+        table_names = None
+        for blob_min_size in (128, 128, BLOB_MIN_SIZE, BLOB_MIN_SIZE):
+            worker = WorkloadWorker(self, blob_min_size, table_names)
+            self.workers.append(worker)
+            if table_names is None:
+                table_names = [ydb_queue.table_name for ydb_queue in worker.ydb_queues]
+
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
         self.pool.stop()
         self.driver.stop()
 
+    def stop(self):
+        self.stop_event.set()
+
     def start(self):
-        pool = ThreadPoolExecutor()
-        for lambda_call in self.loop():
-            if len(self.worker_exception) == 0:
-                self.pool_semaphore.acquire()
-                pool.submit(self.wrapper, lambda_call)
-            else:
-                assert False, f"Worker exceptions {self.worker_exception}"
-        pool.shutdown(wait=True)
+        with ThreadPoolExecutor(max_workers=len(self.workers)) as pool:
+            futures = [pool.submit(worker.start) for worker in self.workers]
+            try:
+                for future in as_completed(futures):
+                    future.result()
+            finally:
+                self.stop()
         self.workload_stats.print_stats()

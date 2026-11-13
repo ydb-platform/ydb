@@ -3264,6 +3264,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
         // a handler that is still waiting for the pools leaves these flags set and returns the nodes as they are
         UNIT_ASSERT_C(!json["NeedFilter"].GetBoolean(), context);
         UNIT_ASSERT_C(!json["NeedSort"].GetBoolean(), context);
+        // the nodes are not limited to the database, and this is the only sign of it
+        bool hasFilterNotApplied = false;
+        for (const auto& problem : json["Problems"].GetArray()) {
+            hasFilterNotApplied |= problem.GetString() == "filter-not-applied";
+        }
+        UNIT_ASSERT_C(hasFilterNotApplied, context);
         const auto& nodes = json["Nodes"].GetArray();
         UNIT_ASSERT_VALUES_EQUAL_C(nodes.size(), expectedNodeIds.size(), context);
         for (size_t i = 0; i < nodes.size(); ++i) {

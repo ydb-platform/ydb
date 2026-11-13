@@ -2463,6 +2463,13 @@ public:
             // The pools were to be taken from the database (all navigate requests are processed by now),
             // and it gave none: no domain description, or no storage pools of its own.
             // There is nothing to filter by, so go on without the pool filter instead of waiting forever.
+            const bool databaseResolved = (!DatabaseNavigateResponse || DatabaseNavigateResponse->IsOk())
+                && (!ResourceNavigateResponse || ResourceNavigateResponse->IsOk());
+            if (databaseResolved) {
+                // The nodes are not limited to the database, and nothing else in the response tells it.
+                // A database that was not resolved has a problem of its own and an empty list.
+                AddProblem("filter-not-applied");
+            }
             FilterStorageStage = GetStorageStageWithoutPools();
         }
         if (FilterStorageStage == EFilterStorageStage::Pools && StoragePoolsResponse && StoragePoolsResponse->IsDone()) {

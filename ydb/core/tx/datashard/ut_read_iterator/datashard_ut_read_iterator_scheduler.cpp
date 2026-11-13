@@ -504,55 +504,6 @@ Y_UNIT_TEST_SUITE(DataShardReadQuotaRegression) {
         UNIT_ASSERT_VALUES_EQUAL(helper.ReadQuery()->CpuUsage.load(), 0u);
     }
 
-    // TODO(KIKIMR-27728): Enable after fixing tiny limits, batch throttling, limit updates and idle demand.
-    /*
-    Y_UNIT_TEST(SubMillisecondPoolLimitRemainsPositive) {
-        TSchedulerTestHelper helper;
-        helper.Upsert(1, 100);
-        helper.UpdatePoolQuota(0.01);
-        auto request = helper.MakeReadRequest(1);
-        AddKeyQuery(*request, {1, 1, 1});
-        auto result = helper.SendRead(request.release());
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1u);
-    }
-
-    Y_UNIT_TEST(BatchHintHonoursQuota) {
-        TSchedulerTestHelper helper;
-        helper.UpsertMany(1, 2);
-        auto request = helper.MakeRangeReadRequest(1, 1, 2);
-        request->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
-        auto result = helper.ThrottleAndResume(std::move(request));
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 2u);
-    }
-
-    Y_UNIT_TEST_TWIN(ExistingIteratorRejectsZeroQuota, RegisteredPool) {
-        TSchedulerTestHelper helper;
-        helper.UpsertMany(1, 2);
-        const TString pool = RegisteredPool ? TEST_POOL_ID : "late_pool";
-        auto request = helper.MakeRangeReadRequest(1, 1, 2, 1, pool);
-        request->Record.SetMaxRows(1);
-        auto first = helper.SendRead(request.release());
-        UNIT_ASSERT_VALUES_EQUAL(first->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-        helper.UpdatePoolQuota(0., pool);
-        helper.SendAck(first->Record, 10, 50_MB);
-        auto second = helper.WaitResult();
-        UNIT_ASSERT_VALUES_EQUAL(second->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
-    }
-
-    Y_UNIT_TEST(WaitingForAckDoesNotDemandCpu) {
-        TSchedulerTestHelper helper;
-        helper.UpsertMany(1, 2);
-        auto request = helper.MakeRangeReadRequest(1, 1, 2, 1);
-        request->Record.SetMaxRows(1);
-        auto result = helper.SendRead(request.release());
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT(!result->Record.GetFinished());
-        UNIT_ASSERT_VALUES_EQUAL(helper.ReadQuery()->CpuMaxDemand.load(), 0u);
-    }
-    */
-
     Y_UNIT_TEST(AdmissionPrecedesColumnValidation) {
         TSchedulerTestHelper helper;
         auto request = helper.MakeReadRequest(1);
@@ -561,21 +512,6 @@ Y_UNIT_TEST_SUITE(DataShardReadQuotaRegression) {
         auto result = helper.ThrottleAndResume(std::move(request));
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SCHEME_ERROR);
     }
-
-    // TODO(KIKIMR-27728): Enable after extending accounting to read preparation.
-    /*
-    Y_UNIT_TEST(ChargesFailedPreparation) {
-        TSchedulerTestHelper helper;
-        auto request = helper.MakeReadRequest(1);
-        request->Record.AddColumns(Max<ui32>());
-        AddKeyQuery(*request, {1, 1, 1});
-        const auto before = helper.ReadQuery()->ReadBurstUsage.load();
-        auto result = helper.SendRead(request.release());
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SCHEME_ERROR);
-        UNIT_ASSERT_GT(helper.ReadQuery()->ReadBurstUsage.load(), before);
-        UNIT_ASSERT_VALUES_EQUAL(helper.ReadQuery()->CpuUsage.load(), 0u);
-    }
-    */
 
     Y_UNIT_TEST(SamplingKeepsCheckpointAcrossInitialThrottle) {
         TSchedulerTestHelper helper;

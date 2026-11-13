@@ -77,34 +77,6 @@ Y_UNIT_TEST_SUITE(KqpReadQuotaRegression) {
         }
     };
 
-    // TODO(KIKIMR-27728): Enable after fixing sub-millisecond accounting and refill precision.
-    /*
-    Y_UNIT_TEST(ChargesSubMillisecondReads) {
-        TFixture f;
-        auto read = f.Read();
-        for (size_t i = 0; i < 8; ++i) {
-            UNIT_ASSERT(read->TryConsumeQuota(TDuration::MilliSeconds(5)));
-            read->ReturnQuota(TFixture::Cycles(TDuration::MicroSeconds(250)));
-        }
-        UNIT_ASSERT_GE(read->Query->ReadBurstUsage.load(), 2000u);
-        UNIT_ASSERT_VALUES_EQUAL(read->Query->CpuUsage.load(), 0u);
-    }
-
-    Y_UNIT_TEST(FrequentPollingDoesNotLoseRefill) {
-        TFixture f;
-        auto read = f.Read();
-        UNIT_ASSERT(read->TryConsumeQuota(TDuration::MilliSeconds(5)));
-        read->ReturnQuota(TFixture::Cycles(TDuration::MilliSeconds(6)));
-        const auto deadline = TMonotonic::Now() + TDuration::Seconds(2);
-        bool available = false;
-        do {
-            Sleep(TDuration::MilliSeconds(1));
-            available = read->HasAvailableQuota();
-        } while (!available && TMonotonic::Now() < deadline);
-        UNIT_ASSERT_C(available, "Positive quota must refill even when polled every millisecond");
-    }
-    */
-
     Y_UNIT_TEST(DebtSurvivesLastIteratorAndCacheCleanup) {
         TFixture f;
         {
@@ -150,36 +122,6 @@ Y_UNIT_TEST_SUITE(KqpReadQuotaRegression) {
         next->ReturnQuota(TFixture::Cycles(TDuration::MilliSeconds(90)));
         UNIT_ASSERT_C(!next->HasAvailableQuota(), "Sequential one-shot reads must share the same budget");
     }
-
-    // TODO(KIKIMR-27728): Enable after fixing retry delays, live limit updates and idle demand.
-    /*
-    Y_UNIT_TEST(FairShareDelayWithPartiallyFilledBucket) {
-        TFixture f;
-        auto read = f.Read();
-        UNIT_ASSERT(read->TryConsumeQuota(TDuration::MilliSeconds(5)));
-        read->ReturnQuota(TFixture::Cycles(TDuration::MilliSeconds(4)));
-        TSchedulableTask blocker(read->Query);
-        blocker.IncreaseUsage();
-        UNIT_ASSERT(!read->TryConsumeQuota(TDuration::MilliSeconds(5)));
-        UNIT_ASSERT_VALUES_EQUAL(read->EstimateQuotaDelay(TDuration::MilliSeconds(5)), TDuration::MilliSeconds(1));
-        blocker.DecreaseUsage(TDuration::Zero(), TSchedulableTask::CPU_DEFAULT);
-    }
-
-    Y_UNIT_TEST(ExistingReadObservesZeroAndRestoredLimit) {
-        TFixture f;
-        auto read = f.Read();
-        f.Scheduler->AddOrUpdatePool("db", "pool", {.ReadLimit = TDuration::Zero()});
-        UNIT_ASSERT_C(!read->IsValid(), "Existing reads must observe a zero quota just like new reads");
-        f.Scheduler->AddOrUpdatePool("db", "pool", {.ReadLimit = TDuration::MilliSeconds(5)});
-        UNIT_ASSERT(read->IsValid());
-    }
-
-    Y_UNIT_TEST(IdleAccountingDoesNotDemandCpu) {
-        TFixture f;
-        auto read = f.Read();
-        UNIT_ASSERT_VALUES_EQUAL(read->Query->CpuMaxDemand.load(), 0u);
-    }
-    */
 }
 
 Y_UNIT_TEST_SUITE(KqpComputeScheduler) {

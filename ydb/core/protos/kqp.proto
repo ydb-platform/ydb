@@ -410,6 +410,8 @@ message TSessionInfo {
     optional int64 WmEnterTime = 19;
     optional int64 WmExitTime = 20;
     optional string TraceId = 21;
+    // Description of how the query was classified into WmPoolId
+    optional string WmClassifiedBy = 22;
 }
 
 message TEvListSessionsRequest {

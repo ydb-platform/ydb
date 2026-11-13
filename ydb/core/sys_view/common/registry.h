@@ -599,6 +599,7 @@ struct Schema : NIceDb::Schema {
         struct WmEnterTime        : Column<19, NScheme::NTypeIds::Timestamp> {};
         struct WmExitTime         : Column<20, NScheme::NTypeIds::Timestamp> {};
         struct TraceId            : Column<21, NScheme::NTypeIds::Utf8> {};
+        struct WmClassifiedBy     : Column<22, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<SessionId>;
         using TColumns = TableColumns<
@@ -620,7 +621,8 @@ struct Schema : NIceDb::Schema {
             WmState,
             WmEnterTime,
             WmExitTime,
-            TraceId>;
+            TraceId,
+            WmClassifiedBy>;
     };
 
     struct PrimaryIndexPortionStats : Table<14> {

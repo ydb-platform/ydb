@@ -97,7 +97,7 @@ TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool ch
 
     if (autoAddEndpointAndDatabase) {
         command << "-e" << ("grpc://" + GetYdbEndpoint());
-        command << "-d" << ("/" + GetYdbDatabase());
+        command << "-d" << GetYdbDatabase();
     }
 
     for (auto& arg : args1) {
@@ -135,7 +135,7 @@ TString RunYdbWithInput(const TList<TString>& args1, const TList<TString>& args2
 
     if (autoAddEndpointAndDatabase) {
         command << "-e" << ("grpc://" + GetYdbEndpoint());
-        command << "-d" << ("/" + GetYdbDatabase());
+        command << "-d" << GetYdbDatabase();
     }
 
     for (auto& arg : args1) {

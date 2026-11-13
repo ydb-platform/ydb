@@ -123,6 +123,8 @@ enum class EGroupFields : ui8 {
     BridgeSyncRunning,
     BridgeSyncLastErrorTimestamp,
     BridgeSyncErrorCount,
+    BridgeMode,
+    BridgeGroups,
     COUNT
 };
 
@@ -318,6 +320,10 @@ public:
         NKikimrBlobStorage::TPDiskSpaceColor::E CapacityAlert = {};
         std::vector<TVDisk> VDisks;
         std::vector<TNodeId> VDiskNodeIds; // filter nodes to request disk info from the whiteboard. could be duplicated.
+
+        TGroupId GetBridgeGroupId() const {
+            return BscInfo && BscInfo->HasProxyGroupId() ? BscInfo->GetProxyGroupId() : GroupId;
+        }
 
         static TString PrintDomains(const std::vector<ui8>& failedDomains) {
             TString result;
@@ -695,6 +701,7 @@ public:
     std::unordered_map<TVSlotId, const NKikimrWhiteboard::TVDiskStateInfo*> VDisksByVSlotId;
     std::unordered_map<TPDiskId, const NKikimrWhiteboard::TPDiskStateInfo*> PDisksByPDiskId;
     std::unordered_map<TBridgePileId, TString> PileNames;
+    std::unordered_map<TGroupId, TGroupView> BridgeGroups;
 
     TFieldsType FieldsRequested; // fields that were requested by user
     TFieldsType FieldsRequired; // fields that are required to calculate the response
@@ -709,7 +716,9 @@ public:
                                                      .set(+EGroupFields::BridgeSyncRemainingBytesComplete)
                                                      .set(+EGroupFields::BridgeSyncRunning)
                                                      .set(+EGroupFields::BridgeSyncLastErrorTimestamp)
-                                                     .set(+EGroupFields::BridgeSyncErrorCount);
+                                                     .set(+EGroupFields::BridgeSyncErrorCount)
+                                                     .set(+EGroupFields::BridgeMode)
+                                                     .set(+EGroupFields::BridgeGroups);
     const TFieldsType FieldsBsGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
                                                     .set(+EGroupFields::Latency)
@@ -874,6 +883,10 @@ public:
             result = EGroupFields::BridgeSyncLastErrorTimestamp;
         } else if (field == "BridgeSyncErrorCount") {
             result = EGroupFields::BridgeSyncErrorCount;
+        } else if (field == "BridgeMode") {
+            result = EGroupFields::BridgeMode;
+        } else if (field == "BridgeGroups") {
+            result = EGroupFields::BridgeGroups;
         }
         return result;
     }
@@ -999,6 +1012,7 @@ public:
             FieldsRequired.reset(+EGroupFields::PDiskId);
             FieldsRequired.reset(+EGroupFields::PDisk);
             FieldsRequired.reset(+EGroupFields::PileName);
+            FieldsRequired.reset(+EGroupFields::BridgeGroups);
         }
         FieldsRequested = FieldsRequired; // no dependent fields
         for (auto field = +EGroupFields::GroupId; field != +EGroupFields::COUNT; ++field) {
@@ -1296,6 +1310,8 @@ public:
                 case EGroupFields::BridgeSyncRunning:
                 case EGroupFields::BridgeSyncLastErrorTimestamp:
                 case EGroupFields::BridgeSyncErrorCount:
+                case EGroupFields::BridgeMode:
+                case EGroupFields::BridgeGroups:
                     break;
             }
         }
@@ -1393,6 +1409,8 @@ public:
                 case EGroupFields::BridgeSyncRunning:
                 case EGroupFields::BridgeSyncLastErrorTimestamp:
                 case EGroupFields::BridgeSyncErrorCount:
+                case EGroupFields::BridgeMode:
+                case EGroupFields::BridgeGroups:
                 case EGroupFields::COUNT:
                     break;
             }
@@ -1600,6 +1618,9 @@ public:
                 }
                 for (TGroup& group : GroupData) {
                     GroupView.emplace_back(&group);
+                    if (group.BscInfo->HasBridgePileId()) {
+                        BridgeGroups[group.GetBridgeGroupId()].push_back(&group);
+                    }
                 }
                 GroupsByGroupId.clear();
                 FoundGroups = TotalGroups = GroupView.size();
@@ -2503,6 +2524,19 @@ public:
                 }
                 if (showBridgeSync && group->BscInfo) {
                     const auto& info = *group->BscInfo;
+                    const auto peers = BridgeGroups.find(group->GetBridgeGroupId());
+                    if (FieldsRequested.test(+EGroupFields::BridgeMode)) {
+                        jsonGroup.SetBridgeMode(info.HasBridgePileId() || info.HasProxyGroupId() || peers != BridgeGroups.end());
+                    }
+                    if (FieldsRequested.test(+EGroupFields::BridgeGroups) && peers != BridgeGroups.end()) {
+                        for (const TGroup* peer : peers->second) {
+                            if (peer->GroupId != group->GroupId) {
+                                auto& link = *jsonGroup.AddBridgeGroups();
+                                link.SetGroupId(::ToString(peer->GroupId));
+                                link.SetPileName(peer->PileName);
+                            }
+                        }
+                    }
                     if (FieldsAvailable.test(+EGroupFields::BridgeSyncStatus) && FieldsRequested.test(+EGroupFields::BridgeSyncStatus) &&
                             info.HasBridgeSyncStatus()) {
                         jsonGroup.SetBridgeSyncStatus(info.GetBridgeSyncStatus());
@@ -2723,7 +2757,7 @@ public:
                     in: query
                     description: >
                         list of fields required in response (the more - the heavier could be request).
-                        When absent or empty, bridge synchronization fields are returned along with GroupId.
+                        When absent or empty, bridge fields are returned along with GroupId.
                         An explicit list selects bridge fields individually; `all` requests every available field.
                         Supported fields:
                           * `GroupId` (always required)
@@ -2733,6 +2767,8 @@ public:
                           * `Erasure`
                           * `MissingDisks`
                           * `State`
+                          * `BridgeMode`
+                          * `BridgeGroups`
                           * `BridgeSyncStatus`
                           * `BridgeSyncStage`
                           * `BridgeSyncLastError`
@@ -2831,6 +2867,11 @@ public:
         storageGroupProperties["BridgeSyncStatus"]["description"] =
             "Bridge synchronization status from BSC: NOT_REQUIRED, SYNCED, SYNCING, UNKNOWN or PENDING. "
             "Omitted when unavailable. Groups without an observed status use UNKNOWN for grouping and sorting.";
+        storageGroupProperties["BridgeMode"]["description"] =
+            "Whether the group belongs to a bridge group, including inline and proxy groups. Omitted without BSC data.";
+        storageGroupProperties["BridgeGroups"]["description"] =
+            "Other physical parts of the same bridge group, with GroupId and PileName for navigation. "
+            "Excludes this group; includes peers outside the current filter or page. Omitted when empty or unavailable.";
         storageGroupProperties["BridgeSyncStage"]["description"] =
             "Bridge synchronization stage as reported by the storage controller. Omitted when unavailable.";
         storageGroupProperties["BridgeSyncLastError"]["description"] =

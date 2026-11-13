@@ -805,8 +805,8 @@
         }
     },
     "test.TestViewer.test_storage_groups": {
-        "FieldsAvailable": "11111111111111110111111111111111111111",
-        "FieldsRequired": "11111111111111111111111111111111111111",
+        "FieldsAvailable": "1111111111111111110111111111111111111111",
+        "FieldsRequired": "1111111111111111111111111111111111111111",
         "FoundGroups": 5,
         "GroupSizeInUnitsChecks": {
             "GroupSizeOnly": {
@@ -821,6 +821,7 @@
         "StorageGroups": [
             {
                 "Available": "not-zero-number-text",
+                "BridgeMode": false,
                 "BridgeSyncStatus": "NOT_REQUIRED",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -930,6 +931,7 @@
             },
             {
                 "Available": "not-zero-number-text",
+                "BridgeMode": false,
                 "BridgeSyncStatus": "NOT_REQUIRED",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -1041,6 +1043,7 @@
             },
             {
                 "Available": "not-zero-number-text",
+                "BridgeMode": false,
                 "BridgeSyncStatus": "NOT_REQUIRED",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -1153,6 +1156,7 @@
             {
                 "AllocationUnits": "34",
                 "Available": "not-zero-number-text",
+                "BridgeMode": false,
                 "BridgeSyncStatus": "NOT_REQUIRED",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -1265,6 +1269,7 @@
             {
                 "AllocationUnits": "54",
                 "Available": "not-zero-number-text",
+                "BridgeMode": false,
                 "BridgeSyncStatus": "NOT_REQUIRED",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -9057,8 +9062,8 @@
         }
     },
     "test.TestViewer.test_viewer_groups_allocation_units_without_pool_name": {
-        "FieldsAvailable": "11111111111000000100000100000100011111",
-        "FieldsRequired": "00000000000000000000000100000000000011",
+        "FieldsAvailable": "1111111111111000000100000100000100011111",
+        "FieldsRequired": "0000000000000000000000000100000000000011",
         "FoundGroups": 5,
         "StorageGroups": [
             {
@@ -9083,8 +9088,8 @@
     },
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {
-            "FieldsAvailable": "11111111111111110111111011111011110001",
-            "FieldsRequired": "11111111110100000000010000000000000001",
+            "FieldsAvailable": "1111111111111111110111111011111011110001",
+            "FieldsRequired": "1111111111110100000000010000000000000001",
             "FoundGroups": 5,
             "StorageGroupGroups": [
                 {
@@ -9103,31 +9108,36 @@
             "TotalGroups": 5
         },
         {
-            "FieldsAvailable": "11111111111111110111111011111011110001",
-            "FieldsRequired": "11111111110100000000010000000000000001",
+            "FieldsAvailable": "1111111111111111110111111011111011110001",
+            "FieldsRequired": "1111111111110100000000010000000000000001",
             "FoundGroups": 5,
             "StorageGroups": [
                 {
+                    "BridgeMode": false,
                     "BridgeSyncStatus": "NOT_REQUIRED",
                     "CapacityAlert": "GREEN",
                     "GroupId": "0"
                 },
                 {
+                    "BridgeMode": false,
                     "BridgeSyncStatus": "NOT_REQUIRED",
                     "CapacityAlert": "GREEN",
                     "GroupId": "2181038080"
                 },
                 {
+                    "BridgeMode": false,
                     "BridgeSyncStatus": "NOT_REQUIRED",
                     "CapacityAlert": "GREEN",
                     "GroupId": "2181038081"
                 },
                 {
+                    "BridgeMode": false,
                     "BridgeSyncStatus": "NOT_REQUIRED",
                     "CapacityAlert": "GREEN",
                     "GroupId": "2181038082"
                 },
                 {
+                    "BridgeMode": false,
                     "BridgeSyncStatus": "NOT_REQUIRED",
                     "CapacityAlert": "GREEN",
                     "GroupId": "2181038083"
@@ -9138,8 +9148,8 @@
     ],
     "test.TestViewer.test_viewer_groups_group_by_pool_name": [
         {
-            "FieldsAvailable": "11111111111000000100000000000100011111",
-            "FieldsRequired": "11111111110000000000000000000000000011",
+            "FieldsAvailable": "1111111111111000000100000000000100011111",
+            "FieldsRequired": "1111111111110000000000000000000000000011",
             "FoundGroups": 5,
             "StorageGroupGroups": [
                 {
@@ -9174,11 +9184,12 @@
             "TotalGroups": 5
         },
         {
-            "FieldsAvailable": "11111111111000000100000000000100011111",
-            "FieldsRequired": "11111111110000000000000000000000000011",
+            "FieldsAvailable": "1111111111111000000100000000000100011111",
+            "FieldsRequired": "1111111111110000000000000000000000000011",
             "FoundGroups": 1,
             "StorageGroups": [
                 {
+                    "BridgeMode": false,
                     "BridgeSyncStatus": "NOT_REQUIRED",
                     "GroupId": "0",
                     "PoolName": "static"

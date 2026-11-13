@@ -9,6 +9,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
+    ydb/core/testlib/audit_helpers
     ydb/core/testlib/pg
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
@@ -29,6 +30,7 @@ SRCS(
     ut_table_pg_types.cpp
     ut_commit_redo_limit.cpp
     ut_db_ref_map.cpp
+    ut_xxport_audit_log.cpp
 )
 
 END()

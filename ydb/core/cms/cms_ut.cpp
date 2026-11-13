@@ -1514,7 +1514,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TCmsTestEnv env(opts);
 
         constexpr ui32 sharedNodeIndex = 2;
-        NKikimrConfig::TStateStorageConfig config;
+        NKikimrConfig::TDomainsConfig::TStateStorage config;
         config.SetSSId(1);
         for (ui32 firstNodeIndex : {0u, sharedNodeIndex}) {
             auto* group = config.AddRingGroups();

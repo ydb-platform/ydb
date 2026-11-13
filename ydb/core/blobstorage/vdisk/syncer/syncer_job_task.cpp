@@ -247,13 +247,10 @@ namespace NKikimr {
         }
 
         TSjOutcome TSyncerJobTask::HandleRestart(const TSyncState &newSyncState) {
-            SetSyncState(newSyncState);
-            EndOfStream = false;
-            Phase = EStart;
-            Y_VERIFY_S(Type == EJustSync, Ctx->SyncerCtx->VCtx->VDiskLogPrefix);
-
-            Sublog.Log() << "HandleRestart: newSyncState# " << newSyncState << "\n";
-            return NextRequest();
+            // A changed incarnation does not certify coverage of the old metadata.
+            // Persist the new cursor only after applying the full snapshot.
+            PrepareToFullRecovery(newSyncState);
+            return ContinueInFullRecoveryMode();
         }
 
         void TSyncerJobTask::HandleStatusFlags(const NKikimrBlobStorage::TEvVSyncResult &record) {

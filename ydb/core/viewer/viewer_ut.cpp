@@ -3242,15 +3242,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
     // instead of waiting for the pools forever, so the reply is still filtered by type, sorted and limited.
     void CheckNodesDatabaseWithoutPoolsCase(TTestActorRuntime& runtime, const TString& fields,
                                             const std::vector<TNodeId>& nodeIdsDescending, bool page) {
-        // a nonzero offset with a limit shorter than the rest: the page differs for a sorted and an unsorted list
+        // a nonzero offset with a limit shorter than the rest: the page is one node from the middle of the sorted list,
+        // which checks the order, the offset and the cut by the limit at once
         const std::vector<TNodeId> expectedNodeIds = page
-            ? std::vector<TNodeId>(nodeIdsDescending.begin() + 1, nodeIdsDescending.end())
+            ? std::vector<TNodeId>(nodeIdsDescending.begin() + 1, nodeIdsDescending.begin() + 2)
             : nodeIdsDescending;
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
             TStringBuilder() << "GET /viewer/json/nodes?type=static&sort=-NodeId&offload_merge=false"
                 << "&use_cache=false&timeout=1000&with=all&database=/Root&direct=1" << fields
-                << (page ? "&offset=1&limit=2" : "&offset=0&limit=20") << " HTTP/1.1\r\n\r\n", endpoint, {});
+                << (page ? "&offset=1&limit=1" : "&offset=0&limit=20") << " HTTP/1.1\r\n\r\n", endpoint, {});
         const TActorId sender = runtime.AllocateEdgeActor();
         runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
         TAutoPtr<IEventHandle> handle;
@@ -3318,11 +3319,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
             } else if (ev->GetTypeRewrite() == TEvStateStorage::EvBoardInfo) {
                 // A request with a database first resolves the endpoints board of the database and is
                 // rejected when the board is not available, which it is not for the root in this test.
-                auto* event = reinterpret_cast<TEvStateStorage::TEvBoardInfo::TPtr*>(&ev);
-                auto* record = (*event)->Get();
-                if (record->Path == "gpc+/Root") {
-                    using EStatus = TEvStateStorage::TEvBoardInfo::EStatus;
-                    const_cast<EStatus&>(record->Status) = EStatus::Ok;
+                using EStatus = TEvStateStorage::TEvBoardInfo::EStatus;
+                const auto* info = ev->Get<TEvStateStorage::TEvBoardInfo>();
+                if (info->Path == "gpc+/Root" && info->Status != EStatus::Ok) {
+                    // the status is a const member: the event is replaced, not changed
+                    auto available = std::make_unique<TEvStateStorage::TEvBoardInfo>(EStatus::Ok, info->Path);
+                    available->InfoEntries = info->InfoEntries;
+                    ev.Reset(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender, available.release(),
+                        ev->Flags, ev->Cookie));
                 }
             } else if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySetResult) {
                 auto* event = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);

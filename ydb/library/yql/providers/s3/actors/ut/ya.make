@@ -4,6 +4,7 @@ UNITTEST_FOR(ydb/library/yql/providers/s3/actors)
 
 SRCS(
     yql_arrow_push_down_ut.cpp
+    yql_s3_cpu_metrics_ut.cpp
 )
 
 PEERDIR(

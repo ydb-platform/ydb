@@ -11,6 +11,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/writer.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/file_reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/metadata.h>
+#include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/str.h>
@@ -182,6 +183,82 @@ struct TReadResult {
 };
 
 // All callbacks and observations run on the simulated actor runtime's single thread.
+class TCountingWorkFactory: public IDqSchedulableWorkFactory {
+public:
+    ui64 Starts = 0;
+    ui64 Stops = 0;
+    ui64 Unfinished = 0;
+    ui64 Attempts = 0;
+    ui64 Waiting = 0;
+    bool Throttle = false;
+    TActorId WorkActorId;
+
+    class TWork: public IDqSchedulableWork {
+    public:
+        explicit TWork(TCountingWorkFactory& owner)
+            : Owner(owner)
+        {
+        }
+
+        ~TWork() override {
+            Owner.Unfinished += Active || Throttled;
+        }
+
+        std::optional<TDuration> TryStartExecution(TMonotonic) override {
+            UNIT_ASSERT(!Active);
+            ++Owner.Attempts;
+            if (Owner.Throttle) {
+                if (!Throttled) {
+                    Throttled = true;
+                    ++Owner.Waiting;
+                }
+                return TDuration::Seconds(1);
+            }
+            if (Throttled) {
+                Throttled = false;
+                --Owner.Waiting;
+            }
+            Active = true;
+            ++Owner.Starts;
+            return {};
+        }
+
+        void StopExecution() override {
+            UNIT_ASSERT(Active || Throttled);
+            if (Throttled) {
+                Throttled = false;
+                --Owner.Waiting;
+            }
+            Active = false;
+            ++Owner.Stops;
+        }
+
+        void NotifyResumed(bool) override {
+        }
+
+        void RegisterForResume(const TActorId& actorId) override {
+            Owner.WorkActorId = actorId;
+        }
+
+        TWorkScope GetWorkScope() const override {
+            return Owner.GetWorkScope();
+        }
+
+    private:
+        TCountingWorkFactory& Owner;
+        bool Active = false;
+        bool Throttled = false;
+    };
+
+    std::unique_ptr<IDqSchedulableWork> CreateSchedulableWork() override {
+        return std::make_unique<TWork>(*this);
+    }
+
+    TWorkScope GetWorkScope() const override {
+        return { "/Root", "test" };
+    }
+};
+
 class TParquetReader {
 public:
     TReadResult Result;
@@ -219,7 +296,7 @@ public:
     }
 
     void Start(std::shared_ptr<TParquetGateway> gateway, NS3::TSource source, ui64 dataInflight = 200_MB, bool batched = true,
-        ui64 batchDecodeTargetBytes = 16_MB)
+        ui64 batchDecodeTargetBytes = 16_MB, IDqSchedulableWorkFactoryPtr workFactory = nullptr)
     {
         NS3::TRange range;
         auto* path = range.AddPaths();
@@ -237,7 +314,7 @@ public:
                 CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory, std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {
                 }), gateway, std::move(source), 0, TCollectStatsLevel::None,
                     TTxId{}, {}, {}, { encodedRange.Str() }, FakeActorId, CreateStructuredTokenCredentialsFactory(), GetHTTPDefaultRetryPolicy(),
-                    config, nullptr, nullptr, std::make_shared<TGuaranteeQuotaManager>(dataInflight, dataInflight), false);
+                    config, nullptr, nullptr, std::make_shared<TGuaranteeQuotaManager>(dataInflight, dataInflight), false, workFactory);
             actor.InitAsyncInput(input, inputActor);
         });
     }
@@ -256,6 +333,10 @@ public:
             Pump();
         }
         UNIT_ASSERT_C(Result.Finished || !Result.Errors.empty(), "HTTP reader did not complete");
+    }
+
+    void SendToWork(const TActorId& actorId, IEventBase* event) {
+        Runtime.Send(new IEventHandle(actorId, FakeActorId, event));
     }
 
 private:
@@ -323,7 +404,116 @@ TReadResult ReadParquet(TString body, ui64 parallelRowGroups, bool batched, ui64
     return reader.Result;
 }
 
+void CheckQuotaCleanup(const TString& body, const NS3::TSource& source, ui64 expectedRows, bool expectError = false) {
+    for (bool batched : { true, false }) {
+        auto workFactory = std::make_shared<TCountingWorkFactory>();
+        {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = body;
+            reader.Start(gateway, source, 200_MB, batched, 16_MB, workFactory);
+            reader.ReadToEnd();
+            if (expectError) {
+                UNIT_ASSERT(!reader.Result.Errors.empty());
+            } else {
+                UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+                UNIT_ASSERT(reader.Result.Finished);
+                UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, expectedRows);
+            }
+            // Quota must already be released when the file completes, not only
+            // later when the compute actor tears down its async source.
+            UNIT_ASSERT(workFactory->Starts > 0);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Starts, workFactory->Stops);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(workFactory->Unfinished, 0);
+        UNIT_ASSERT_VALUES_EQUAL(workFactory->Starts, workFactory->Stops);
+    }
+}
+
 }   // namespace
+
+Y_UNIT_TEST_SUITE(TS3ParquetQuotaCleanup) {
+    Y_UNIT_TEST(CancelWhileWaitingForCpu) {
+        auto workFactory = std::make_shared<TCountingWorkFactory>();
+        workFactory->Throttle = true;
+        {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = MakeParquet(10);
+            reader.Start(gateway, ParquetSource(), 200_MB, true, 16_MB, workFactory);
+            reader.Pump();
+            UNIT_ASSERT(workFactory->Attempts > 0);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Starts, 0);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Waiting, 1);
+
+            // A retry must not register another waiter or cancel the first one.
+            const auto attempts = workFactory->Attempts;
+            reader.SendToWork(workFactory->WorkActorId, new TEvents::TEvWakeup());
+            reader.Pump();
+            UNIT_ASSERT(workFactory->Attempts > attempts);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Waiting, 1);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Stops, 0);
+
+            reader.SendToWork(workFactory->WorkActorId, new TEvents::TEvPoison());
+            reader.ReadToEnd();
+            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Waiting, 0);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Stops, 1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(workFactory->Unfinished, 0);
+    }
+
+    Y_UNIT_TEST(AdmissionAfterWaiting) {
+        auto workFactory = std::make_shared<TCountingWorkFactory>();
+        workFactory->Throttle = true;
+        {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = MakeParquet(10);
+            reader.Start(gateway, ParquetSource(), 200_MB, true, 16_MB, workFactory);
+            reader.Pump();
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Waiting, 1);
+            workFactory->Throttle = false;
+            reader.SendToWork(workFactory->WorkActorId, new TEvents::TEvWakeup());
+            reader.ReadToEnd();
+            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 10);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Waiting, 0);
+            UNIT_ASSERT(workFactory->Starts > 0);
+            UNIT_ASSERT_VALUES_EQUAL(workFactory->Starts, workFactory->Stops);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(workFactory->Unfinished, 0);
+    }
+
+    Y_UNIT_TEST(EmptyFile) {
+        CheckQuotaCleanup(MakeParquetWithCompressedSizes({}), ParquetSource(), 0);
+    }
+
+    Y_UNIT_TEST(AllRowGroupsFiltered) {
+        auto source = ParquetSource();
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"pb(
+                comparison {
+                  operation: L
+                  left_value { column: "ts" }
+                  right_value {
+                    typed_value {
+                      type { type_id: TIMESTAMP }
+                      value { int64_value: 0 }
+                    }
+                  }
+                }
+            )pb", source.MutablePredicate()));
+        CheckQuotaCleanup(MakeParquet(10), source, 0);
+    }
+
+    Y_UNIT_TEST(InvalidMetadata) {
+        CheckQuotaCleanup(MakeParquetWithCompressedSizes({ -1 }), ParquetSource(), 0, true);
+    }
+
+    Y_UNIT_TEST(NormalRead) {
+        CheckQuotaCleanup(MakeParquet(10), ParquetSource(), 10);
+    }
+}
 
 Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
     Y_UNIT_TEST(ZeroCompressedSize) {

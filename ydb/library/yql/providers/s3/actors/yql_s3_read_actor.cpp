@@ -1,6 +1,7 @@
 #include "yql_arrow_column_converters.h"
 #include "yql_arrow_push_down.h"
 #include "yql_s3_actors_util.h"
+#include "yql_s3_cpu_metrics.h"
 #include "yql_s3_decompressor_actor.h"
 #include "yql_s3_raw_read_actor.h"
 #include "yql_s3_read_actor.h"
@@ -474,9 +475,20 @@ public:
         if (!Work || Working) {
             return;
         }
+        bool throttled = false;
+        Y_DEFER {
+            // Cancellation can unwind this wait before Working becomes true.
+            // StopExecution also cancels pending admission, unlike StopUnit.
+            if (throttled) {
+                Work->StopExecution();
+                CpuMetrics.OnStop(TMonotonic::Now());
+            }
+        };
         for (;;) {
             const auto now = TMonotonic::Now();
             const auto delay = Work->TryStartExecution(now);
+            throttled = delay.has_value();
+            CpuMetrics.OnAdmission(!delay, now);
             if (!delay) {
                 break;
             }
@@ -494,6 +506,7 @@ public:
             return;
         }
         Work->StopExecution();
+        CpuMetrics.OnStop(TMonotonic::Now());
         Working = false;
     }
 
@@ -1375,7 +1388,8 @@ public:
         const TS3ReadActorFactoryConfig& readActorFactoryCfg, TSourceContext::TPtr queueBufferCounter,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& deferredQueueSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpInflightSize, const ::NMonitoring::TDynamicCounters::TCounterPtr& httpDataRps,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& rawInflightSize, bool asyncDecompressing, IDqSchedulableWorkFactoryPtr workFactory)
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& rawInflightSize, bool asyncDecompressing, IDqSchedulableWorkFactoryPtr workFactory,
+        ::NMonitoring::TDynamicCounterPtr counters)
         : TActorCoroImpl(256_KB)
         , TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
@@ -1395,6 +1409,8 @@ public:
         , AsyncDecompressing(asyncDecompressing)
         , WorkFactory(std::move(workFactory))
         , Work(WorkFactory ? WorkFactory->CreateSchedulableWork() : nullptr)
+        , Counters(std::move(counters))
+        , CpuMetrics(Counters, Work.get(), "reader")
     {
     }
 
@@ -1450,12 +1466,18 @@ private:
     }
 
     void Run() final {
+        Y_DEFER {
+            // Metadata reads can acquire quota before any row-group decode scope.
+            // Release it on empty/filtered files and errors as well as normal EOF.
+            StopUnit();
+            CpuMetrics.OnExit(TMonotonic::Now());
+        };
         LOG_CORO_D("Run start: WorkFactory=" << (WorkFactory ? "set" : "null") << " Work=" << (Work ? "set" : "null"));
         if (Work) {
             Work->RegisterForResume(SelfActorId);
         }
         if (AsyncDecompressing) {
-            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression, WorkFactory));
+            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression, WorkFactory, Counters));
         }
 
         FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
@@ -1631,6 +1653,8 @@ private:
     const bool AsyncDecompressing;
     const IDqSchedulableWorkFactoryPtr WorkFactory;
     std::unique_ptr<IDqSchedulableWork> Work;
+    const ::NMonitoring::TDynamicCounterPtr Counters;
+    TS3CpuMetrics CpuMetrics;
     bool Working = false;   // holds HDRF slot — allowed to consume CPU
 };
 
@@ -1809,7 +1833,7 @@ public:
             TxId, requestId, RetryPolicy);
         auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, TxId, ComputeActorId, std::move(stuff), ReadSpec, pathIndex, object.GetPath(), Url,
             RowsRemained, ReadActorFactoryCfg, SourceContext, DeferredQueueSize, HttpInflightSize, HttpDataRps, RawInflightSize,
-            AsyncDecompressing, WorkFactory);
+            AsyncDecompressing, WorkFactory, Counters);
         if (AsyncDecoding) {
             actorId = Register(new TS3ReadCoroActor(std::move(impl)));
         } else {

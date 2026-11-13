@@ -1,3 +1,6 @@
+#include "yql_s3_cpu_metrics.h"
+#include "yql_s3_decompressor_actor.h"
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -25,12 +28,14 @@ namespace {
 
 class TS3DecompressorCoroImpl: public TActorCoroImpl {
 public:
-    TS3DecompressorCoroImpl(const TActorId& parent, const TString& compression, IDqSchedulableWorkFactoryPtr workFactory)
+    TS3DecompressorCoroImpl(const TActorId& parent, const TString& compression, IDqSchedulableWorkFactoryPtr workFactory,
+        const ::NMonitoring::TDynamicCounterPtr& counters)
         : TActorCoroImpl(256_KB)
         , Compression(compression)
         , Parent(parent)
         , WorkFactory(std::move(workFactory))
         , Work(WorkFactory ? WorkFactory->CreateSchedulableWork() : nullptr)
+        , CpuMetrics(counters, Work.get(), "decompressor")
     {
     }
 
@@ -99,6 +104,7 @@ private:
         for (;;) {
             const auto now = TMonotonic::Now();
             const auto delay = Work->TryStartExecution(now);
+            CpuMetrics.OnAdmission(!delay, now);
             if (!delay) {
                 break;
             }
@@ -123,6 +129,7 @@ private:
             return;
         }
         Work->StopExecution();
+        CpuMetrics.OnStop(TMonotonic::Now());
         Working = false;
     }
 
@@ -139,6 +146,9 @@ private:
     }
 
     void Run() final {
+        Y_DEFER {
+            CpuMetrics.OnExit(TMonotonic::Now());
+        };
         StartCycleCount = GetCycleCountFast();
 
         if (Work) {
@@ -208,6 +218,7 @@ private:
     std::queue<THolder<TEvS3Provider::TEvDecompressDataRequest>> Requests;
     const IDqSchedulableWorkFactoryPtr WorkFactory;
     std::unique_ptr<IDqSchedulableWork> Work;
+    TS3CpuMetrics CpuMetrics;
     bool Working = false;   // holds HDRF slot — allowed to consume CPU
     bool UpstreamPaused = false;   // waiting on decompress input / HDRF admission — stop consuming
 };
@@ -230,8 +241,9 @@ private:
 }   // anonymous namespace
 
 NActors::IActor* CreateS3DecompressorActor(
-    const NActors::TActorId& parent, const TString& compression, IDqSchedulableWorkFactoryPtr workFactory) {
-    return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression, std::move(workFactory)));
+    const NActors::TActorId& parent, const TString& compression, IDqSchedulableWorkFactoryPtr workFactory,
+    ::NMonitoring::TDynamicCounterPtr counters) {
+    return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression, std::move(workFactory), counters));
 }
 
 }   // namespace NYql::NDq

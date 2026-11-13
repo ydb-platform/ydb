@@ -288,22 +288,40 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
     AFL_VERIFY(DataAccessorsManager);
     bool switchOptimizer = false;
     bool switchAccessorsManager = false;
+<<<<<<< HEAD
     TVersionedIndex& vIndex = VersionedSchemas.MutableVersionedIndex(indexInfo.GetPresetId());
     if (!vIndex.IsEmpty()) {
         const NOlap::TIndexInfo& lastIndexInfo = vIndex.GetLastSchema()->GetIndexInfo();
         lastIndexInfo.CheckCompatible(indexInfo).Validate();
         switchOptimizer = !indexInfo.GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
         switchAccessorsManager = !indexInfo.GetMetadataManagerConstructor()->IsEqualTo(*lastIndexInfo.GetMetadataManagerConstructor());
+=======
+    bool switchTieringActualization = indexInfo->GetTieringNeedActualization();
+    TVersionedIndex& vIndex = VersionedSchemas.MutableVersionedIndex(indexInfo->GetPresetId());
+    if (!vIndex.IsEmpty()) {
+        const NOlap::TIndexInfo& lastIndexInfo = vIndex.GetLastSchema()->GetIndexInfo();
+        lastIndexInfo.CheckCompatible(*indexInfo).Validate();
+        switchOptimizer = !indexInfo->GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
+        switchAccessorsManager = !indexInfo->GetMetadataManagerConstructor()->IsEqualTo(*lastIndexInfo.GetMetadataManagerConstructor());
+        switchTieringActualization = indexInfo->GetTieringNeedActualization() != lastIndexInfo.GetTieringNeedActualization();
+>>>>>>> b8b9df599a1 (Tiering actualization (#57209))
     }
+
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "new_schema"},
         {"snapshot", snapshot.DebugString()},
         {"switchOptimizer", switchOptimizer},
         {"switchAccessors", switchAccessorsManager});
 
+<<<<<<< HEAD
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     auto* indexInfoActual = vIndex.AddIndex(snapshot, SchemaObjectsCache->UpsertIndexInfo(std::move(indexInfo)));
     if (isCriticalScheme) {
+=======
+    const bool isCriticalScheme = indexInfo->GetSchemeNeedActualization();
+    auto* indexInfoActual = vIndex.AddIndex(snapshot, std::move(indexInfo));
+    if (isCriticalScheme || switchTieringActualization) {
+>>>>>>> b8b9df599a1 (Tiering actualization (#57209))
         StartActualization({});
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();

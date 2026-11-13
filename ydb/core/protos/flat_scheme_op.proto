@@ -769,6 +769,7 @@ message TColumnTableSchemeOptions {
     optional TInsertOptions InsertOptions = 6;
     optional bool DeduplicationEnabled = 7;
     optional bool CacheBlobsAfterWrite = 8 [default = false];
+    optional bool TieringNeedActualization = 9 [default = false];
 }
 
 message TColumnTableSchema {
@@ -817,6 +818,7 @@ message TColumnTableRequestedOptions {
     optional TInsertOptions InsertOptions = 6;
     optional bool DeduplicationEnabled = 7;
     optional bool CacheBlobsAfterWrite = 8 [default = false];
+    optional bool TieringNeedActualization = 9 [default = false];
 }
 
 message TAlterColumnTableSchema {

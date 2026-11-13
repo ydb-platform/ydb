@@ -10,6 +10,7 @@
 #include <util/folder/path.h>
 #include <util/generic/guid.h>
 #include <util/string/builder.h>
+#include <util/thread/pool.h>
 
 #include <limits>
 
@@ -42,6 +43,7 @@ inline TString MakeSpillingNodeDirName(ui32 nodeId, TStringBuf username, TString
 
 NActors::IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const NActors::TActorId& client, bool removeBlobsAfterRead, ESpillingType spillingType);
 
-NActors::IActor* CreateDqLocalFileSpillingService(const TFileSpillingServiceConfig& config, TIntrusivePtr<TSpillingCounters> counters);
+NActors::IActor* CreateDqLocalFileSpillingService(const TFileSpillingServiceConfig& config, TIntrusivePtr<TSpillingCounters> counters,
+    THolder<IThreadPool> ioThreadPool = {});
 
 } // namespace NYql::NDq

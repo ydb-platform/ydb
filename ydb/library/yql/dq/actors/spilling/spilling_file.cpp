@@ -228,12 +228,15 @@ private:
 
 public:
     TDqLocalFileSpillingService(const TFileSpillingServiceConfig& config,
-        TIntrusivePtr<TSpillingCounters> counters)
+        TIntrusivePtr<TSpillingCounters> counters, THolder<IThreadPool> ioThreadPool)
         : Config_(config)
         , Counters_(counters)
+        , IoThreadPool_(std::move(ioThreadPool))
     {
-        IoThreadPool_ = CreateThreadPool(Config_.IoThreadPoolWorkersCount,
-            Config_.IoThreadPoolQueueSize, IThreadPool::TParams().SetThreadNamePrefix("DqSpilling"));
+        if (!IoThreadPool_) {
+            IoThreadPool_ = CreateThreadPool(Config_.IoThreadPoolWorkersCount,
+                Config_.IoThreadPoolQueueSize, IThreadPool::TParams().SetThreadNamePrefix("DqSpilling"));
+        }
     }
 
     void Bootstrap() {
@@ -1179,9 +1182,10 @@ IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const
     return new TDqLocalFileSpillingActor(txId, details, client, removeBlobsAfterRead, spillingType);
 }
 
-IActor* CreateDqLocalFileSpillingService(const TFileSpillingServiceConfig& config, TIntrusivePtr<TSpillingCounters> counters)
+IActor* CreateDqLocalFileSpillingService(const TFileSpillingServiceConfig& config, TIntrusivePtr<TSpillingCounters> counters,
+    THolder<IThreadPool> ioThreadPool)
 {
-    return new TDqLocalFileSpillingService(config, counters);
+    return new TDqLocalFileSpillingService(config, counters, std::move(ioThreadPool));
 }
 
 } // namespace NYql::NDq

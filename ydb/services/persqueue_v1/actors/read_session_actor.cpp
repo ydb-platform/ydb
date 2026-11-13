@@ -902,7 +902,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     }
 
     TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, database,
-        Protocol == EProtocol::Topic && AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
+        !UseMigrationProtocol && AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
 
     if (!TopicsList.IsValid) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason, ctx);

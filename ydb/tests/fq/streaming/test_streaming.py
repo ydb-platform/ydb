@@ -2482,6 +2482,12 @@ FROM `{table_name}`"""
             '{"req":{"id":"bad"},"note":"skip-req-type"}',
             # Errors: nested required scalar null.
             '{"req":{"id":null},"note":"skip-req-null"}',
+            # Errors: invalid escaped unicode in top-level field name
+            '{"foo\\ud800":42,"note":"skip-top-broken-escape"}',
+            # Errors: invalid escaped unicode in Struct field name
+            '{"top":{"bar\\ud800":42},"note":"skip-struct-broken-escape"}',
+            # Errors: invalid escaped unicode in Dict field name
+            '{"top":{"c":{"bar\\ud800":42}},"note":"skip-struct-broken-escape"}',
             # Valid: tuple has extra elements, extra tuple elements are ignored (also validates toplevel key unescape, \u006f is 'o').
             '{"t\\u006fp":{"b":[5,"t","extra"]},"req":{"id":1},"note":"ok-extra"}',
             # Valid: explicit nulls for optional top-level structs.

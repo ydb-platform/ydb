@@ -2312,7 +2312,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
         testConfig.PDiskPathSuffix = "synclog_real_phantom_builder_log_start.dat";
 
-        auto storage = SetupRealPDiskAndRealVDisk(runtime,
+        TRealStorage storage = SetupRealPDiskAndRealVDisk(runtime,
             TBlobStorageGroupType::ErasureMirror3of4, testConfig);
         const TVDiskID targetVDisk = storage.Info->GetVDiskId(0);
         const TVDiskID sourceVDisk = storage.Info->GetVDiskId(1);
@@ -2337,7 +2337,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             }
         };
 
-        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        TTestActorRuntime::TEventObserver previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (!ev) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
@@ -2359,14 +2359,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
                 case TEvBlobStorage::EvMultiLog:
                     if (ev->Recipient == storage.PDiskServiceId) {
-                        for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
+                        for (const NPDisk::TEvMultiLog::TItem& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
                             observePDiskLog(*item.Event);
                         }
                     }
                     break;
 
                 case TEvBlobStorage::EvLogResult: {
-                    const auto *msg = ev->Get<NPDisk::TEvLogResult>();
+                    const NPDisk::TEvLogResult *msg = ev->Get<NPDisk::TEvLogResult>();
                     if (msg->Status != NKikimrProto::OK) {
                         lastPDiskErrorReason = msg->ErrorReason;
                     }
@@ -2380,7 +2380,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                     break;
 
                 case TEvBlobStorage::EvVDiskCutLog: {
-                    const auto *msg = ev->Get<TEvVDiskCutLog>();
+                    const TEvVDiskCutLog *msg = ev->Get<TEvVDiskCutLog>();
                     if (ev->Sender == syncLogKeeperId && msg->Component == TEvVDiskCutLog::SyncLog) {
                         lastReportedSyncLogFirstLsnToKeep =
                             Max(lastReportedSyncLogFirstLsnToKeep, msg->LastKeepLsn);
@@ -2391,7 +2391,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
             return TTestActorRuntime::EEventAction::PROCESS;
         });
-        auto previousEventFilter = runtime.SetEventFilter(
+        TTestActorRuntime::TEventFilter previousEventFilter = runtime.SetEventFilter(
             [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
                 return false;
             });
@@ -2413,15 +2413,17 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
             for (ui32 attempt = 0; attempt < 100; ++attempt) {
                 TVector<TLogoBlobID> doNotKeep{blobId};
-                auto collect = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(123, 1,
+                std::unique_ptr<TEvBlobStorage::TEvVCollectGarbage> collect =
+                    std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(123, 1,
                     nextCollectCounter, 0, false, 0, 0, false, nullptr, &doNotKeep,
                     targetVDisk, TInstant::Max());
                 runtime.Send(new IEventHandle(putQueue, edge, collect.release()), NodeIndex);
-                auto result = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVCollectGarbageResult>(edge,
+                TEvBlobStorage::TEvVCollectGarbageResult::TPtr result =
+                    runtime.GrabEdgeEvent<TEvBlobStorage::TEvVCollectGarbageResult>(edge,
                     TDuration::Seconds(120));
                 UNIT_ASSERT_C(result, "no collect result; blobId# " << blobId
                     << " lastPDiskError# " << lastPDiskErrorReason);
-                const auto status = result->Get()->Record.GetStatus();
+                const NKikimrProto::EReplyStatus status = result->Get()->Record.GetStatus();
                 if (status == NKikimrProto::NOTREADY || status == NKikimrProto::TRYLATER) {
                     DispatchFor(runtime, TDuration::MilliSeconds(10));
                     continue;
@@ -2462,7 +2464,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         ui64 logStartLsn = 0;
         UNIT_ASSERT_C(PumpUntil(runtime, [&] {
             runtime.Send(new IEventHandle(syncLogKeeperId, edge, new NSyncLog::TEvSyncLogSnapshot()), NodeIndex);
-            auto result = runtime.GrabEdgeEvent<NSyncLog::TEvSyncLogSnapshotResult>(edge, TDuration::Seconds(5));
+            NSyncLog::TEvSyncLogSnapshotResult::TPtr result =
+                runtime.GrabEdgeEvent<NSyncLog::TEvSyncLogSnapshotResult>(edge, TDuration::Seconds(5));
             UNIT_ASSERT(result);
             logStartLsn = result->Get()->SnapshotPtr->LogStartLsn;
             return logStartLsn == lsns[1];
@@ -2471,7 +2474,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
         runtime.Send(new IEventHandle(targetVDiskId, edge,
             new TEvBlobStorage::TEvVBaldSyncLog(targetVDisk, true)), NodeIndex);
-        auto baldResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVBaldSyncLogResult>(edge,
+        TEvBlobStorage::TEvVBaldSyncLogResult::TPtr baldResult =
+            runtime.GrabEdgeEvent<TEvBlobStorage::TEvVBaldSyncLogResult>(edge,
             TDuration::Seconds(120));
         UNIT_ASSERT_C(baldResult, "no BaldSyncLog result");
         UNIT_ASSERT_VALUES_EQUAL(baldResult->Get()->Record.GetStatus(), NKikimrProto::OK);
@@ -2481,13 +2485,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
         runtime.Send(new IEventHandle(syncLogKeeperId, edge,
             new NSyncLog::TEvPhantomFlagStorageGetSnapshot()), NodeIndex);
-        auto phantomSnapshot = runtime.GrabEdgeEvent<NSyncLog::TEvPhantomFlagStorageGetSnapshotResult>(edge,
+        NSyncLog::TEvPhantomFlagStorageGetSnapshotResult::TPtr phantomSnapshot =
+            runtime.GrabEdgeEvent<NSyncLog::TEvPhantomFlagStorageGetSnapshotResult>(edge,
             TDuration::Seconds(120));
         UNIT_ASSERT_C(phantomSnapshot, "no Phantom Flag Storage snapshot result");
 
         TVector<TLogoBlobID> expectedFlags(flags.begin() + 1, flags.end());
         TVector<TLogoBlobID> actualFlags;
-        for (const auto& flag : phantomSnapshot->Get()->Flags) {
+        for (const NSyncLog::TLogoBlobRec& flag : phantomSnapshot->Get()->Flags) {
             actualFlags.push_back(flag.LogoBlobID());
         }
         Sort(expectedFlags);

@@ -11,10 +11,6 @@ public:
     virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, NYql::TExprContext& ectx, const TCBOSettings& settings) const override {
       return IOptimizerNew::TPtr(MakeNativeOptimizerNew(pctx, settings, ectx, false, nullptr));
     }
-
-    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerPG(IProviderContext& /*pctx*/, NYql::TExprContext& /*ctx*/, const TPGSettings& /*settings*/) const override {
-        Y_ABORT("PG optimizer is not supported in the ydb-owned CBO");
-    }
 };
 }
 

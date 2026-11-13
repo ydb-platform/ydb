@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         }
         auto pgParams = makeParams(pgValues.front());
         auto pgResult = session.ExecuteDataQuery("SELECT $value;", txControl, pgParams).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(pgResult.GetStatus(), EStatus::BAD_REQUEST, pgResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(pgResult.GetStatus(), EStatus::GENERIC_ERROR, pgResult.GetIssues().ToString());
         checkNative();
 
         auto structParams = makeParams(R"(

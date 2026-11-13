@@ -688,7 +688,7 @@ message TKqpKillSession {
 message TKqpSchemeOperation {
     enum EFlags {
         FLAG_UNSPECIFIED = 0;
-        reserved 1;
+        FLAG_RESERVED_1 = 1;
         reserved "FLAG_PG_MODE";
         FLAG_IF_NOT_EXISTS = 2; // set if IF_NOT_EXISTS modificator present
         FLAG_REBUILD_INDEX = 4; // set for REBUILD INDEX operation

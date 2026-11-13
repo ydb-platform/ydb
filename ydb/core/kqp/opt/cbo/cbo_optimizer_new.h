@@ -427,16 +427,10 @@ struct TCBOSettings {
 class IOptimizerFactory: private TNonCopyable {
 public:
     using TPtr = std::shared_ptr<IOptimizerFactory>;
-    using TLogger = std::function<void(const TString&)>;
 
     virtual ~IOptimizerFactory() = default;
 
     virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, NYql::TExprContext& ctx, const TCBOSettings& settings) const = 0;
-
-    struct TPGSettings {
-        TLogger Logger = [](const TString&) {};
-    };
-    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerPG(IProviderContext& pctx, NYql::TExprContext& ctx, const TPGSettings& settings) const = 0;
 };
 
 } // namespace NKikimr::NKqp

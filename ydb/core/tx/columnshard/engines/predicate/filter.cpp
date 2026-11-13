@@ -378,7 +378,6 @@ TConclusion<TCell> TRangesBuilder::MakeDefaultCell(const NScheme::TTypeInfo type
         case NScheme::NTypeIds::ActorId:
         case NScheme::NTypeIds::StepOrderId:
             break;   // Deprecated types
-
     }
     return TConclusionStatus::Fail(TStringBuilder() << "Unsupported type: " << NScheme::TypeName(typeInfo.GetTypeId()));
 }

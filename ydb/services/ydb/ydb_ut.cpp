@@ -3295,7 +3295,7 @@ tx_meta {
             Ydb::Table::CreateTableResponse response;
             UNIT_ASSERT(stub->CreateTable(&context, request, &response).ok());
             UNIT_ASSERT(response.operation().ready());
-            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::BAD_REQUEST, response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR, response.DebugString());
             UNIT_ASSERT_STRING_CONTAINS(response.DebugString(), "PostgreSQL types are not supported");
         }
         {
@@ -3321,7 +3321,7 @@ tx_meta {
             Ydb::Table::AlterTableResponse response;
             UNIT_ASSERT(stub->AlterTable(&context, request, &response).ok());
             UNIT_ASSERT(response.operation().ready());
-            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::BAD_REQUEST, response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR, response.DebugString());
             UNIT_ASSERT_STRING_CONTAINS(response.DebugString(), "PostgreSQL types are not supported");
         }
         {

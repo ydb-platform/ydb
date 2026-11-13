@@ -55,6 +55,7 @@ public:
         ui32 Room = DefaultRoom;
         ECache Cache = ECache::None;    /* How to cache data pages      */
         ECodec Codec = ECodec::Plain;   /* How to encode data pages     */
+        ui32 CodecLevel = 1;           /* ZSTD compression level       */
         ui32 Small = Max<ui32>();       /* When pack values to outer blobs  */
         ui32 Large = Max<ui32>();       /* When keep values in single blobs */
         ECacheMode CacheMode = ECacheMode::Regular;
@@ -253,7 +254,7 @@ public:
     TAlter& AddColumnToFamily(ui32 table, ui32 column, ui32 family);
     TAlter& AddFamily(ui32 table, ui32 family, ui32 room);
     TAlter& AddColumnToKey(ui32 table, ui32 column);
-    TAlter& SetFamilyCompression(ui32 table, ui32 family, ECodec codec);
+    TAlter& SetFamilyCompression(ui32 table, ui32 family, ECodec codec, ui32 codecLevel = 1);
     TAlter& SetFamilyCacheMode(ui32 table, ui32 family, ECacheMode cacheMode);
     TAlter& SetFamilyCache(ui32 table, ui32 family, ECache cache);
     TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec); // legacy

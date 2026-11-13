@@ -25,6 +25,7 @@
 #include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/scope.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
@@ -3659,8 +3660,10 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         env.ExpectUnlink();
     }
 
-    Y_UNIT_TEST(CombinedFamilyCreationAndReassignmentCompletes) {
-        TEnv env;
+    Y_UNIT_TEST_TWIN(CombinedFamilyCreationAndReassignmentCompletes, Zstd) {
+        NTestHelpers::TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableRowTableZstdCompression(Zstd);
+        TEnv env(flags);
         const auto info = StartReplication(env);
         const auto controllerId = info.ControllerId;
         const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
@@ -3668,7 +3671,11 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
         AttachWorkers(env, controllerId, {worker});
 
-        const auto schema = MakeFamilySchemaChange("test");
+        auto schema = MakeFamilySchemaChange("test");
+        schema.MutableFamilies(1)->SetCompression(Zstd ? TFamily::COMPRESSION_ZSTD : TFamily::COMPRESSION_LZ4);
+        if constexpr (Zstd) {
+            schema.MutableFamilies(1)->SetCompressionLevel(0);
+        }
 
         env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema));
         const auto released = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
@@ -3681,7 +3688,11 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
             if (family.GetName() == "archive") {
                 archiveId = family.GetId();
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(family.GetColumnCodec()),
-                    static_cast<ui32>(NKikimrSchemeOp::ColumnCodecLZ4));
+                    static_cast<ui32>(Zstd ? NKikimrSchemeOp::ColumnCodecZSTD : NKikimrSchemeOp::ColumnCodecLZ4));
+                if constexpr (Zstd) {
+                    UNIT_ASSERT(family.HasColumnCodecLevel());
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetColumnCodecLevel(), 0);
+                }
             }
         }
 
@@ -3698,11 +3709,32 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
         CompleteSchemaChange(env, controllerId, worker, schema);
 
+        if constexpr (Zstd) {
+            auto levelOnly = schema;
+            levelOnly.MutableVersion()->SetStep(150);
+            levelOnly.MutableVersion()->SetTxId(15);
+            levelOnly.SetSourceSchemaVersion(3);
+            levelOnly.MutableFamilies(1)->SetCompressionLevel(9);
+            env.SendAsync(controllerId, MakeSchemaChangeReport(worker, levelOnly));
+            const auto release = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+            UNIT_ASSERT_VALUES_EQUAL(
+                release->Get()->Record.GetSchema().SerializeAsString(), levelOnly.SerializeAsString());
+            const auto updated = env.GetDescription("/Root/replica1");
+            const auto& families = updated.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies();
+            const auto* archive = FindIfPtr(families, [](const auto& family) {
+                return family.GetName() == "archive";
+            });
+            UNIT_ASSERT(archive);
+            UNIT_ASSERT_VALUES_EQUAL(archive->GetColumnCodecLevel(), 9);
+            CompleteSchemaChange(env, controllerId, worker, levelOnly);
+        }
+
         auto next = schema;
         next.MutableVersion()->SetStep(200);
         next.MutableVersion()->SetTxId(20);
-        next.SetSourceSchemaVersion(3);
+        next.SetSourceSchemaVersion(4);
         next.MutableFamilies(1)->SetCompression(TFamily::COMPRESSION_OFF);
+        next.MutableFamilies(1)->ClearCompressionLevel();
 
         env.SendAsync(controllerId, MakeSchemaChangeReport(worker, next));
         const auto nextRelease = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
@@ -3722,7 +3754,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         auto withoutMedia = next;
         withoutMedia.MutableVersion()->SetStep(300);
         withoutMedia.MutableVersion()->SetTxId(30);
-        withoutMedia.SetSourceSchemaVersion(4);
+        withoutMedia.SetSourceSchemaVersion(5);
         withoutMedia.MutableFamilies(1)->ClearMedia();
 
         env.SendAsync(controllerId, MakeSchemaChangeReport(worker, withoutMedia));
@@ -3744,7 +3776,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         auto withColumn = withoutMedia;
         withColumn.MutableVersion()->SetStep(400);
         withColumn.MutableVersion()->SetTxId(40);
-        withColumn.SetSourceSchemaVersion(5);
+        withColumn.SetSourceSchemaVersion(6);
         auto* extra = withColumn.AddColumns();
         extra->SetName("extra");
         extra->SetType("Uint64");

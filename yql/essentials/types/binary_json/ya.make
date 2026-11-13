@@ -10,6 +10,7 @@ SRCS(
     format.cpp
     read.cpp
     write.cpp
+    write_internal.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(format.h)

@@ -9,19 +9,19 @@ SELECT
     cc_manager AS Manager,
     Sum(cr_net_loss) AS Returns_Loss
 FROM
-    `/Root/test/ds/call_center`
+    `call_center`
 ,
-    `/Root/test/ds/catalog_returns`
+    `catalog_returns`
 ,
-    `/Root/test/ds/date_dim`
+    `date_dim`
 ,
-    `/Root/test/ds/customer`
+    `customer`
 ,
-    `/Root/test/ds/customer_address`
+    `customer_address`
 ,
-    `/Root/test/ds/customer_demographics`
+    `customer_demographics`
 ,
-    `/Root/test/ds/household_demographics`
+    `household_demographics`
 WHERE
     cr_call_center_sk == cc_call_center_sk
     AND cr_returned_date_sk == d_date_sk

@@ -1,6 +1,6 @@
 #include "bridge_common.h"
 
-#include <ydb/core/blobstorage/bridge/syncer/syncer.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
 #include <util/system/type_name.h>
 
 namespace {
@@ -130,8 +130,8 @@ public:
 
     void Start() {
         Completion.reset();
-        Syncer = Env.Runtime->Register(NBridge::CreateSyncerActor(Info, Source->GroupID, Target->GroupID,
-            std::make_shared<NBridge::TSyncerDataStats>(), nullptr), 1);
+        Syncer = Env.Runtime->Register(NGroupSyncer::CreateSyncerActor(Info, Source->GroupID, Target->GroupID,
+            std::make_shared<NGroupSyncer::TSyncerDataStats>(), nullptr), 1);
     }
 
     void CheckCompletion(bool success) {

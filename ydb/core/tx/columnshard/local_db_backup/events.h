@@ -26,6 +26,8 @@ struct TEvStartBackup: public NActors::TEventLocal<TEvStartBackup, TEvColumnShar
 };
 
 struct TEvBackupStarted: public NActors::TEventLocal<TEvBackupStarted, TEvColumnShard::EvLocalDbBackupStarted> {
+    // Writer this reply belongs to. A late reply of a failed run must not be applied to the next one.
+    NActors::TActorId Writer;
     TGeneration Generation = 0;
     TStep Step = 0;
     std::unique_ptr<NTable::TSchemeChanges> Schema;

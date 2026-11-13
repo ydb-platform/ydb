@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/public/lib/idx_test)
 
 SIZE(MEDIUM)
 
-FORK_SUBTESTS()
-
 PEERDIR(
     ydb/public/lib/idx_test
 )

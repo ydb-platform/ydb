@@ -358,6 +358,7 @@ class ClusterDetailsProvider(object):
         self.memory_controller_config = self.__cluster_description.get("memory_controller_config")
         self.kafka_proxy_config = self.__cluster_description.get("kafka_proxy_config")
         self.s3_proxy_resolver_config = self.__cluster_description.get("s3_proxy_resolver_config")
+        self.resource_path_prefix_mapping = self.__cluster_description.get("resource_path_prefix_mapping")
         self.channel_profile_config = self.__cluster_description.get("channel_profile_config")
         self.immediate_controls_config = self.__cluster_description.get("immediate_controls_config")
         self.cms_config = self.__cluster_description.get("cms_config")

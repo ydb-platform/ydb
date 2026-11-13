@@ -70,7 +70,7 @@ struct TTransactionCommitOptions
 
     //! Transactions that have intersecting ordering tags are committed in the order of
     //! their commit timestamps.
-    TStrongOrderingTagsMap StrongOrderingTags = {};
+    TCellIdToStrongOrderingTagSet StrongOrderingTags = {};
 
     //! Postpones transaction commit on a particular cell until all commit
     //! approvals are received. Does nothing if the participant does not support

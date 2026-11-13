@@ -11,6 +11,7 @@
 #include "resources.h"
 #include "stat_processor.h"
 #include "bridge_sync_counters.h"
+#include "bridge_storage.h"
 #include "indir.h"
 #include "self_heal.h"
 #include "group_state.h"
@@ -22,7 +23,9 @@
 #include <ydb/core/base/feature_flags_service.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include <ydb/core/blobstorage/base/pdisk_filter.h>
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
@@ -91,6 +94,7 @@ public:
     class TTxMonEvent_SetDown;
     class TTxMonEvent_GetDown;
     class TTxUpdateDiskMetrics;
+    class TTxUpdateDatabaseSpace;
     class TTxGroupMetricsExchange;
     class TTxNodeReport;
     class TTxUpdateSeenOperational;
@@ -115,6 +119,8 @@ public:
     class TTxBridgePileOperation;
     class TTxAddBridgePile;
     class TTxRemoveBridgePile;
+    class TTxBridgeRollback;
+    class TTxUpdatePileOverrides;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
@@ -970,6 +976,13 @@ public:
             return !BlobDepotId && DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE;
         }
 
+        // Do the writes to this group (to its parts, for a bridged one) go to VDisks? The group to be decommitted keeps
+        // taking them until it is switched to BlobDepot (see TBlobStorageGroupInfo::DecommitBlocksWrites).
+        bool WritesGoToVDisks() const {
+            return !BlobDepotId && (DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE ||
+                DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING);
+        }
+
         // is this group a pile of its own (a group converted from non-bridged one); such group has both its own VDisks
         // and BridgeGroupInfo referencing itself
         bool IsInlinePile() const {
@@ -1724,6 +1737,14 @@ private:
     std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
     TBridgeInfo::TPtr BridgeInfo;
     bool SelfManagementEnabled = false;
+
+    // Storage pool pile overrides BSC follows for its groups. StorageConfig is committed by distconf regardless of the
+    // groups BSC has, so its overrides are adopted by TTxUpdatePileOverrides, which checks them against the groups the
+    // same way any other transaction creating or changing groups does. Unset until the first adoption (the tablet that
+    // has never done it follows StorageConfig, as it used to).
+    std::optional<NKikimrBlobStorage::TStoragePoolPileOverrides> AppliedPileOverrides;
+    // why the overrides of the current StorageConfig are not adopted (when they are not)
+    std::optional<TString> PileOverridesError;
     std::optional<TYamlConfig> YamlConfig;
     ui64 YamlConfigHash = 0;
     std::optional<TString> StorageYamlConfig; // if separate config is in effect
@@ -1844,6 +1865,7 @@ private:
         bool TreatPhantomsOnlyVDisksAsWorking = false;
     };
 
+    void PropagateGroupContentChanged(TConfigState& state);
     bool ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
             TString* errorDescription, NKikimrBlobStorage::TConfigResponse* response = nullptr);
 
@@ -2215,6 +2237,7 @@ private:
         std::unique_ptr<IEventHandle> response);
     // validate removal of the pile, then send the response
     ITransaction* CreateTxValidateRemoveBridgePile(TBridgePileId pileId, std::unique_ptr<IEventHandle> response);
+    ITransaction* CreateTxValidateBridgeRollback(TBridgePileId pileId, std::unique_ptr<IEventHandle> response);
 
     struct TAuditLogInfo {
         TString PeerName;
@@ -2401,6 +2424,12 @@ private:
     // groups that have lost their part
     size_t RemoveBridgePileGroups(TConfigState& state, TBridgePileId pileId);
 
+    // make bridged pools and groups ordinary ones when the bridged cluster is being rolled back: the pile is the only one
+    // left (the implicit one), and every bridged group has to be the inline pile in it; pools get the settings the pile
+    // has for them (pile overrides included); returns the number of groups made ordinary, throws TExError naming the
+    // groups that can't be made such
+    size_t RollbackBridgedGroups(TConfigState& state, TBridgePileId pileId);
+
     // delete the part of the bridged group in the pile along with its data; the group serves as bridge proxy only when
     // its inline pile goes away
     void DropBridgeGroupPart(TConfigState& state, TGroupId proxyGroupId, TBridgePileId pileId);
@@ -2413,12 +2442,20 @@ private:
 
     // the pile is being removed, so new groups get no parts there
     bool IsBridgePileBeingRemoved(TBridgePileId pileId) const;
+    // the bridged cluster is being rolled back: new pools and groups are ordinary ones, bridged groups stay as they are
+    bool IsBeingRolledBack() const;
     // the pile is being added, while this BSC hasn't added parts in it to its groups yet; the groups created meanwhile get
     // no part in the pile, the addition gives it to them
     bool IsBridgePileAwaitingParts(TBridgePileId pileId) const;
     ui64 BridgePileAddedOperationId = 0; // ADD operation BSC has done its part of (in memory, it is repeated on restart)
 
     void UpdateBridgeSyncCounters();
+    NBridgeStorage::TCopyObservation ObserveBridgeStorageCopy(const NBridgeStorage::TGroupContext& group,
+        const TBridgeInfo::TPile& pile, const NKikimrBridge::TClusterStateDetails::TPileSyncState* syncState,
+        bool bridged) const;
+    void Handle(TEvBlobStorage::TEvControllerQueryBridgeStorage::TPtr& ev);
+    Ydb::StatusIds::StatusCode SelectBridgeStoragePools(const NKikimrBridge::TStorageQuery& query,
+        std::set<TBoxStoragePoolId>& selected, NBridgeStorage::TReportBudget& budget, TString& error) const;
 
     // bytes left to copy into the target group of a pile in the given sync stage; Complete is set when the number
     // comes from a scan that has gone over all the blobs, otherwise it's a lower bound; nothing is known before any
@@ -2470,8 +2507,13 @@ private:
     // the same inside a transaction that persists the state the changes follow from
     void CommitDatabaseSpaceChanges(NIceDb::TNiceDb& db);
     void PersistDatabaseSpaceLatches(NIceDb::TNiceDb& db, const std::map<TBoxStoragePoolId, bool>& latches);
+    // for the latches published outside of the transaction persisting them: writes their current values
+    void PersistChangedDatabaseSpaceLatches(NIceDb::TNiceDb& db, const std::map<TBoxStoragePoolId, bool>& changed);
     void SendDatabaseSpaceState(TNodeId nodeId, TDatabaseSpaceTracker::TScope scope);
+    void UpdateDatabaseSpaceOnPileChanges();
     void UpdateDatabaseSpaceGroup(const TGroupInfo& group);
+    void UpdateDatabaseSpaceGroup(const TGroupInfo& group, const TGroupInfo::TGroupFinder& finder,
+        const TBridgeInfo *bridgeInfo);
     void UpdateDatabaseSpacePool(const TBoxStoragePoolId& poolId, const TStoragePoolInfo& pool);
     void RenderDatabaseSpace(IOutputStream& out);
 
@@ -2626,6 +2668,7 @@ public:
         switch (type) {
             hFunc(TEvBlobStorage::TEvControllerRegisterNode, Handle);
             hFunc(TEvBlobStorage::TEvControllerGetGroup, Handle);
+            hFunc(TEvBlobStorage::TEvControllerQueryBridgeStorage, Handle);
             hFunc(TEvBlobStorage::TEvControllerSelectGroups, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateGroupStat, Handle);
@@ -2680,6 +2723,7 @@ public:
         }
         Loaded = true;
         LoadedAt = TActivationContext::Monotonic();
+        UpdatePileOverrides();
         ApplyStorageConfig();
 
         // configs handled while loading (the first one at least) didn't make BSC check parts of its groups in unsynced
@@ -3070,9 +3114,14 @@ public:
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
     static TStoragePoolInfo ResolveStoragePoolForPile(const TBoxStoragePoolId& id, const TStoragePoolInfo& pool,
-        TBridgePileId pileId, const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config);
+        TBridgePileId pileId, const TBridgeInfo *bridgeInfo, const TStoragePoolPileOverrideRules *rules);
     TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const;
+    const TStoragePoolPileOverrideRules *GetPileOverrideRules() const; // the rules BSC follows, if any
+    // the rules BSC would follow having got this StorageConfig: its ones, unless the groups don't fit them
+    const TStoragePoolPileOverrideRules *GetPileOverrideRulesWith(const NKikimrBlobStorage::TStorageConfig& config) const;
+    std::optional<TString> CheckGroupsAgainstPileOverrides(const TStoragePoolPileOverrideRules& rules) const;
     std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrBlobStorage::TStorageConfig& config) const;
+    void UpdatePileOverrides(); // adopt the overrides of StorageConfig, if they differ and fit the groups
 
     static void Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TStoragePoolSettings *pb, const TStoragePoolInfo &pool);

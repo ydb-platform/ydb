@@ -126,6 +126,7 @@ struct TKesusTablet::TTxQuoterResourceDescribe : public TTxBase {
 };
 
 void TKesusTablet::Handle(TEvKesus::TEvDescribeQuoterResources::TPtr& ev) {
+    TabletCounters->Cumulative()[COUNTER_REQS_QUOTER_RESOURCE_DESCRIBE].Increment(1);
     Execute(new TTxQuoterResourceDescribe(this, ev->Sender, ev->Cookie, ev->Get()->Record), TActivationContext::AsActorContext());
 }
 

@@ -13,6 +13,7 @@ namespace NKikimr::NTableIndex::NKMeans {
 
 namespace NKikimr::NKMeans {
 
+inline constexpr ui32 MinHnswM = 2;
 inline constexpr ui32 MaxHnswM = 100;
 inline constexpr ui32 MaxHnswEfConstruction = 1000;
 

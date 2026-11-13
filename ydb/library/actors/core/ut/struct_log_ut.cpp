@@ -3,8 +3,10 @@
 #include <ydb/library/actors/struct_log/json_writer.h>
 #include <ydb/library/actors/struct_log/key_name.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/actors/struct_log/native_value_extractor.h>
 #include <ydb/library/actors/struct_log/native_types_mapping.h>
 #include <ydb/library/actors/struct_log/native_types_support.h>
+#include <ydb/library/actors/struct_log/string_value_extractor.h>
 #include <ydb/library/actors/struct_log/structured_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -17,27 +19,142 @@ template <typename T>
 void TestType(const std::vector<T>& values) {
     auto typeCode = TTypesMapping::GetCode<T>();
 
-    for (auto value : values) {
-        auto originalStr = TTypesMapping::ToString(value);
+    for (auto originalValue : values) {
+        auto originalStr = TTypesMapping::ToString(originalValue);
 
         TBinaryData data;
-        TTypesMapping::Serialize<T>(value, data);
+        TTypesMapping::Serialize<T>(originalValue, data);
 
         T readValue;
         auto hasRead = TTypesMapping::Deserialize<T>(readValue, typeCode, data.data(), data.size());
         UNIT_ASSERT(hasRead);
+        UNIT_ASSERT_VALUES_EQUAL(originalValue, readValue);
 
-        TString recoveredStr;
-        if (hasRead) {
-            recoveredStr = TTypesMapping::ToString(readValue);
-        }
-
-        UNIT_ASSERT(value == readValue);
+        auto recoveredStr = TTypesMapping::ToString(readValue);
+        UNIT_ASSERT_VALUES_EQUAL(originalStr, recoveredStr);
     }
 }
 
 Y_UNIT_TEST_SUITE(StructLog) {
-    Y_UNIT_TEST(NativeTypes) { TestType<TString>({"", "a", "ab", "abc"}); }
+    Y_UNIT_TEST(NativeTypes) {
+        TestType<TString>({"", "a", "ab", "abc"});
+        TestType<ui8>({1, 2, 3, 4, 5});
+        TestType<i8>({1, 2, 3, 4, 5});
+        TestType<ui16>({1, 2, 3, 4, 5});
+        TestType<i16>({1, 2, 3, 4, 5});
+        TestType<ui32>({1, 2, 3, 4, 5});
+        TestType<i32>({1, 2, 3, 4, 5});
+        TestType<ui64>({1, 2, 3, 4, 5});
+        TestType<i64>({1, 2, 3, 4, 5});
+        TestType<bool>({true, false});
+        TestType<float>({1, 2, 3, 4, 5});
+        TestType<double>({1, 2, 3, 4, 5});
+        TestType<long double>({1, 2, 3, 4, 5});
+        TestType<TInstant>({TInstant::Now()});
+    }
+
+    template <typename T>
+    void CheckTypeLimits(const TString& minValue, const TString& maxValue) {
+        auto value = TTypesMapping::ToString(std::numeric_limits<T>::min());
+        UNIT_ASSERT_STRINGS_EQUAL(minValue, value);
+
+        value = TTypesMapping::ToString(std::numeric_limits<T>::max());
+        UNIT_ASSERT_STRINGS_EQUAL(maxValue, value);
+    }
+
+    Y_UNIT_TEST(NativeTypesLimits) {
+        CheckTypeLimits<ui16>("0", "65535");
+        CheckTypeLimits<i16>("-32768", "32767");
+        CheckTypeLimits<ui32>("0", "4294967295");
+        CheckTypeLimits<i32>("-2147483648", "2147483647");
+        CheckTypeLimits<ui64>("0", "18446744073709551615");
+        CheckTypeLimits<i64>("-9223372036854775808", "9223372036854775807");
+        CheckTypeLimits<float>("1.17549e-38", "3.40282e+38");
+        CheckTypeLimits<double>("2.225073859e-308", "1.797693135e+308");
+    }
+
+    #define TEST_MESSAGE_EXTRACT_TO_STRING(M, S)                          \
+        {                                                                 \
+            TStringValueExtractor extractor;                              \
+            auto stringValue = extractor.ExtractValue(M, {"value"});      \
+            UNIT_ASSERT(stringValue.has_value());                         \
+            UNIT_ASSERT_STRINGS_EQUAL(stringValue.value(), S);            \
+        }
+
+    Y_UNIT_TEST(NativeTypesExtractString) {
+
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), "3");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), "4");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), "5");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), "6");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), "7");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), "8");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", true}), "true");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", false}), "false");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), "abc");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), "abc");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "1.123");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "1.123");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "1.123");
+
+        int i = 0;
+        auto ptr = static_cast<void*>(&i);
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", ptr}), TStringBuilder() << ptr);
+
+        ptr = nullptr;
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", ptr}), TStringBuilder() << ptr);
+
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", TInstant::MicroSeconds(1789233327128336)}), "2026-09-12T17:15:27.128336Z");
+    }
+
+    template <typename T, typename A, bool OK>
+    void CheckNativeExtraction(const T& value) {
+        auto msg = YDB_LOG_CREATE_MESSAGE({"value", value});
+
+        using TExtractorType = TNativeValueExtractor<A>;
+        TExtractorType extractor;
+
+        auto result = extractor.ExtractValue(msg, {"value"});
+        UNIT_ASSERT_EQUAL(result.first, OK ? TExtractorType::TResultKind::Ok : TExtractorType::TResultKind::NoCast);
+        if constexpr(OK) {
+            UNIT_ASSERT(result.second.has_value());
+            UNIT_ASSERT_EQUAL(result.second.value(), static_cast<A>(value));
+        }
+    }
+
+    Y_UNIT_TEST(NativeTypesExtractNative) {
+        CheckNativeExtraction<ui8, ui64, true>(1);
+        CheckNativeExtraction<ui64, ui8, true>(1);
+        CheckNativeExtraction<ui8, TString, false>(1);
+        CheckNativeExtraction<TString, ui8, false>("1");
+
+        CheckNativeExtraction<float, i32, false>(1.5f);
+        CheckNativeExtraction<float, i32, true>(-128.0f);
+        CheckNativeExtraction<float, ui32, false>(-128.0f);
+        CheckNativeExtraction<double, ui8, false>(255.9);
+        CheckNativeExtraction<double, ui8, false>(-1.5);
+        CheckNativeExtraction<double, i8, false>(-1.5);
+        CheckNativeExtraction<float, i32, false>(std::numeric_limits<float>::infinity());
+        CheckNativeExtraction<float, i32, false>(-std::numeric_limits<float>::infinity());
+        CheckNativeExtraction<float, i32, false>(std::numeric_limits<float>::quiet_NaN());
+        CheckNativeExtraction<float, i32, false>(1e20f);
+        CheckNativeExtraction<double, ui8, true>(255.0);
+        CheckNativeExtraction<double, ui8, false>(256.0);
+        CheckNativeExtraction<double, i8, true>(-1.0);
+        CheckNativeExtraction<double, ui8, false>(-1.0);
+        CheckNativeExtraction<float, i32, true>(-1.0f);
+        CheckNativeExtraction<float, ui32, false>(-1.0f);
+        CheckNativeExtraction<float, i64, false>(std::ldexp(1.0f, 63));
+
+        CheckNativeExtraction<float, bool, true>(0.0f);
+        CheckNativeExtraction<float, bool, true>(1.0f);
+        CheckNativeExtraction<double, bool, true>(0.0);
+        CheckNativeExtraction<double, bool, true>(1.0);
+        CheckNativeExtraction<float, bool, false>(1.5f);
+        CheckNativeExtraction<float, bool, false>(2.0f);
+        CheckNativeExtraction<float, bool, false>(-1.0f);
+        CheckNativeExtraction<float, bool, false>(std::numeric_limits<float>::quiet_NaN());
+    }
 
     Y_UNIT_TEST(TestKeyName) {
         // compile vs compile
@@ -89,7 +206,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     Y_UNIT_TEST(SortValues) {
         {
-            auto message = YDB_LOG_CREATE_MESSAGE({"v1", 2});
+            auto message = YDB_LOG_CREATE_MESSAGE({"v1", "2"});
             UNIT_ASSERT(message.GetValuesCount() == 1);
             UNIT_ASSERT(message.GetValueIndex("v1") == 0);
             UNIT_ASSERT(!message.GetValueIndex("v2").has_value());
@@ -97,7 +214,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
             UNIT_ASSERT(message.GetValue<TString>("v1") == "2");
         }
         {
-            auto message = YDB_LOG_CREATE_MESSAGE({"v3", 3}, {"v2", 1}, {"v1", 2});
+            auto message = YDB_LOG_CREATE_MESSAGE({"v3", "3"}, {"v2", "1"}, {"v1", "2"});
             UNIT_ASSERT(message.GetValuesCount() == 3);
             UNIT_ASSERT(message.GetValueIndex("v1") == 0);
             UNIT_ASSERT(message.GetValueIndex("v2") == 1);
@@ -109,7 +226,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
             UNIT_ASSERT(message.GetValue<TString>("v3") == "3");
         }
         {
-            auto message = YDB_LOG_CREATE_MESSAGE({"v0", 1}, {"v2", 1}, {"v1", 1}, {"v1", 2}, {"v1", 3});
+            auto message = YDB_LOG_CREATE_MESSAGE({"v0", "1"}, {"v2", "1"}, {"v1", "1"}, {"v1", "2"}, {"v1", "3"});
             UNIT_ASSERT(message.GetValuesCount() == 3);
             UNIT_ASSERT(message.GetValueIndex("v0") == 0);
             UNIT_ASSERT(message.GetValueIndex("v1") == 1);
@@ -120,7 +237,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
             UNIT_ASSERT(message.GetValue<TString>("v2") == "1");
         }
         {
-            auto message = YDB_LOG_CREATE_MESSAGE({"v0", 1}, {"v2", 1}, {"v1", 3}, {"v1", 2}, {"v1", 1});
+            auto message = YDB_LOG_CREATE_MESSAGE({"v0", "1"}, {"v2", "1"}, {"v1", "3"}, {"v1", "2"}, {"v1", "1"});
             UNIT_ASSERT(message.GetValuesCount() == 3);
             UNIT_ASSERT(message.GetValueIndex("v0") == 0);
             UNIT_ASSERT(message.GetValueIndex("v1") == 1);
@@ -147,14 +264,15 @@ Y_UNIT_TEST_SUITE(StructLog) {
     Y_UNIT_TEST(ScanValues) {
         auto message = YDB_LOG_CREATE_MESSAGE({"string", static_cast<TString>("abc")});
 
-        message.ForEachTyped(TOverloaded{[](const std::vector<TKeyName>& name, const TString& value) {
-            UNIT_ASSERT(name.size() == 1 && name[0].ToString() == "string" && value == "abc");
+        message.ForEachTyped(TOverloaded{[](const std::vector<TKeyName>& name, const auto& value) {
+            auto stringValue = TTypesMapping::ToString(value);
+            UNIT_ASSERT(name.size() == 1 && name[0].ToString() == "string" && stringValue == "abc");
         }});
     }
 
     TString GetMessageString(const TStructuredMessage& message) {
         TString result;
-        auto append = [&result](const std::vector<TKeyName>& name, const auto& value) {
+        auto append = [&result](const std::vector<TKeyName>& name, const TString& value) {
             if (!result.empty()) result += ", ";
 
             bool addDot = false;
@@ -168,12 +286,13 @@ Y_UNIT_TEST_SUITE(StructLog) {
                 result += nameItem.ToString();
             }
             result += "=";
-            result += TTypesMapping::ToString(value);
+            result += value;
         };
 
-        message.ForEachTyped(TOverloaded{[&](const std::vector<TKeyName>& name, const TString& value) {
-            append(name, value);
-        }});
+        message.ForEachTyped([&](const std::vector<TKeyName>& name, const auto& value) {
+            auto stringValue = TTypesMapping::ToString(value);
+            append(name, stringValue);
+        });
         return result;
     }
 
@@ -197,7 +316,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
     Y_UNIT_TEST(CreateMessageNativeTypes) {
         // Native type values
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>('a')}), "value=a");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('a')}), "value=a");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('b')}), "value=b");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), "value=3");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), "value=4");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), "value=5");
@@ -210,6 +329,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "value=1.123");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "value=1.123");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TInstant::MicroSeconds(1789233327128336)}), "value=2026-09-12T17:15:27.128336Z");
 
         int i = 0;
         auto ptr = static_cast<void*>(&i);
@@ -505,7 +625,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         // Support types
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>('a')}), R"({"value":"a"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('a')}), R"({"value":"a"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('b')}), R"({"value":"b"})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), R"({"value":"3"})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), R"({"value":"4"})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), R"({"value":"5"})");
@@ -565,6 +685,38 @@ Y_UNIT_TEST_SUITE(StructLog) {
             ),
             R"({"value":"1","_value":{"value":"1"},"xvalue":{"value":"10"}})"
         );
+
+        TEST_JSON_MESSAGE(
+            YDB_LOG_CREATE_MESSAGE(
+                {"value", TInstant::MicroSeconds(1789233327128336)}
+            ),
+            R"({"value":"2026-09-12T17:15:27.128336Z"})"
+        );
     }
+
+    template <typename T>
+    void CheckJsonTypeLimits(const TString& required) {
+        auto message = YDB_LOG_CREATE_MESSAGE(
+            {"min", std::numeric_limits<T>::min()},
+            {"max", std::numeric_limits<T>::max()});
+
+        NJsonWriter::TBuf jsonWriter;
+        TJsonWriter().Write(jsonWriter, message);
+
+        UNIT_ASSERT_STRINGS_EQUAL(required, jsonWriter.Str());
+    }
+
+    Y_UNIT_TEST(GenerateJsonLimits) {
+        CheckJsonTypeLimits<ui16>(R"({"max":"65535","min":"0"})");
+        CheckJsonTypeLimits<i16>(R"({"max":"32767","min":"-32768"})");
+        CheckJsonTypeLimits<ui32>(R"({"max":"4294967295","min":"0"})");
+        CheckJsonTypeLimits<i32>(R"({"max":"2147483647","min":"-2147483648"})");
+        CheckJsonTypeLimits<ui64>(R"({"max":"18446744073709551615","min":"0"})");
+        CheckJsonTypeLimits<i64>(R"({"max":"9223372036854775807","min":"-9223372036854775808"})");
+        CheckJsonTypeLimits<float>(R"({"max":"3.40282e+38","min":"1.17549e-38"})");
+        CheckJsonTypeLimits<double>(R"({"max":"1.797693135e+308","min":"2.225073859e-308"})");
+    }
+
+
 }
 }  // namespace NActors::NStructuredLog

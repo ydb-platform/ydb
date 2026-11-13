@@ -1,5 +1,6 @@
 #include "kqp_opt_phy_rules.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
@@ -9,6 +10,8 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <yql/essentials/core/yql_opt_utils.h>
+
+#include <util/generic/algorithm.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -136,8 +139,6 @@ TExprBase KqpRewriteReadTableSysView(TExprBase node, TExprContext& ctx, const TK
 }
 
 TExprBase KqpRewriteReadTableFullText(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    Y_UNUSED(kqpCtx);
-
     auto stage = node.Cast<TDqStage>();
 
     TMaybeNode<TKqpReadTableFullTextIndex> physicalRead;
@@ -153,6 +154,14 @@ TExprBase KqpRewriteReadTableFullText(TExprBase node, TExprContext& ctx, const T
     if (!physicalRead) {
         return node;
     }
+
+    const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, physicalRead.Cast().Table().Path());
+    // Only primary keys and relevance need no main-table document lookup.
+    // Both EXPLAIN and execution use this source setting.
+    const bool mainTableCovered = AllOf(physicalRead.Cast().Columns(), [&](const TCoAtom& column) {
+        return column.Value() == NTableIndex::NFulltext::FullTextRelevanceColumn
+            || IsIn(tableDesc.Metadata->KeyColumnNames, column.StringValue());
+    });
 
     TVector<TExprBase> inputs;
     TVector<TCoArgument> args;
@@ -183,6 +192,7 @@ TExprBase KqpRewriteReadTableFullText(TExprBase node, TExprContext& ctx, const T
                 .Query(physicalRead.Cast().Query())
                 .QueryColumns(physicalRead.Cast().QueryColumns())
                 .Settings(physicalRead.Cast().Settings())
+                .MainTableCovered().Build(mainTableCovered ? "true" : "false")
             .Build()
             .DataSource<TCoDataSource>()
                 .Category<TCoAtom>().Value(KqpFullTextSourceName).Build()

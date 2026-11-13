@@ -111,6 +111,47 @@ EPart ClassifyFallbackPart(const TIssue& group, const TIssuesById& issues) {
     return failed ? EPart::FallbackRed : EPart::Incomplete;
 }
 
+// The group is already RED; every contributing reason must prove device I/O
+// failure. One device error mixed with transport loss or replication need not
+// cross the group's erasure threshold and cannot override a live node quorum.
+bool HasStorageFailure(const TIssue& group, const TIssuesById& issues) {
+    const auto find = [&](const TString& id) -> const TIssue* {
+        const auto it = issues.find(id);
+        return it == issues.end() ? nullptr : it->second;
+    };
+    if (group.type() != "STORAGE_GROUP" || group.reason().empty() || find(group.id()) != &group) {
+        return false;
+    }
+    const auto& pile = group.location().storage().pool().group().pile().name();
+    const auto samePile = [&](const TIssue& issue) {
+        const auto& location = issue.location().storage().pool().group();
+        return location.has_pile() && location.pile().name() == pile;
+    };
+    for (const auto& id : group.reason()) {
+        const auto* disk = find(id);
+        if (!disk || disk->type() != "VDISK" || disk->status() != TStatus::RED
+            || disk->reason().empty() || !samePile(*disk) || !disk->location().storage().node().id())
+        {
+            return false;
+        }
+        for (const auto& reason : disk->reason()) {
+            const auto* pdisk = find(reason);
+            if (!pdisk || pdisk->type() != "PDISK" || pdisk->status() != TStatus::RED
+                || pdisk->message() != "PDisk state is DeviceIoError" || !pdisk->reason().empty()
+                || !samePile(*pdisk)
+                || pdisk->location().storage().node().id() != disk->location().storage().node().id())
+            {
+                return false;
+            }
+            const auto& devices = pdisk->location().storage().pool().group().vdisk().pdisk();
+            if (devices.size() != 1 || devices.Get(0).id().empty()) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 int Rank(EPart part) {
     return part == EPart::ReplicatingPart ? 0 : part == EPart::Incomplete ? 1 : 2;
 }
@@ -200,6 +241,11 @@ TSelfCheckClassification ClassifySelfCheck(const Ydb::Monitoring::SelfCheckResul
             ? ClassifyFallbackPart(issue, issues)
             : ClassifyBscPart(issue, issues);
         AddPart(classification, group.pile().name(), part);
+        if (classification.Mode == ESelfCheckMode::Fallback && !classification.Truncated && part == EPart::FallbackRed
+            && HasStorageFailure(issue, issues))
+        {
+            classification.StorageFailures.insert(group.pile().name());
+        }
     }
     return classification;
 }
@@ -359,6 +405,7 @@ THealthEvaluation EvaluatePiles(
         auto& verdict = evaluation.Piles[pile];
         bool outsideFallback = false;
         bool allFallbackRed = true;
+        bool allStorageFailed = true;
         TMonotonic newestFallback;
         for (const auto* reply : fallback) {
             const auto& responder = FindEndpoint(replies, reply->Endpoint)->Pile;
@@ -369,6 +416,7 @@ THealthEvaluation EvaluatePiles(
                 outsideFallback = true;
                 allFallbackRed &= reply->ResponderPile == responder && !reply->Classification.Truncated
                     && Part(*reply, pile) == EPart::FallbackRed;
+                allStorageFailed &= reply->Classification.StorageFailures.contains(pile);
                 newestFallback = std::max(newestFallback, reply->SentAt);
             }
         }
@@ -423,17 +471,22 @@ THealthEvaluation EvaluatePiles(
             verdict.Verdict = EPileVerdict::Failed;
             verdict.NewestEvidenceSentAt = newestBsc;
             verdict.Reasons.push_back("Every BSC-mode reply reports a RED group part");
+        } else if (bscHost && pile == *bscHost && bsc.empty() && outsideFallback && allFallbackRed
+            && (!verdict.SelfQuorum || allStorageFailed))
+        {
+            // A retained settled report can keep Lost evidence frozen while
+            // newer reports are binding. Prefer the independently qualified
+            // fallback failure so fresh samples can advance its confirmation.
+            verdict.Verdict = EPileVerdict::Failed;
+            verdict.FailureEvidence = allStorageFailed ? EFailureEvidence::Storage : EFailureEvidence::Fallback;
+            verdict.NewestEvidenceSentAt = newestFallback;
+            verdict.Reasons.push_back(allStorageFailed
+                ? "Every current outside fallback reply proves a RED static group caused by PDisk DeviceIoError"
+                : "Every current outside fallback reply reports a decisive RED static group part");
         } else if (outside && outsideLost && !verdict.SelfQuorum) {
             verdict.Verdict = EPileVerdict::Lost;
             verdict.NewestEvidenceSentAt = newestLost;
             verdict.Reasons.push_back("Outside reports lack node quorum and no inside report claims quorum");
-        } else if (bscHost && pile == *bscHost && bsc.empty() && !verdict.SelfQuorum
-            && outsideFallback && allFallbackRed)
-        {
-            verdict.Verdict = EPileVerdict::Failed;
-            verdict.FallbackFailure = true;
-            verdict.NewestEvidenceSentAt = newestFallback;
-            verdict.Reasons.push_back("Every current outside fallback reply reports a decisive RED static group part");
         } else if (participating && allRedOrReplicating && anyReplicating) {
             verdict.Verdict = EPileVerdict::Replicating;
             verdict.NewestEvidenceSentAt = newestBsc;

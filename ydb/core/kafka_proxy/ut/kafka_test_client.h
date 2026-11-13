@@ -6,7 +6,11 @@
 #include <ydb/core/kafka_proxy/kafka_topic_partition.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
 
+#include <util/network/socket.h>
 #include <util/system/tempfile.h>
+
+#include <memory>
+#include <string_view>
 
 using namespace NKafka;
 
@@ -51,16 +55,25 @@ class TKafkaTestClient {
     public:
         TKafkaTestClient(ui16 port, const TString clientName = "TestClient");
 
+        // Connects over TLS and presents a client certificate (mTLS)
+        TKafkaTestClient(ui16 port, std::string_view clientCertPem, std::string_view clientKeyPem,
+                         std::string_view caCertPem, const TString clientName = "TestClient");
+        ~TKafkaTestClient();
+
         void SetSocketTimeout(ui32 seconds);
+
+        SOCKET GetRawSocket() const {
+            return (SOCKET)Socket;
+        }
 
         template <std::derived_from<TApiMessage> T>
         void WriteToSocket(TRequestHeaderData& header, T& request) {
-            Write(So, &header, &request);
+            Write(*So, &header, &request);
         }
 
         template <std::derived_from<TApiMessage> T>
         TMessagePtr<T> ReadResponse(TRequestHeaderData& header) {
-            return Read<T>(Si, &header);
+            return Read<T>(*Si, &header);
         }
 
         TMessagePtr<TApiVersionsResponseData> ApiVersions(bool silent = false);
@@ -174,18 +187,23 @@ class TKafkaTestClient {
 
     protected:
         ui32 NextCorrelation();
-        void Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version, bool silent = false);
-        void Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request, bool silent = false);
+        void Write(IOutputStream& so, TApiMessage* request, TKafkaVersion version, bool silent = false);
+        void Write(IOutputStream& so, TRequestHeaderData* header, TApiMessage* request, bool silent = false);
         template <std::derived_from<TApiMessage> T>
-        TMessagePtr<T> Read(TSocketInput& si, TRequestHeaderData* requestHeader);
+        TMessagePtr<T> Read(IInputStream& si, TRequestHeaderData* requestHeader);
         void Print(const TBuffer& buffer);
         void FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics);
 
     private:
+        struct TSslConnection;
+
         TNetworkAddress Addr;
         TSocket Socket;
-        TSocketOutput So;
-        TSocketInput Si;
+        TSocketOutput PlainSo;
+        TSocketInput PlainSi;
+        IOutputStream* So;
+        IInputStream* Si;
+        std::unique_ptr<TSslConnection> Ssl;
 
         ui32 Correlation;
         TString ClientName;

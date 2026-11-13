@@ -14,6 +14,8 @@
 
 namespace NKikimr::NOlap::NTest {
 
+inline constexpr ui32 TestPortionColumnBlobBytes = 100;
+
 inline TIndexInfo MakePortionTestIndexInfo() {
     THashMap<ui32, NTable::TColumn> columns = { { 0, NTable::TColumn("pk", 0, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), "") } };
     std::vector<ui32> pkIds = { 0 };
@@ -46,7 +48,7 @@ inline TPortionMetaConstructor MakeTestPortionMeta(const ui64 startKey, const ui
     metaProto.SetCompactionLevel(0);
     metaProto.SetRecordsCount(recordsCount);
     metaProto.SetColumnRawBytes(100);
-    metaProto.SetColumnBlobBytes(100);
+    metaProto.SetColumnBlobBytes(TestPortionColumnBlobBytes);
     metaProto.SetIndexRawBytes(0);
     metaProto.SetIndexBlobBytes(blobStorageIndexBytes);
     if (blobStorageIndexBytes) {

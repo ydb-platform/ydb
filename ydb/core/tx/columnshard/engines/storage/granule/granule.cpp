@@ -102,11 +102,11 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
 }
 
 void TGranuleMeta::RefreshDataCounters() const {
-    const NColumnShard::TGranuleDataStats& stats = GetDataStats();
+    const NColumnShard::TDataStatsByStorage& stats = GetDataStats();
     Counters.OnPortionsDataRefresh(stats.GetWritten(), stats.GetCompacted());
 }
 
-const NColumnShard::TGranuleDataStats& TGranuleMeta::GetDataStats() const {
+const NColumnShard::TDataStatsByStorage& TGranuleMeta::GetDataStats() const {
     return DataStats->GetGranuleStats(PathId);
 }
 

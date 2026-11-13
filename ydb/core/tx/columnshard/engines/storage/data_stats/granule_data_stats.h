@@ -52,26 +52,27 @@ public:
     }
 };
 
-class TGranuleDataStats {
+class TDataStatsByStorage {
 private:
     THashMap<TString, TStorageStats> Storages;
 
-public:
-    TStorageStats& GetOrCreateStorageStats(const TString& storageId) {
-        return Storages[storageId];
-    }
-
-    TStorageStats& GetStorageStatsVerified(const TString& storageId) {
-        auto it = Storages.find(storageId);
-        AFL_VERIFY(it != Storages.end())("storage_id", storageId);
-        return it->second;
-    }
-
+    TStorageStats& GetStorageVerified(const TString& storageId);
     void EraseStorageIfEmpty(const TString& storageId);
+
+public:
+    // blobStorageSmallBlobBytes: the portion's bytes in the blob storage if they are a small blob, otherwise 0
+    void AddPortion(const NOlap::TPortionInfo& portion, const ui64 blobStorageSmallBlobBytes);
+    void RemovePortion(const NOlap::TPortionInfo& portion, const ui64 blobStorageSmallBlobBytes);
 
     bool IsEmpty() const {
         return Storages.empty();
     }
+
+    const THashMap<TString, TStorageStats>& GetStorages() const {
+        return Storages;
+    }
+
+    const TStorageStats& GetStorageStats(const TString& storageId) const;
 
     // without a storage id: summed over every storage
     NOlap::TSimplePortionsGroupInfo GetWritten(const std::optional<TString>& storageId = std::nullopt) const;

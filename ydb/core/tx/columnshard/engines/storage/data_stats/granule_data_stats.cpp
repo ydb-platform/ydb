@@ -6,6 +6,10 @@ namespace NKikimr::NColumnShard {
 
 namespace {
 
+const TString& GetBlobStorageId() {
+    return NOlap::NBlobOperations::TGlobal::DefaultStorageId;
+}
+
 template <class TGetGroup>
 NOlap::TSimplePortionsGroupInfo SumGroups(
     const THashMap<TString, TStorageStats>& storages, const std::optional<TString>& storageId, const TGetGroup& getGroup) {
@@ -49,38 +53,67 @@ bool TStorageStats::IsEmpty() const {
     return Written.IsEmpty() && Compacted.IsEmpty() && Removed.IsEmpty() && !SmallBlobsBytes && !SmallBlobsCount;
 }
 
-void TGranuleDataStats::EraseStorageIfEmpty(const TString& storageId) {
+void TDataStatsByStorage::AddPortion(const NOlap::TPortionInfo& portion, const ui64 blobStorageSmallBlobBytes) {
+    Storages[portion.GetTierNameDef(GetBlobStorageId())].AddPortion(portion);
+    if (blobStorageSmallBlobBytes) {
+        Storages[GetBlobStorageId()].AddSmallBlob(blobStorageSmallBlobBytes);
+    }
+}
+
+void TDataStatsByStorage::RemovePortion(const NOlap::TPortionInfo& portion, const ui64 blobStorageSmallBlobBytes) {
+    const TString storageId = portion.GetTierNameDef(GetBlobStorageId());
+    GetStorageVerified(storageId).RemovePortion(portion);
+    if (blobStorageSmallBlobBytes) {
+        GetStorageVerified(GetBlobStorageId()).RemoveSmallBlob(blobStorageSmallBlobBytes);
+        EraseStorageIfEmpty(GetBlobStorageId());
+    }
+    EraseStorageIfEmpty(storageId);
+}
+
+TStorageStats& TDataStatsByStorage::GetStorageVerified(const TString& storageId) {
+    auto it = Storages.find(storageId);
+    AFL_VERIFY(it != Storages.end())("storage_id", storageId);
+    return it->second;
+}
+
+void TDataStatsByStorage::EraseStorageIfEmpty(const TString& storageId) {
     auto it = Storages.find(storageId);
     if (it != Storages.end() && it->second.IsEmpty()) {
         Storages.erase(it);
     }
 }
 
-NOlap::TSimplePortionsGroupInfo TGranuleDataStats::GetWritten(const std::optional<TString>& storageId) const {
+const TStorageStats& TDataStatsByStorage::GetStorageStats(const TString& storageId) const {
+    static const TStorageStats empty;
+    auto it = Storages.find(storageId);
+    return it == Storages.end() ? empty : it->second;
+}
+
+NOlap::TSimplePortionsGroupInfo TDataStatsByStorage::GetWritten(const std::optional<TString>& storageId) const {
     return SumGroups(Storages, storageId, [](const TStorageStats& storage) {
         return storage.GetWritten();
     });
 }
 
-NOlap::TSimplePortionsGroupInfo TGranuleDataStats::GetCompacted(const std::optional<TString>& storageId) const {
+NOlap::TSimplePortionsGroupInfo TDataStatsByStorage::GetCompacted(const std::optional<TString>& storageId) const {
     return SumGroups(Storages, storageId, [](const TStorageStats& storage) {
         return storage.GetCompacted();
     });
 }
 
-NOlap::TSimplePortionsGroupInfo TGranuleDataStats::GetRemoved(const std::optional<TString>& storageId) const {
+NOlap::TSimplePortionsGroupInfo TDataStatsByStorage::GetRemoved(const std::optional<TString>& storageId) const {
     return SumGroups(Storages, storageId, [](const TStorageStats& storage) {
         return storage.GetRemoved();
     });
 }
 
-NOlap::TSimplePortionsGroupInfo TGranuleDataStats::GetAll(const std::optional<TString>& storageId) const {
+NOlap::TSimplePortionsGroupInfo TDataStatsByStorage::GetAll(const std::optional<TString>& storageId) const {
     return SumGroups(Storages, storageId, [](const TStorageStats& storage) {
         return storage.GetAll();
     });
 }
 
-NOlap::TSmallBlobsStat TGranuleDataStats::GetSmallBlobs(const std::optional<TString>& storageId) const {
+NOlap::TSmallBlobsStat TDataStatsByStorage::GetSmallBlobs(const std::optional<TString>& storageId) const {
     NOlap::TSmallBlobsStat result;
     for (const auto& [id, storage] : Storages) {
         if (!storageId || id == *storageId) {

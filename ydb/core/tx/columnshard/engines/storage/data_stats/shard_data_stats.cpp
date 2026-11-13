@@ -48,17 +48,9 @@ TShardDataStats::~TShardDataStats() {
 }
 
 void TShardDataStats::AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) {
-    auto& granule = Granules[portion->GetPathId()];
-    const TString& storageId = portion->GetTierNameDef(GetBlobStorageId());
-    auto& granuleCounters = granule.GetOrCreateStorageStats(storageId);
-    auto& storageCounters = StorageStats[storageId];
-    granuleCounters.AddPortion(*portion);
-    storageCounters.AddPortion(*portion);
-
-    if (const ui64 bytes = portion->GetSmallBlobBytesInBlobStorage(GetSmallBlobThreshold(GetBlobStorageId()))) {
-        granule.GetOrCreateStorageStats(GetBlobStorageId()).AddSmallBlob(bytes);
-        StorageStats[GetBlobStorageId()].AddSmallBlob(bytes);
-    }
+    const ui64 smallBlobBytes = portion->GetSmallBlobBytesInBlobStorage(GetSmallBlobThreshold(GetBlobStorageId()));
+    Granules[portion->GetPathId()].AddPortion(*portion, smallBlobBytes);
+    Total.AddPortion(*portion, smallBlobBytes);
 
     SchemaVersionsInUse[portion->GetSchemaVersionVerified()].Inc();
     PortionsMetadataRamBytes += portion->GetMetadataMemorySize();
@@ -67,25 +59,14 @@ void TShardDataStats::AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& por
 }
 
 void TShardDataStats::RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) {
-    auto granule_it = Granules.find(portion->GetPathId());
-    AFL_VERIFY(granule_it != Granules.end())("path_id", portion->GetPathId());
-    auto& [pathId, granuleStats] = *granule_it;
-    const TString& storageId = portion->GetTierNameDef(GetBlobStorageId());
-    auto& granuleCounters = granuleStats.GetStorageStatsVerified(storageId);
-    auto& storageCounters = StorageStats.at(storageId);
-    granuleCounters.RemovePortion(*portion);
-    storageCounters.RemovePortion(*portion);
-
-    if (const ui64 bytes = portion->GetSmallBlobBytesInBlobStorage(SmallBlobThresholds.at(GetBlobStorageId()))) {
-        granuleStats.GetStorageStatsVerified(GetBlobStorageId()).RemoveSmallBlob(bytes);
-        StorageStats.at(GetBlobStorageId()).RemoveSmallBlob(bytes);
+    auto granule = Granules.find(portion->GetPathId());
+    AFL_VERIFY(granule != Granules.end())("path_id", portion->GetPathId());
+    const ui64 smallBlobBytes = portion->GetSmallBlobBytesInBlobStorage(GetSmallBlobThreshold(GetBlobStorageId()));
+    granule->second.RemovePortion(*portion, smallBlobBytes);
+    if (granule->second.IsEmpty()) {
+        Granules.erase(granule);
     }
-    for (const auto& id : { storageId, GetBlobStorageId() }) {
-        granuleStats.EraseStorageIfEmpty(id);
-    }
-    if (granuleStats.IsEmpty()) {
-        Granules.erase(granule_it);
-    }
+    Total.RemovePortion(*portion, smallBlobBytes);
 
     auto schemaVersion = SchemaVersionsInUse.find(portion->GetSchemaVersionVerified());
     AFL_VERIFY(schemaVersion != SchemaVersionsInUse.end());
@@ -106,8 +87,8 @@ ui64 TShardDataStats::GetSmallBlobThreshold(const TString& storageId) {
     return it->second;
 }
 
-const TGranuleDataStats& TShardDataStats::GetGranuleStats(const TInternalPathId pathId) const {
-    static const TGranuleDataStats empty;
+const TDataStatsByStorage& TShardDataStats::GetGranuleStats(const TInternalPathId pathId) const {
+    static const TDataStatsByStorage empty;
     auto it = Granules.find(pathId);
     return it == Granules.end() ? empty : it->second;
 }
@@ -119,7 +100,7 @@ bool TShardDataStats::HasSchemaVersion(const ui64 fromVersion, const ui64 versio
 }
 
 void TShardDataStats::FillTableStats(const TInternalPathId pathId, NKikimrTableStats::TTableStats& tableStats) const {
-    const TGranuleDataStats& granule = GetGranuleStats(pathId);
+    const TDataStatsByStorage& granule = GetGranuleStats(pathId);
     FillPortionStats(tableStats, granule.GetAll(GetBlobStorageId()), granule.GetSmallBlobs(GetBlobStorageId()));
 }
 
@@ -180,10 +161,9 @@ void TShardDataStats::UpdateTabletCounters(const TTabletCountersHandle& counters
 
     const NOlap::TSimplePortionsGroupInfo written = blobStorageStats.GetWritten();
     const NOlap::TSimplePortionsGroupInfo compacted = blobStorageStats.GetCompacted();
-    NOlap::TSimplePortionsGroupInfo removed;
+    const NOlap::TSimplePortionsGroupInfo removed = Total.GetRemoved();
     NOlap::TSimplePortionsGroupInfo evicted;
-    for (const auto& [storageId, storage] : StorageStats) {
-        removed += storage.GetRemoved();
+    for (const auto& [storageId, storage] : Total.GetStorages()) {
         if (storageId != GetBlobStorageId()) {
             evicted += storage.GetWritten() + storage.GetCompacted();
         }
@@ -207,12 +187,6 @@ void TShardDataStats::UpdateTabletCounters(const TTabletCountersHandle& counters
 
 ui64 TShardDataStats::GetBlobStorageBytes() const {
     return GetStorageStats(GetBlobStorageId()).GetAll().GetBlobBytes();
-}
-
-const TStorageStats& TShardDataStats::GetStorageStats(const TString& storageId) const {
-    static const TStorageStats empty;
-    auto it = StorageStats.find(storageId);
-    return it == StorageStats.end() ? empty : it->second;
 }
 
 }   // namespace NKikimr::NColumnShard

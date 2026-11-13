@@ -32,8 +32,8 @@ private:
     const ui64 TabletId;
     const TEngineLogsCounters Counters;
 
-    THashMap<TInternalPathId, TGranuleDataStats> Granules;
-    THashMap<TString, TStorageStats> StorageStats;
+    THashMap<TInternalPathId, TDataStatsByStorage> Granules;
+    TDataStatsByStorage Total;
     THashMap<TString, ui64> SmallBlobThresholds;
     // RAM taken by the metadata of the shard's portions; writes are rejected when the sum over all shards reaches a limit
     i64 PortionsMetadataRamBytes = 0;
@@ -56,8 +56,12 @@ public:
     void AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
     void RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
 
-    const TGranuleDataStats& GetGranuleStats(const TInternalPathId pathId) const;
-    const TStorageStats& GetStorageStats(const TString& storageId) const;
+    const TDataStatsByStorage& GetGranuleStats(const TInternalPathId pathId) const;
+
+    const TStorageStats& GetStorageStats(const TString& storageId) const {
+        return Total.GetStorageStats(storageId);
+    }
+
     bool HasSchemaVersion(const ui64 fromVersion, const ui64 version) const;
 
     static ui64 GetAllShardsPortionsMetadataRamBytes() {

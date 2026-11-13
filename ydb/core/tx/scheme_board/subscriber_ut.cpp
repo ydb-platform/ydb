@@ -609,6 +609,82 @@ TActorId GetFirstParticipatingReplica(const TVector<TStateStorageInfo::TRingGrou
 
 Y_UNIT_TEST_SUITE(TSubscriberSinglePathUpdateTest) {
 
+    Y_UNIT_TEST(EmptySelectionWaitsForCorrectedConfiguration) {
+        for (bool activeBeforeEmpty : {false, true}) {
+            TTestBasicRuntime runtime;
+            SetupMinimalRuntime(runtime);
+            runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+
+            constexpr int DomainId = 1;
+            constexpr TPathId PathId = TPathId(DomainId, 1);
+            constexpr const char* Path = "TestPath";
+            constexpr ui64 oldSyncCookie = 1;
+            constexpr ui64 syncCookie = 2;
+            const auto stateStorageInfo = GetStateStorageInfo(runtime);
+            const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+            const TActorId edge = runtime.AllocateEdgeActor();
+            const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+            TBlockEvents<TEvStateStorage::TEvResolveReplicasList> resolveBlocker(runtime, [&](const auto& ev) {
+                return ev->Recipient == subscriber;
+            });
+            TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const auto& ev) {
+                return ev->Recipient == subscriber;
+            });
+            TBlockEvents<NInternalEvents::TEvSyncVersionResponse> syncResponseBlocker(runtime, [&](const auto& ev) {
+                return ev->Recipient == subscriber;
+            });
+            runtime.WaitFor("initial replica resolution", [&] {
+                return resolveBlocker.size() == 1;
+            }, TDuration::Seconds(10));
+
+            if (activeBeforeEmpty) {
+                resolveBlocker.Unblock(1);
+                runtime.WaitFor("initial replica notifications", [&] {
+                    return notificationBlocker.size() == participatingReplicas;
+                }, TDuration::Seconds(10));
+                notificationBlocker.Unblock();
+                UNIT_ASSERT(runtime.GrabEdgeEvent<TEvNotifyDelete>(edge, TDuration::Seconds(10)));
+
+                runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, oldSyncCookie));
+                runtime.WaitFor("pending sync responses", [&] {
+                    return syncResponseBlocker.size() == participatingReplicas;
+                }, TDuration::Seconds(10));
+
+                const auto replica = GetFirstParticipatingReplica(stateStorageInfo->RingGroups);
+                HandshakeReplica(runtime, replica, edge);
+                runtime.Send(replica, edge, GenerateUpdate(GenerateDescribe(Path, PathId, 1)));
+                runtime.WaitFor("pending path notification", [&] {
+                    return !notificationBlocker.empty();
+                }, TDuration::Seconds(10));
+            }
+
+            runtime.Send(subscriber, edge, new TEvStateStorage::TEvResolveReplicasList());
+            runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, syncCookie));
+            UNIT_ASSERT_VALUES_EQUAL(CountEvents<NInternalEvents::TEvSyncResponse>(runtime, false, edge), 0);
+
+            // Messages from the previous proxies must not acknowledge a sync or
+            // publish a path update while the selection is unavailable.
+            notificationBlocker.Unblock();
+            syncResponseBlocker.Stop().Unblock();
+            UNIT_ASSERT_VALUES_EQUAL(CountEvents<TEvNotifyUpdate>(runtime, false, edge), 0);
+            UNIT_ASSERT_VALUES_EQUAL(CountEvents<NInternalEvents::TEvSyncResponse>(runtime, false, edge), 0);
+
+            notificationBlocker.Stop();
+            if (activeBeforeEmpty) {
+                resolveBlocker.Stop();
+                runtime.Send(new IEventHandle(MakeStateStorageProxyID(), subscriber,
+                    new TEvStateStorage::TEvResolveSchemeBoard(Path)));
+            } else {
+                resolveBlocker.Stop().Unblock();
+            }
+            const auto response = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(response->Cookie, syncCookie);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Path, Path);
+            UNIT_ASSERT(!response->Get()->Partial);
+            UNIT_ASSERT_VALUES_EQUAL(CountEvents<NInternalEvents::TEvSyncResponse>(runtime, false, edge), 0);
+        }
+    }
+
     void TestSinglePathUpdate(TVector<TStateStorageInfo::TRingGroup>&& ringGroupsConfiguration) {
         TTestBasicRuntime runtime;
         SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper(ringGroupsConfiguration, ReplicasInRingGroup));

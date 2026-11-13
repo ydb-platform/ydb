@@ -2107,6 +2107,51 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
     }
 
+    Y_UNIT_TEST(StateStorageSelectionBoundsValidation) {
+        for (ui32 section : xrange<ui32>(3)) {
+            for (bool legacyNodes : {false, true}) {
+                NKikimrBlobStorage::TStorageConfig config;
+                auto* ss = section == 0 ? config.MutableStateStorageConfig()
+                    : section == 1 ? config.MutableStateStorageBoardConfig()
+                    : config.MutableSchemeBoardConfig();
+                auto* group = legacyNodes ? ss->MutableRing() : ss->AddRingGroups();
+                for (ui32 node : xrange<ui32>(1, 4)) {
+                    if (legacyNodes) {
+                        group->AddNode(node);
+                    } else {
+                        auto* ring = group->AddRing();
+                        ring->AddNode(node);
+                        ring->AddNode(node + 3);
+                        ring->AddNode(node + 6);
+                    }
+                }
+                for (ui32 nToSelect : {0u, 9u, 3u}) {
+                    group->SetNToSelect(nToSelect);
+                    // Historical bad data must remain readable by administrative APIs.
+                    UNIT_ASSERT(!NStorage::ValidateConfig(config));
+                    auto proposed = config;
+                    const auto error = NStorage::TDistributedConfigKeeper::TransformConfigBeforeCommit(&proposed);
+                    if (nToSelect == 3) {
+                        UNIT_ASSERT_C(!error, error.value_or(""));
+                    } else {
+                        UNIT_ASSERT(error);
+                        UNIT_ASSERT_STRING_CONTAINS(*error, "must be in [1, 3]");
+                        auto corrected = config;
+                        corrected.SetGeneration(2);
+                        corrected.MutablePrevConfig()->CopyFrom(config);
+                        auto* fixedSS = section == 0 ? corrected.MutableStateStorageConfig()
+                            : section == 1 ? corrected.MutableStateStorageBoardConfig()
+                            : corrected.MutableSchemeBoardConfig();
+                        auto* fixedGroup = legacyNodes ? fixedSS->MutableRing() : fixedSS->MutableRingGroups(0);
+                        fixedGroup->SetNToSelect(3);
+                        UNIT_ASSERT(!NStorage::TDistributedConfigKeeper::TransformConfigBeforeCommit(&corrected));
+                        UNIT_ASSERT(!NStorage::ValidateConfigUpdate(config, corrected));
+                    }
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(InlinePileStaticGroupValidation) {
         auto config = MakeStorageConfig(17, 1, {1, 2, 3, 4, 5, 6, 7, 8}, TBlobStorageGroupType::Erasure4Plus2Block);
         MakeInlinePile(config);

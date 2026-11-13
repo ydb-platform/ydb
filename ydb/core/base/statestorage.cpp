@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <util/digest/city.h>
 #include <util/generic/xrange.h>
 #include <util/generic/mem_copy.h>
@@ -62,7 +64,7 @@ ui64 GetSchemeBoardSelectionKey(const TPathId& pathId) {
     return pathId.Hash();
 }
 
-void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui32 ringGroupIdx) const {
+bool TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui32 ringGroupIdx) const {
     const ui32 hash = StateStorageHashFromTabletID(tabletId);
 
     Y_ABORT_UNLESS(ringGroupIdx < RingGroups.size());
@@ -70,7 +72,12 @@ void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui3
     auto& ringGroup = RingGroups[ringGroupIdx];
     const ui32 total = ringGroup.Rings.size();
 
-    Y_ABORT_UNLESS(ringGroup.NToSelect <= total);
+    if (!ringGroup.NToSelect || ringGroup.NToSelect > total) {
+        YDB_LOG_CRIT_COMP(NKikimrServices::STATESTORAGE, "Invalid state storage NToSelect; refusing replica selection",
+            {"ringGroup", ringGroupIdx}, {"nToSelect", ringGroup.NToSelect}, {"rings", total});
+        selection->Sz = 0;
+        return false;
+    }
 
     if (selection->Sz < ringGroup.NToSelect) {
         selection->Status.Reset(new TStateStorageInfo::TSelection::EStatus[ringGroup.NToSelect]);
@@ -90,6 +97,7 @@ void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui3
             selection->SelectedReplicas[idx++] = ringGroup.Rings[ringIdx].SelectReplica(hash);
         }
     }
+    return true;
 }
 
 TActorId TStateStorageInfo::TRing::SelectReplica(ui32 hash) const {
@@ -344,6 +352,29 @@ ERingGroupState GetRingGroupState(const NKikimrConfig::TStateStorageConfig::TRin
             Y_ABORT("Unsupported ring group pile state");
     }
 }
+
+TString ValidateStateStorageConfigSelection(const NKikimrConfig::TStateStorageConfig& config) {
+    const auto validate = [](const auto& group, const TString& path) -> TString {
+        const ui32 rings = group.RingSize() ? group.RingSize() : group.NodeSize();
+        if (!group.GetNToSelect() || group.GetNToSelect() > rings) {
+            return TStringBuilder() << path << ".NToSelect# " << group.GetNToSelect()
+                << " must be in [1, " << rings << "] (number of configured rings)";
+        }
+        return {};
+    };
+    if (config.HasRing()) {
+        if (TString error = validate(config.GetRing(), "Ring")) {
+            return error;
+        }
+    }
+    for (ui32 i = 0; i < config.RingGroupsSize(); ++i) {
+        if (TString error = validate(config.GetRingGroups(i), TStringBuilder() << "RingGroups[" << i << ']')) {
+            return error;
+        }
+    }
+    return {};
+}
+
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const TString& namePrefix,
         const NKikimrConfig::TStateStorageConfig& config) {
     char name[TActorId::MaxServiceIDLength];

@@ -10,6 +10,15 @@
 namespace NKikimr {
 namespace {
 
+void InitializeStateStorageRuntime(TTestActorRuntimeBase& runtime) {
+    runtime.Initialize();
+    runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
+        NKikimrServices::EServiceKikimr_MAX,
+        [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+    runtime.SetDispatchTimeout(TDuration::Seconds(5));
+}
+
+
 // Exercise the real proxy with controlled replica replies and nondelivery.
 // Pending replicas stay silent until the test explicitly responds for them.
 class TLookupFixture {
@@ -365,6 +374,179 @@ void CheckIncompleteLockShutdown(bool safetyTimeout, bool partialSuccess, bool r
 } // namespace
 
 Y_UNIT_TEST_SUITE(TStateStorageProxyLookup) {
+    Y_UNIT_TEST(InvalidSelectionRejectsRequestsWithoutContactingReplicas) {
+        for (ui32 nToSelect : {0u, 9u}) {
+            const TVector<TVector<ui32>> configurations = {{nToSelect}, {3, nToSelect}, {nToSelect, 3}};
+            for (const auto& selections : configurations) {
+                for (ui32 requestKind : xrange<ui32>(3)) {
+                    TTestActorRuntimeBase runtime{1};
+                    InitializeStateStorageRuntime(runtime);
+                    const auto edge = runtime.AllocateEdgeActor();
+                    auto info = MakeIntrusive<TStateStorageInfo>();
+                    info->RingGroups.resize(selections.size());
+                    for (ui32 i : xrange(selections.size())) {
+                        auto& group = info->RingGroups[i];
+                        group.State = i ? ERingGroupState::SYNCHRONIZED : ERingGroupState::PRIMARY;
+                        group.NToSelect = selections[i];
+                        group.Rings.resize(3);
+                        for (auto& ring : group.Rings) {
+                            ring.Replicas.push_back(runtime.AllocateEdgeActor());
+                        }
+                    }
+                    const auto proxy = runtime.Register(CreateStateStorageProxy(info, info, info));
+                    runtime.SetObserverFunc([](TAutoPtr<IEventHandle>& event) {
+                        switch (event->GetTypeRewrite()) {
+                            case TEvStateStorage::EvReplicaLookup:
+                            case TEvStateStorage::EvReplicaUpdate:
+                            case TEvStateStorage::EvReplicaLock:
+                                UNIT_FAIL("Invalid selection must be rejected before contacting any replica");
+                                break;
+                        }
+                        return TTestActorRuntimeBase::EEventAction::PROCESS;
+                    });
+                    IEventBase* request = nullptr;
+                    if (requestKind == 0) {
+                        request = new TEvStateStorage::TEvLookup(100, 42);
+                    } else if (requestKind == 1) {
+                        request = new TEvStateStorage::TEvUpdate(100, 42, edge, edge, 1, 0, {});
+                    } else {
+                        request = new TEvStateStorage::TEvLock(100, 42, edge, 1, {});
+                    }
+                    runtime.SendAsync(new IEventHandle(proxy, edge, request, 0, 77));
+                    auto reply = runtime.GrabEdgeEvent<TEvStateStorage::TEvInfo>(edge);
+                    UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::ERROR);
+                    UNIT_ASSERT_VALUES_EQUAL(reply->Get()->TabletID, 100);
+                    UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Cookie, 42);
+                    UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, 77);
+                    for (ui32 i : xrange(selections.size())) {
+                        UNIT_ASSERT_VALUES_EQUAL(info->RingGroups[i].NToSelect, selections[i]);
+                    }
+                    runtime.SendAsync(new IEventHandle(proxy, edge, new TEvStateStorage::TEvResolveBoard("/test")));
+                    auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+                    UNIT_ASSERT(resolved->Get()->ReplicaGroups.empty());
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(BoardPublisherSurvivesInvalidSelectionAndRecovers) {
+        TTestActorRuntimeBase runtime{1};
+        InitializeStateStorageRuntime(runtime);
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto firstReplica = runtime.AllocateEdgeActor();
+        const auto secondReplica = runtime.AllocateEdgeActor();
+        const auto makeInfo = [](const TActorId& replica, ui32 nToSelect) {
+            auto info = MakeIntrusive<TStateStorageInfo>();
+            info->RingGroups.resize(1);
+            auto& group = info->RingGroups[0];
+            group.State = ERingGroupState::PRIMARY;
+            group.NToSelect = nToSelect;
+            group.Rings.resize(1);
+            group.Rings[0].Replicas.push_back(replica);
+            return info;
+        };
+        const auto initial = makeInfo(firstReplica, 1);
+        const auto proxy = runtime.Register(CreateStateStorageProxy(initial, initial, initial));
+        runtime.RegisterService(MakeStateStorageProxyID(), proxy);
+        const auto publisher = runtime.Register(CreateBoardPublishActor("/test", "payload", edge, 0, true));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaBoardPublish>(firstReplica));
+        const auto invalid = makeInfo(firstReplica, 9);
+        runtime.SendAsync(new IEventHandle(proxy, edge, new TEvStateStorage::TEvUpdateGroupConfig(invalid, invalid, invalid)));
+        // The next update reaches the publisher after the invalid resolution,
+        // and proves it is still alive and can start a new replica publisher.
+        const auto restored = makeInfo(secondReplica, 1);
+        runtime.SendAsync(new IEventHandle(proxy, edge, new TEvStateStorage::TEvUpdateGroupConfig(restored, restored, restored)));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaBoardPublish>(secondReplica));
+        UNIT_ASSERT_VALUES_EQUAL(invalid->RingGroups[0].NToSelect, 9);
+        runtime.SendAsync(new IEventHandle(publisher, edge, new TEvents::TEvPoisonPill()));
+    }
+
+    Y_UNIT_TEST(LeaderGuardianDemotesOnInvalidSelection) {
+        for (bool initiallyInvalid : {false, true}) {
+            TTestActorRuntimeBase runtime{1};
+            InitializeStateStorageRuntime(runtime);
+            const auto edge = runtime.AllocateEdgeActor();
+            const auto replica = runtime.AllocateEdgeActor();
+            auto info = MakeIntrusive<TStateStorageInfo>();
+            info->RingGroups.resize(1);
+            auto& group = info->RingGroups.front();
+            group.State = ERingGroupState::PRIMARY;
+            group.NToSelect = initiallyInvalid ? 9 : 1;
+            group.Rings.resize(1);
+            group.Rings.front().Replicas.push_back(replica);
+            const auto proxy = runtime.Register(CreateStateStorageProxy(info, info, info));
+            runtime.RegisterService(MakeStateStorageProxyID(), proxy);
+            runtime.Register(CreateStateStorageTabletGuardian(100, edge, edge, 1));
+            if (!initiallyInvalid) {
+                UNIT_ASSERT(runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaLookup>(replica));
+                auto invalid = MakeIntrusive<TStateStorageInfo>();
+                invalid->RingGroups = info->RingGroups;
+                invalid->RingGroups.front().NToSelect = 9;
+                runtime.SendAsync(new IEventHandle(proxy, edge,
+                    new TEvStateStorage::TEvUpdateGroupConfig(invalid, invalid, invalid)));
+            }
+            const auto demoted = runtime.GrabEdgeEvent<TEvTablet::TEvDemoted>(edge);
+            UNIT_ASSERT(demoted->Get()->ByIsolation);
+        }
+    }
+
+    Y_UNIT_TEST(FollowerGuardianWaitsForCorrectedSelection) {
+        for (bool initiallyInvalid : {false, true}) {
+            TTestActorRuntimeBase runtime{1};
+            InitializeStateStorageRuntime(runtime);
+            const auto edge = runtime.AllocateEdgeActor();
+            const auto firstReplica = runtime.AllocateEdgeActor();
+            const auto secondReplica = runtime.AllocateEdgeActor();
+            const auto makeInfo = [](const TActorId& replica, ui32 nToSelect) {
+                auto info = MakeIntrusive<TStateStorageInfo>();
+                info->RingGroups.resize(1);
+                auto& group = info->RingGroups.front();
+                group.State = ERingGroupState::PRIMARY;
+                group.NToSelect = nToSelect;
+                group.Rings.resize(1);
+                group.Rings.front().Replicas.push_back(replica);
+                return info;
+            };
+            auto info = makeInfo(firstReplica, initiallyInvalid ? 9 : 1);
+            const auto proxy = runtime.Register(CreateStateStorageProxy(info, info, info));
+            runtime.RegisterService(MakeStateStorageProxyID(), proxy);
+            const auto guardian = runtime.Register(CreateStateStorageFollowerGuardian(100, 1, edge));
+            TActorId oldChild;
+            if (!initiallyInvalid) {
+                runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+                    if (event->Recipient == oldChild && event->Sender == guardian &&
+                            event->GetTypeRewrite() == TEvents::TEvPoisonPill::EventType) {
+                        runtime.SendAsync(new IEventHandle(edge, edge, new TEvents::TEvWakeup()));
+                    }
+                    return TTestActorRuntimeBase::EEventAction::PROCESS;
+                });
+            }
+            if (!initiallyInvalid) {
+                const auto registration = runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaRegFollower>(firstReplica);
+                UNIT_ASSERT(registration);
+                oldChild = registration->Sender;
+                auto invalid = makeInfo(firstReplica, 9);
+                runtime.SendAsync(new IEventHandle(proxy, edge,
+                    new TEvStateStorage::TEvUpdateGroupConfig(invalid, invalid, invalid)));
+            }
+            // A request to the same proxy is a barrier after the unavailable resolution.
+            runtime.SendAsync(new IEventHandle(proxy, edge, new TEvStateStorage::TEvResolveReplicas(100)));
+            const auto unavailable = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+            UNIT_ASSERT(unavailable->Get()->ReplicaGroups.empty());
+            if (!initiallyInvalid) {
+                UNIT_ASSERT(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(edge));
+                // Late events from the stopped child must not kill the subscription.
+                runtime.SendAsync(new IEventHandle(guardian, oldChild, new TEvents::TEvGone()));
+                runtime.SendAsync(new IEventHandle(guardian, oldChild,
+                    new TEvStateStorage::TEvReplicaInfo(100, NKikimrProto::ERROR, 0, 0)));
+            }
+            auto corrected = makeInfo(secondReplica, 1);
+            runtime.SendAsync(new IEventHandle(proxy, edge,
+                new TEvStateStorage::TEvUpdateGroupConfig(corrected, corrected, corrected)));
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaRegFollower>(secondReplica));
+        }
+    }
+
     Y_UNIT_TEST(NodataQuorumSigNone) {
         CheckEmptyQuorum(TEvStateStorage::TProxyOptions::SigNone);
     }
@@ -774,10 +956,7 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardianRingGroups) {
         static constexpr ui32 Generation = 2;
 
         TTestActorRuntimeBase runtime{1};
-        runtime.Initialize();
-        runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX,
-            [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+        InitializeStateStorageRuntime(runtime);
         runtime.SetDispatchTimeout(TDuration::Seconds(5));
         const TActorId leader = runtime.AllocateEdgeActor();
         const TActorId tabletLeader = runtime.AllocateEdgeActor();
@@ -862,10 +1041,7 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerGuardian) {
 
     Y_UNIT_TEST(FollowerRecoveryClearsMissingReplica) {
         TTestActorRuntimeBase runtime{1};
-        runtime.Initialize();
-        runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX,
-            [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+        InitializeStateStorageRuntime(runtime);
         runtime.SetScheduledEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&,
                                            TDuration, TInstant&) { return false; });
         runtime.SetDispatchTimeout(TDuration::Seconds(5));

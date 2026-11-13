@@ -111,7 +111,9 @@ private:
         AFL_VERIFY(chunks);
         const auto portionAddress = accessor->GetPortionInfo().GetAddress();
         if (chunks->GetAddress() != portionAddress) {
-            std::const_pointer_cast<TPortionChunks>(chunks)->ResetAddress(portionAddress);
+            auto retargeted = std::make_shared<TPortionChunks>(*chunks);
+            retargeted->ResetAddress(portionAddress);
+            chunks = std::move(retargeted);
         }
         NGeneralCache::TGlobalPortionAddress address(GetTabletActorId(), portionAddress);
         add.emplace(address, std::move(chunks));

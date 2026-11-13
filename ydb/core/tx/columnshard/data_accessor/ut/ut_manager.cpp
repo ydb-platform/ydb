@@ -62,11 +62,13 @@ class TMockCacheService: public NActors::TActor<TMockCacheService> {
 private:
     using TBase = NActors::TActor<TMockCacheService>;
     const bool WithRemovedAddresses;
+    const std::shared_ptr<const TPortionChunks> Chunks;
 
 public:
-    TMockCacheService(bool withRemovedAddresses)
+    TMockCacheService(bool withRemovedAddresses, std::shared_ptr<const TPortionChunks> chunks = nullptr)
         : TBase(&TMockCacheService::StateWork)
         , WithRemovedAddresses(withRemovedAddresses)
+        , Chunks(std::move(chunks))
     {
     }
 
@@ -89,6 +91,10 @@ public:
             // Move all requested addresses to removedAddresses to simulate removed portions
             for (auto&& addr : addresses) {
                 removedAddresses.emplace(std::move(addr));
+            }
+        } else if (Chunks) {
+            for (const auto& addr : addresses) {
+                objectAddresses.emplace(addr, Chunks);
             }
         }
 
@@ -198,5 +204,52 @@ Y_UNIT_TEST_SUITE(TActorAccessorsManagerTests) {
 
         UNIT_ASSERT(subscriber->IsFinished());
         UNIT_ASSERT(!subscriber->GetResult().HasRemovedData());
+    }
+
+    Y_UNIT_TEST(AskDataPairsEachRequestPortionWithTheSameChunks) {
+        const auto pathId = TInternalPathId::FromRawValue(1);
+        const auto portion = NTest::MakeTestCompactedPortion(pathId, 7, 0, 0, 1, TSnapshot(0, 0), std::nullopt);
+        auto removed = portion->MakeCopy();
+        removed->SetRemoveSnapshot(3, 3);
+        const TUnifiedBlobId blob(1, TLogoBlobID(123, 1, 1, 2, 100, 0));
+        const TPortionDataAccessor seed(
+            portion, std::vector<TUnifiedBlobId>{ blob }, std::vector<TColumnRecord>{}, std::vector<TIndexChunk>{}, false);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        NActors::TActorId mockServiceId =
+            NKikimr::NGeneralCache::TServiceOperator<TPortionsMetadataCachePolicy>::MakeServiceId(runtime.GetNodeId(0));
+        runtime.RegisterService(mockServiceId, runtime.Register(new TMockCacheService(false, seed.GetChunksPtr())));
+
+        NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+        auto manager = std::make_shared<TActorAccessorsManager>(tabletActorId);
+
+        auto ask = [&](const TPortionInfo::TConstPtr& info) {
+            auto subscriber = std::make_shared<TTestSubscriber>();
+            auto request = std::make_shared<TDataAccessorsRequest>(TPortionsMetadataCachePolicy::DefaultConsumer());
+            request->RegisterSubscriber(subscriber);
+            request->AddPortion(info);
+            runtime.Register(new TTestActor(manager, request));
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([&subscriber](IEventHandle&) {
+                return subscriber->IsFinished();
+            });
+            runtime.DispatchEvents(options, TDuration::Seconds(1));
+            UNIT_ASSERT(subscriber->IsFinished());
+            return subscriber;
+        };
+
+        const auto first = ask(portion);
+        const auto second = ask(removed);
+        const auto& kept = first->GetResult().GetPortionAccessorVerified(7);
+        const auto& dropped = second->GetResult().GetPortionAccessorVerified(7);
+
+        UNIT_ASSERT(kept.GetChunksPtr().get() == seed.GetChunksPtr().get());
+        UNIT_ASSERT(dropped.GetChunksPtr().get() == seed.GetChunksPtr().get());
+        UNIT_ASSERT(kept.GetPortionInfoPtr().get() == portion.get());
+        UNIT_ASSERT(dropped.GetPortionInfoPtr().get() == removed.get());
+        UNIT_ASSERT(!kept.GetPortionInfo().HasRemoveSnapshot());
+        UNIT_ASSERT(dropped.GetPortionInfo().HasRemoveSnapshot());
     }
 }

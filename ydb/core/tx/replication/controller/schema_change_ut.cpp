@@ -1,5 +1,6 @@
 #include "controller_impl.h"
 #include "controller.h"
+#include "index_replication.h"
 #include "dst_alterer.h"
 #include "dst_creator.h"
 #include "dst_schema_changer.h"
@@ -940,7 +941,7 @@ struct TSchemaAltererTestEnv {
     NKikimrReplication::TSchemaChange Schema;
 
     TSchemaAltererTestEnv(const NKikimrReplication::TSchemaChange& schema, ui64 dstAlterTxId,
-            bool requireTargetFlush = false, bool globalConsistency = false)
+            bool requireTargetFlush = false, bool globalConsistency = false, const TString& readyIndex = {})
         : Schema(schema)
     {
         Runtime.Initialize(TAppPrepare().Unwrap());
@@ -953,6 +954,7 @@ struct TSchemaAltererTestEnv {
             .TxId = dstAlterTxId,
             .RequireTargetFlush = requireTargetFlush,
             .GlobalConsistency = globalConsistency,
+            .IndexName = readyIndex,
         };
         Alterer = Runtime.Register(CreateSchemaChangeDstAlterer(Parent, DstPathId.OwnerId,
             1, 1, TReplication::ETargetKind::Table, DstPathId, Schema, settings));
@@ -3461,6 +3463,37 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
 
 Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
     using namespace NTestHelpers;
+
+    Y_UNIT_TEST(RowIdIndexCompletesAfterFeatureFlagDisabled) {
+        const TString name(NTableIndex::NFulltext::RowIdUniqueIndexName);
+        TSchemaAltererTestEnv env({}, 0, false, false, name);
+        env.Runtime.GetAppData().FeatureFlags.SetEnableFulltextIndexReplication(false);
+        const auto reply = [&](NKikimrSchemeOp::EIndexState state) {
+            env.Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(env.PipeCache);
+            auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+            result->Record.SetStatus(NKikimrScheme::StatusSuccess);
+            result->Record.SetPath("/Root/replica1");
+            auto* index = result->Record.MutablePathDescription()->MutableTable()->AddTableIndexes();
+            index->SetName(name);
+            index->SetType(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+            index->SetState(state);
+            index->AddKeyColumnNames(NTableIndex::NFulltext::RowIdColumn);
+            env.Runtime.Send(env.Alterer, env.PipeCache, result.Release());
+        };
+        reply(NKikimrSchemeOp::EIndexStateWriteOnly);
+        const auto txId = env.Runtime.GrabEdgeEvent<TEvPrivate::TEvSchemaChangeDstAlterTxId>(env.Parent);
+        env.Runtime.Send(env.Alterer, env.Parent,
+            new TEvPrivate::TEvSchemaChangeDstAlterTxIdSaved(txId->Get()->TxId));
+        const auto alter = env.GrabAlter();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(alter.GetOperationType()),
+            static_cast<int>(NKikimrSchemeOp::ESchemeOpApplyIndexBuild));
+        UNIT_ASSERT_VALUES_EQUAL(alter.GetApplyIndexBuild().GetIndexName(), name);
+        env.CompleteAlter(1);
+        reply(NKikimrSchemeOp::EIndexStateReady);
+        const auto result = env.Runtime.GrabEdgeEvent<TEvPrivate::TEvSchemaChangeDstAlterResult>(env.Parent);
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+        env.ExpectUnlink();
+    }
 
     Y_UNIT_TEST(AddSyncIndexCreatesWriteOnlyReplicaAndReconcilesAfterCompletion) {
         const auto schema = MakeSyncIndexSchemaChange();

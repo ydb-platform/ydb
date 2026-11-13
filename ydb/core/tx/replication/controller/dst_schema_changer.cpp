@@ -401,8 +401,8 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
                 index.GetDataColumnNames().begin(), index.GetDataColumnNames().end());
             const bool sameFulltext = !NTableIndex::IsFulltextOrJsonIndex(index.GetType())
                 || (expected.HasFulltextSettings()
-                    && expected.GetFulltextSettings().SerializeAsString()
-                        == index.GetFulltextIndexDescription().GetSettings().SerializeAsString()
+                    && EqualFulltextSettings(expected.GetFulltextSettings(),
+                        index.GetFulltextIndexDescription().GetSettings())
                     && expected.GetUseRowIdAsDocId() == index.GetFulltextIndexDescription().GetUseRowIdAsDocId());
             if (expected.GetType() != type || !sameKeys || !sameData || !sameFulltext) {
                 error = TStringBuilder() << "destination index differs from source schema: " << index.GetName();
@@ -528,10 +528,9 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             const auto state = index.GetState();
             const bool validState = state == NKikimrSchemeOp::EIndexStateWriteOnly
                 || state == NKikimrSchemeOp::EIndexStateReady;
-            const bool rowId = index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique
-                && index.KeyColumnNamesSize() == 1
-                && index.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn
-                && AppData()->FeatureFlags.GetEnableFulltextIndexReplication();
+            // Existing reserved indexes must still complete after the creation
+            // feature flag is disabled. Validate their identity and shape.
+            const bool rowId = IsFulltextRowIdIndex(index);
             if ((index.GetType() != NKikimrSchemeOp::EIndexTypeGlobal
                 && !NTableIndex::IsFulltextOrJsonIndex(index.GetType()) && !rowId) || !validState)
             {

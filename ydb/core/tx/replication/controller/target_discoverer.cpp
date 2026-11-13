@@ -19,6 +19,8 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/algorithm.h>
+#include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -98,6 +100,24 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         MaybeReply();
     }
 
+    void ReportStatus(ui32 idx, const TString& issue) {
+        if (issue.empty()) {
+            PendingSourceIssues.erase(idx);
+        } else {
+            PendingSourceIssues[idx] = issue;
+        }
+        TVector<TString> issues;
+        for (const auto& [_, pending] : PendingSourceIssues) {
+            issues.push_back(pending);
+        }
+        Sort(issues);
+        const auto combined = JoinSeq("; ", issues);
+        if (combined != LastStatus) {
+            LastStatus = combined;
+            Send(Parent, new TEvPrivate::TEvSourceStatus(ReplicationId, std::nullopt, combined));
+        }
+    }
+
     void DescribeTable(ui32 idx) {
         Y_ABORT_UNLESS(idx < Paths.size());
         Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(Paths.at(idx).first, {}), 0, idx);
@@ -123,11 +143,15 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             YDB_LOG_DEBUG("Describe table succeeded",
                 {"path", path.first});
 
-            if (AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
-                && HasBuildingFulltextIndex(NYdb::TProtoAccessor::GetProto(result.GetTableDescription())))
-            {
-                return RetryDescribe(*it);
+            if (AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
+                const auto pendingIndexes = GetBuildingFulltextIndexes(NYdb::TProtoAccessor::GetProto(result.GetTableDescription()));
+                if (!pendingIndexes.empty()) {
+                    ReportStatus(*it, TStringBuilder() << "Waiting for source fulltext/JSON index builds on "
+                        << path.first << ": " << JoinSeq(", ", pendingIndexes));
+                    return RetryDescribe(*it);
+                }
             }
+            ReportStatus(*it, {});
 
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
                 std::make_shared<TTargetTable::TTableConfig>(path.first, path.second));
@@ -190,8 +214,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"issues", result.GetIssues().ToOneLineString()});
 
             if (IsRetryableError(result, Backoff)) {
+                ReportStatus(*it, TStringBuilder() << "Cannot describe source table " << path.first
+                    << ": " << result.GetStatus() << ", " << result.GetIssues().ToOneLineString());
                 return RetryDescribe(*it);
             } else {
+                ReportStatus(*it, {});
                 Failed.emplace_back(path.first, result);
             }
         }
@@ -433,6 +460,8 @@ private:
     TVector<TEvPrivate::TEvDiscoveryTargetsResult::TFailedEntry> Failed;
 
     TBackoff Backoff;
+    THashMap<ui32, TString> PendingSourceIssues;
+    TString LastStatus;
 
 }; // TTargetDiscoverer
 

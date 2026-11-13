@@ -9,13 +9,16 @@
 #include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -708,6 +711,118 @@ void RunLayoutMismatch(const TString& kind, bool compact, bool initialIndex) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(FulltextReplication) {
+    Y_UNIT_TEST(SourceIndexWaitIsVisibleDuringDiscovery) {
+        NTestHelpers::TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+        NTestHelpers::TEnv env(flags, true, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        NYdb::NQuery::TQueryClient client(env.GetDriver());
+        const auto execute = [&](const TString& text) {
+            const auto result = env.RunCall([&] {
+                return client.ExecuteQuery(text, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        execute(R"(
+            CREATE TABLE `/Root/source` (key Uint64 NOT NULL, value Utf8, PRIMARY KEY(key),
+                INDEX idx GLOBAL USING fulltext_plain ON (value) WITH (tokenizer=standard));
+        )");
+        bool building = true;
+        auto observer = runtime.AddObserver<TEvYdbProxy::TEvDescribeTableResponse>(
+            [&](TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
+                const auto* actor = runtime.FindActor(ev->GetRecipientRewrite());
+                if (!building || !actor || !ev->Get()->Result.IsSuccess()
+                    || actor->GetActivityType() != NKikimrServices::TActivity::REPLICATION_CONTROLLER_TARGET_DISCOVERER)
+                {
+                    return;
+                }
+                auto table = NYdb::TProtoAccessor::GetProto(ev->Get()->Result.GetTableDescription());
+                table.mutable_indexes(0)->set_status(Ydb::Table::TableIndexDescription::STATUS_BUILDING);
+                TEvYdbProxy::TEvDescribeTableResponse replacement(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}),
+                    std::move(table), NYdb::NTable::TDescribeTableSettings());
+                ev->Get()->Result = std::move(replacement.Result);
+            });
+        execute(TStringBuilder() << "CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica` WITH ("
+            << "CONNECTION_STRING='grpc://" << env.GetEndpoint() << "/?database=/Root', TOKEN='root@builtin');");
+        const auto controller = env.GetDescription("/Root/replication").GetPathDescription()
+            .GetReplicationDescription().GetControllerId();
+        const auto monitoring = [&] {
+            NActorsProto::TRemoteHttpInfo request;
+            request.SetMethod(HTTP_METHOD_GET);
+            request.SetPath("/app");
+            return env.Send<NMon::TEvRemoteHttpInfoRes>(controller,
+                new NMon::TEvRemoteHttpInfo(std::move(request)))->Get()->Html;
+        };
+        const TString reason = "Waiting for source fulltext/JSON index builds on /Root/source: idx";
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (!monitoring().Contains(reason)) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "Source index wait was not visible in controller monitoring");
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        // Completion must clear the diagnostic even if a transient progress
+        // notification is lost or belongs to a retired discoverer.
+        auto clearObserver = runtime.AddObserver<TEvPrivate::TEvSourceStatus>(
+            [&](TEvPrivate::TEvSourceStatus::TPtr& ev) {
+                if (!ev->Get()->TargetId && ev->Get()->Issue.empty()) {
+                    ev.Reset();
+                }
+            });
+        building = false;
+        while (env.GetDescription("/Root/replica").GetSchemeStatus() != NKikimrScheme::StatusSuccess) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "Destination creation did not resume after the source index became ready");
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(!monitoring().Contains(reason));
+    }
+
+    Y_UNIT_TEST_TWIN(DescribeTableSurvivesSequenceLookupFailure, Transient) {
+        NTestHelpers::TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+        NTestHelpers::TEnv env(flags, true, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto sessionResult = env.RunCall([&] { return client.GetSession().GetValueSync(); });
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto create = env.RunCall([&] {
+            return session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/source` (key Utf8 NOT NULL, value Utf8, PRIMARY KEY(key),
+                    INDEX idx GLOBAL USING fulltext_plain ON (value) WITH (tokenizer=standard));
+            )").GetValueSync();
+        });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        runtime.GetAppData().FeatureFlags.SetEnableFulltextIndexReplication(false);
+        ui32 lookups = 0;
+        auto observer = runtime.AddObserver<NSequenceProxy::TEvSequenceProxy::TEvGetSequence>(
+            [&](NSequenceProxy::TEvSequenceProxy::TEvGetSequence::TPtr& ev) {
+                ++lookups;
+                NYql::TIssues issues;
+                issues.AddIssue(NYql::TIssue("injected sequence lookup failure"));
+                runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                    new NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult(
+                        Transient ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::SCHEME_ERROR, issues),
+                    0, ev->Cookie));
+                ev.Reset();
+            });
+        const auto result = env.RunCall([&] {
+            return session.DescribeTable("/Root/source", NYdb::NTable::TDescribeTableSettings().WithSetVal(true)).GetValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT(lookups);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "injected sequence lookup failure");
+        bool found = false;
+        const auto& table = NYdb::TProtoAccessor::GetProto(result.GetTableDescription());
+        UNIT_ASSERT_VALUES_EQUAL(table.indexes_size(), 2);
+        for (const auto& column : table.columns()) {
+            if (column.name() == NTableIndex::NFulltext::RowIdColumn) {
+                UNIT_ASSERT(column.has_from_sequence());
+                UNIT_ASSERT(!column.from_sequence().has_set_val());
+                found = true;
+            }
+        }
+        UNIT_ASSERT(found);
+    }
+
     Y_UNIT_TEST_TWIN(PlainOnline, Compact) {
         RunReplication({.Kind = "fulltext_plain", .Compact = Compact});
         RunReplication({.Kind = "fulltext_plain", .Compact = Compact, .Global = true});

@@ -7,6 +7,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -23,6 +24,46 @@ namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(DstCreator) {
     using namespace NTestHelpers;
+
+    Y_UNIT_TEST(ReportsPendingSourceIndexAndClearsStatus) {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
+        TEnv env(flags, true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto sessionResult = env.RunCall([&] { return client.GetSession().GetValueSync(); });
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto create = env.RunCall([&] {
+            return session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/Source` (key Uint64 NOT NULL, value Utf8, PRIMARY KEY(key),
+                    INDEX idx GLOBAL USING fulltext_plain ON (value) WITH (tokenizer=standard));
+            )").GetValueSync();
+        });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        const auto description = env.RunCall([&] { return session.DescribeTable("/Root/Source").GetValueSync(); });
+        UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+        auto table = NYdb::TProtoAccessor::GetProto(description.GetTableDescription());
+        table.mutable_indexes(0)->set_status(Ydb::Table::TableIndexDescription::STATUS_BUILDING);
+        const auto proxy = runtime.AllocateEdgeActor();
+        const auto creator = runtime.Register(CreateDstCreator(env.GetSender(), env.GetSchemeshardId("/Root/Source"),
+            proxy, "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Replica"));
+        const auto request = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTableRequest>(proxy);
+        runtime.Send(new IEventHandle(creator, proxy, new TEvYdbProxy::TEvDescribeTableResponse(
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(table), NYdb::NTable::TDescribeTableSettings()),
+            0, request->Cookie));
+        const auto waiting = runtime.GrabEdgeEvent<TEvPrivate::TEvSourceStatus>(env.GetSender());
+        UNIT_ASSERT_STRING_CONTAINS(waiting->Get()->Issue, "Waiting for source fulltext/JSON index builds");
+        UNIT_ASSERT_STRING_CONTAINS(waiting->Get()->Issue, "/Root/Source: idx");
+        runtime.Send(creator, env.GetSender(), new TEvents::TEvWakeup());
+        const auto retry = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTableRequest>(proxy);
+        runtime.Send(retry->Forward(env.GetYdbProxy()));
+        const auto cleared = runtime.GrabEdgeEvent<TEvPrivate::TEvSourceStatus>(env.GetSender());
+        UNIT_ASSERT(cleared->Get()->Issue.empty());
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+    }
 
     void SetImportState(TEnv<>& env, const TString& path,
             NKikimrSchemeOp::TTableReplicationConfig::EImportState state,

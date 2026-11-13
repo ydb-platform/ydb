@@ -59,6 +59,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         if (Ev->Get()->IsSuccess()) {
+            Replication->SetState(Replication->GetState());
             THashMap<TString, ui64> indexGroups;
             for (const auto& target : Ev->Get()->ToAdd) {
                 const auto tid = Replication->AddTarget(target.Kind, target.Config);

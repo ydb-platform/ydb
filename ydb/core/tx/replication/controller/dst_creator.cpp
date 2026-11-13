@@ -23,6 +23,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <util/string/join.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
@@ -276,6 +278,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
+                ReportStatus(TStringBuilder() << "Cannot describe source table " << SrcPath
+                    << ": " << result.GetStatus() << ", " << result.GetIssues().ToOneLineString());
                 return Retry();
             }
 
@@ -284,11 +288,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 << ", issue: " << result.GetIssues().ToOneLineString());
         }
 
-        if (Kind == TReplication::ETargetKind::Table && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
-            && HasBuildingFulltextIndex(NYdb::TProtoAccessor::GetProto(result.GetTableDescription())))
-        {
-            return Retry();
+        if (Kind == TReplication::ETargetKind::Table && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
+            const auto pendingIndexes = GetBuildingFulltextIndexes(NYdb::TProtoAccessor::GetProto(result.GetTableDescription()));
+            if (!pendingIndexes.empty()) {
+                ReportStatus(TStringBuilder() << "Waiting for source fulltext/JSON index builds on "
+                    << SrcPath << ": " << JoinSeq(", ", pendingIndexes));
+                return Retry();
+            }
         }
+        ReportStatus({});
 
         Ydb::Table::CreateTableRequest scheme;
         const auto description = result.GetTableDescription();
@@ -881,8 +889,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             if (NTableIndex::IsFulltextOrJsonIndex(index.GetType())
-                && (index.GetFulltextIndexDescription().GetSettings().SerializeAsString()
-                    != it->second->GetFulltextIndexDescription().GetSettings().SerializeAsString()
+                && (!EqualFulltextSettings(index.GetFulltextIndexDescription().GetSettings(),
+                        it->second->GetFulltextIndexDescription().GetSettings())
                     || index.GetFulltextIndexDescription().GetUseRowIdAsDocId()
                         != it->second->GetFulltextIndexDescription().GetUseRowIdAsDocId()))
             {
@@ -995,6 +1003,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         Retry();
+    }
+
+    void ReportStatus(const TString& issue) {
+        if (LastStatus != issue) {
+            LastStatus = issue;
+            Send(Parent, new TEvPrivate::TEvSourceStatus(ReplicationId, TargetId, issue));
+        }
     }
 
     void Success() {
@@ -1155,6 +1170,7 @@ private:
     ui64 RetryGeneration = 0;
     TPathId DstPathId;
     TActorId Subscriber;
+    TString LastStatus;
 
 }; // TDstCreator
 

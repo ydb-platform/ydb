@@ -241,9 +241,7 @@ private:
                 FillReadReplicasSettings(describeTableResult, tableDescription);
                 FillMetricsSettings(describeTableResult, tableDescription);
 
-                if (GetProtoRequest()->include_set_val()
-                    && AppData()->FeatureFlags.GetEnableFulltextIndexReplication())
-                {
+                if (GetProtoRequest()->include_set_val()) {
                     for (int i = 0; i < describeTableResult.columns_size(); ++i) {
                         const auto& column = describeTableResult.columns(i);
                         if ((column.name() != NTableIndex::NFulltext::GenColumn
@@ -297,13 +295,20 @@ private:
             return;
         }
         const auto& result = *ev->Get();
+        auto* sequence = SequenceDescribeResult.mutable_columns(ev->Cookie)->mutable_from_sequence();
         if (result.Status != Ydb::StatusIds::SUCCESS) {
-            Request_->RaiseIssues(result.Issues);
-            return Reply(result.Status, ctx);
+            // The catalog value may be stale. Keep the schema available, but
+            // omit the watermark so replication cannot use an unsafe fallback.
+            sequence->clear_set_val();
+            Request_->RaiseIssue(NYql::TIssue(TStringBuilder()
+                << "Cannot read current value of sequence '" << sequence->name()
+                << "': " << result.Issues.ToOneLineString())
+                .SetCode(NKikimrIssues::TIssuesIds::WARNING, NYql::TSeverityIds::S_WARNING));
+        } else {
+            auto* watermark = sequence->mutable_set_val();
+            watermark->set_next_value(result.NextValue);
+            watermark->set_next_used(result.NextUsed);
         }
-        auto* watermark = SequenceDescribeResult.mutable_columns(ev->Cookie)->mutable_from_sequence()->mutable_set_val();
-        watermark->set_next_value(result.NextValue);
-        watermark->set_next_used(result.NextUsed);
         if (PendingSequenceColumns.empty()) {
             ReplyWithResult(Ydb::StatusIds::SUCCESS, SequenceDescribeResult, ctx);
         }

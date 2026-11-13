@@ -2695,7 +2695,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
 }
 
 void CheckAlterColumnShowCreate(double dictionaryUniqueFraction, bool enableNativeColumns) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableColumnTableDefaults = true, .EnableOlapCompression = true, .EnableCsDictionaryEncoding = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableCsDefaultValues = true, .EnableOlapCompression = true, .EnableCsDictionaryEncoding = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2929,7 +2929,7 @@ Y_UNIT_TEST(TableColumnUpsertIndex) {
 }
 
 Y_UNIT_TEST(TableColumnAlterObject) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableColumnTableDefaults = true, .EnableOlapCompression = true, .EnableLocalIndexAsSchemeObject = false});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableCsDefaultValues = true, .EnableOlapCompression = true, .EnableLocalIndexAsSchemeObject = false});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);

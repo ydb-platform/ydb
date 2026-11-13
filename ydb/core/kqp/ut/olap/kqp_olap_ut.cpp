@@ -5417,7 +5417,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(WithDefaultValueEnabled) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnTableDefaults(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableCsDefaultValues(true);
         auto kikimr = std::make_unique<TKikimrRunner>(settings);
         auto queryClient = kikimr->GetQueryClient();
         {

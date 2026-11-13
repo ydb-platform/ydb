@@ -300,7 +300,7 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         errors.AddError("Default value is not supported for primary key columns in column tables");
         return false;
     }
-    if (sqlDefaultChange && !AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
+    if (sqlDefaultChange && !AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
         errors.AddError("column table defaults are disabled");
         return false;
     }

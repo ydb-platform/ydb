@@ -682,7 +682,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableTablePgTypes(opts.EnableTablePgTypes_);
     app.SetEnableServerlessExclusiveDynamicNodes(opts.EnableServerlessExclusiveDynamicNodes_);
     app.SetEnableAddColumsWithDefaults(opts.EnableAddColumsWithDefaults_);
-    app.SetEnableColumnTableDefaults(opts.EnableColumnTableDefaults_);
+    app.SetEnableCsDefaultValues(opts.EnableCsDefaultValues_);
     app.SetEnableReplaceIfExistsForExternalEntities(opts.EnableReplaceIfExistsForExternalEntities_);
     app.SetEnableChangefeedsOnIndexTables(opts.EnableChangefeedsOnIndexTables_);
     app.SetEnableTieringInColumnShard(opts.EnableTieringInColumnShard_);

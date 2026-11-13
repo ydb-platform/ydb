@@ -2447,7 +2447,7 @@ private:
                             return TStatus::Error;
                         }
                     } else if (alterColumnAction == "setDefaultValue") {
-                        if (table->Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
+                        if (table->Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                 "Default values are not supported in column tables"));
                             return TStatus::Error;
@@ -2487,7 +2487,7 @@ private:
                         }
                     } else if (alterColumnAction == "dropDefault") {
                         auto* column = table->Metadata->Columns.FindPtr(name);
-                        if (table->Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
+                        if (table->Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                 "Default values are not supported in column tables"));
                             return TStatus::Error;

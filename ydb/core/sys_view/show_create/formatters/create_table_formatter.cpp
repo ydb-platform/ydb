@@ -40,7 +40,7 @@ using namespace NYdb;
 namespace NIndexParameters = NKikimr::NOlap::NIndexes::NIndexParameters;
 
 bool SqlColumnDefaultsEnabled() {
-    return HasAppData() && AppData()->FeatureFlags.GetEnableColumnTableDefaults();
+    return HasAppData() && AppData()->FeatureFlags.GetEnableCsDefaultValues();
 }
 
 namespace {

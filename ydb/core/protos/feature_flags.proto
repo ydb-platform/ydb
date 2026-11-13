@@ -487,5 +487,5 @@ message TFeatureFlags {
     optional bool EnableDataShardSnapshotLocking = 387 [default = false];
     optional bool EnableRowTableZstdCompression = 388 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
-    optional bool EnableColumnTableDefaults = 390 [default = false];
+    optional bool EnableCsDefaultValues = 390 [default = false];
 }

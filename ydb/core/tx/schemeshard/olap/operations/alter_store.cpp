@@ -535,7 +535,7 @@ public:
             for (auto& [_, preset] : alterData->SchemaPresets) {
                 for (auto& [_, column] : preset.GetColumns().GetColumns()) {
                     const bool sparsed = column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
-                    if (sparsed || (column.GetDefaultValue().GetValue() && !AppData()->FeatureFlags.GetEnableColumnTableDefaults())) {
+                    if (sparsed || (column.GetDefaultValue().GetValue() && !AppData()->FeatureFlags.GetEnableCsDefaultValues())) {
                         result->SetError(NKikimrScheme::StatusSchemeError, "schema update error: sparsed columns are disabled");
                         return result;
                     }

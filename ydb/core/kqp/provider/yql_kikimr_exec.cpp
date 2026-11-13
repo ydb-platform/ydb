@@ -2149,7 +2149,7 @@ public:
                                     }
 
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
-                                        if (!NKikimr::AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
+                                        if (!NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                                             ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                                 "Default values are not supported in column tables"));
                                             return SyncError();
@@ -2413,7 +2413,7 @@ public:
                                 return SyncError();
                             }
                         } else if (alterColumnAction == "setDefaultValue") {
-                            if (table.Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                     "Default values are not supported in column tables"));
                                 return SyncError();
@@ -2447,7 +2447,7 @@ public:
                                 }
                             }
                         } else if (alterColumnAction == "dropDefault") {
-                            if (table.Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                     "Default values are not supported in column tables"));
                                 return SyncError();

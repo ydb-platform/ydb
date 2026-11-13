@@ -379,7 +379,7 @@ private:
             allColumnsLeft.erase(name);
         }
 
-        if (HasAppData() && AppDataVerified().FeatureFlags.GetEnableColumnTableDefaults() && entry.ColumnTableInfo) {
+        if (HasAppData() && AppDataVerified().FeatureFlags.GetEnableCsDefaultValues() && entry.ColumnTableInfo) {
             for (const auto& col : entry.ColumnTableInfo->Description.GetSchema().GetColumns()) {
                 if (col.HasDefaultValue()) {
                     allColumnsLeft.erase(col.GetName());
@@ -659,7 +659,7 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing key columns: %s", JoinSeq(", ", keyColumnsLeft).c_str()));
         }
 
-        if (isColumnTable && HasAppData() && AppDataVerified().FeatureFlags.GetEnableColumnTableDefaults() && entry.ColumnTableInfo) {
+        if (isColumnTable && HasAppData() && AppDataVerified().FeatureFlags.GetEnableCsDefaultValues() && entry.ColumnTableInfo) {
             for (const auto& col : entry.ColumnTableInfo->Description.GetSchema().GetColumns()) {
                 if (col.HasDefaultValue()) {
                     defaultColumnsLeft.erase(col.GetName());

@@ -79,7 +79,7 @@ protected:
         if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
             for (auto& [_, column] : targetSchema.GetColumns().GetColumns()) {
                 const bool sparsed = column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
-                if (sparsed || (column.GetDefaultValue().GetValue() && !AppData()->FeatureFlags.GetEnableColumnTableDefaults())) {
+                if (sparsed || (column.GetDefaultValue().GetValue() && !AppData()->FeatureFlags.GetEnableCsDefaultValues())) {
                     return false;
                 }
             }

@@ -18,7 +18,7 @@ namespace {
 
 TKikimrSettings DefaultsSettings() {
     auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
-    settings.AppConfig.MutableFeatureFlags()->SetEnableColumnTableDefaults(true);
+    settings.AppConfig.MutableFeatureFlags()->SetEnableCsDefaultValues(true);
     return settings;
 }
 

@@ -558,7 +558,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         auto columnIt = metadata.Columns.find(name);
         Y_ENSURE(columnIt != metadata.Columns.end());
 
-        if (columnIt->second.IsDefaultFromLiteral() && !AppData()->FeatureFlags.GetEnableColumnTableDefaults()) {
+        if (columnIt->second.IsDefaultFromLiteral() && !AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
             code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Default values are not supported in column tables";
             return false;

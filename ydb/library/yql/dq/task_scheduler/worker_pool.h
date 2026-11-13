@@ -19,6 +19,9 @@ struct TTaskSliceResult {
     ui32 Status = 0; // interpreted by the execution engine, not the queue
     std::exception_ptr Error;
     std::optional<TDuration> RetryAfter;
+    // The slice needs no endpoint work,
+    // OnSliceFinished completes the scheduling handle on the worker itself.
+    bool CompleteInline = false;
 };
 
 // Implementations own task state. No methods of a task's endpoint actor are
@@ -102,7 +105,10 @@ private:
     ui64 Sequence = 0;
     ui64 Selections = 0;
     double ServiceFloor = 0;
-    NMonitoring::TDynamicCounters::TCounterPtr WorkerSlices, WorkerRuns, WorkerCpuUs, QuotaRejected, LeaseRetries;
+    NMonitoring::TDynamicCounters::TCounterPtr WorkerSlices, WorkerRuns, WorkerCpuUs, QuotaRejected, LeaseRetries, InlineCompletions;
+public:
+    void RecordInlineCompletion() { if (InlineCompletions) { ++*InlineCompletions; } }
+private:
     NMonitoring::TDynamicCounters::TCounterPtr SelectionsCount, SelectionCpuUs, SelectionLockWaitUs;
     NMonitoring::TDynamicCounters::TCounterPtr RunnableSelections, RecheckSelections, BufferedOutputSelections;
 };

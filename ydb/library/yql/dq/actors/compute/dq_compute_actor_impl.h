@@ -414,11 +414,23 @@ protected:
     virtual void CompleteWorkerSlice(TTaskSliceResult) { Y_ABORT("Worker execution is not supported"); }
 
     bool EnterWorkerEndpoint(TAutoPtr<NActors::IEventHandle>& ev) {
+        const bool availability = ev->GetTypeRewrite() == TEvTaskExecutionAvailable::EventType;
+        if (!availability) {
+            // Any other event may change output, peer or control state: the next slice goes through here.
+            WorkerExecution->DisallowInlineCompletion();
+        }
         if (!WorkerExecution->TryAcquireEndpoint()) {
-            DeferredWorkerEvents.emplace_back(ev.Release());
+            // An availability notice is only a wakeup. The failed acquire above parked the
+            // endpoint again, so the next release sends a fresh one; never queue it, otherwise
+            // it is later replayed as a regular event with no handler.
+            if (availability) {
+                ev.Destroy();
+            } else {
+                DeferredWorkerEvents.emplace_back(ev.Release());
+            }
             return false;
         }
-        if (ev->GetTypeRewrite() == TEvTaskExecutionAvailable::EventType) {
+        if (availability) {
             ev.Destroy();
         }
         if (!DeferredWorkerEvents.empty()) {
@@ -433,6 +445,34 @@ protected:
             return false;
         }
         return true;
+    }
+
+    // Endpoint lease held, right after a slice was processed here. True when the endpoint
+    // would do nothing for a following non-final slice but complete its scheduling handle:
+    // local channels only, cached output summary valid, no async IO, nothing pending.
+    bool CanCompleteSlicesInline() const {
+        // CheckRunStatus treats PendingInput with every output finished as Finished; with an output still
+        // unfinished (HasDataToSend) that branch only logs, so the slice needs nothing from the endpoint.
+        if (Terminated || State != NDqProto::COMPUTE_STATE_EXECUTING || Channels || Checkpoints
+            || !AllOutputsFinishEpochBound || ProcessOutputsState.Inflight != 0 || !CheckedOutputFinishEpoch
+            || !OutputChannelsSummary || !OutputChannelsSummary->ChannelsReady || !OutputChannelsSummary->HasDataToSend
+            || HasEffectsOutputs || !DeferredWorkerEvents.empty() || InputChannelsMap.empty()
+            || !SourcesMap.empty() || !InputTransformsMap.empty() || !SinksMap.empty() || !OutputTransformsMap.empty())
+        {
+            return false;
+        }
+        for (const auto& [_, info] : InputChannelsMap) {
+            if (!info.HasPeer) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void MaybeAllowInlineCompletion() {
+        if (WorkerExecution && CanCompleteSlicesInline()) {
+            WorkerExecution->AllowInlineCompletion(OutputFinishEpoch, *CheckedOutputFinishEpoch);
+        }
     }
 
     void LeaveWorkerEndpoint(const std::shared_ptr<TDqTaskExecution>& execution) {

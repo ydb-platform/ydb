@@ -13,6 +13,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NThreading;
@@ -168,12 +170,9 @@ void TDDiskDataCopier::StartCopyRange()
 {
     auto freshRange = GetFreshRange();
 
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s Will copy range: %s",
-        LogTitle.GetWithTime().c_str(),
-        freshRange ? freshRange->Print().c_str() : "<empty>");
+    YDB_LOG_DEBUG_CTX(*ActorSystem, "Will copy",
+        {"withTime", LogTitle.GetWithTime()},
+        {"range", freshRange ? freshRange->Print().c_str() : "<empty>"});
 
     switch (State) {
         case EState::Stopped: {
@@ -218,14 +217,11 @@ void TDDiskDataCopier::CopyRange(
     TBlockRange16 range)
 {
     if (timeWaitBeforeExecution) {
-        LOG_DEBUG(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s %lu %s Schedule copy range %s",
-            LogTitle.GetWithTime().c_str(),
-            syncId,
-            range.Print().c_str(),
-            FormatDuration(timeWaitBeforeExecution).c_str());
+        YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule copy range",
+            {"withTime", LogTitle.GetWithTime()},
+            {"syncId", syncId},
+            {"range", range.Print()},
+            {"waitBeforeExecution", FormatDuration(timeWaitBeforeExecution)});
 
         DirectBlockGroup->Schedule(
             timeWaitBeforeExecution,
@@ -239,13 +235,10 @@ void TDDiskDataCopier::CopyRange(
         return;
     }
 
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s %lu %s Copy range",
-        LogTitle.GetWithTime().c_str(),
-        syncId,
-        range.Print().c_str());
+    YDB_LOG_DEBUG_CTX(*ActorSystem, "Copy range",
+        {"withTime", LogTitle.GetWithTime()},
+        {"syncId", syncId},
+        {"range", range.Print()});
 
     auto copyRangeState = std::make_shared<TCopyRangeRequestState>(
         syncId,
@@ -312,24 +305,18 @@ void TDDiskDataCopier::OnRangeRead(
 {
     copyRangeState->Span.Event("OnRangeRead");
 
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s %lu %s Read: %s",
-        LogTitle.GetWithTime().c_str(),
-        copyRangeState->SyncId,
-        copyRangeState->Range.Print().c_str(),
-        FormatError(response.Error).Quote().c_str());
+    YDB_LOG_DEBUG_CTX(*ActorSystem, "",
+        {"withTime", LogTitle.GetWithTime()},
+        {"syncId", copyRangeState->SyncId},
+        {"range", copyRangeState->Range.Print()},
+        {"read", FormatError(response.Error)});
 
     if (HasError(response.Error)) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s %lu %s Read error: %s",
-            LogTitle.GetWithTime().c_str(),
-            copyRangeState->SyncId,
-            copyRangeState->Range.Print().c_str(),
-            FormatError(response.Error).Quote().c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "Read",
+            {"withTime", LogTitle.GetWithTime()},
+            {"syncId", copyRangeState->SyncId},
+            {"range", copyRangeState->Range.Print()},
+            {"error", FormatError(response.Error)});
 
         Client->EndRangeSync(copyRangeState->SyncId, false);
         if (IsNeverRetriableError(response.Error)) {
@@ -364,24 +351,18 @@ void TDDiskDataCopier::OnRangeWritten(
 {
     copyRangeState->Span.Event("OnRangeWritten");
 
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s %lu %s Write: %s",
-        LogTitle.GetWithTime().c_str(),
-        copyRangeState->SyncId,
-        copyRangeState->Range.Print().c_str(),
-        FormatError(response.Error).Quote().c_str());
+    YDB_LOG_DEBUG_CTX(*ActorSystem, "",
+        {"withTime", LogTitle.GetWithTime()},
+        {"syncId", copyRangeState->SyncId},
+        {"range", copyRangeState->Range.Print()},
+        {"write", FormatError(response.Error)});
 
     if (HasError(response.Error)) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s %lu %s Write error: %s",
-            LogTitle.GetWithTime().c_str(),
-            copyRangeState->SyncId,
-            copyRangeState->Range.Print().c_str(),
-            FormatError(response.Error).Quote().c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "Write",
+            {"withTime", LogTitle.GetWithTime()},
+            {"syncId", copyRangeState->SyncId},
+            {"range", copyRangeState->Range.Print()},
+            {"error", FormatError(response.Error)});
 
         Client->EndRangeSync(copyRangeState->SyncId, false);
         if (IsNeverRetriableError(response.Error)) {

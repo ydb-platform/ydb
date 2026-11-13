@@ -117,13 +117,17 @@ protected:
         if (ReplicaMissingReported < value) {
             const TMonotonic now = TActivationContext::Monotonic();
             if (LastReplicaMissing == TMonotonic::Max()) {
-                // this if the first time in row we report replica missing
+                // this if the first time in row we report replica missing; the grace period starts now, and the
+                // replica is not reported missing yet
                 LastReplicaMissing = now;
+                value = false;
             } else {
                 // make it actually "missing" only after a specific amount of time
                 value = LastReplicaMissing + TDuration::Seconds(3) < now;
             }
-        } else if (value < ReplicaMissingReported) {
+        } else if (!value) {
+            // the replica is there, so a failure later starts a grace period of its own, whether or not this one has
+            // ended with a report
             LastReplicaMissing = TMonotonic::Max();
         }
         if (value != ReplicaMissingReported) {
@@ -451,12 +455,19 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
 
         TVector<std::pair<TActorId, TActorId>> updatedReplicaGuardians;
         updatedReplicaGuardians.reserve(replicaSz);
+        // a kept child sends its followers again only when they change, so what it has reported goes to the new
+        // tracker; the reports of the children going away do not
+        auto followerTracker = MakeHolder<TFollowerTracker>(replicaSz);
 
         for (ui32 idx : xrange(replicasList.size())) {
             const TActorId replica = replicasList[idx];
             bool found = false;
-            for (auto& p : ReplicaGuardians)
-                if (p.first == replica && p.second) {
+            for (ui32 oldIdx : xrange(ReplicaGuardians.size()))
+                if (auto& p = ReplicaGuardians[oldIdx]; p.first == replica && p.second) {
+                    if (FollowerTracker) {
+                        TVector<TActorId> reported = FollowerTracker->GetReported(oldIdx);
+                        followerTracker->Merge(idx, reported);
+                    }
                     updatedReplicaGuardians.emplace_back(p);
                     Send(p.second, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
                     p.second = TActorId();
@@ -478,7 +489,18 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         ReplicaGuardians.swap(updatedReplicaGuardians);
         ReplicasOnlineThreshold = (ReplicaGuardians.size() == 1) ? 0 : 1;
 
-        FollowerTracker.Reset(new TFollowerTracker(replicaSz));
+        const bool followersChanged = Info && FollowerTracker
+            && FollowerTracker->GetMerged() != followerTracker->GetMerged();
+        FollowerTracker = std::move(followerTracker);
+        if (followersChanged) {
+            // the followers known only from the children gone are gone too
+            TVector<TActorId> followers;
+            followers.reserve(FollowerTracker->GetMerged().size());
+            for (const auto& xpair : FollowerTracker->GetMerged()) {
+                followers.emplace_back(xpair.first);
+            }
+            Send(Launcher(), new TEvTablet::TEvFollowerListRefresh(std::move(followers)));
+        }
 
         Become(&TThis::StateCalm);
     }

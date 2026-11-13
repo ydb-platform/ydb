@@ -1,3 +1,7 @@
+import faulthandler
+import logging
+import time
+
 import pytest
 
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -24,3 +28,45 @@ def config_hive(ydb_cluster):
         hive_cli.set_max_scheduled_tablets(boot_per_node)
         hive_cli.set_max_boot_batch_size(boot_batch_size)
     return _config_hive
+
+
+# Diagnostic-only hooks: preserve all auth/admin logs and locate long waits.
+_diagnostic_logger = logging.getLogger("auth_admin_diagnostics")
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    faulthandler.dump_traceback_later(10, repeat=True, file=2)
+    try:
+        yield
+    finally:
+        faulthandler.cancel_dump_traceback_later()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_fixture_setup(fixturedef, request):
+    started = time.monotonic()
+    _diagnostic_logger.warning("AUTH_DIAG fixture start: %s", fixturedef.argname)
+    try:
+        yield
+    finally:
+        _diagnostic_logger.warning(
+            "AUTH_DIAG fixture end: %s, %.3f seconds",
+            fixturedef.argname, time.monotonic() - started,
+        )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    _diagnostic_logger.warning(
+        "AUTH_DIAG phase: %s, %s, %.3f seconds, %s",
+        item.nodeid, report.when, report.duration, report.outcome,
+    )
+
+
+@pytest.fixture(autouse=True)
+def publish_auth_admin_diagnostics():
+    yield
+    pytest.fail("Intentional diagnostic failure: publish auth/admin logs", pytrace=False)

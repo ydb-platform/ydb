@@ -1723,6 +1723,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::current_user",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::day",
     "kind": "Normal"
   },
@@ -2027,6 +2031,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::session_user",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::sha",
     "kind": "Normal"
   },
@@ -2152,6 +2160,10 @@
   },
   {
     "name": "Spark::upper",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::user",
     "kind": "Normal"
   },
   {

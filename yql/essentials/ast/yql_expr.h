@@ -198,6 +198,7 @@ enum ETypeAnnotationFlags: ui32 {
     TypeHasStaticLinear = 0x10000,
     TypeUseStaticLinear = 0x20000,
     TypeHasUniversal = 0x40000,
+    TypeHasYqlNaN = 0x80000,
 };
 
 const ui64 TypeHashMagic = 0x1000000;
@@ -300,6 +301,10 @@ public:
 
     bool HasOptionalOrNull() const {
         return (GetFlags() & (TypeHasOptional | TypeHasNull)) != 0;
+    }
+
+    bool HasYqlNaN() const {
+        return (GetFlags() & TypeHasYqlNaN) != 0;
     }
 
     bool IsOptionalOrNull() const {
@@ -966,6 +971,9 @@ public:
     static ui32 GetFlags(EDataSlot slot) {
         ui32 ret = TypeHasManyValues;
         auto props = NUdf::GetDataTypeInfo(slot).Features;
+        if (props & (NUdf::FloatType | NUdf::DecimalType)) {
+            ret |= TypeHasYqlNaN;
+        }
         if (!(props & NUdf::CanHash)) {
             ret |= TypeNonHashable;
         }

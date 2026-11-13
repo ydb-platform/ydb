@@ -1,0 +1,27 @@
+(
+(let world (Configure! world (DataSource 'config) 'DeriveColumnOrder))
+(let query (lambda '(data) (YqlSelect '(
+    '('set_items '((YqlSetItem '('('values '('value) data)))))
+    '('set_ops '('push))
+))))
+(let integers (AsList '((Just (Int32 '1))) '((Just (Int32 '2)))))
+(let floats (AsList '((Just (Double 'nan))) '((Just (Double '1)))))
+(let pg_floats (AsList '((PgConst 'NaN (PgType 'float4)))))
+(let sublink (lambda '(value data) (YqlSubLink 'any (Void) (Void)
+    (lambda '(item) (JoinEquals value item))
+    (lambda '() (Apply query data)) '('('ansiIn)))))
+(let result (YqlSelect '(
+    '('set_items '((YqlSetItem '(
+        '('result '(
+            (YqlResultItem 'integer_in (Void) (lambda '() (Apply sublink (Just (Int32 '1)) integers)))
+            (YqlResultItem 'integer_missing (Void) (lambda '() (Apply sublink (Just (Int32 '3)) integers)))
+            (YqlResultItem 'nan_in (Void) (lambda '() (Apply sublink (Just (Double 'nan)) floats)))
+            (YqlResultItem 'pg_nan_in (Void) (lambda '() (Apply sublink (PgConst 'NaN (PgType 'float4)) pg_floats)))
+        ))
+    ))))
+    '('set_ops '('push))
+)))
+(let sink (DataSink 'result))
+(let world (Write! world sink (Key) result '('('type))))
+(return (Commit! world sink))
+)

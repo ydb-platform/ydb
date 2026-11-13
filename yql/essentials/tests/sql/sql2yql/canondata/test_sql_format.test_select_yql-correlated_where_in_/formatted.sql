@@ -1,13 +1,22 @@
-/* custom error: Error: Member not found: _yql_join_sublink_0__alias_x.b. */
 PRAGMA YqlSelect = 'force';
 
--- FIXME(YQL-20436): bad test,
---   syntax_pg fails too.
 SELECT
+    a
+FROM (
+    VALUES
+        (1, 10),
+        (2, 20),
+        (3, 30),
+        (4, 40),
+        (5, 50)
+) AS x (
     a,
+    b
+)
+WHERE
     b IN (
         SELECT
-            y.b / 10
+            y.b / 10,
         FROM (
             VALUES
                 (1, 100),
@@ -26,14 +35,4 @@ SELECT
         WHERE
             x.a == y.a
     )
-FROM (
-    VALUES
-        (1, 10),
-        (2, 20),
-        (3, 30),
-        (4, 40),
-        (5, 50)
-) AS x (
-    a,
-    b
-);
+;

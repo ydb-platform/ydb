@@ -642,20 +642,24 @@ bool ScanColumns(
                     break;
                 }
             }
-        } else if (node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "PgColumnRef"})) {
-            const bool columnOrType = node->IsCallable("YqlColumnRefOrType");
+        } else if (node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "YqlColumnRefOrDefault", "PgColumnRef"})) {
+            const bool hasDefault = node->IsCallable("YqlColumnRefOrDefault");
+            const auto reference = hasDefault
+                                       ? ctx.Expr.NewCallable(node->Pos(), "YqlColumnRef", {node->TailPtr()})
+                                       : node;
+            const bool columnOrType = reference->IsCallable("YqlColumnRefOrType");
             if (hasStar && *hasStar && !hasEmitPgStar) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), "Star is incompatible to column reference"));
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(reference->Pos()), "Star is incompatible to column reference"));
                 isError = true;
                 return false;
             }
 
             hasColumnRef = true;
-            const auto match = ResolveSqlColumnRef(*node, inputs, possibleAliases, scanColumnsOnly, projectionRefsResolved, allowProjection);
+            const auto match = ResolveSqlColumnRef(*reference, inputs, possibleAliases, scanColumnsOnly, projectionRefsResolved, allowProjection);
             const auto deferred = columnOrType && match.Status != ESqlColumnRefStatus::AmbiguousTable;
-            auto lcase = to_lower(TString(node->Tail().Content()));
+            auto lcase = to_lower(TString(reference->Tail().Content()));
             if (const auto* column = FindUniqueUsingColumn(usedInUsing, lcase);
-                node->ChildrenSize() == 1 && column && IsUsingColumnMatch(match, *column))
+                reference->ChildrenSize() == 1 && column && IsUsingColumnMatch(match, *column))
             {
                 refs.insert(column->Name);
                 return true;
@@ -664,9 +668,9 @@ bool ScanColumns(
             switch (match.Status) {
                 case ESqlColumnRefStatus::Found: {
                     const auto& input = *match.Input;
-                    const TString foundColumn(node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType"})
-                        ? input.Type->GetItems()[*match.Position]->GetCleanName(match.IsVirtual)
-                        : node->Tail().Content());
+                    const TString foundColumn(reference->IsCallable({"YqlColumnRef", "YqlColumnRefOrType"})
+                                                  ? input.Type->GetItems()[*match.Position]->GetCleanName(match.IsVirtual)
+                                                  : reference->Tail().Content());
                     if (qualifiedRefs && !input.Alias.empty()) {
                         (*qualifiedRefs)[input.Alias].insert(foundColumn);
                     } else {
@@ -697,31 +701,37 @@ bool ScanColumns(
                     }
                     return true;
                 case ESqlColumnRefStatus::NoFrom:
+                    if (hasDefault) {
+                        return false;
+                    }
                     if (deferred) {
                         return true;
                     }
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), ColumnRefErrorMessage(*node, match.Status)));
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(reference->Pos()), ColumnRefErrorMessage(*reference, match.Status)));
                     break;
                 case ESqlColumnRefStatus::UnknownAlias:
                     if (deferred) {
                         return true;
                     }
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), ColumnRefErrorMessage(*node, match.Status)));
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(reference->Pos()), ColumnRefErrorMessage(*reference, match.Status)));
                     break;
                 case ESqlColumnRefStatus::Ambiguous:
                     if (deferred) {
                         return true;
                     }
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), ColumnRefErrorMessage(*node, match.Status)));
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(reference->Pos()), ColumnRefErrorMessage(*reference, match.Status)));
                     break;
                 case ESqlColumnRefStatus::AmbiguousTable:
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), ColumnRefErrorMessage(*node, match.Status)));
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(reference->Pos()), ColumnRefErrorMessage(*reference, match.Status)));
                     break;
                 case ESqlColumnRefStatus::Missing:
+                    if (hasDefault) {
+                        return false;
+                    }
                     if (scanColumnsOnly || deferred) {
                         return true;
                     }
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), ColumnRefErrorMessage(*node, match.Status)));
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(reference->Pos()), ColumnRefErrorMessage(*reference, match.Status)));
                     break;
             }
             isError = true;
@@ -1546,27 +1556,34 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
             return argNode;
         }
 
-        if (node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "PgColumnRef"})) {
-            const bool columnOrType = node->IsCallable("YqlColumnRefOrType");
+        if (node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "YqlColumnRefOrDefault", "PgColumnRef"})) {
+            const bool hasDefault = node->IsCallable("YqlColumnRefOrDefault");
+            const auto reference = hasDefault
+                                       ? ctx.Expr.NewCallable(node->Pos(), "YqlColumnRef", {node->TailPtr()})
+                                       : node;
+            const bool columnOrType = reference->IsCallable("YqlColumnRefOrType");
             const auto wrapColumn = [&](TExprNode::TPtr column) {
                 return columnOrType
-                    ? ctx.Expr.NewCallable(node->Pos(), "YqlColumnOrType", {std::move(column), node->TailPtr()})
-                    : column;
+                           ? ctx.Expr.NewCallable(reference->Pos(), "YqlColumnOrType", {std::move(column), reference->TailPtr()})
+                           : column;
             };
             const auto columnError = [&](const TString& message) {
-                const auto* type = ctx.Expr.MakeType<TErrorExprType>(TIssue(ctx.Expr.GetPosition(node->Pos()), message));
-                return wrapColumn(ctx.Expr.NewCallable(node->Pos(), "Error", {ExpandType(node->Pos(), *type, ctx.Expr)}));
+                const auto* type = ctx.Expr.MakeType<TErrorExprType>(TIssue(ctx.Expr.GetPosition(reference->Pos()), message));
+                return wrapColumn(ctx.Expr.NewCallable(reference->Pos(), "Error", {ExpandType(reference->Pos(), *type, ctx.Expr)}));
             };
-            const auto match = ResolveSqlColumnRef(*node, inputs, possibleAliases, /*scanColumnsOnly=*/false, projectionRefsResolved);
-            if (const auto* column = FindUniqueUsingColumn(usedInUsing, node->Tail().Content());
-                node->ChildrenSize() == 1 && column &&
-                (column->Type || usedInUsing.contains(node->Tail().Content())) &&
+            const auto match = ResolveSqlColumnRef(*reference, inputs, possibleAliases, /*scanColumnsOnly=*/false, projectionRefsResolved);
+            if (hasDefault && (match.Status == ESqlColumnRefStatus::Missing || match.Status == ESqlColumnRefStatus::NoFrom)) {
+                return node->HeadPtr();
+            }
+            if (const auto* column = FindUniqueUsingColumn(usedInUsing, reference->Tail().Content());
+                reference->ChildrenSize() == 1 && column &&
+                (column->Type || usedInUsing.contains(reference->Tail().Content())) &&
                 IsUsingColumnMatch(match, *column)) {
                 // clang-format off
-                return wrapColumn(ctx.Expr.Builder(node->Pos())
+                return wrapColumn(ctx.Expr.Builder(reference->Pos())
                             .Callable("Member")
                                 .Add(0, argNode)
-                                .Atom(1, column->Type ? column->PhysicalName : TString(node->Tail().Content()))
+                                .Atom(1, column->Type ? column->PhysicalName : TString(reference->Tail().Content()))
                             .Seal()
                             .Build());
                 // clang-format on
@@ -1575,7 +1592,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
                 const auto& input = *match.Input;
                 const auto& item = input.Type->GetItems()[*match.Position];
                 // clang-format off
-                auto column = ctx.Expr.Builder(node->Pos())
+                auto column = ctx.Expr.Builder(reference->Pos())
                     .Callable("Member")
                         .Add(0, argNode)
                         .Atom(1, MakeAliasedColumn(input.Alias, item->GetName()))
@@ -1588,7 +1605,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
             if (match.Status == ESqlColumnRefStatus::Row) {
                 const auto& rowInput = *match.RowInput;
                 // clang-format off
-                return wrapColumn(ctx.Expr.Builder(node->Pos())
+                return wrapColumn(ctx.Expr.Builder(reference->Pos())
                     .Callable("PgToRecord")
                         .Callable(0, "DivePrefixMembers")
                             .Add(0, argNode)
@@ -1618,11 +1635,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
                 // clang-format on
             }
 
-            if (columnOrType) {
-                return columnError(ColumnRefErrorMessage(*node, match.Status));
-            }
-
-            YQL_ENSURE(false, "Missing input");
+            return columnError(ColumnRefErrorMessage(*reference, match.Status));
         }
 
         if (node->IsCallable({"YqlQualifiedStar", "PgQualifiedStar"})) {
@@ -2641,6 +2654,50 @@ bool ScanSqlLambdaColumns(
     return true;
 }
 
+TExprNode::TPtr IncludeTestColumnsInType(const TExprNode::TPtr& external, const TExprNode& inputType,
+                                         const THashSet<TString>& columns, TExprContext& ctx)
+{
+    const auto* type = external->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+    auto fields = type->GetItems();
+    for (const auto* field : inputType.GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems()) {
+        if (!type->FindItem(field->GetName()) && columns.contains(MakeAliasedColumn(external->Head().Content(), field->GetName()))) {
+            fields.push_back(field);
+        }
+    }
+    return fields.size() == type->GetSize() ? external
+                                            : ctx.ChangeChild(*external, 1, ExpandType(external->Pos(), *ctx.MakeType<TStructExprType>(fields), ctx));
+}
+
+TExprNode::TPtr IncludeSubLinkTestColumns(const TExprNode::TPtr& select, const TExprNode::TPtr& inputTypes,
+                                          const TExprNode::TPtr& test, const TExprNode::TPtr& row, TExprContext& ctx)
+{
+    if (!select->IsCallable("YqlSelect") || ExtractExternalColumns(*select).empty()) {
+        return select;
+    }
+    THashSet<TString> columns;
+    VisitExpr(test, [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable("Member") && node->HeadPtr() == row) {
+            columns.insert(TString(node->Tail().Content()));
+        }
+        return true;
+    });
+    auto setItems = GetSetting(select->Head(), "set_items")->Tail().ChildrenList();
+    bool changed = false;
+    for (auto& item : setItems) {
+        const auto extTypes = GetSetting(item->Head(), "final_ext_types");
+        auto types = extTypes->Tail().ChildrenList();
+        for (ui32 index = 0; index < types.size(); ++index) {
+            auto expanded = IncludeTestColumnsInType(types[index], inputTypes->Child(index)->Tail(), columns, ctx);
+            changed |= expanded != types[index];
+            types[index] = std::move(expanded);
+        }
+        // External inputs must stay before the sort metadata that refers to them.
+        auto expandedTypes = ctx.ChangeChild(*extTypes, 1, ctx.NewList(extTypes->Tail().Pos(), std::move(types)));
+        item = ctx.ReplaceNode(std::move(item), *extTypes, std::move(expandedTypes));
+    }
+    return changed ? ctx.ChangeChild(*select, 0, ReplaceSetting(select->Head(), select->Pos(), "set_items", ctx.NewList(select->Pos(), std::move(setItems)), ctx)) : select;
+}
+
 IGraphTransformer::TStatus RebuildSubLinks(
     const TExprNode::TPtr& root,
     TExprNode::TPtr& newRoot,
@@ -2956,6 +3013,13 @@ IGraphTransformer::TStatus SqlQualifiedStarWrapper(const TExprNode::TPtr& input,
 
 IGraphTransformer::TStatus SqlColumnRefWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
+    if (input->IsCallable("YqlColumnRefOrDefault")) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr) || !EnsureAtom(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
     if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -6141,6 +6205,14 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
 
     const TTypeAnnotationNode* collectionItemType = nullptr;
     const TTypeAnnotationNode* valueType = nullptr;
+    if (isYql && !input->Child(2)->IsCallable("Void") && input->Child(3)->IsLambda()) {
+        auto select = IncludeSubLinkTestColumns(input->ChildPtr(4), input->ChildPtr(1), input->Child(3)->TailPtr(),
+                                                input->Child(3)->Head().HeadPtr(), ctx.Expr);
+        if (select != input->ChildPtr(4)) {
+            output = ctx.Expr.ChangeChild(*input, 4, std::move(select));
+            return IGraphTransformer::TStatus::Repeat;
+        }
+    }
     if (linkType != "exists") {
         if (input->Child(4)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
             input->SetTypeAnn(input->Child(4)->GetTypeAnn());
@@ -6156,7 +6228,7 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
 
         collectionItemType = itemType->GetItems()[0]->GetItemType();
         valueType = collectionItemType;
-        if (!valueType->IsOptionalOrNull()) {
+        if (linkType == "expr" && !valueType->IsOptionalOrNull()) {
             valueType = ctx.Expr.MakeType<TOptionalExprType>(valueType);
         }
     }
@@ -6208,15 +6280,20 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
             }
 
             if (isYql) {
+                inResultIsOptional = lambda->GetTypeAnn()->HasOptionalOrNull();
+            }
+
+            if (isYql && IsYqlInSubLink(*input)) {
                 const auto lookupType = lambda->Tail().Head().GetTypeAnn();
+                const auto comparedItemType = lambda->Tail().Tail().GetTypeAnn();
                 YQL_ENSURE(lookupType);
                 inResultIsOptional = lookupType->HasOptionalOrNull();
 
                 if (input->ChildrenSize() == 6) {
                     inResultIsOptional |= HasSetting(*input->Child(5), "ansiIn") &&
-                        IsSqlInCollectionItemsNullable(lookupType, collectionItemType);
+                                          IsSqlInCollectionItemsNullable(lookupType, comparedItemType);
                     if (const auto status = ValidateYqlSublinkInCollectionItemsNullable(
-                            input, output, ctx, lookupType, collectionItemType);
+                            input, output, ctx, lookupType, comparedItemType);
                         status != IGraphTransformer::TStatus::Ok)
                     {
                         return status;

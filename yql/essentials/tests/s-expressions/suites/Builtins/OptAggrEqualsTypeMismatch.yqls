@@ -1,0 +1,6 @@
+# /* custom error: Type mismatch, left: Int32, right:Int64 */
+(
+(let sink (DataSink 'result))
+(let world (Write! world sink (Key) (OptAggrEquals (Int32 '1) (Int64 '1)) '('('type))))
+(return (Commit! world sink))
+)

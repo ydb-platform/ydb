@@ -53,8 +53,6 @@ TVChunkCounters::TVChunkCounters(NMonitoring::TDynamicCounterPtr parent)
     , Write(parent ? parent->GetSubgroup("operation", "Write") : nullptr)
     , Flush(parent ? parent->GetSubgroup("operation", "Flush") : nullptr)
     , Erase(parent ? parent->GetSubgroup("operation", "Erase") : nullptr)
-    , EraseBelated(
-          parent ? parent->GetSubgroup("operation", "EraseBelated") : nullptr)
 {}
 
 void TVChunkCounters::Publish(const TVChunkStats& total)
@@ -63,8 +61,6 @@ void TVChunkCounters::Publish(const TVChunkStats& total)
     Get(EVChunkOperation::Write).Publish(total.Get(EVChunkOperation::Write));
     Get(EVChunkOperation::Flush).Publish(total.Get(EVChunkOperation::Flush));
     Get(EVChunkOperation::Erase).Publish(total.Get(EVChunkOperation::Erase));
-    Get(EVChunkOperation::EraseBelated)
-        .Publish(total.Get(EVChunkOperation::EraseBelated));
 }
 
 TVChunkRequestCounters& TVChunkCounters::Get(EVChunkOperation operation)
@@ -78,8 +74,6 @@ TVChunkRequestCounters& TVChunkCounters::Get(EVChunkOperation operation)
             return Flush;
         case EVChunkOperation::Erase:
             return Erase;
-        case EVChunkOperation::EraseBelated:
-            return EraseBelated;
 
         case EVChunkOperation::MAX:
             Y_ABORT("Invalid operation");

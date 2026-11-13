@@ -730,7 +730,6 @@ class LogbrokerFederation(object):
                 if remaining <= 0:
                     break
                 cluster_port = self.__cluster_ports[cluster_name]
-                consumer = "/logbroker-federation/{}/consumer".format(account)
                 database = "/Root/logbroker-federation/{}".format(account)
                 probe_timeout = min(5.0, remaining)
                 try:
@@ -742,13 +741,11 @@ class LogbrokerFederation(object):
                         driver.wait(timeout=probe_timeout)
                         # TopicClient has no request settings; bound the probe wall.
                         with futures.ThreadPoolExecutor(max_workers=1) as pool:
-                            fut = pool.submit(
-                                driver.topic_client.describe_consumer, "topic", consumer
-                            )
+                            fut = pool.submit(driver.topic_client.describe_topic, "topic")
                             fut.result(timeout=probe_timeout)
                     pending.remove((cluster_name, account))
                     logger.info(
-                        "Preinstalled topic+consumer ready on cluster=%s account=%s",
+                        "Preinstalled topic ready on cluster=%s account=%s",
                         cluster_name,
                         account,
                     )

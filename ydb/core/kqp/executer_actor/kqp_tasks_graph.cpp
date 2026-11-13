@@ -7,7 +7,6 @@
 #include <ydb/library/json_index/json_index.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/fq/libs/state/dq_stage_state_recovery_info.h>
 #include <ydb/core/kqp/common/control.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -27,10 +26,6 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
-#include <ydb/library/yql/providers/pq/common/pq_partitions.h>
-#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
-#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
-
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
 #include <algorithm>
@@ -183,6 +178,7 @@ void MergeReadInfoToTaskMeta(TTaskMeta& meta, ui64 shardId, TMaybe<TShardKeyRang
     }
 
     FillReadInfo(meta, readSettings.ItemsLimit, readSettings.GetSorting());
+    meta.ReadInfo.RequireSortedRead = readSettings.RequireSortedRead;
     if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
         FillOlapReadInfo(meta, readSettings.ResultType, op.GetReadOlapRange());
     }
@@ -381,6 +377,7 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
         if (!task.Meta.Reads->empty()) {
             protoTaskMeta.SetReverse(task.Meta.ReadInfo.IsReverse());
             protoTaskMeta.SetOptionalSorting((ui32)task.Meta.ReadInfo.GetSorting());
+            protoTaskMeta.SetRequireSortedRead(task.Meta.ReadInfo.RequireSortedRead);
             protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
             if (task.Meta.HasEnableShardsSequentialScan()) {
                 protoTaskMeta.SetEnableShardsSequentialScan(task.Meta.GetEnableShardsSequentialScanUnsafe());
@@ -1099,6 +1096,9 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
             auto& out = *settings->MutableVectorTopK();
             out.SetColumn(in.GetColumn());
             *out.MutableSettings() = in.GetSettings();
+            if (in.HasHnswIndexId()) {
+                *out.MutableHnswIndexId() = in.GetHnswIndexId();
+            }
             auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
             out.SetTargetVector(TString(target.AsStringRef()));
             out.SetLimit((ui32)limit);
@@ -1197,6 +1197,9 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
     auto* settings = GetMeta().Allocate<NKikimrTxDataShard::TKqpVectorSearchSettings>();
 
     *settings->MutableIndexSettings() = vectorSearch.GetIndexSettings();
+    if (vectorSearch.HasHnswIndexId()) {
+        *settings->MutableHnswIndexId() = vectorSearch.GetHnswIndexId();
+    }
     settings->SetOverlapClusters(vectorSearch.GetOverlapClusters());
     settings->SetIndexLevels(vectorSearch.GetLevels());
     {
@@ -1795,6 +1798,8 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             if (Y_LIKELY(input.Meta.SourceSettings)) {
                 enableMetering = true;
                 YQL_ENSURE(input.Meta.SourceSettings->HasTable());
+                // Refresh request-specific hints even when restoring a cached task graph.
+                input.Meta.SourceSettings->SetReadHints(GetMeta().UserRequestContext->ReadHints);
                 bool isTableImmutable = input.Meta.SourceSettings->GetIsTableImmutable();
 
                 if (snapshot.IsValid() && !isTableImmutable) {
@@ -2200,6 +2205,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
 
             auto& readInfo = newTask.Meta.ReadInfo;
             readInfo.SetSorting(static_cast<ERequestSorting>(meta.GetOptionalSorting()));
+            readInfo.RequireSortedRead = meta.GetRequireSortedRead();
             readInfo.ItemsLimit = meta.GetItemsLimit();
             readInfo.GroupByColumnNames.assign(meta.GetGroupByColumnNames().begin(), meta.GetGroupByColumnNames().end());
             readInfo.OlapProgram.Program = meta.GetOlapProgram().GetProgram();
@@ -2607,7 +2613,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
     // Tasks were already created, placed by node and laid into stageInfo.Tasks; here we just enrich them.
     auto tasksByNode = GroupStageTasksByNode(stageInfo);
 
-    if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() && !shuffleEliminated || (!isOlapScan && readSettings.IsSorted())) {
+    if (readSettings.RequireSortedRead || (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() && !shuffleEliminated) || (!isOlapScan && readSettings.IsSorted())) {
         if (stageInfo.Meta.IsOlap() && readSettings.IsSorted()) {
             // OLAP + sorted: one task per shard (FIXED in MaxTasksGraph)
             for (auto& [nodeId, shardsInfo] : nodeShards) {
@@ -2851,6 +2857,9 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     NKikimrKqp::TKqpFullTextSourceSettings* settings = input.Meta.FullTextSourceSettings;
 
     settings->SetIndex(fullTextSource.GetIndex());
+    if (fullTextSource.HasMainTableCovered()) {
+        settings->SetMainTableCovered(fullTextSource.GetMainTableCovered());
+    }
     settings->SetDatabase(GetMeta().Database);
 
     const auto& poolId = GetMeta().UserRequestContext->PoolId;
@@ -3271,6 +3280,9 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
                 auto& out = *settings->MutableVectorTopK();
                 out.SetColumn(in.GetColumn());
                 *out.MutableSettings() = in.GetSettings();
+                if (in.HasHnswIndexId()) {
+                    *out.MutableHnswIndexId() = in.GetHnswIndexId();
+                }
                 auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
                 out.SetTargetVector(TString(target.AsStringRef()));
                 out.SetLimit((ui32)limit);
@@ -4472,14 +4484,15 @@ void TKqpTasksGraph::CountScanTasksFromShards(TStageInfo& stageInfo, bool enable
 
     const auto& op = stage.GetTableOps(0);
     const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
-    const bool isSorted = ExtractReadSettings(op, stageInfo, TxAlloc->HolderFactory, TxAlloc->TypeEnv).IsSorted();
+    const auto readSettings = ExtractReadSettings(op, stageInfo, TxAlloc->HolderFactory, TxAlloc->TypeEnv);
+    const bool isSorted = readSettings.IsSorted();
 
     const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
     for (const auto& [shardId, _]: partitions) {
         ++nodeShards[GetMeta().ShardIdToNodeId.at(shardId)];
     }
 
-    if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() && !shuffleEliminated || (!isOlapScan && isSorted)) {
+    if (readSettings.RequireSortedRead || (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() && !shuffleEliminated) || (!isOlapScan && isSorted)) {
         if (stageInfo.Meta.IsOlap() && isSorted) {
             MaxTasksGraph->AddStage(stageInfo, TMaxTasksGraph::FIXED, inputs);
             for (const auto& [nodeId, shards] : nodeShards) {

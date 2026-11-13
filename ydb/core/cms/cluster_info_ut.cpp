@@ -539,9 +539,9 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT(!cluster->HasNode(42));
         UNIT_ASSERT(!cluster->HasNode(99));
 
-        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(1), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(2), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(3), 1);
+        UNIT_ASSERT((*cluster->FindStateStorageReplicaRings(1) == TClusterInfo::TStateStorageReplicaRings{{0, 0}}));
+        UNIT_ASSERT((*cluster->FindStateStorageReplicaRings(2) == TClusterInfo::TStateStorageReplicaRings{{0, 0}}));
+        UNIT_ASSERT((*cluster->FindStateStorageReplicaRings(3) == TClusterInfo::TStateStorageReplicaRings{{0, 1}}));
     }
 
     Y_UNIT_TEST(SysTabletNonActiveStateIgnored) {
@@ -697,13 +697,14 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
                 TTabletTypes::SequenceShard,
                 TTabletTypes::ReplicationController,
                 TTabletTypes::BlobDepot,
+                TTabletTypes::CdcAggregator,
                 // New tablet types are introduced by renaming one of these
                 // reserved values, which must force this classification test
                 // to be updated.
-                TTabletTypes::Reserved48,
                 TTabletTypes::Reserved49,
                 TTabletTypes::Reserved50,
                 TTabletTypes::Reserved51,
+                TTabletTypes::Reserved52,
             })
         {
             TClusterInfoPtr cluster(new TClusterInfo);

@@ -211,6 +211,12 @@ public:
         }
     }
 
+    ~TEnv() {
+        RunCall([&] {
+            Server.ShutdownGRpc();
+        });
+    }
+
     void RotatePassword(const TString& user, const TString& newPassword, const TString& oldPassword) {
         const auto db = "/" + ToString(DomainName);
         auto status = RunCall([&] {

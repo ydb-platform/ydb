@@ -23,6 +23,18 @@ TInfoUnitId ResolveBinding(const TExpression::TBindings& bindings, TStringBuf na
     return it->second;
 }
 
+// A select with ORDER BY builds its LIMIT right on its sort or on the ordered projection that follows the sort.
+bool LimitsOwnSort(const TExprBase& input) {
+    if (input.Maybe<TKqpOpSort>()) {
+        return true;
+    }
+    if (const auto map = input.Maybe<TKqpOpMap>()) {
+        const auto ordered = map.Cast().Ordered();
+        return ordered && ordered.Cast().Value() == "True";
+    }
+    return false;
+}
+
 TOrderedIUs<> RebindProjection(const TOrderedIUs<>& projection, const TSubstitutions& substitutions) {
     TOrderedIUs<> result;
     for (const auto id : projection.Items()) {
@@ -758,7 +770,9 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node)
     }
     OutputBindings[TImportKey{node.Get(), BindingContext}] = bindings;
     PropagateProjection(source.Input().Ptr(), node);
-    return MakeIntrusive<TOpLimit>(std::move(input), node->Pos(), TPhysicalOpProps{}, count, std::move(offset), EOpPhase::Undefined);
+    auto limit = MakeIntrusive<TOpLimit>(std::move(input), node->Pos(), TPhysicalOpProps{}, count, std::move(offset), EOpPhase::Undefined);
+    limit->OrderedInput = LimitsOwnSort(source.Input());
+    return limit;
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr node) {

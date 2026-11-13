@@ -109,7 +109,8 @@ protected:
                                    const std::string& consumerName,
                                    const TDuration& duration,
                                    TTransactionBase* tx = nullptr,
-                                   std::optional<std::uint32_t> partitionId = std::nullopt);
+                                   std::optional<std::uint32_t> partitionId = std::nullopt,
+                                   std::optional<std::size_t> expectedMessages = std::nullopt);
     void WaitForAcks(const std::string& topicPath,
                      const std::string& messageGroupId,
                      std::size_t writtenInTxCount = std::numeric_limits<std::size_t>::max());

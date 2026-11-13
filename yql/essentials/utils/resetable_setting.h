@@ -15,15 +15,15 @@ protected:
 
 public:
     void Set(const TSet& value) {
-        Value.ConstructInPlace(value);
+        Value_.ConstructInPlace(value);
     }
 
     void Reset(const TReset& value) {
-        Value.ConstructInPlace(value);
+        Value_.ConstructInPlace(value);
     }
 
     bool Defined() const {
-        return Value.Defined();
+        return Value_.Defined();
     }
 
     explicit operator bool() const {
@@ -32,21 +32,21 @@ public:
 
     bool IsSet() const {
         YQL_ENSURE(Defined());
-        return Value->index() == 0;
+        return Value_->index() == 0;
     }
 
     const TSet& GetValueSet() const {
         YQL_ENSURE(IsSet());
-        return std::get<TSet>(*Value);
+        return std::get<TSet>(*Value_);
     }
 
     const TReset& GetValueReset() const {
         YQL_ENSURE(!IsSet());
-        return std::get<TReset>(*Value);
+        return std::get<TReset>(*Value_);
     }
 
 private:
-    TMaybe<std::variant<TSet, TReset>> Value;
+    TMaybe<std::variant<TSet, TReset>> Value_;
 };
 
 template <typename S, typename R>

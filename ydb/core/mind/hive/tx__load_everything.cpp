@@ -30,6 +30,7 @@ public:
         Self->NodeSegments.clear();
         Self->TabletCategories.clear();
         Self->Tablets.clear();
+        Self->BootAttempts.clear();
         Self->OwnerToTablet.clear();
         Self->ObjectToTabletMetrics.clear();
         Self->TabletTypeToTabletMetrics.clear();

@@ -7,6 +7,8 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/scheme/protos/pathid.proto";
+
 import "ydb/core/protos/kqp_tablemetadata.proto";
 import "ydb/core/protos/kqp_physical.proto";
 import "ydb/core/protos/kqp_stats.proto";
@@ -206,6 +208,8 @@ message TQueryRequest {
     // relayed by proxies across nodes; this flag is ignored for forwarded
     // requests. Notifications retain the request cookie.
     optional bool ReportWmStateChanges = 44;
+    // Raw internal x-ydb-mvcc-version metadata; validated by the session actor.
+    optional string MvccVersion = 45;
 }
 
 message TVectorIndexKmeansTreeDescription {
@@ -1047,6 +1051,8 @@ message TReadVectorTopK {
     optional string TargetVector = 3;
     optional uint32 Limit = 4;
     repeated uint32 DistinctColumns = 5;
+    // Logical HNSW index identity on the local table. Omitted by legacy callers.
+    optional NKikimrProto.TPathID HnswIndexId = 6;
 }
 
 message TKqpStreamLookupSettings {
@@ -1143,6 +1149,7 @@ message TKqpFullTextSourceSettings {
     optional uint32 LockNodeId = 21;
     optional NKikimrDataEvents.ELockMode LockMode = 22;
     optional uint64 QuerySpanId = 23;
+    optional bool MainTableCovered = 24;
 };
 
 message TKqpSysViewSourceSettings {

@@ -855,9 +855,9 @@ private:
                   Y("String", BuildQuotedAtom(Pos_, message)));
         }
 
-        if (isFactory) {
-            FactoryPercentile_ = x;
-        } else {
+        FactoryPercentile_ = x;
+
+        if (!isFactory) {
             Percentiles_.emplace(Name_, x);
         }
 

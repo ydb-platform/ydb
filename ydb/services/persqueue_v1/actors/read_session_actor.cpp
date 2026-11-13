@@ -889,7 +889,8 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
-    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, database);
+    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, database,
+        Protocol == EProtocol::Topic && AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
 
     if (!TopicsList.IsValid) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason, ctx);
@@ -907,7 +908,7 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
             const auto internalName = converter->GetOriginalPath();
             if constexpr (Protocol != EProtocol::PQv1) {
                 auto [alias, inserted] = AliasedTopicPaths.emplace(internalName,
-                    topic.path() == path ? TString() : TString(topic.path()));
+                    TStringBuf(topic.path()).StartsWith('/') && topic.path() != path ? TString(topic.path()) : TString());
                 if (!inserted && alias->second != topic.path()) {
                     alias->second.clear(); // Ambiguous request: keep the existing response path.
                 }
@@ -1489,7 +1490,8 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
     }
 
     LOG_D("Sending to client partition status");
-    SendControlMessage(it->second.Partition, std::move(result), ctx, false);
+    // A status read_offset must not overtake the data already read at that offset.
+    SendControlMessage(it->second.Partition, std::move(result), ctx);
 }
 
 template <EProtocol Protocol>

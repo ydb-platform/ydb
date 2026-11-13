@@ -80,7 +80,8 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
         : request->path());
 
     auto topicsList = TopicsHandler->GetReadTopicsList(
-            topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString())
+            topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString()),
+            AppData(ctx)->FeatureFlags.GetEnableRelativePaths()
     );
     if (!topicsList.IsValid) {
         return AnswerError(

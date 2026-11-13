@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <library/cpp/json/json_reader.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
+#include <ydb/core/kqp/node_service/kqp_node_service.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/console.h>
@@ -3447,6 +3448,54 @@ Y_UNIT_TEST(NgramScanFallback) {
         UNIT_ASSERT_VALUES_EQUAL_C(limited.GetStatus(), EStatus::SUCCESS, limited.GetIssues().ToString());
         CompareYson("[[[600u]]]", FormatResultSetYson(limited.GetResultSet(0)));
         DropIndex(db);
+    }
+}
+
+Y_UNIT_TEST(FullTextLegacyMainTableCoverage) {
+    auto kikimr = KikimrWithCompact(true, false);
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    auto db = kikimr.GetQueryClient();
+    auto tableClient = kikimr.GetTableClient();
+    kikimr.RunCall([&] {
+        CreateTexts(db, true);
+        UpsertTexts(db);
+        AddIndexNGram(db);
+        return true;
+    });
+
+    for (bool wildcard : {false, true}) {
+        size_t clearedSources = 0;
+        const auto observer = runtime.AddObserver<TEvKqpNode::TEvStartKqpTasksRequest>([&](auto& ev) {
+            for (auto& task : *ev->Get()->Record.MutableTasks()) {
+                for (auto& input : *task.MutableInputs()) {
+                    if (!input.HasSource()) {
+                        continue;
+                    }
+                    auto* packed = input.MutableSource()->MutableSettings();
+                    NKikimrKqp::TKqpFullTextSourceSettings settings;
+                    if (packed->UnpackTo(&settings) && settings.HasMainTableCovered()) {
+                        ++clearedSources;
+                        settings.ClearMainTableCovered(); // Emulate settings from an older saved graph.
+                        packed->PackFrom(settings);
+                    }
+                }
+            }
+        });
+        const TString predicate = wildcard
+            ? "FulltextMatch(Text, \"cat%\", \"Wildcard\" AS Mode)"
+            : "FulltextMatch(Text, \"cats\")";
+        const auto result = kikimr.RunCall([&] {
+            // Scan queries send settings through the node service observed above.
+            auto it = tableClient.StreamExecuteScanQuery(TStringBuilder()
+                << "SELECT Key FROM `/Root/Texts` VIEW fulltext_idx WHERE " << predicate << " ORDER BY Key;",
+                TStreamExecScanQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return CollectStreamResult(it);
+        });
+        UNIT_ASSERT_GT(clearedSources, 0);
+        CompareYson(wildcard ? "[[[100u]];[[300u]]]" : "[[[100u]];[[200u]];[[300u]]]", result.ResultSetYson);
+        UNIT_ASSERT(result.QueryStats);
+        AssertTableStats(*result.QueryStats, "/Root/Texts", {.ExpectedReads = wildcard ? 3u : 0u});
     }
 }
 

@@ -1,3 +1,7 @@
+* Added support for tablet reassignment operation IDs.
+
+## v3.27.0
+
 * Fixed static login credentials failing permanently when the initial Login operation returns a transient service error.
 
 * Added draft `TBridgeClient::Rollback()` to roll a cluster converted into a bridged one back to ordinary mode, and `TBridgeClient::GetRollbackStatus()` to show the progress of the rollback.
@@ -12,6 +16,8 @@
 * Added `TUpdateClusterStateSettings::ExpectedGeneration()` to apply a bridge cluster state update only if the cluster state still has the given generation.
 * Added draft bridge synchronization APIs for pile, database, and group diagnostics.
 
+* Fixed Topic write-session path handling: paths starting with `/` remain absolute, and relative database names are left for server-side resolution.
+
 * Added draft `TBridgeClient::SetDatabaseBridgeMode()` to atomically change a database's bridge mode. `TSetDatabaseBridgeModeSettings::RetainPileName()` selects the pile to retain when disabling bridge mode.
 
 * Fixed PersQueue topic settings losing replication-consumer and consumer-offset-mirroring attributes when copied from DescribeTopic into CreateTopic or AlterTopic settings.
@@ -19,6 +25,8 @@
 * Fixed Topic producer retries touching the producer after it was destroyed. Write sessions keep a snapshot of the retry policy and no longer read producer settings from the gRPC thread.
 
 * Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
+
+* Fixed a Topic read session crash (Panic in `OnUserRetrievedEvent`) when an unrecoverable stream read error tore down the session while data events were still queued for delivery; the teardown now releases the accounting for undelivered events exactly once.
 
 ## v3.26.0
 

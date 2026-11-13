@@ -5,6 +5,7 @@
 #include "util.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/util/proto_duration.h>
@@ -13,6 +14,7 @@
 
 #include <library/cpp/json/json_writer.h>
 
+#include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -28,13 +30,18 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             const std::optional<TDuration>& resolvedTimestamps,
             const NJson::TJsonMap& attrs,
             bool schemaChanges,
-            bool initialScan)
+            bool initialScan,
+            bool enableOmitBackupAttribute)
     {
         using namespace NYdb::NTable;
 
         auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
             .WithRetentionPeriod(retentionPeriod)
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
+
+        if (enableOmitBackupAttribute) {
+            desc.AddAttribute(std::string(NBackup::OMIT_BACKUP_ATTRIBUTE), std::string(NBackup::OMIT_BACKUP_VALUE));
+        }
 
         if (initialScan) {
             desc.WithInitialScan();
@@ -153,7 +160,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
                 .SetAvailabilityPeriod(ConsumerAvailabilityPeriod);
             break;
         case ETopicOperation::SetRetention:
-            settings.SetRetentionPeriod(StreamRetentionPeriod);
+            settings.SetRetentionPeriod(StreamRetentionPeriod)
+                .SetPartitionWriteSpeedBytesPerSecond(10_MB);
             break;
         }
 
@@ -400,7 +408,8 @@ public:
             bool describeOnly,
             TDuration streamRetentionPeriod,
             TDuration consumerAvailabilityPeriod,
-            bool consumerImportant)
+            bool consumerImportant,
+            bool enableOmitBackupAttribute)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -415,7 +424,7 @@ public:
             // A schema barrier snapshots its partition membership, so topic
             // repartitioning is unsupported for schema-aware streams.
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning && !schemaChanges},
-        }, schemaChanges, initialScan))
+        }, schemaChanges, initialScan, enableOmitBackupAttribute))
         , StreamRetentionPeriod(streamRetentionPeriod)
         , ConsumerAvailabilityPeriod(consumerAvailabilityPeriod)
         , ConsumerImportant(consumerImportant)
@@ -500,7 +509,7 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
         supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly,
         TDuration::Seconds(AppData()->ReplicationConfig.GetStreamRetentionPeriodSeconds()),
-        consumerAvailabilityPeriod, consumerImportant);
+        consumerAvailabilityPeriod, consumerImportant, AppData()->ReplicationConfig.GetEnableOmitBackupAttribute());
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
@@ -508,11 +517,12 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
         const TString& streamName, const TString& streamPath, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
         bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly,
-        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant)
+        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant, bool enableOmitBackupAttribute)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
         streamName, streamPath, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
-        schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant);
+        schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant,
+        enableOmitBackupAttribute);
 }
 
 }

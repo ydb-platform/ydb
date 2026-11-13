@@ -15,6 +15,10 @@ SRCS(
     system_mmap.h
     tracked_mmap.cpp
     tracked_mmap.h
+    frozen_page.cpp
+    global_page_pool.cpp
+    global_pools.cpp
+    page_pool_constants.cpp
 )
 
 PEERDIR(

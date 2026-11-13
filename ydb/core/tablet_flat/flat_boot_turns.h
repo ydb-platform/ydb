@@ -219,14 +219,7 @@ namespace NBoot {
                         snapshot.Strategy = front.CompactionChanges.Strategy;
                     }
 
-                    for (const auto &label : front.Leaving) {
-                        snapshot.State.PartLevels.erase(label);
-                    }
-
-                    for (const auto &bundle : front.Bundles) {
-                        const auto &label = bundle.LargeGlobIds[0].Lead;
-                        snapshot.State.PartLevels[label] = front.Level;
-                    }
+                    front.ApplyPartLevels(snapshot.State.PartLevels);
 
                     for (const auto &kv : front.CompactionChanges.KeyValues) {
                         if (kv.second) {

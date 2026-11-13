@@ -2,6 +2,7 @@ import os
 import yaml
 
 from ydb.tools.ydbd_slice import cluster_description
+from ydb.tools.ydbd_slice import config_yaml
 import copy
 from ydb.tools.cfg.utils import write_to_file
 
@@ -55,7 +56,7 @@ class YamlConfig(object):
             with open(yaml_config_path, 'r') as f:
                 self.__yaml_config = yaml.safe_load(f)
         except (yaml.YAMLError, yaml.scanner.ScannerError, yaml.parser.ParserError) as e:  # type: ignore
-            raise ValueError(f"Invalid yaml config: {e}")
+            raise ValueError(f"Invalid yaml config: {e}") from e
 
     @property
     def dynamic_simple(self):
@@ -96,7 +97,7 @@ class YamlConfigurator(object):
         with open(config_path, 'r') as f:
             self.static = f.read()
 
-        self.cluster_description = cluster_description.ClusterDetails(config_path)
+        self.cluster_description = cluster_description.ClusterDetails(config_path, loader=config_yaml.load)
 
         with open(cluster_path, 'r') as f:
             _domains = cluster_description.safe_load_no_duplicates(f.read())
@@ -119,14 +120,14 @@ class YamlConfigurator(object):
 
     @property
     def static_yaml(self):
-        return yaml.dump(self.__static_dict)
+        return config_yaml.dump(self.__static_dict)
 
     @static.setter
     def static(self, value):
         try:
-            self.__static_dict = yaml.safe_load(value)
-        except (yaml.scanner.ScannerError, yaml.parser.ParserError) as e:  # type: ignore
-            raise ValueError(f"Invalid yaml config: {e}")
+            self.__static_dict = config_yaml.load(value)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid yaml config: {e}") from e
 
         self.__static = value
 
@@ -142,8 +143,8 @@ class YamlConfigurator(object):
     def dynamic(self, value):
         try:
             self.__dynamic_dict = yaml.safe_load(value)
-        except (yaml.scanner.ScannerError, yaml.parser.ParserError) as e:  # type: ignore
-            raise ValueError(f"Invalid yaml config: {e}")
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid yaml config: {e}") from e
 
         self.__dynamic = value
 
@@ -257,7 +258,7 @@ class YamlConfigurator(object):
         if self.enable_process_profiles or process_profiles.needs_strip(self.static_dict):
             write_to_file(
                 config_yaml_path,
-                process_profiles.dump_yaml(process_profiles.strip_slice_only_fields(self.static_dict)),
+                config_yaml.dump(process_profiles.strip_slice_only_fields(self.static_dict)),
             )
         else:
             write_to_file(config_yaml_path, self.static)

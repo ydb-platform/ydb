@@ -8,6 +8,10 @@
 
 #include <util/datetime/base.h>
 
+namespace NKikimrSchemeOp {
+class TColumnDescription;
+}
+
 namespace NKikimr::NUdfStore {
 
 enum class EUdfType {

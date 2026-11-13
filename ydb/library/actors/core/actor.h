@@ -587,6 +587,8 @@ namespace NActors {
         TIntrusiveList<TActorTask> ActorTasks;
         absl::flat_hash_map<ui64, TIntrusiveList<TActorEventAwaiter>> EventAwaiters;
         bool PassedAway = false;
+        bool ExceptionHandlerChecked = false;
+        bool HasExceptionHandler = false;
 
         void FinishPassAway();
         void DestroyActorTasks();

@@ -595,6 +595,40 @@ Y_UNIT_TEST(BatchedMessagesWriteWithoutFeatureFlagFails) {
     PQGetPartInfo(0, 0, tc);
 }
 
+Y_UNIT_TEST(CmdWriteRejectsExplicitHashLongerThan255) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString ownerCookie = CmdSetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, 0).first;
+    auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* partitionRequest = request->Record.MutablePartitionRequest();
+    partitionRequest->SetPartition(0);
+    partitionRequest->SetOwnerCookie(ownerCookie);
+    partitionRequest->SetMessageNo(1);
+
+    auto* write = partitionRequest->AddCmdWrite();
+    write->SetSourceId("source");
+    write->SetSeqNo(1);
+    write->SetData("data");
+    write->SetLogicalMessageCount(1);
+    write->SetExplicitHash(TString(256, 'h'));
+
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
+        [](const TEvPersQueue::TEvResponse& event) {
+            return event.Record.GetErrorCode() != NPersQueue::NErrorCode::OK;
+        });
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(
+        static_cast<ui32>(response->Record.GetErrorCode()),
+        static_cast<ui32>(NPersQueue::NErrorCode::BAD_REQUEST));
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetErrorReason(), "too long explicit hash");
+}
+
 Y_UNIT_TEST(BatchedMessagesWriteWithoutMaxSeqNoFails) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;
@@ -5165,6 +5199,53 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlob) {
     PQGetPartInfo(1, 2, tc);
 
     WaitRetentionCleanup(tc, 2, 2, retentionSeconds);
+}
+
+void TestLegacyRetentionIdlePartition(bool subDomainOutOfSpace) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
+    constexpr ui32 retentionSeconds = 5;
+
+    PQTabletPrepare({.maxCountInPartition = 1000, .deleteTime = retentionSeconds, .partitions = 1,
+        .lowWatermark = 100, .meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS,
+        .AddDefaultConsumer = false}, {}, tc);
+
+    TString s{32, 'c'};
+    ui32 pp = 8 + 4 + 2 + 9;
+    TVector<std::pair<ui64, TString>> data;
+    for (ui32 i = 0; i < 10; ++i) {
+        data.push_back({i + 1, s.substr(pp)});
+    }
+    CmdWrite(0, "sourceid0", data, tc, false, {}, true);
+    CmdWrite(0, "sourceid1", data, tc, false);
+    CmdWrite(0, "sourceid2", data, tc, false);
+    PQGetPartInfo(0, 30, tc);
+
+    if (subDomainOutOfSpace) {
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, new TEvPQ::TEvSubDomainStatus(true), 0, GetPipeConfigWithRetries());
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvPQ::EvSubDomainStatus, 2);
+        tc.Runtime->DispatchEvents(options);
+    }
+
+    for (ui32 i = 0; i < 10; ++i) {
+        tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(retentionSeconds + 1));
+        DispatchUntilWakeup(tc);
+    }
+
+    PQGetPartInfo(20, 30, tc);
+}
+
+Y_UNIT_TEST(TestLegacyRetentionIdlePartition) {
+    TestLegacyRetentionIdlePartition(false);
+}
+
+Y_UNIT_TEST(TestLegacyRetentionIdlePartitionSubDomainOutOfSpace) {
+    TestLegacyRetentionIdlePartition(true);
 }
 
 Y_UNIT_TEST(TestRetentionDeletesLastBlobInFwz) {

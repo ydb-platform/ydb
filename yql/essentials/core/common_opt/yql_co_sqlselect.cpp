@@ -4,6 +4,7 @@
 
 #include <yql/essentials/core/type_ann/type_ann_pg.h>
 #include <yql/essentials/core/type_ann/type_ann_yql.h>
+#include <yql/essentials/core/type_ann/type_ann_yql_flatten.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_join.h>
@@ -15,6 +16,40 @@
 #include <library/cpp/iterator/zip.h>
 
 namespace NYql {
+
+namespace {
+
+TExprNode::TPtr BuildSqlSourceRenameLambda(
+    TPositionHandle pos,
+    const TColumnOrder& sourceOrder,
+    const TExprNode::TListType& targetNames,
+    TExprContext& ctx)
+{
+    YQL_ENSURE(sourceOrder.Size() == targetNames.size());
+    // clang-format off
+    return ctx.Builder(pos)
+        .Lambda()
+            .Param("item")
+            .Callable("AsStruct")
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    for (ui32 i = 0; i < targetNames.size(); ++i) {
+                        parent.List(i)
+                            .Add(0, targetNames[i])
+                            .Callable(1, "Member")
+                                .Arg(0, "item")
+                                .Atom(1, sourceOrder.at(i).PhysicalName)
+                            .Seal()
+                        .Seal();
+                    }
+                    return parent;
+                })
+            .Seal()
+        .Seal()
+        .Build();
+    // clang-format on
+}
+
+} // namespace
 
 TExprNode::TPtr WrapWithNonNegativeCheck(TPositionHandle pos, const TExprNode::TPtr& value, TExprContext& ctx, const TString& message) {
     // clang-format off
@@ -287,8 +322,8 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
     TExprContext& ctx,
     TOptimizeContext& optCtx,
     bool isYql,
-    const TString& leftPrefix = {},
-    TVector<TString>* sublinkColumns = nullptr)
+    const TString& leftPrefix,
+    TVector<TString>* sublinkColumns)
 {
     auto newRoot = root;
     auto newList = list;
@@ -972,32 +1007,16 @@ TExprNode::TPtr NormalizeColumnOrder(const TExprNode::TPtr& node, const TColumnO
     }
 
     YQL_ENSURE(sourceColumnOrder.Size() == targetColumnOrder.Size());
+    TExprNode::TListType targetNames;
+    for (const auto& column : targetColumnOrder) {
+        targetNames.push_back(ctx.NewAtom(node->Pos(), column.PhysicalName));
+    }
+
     // clang-format off
     return ctx.Builder(node->Pos())
         .Callable("OrderedMap")
             .Add(0, node)
-            .Lambda(1)
-                .Param("row")
-                .Callable("AsStruct")
-                .Do([&](TExprNodeBuilder &parent) -> TExprNodeBuilder & {
-                    // clang-format on
-                    for (size_t i = 0; i < sourceColumnOrder.Size(); ++i) {
-                        // clang-format off
-                        parent
-                            .List(i)
-                                .Atom(0, targetColumnOrder[i].PhysicalName)
-                                .Callable(1, "Member")
-                                    .Arg(0, "row")
-                                    .Atom(1, sourceColumnOrder[i].PhysicalName)
-                                .Seal()
-                            .Seal();
-                        // clang-format on
-                    }
-                    return parent;
-                // clang-format off
-                })
-                .Seal()
-            .Seal()
+            .Add(1, BuildSqlSourceRenameLambda(node->Pos(), sourceColumnOrder, targetNames, ctx))
         .Seal()
         .Build();
     // clang-format on
@@ -1300,7 +1319,9 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
                     continue;
                 }
 
-                if (columns.ChildrenSize() > 0) {
+                if (auto flatten = NTypeAnnImpl::GetYqlFlattenSetting(*from->Tail().Child(inputIndex))) {
+                    foundColumn = NTypeAnnImpl::GetYqlFlattenRowType(*flatten)->FindItem(column).Defined();
+                } else if (columns.ChildrenSize() > 0) {
                     auto readOrder = optCtx.Types->LookupColumnOrder(read);
                     YQL_ENSURE(readOrder);
                     TColumnOrder aliases;
@@ -1355,15 +1376,17 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
 }
 
 TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::TPtr& from, const TUsedColumns& usedColumns,
-    TVector<TString>& inputAliases, THashMap<TString, ui32>& memberToInput, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
+    TVector<TString>& inputAliases, THashMap<TString, ui32>& memberToInput, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TOptimizeContext& optCtx) {
     TExprNode::TListType cleanedInputs;
     for (ui32 i = 0; i < from->Tail().ChildrenSize(); ++i) {
-        auto list = from->Tail().Child(i)->HeadPtr();
+        const auto& source = *from->Tail().Child(i);
+        auto list = source.HeadPtr();
         auto originalList = list;
-        auto inputAlias = from->Tail().Child(i)->Child(1)->Content();
+        auto inputAlias = source.Child(1)->Content();
+        TExprNode::TPtr renameLambda;
         inputAliases.push_back(TString(inputAlias));
         if (list->IsCallable("PgResolvedCall")) {
-            const auto& columns = *from->Tail().Child(i)->Child(2);
+            const auto& columns = *source.Child(2);
             if (inputAlias.empty()) {
                 inputAliases.back() = inputAlias = list->Head().Content();
             }
@@ -1385,36 +1408,14 @@ TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::T
                 }
 
                 if (columns.ChildrenSize() != 0) {
-                    // rename columns
+                    const auto originalColumnOrder = typeCtx.LookupColumnOrder(*originalList);
+                    YQL_ENSURE(originalColumnOrder);
+                    auto sourceRenameLambda = BuildSqlSourceRenameLambda(pos, *originalColumnOrder, columns.ChildrenList(), ctx);
                     // clang-format off
                     list = ctx.Builder(pos)
                         .Callable("OrderedMap")
                             .Add(0, list)
-                            .Lambda(1)
-                                .Param("item")
-                                .Callable("AsStruct")
-                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
-                                        // clang-format on
-                                        auto originalColumnOrder = typeCtx.LookupColumnOrder(*originalList);
-                                        YQL_ENSURE(originalColumnOrder);
-                                        YQL_ENSURE(originalColumnOrder->Size() == columns.ChildrenSize());
-                                        for (ui32 i = 0; i < columns.ChildrenSize(); ++i) {
-                                            // clang-format off
-                                            parent.List(i)
-                                                .Atom(0, columns.Child(i)->Content())
-                                                .Callable(1, "Member")
-                                                    .Arg(0, "item")
-                                                    .Atom(1, originalColumnOrder->at(i).PhysicalName)
-                                                .Seal()
-                                                .Seal();
-                                            // clang-format on
-                                        }
-
-                                        return parent;
-                                    // clang-format off
-                                    })
-                                .Seal()
-                            .Seal()
+                            .Add(1, std::move(sourceRenameLambda))
                         .Seal()
                         .Build();
                     // clang-format on
@@ -1454,7 +1455,20 @@ TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::T
                     // clang-format on
                 }
             }
+        } else if (const auto flatten = NTypeAnnImpl::GetYqlFlattenSetting(source)) {
+            const auto& columns = *source.Child(2);
+            if (columns.ChildrenSize() > 0) {
+                const auto readOrder = typeCtx.LookupColumnOrder(source.Head());
+                YQL_ENSURE(readOrder);
+                TColumnOrder aliases;
+                TExprNode::TListType targetNames;
+                for (const auto& column : columns.Children()) {
+                    targetNames.push_back(ctx.NewAtom(flatten->Pos(), aliases.AddColumn(TString(column->Content()))));
+                }
+                renameLambda = BuildSqlSourceRenameLambda(flatten->Pos(), *readOrder, targetNames, ctx);
+            }
         }
+        list = ExpandYqlFlatten(std::move(list), source, renameLambda, ctx, optCtx);
         TColumnOrder order;
         // clang-format off
         auto cleaned = ctx.Builder(pos)
@@ -2158,7 +2172,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
 
                         TExprNode::TPtr left;
                         TExprNode::TPtr right;
-                        if (!IsMemberEquality(andTerm, predicate->Head().Head(), left, right)) {
+                        if (!IsMemberEquality(andTerm, predicate->Head().Head(), left, right, IsAggrEqualsJoinKeysEnabled(*optCtx.Types))) {
                             bad = true;
                             break;
                         }
@@ -4730,7 +4744,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
                 FillInputIndices(from, finalExtTypes, usedColumns, optCtx);
 
                 THashMap<TString, ui32> memberToInput;
-                cleanedInputs = BuildCleanedColumns(node->Pos(), from, usedColumns, inputAliases, memberToInput, ctx, *optCtx.Types);
+                cleanedInputs = BuildCleanedColumns(node->Pos(), from, usedColumns, inputAliases, memberToInput, ctx, *optCtx.Types, optCtx);
                 if (cleanedInputs.size() == 1) {
                     list = cleanedInputs.front();
                 } else {

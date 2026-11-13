@@ -1028,7 +1028,7 @@ TNode SerializeParamsForReadFile(
     const TTransactionId& transactionId,
     const TFileReaderOptions& options)
 {
-    TNode result;
+    TNode result = TNode::CreateMap();
     SetTransactionIdParam(&result, transactionId);
     SerializeSuppressableAccessTrackingOptions(&result, options);
     return result;

@@ -139,6 +139,10 @@ namespace NKikimr::NBsController {
                 // bridged group is decommitted as a whole through its bridge proxy group, single piles are not
                 throw TExError() << "can't decommit a pile of bridged group, decommit its bridge proxy group instead"
                     << TErrorParams::GroupId(groupId);
+            } else if (group->BridgeGroupInfo && Self.IsBeingRolledBack()) {
+                // the group has to stay the inline pile with all its data until it is made ordinary one
+                throw TExError() << "bridged group can't be decommitted while the cluster is being rolled back"
+                    << TErrorParams::GroupId(groupId);
             }
 
             group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::PENDING;

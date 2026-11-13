@@ -97,7 +97,7 @@ TStoredPayload ReadPayload(const NKikimrClient::TPersQueuePartitionRequest::TCmd
 
 std::unique_ptr<IChangeRecordSerializer> MakeSerializer(NKikimrSchemeOp::ECdcStreamFormat format,
         bool virtualTimestamps = true,
-        NKikimrSchemeOp::ECdcStreamCompression compression = NKikimrSchemeOp::ECdcStreamCompressionUnspecified)
+        NKikimrSchemeOp::ECdcStreamCompression compression = NKikimrSchemeOp::ECdcStreamCompressionNone)
 {
     TChangeRecordSerializerOpts opts;
     opts.StreamFormat = format;

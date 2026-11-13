@@ -1,0 +1,2 @@
+SELECT scaled_left * scaled_right AS scaled
+FROM Input;

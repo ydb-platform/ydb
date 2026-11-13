@@ -460,13 +460,16 @@ struct TShardedTableOptions {
         bool SchemaChanges = false;
         bool UserSIDs = true;
         bool TraceIds = false;
-        ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionUnspecified;
+        ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionNone;
+        i32 CompressionLevel = 0;
+        ui32 TopicPartitions = 0;
     };
 
     struct TFamily {
         TString Name;
         TMaybe<ui32> Id;
         TMaybe<NKikimrSchemeOp::EColumnCodec> ColumnCodec;
+        TMaybe<i32> ColumnCodecLevel;
         TMaybe<NKikimrSchemeOp::EColumnCacheMode> ColumnCacheMode;
         TString LogPoolKind;
         TString SysLogPoolKind;

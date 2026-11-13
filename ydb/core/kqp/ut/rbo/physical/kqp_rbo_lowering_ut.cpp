@@ -468,9 +468,13 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 auto filter = ctx.NewCallable(pos, "KqpOlapFilter", {row, condition});
                 read.OlapFilterLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(filter));
             }
-            const auto result = TPhysicalSourceBuilder(read, ctx, pos, names, registry, "stage").BuildPhysicalOp().AsNarrow(ctx);
+            TPhysicalSourceBuilder builder(read, ctx, pos, names, registry);
+            const auto result = builder.BuildPhysicalOp().AsNarrow(ctx);
+            // A row read is a source input of its stage, and its body reads the stage argument.
+            const auto& stageSource = builder.GetStageSource();
+            UNIT_ASSERT_VALUES_EQUAL(stageSource.has_value(), storage == NYql::EStorageType::RowStorage);
             TExprNode::TPtr storageRead;
-            VisitExpr(result, [&](const TExprNode::TPtr& node) {
+            VisitExpr(stageSource ? stageSource->Source : result, [&](const TExprNode::TPtr& node) {
                 if (TKqpReadRangesSourceSettings::Match(node.Get()) || TKqpBlockReadOlapTableRanges::Match(node.Get())) {
                     storageRead = node;
                 }
@@ -490,8 +494,10 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
             UNIT_ASSERT_VALUES_EQUAL(columns.Item(0).Value(), "a");
             UNIT_ASSERT_VALUES_EQUAL(columns.Item(1).Value(), "z");
 
-            const auto map = storage == NYql::EStorageType::RowStorage
-                ? TDqPhyStage(result).Program().Body().Ptr() : result->HeadPtr();
+            const auto map = stageSource ? result : result->HeadPtr();
+            if (stageSource) {
+                UNIT_ASSERT(map->HeadPtr() == stageSource->Argument);
+            }
             const auto& lambda = map->Tail();
             const auto& fields = lambda.Tail();
             UNIT_ASSERT_VALUES_EQUAL(fields.ChildrenSize(), 3);
@@ -513,7 +519,7 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
             std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, f.Pos);
         const TPhysicalNames names(f.Props.InfoUnitRegistry);
         const auto ast = TPhysicalSourceBuilder(read, f.ExprCtx, f.Pos, names,
-            f.Props.InfoUnitRegistry, "stage", /*isSysView=*/false, "key").BuildPhysicalOp().AsNarrow(f.ExprCtx);
+            f.Props.InfoUnitRegistry, /*isSysView=*/false, "key").BuildPhysicalOp().AsNarrow(f.ExprCtx);
         const auto source = FindNode(ast, [](const auto& node) {
             return TKqpBlockReadOlapTableRanges::Match(node.Get());
         });
@@ -729,7 +735,7 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 f.SetType(partial);
                 const TPhysicalNames names(root->PlanProps.InfoUnitRegistry);
                 auto stage = TPhysicalSourceBuilder(*read, f.ExprCtx, f.Pos, names,
-                    root->PlanProps.InfoUnitRegistry, "stage").BuildPhysicalOp().AsNarrow(f.ExprCtx);
+                    root->PlanProps.InfoUnitRegistry).BuildPhysicalOp().AsNarrow(f.ExprCtx);
                 stage = NPhysicalConvertionUtils::BuildSwitch(stage, *hub, names, f.ExprCtx);
                 // A sibling consumer may have adapted its branch before this
                 // aggregate is visited in the normal postorder traversal.
@@ -738,15 +744,13 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                     TOpTableLookup rawLookup(raw, f.Pos, nullptr, {}, {{rawValue, "raw_storage_key"}});
                     stage = NLookupJoinBuilder::BuildLookupKeys(rawLookup, stage, f.ExprCtx, names).InputStage;
                 }
-                const auto before = storage == NYql::EStorageType::RowStorage
-                    ? TDqPhyStage(stage).Program().Body().Ptr() : stage;
+                const auto before = stage;
                 stage = NPhysicalConvertionUtils::TransformStageOutput(stage, [&](TExprNode::TPtr body) {
                     return TPhysicalAggregationBuilder(partial, f.ExprCtx, f.Pos, names)
                         .BuildPhysicalOp(NPhysicalConvertionUtils::TStageBody::Narrow(body), std::nullopt)
                         .AsNarrow(f.ExprCtx);
                 }, GetReplicateOutputIndex(partial), f.ExprCtx);
-                const auto body = storage == NYql::EStorageType::RowStorage
-                    ? TDqPhyStage(stage).Program().Body().Ptr() : stage;
+                const auto body = stage;
                 UNIT_ASSERT_VALUES_EQUAL(body->IsCallable("Switch"), !testCase.SinglePort);
                 if (!testCase.SinglePort) {
                     UNIT_ASSERT(body->HeadPtr() == before->HeadPtr());
@@ -758,16 +762,12 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 UNIT_ASSERT(FindNode(testCase.SinglePort ? body : body->ChildPtr(5), [](const auto& node) {
                     return node->IsCallable("DqPhyHashCombine");
                 }));
-                if (storage == NYql::EStorageType::RowStorage) {
-                    UNIT_ASSERT(TDqPhyStage::Match(stage.Get()));
-                }
 
                 // Lookup key adaptation follows the aggregate's output index.
                 const auto lookupKey = *partial.GetAggregationTraits().Keys().begin();
                 TOpTableLookup lookup(final.GetInput(), f.Pos, nullptr, {}, {{lookupKey, "storage_key"}});
                 const auto keys = NLookupJoinBuilder::BuildLookupKeys(lookup, stage, f.ExprCtx, names);
-                const auto lookupBody = storage == NYql::EStorageType::RowStorage
-                    ? TDqPhyStage(keys.InputStage).Program().Body().Ptr() : keys.InputStage;
+                const auto lookupBody = keys.InputStage;
                 if (!testCase.SinglePort) {
                     UNIT_ASSERT(lookupBody->HeadPtr() == body->HeadPtr());
                     UNIT_ASSERT(lookupBody->ChildPtr(3) == body->ChildPtr(3));

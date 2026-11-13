@@ -790,6 +790,19 @@ namespace NKikimr::NStorage {
         void HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev);
         void ForwardInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev, ui32 hopNodeId);
         void FillPileConnectivity(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record);
+
+        // the rollback status is collected by the root outside the queue of invoke operations, as it is collected from
+        // every node and may take long; the requests coming while it is collected get the result of that collection
+        struct TBridgeRollbackStatusWaiter {
+            TActorId Sender;
+            ui64 Cookie;
+            TActorId SessionId;
+        };
+        std::optional<TActorId> BridgeRollbackStatusCollector;
+        std::vector<TBridgeRollbackStatusWaiter> BridgeRollbackStatusWaiters;
+        void QueryBridgeRollbackStatus(TEvNodeConfigInvokeOnRoot::TPtr ev);
+        void FinishBridgeRollbackStatus(const TEvGather& gather);
+
         void Invoke(TInvokeQuery&& query);
         void HandleQueryFinished(STFUNC_SIG);
 
@@ -960,7 +973,8 @@ namespace NKikimr::NStorage {
     void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState);
 
     // Pile registry of the bridged cluster: the one persisted in the config, or the one implied by node's BridgeConfig
-    // when there is none persisted; nullopt when the node is not bridge-capable (has no BridgeConfig).
+    // when there is none persisted (only the original pile of it when the cluster has been rolled back, see
+    // TBridgeRollbackRecord.PileName); nullopt when the node is not bridge-capable (has no BridgeConfig).
     std::optional<NKikimrBridge::TPileRegistry> GetPileRegistry(const NKikimrBlobStorage::TStorageConfig& config,
         const NKikimrConfig::TBridgeConfig *bridgeConfig);
 
@@ -980,10 +994,13 @@ namespace NKikimr::NStorage {
         BridgeFeatureLevelPileOps = 2,
         BridgeFeatureLevelNonUniformStorage = 3,
         BridgeFeatureLevelPileOverrides = 4,
+        // the bridged cluster may be rolled back: groups lose their bridge state while nodes run, the cluster state goes
+        // away
+        BridgeFeatureLevelRollback = 5,
     };
 
     // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
-    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelPileOverrides;
+    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelRollback;
 
     inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
@@ -1021,6 +1038,14 @@ namespace NKikimr::NStorage {
     // unless their conversion is skipped, which activates non-uniform storage.
     std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config,
         const NKikimrConfig::TBridgeConfig& bridgeConfig, bool skipStoragePoolConversion = false);
+
+    // Roll the bridged cluster back, first step: make every bridged static group an ordinary one; each one has to be the
+    // inline pile in the pile, holding all the data of the group. Their generations are bumped.
+    std::optional<TString> MakeStaticGroupsOrdinary(NKikimrBlobStorage::TStorageConfig *config, TBridgePileId pileId);
+
+    // Roll the bridged cluster back, last step (BSC has made its pools and groups ordinary ones): remove the cluster state
+    // along with pile assignments of state storage, leaving the record of the rollback in the config.
+    std::optional<TString> RemoveClusterStateAfterRollback(NKikimrBlobStorage::TStorageConfig *config);
 
     // Make VDisks of the static groups follow their new generations (each one is bumped by one); donors and VDisks being
     // destroyed have older generations and keep them.

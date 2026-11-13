@@ -1,0 +1,46 @@
+PRAGMA YqlSelect = 'force';
+
+PRAGMA OrderedColumns;
+
+SELECT
+    *
+FROM (
+    SELECT
+        AsStruct(1 AS member)
+) AS x
+    FLATTEN COLUMNS
+;
+
+SELECT
+    *
+FROM (
+    VALUES
+        (AsStruct(1 AS member))
+)
+    FLATTEN COLUMNS
+;
+
+SELECT
+    *
+FROM (
+    VALUES
+        (AsStruct(1 AS member))
+) AS x (
+    value
+)
+    FLATTEN COLUMNS
+;
+
+SELECT
+    *
+FROM (
+    SELECT
+        AsStruct(1 AS left_member)
+) AS l
+    FLATTEN COLUMNS
+CROSS JOIN (
+    SELECT
+        AsStruct(2 AS right_member)
+) AS r
+    FLATTEN COLUMNS
+;

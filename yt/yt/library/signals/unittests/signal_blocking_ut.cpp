@@ -15,7 +15,7 @@ namespace NYT::NSignals {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef _win_
+#ifdef _linux_
 
 YT_TRY_BLOCK_SIGNAL_FOR_PROCESS(SIGRTMIN, GetDefaultSignalBlockingCallback(NLogging::TLogger("SignalBlocking")));
 
@@ -71,8 +71,6 @@ TEST_F(TSignalBlockingTest, SignalBlockingJustWorks)
     ::raise(SIGRTMIN);
 }
 
-#ifdef _linux_
-
 TEST_F(TSignalBlockingTest, TestSignalFD)
 {
     auto sigFD = OpenSignalFD();
@@ -111,9 +109,17 @@ TEST_F(TSignalBlockingTest, TestSignalFD)
     EXPECT_TRUE(fdsi.ssi_signo == static_cast<uint32_t>(SIGRTMIN));
 }
 
-#endif // _linux_
+#else
 
-#endif // _win_
+TEST(TSignalBlockingTest, SingleThreadValidationRejectsUnsupportedPlatform)
+{
+    auto invoked = false;
+    auto callback = [&] (bool /*ok*/, int /*threadCount*/) { invoked = true; };
+    EXPECT_THROW(NDetail::ValidateSingleRunningThread(callback), TErrorException);
+    EXPECT_FALSE(invoked);
+}
+
+#endif // _linux_
 
 ////////////////////////////////////////////////////////////////////////////////
 

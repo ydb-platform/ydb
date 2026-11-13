@@ -11,19 +11,19 @@ FROM (
     SELECT
         Sum(ss_ext_sales_price) AS promotions
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/store`
+        `store`
     ,
-        `/Root/test/ds/promotion`
+        `promotion`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/customer`
+        `customer`
     ,
-        `/Root/test/ds/customer_address`
+        `customer_address`
     ,
-        `/Root/test/ds/item`
+        `item`
     WHERE
         ss_sold_date_sk == d_date_sk
         AND ss_store_sk == s_store_sk
@@ -42,17 +42,17 @@ FROM (
     SELECT
         Sum(ss_ext_sales_price) AS total
     FROM
-        `/Root/test/ds/store_sales`
+        `store_sales`
     ,
-        `/Root/test/ds/store`
+        `store`
     ,
-        `/Root/test/ds/date_dim`
+        `date_dim`
     ,
-        `/Root/test/ds/customer`
+        `customer`
     ,
-        `/Root/test/ds/customer_address`
+        `customer_address`
     ,
-        `/Root/test/ds/item`
+        `item`
     WHERE
         ss_sold_date_sk == d_date_sk
         AND ss_store_sk == s_store_sk

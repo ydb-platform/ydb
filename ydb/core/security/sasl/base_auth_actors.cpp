@@ -37,6 +37,13 @@ void TAuthActorBase::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResu
         }
     }
 
+    if (resultSet.size() == 1 && resultSet.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError) {
+        // A synchronized lookup can be temporarily unavailable during startup.
+        // Preserve the distinction from a path that is known not to exist.
+        SendError(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, "Database lookup is temporarily unavailable");
+        return CleanupAndDie(ctx);
+    }
+
     std::string error = "Unknown database";
     YDB_LOG_INFO_CTX(ctx, "Authentication failed",
         {"actorName", DerivedActorName},

@@ -21,6 +21,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/streams/zstd/zstd.h>
 
 #include <contrib/libs/zstd/include/zstd.h>
 #include <util/charset/utf8.h>
@@ -59,6 +60,11 @@ class TBaseSerializer: public IChangeRecordSerializer {
         if (record.GetKind() == TChangeRecord::EKind::CdcHeartbeat) {
             return;
         }
+        // JSON fills the chunk before this runs. A codec other than raw means
+        // the payload is already compressed.
+        if (data.GetCodec() != 0) {
+            return;
+        }
 
         const auto& payload = data.GetData();
         const bool schema = record.GetKind() == TChangeRecord::EKind::CdcSchemaChange;
@@ -73,7 +79,11 @@ class TBaseSerializer: public IChangeRecordSerializer {
             CCtx_ = ZSTD_createCCtx();
             Y_ENSURE(CCtx_, "failed to allocate a zstd compression context");
         }
-        const int level = schema ? ZSTD_defaultCLevel() : CdcZstdDataLevel;
+        // A stored level wins. Without one, data rows use the fast level that
+        // still shrinks a 1 KiB run, and schema snapshots use the library default.
+        const int level = Opts.CompressionLevel
+            ? Opts.CompressionLevel
+            : (schema ? ZSTD_defaultCLevel() : CdcZstdDataLevel);
         if (ZSTD_isError(ZSTD_CCtx_setParameter(CCtx_, ZSTD_c_compressionLevel, level))) {
             return;
         }
@@ -406,10 +416,28 @@ protected:
         return str.Str();
     }
 
+    void SetJsonData(NKikimrPQClient::TDataChunk& data, TString json) const {
+        switch (Opts.Compression) {
+        case NKikimrSchemeOp::ECdcStreamCompressionNone:
+        case NKikimrSchemeOp::ECdcStreamCompressionZstd:
+            // ApplyCompression owns zstd so JSON and binary share one policy:
+            // skip heartbeats and short rows, and keep the raw bytes when the
+            // frame does not shrink them.
+            data.SetData(std::move(json));
+            break;
+        default:
+            Y_ENSURE(false, "Unsupported changefeed compression");
+        }
+    }
+
     void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {
         NJson::TJsonValue json;
         SerializeToJson(json, record);
-        data.SetData(JsonToString(json));
+        if (record.GetKind() == TChangeRecord::EKind::CdcHeartbeat) {
+            data.SetData(JsonToString(json));
+        } else {
+            SetJsonData(data, JsonToString(json));
+        }
     }
 
     virtual void SerializeToJson(NJson::TJsonValue& json, const TChangeRecord& record) = 0;
@@ -561,7 +589,18 @@ protected:
             if (!data.GetAllowOtherKinds() && data.GetPreferredPoolKind()) {
                 definition["data"]["media"] = data.GetPreferredPoolKind();
             }
-            definition["compression"] = family.Codec == NTable::NPage::ECodec::Plain ? "off" : "lz4";
+            switch (family.Codec) {
+                case NTable::NPage::ECodec::Plain:
+                    definition["compression"] = "off";
+                    break;
+                case NTable::NPage::ECodec::LZ4:
+                    definition["compression"] = "lz4";
+                    break;
+                case NTable::NPage::ECodec::ZSTD:
+                    definition["compression"] = "zstd";
+                    definition["compressionLevel"] = family.GetCodecLevel();
+                    break;
+            }
             definition["cacheMode"] = family.CacheMode == NTable::NPage::ECacheMode::Regular
                 ? "regular" : "in_memory";
         }
@@ -855,7 +894,7 @@ protected:
             messageMeta.set_key("__key");
             messageMeta.set_value(JsonToString(json["key"]));
         }
-        data.SetData(JsonToString(json["value"]));
+        SetJsonData(data, JsonToString(json["value"]));
     }
 
 public:

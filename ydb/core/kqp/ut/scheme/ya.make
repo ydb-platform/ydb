@@ -35,6 +35,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/zstd
     ydb/public/sdk/cpp/src/client/import
     yql/essentials/types/binary_json
     library/cpp/threading/local_executor

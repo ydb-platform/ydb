@@ -1,7 +1,5 @@
 UNITTEST()
 
-FORK_SUBTESTS()
-
 PEERDIR(
     ydb/core/tx/datashard/ut_common
     ydb/core/tx/datashard

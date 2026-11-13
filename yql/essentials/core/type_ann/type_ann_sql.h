@@ -25,6 +25,18 @@ struct TInput {
 
 using TInputs = TVector<TInput>;
 
+bool ScanSqlLambdaColumns(
+    const TExprNode::TPtr& lambda, TInputs& inputs, const THashSet<TString>& aliases,
+    TNodeSet& sublinks, bool& isUniversal, bool& rebuildSublinks, TExtContext& ctx);
+
+IGraphTransformer::TStatus RebuildSubLinks(
+    const TExprNode::TPtr& root, TExprNode::TPtr& newRoot, const TNodeSet& sublinks,
+    const TInputs& inputs, const TExprNode::TPtr& rowType, TExtContext& ctx);
+
+TExprNode::TPtr BuildSqlColumnRefMember(
+    const TExprNode::TPtr& node, const TExprNode::TPtr& argument,
+    const TInputs& inputs, const THashSet<TString>& aliases, TExprContext& ctx);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 bool IsPlainMemberOverArg(const TExprNode& expr, TStringBuf& memberName);

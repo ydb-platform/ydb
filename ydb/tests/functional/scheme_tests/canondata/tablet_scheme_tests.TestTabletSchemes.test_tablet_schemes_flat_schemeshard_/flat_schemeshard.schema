@@ -7382,6 +7382,11 @@
                 "ColumnId": 13,
                 "ColumnName": "Compression",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "CompressionLevel",
+                "ColumnType": "Int32"
             }
         ],
         "ColumnsDropped": [],
@@ -7400,7 +7405,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7493,6 +7499,11 @@
                 "ColumnId": 13,
                 "ColumnName": "Compression",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "CompressionLevel",
+                "ColumnType": "Int32"
             }
         ],
         "ColumnsDropped": [],
@@ -7511,7 +7522,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,

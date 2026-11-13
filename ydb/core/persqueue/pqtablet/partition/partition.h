@@ -163,6 +163,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
     friend TInitFieldsStep;
+    friend TNotifyWriteSessionsQuoterStep;
 
     friend TPartitionSourceManager;
 
@@ -171,6 +172,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
 
 public:
     const TString& TopicName() const;
+    void PassAway() override;
 
     ui64 GetUsedStorage(const TInstant& ctx);
 
@@ -206,6 +208,7 @@ private:
 
     bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
     void SendInfoToAutopartitioningManager(const TWriteMsg& p);
+    static ECumulativeCounters UserActCounter(TEvPQ::TEvSetClientInfo::ESetClientInfoType type, bool ok);
 
     TActorId ReplyTo(const ui64 destination, const TActorId& replyTo) const;
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo = {});
@@ -811,6 +814,7 @@ private:
 
 private:
     ui32 TabletGeneration;
+    bool WriteSessionsQuoterNotified = false;
     const TPartitionId Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;
@@ -1119,6 +1123,7 @@ private:
     TInstant WriteTimestampEstimate;
     bool ManageWriteTimestampEstimate = true;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteInitThrottledMs;
     //ToDo - counters.
     THolder<TPercentileCounter> InputTimeLag;
     THolder<TMultiBucketCounter> SupportivePartitionTimeLag;

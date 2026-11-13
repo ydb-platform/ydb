@@ -24,15 +24,34 @@ TConsumerReport TRegistrantConsumer::GetReport() const {
     return report;
 }
 
-TIntrusivePtr<TRegistrantConsumer> TConsumerCollection::Register(TActorId registrant) {
+TIntrusivePtr<TRegistrantConsumer> TConsumerCollection::Register(TActorId registrant, bool demandOnly) {
     // A fresh object even for the same actor: a pointer handed out earlier may outlive the registration that got it
     auto& slot = Registrants[registrant];
-    slot = MakeIntrusive<TRegistrantConsumer>();
+    Retiring.erase(registrant);
+    slot = MakeIntrusive<TRegistrantConsumer>(demandOnly);
     return slot;
 }
 
-bool TConsumerCollection::Unregister(TActorId registrant) {
+bool TConsumerCollection::Unregister(TActorId registrant, bool retainUntilUnused) {
+    const auto* consumer = Registrants.FindPtr(registrant);
+    if (consumer && (retainUntilUnused || (*consumer)->DemandOnly) && (*consumer)->GetReport().Used) {
+        Retiring.insert(registrant);
+        return true;
+    }
+    Retiring.erase(registrant);
     return Registrants.erase(registrant) > 0;
+}
+
+void TConsumerCollection::CollectRetired() {
+    for (auto it = Retiring.begin(); it != Retiring.end();) {
+        const auto* consumer = Registrants.FindPtr(*it);
+        if (!consumer || !(*consumer)->GetReport().Used) {
+            Registrants.erase(*it);
+            Retiring.erase(it++);
+        } else {
+            ++it;
+        }
+    }
 }
 
 TConsumerReport TConsumerCollection::GetTotal() const {
@@ -40,7 +59,7 @@ TConsumerReport TConsumerCollection::GetTotal() const {
     for (const auto& [registrant, consumer] : Registrants) {
         const auto report = consumer->GetReport();
         total.Used += report.Used;
-        total.Demand += report.Demand;
+        total.Demand += Retiring.contains(registrant) ? report.Used : report.Demand;
         total.Reclaimable += report.Reclaimable;
     }
     return total;
@@ -53,22 +72,27 @@ TVector<TConsumerShare> TConsumerCollection::ComputeLimitShares(ui64 limitBytes)
     }
     TVector<ui64> demands(::Reserve(Registrants.size()));
     ui64 totalDemand = 0;
+    size_t bootstrapConsumers = 0;
     for (const auto& [registrant, consumer] : Registrants) {
-        demands.push_back(consumer->GetReport().Demand);
+        bootstrapConsumers += !consumer->DemandOnly;
+        const auto report = consumer->GetReport();
+        demands.push_back(Retiring.contains(registrant) ? report.Used : report.Demand);
         totalDemand += demands.back();
     }
     // A slice of the limit ignores demand: a cache that obeys its limit and reports only Used could never grow out of zero
-    const ui64 bootstrapShare = limitBytes / (BootstrapLimitDivisor * Registrants.size());
-    const ui64 rest = limitBytes - bootstrapShare * Registrants.size();
+    const ui64 bootstrapShare = bootstrapConsumers ? limitBytes / (BootstrapLimitDivisor * bootstrapConsumers) : 0;
+    const ui64 rest = limitBytes - bootstrapShare * bootstrapConsumers;
     // The demand-covered part of the rest splits proportionally; what demand leaves over splits equally.
     const ui64 covered = Min(totalDemand, rest);
-    const ui64 surplusShare = (rest - covered) / Registrants.size();
+    const ui64 surplusShare = bootstrapConsumers ? (rest - covered) / bootstrapConsumers : 0;
     size_t index = 0;
     for (const auto& [registrant, consumer] : Registrants) {
         const ui64 demandShare = totalDemand
             ? static_cast<ui64>(static_cast<unsigned __int128>(covered) * demands[index] / totalDemand)
             : 0;
-        result.push_back({.Registrant = registrant, .Bytes = bootstrapShare + demandShare + surplusShare});
+        if (!Retiring.contains(registrant)) {
+            result.push_back({.Registrant = registrant, .Bytes = demandShare + (consumer->DemandOnly ? 0 : bootstrapShare + surplusShare)});
+        }
         ++index;
     }
     return result;

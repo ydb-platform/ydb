@@ -435,8 +435,10 @@ private:
             TryFinalizeDeduplicationInfo(it++);
         }
         ProcessQueue();
-        AFL_VERIFY_DEBUG(Queue.empty())("size", Queue.size());
-        AFL_VERIFY_DEBUG(DeduplicationInfo.empty())("size", DeduplicationInfo.size());
+        YDB_LOG_VERIFY_DEBUG(Queue.empty(),
+            {"size", Queue.size()});
+        YDB_LOG_VERIFY_DEBUG(DeduplicationInfo.empty(),
+            {"size", DeduplicationInfo.size()});
     }
 
     void PassAway() override {
@@ -495,7 +497,8 @@ private:
                     "Unexpected",
                     {"event", EventStr("StateWork", ev)}
                 );
-                AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
+                YDB_LOG_VERIFY_DEBUG(false,
+                    {"Unexpected", EventStr("StateInit", ev)});
         }
     }
 };

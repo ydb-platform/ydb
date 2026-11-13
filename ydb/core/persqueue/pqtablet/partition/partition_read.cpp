@@ -584,8 +584,8 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 YDB_LOG_ENSURE(PartNo == res.GetPartNo(),
                     {"batchStartIdx", batchStartIdx},
                     {"i", i},
-                    {"offset", Offset},
-                    {"partNo", PartNo},
+                    {"selfOffset", Offset},
+                    {"selfPartNo", PartNo},
                     {"offset", offset},
                     {"partNo", res.GetPartNo()});
 

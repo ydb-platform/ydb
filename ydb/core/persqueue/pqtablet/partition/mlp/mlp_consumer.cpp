@@ -655,7 +655,8 @@ STFUNC(TConsumerActor::StateInit) {
                 "Unexpected",
                 {"event", EventStr("StateInit", ev)}
             );
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
+            YDB_LOG_VERIFY_DEBUG(false,
+                {"Unexpected", EventStr("StateInit", ev)});
     }
 }
 
@@ -687,7 +688,8 @@ STFUNC(TConsumerActor::StateWork) {
                 "Unexpected",
                 {"event", EventStr("StateWork", ev)}
             );
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWork", ev));
+            YDB_LOG_VERIFY_DEBUG(false,
+                {"Unexpected", EventStr("StateWork", ev)});
     }
 }
 
@@ -719,7 +721,8 @@ STFUNC(TConsumerActor::StateWrite) {
                 "Unexpected",
                 {"event", EventStr("StateWrite", ev)}
             );
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWrite", ev));
+            YDB_LOG_VERIFY_DEBUG(false,
+                {"Unexpected", EventStr("StateWrite", ev)});
     }
 }
 

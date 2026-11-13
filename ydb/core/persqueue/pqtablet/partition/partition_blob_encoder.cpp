@@ -44,7 +44,7 @@ void TPartitionBlobEncoder::CheckHeadConsistency(const TVector<ui32>& compactLev
         {"dataKeysBodySize", DataKeysBody.size()},
         {"lastKey", DataKeysBody.back().Key},
         {"headOffset", Head.Offset});
-    AFL_ENSURE(p == HeadKeys.size());
+    YDB_LOG_ENSURE(p == HeadKeys.size());
     if (!HeadKeys.empty()) {
         YDB_LOG_ENSURE(HeadKeys.size() <= totalMaxCount);
         YDB_LOG_ENSURE(HeadKeys.front().Key.GetOffset() == Head.Offset);

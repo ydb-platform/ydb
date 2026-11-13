@@ -832,12 +832,12 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
         {"key", KeysIter->Key},
         {"tabletId", PartitionActor->TabletId},
         {"partitionId", PartitionActor->Partition});
-    AFL_ENSURE(KeysIter->Key.GetCount() == offsetSpan)
-        ("key_count", KeysIter->Key.GetCount())
-        ("offset_span", offsetSpan)
-        ("key", KeysIter->Key.ToString())
-        ("tablet_id", PartitionActor->TabletId)
-        ("partition_id", PartitionActor->Partition);
+    YDB_LOG_ENSURE(KeysIter->Key.GetCount() == offsetSpan,
+        {"keyCount", KeysIter->Key.GetCount()},
+        {"offsetSpan", offsetSpan},
+        {"key", KeysIter->Key.ToString()},
+        {"tabletId", PartitionActor->TabletId},
+        {"partitionId", PartitionActor->Partition});
     if (!hasNonZeroParts) {
         EmptyBlobs.emplace(isTruncatedBlob ? lastExpectedOffset : lastExpectedOffset - 1, KeysIter->Key);
     }

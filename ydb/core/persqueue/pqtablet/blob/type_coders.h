@@ -62,8 +62,10 @@ template <>
 class TCoderMask<false> {
 public:
     inline size_t MaxSize() const { return 0; }
-    inline void AddNull() { YDB_LOG_ENSURE(false,
-                                {"reason", "Null values are not supported."}); }
+    inline void AddNull() {
+        YDB_LOG_ENSURE(false,
+            {"reason", "Null values are not supported."});
+    }
     inline void AddNonNull() { }
     inline void Seal(TBuffer&) { }
 };

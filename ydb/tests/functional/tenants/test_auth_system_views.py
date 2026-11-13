@@ -95,8 +95,7 @@ def prepared_root_db(ydb_cluster, ydb_root, ydb_endpoint):
     # prepare root database
     driver_config = ydb.DriverConfig(ydb_endpoint, ydb_root, credentials=cluster_admin)
     with ydb.Driver(driver_config) as driver:
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.SessionPool(driver) as pool, pool.checkout() as session:
             session.execute_scheme("create user clusteradmin password '1234'")
             session.execute_scheme("create user clusteruser password '1234'")
 
@@ -109,8 +108,7 @@ def prepared_tenant_db(ydb_cluster, ydb_endpoint, ydb_database_module_scope):
     database_path = ydb_database_module_scope
     driver_config = ydb.DriverConfig(ydb_endpoint, database_path, credentials=cluster_admin)
     with ydb.Driver(driver_config) as driver:
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.SessionPool(driver) as pool, pool.checkout() as session:
             # add users
             session.execute_scheme("create user dbadmin password '1234'")
             session.execute_scheme("create user ordinaryuser password '1234'")

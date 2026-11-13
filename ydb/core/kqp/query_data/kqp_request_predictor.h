@@ -1,10 +1,13 @@
 #pragma once
 
-#include "kqp_predictor.h"
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+
+#include <deque>
+#include <map>
 
 namespace NYql {
     class TExprNode;

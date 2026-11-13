@@ -1,6 +1,7 @@
 #include "bridge_pile_ops.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 using namespace NBridgeTest;
@@ -457,6 +458,81 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         checker.Write(groupId);
         checker.CheckAll();
         CheckPileData(env, checker, 2, FirstThirdPileNodeId);
+    }
+
+    // a pool created while BSC commits its part of the addition gets its part in the added pile as well; the results of
+    // the controller's log writes are held from the moment the pending addition reaches the nodes, so the pool's
+    // transaction executes after the addition step and before its completion
+    Y_UNIT_TEST(GroupCreatedWhileAdditionCommits) {
+        TEnvironmentSetup env(MakeExpandableSettings());
+        CreatePoolAndGetGroup(env);
+        auto res = AddThirdPileToConfig(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        StartPileNodes(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId);
+
+        // the definition of the new pool is prepared now, as no transaction of the controller completes while its log
+        // is held
+        NKikimrBlobStorage::TDefineStoragePool pool = ReadStoragePool(env, 1);
+        pool.SetStoragePoolId(2);
+        pool.SetName("pool_2");
+        pool.SetKind(pool.GetName());
+        pool.SetNumGroups(1);
+        pool.ClearItemConfigGeneration();
+
+        bool hold = false;
+        bool released = false;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> held;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenStorageConfig) {
+                const auto *msg = ev->Get<TEvNodeWardenStorageConfig>();
+                if (!released && msg->Config && msg->Config->GetClusterStateDetails().HasPendingPileOperation()) {
+                    hold = true;
+                }
+            } else if (hold && ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult &&
+                    ev->Get<TEvBlobStorage::TEvPutResult>()->Id.TabletID() == env.TabletId) {
+                held.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        res = AddPile(env, "pile_3");
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(1)); // the step of the addition executes, its commit is held
+        UNIT_ASSERT(!held.empty());
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        ev->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+        env.Runtime->SendToPipe(env.TabletId, edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+        // the pool's transaction executes meanwhile, its commit is held as well
+        UNIT_ASSERT(!env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerConfigResponse>(edge, false,
+            env.Runtime->GetClock() + TDuration::Seconds(1)));
+
+        hold = false;
+        released = true;
+        for (auto& [nodeId, item] : std::exchange(held, {})) {
+            env.Runtime->Send(item.release(), nodeId);
+        }
+        const auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerConfigResponse>(edge);
+        UNIT_ASSERT_C(response->Get()->Record.GetResponse().GetSuccess(),
+            response->Get()->Record.GetResponse().GetErrorDescription());
+        WaitPileOperationFinished(env);
+        env.Runtime->FilterFunction = {};
+
+        std::optional<ui32> newGroupId;
+        {
+            const auto baseConfig = env.FetchBaseConfig(); // groups are referenced by pointers
+            for (const auto *group : GetPoolGroups(baseConfig, 2)) {
+                if (group->GetIsProxyGroup()) {
+                    newGroupId = group->GetGroupId();
+                }
+            }
+        }
+        UNIT_ASSERT(newGroupId);
+        const auto info = GetGroupInfo(env, *newGroupId);
+        UNIT_ASSERT_C(NBridge::GetGroupPile(info.GetBridgeGroupState(), TBridgePileId::FromPileIndex(2)),
+            info.DebugString());
     }
 
     // the pile can't be rejoined until BSC adds its parts to every group; BSC finishes the operation after restart

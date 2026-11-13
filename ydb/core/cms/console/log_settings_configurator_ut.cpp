@@ -137,8 +137,11 @@ TVector<TComponentSettings> InitLogSettingsConfigurator(TTenantTestRuntime &runt
 TSet<TString> GetSinkNames(TIntrusivePtr<NLog::TSettings> logSettings) {
     TSet<TString> result;
 
-    auto sinks = logSettings->GetSinks();
-    for(auto& sink : *sinks) {
+    auto sinks = logSettings->Sinks.atomic_load();
+    if (!sinks) {
+        return result;
+    }
+    for (auto& sink : *sinks) {
         result.insert(sink.first);
     }
     return result;

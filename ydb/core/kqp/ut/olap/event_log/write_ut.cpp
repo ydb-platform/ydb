@@ -278,18 +278,18 @@ struct TEnvironment {
             settings->DefPriority = NActors::NLog::PRI_TRACE;
             ::NKikimr::NAudit::AUDIT_LOG_ENABLED.store(true);
 
-            auto sinks = std::make_shared<NLog::TSettings::TLogSinkMap>();
+            NLog::TSettings::TLogSinkMap sinks;
             if (Writer != nullptr) {
-                (*sinks)[""] = Writer;
+                sinks[""] = Writer;
             }
 
             ui32 j = 0;
             for (auto& sink: AddSinks) {
                 TStringBuilder key;
                 key << j++;
-                (*sinks)[key] = sink;
+                sinks[key] = sink;
             }
-            settings->SetSinks(sinks);
+            settings->Sinks.atomic_store(MakeTrueAtomicShared<NLog::TSettings::TLogSinkMap>(std::move(sinks)));
         }
         if (!AuditHeartbeatRegistered) {
             NKikimrConfig::TAuditConfig protoCfg;

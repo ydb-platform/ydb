@@ -5,10 +5,11 @@
 #include <map>
 #include <memory>
 
+#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
+
 #include <util/generic/vector.h>
 #include <util/digest/murmur.h>
 #include <util/random/easy.h>
-#include <util/system/mutex.h>
 
 namespace NActors {
     namespace NStructuredLog {
@@ -185,14 +186,11 @@ namespace NActors {
             void SetEnableStructuredLogInJson(bool value);
 
             using TLogSinkMap = std::map<TString, NStructuredLog::ILogSinkSPtr>;
-            using TLogSinkMapSPtr = std::shared_ptr<const TLogSinkMap>;
-            TLogSinkMapSPtr GetSinks();
-            void SetSinks(TLogSinkMapSPtr sinks);
+            using TLogSinkMapSPtr = TTrueAtomicSharedPtr<TLogSinkMap>;
+
+            TLogSinkMapSPtr Sinks;
 
             ~TSettings();
-        protected:
-            TMutex SinksMutex;      // Lock access to sinks
-            TLogSinkMapSPtr Sinks;
 
         private:
             int SetLevelImpl(

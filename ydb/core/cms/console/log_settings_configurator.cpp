@@ -348,8 +348,8 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
 
     NActors::NLog::TSettings::TLogSinkMap oldSinks, newSinks;
 
-    auto oldSinksPtr = logSettings->GetSinks();
-    if (oldSinksPtr != nullptr) {
+    auto oldSinksPtr = logSettings->Sinks.atomic_load();
+    if (oldSinksPtr) {
         oldSinks = *oldSinksPtr;
     }
 
@@ -396,7 +396,7 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
         }
     }
 
-    logSettings->SetSinks(std::make_shared<NLog::TSettings::TLogSinkMap>(newSinks));
+    logSettings->Sinks.atomic_store(MakeTrueAtomicShared<NLog::TSettings::TLogSinkMap>(std::move(newSinks)));
     for(auto& oldSink: oldSinks) {
         oldSink.second->Stop();
     }

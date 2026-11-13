@@ -28,6 +28,14 @@ namespace NKikimr::NGroupSyncer {
         std::atomic_bool ScanFinished = false;
     };
 
+    struct TEvRunMirror3dcRepair
+        : TEventPB<TEvRunMirror3dcRepair, NKikimrBlobStorage::TEvRunMirror3dcRepair, TEvBlobStorage::EvRunMirror3dcRepair>
+    {};
+
+    struct TEvRunMirror3dcRepairResult
+        : TEventPB<TEvRunMirror3dcRepairResult, NKikimrBlobStorage::TEvRunMirror3dcRepairResult, TEvBlobStorage::EvRunMirror3dcRepairResult>
+    {};
+
     struct TEvMirror3dcRepairScanResult
         : TEventLocal<TEvMirror3dcRepairScanResult, TEvBlobStorage::EvMirror3dcRepairScanResult>
     {

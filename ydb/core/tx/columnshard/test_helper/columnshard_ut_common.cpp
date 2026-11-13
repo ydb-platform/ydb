@@ -25,8 +25,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <algorithm>
-
 namespace NKikimr::NTxUT {
 
 using namespace NColumnShard;
@@ -532,16 +530,8 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
     }
 
     Y_ABORT_UNLESS(pk.size() > 0);
-    const auto pkNames = ExtractNames(pk);
-    for (auto& column : pkNames) {
+    for (auto& column : ExtractNames(pk)) {
         schema->AddKeyColumnNames(column);
-    }
-    // Key columns are NOT NULL, as SchemeShard guarantees for every table created without AllowNullableColumnsInPK.
-    // The shard takes nullability from the schema, so a NULL key cell is rejected only because of this flag.
-    for (auto& column : *schema->MutableColumns()) {
-        if (std::find(pkNames.begin(), pkNames.end(), column.GetName()) != pkNames.end()) {
-            column.SetNotNull(true);
-        }
     }
 
     if (specials.HasCodec()) {

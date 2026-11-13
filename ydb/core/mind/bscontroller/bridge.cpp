@@ -458,6 +458,10 @@ public:
         Error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc, nullptr,
             /*dryRun=*/ static_cast<bool>(Response));
 
+        if (!Error && !Response && Kind == TOperation::ADD) {
+            Self->BridgePileAddedOperationId = OperationId;
+        }
+
         return true;
     }
 
@@ -527,9 +531,6 @@ private:
     }
 
     void OnCommitted() override {
-        // groups created from now on get their parts in the pile right away
-        Self->BridgePileAddedOperationId = OperationId;
-
         // new parts are unsynced from the very beginning, they get synced when the pile rejoins
         for (const auto& [bridgeProxyGroupId, targetGroupId] : Added) {
             const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, bridgeProxyGroupId,

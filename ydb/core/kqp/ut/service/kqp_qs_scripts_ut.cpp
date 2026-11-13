@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
     }
 
-    Y_UNIT_TEST(SyntaxV0ReturnsBadRequest) {
+    Y_UNIT_TEST(SyntaxV0Rejected) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         auto readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
         UNIT_ASSERT_VALUES_EQUAL_C(
             readyOp.Status().GetStatus(),
-            EStatus::BAD_REQUEST,
+            EStatus::GENERIC_ERROR,
             readyOp.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(
             readyOp.Status().GetIssues().ToString(),

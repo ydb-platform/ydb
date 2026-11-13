@@ -29,8 +29,12 @@ SRCS(
     metrics.h
     monitoring.cpp
     monitoring.h
+<<<<<<< HEAD
     move_data_actor.cpp
     node_info.cpp
+=======
+    named_resources.h
+>>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
     node_info.h
     object_distribution.h
     reassign_actor.cpp
@@ -56,12 +60,29 @@ SRCS(
     tx__delete_node.cpp
     tx__delete_tablet.cpp
     tx__delete_tablet_result.cpp
+<<<<<<< HEAD
     tx__disconnect_node.cpp
     tx__generate_data_ut.cpp
     tx__init_scheme.cpp
     tx__kill_node.cpp
     tx__load_everything.cpp
     tx__lock_tablet.cpp
+=======
+)
+
+JOIN_SRCS(
+    all_hive.cpp
+    hive.cpp
+    hive_domains.cpp
+    hive_impl.cpp
+    hive_log.cpp
+    hive_statics.cpp
+    named_resources.cpp
+)
+
+JOIN_SRCS(
+    all_process.cpp
+>>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
     tx__process_boot_queue.cpp
     tx__process_metrics.cpp
     tx__process_pending_operations.cpp

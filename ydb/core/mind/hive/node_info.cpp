@@ -129,6 +129,10 @@ void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& 
     auto oldResourceValues = ResourceValues;
     auto oldNormalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     ResourceValues += delta;
+    if (!before.NamedResources.Empty() || !after.NamedResources.Empty()) {
+        NamedResourceValues.Subtract(before.NamedResources);
+        NamedResourceValues.Add(after.NamedResources);
+    }
     auto normalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     YDB_LOG_TRACE("TNodeInfo::UpdateResourceValues updated resource values",
         {"logPrefix", GetLogPrefix()},
@@ -447,11 +451,17 @@ void TNodeInfo::UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics
     if (metrics.HasNetwork()) {
         std::get<NMetrics::EResource::Network>(ResourceMaximumValues) = metrics.GetNetwork();
     }
+    // node reports the complete set of its named resource capacities every time
+    NamedResourceMaximum.clear();
+    for (const auto& resource : metrics.GetNamedResources()) {
+        NamedResourceMaximum[resource.GetName()] = resource.GetValue();
+        Hive.RegisterNamedResource(resource.GetName());
+    }
     auto normalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     Hive.UpdateTotalResourceValues(nullptr, nullptr, {}, {}, {}, normalizedValues - oldNormalizedValues);
 }
 
-double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty) const {
+double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty, bool includeNamed) const {
     // what it would like when tablet will run on this node?
     auto maximum = GetResourceMaximumValues();
     TResourceRawValues nodeValues = GetResourceCurrentValues();
@@ -465,6 +475,19 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
     auto current = tablet.IsPresentOnLocal(Local) ? nodeValues : nodeValues + tabletValues;
     // basically, this is: return max(a / b);
     double usage = TTabletInfo::GetUsage(current, maximum);
+<<<<<<< HEAD
+=======
+    double reserved = GetMaxTabletImpact(&tablet);
+    if (reserved > 0 && Hive.GetUseTabletUsageEstimate()) {
+        if (!alreadyHere) {
+            reserved += TTabletInfo::GetUsage(tabletValues, maximum);
+        }
+        usage = std::max(usage, reserved);
+    }
+    if (includeNamed) {
+        usage = std::max(usage, GetNamedUsageForTablet(tablet));
+    }
+>>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
     if (Hive.GetSpreadNeighbours() && usage < 1 && neighbourPenalty) {
         auto neighbours = GetTabletNeighboursCount(tablet);
         if (neighbours > 0) {
@@ -476,12 +499,42 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
     return usage;
 }
 
+double TNodeInfo::GetNamedUsageForTablet(const TTabletInfo& tablet) const {
+    const bool alreadyHere = tablet.IsPresentOnLocal(Local);
+    double usage = 0;
+    for (const auto& v : tablet.GetResourceValues().NamedResources) {
+        if (!Hive.GetNamedResourceSettings(v.Name).IsBalanced()) {
+            continue;
+        }
+        if (auto namedUsage = GetNamedResourceUsage(v.Name, alreadyHere ? 0 : v.Value)) {
+            usage = std::max(usage, *namedUsage);
+        }
+    }
+    return usage;
+}
+
 double TNodeInfo::GetNodeUsage(const TResourceNormalizedValues& normValues, EResourceToBalance resource) const {
     double usage = TTabletInfo::ExtractResourceUsage(normValues, resource);
     if (resource == EResourceToBalance::ComputeResources && AveragedNodeTotalUsage.IsValueStable()) {
         usage = std::max(usage, AveragedNodeTotalUsage.GetValue());
     }
     return usage;
+}
+
+std::optional<ui64> TNodeInfo::GetNamedResourceMaximum(const TString& name) const {
+    auto it = NamedResourceMaximum.find(name);
+    if (it != NamedResourceMaximum.end()) {
+        return it->second;
+    }
+    return Hive.GetNamedResourceSettings(name).DefaultMaximum;
+}
+
+std::optional<double> TNodeInfo::GetNamedResourceUsage(const TString& name, ui64 extra) const {
+    auto maximum = GetNamedResourceMaximum(name);
+    if (!maximum) {
+        return std::nullopt;
+    }
+    return static_cast<double>(NamedResourceValues.GetValue(name) + extra) / std::max<ui64>(*maximum, 1);
 }
 
 double TNodeInfo::GetNodeUsage(EResourceToBalance resource) const {

@@ -418,7 +418,7 @@ bool TTabletInfo::HasMetric(EResourceToBalance resource) const {
 void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics) {
     TInstant now = TActivationContext::Now();
     const TVector<i64>& allowedMetricIds(GetTabletAllowedMetricIds());
-    // Resource accounting only needs scalars, so keep group vectors empty.
+    // Resource accounting only needs scalars and named resources, so keep group vectors empty.
     const TMetrics before = {
         .CPU = ResourceValues.CPU,
         .Memory = ResourceValues.Memory,
@@ -433,6 +433,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
         .GroupWriteIops = {},
         .ReadIops = ResourceValues.ReadIops,
         .WriteIops = ResourceValues.WriteIops,
+        .NamedResources = ResourceValues.NamedResources,
     };
     auto maximum = GetResourceMaximumValues();
     bool groupsChanged = false;
@@ -507,6 +508,23 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
             groupsChanged = true;
         }
     }
+    bool namedEstimatesLoaded = false;
+    for (const auto& resource : metrics.GetNamedResources()) {
+        // instantaneous values, no windowed maximum: e.g. queue usage must disappear as soon as the work is done.
+        // Estimate deadline is present only in metrics persisted by Hive itself.
+        ResourceValues.NamedResources.Set(resource.GetName(), resource.GetValue(), resource.GetTransferable(),
+            TInstant::MilliSeconds(resource.GetEstimateDeadline()));
+        namedEstimatesLoaded |= resource.HasEstimateDeadline();
+        if (resource.GetValue() != 0) {
+            Hive.RegisterNamedResource(resource.GetName());
+        }
+    }
+    ResourceValues.NamedResources.DropExpiredEstimates(now);
+    if (namedEstimatesLoaded) {
+        if (TInstant deadline = ResourceValues.NamedResources.GetEarliestEstimateDeadline()) {
+            Hive.ScheduleNamedResourceEstimatesCheck(GetFullTabletId(), deadline);
+        }
+    }
     i64 counterBefore = ResourceValues.Counter;
     ActualizeCounter();
     i64 counterAfter = ResourceValues.Counter;
@@ -515,7 +533,8 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
             || before.Network != after.Network || before.Storage != after.Storage
             || before.ReadThroughput != after.ReadThroughput
             || before.WriteThroughput != after.WriteThroughput
-            || before.ReadIops != after.ReadIops || before.WriteIops != after.WriteIops) {
+            || before.ReadIops != after.ReadIops || before.WriteIops != after.WriteIops
+            || before.NamedResources != after.NamedResources) {
         MarkProtoMetricsDirty();
     }
     if (Node != nullptr) {
@@ -529,6 +548,37 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
             }
         }
     }
+}
+
+void TTabletInfo::CarryOverNamedResources() {
+    if (ResourceValues.NamedResources.Empty()) {
+        return;
+    }
+    auto before = ResourceValues;
+    const TInstant deadline = TActivationContext::Now() + NAMED_RESOURCE_ESTIMATE_TIMEOUT;
+    if (!ResourceValues.NamedResources.CarryOverAsEstimate(deadline)) {
+        return;
+    }
+    MarkProtoMetricsDirty();
+    if (Node != nullptr && IsResourceDrainingState(VolatileState)) {
+        Node->UpdateResourceValues(this, before, ResourceValues);
+    }
+    Hive.EnqueueUpdateMetrics(this);
+    if (!ResourceValues.NamedResources.Empty()) {
+        Hive.ScheduleNamedResourceEstimatesCheck(GetFullTabletId(), deadline);
+    }
+}
+
+void TTabletInfo::DropExpiredNamedResourceEstimates() {
+    auto before = ResourceValues;
+    if (!ResourceValues.NamedResources.DropExpiredEstimates(TActivationContext::Now())) {
+        return;
+    }
+    MarkProtoMetricsDirty();
+    if (Node != nullptr && IsResourceDrainingState(VolatileState)) {
+        Node->UpdateResourceValues(this, before, ResourceValues);
+    }
+    Hive.EnqueueUpdateMetrics(this);
 }
 
 TResourceRawValues TTabletInfo::GetResourceCurrentValues() const {
@@ -607,7 +657,12 @@ const TNodeFilter& TTabletInfo::GetNodeFilter() const {
 }
 
 bool TTabletInfo::InitiateStart(TNodeInfo* node) {
+<<<<<<< HEAD
     if (BecomeStarting(node->Id)) {
+=======
+    if (BecomeStarting(node->Id, EHiveEventReason::BootQueue)) {
+        CarryOverNamedResources();
+>>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
         PostponedStart = {};
         TFullTabletId tabletId = GetFullTabletId();
         Hive.ExecuteStartTablet(tabletId, node->Local, tabletId.first, false);

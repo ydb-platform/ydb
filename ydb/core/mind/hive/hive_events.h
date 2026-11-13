@@ -42,6 +42,12 @@ struct TEvPrivate {
         EvProcessTabletMetrics,
         EvReassignInactiveGroupsComplete,
         EvMoveDataComplete,
+<<<<<<< HEAD
+=======
+        EvLogHangingRequests,
+        EvCheckNamedResourceEstimates,
+        EvProcessPileDrains,
+>>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
         EvEnd
     };
 
@@ -163,6 +169,19 @@ struct TEvPrivate {
 
         TEvMoveDataComplete(const TString& poolName, bool success) : PoolName(poolName), Success(success) {}
     };
+<<<<<<< HEAD
+=======
+
+    struct TEvLogHangingRequests : TEventLocal<TEvLogHangingRequests, EvLogHangingRequests> {};
+
+    struct TEvCheckNamedResourceEstimates : TEventLocal<TEvCheckNamedResourceEstimates, EvCheckNamedResourceEstimates> {
+        TFullTabletId TabletId;
+
+        explicit TEvCheckNamedResourceEstimates(TFullTabletId tabletId)
+            : TabletId(tabletId)
+        {}
+    };
+>>>>>>> 37eedf2b77c (add resource broker queues as resources to hive (#57917))
 };
 
 } // NHive

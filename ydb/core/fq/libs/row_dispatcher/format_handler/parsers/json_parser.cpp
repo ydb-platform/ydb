@@ -40,6 +40,20 @@ static std::string JsonTypeToString(const simdjson::builtin::ondemand::json_type
     const simdjson::error_code error = value; \
     if (Y_UNLIKELY(error))
 
+static simdjson::error_code ExtractJsonKey(simdjson::simdjson_result<simdjson::builtin::ondemand::field>& item, std::string_view& name) {
+    {
+        CHECK_JSON_ERROR(item.escaped_key().get(name)) {
+            return error;
+        }
+    }
+    if (name.find('\\') != std::string::npos) {
+        CHECK_JSON_ERROR(item.unescaped_key().get(name)) {
+            return error;
+        }
+    }
+    return simdjson::error_code::SUCCESS;
+}
+
 template <typename T>
 using TParserVector = TVector<T, NKikimr::NMiniKQL::TMKQLAllocator<T>>;
 using TParserString = std::basic_string<char, std::char_traits<char>, NKikimr::NMiniKQL::TMKQLAllocator<char>>;
@@ -290,7 +304,7 @@ public:
                 for (auto elt : jsonValue.get_object()) {
                     std::string_view name; // fragile; don't use after any other simdjson call
                     {
-                        CHECK_JSON_ERROR(elt.unescaped_key().get(name)) {
+                        CHECK_JSON_ERROR(ExtractJsonKey(elt, name)) {
                             SetParsingError(error, jsonValue, "parse as object", status);
                             return false;
                         }
@@ -358,7 +372,7 @@ public:
                     for (auto elt : jsonObject) {
                         std::string_view name; // fragile; don't use after any other simdjson call
                         {
-                            CHECK_JSON_ERROR(elt.unescaped_key().get(name)) {
+                            CHECK_JSON_ERROR(ExtractJsonKey(elt, name)) {
                                 SetParsingError(error, jsonValue, "parse as object", status);
                                 return;
                             }
@@ -1160,7 +1174,7 @@ private:
         }
         for (auto item : document.get_object()) {
             std::string_view name; // fragile; don't use after any other simdjson call
-            CHECK_JSON_ERROR(item.unescaped_key().get(name)) {
+            CHECK_JSON_ERROR(ExtractJsonKey(item, name)) {
                 return false;
             }
             const auto it = ColumnsIndex.find(name);
@@ -1270,7 +1284,7 @@ private:
             ui16 parsedNonOptional = 0;
             for (auto item : document.get_object()) {
                 std::string_view name; // fragile; don't use after any other simdjson call
-                CHECK_JSON_ERROR(item.unescaped_key().get(name)) {
+                CHECK_JSON_ERROR(ExtractJsonKey(item, name)) {
                     auto status = TStatus::Fail(EStatusId::BAD_REQUEST,
                         TStringBuilder() << "Failed to parse json message for offset " << offset
                                          << ", json item was corrupted: " << simdjson::error_message(error)

@@ -8276,7 +8276,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
     }
 
 
-    Y_UNIT_TEST_TWIN(HnswSchemaFinalizationWaitsForBuild, BelowMinRows) {
+    Y_UNIT_TEST_TWIN(HnswSchemaFinalizationRequestsBackgroundBuild, BelowMinRows) {
         THnswLifecycleFixture fixture(false, 1, true, false);
         UNIT_ASSERT(!fixture.Index());
         auto& runtime = *fixture.Helper.Server->GetRuntime();
@@ -8309,98 +8309,20 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             UNIT_ASSERT(!fixture.Index());
             UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 2u);
         } else {
-            // No read or warmup has triggered lazy construction: the schema reply
-            // itself guarantees that eager construction has already completed.
-            UNIT_ASSERT(fixture.Index());
+            runtime.WaitFor("background HNSW build after publication", [&] { return bool(fixture.Index()); });
             UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 1u);
         }
     }
 
-    Y_UNIT_TEST(HnswEagerEmptyGraphInstallationRetriesAreBounded) {
+    Y_UNIT_TEST(HnswBackgroundPublicationBuildDoesNotBlockWrites) {
         THnswLifecycleFixture fixture(false, 1, true, false);
-        ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, "DELETE FROM `/Root/hnsw-lifecycle`;");
         auto& runtime = *fixture.Helper.Server->GetRuntime();
         auto* shard = fixture.Shard();
         const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
         runtime.RunCall([&] { return shard->GetHnswCacheMemoryLimit(); });
-        ui64 forcedLimit = 64_MB;
-        std::shared_ptr<void> pressure;
-        ui32 attempts = 0;
-        auto settings = fixture.Settings();
-        settings.set_min_rows(0);
-        constexpr ui32 rebuild = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 36;
-        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == rebuild && ev->Recipient == actor) {
-                ev.Reset(); // Isolate eager attempts from lazy retries.
-                return;
-            }
-            if (ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType && ev->Recipient == actor) {
-                ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = forcedLimit;
-            }
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
-                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
-                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
-                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
-                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
-                    if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
-                        fixture.AnnotatePublication(*tx.MutableAlterTable(), settings);
-                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
-                    }
-                }
-            }
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvAsyncJobComplete::EventType) {
-                auto* product = ev->Get<TEvDataShard::TEvAsyncJobComplete>()->Prod.Get();
-                if (auto* snapshot = dynamic_cast<THnswSnapshotScanProduct*>(product)) {
-                    // Supply a valid empty rebuild input despite scan admission
-                    // pressure, so the test exercises rejected installations.
-                    snapshot->Result.Success = true;
-                    snapshot->Result.BelowMinRows = false;
-                    snapshot->Result.AllowEmpty = true;
-                    snapshot->Result.Rows.clear();
-                    snapshot->Result.MemoryReservation = std::make_shared<int>(0);
-                    snapshot->Result.ReservedBytes = 0;
-                    snapshot->Result.ReduceReservation = {};
-                } else if (auto* result = dynamic_cast<THnswIndexBuildProduct*>(product);
-                        result && ev->Recipient == actor) {
-                    UNIT_ASSERT_C(result->Index, result->Error);
-                    UNIT_ASSERT_VALUES_EQUAL(result->RowCount, 0u);
-                    UNIT_ASSERT_VALUES_EQUAL(result->Index->Size(), 0u);
-                    UNIT_ASSERT_C(++attempts <= 3, "Empty graph installations exceeded the build budget");
-                }
-            }
-        });
-        runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(forcedLimit)));
-        runtime.WaitFor("HNSW memory grant", [&] { return shard->GetHnswCacheMemoryLimit() == forcedLimit; });
-        pressure = runtime.RunCall([&] { return shard->TryReserveHnswCacheMemory(forcedLimit); });
-        UNIT_ASSERT(pressure);
-        forcedLimit = 1;
-        runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(forcedLimit)));
-        runtime.WaitFor("HNSW memory pressure", [&] { return shard->GetHnswCacheMemoryLimit() == 1; });
-        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
-            "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
-        UNIT_ASSERT_VALUES_EQUAL(attempts, 3u);
-        UNIT_ASSERT(!fixture.Index());
-    }
-
-    Y_UNIT_TEST(HnswEagerBelowThresholdScanRetriesAfterConcurrentChange) {
-        THnswLifecycleFixture fixture(false, 1, true, false);
-        auto& runtime = *fixture.Helper.Server->GetRuntime();
-        auto* shard = fixture.Shard();
-        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
-        const auto actor = ResolveTablet(runtime, fixture.Helper.Tables.at("hnsw-lifecycle").TabletId);
-        const TPathId id(fixture.Helper.Tables.at("hnsw-lifecycle").TableId.PathId.OwnerId, Max<ui64>() - 1);
-        runtime.RunCall([&] { return shard->GetHnswCacheMemoryLimit(); });
-        auto settings = fixture.Settings();
-        settings.set_min_rows(2);
+        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 35;
         TAutoPtr<IEventHandle> delayed;
-        bool captured = false;
-        ui32 scans = 0;
-        constexpr ui32 rebuild = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 36;
         auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == rebuild && ev->Recipient == actor) {
-                ev.Reset();
-                return;
-            }
             if (ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType && ev->Recipient == actor) {
                 ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = 64_MB;
             }
@@ -8410,43 +8332,31 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                     NKikimrTxDataShard::TFlatSchemeTransaction tx;
                     UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
                     if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "hnsw-lifecycle") {
-                        fixture.AnnotatePublication(*tx.MutableAlterTable(), settings);
+                        fixture.AnnotatePublication(*tx.MutableAlterTable(), fixture.Settings());
                         UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
                     }
                 }
             }
-            if (ev->GetTypeRewrite() == TEvDataShard::TEvAsyncJobComplete::EventType) {
-                auto* snapshot = dynamic_cast<THnswSnapshotScanProduct*>(
-                    ev->Get<TEvDataShard::TEvAsyncJobComplete>()->Prod.Get());
-                if (snapshot) {
-                    ++scans;
-                    if (!captured) {
-                        captured = true;
-                        // Emulate the smaller snapshot arriving after a commit
-                        // has been recorded in the graph's change journal.
-                        snapshot->Result.Success = false;
-                        snapshot->Result.BelowMinRows = true;
-                        snapshot->Result.Rows.clear();
-                        delayed = ev.Release();
-                        return;
-                    }
-                }
+            if (ev->GetTypeRewrite() == buildResult && ev->Recipient == actor) {
+                UNIT_ASSERT(!delayed);
+                delayed = ev.Release();
             }
         });
         runtime.Send(new IEventHandle(actor, fixture.Helper.Sender, new NMemory::TEvConsumerLimit(64_MB)));
         runtime.WaitFor("HNSW memory grant", [&] { return shard->GetHnswCacheMemoryLimit() == 64_MB; });
-        auto future = KqpSchemeExecSend(runtime,
-            "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;");
-        runtime.WaitFor("eager HNSW snapshot", [&] { return bool(delayed); });
-        runtime.RunCall([&] {
-            const TVector<TCell> key{TCell::Make(ui32(2))};
-            shard->ApplyHnswIndexChange(tid, TSerializedCellVec::Serialize(key),
-                {TRowVersion(Max<ui64>() - 1, 0), TString("\x00\x00\x00\x00\x00\x00\x80\x3F\x01", 9), {}}, id);
-            return true;
-        });
+        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime,
+            "ALTER TABLE `/Root/hnsw-lifecycle` ADD COLUMN extra String;"), "SUCCESS");
+        runtime.WaitFor("background graph installation", [&] { return bool(delayed); });
+        UNIT_ASSERT(!fixture.Index());
+        // A completed schema publication must let later writes commit while
+        // graph construction/installation is still outstanding.
+        ExecSQL(fixture.Helper.Server, fixture.Helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-lifecycle` (key, label, emb) VALUES
+                (2, 9, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+        )");
+        observer.Remove();
         runtime.Send(delayed.Release());
-        UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExecWait(runtime, std::move(future)), "SUCCESS");
-        UNIT_ASSERT_VALUES_EQUAL(scans, 2u);
+        fixture.Warm();
         UNIT_ASSERT(fixture.Index());
         UNIT_ASSERT_VALUES_EQUAL(fixture.Read()->Record.GetStats().GetRows(), 1u);
     }

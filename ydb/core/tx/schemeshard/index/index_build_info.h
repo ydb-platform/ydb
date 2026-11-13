@@ -768,12 +768,39 @@ public:
                     } else {
                         indexInfo->SpecializedIndexDescription = creationConfig.GetVectorIndexKmeansTreeDescription();
                     }
-                    const auto& settings = indexInfo->GetVectorSettings();
+                    const Ydb::Table::KMeansTreeSettings* restoredSettings = nullptr;
+                    if (indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                        if (const auto* description = std::get_if<NKikimrSchemeOp::THnswIndexDescription>(
+                                &indexInfo->SpecializedIndexDescription)) {
+                            restoredSettings = &description->GetSettings();
+                        }
+                    } else if (indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                        if (const auto* description = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+                                &indexInfo->SpecializedIndexDescription)) {
+                            restoredSettings = &description->GetSettings();
+                        }
+                    }
+                    if (!restoredSettings) {
+                        indexInfo->IsBroken = true;
+                        indexInfo->AddIssue("Persisted vector index type and description do not match");
+                        // Keep diagnostics/cancellation able to serialize the broken build.
+                        if (indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                            indexInfo->SpecializedIndexDescription.emplace<NKikimrSchemeOp::THnswIndexDescription>();
+                        } else if (indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                            indexInfo->SpecializedIndexDescription.emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>();
+                        }
+                        break;
+                    }
+                    const auto& settings = *restoredSettings;
                     TString createError;
                     const bool valid = indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
                         ? NKikimr::NKMeans::ValidateHnswSettingsPartial(settings, createError)
                         : NKikimr::NKMeans::ValidateSettingsPartial(settings, createError);
-                    Y_ENSURE(valid, createError);
+                    if (!valid) {
+                        indexInfo->IsBroken = true;
+                        indexInfo->AddIssue(createError);
+                        break;
+                    }
                     indexInfo->KMeans.K = settings.clusters();
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + settings.levels();
                     indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();

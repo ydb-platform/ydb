@@ -840,6 +840,31 @@ message TEvVSyncFullResult {
     optional EFullSyncProtocol Protocol = 20;
 }
 
+message TEvVPhantomFlagStorageListChunks {
+    optional TVDiskID SourceVDiskID = 1;
+    optional TVDiskID VDiskID = 2;
+}
+
+message TEvVPhantomFlagStorageListChunksResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional TVDiskID VDiskID = 2;
+    repeated uint32 ChunkIndexes = 3 [packed = true];
+}
+
+message TEvVPhantomFlagStorageReadChunk {
+    optional TVDiskID SourceVDiskID = 1;
+    optional TVDiskID VDiskID = 2;
+    optional uint32 ChunkIndex = 3;
+}
+
+message TEvVPhantomFlagStorageReadChunkResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional TVDiskID VDiskID = 2;
+    optional uint32 ChunkIndex = 3;
+    // Consecutive whole-blob DoNotKeep keys in TLogoBlobID::ToBinary format.
+    optional bytes Keys = 4;
+}
+
 message THandoffDelLogoBlob {
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional uint64 Ingress = 2;

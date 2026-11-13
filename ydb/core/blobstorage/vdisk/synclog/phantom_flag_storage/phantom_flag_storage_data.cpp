@@ -114,6 +114,39 @@ TPhantomFlagStorageItem TPhantomFlagStorageItem::DeserializeFromRaw(const char* 
     }
 }
 
+std::optional<TPhantomFlagStorageItem> TPhantomFlagStorageItem::TryDeserialize(TStringBuf data) {
+    constexpr size_t typeSize = sizeof(EPhantomFlagStorageItem);
+    if (data.size() < typeSize) {
+        return std::nullopt;
+    }
+
+    size_t size;
+    switch (static_cast<EPhantomFlagStorageItem>(data.front())) {
+        case EPhantomFlagStorageItem::SkipOneByte:
+            size = typeSize;
+            break;
+        case EPhantomFlagStorageItem::Flag:
+            size = typeSize + sizeof(TFlag);
+            break;
+        case EPhantomFlagStorageItem::Threshold:
+            size = typeSize + sizeof(TThreshold);
+            break;
+        default:
+            if (data.size() < typeSize + sizeof(ui32)) {
+                return std::nullopt;
+            }
+            size = ReadUnaligned<ui32>(data.data() + typeSize);
+            if (size < typeSize + sizeof(ui32)) {
+                return std::nullopt;
+            }
+            break;
+    }
+    if (size > data.size()) {
+        return std::nullopt;
+    }
+    return DeserializeFromRaw(data.data());
+}
+
 ui32 TPhantomFlagStorageItem::SerializedSize() const {
     ui32 res = 0;
     std::visit(TOverloaded{

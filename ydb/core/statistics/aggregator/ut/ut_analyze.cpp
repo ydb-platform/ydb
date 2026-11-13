@@ -16,6 +16,7 @@
 #include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <util/string/cast.h>
 
@@ -1485,18 +1486,30 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         });
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
-        ExecuteYqlScript(env, R"(
-            CREATE TABLE `Root/Database/Table` (
-                Key pgint8,
-                Value String,
-                PRIMARY KEY (Key)
-            );
-        )");
-        ExecuteYqlScript(env, R"(
-            UPSERT INTO `Root/Database/Table` (Key, Value) VALUES
-                (1pb, "one"),
-                (2pb, "two");
-        )");
+        env.RunInThreadPool([&] {
+            NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings().Database("/Root/Database"));
+            auto sessionResult = client.CreateSession().GetValueSync();
+            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+            auto session = sessionResult.GetSession();
+            auto createResult = session.CreateTable("/Root/Database/Table", NYdb::NTable::TTableBuilder()
+                .AddNullableColumn("Key", NYdb::TPgType("pgint8"))
+                .AddNullableColumn("Value", NYdb::EPrimitiveType::String)
+                .SetPrimaryKeyColumns({"Key"})
+                .Build()).GetValueSync();
+            UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
+
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [key, value] : {std::pair{"1", "one"}, std::pair{"2", "two"}}) {
+                rows.AddListItem().BeginStruct()
+                    .AddMember("Key").Pg(NYdb::TPgValue(NYdb::TPgValue::VK_TEXT, key, NYdb::TPgType("pgint8")))
+                    .AddMember("Value").String(value)
+                    .EndStruct();
+            }
+            rows.EndList();
+            auto uploadResult = client.BulkUpsert("/Root/Database/Table", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(uploadResult.IsSuccess(), uploadResult.GetIssues().ToString());
+        });
 
         const auto tableInfo = ResolveRowTable(runtime, "/Root/Database/Table");
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});

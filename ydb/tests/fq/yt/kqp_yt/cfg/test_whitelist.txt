@@ -155,7 +155,6 @@ bigdate/input_date32
 bigdate/bitcast_datetime64
 aggregate/group_by_rollup_column_reuse
 bigdate/explicit_cast
-blocks/combine_hashed_pg
 blocks/filter_partial_expr
 aggregate/group_by_session_extended_tuple
 aggregate/list_after_group
@@ -166,7 +165,6 @@ bigdate/misc
 bigdate/output_date32
 bigdate/int_cast
 aggregate/group_by_session_star
-blocks/pg_from_dates
 blocks/sort_one_desc
 aggregate/percentile_and_variance
 bigdate/table_arithmetic_mul_div
@@ -250,7 +248,6 @@ expr/dict_comp
 expr/cast_struct
 blocks/combine_all_minmax_double
 blocks/pg_call
-blocks/pg_to_interval
 column_order/select_subquery
 compute_range/in
 compute_range/merge_adjacent
@@ -283,7 +280,6 @@ expr/flatmap_by_map_lazy_list
 expr/lds_empty_compare
 expr/struct_gather_spread
 blocks/top_sort_two_asc
-blocks/pg_tofrom
 expr/fallback_filternullmembers
 csee/same_l1
 blocks/date_greater_scalar
@@ -295,7 +291,6 @@ expr/list_flatten
 column_group/hint_empty_grp_fail
 column_order/select_distinct_star
 expr/to_hashed_dict_tuple_key
-blocks/pg_sort
 dq/precompute_parallel_indep
 expr/expr_add_literal_nulls
 expr/non_persistable_inner_select_fail
@@ -318,7 +313,6 @@ count/count_nullable_sub
 expr/list_not_null
 datetime/date_cast
 expr/expr_op_in_paren
-blocks/pg_top_sort
 expr/static_zip
 csee/same_l1_expr
 expr/to_sorted_dict_vartuple_key
@@ -831,7 +825,6 @@ schema/append_to_desc_with_remap
 schema/def_values_job
 pg/select_agg_gs_rollup
 pg/pg_array_literal
-pg/wide_top_sort
 pg/select_join_full
 pg/sublink_having_expr
 schema/select_all
@@ -1271,7 +1264,6 @@ aggregate/agg_phases_table1
 aggregate/aggregate_distinct_expr_with_udf
 aggregate/group_by_expr_mul_col
 window/win_func_over_group_by_compl
-blocks/pg_to_strings
 aggregate/group_by_rollup_grouping_hum
 blocks/not
 aggregate/group_by_expr_only_join
@@ -1427,7 +1419,6 @@ aggregate/group_by_expr_order_by_expr
 blocks/coalesce_ints
 join/left_join_right_pushdown_nested_right
 blocks/combine_hashed_avg
-blocks/pg_to_dates
 expr/expr_named_yql_lambda
 join/left_only_semi_and_other
 join/left_semi_with_other
@@ -1489,7 +1480,6 @@ blocks/filter_expr
 blocks/mod_uint64
 join/mergejoin_with_different_key_names_nested
 join/mergejoin_with_different_key_names_norename
-blocks/combine_all_pg_filter
 in/in_exists_immediate_nested_subq
 csee/const_body_diff_lambda
 blocks/string_pass
@@ -1500,7 +1490,6 @@ optimizers/length_over_merge_fs_multiusage
 optimizers/yql-18300-flatmap-over-extend
 optimizers/yql-7324_duplicate_arg
 blocks/top_sort_one_asc
-blocks/pg_to_numbers
 join/mergejoin_with_different_key_names_norename
 join/pullup_exclusion
 join/pullup_inner
@@ -2203,7 +2192,6 @@ pg/select_join_inner_equi_and_const
 simple_columns/simple_columns_tablerow
 bigdate/table_yt_key_filter
 binding/compact_named_with_subq_contexts
-blocks/combine_all_pg
 pg/select_win_partition_sort
 bigdate/table_arithmetic_sub
 pg/join_using_table_used_order1
@@ -2346,7 +2334,6 @@ schema/select_with_map
 pg/select_win_expr_agg
 type_v3/split
 udf/generic_udf
-blocks/pg
 window/presort_window_partition_by_table
 aggregate/group_by_gs_and_having
 schema/select_yamr_fields
@@ -2818,7 +2805,6 @@ pg/select_columnref1
 pg/select_having_no_from
 pg/select_join_full_equi_and_const
 pg/variadic
-pg/wide_sort
 window/win_func_rank_by_part
 pg/select_join_left3
 pg/select_where

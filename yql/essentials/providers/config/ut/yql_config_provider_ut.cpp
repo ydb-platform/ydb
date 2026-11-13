@@ -134,9 +134,10 @@ Y_UNIT_TEST(StrictValidationRejectsUnknownAndSystemProjectSettings) {
 
         types.DataSourceMap["config"] = provider;
         UNIT_ASSERT(!(provider->Initialize(ctx) && types.ValidateProjectSettings(ctx)));
-        UNIT_ASSERT_STRING_CONTAINS(ctx.IssueManager.GetIssues().ToString(), name);
-        UNIT_ASSERT_VALUES_EQUAL(ctx.IssueManager.GetIssues().Size(), 1);
-        const auto& issue = *ctx.IssueManager.GetIssues().begin();
+        const auto issues = ctx.IssueManager.GetIssues();
+        UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), name);
+        UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
+        const auto& issue = *issues.begin();
         UNIT_ASSERT_VALUES_EQUAL(issue.GetCode(), static_cast<ui32>(TIssuesIds::DEFAULT_ERROR));
         UNIT_ASSERT(issue.GetSeverity() == TSeverityIds::S_ERROR);
     }

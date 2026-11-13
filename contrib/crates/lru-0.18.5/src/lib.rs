@@ -232,6 +232,20 @@ impl<K: Hash + Eq, V> LruCache<K, V> {
         LruCache::construct(cap, HashMap::with_capacity(cap.get()))
     }
 
+    /// Creates a new LRU Cache that holds at most `cap` items without allocating storage space
+    /// for them.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use lru::LruCache;
+    /// use std::num::NonZeroUsize;
+    /// let mut cache: LruCache<isize, &str> = LruCache::sparse(NonZeroUsize::new(1_000_000).unwrap());
+    /// ```
+    pub fn sparse(cap: NonZeroUsize) -> LruCache<K, V> {
+        LruCache::construct(cap, HashMap::default())
+    }
+
     /// Creates a new LRU Cache that never automatically evicts items.
     ///
     /// # Example
@@ -417,10 +431,10 @@ impl<K: Hash + Eq, V, S: BuildHasher> LruCache<K, V, S> {
             (Some(replaced), old_node)
         } else {
             // if the cache is not full allocate a new LruEntry
-            // Safety: We allocate, turn into raw, and get NonNull all in one step.
-            (None, unsafe {
-                NonNull::new_unchecked(Box::into_raw(Box::new(LruEntry::new(k, v))))
-            })
+            (
+                None,
+                NonNull::new(Box::into_raw(Box::new(LruEntry::new(k, v)))).unwrap(),
+            )
         }
     }
 
@@ -1283,14 +1297,19 @@ impl<K: Hash + Eq, V, S: BuildHasher> LruCache<K, V, S> {
         match self.map.remove(KeyWrapper::from_ref(k)) {
             None => None,
             Some(old_node) => {
-                let mut old_node = unsafe {
-                    let mut old_node = *Box::from_raw(old_node.as_ptr());
+                let node_ptr: *mut LruEntry<K, V> = old_node.as_ptr();
+
+                // Detach the node from the linked list *before* freeing it and
+                // dropping the key. `ptr::drop_in_place` below runs the key's
+                // `Drop`, which may panic; if it does, unwinding must not leave
+                // dangling `prev`/`next` pointers in the list. Detaching first
+                // keeps the list consistent regardless of whether `Drop` panics.
+                self.detach(node_ptr);
+
+                let mut old_node = unsafe { *Box::from_raw(node_ptr) };
+                unsafe {
                     ptr::drop_in_place(old_node.key.as_mut_ptr());
-
-                    old_node
-                };
-
-                self.detach(&mut old_node);
+                }
 
                 let LruEntry { key: _, val, .. } = old_node;
                 unsafe { Some(val.assume_init()) }
@@ -1518,6 +1537,68 @@ impl<K: Hash + Eq, V, S: BuildHasher> LruCache<K, V, S> {
         }
 
         None
+    }
+
+    /// Retains only the entries for which the predicate `f` returns `true`, removing the rest.
+    ///
+    /// The entries are visited in most-recently-used to least-recently-used order and the
+    /// relative order of the entries that are kept is preserved.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use lru::LruCache;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut cache = LruCache::new(NonZeroUsize::new(4).unwrap());
+    /// cache.put(1, "a");
+    /// cache.put(2, "b");
+    /// cache.put(3, "c");
+    /// cache.put(4, "d");
+    ///
+    /// cache.retain(|k, _| k % 2 == 0);
+    ///
+    /// assert_eq!(cache.len(), 2);
+    /// assert_eq!(cache.get(&2), Some(&"b"));
+    /// assert_eq!(cache.get(&4), Some(&"d"));
+    /// assert_eq!(cache.get(&1), None);
+    /// assert_eq!(cache.get(&3), None);
+    /// ```
+    pub fn retain<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&K, &mut V) -> bool,
+    {
+        let mut node = unsafe { (*self.head).next };
+
+        while !core::ptr::eq(node, self.tail) {
+            // Grab the next node before we potentially free the current one.
+            let next = unsafe { (*node).next };
+
+            let keep = {
+                let key = unsafe { &*(*node).key.as_ptr() };
+                let val = unsafe { &mut *(*node).val.as_mut_ptr() };
+                f(key, val)
+            };
+
+            if !keep {
+                let key_ref = KeyRef {
+                    k: unsafe { &*(*node).key.as_ptr() },
+                };
+                self.map.remove(&key_ref);
+
+                // Detach before dropping the key and value so that a panic in either
+                // `Drop` cannot leave dangling pointers in the list.
+                self.detach(node);
+
+                let mut old_node = unsafe { *Box::from_raw(node) };
+                unsafe {
+                    ptr::drop_in_place(old_node.key.as_mut_ptr());
+                    ptr::drop_in_place(old_node.val.as_mut_ptr());
+                }
+            }
+
+            node = next;
+        }
     }
 
     /// Returns the number of key-value pairs that are currently in the the cache.
@@ -2894,6 +2975,86 @@ mod tests {
     }
 
     #[test]
+    fn test_retain() {
+        let mut cache = LruCache::new(NonZeroUsize::new(5).unwrap());
+
+        cache.put(1, 10);
+        cache.put(2, 20);
+        cache.put(3, 30);
+        cache.put(4, 40);
+        cache.put(5, 50);
+
+        // Keep even keys and double the values that are kept.
+        cache.retain(|k, v| {
+            if k % 2 == 0 {
+                *v *= 2;
+                true
+            } else {
+                false
+            }
+        });
+
+        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.peek(&2), Some(&40));
+        assert_eq!(cache.peek(&4), Some(&80));
+        assert_eq!(cache.peek(&1), None);
+        assert_eq!(cache.peek(&3), None);
+        assert_eq!(cache.peek(&5), None);
+
+        // The retained entries keep their most-recently-used to least-recently-used order.
+        let mut iter = cache.iter();
+        assert_opt_eq_tuple(iter.next(), (4, 80));
+        assert_opt_eq_tuple(iter.next(), (2, 40));
+        assert!(iter.next().is_none());
+
+        // The list is still consistent, so newly inserted entries land at the front.
+        cache.put(6, 60);
+        let mut iter = cache.iter();
+        assert_opt_eq_tuple(iter.next(), (6, 60));
+        assert_opt_eq_tuple(iter.next(), (4, 80));
+        assert_opt_eq_tuple(iter.next(), (2, 40));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_retain_all_and_none() {
+        let mut cache = LruCache::new(NonZeroUsize::new(3).unwrap());
+        cache.put(1, "a");
+        cache.put(2, "b");
+
+        cache.retain(|_, _| true);
+        assert_eq!(cache.len(), 2);
+
+        cache.retain(|_, _| false);
+        assert_eq!(cache.len(), 0);
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn test_no_memory_leaks_with_retain() {
+        static DROP_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+        struct DropCounter;
+
+        impl Drop for DropCounter {
+            fn drop(&mut self) {
+                DROP_COUNT.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+
+        let n = 100;
+        for _ in 0..n {
+            let mut cache = LruCache::unbounded();
+            for i in 0..n {
+                cache.put(i, DropCounter {});
+            }
+            // Drop half of the entries via `retain` and let the rest drop with the cache.
+            cache.retain(|k, _| k % 2 == 0);
+        }
+        assert_eq!(DROP_COUNT.load(Ordering::SeqCst), n * n);
+    }
+
+    #[test]
     fn test_get_with_borrow() {
         use alloc::string::String;
 
@@ -3175,6 +3336,39 @@ mod tests {
         assert_eq!(cache.get(&1), Some(&20));
         assert_eq!(cache.get(&2), Some(&40));
         assert_eq!(cache.get(&3), Some(&60));
+    }
+
+    #[test]
+    fn test_pop_panicking_key_drop_keeps_list_consistent() {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        static ARMED: AtomicBool = AtomicBool::new(false);
+
+        #[derive(PartialEq, Eq, Hash)]
+        struct PanicKey(u32);
+        impl Drop for PanicKey {
+            fn drop(&mut self) {
+                if ARMED.swap(false, Ordering::SeqCst) {
+                    panic!("PanicKey::drop");
+                }
+            }
+        }
+
+        let mut cache = LruCache::new(NonZeroUsize::new(4).unwrap());
+        cache.put(PanicKey(1), "a");
+        cache.put(PanicKey(2), "b");
+        cache.put(PanicKey(3), "c");
+
+        ARMED.store(true, Ordering::SeqCst);
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            cache.pop(&PanicKey(2));
+        }));
+
+        cache.put(PanicKey(4), "d");
+        cache.put(PanicKey(5), "e");
+        let _ = cache.get(&PanicKey(3));
+        for (_k, _v) in cache.iter() {}
     }
 }
 

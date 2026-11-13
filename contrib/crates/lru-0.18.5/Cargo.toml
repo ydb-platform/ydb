@@ -12,7 +12,7 @@
 [package]
 rust-version = "1.85.0"
 name = "lru"
-version = "0.18.1"
+version = "0.18.5"
 authors = ["Jerome Froelich <jeromefroelic@hotmail.com>"]
 build = false
 autolib = false
@@ -48,7 +48,12 @@ path = "src/lib.rs"
 
 [dependencies.hashbrown]
 version = "0.17.0"
+features = [
+    "default-hasher",
+    "inline-more",
+]
 optional = true
+default-features = false
 
 [dev-dependencies.scoped_threadpool]
 version = "0.1.*"

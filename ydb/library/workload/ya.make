@@ -4,7 +4,6 @@ PEERDIR(
     ydb/library/workload/abstract
     ydb/library/workload/clickbench
     ydb/library/workload/fulltext
-    ydb/library/workload/imdb
     ydb/library/workload/kv
     ydb/library/workload/log
     ydb/library/workload/mixed

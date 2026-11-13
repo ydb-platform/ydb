@@ -7,6 +7,16 @@ The benchmark comes from *How Good Are Query Optimizers, Really?* by Viktor Leis
 Andrey Gubichev, Atans Mirchev, Peter Boncz, Alfons Kemper, and Thomas Neumann
 (PVLDB 9(3), 2015).
 
+The workload is available only in the
+[experimental CLI](../../../apps/ydb/experimental/ydb/README.md).
+Build it from the repository root:
+
+```sh
+./ya make --build relwithdebinfo ydb/apps/ydb/experimental/ydb
+```
+
+The `ydb` commands below refer to `./ydb/apps/ydb/experimental/ydb/ydb`.
+
 ## Schema
 
 `schema.sql` is the standalone YQL translation of upstream `schema.sql`.

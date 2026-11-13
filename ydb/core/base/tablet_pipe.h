@@ -32,6 +32,7 @@ namespace NKikimr {
             EvClientCheckDelay,
             EvClientShuttingDown,
             EvMessage, // replacement for EvSend
+            EvClientUpdateGeneration,
 
             EvEnd
         };
@@ -259,7 +260,24 @@ namespace NKikimr {
         };
 
         struct TEvClientRetry : public TEventLocal<TEvClientRetry, EvClientRetry> {
-            TEvClientRetry() {}
+            explicit TEvClientRetry(ui64 cookie = 0)
+                : Cookie(cookie)
+            {}
+
+            const ui64 Cookie;
+        };
+
+        // The owner observed this tablet actor at the given generation. Wake
+        // obsolete retries while preserving a connection to that incarnation.
+        // The generation is a floor; a later incarnation remains acceptable.
+        struct TEvClientUpdateGeneration : public TEventLocal<TEvClientUpdateGeneration, EvClientUpdateGeneration> {
+            TEvClientUpdateGeneration(ui64 generation, TActorId tabletActor)
+                : Generation(generation)
+                , TabletActor(tabletActor)
+            {}
+
+            const ui64 Generation;
+            const TActorId TabletActor;
         };
 
         struct TEvClientCheckDelay : public TEventLocal<TEvClientCheckDelay, EvClientCheckDelay> {

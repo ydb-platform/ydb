@@ -13,10 +13,9 @@ template <typename TResult, typename... TArgs>
 class TCompartmentFunction;
 
 template <typename TResult, typename... TArgs>
-class TCompartmentFunction<TResult(TArgs...)>
-{
+class TCompartmentFunction<TResult(TArgs...)> {
 public:
-    using TTypedInvokeFunction = TResult(*)(TArgs...);
+    using TTypedInvokeFunction = TResult (*)(TArgs...);
 
     TCompartmentFunction(IWebAssemblyCompartment* compartment, TTypedInvokeFunction function);
     TCompartmentFunction(IWebAssemblyCompartment* compartment, const TString& name);
@@ -31,12 +30,11 @@ private:
 };
 
 template <typename TResult, typename... TArgs>
-TCompartmentFunction<TResult(TArgs...)> PrepareFunction(
-    TResult(*function)(TArgs...));
+TCompartmentFunction<TResult(TArgs...)> PrepareFunction(TResult (*function)(TArgs...));
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm
 
 #define WASM_FUNCTION_INL_H_
 #include "function-inl.h"

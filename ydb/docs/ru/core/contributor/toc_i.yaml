@@ -31,6 +31,8 @@ items:
       href: actor-system/coroutine-primitives.md
     - name: Интеграция корутин
       href: actor-system/coroutine-integration.md
+    - name: Кеш кадров корутин
+      href: actor-system/coroutine-frame-cache.md
     - name: Тестирование акторов
       href: actor-system/testing.md
   - name: Распределённое хранилище

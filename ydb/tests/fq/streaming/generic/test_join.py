@@ -1202,8 +1202,12 @@ TESTCASES = [
 class TestJoinYdbStreaming(StreamingTestBase):
     # Use only testcase 16 for column-shard tables (since it exercises unusual types)
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
-    @pytest.mark.parametrize("streamlookup", [True, False] if DEBUG else [True], ids=["slj", "map"] if DEBUG else ["slj"])
-    @pytest.mark.parametrize("column_tables, testcase", [*zip([False]*len(TESTCASES), range(len(TESTCASES))), (True, 16)])
+    @pytest.mark.parametrize(
+        "streamlookup", [True, False] if DEBUG else [True], ids=["slj", "map"] if DEBUG else ["slj"]
+    )
+    @pytest.mark.parametrize(
+        "column_tables, testcase", [*zip([False] * len(TESTCASES), range(len(TESTCASES))), (True, 16)]
+    )
     @pytest.mark.parametrize("local", [True, False], ids=["local", "generic"])
     def test_streamlookup(
         self,
@@ -1296,7 +1300,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
                         assert componentSensors.get("Fullscans", 0) == 0
 
         if "MultiGet true" not in sql:
-            assert hits + miss == len(messages)*sql.count("/*+ streamlookup(")
+            assert hits + miss == len(messages) * sql.count("/*+ streamlookup(")
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY {query_name}")
         if not local:
@@ -1334,7 +1338,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
 
         # 3. Create TOKEN-auth external data source.
         # (shared_reading with local topics is not implemented, hence use eds)
-        create_source(kikimr, source_name, secret_name, endpoint, shared_reading=True)
+        create_source(kikimr, source_name, secret_name, endpoint, shared_reading=False)
 
         options = ()
         streamlookup_hint = Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else ''
@@ -1354,12 +1358,14 @@ class TestJoinYdbStreaming(StreamingTestBase):
                             user Int32,
                             skip Bool
                         )
-                        , WATERMARK = $event_time(`ts`) - Interval('PT3S')
-                        , WATERMARK_GRANULARITY = 'PT2S'
-                        {idle_clause}
                     )            ;
-            $input =
-                SELECT e.*, $event_time(ts) AS event_time FROM $input AS e WHERE skip IS DISTINCT FROM true;
+            $input = SELECT e.*, $event_time(ts) AS event_time FROM $input AS e;
+            $input = SELECT * FROM $input WITH (
+                        WATERMARK = event_time - Interval('PT3S'),
+                        WATERMARK_GRANULARITY = 'PT2S'
+                        {idle_clause}
+            );
+            $input = SELECT * FROM $input WHERE skip IS DISTINCT FROM true;
             $enriched = SELECT event_time, ts, u.data as uid
                 FROM
                     $input as e
@@ -1418,7 +1424,12 @@ class TestJoinYdbStreaming(StreamingTestBase):
                 endpoint=endpoint,
             )
             expected = pair[1:]
-            read_data = self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint, timeout=None if len(expected) > 0 else 10)
+            read_data = self.read_stream(
+                len(expected),
+                topic_path=self.output_topic,
+                endpoint=endpoint,
+                timeout=None if len(expected) > 0 else 10,
+            )
             read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))
             messages_ctr = Counter(map(freeze, map(json.loads, expected)))
             assert read_data_ctr == messages_ctr

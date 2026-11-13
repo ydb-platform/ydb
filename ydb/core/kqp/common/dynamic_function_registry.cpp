@@ -50,7 +50,6 @@ class TDynamicFunctionRegistry: public IDynamicFunctionRegistry {
         TUdfModulesMap UdfModules;
         TUdfModulePathsMap SystemModulePaths;
         NUdf::TBackTraceCallback BackTraceCallback = nullptr;
-        bool SupportsSizedAllocators = true;
 
         TSnapshot() = default;
 
@@ -59,7 +58,6 @@ class TDynamicFunctionRegistry: public IDynamicFunctionRegistry {
             , UdfModules(other.UdfModules)
             , SystemModulePaths(other.SystemModulePaths)
             , BackTraceCallback(other.BackTraceCallback)
-            , SupportsSizedAllocators(other.SupportsSizedAllocators)
         {
         }
     };
@@ -311,11 +309,19 @@ public:
     }
 
     void RemoveModule(const TStringBuf& moduleName) override {
+        RemoveModuleImpl(moduleName, Nothing());
+    }
+
+    void RemoveModuleIfOwned(const TStringBuf& moduleName, const TStringBuf& libraryPath) override {
+        RemoveModuleImpl(moduleName, libraryPath);
+    }
+
+    void RemoveModuleImpl(const TStringBuf& moduleName, TMaybe<TStringBuf> expectedLibraryPath) {
         TMaybe<TString> droppedLibraryPath;
         with_lock (WriterMutex_) {
             auto cur = State_.AtomicLoad();
             auto it = cur->UdfModules.find(TString(moduleName));
-            if (it == cur->UdfModules.end()) {
+            if (it == cur->UdfModules.end() || (expectedLibraryPath && it->second.LibraryPath != *expectedLibraryPath)) {
                 return;
             }
 
@@ -498,10 +504,6 @@ public:
 
         module->GetAllFunctions(sink);
         return sink.Functions;
-    }
-
-    bool SupportsSizedAllocators() const override {
-        return State_.AtomicLoad()->SupportsSizedAllocators;
     }
 
     void PrintInfoTo(IOutputStream& out) const override {

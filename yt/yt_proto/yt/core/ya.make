@@ -22,6 +22,7 @@ SRCS(
 
     rpc/proto/rpc.proto
 
+    yson/proto/list_types.proto
     yson/proto/protobuf_interop.proto
 
     ytree/proto/attributes.proto

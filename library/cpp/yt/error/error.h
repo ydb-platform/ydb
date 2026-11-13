@@ -2,6 +2,8 @@
 
 #include <library/cpp/yt/error/error_code.h>
 
+#include <library/cpp/yt/system/spin_lock.h>
+
 #include <library/cpp/yt/threading/public.h>
 
 #include <library/cpp/yt/error/mergeable_dictionary.h>
@@ -130,7 +132,7 @@ public:
     bool HasOriginAttributes() const;
     TProcessId GetPid() const;
     TStringBuf GetThreadName() const;
-    NThreading::TThreadId GetTid() const;
+    TThreadId GetTid() const;
 
     bool HasDatetime() const;
     TInstant GetDatetime() const;
@@ -358,12 +360,16 @@ public:
 
 public:
     TErrorException() = default;
-    TErrorException(const TErrorException& other) = default;
-    TErrorException(TErrorException&& other) = default;
+    TErrorException(const TErrorException& other);
+    TErrorException(TErrorException&& other) noexcept;
+
+    TErrorException& operator=(const TErrorException& other);
+    TErrorException& operator=(TErrorException&& other) noexcept;
 
     const char* what() const noexcept override;
 
 private:
+    YT_DECLARE_SPIN_LOCK(mutable TSpinLock, CachedWhatLock_);
     mutable std::string CachedWhat_;
 };
 

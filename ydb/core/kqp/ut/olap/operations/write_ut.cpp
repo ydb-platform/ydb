@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -194,10 +194,14 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         READ: SELECT SchemaVersion FROM `/Root/ColumnTable/.sys/primary_index_schema_stats` WHERE PresetId = 0 ORDER BY SchemaVersion;
         EXPECTED: [[[6u]];[[9u]];[[11u]]]
         ------
+        STOP_PORTIONS_CLEANUP
+        ------
         DATA:
         DELETE FROM `/Root/ColumnTable`
         ------
         ONE_COMPACTION:
+        ------
+        ONE_PORTIONS_CLEANUP
         ------
         ONE_SCHEMAS_CLEANUP:
         EXPECTED: true

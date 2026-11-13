@@ -20,12 +20,8 @@ struct TControlPlaneProxyConfig {
     TDuration MetricsTtl;
     TDuration ConfigRetryPeriod;
 
-    TControlPlaneProxyConfig(
-        const NConfig::TControlPlaneProxyConfig& config,
-        const NConfig::TControlPlaneStorageConfig& storageConfig,
-        const NConfig::TComputeConfig& computeConfig,
-        const NConfig::TCommonConfig& commonConfig,
-        const NYql::TS3GatewayConfig& s3Config);
+    TControlPlaneProxyConfig(const NConfig::TControlPlaneProxyConfig& config, const NConfig::TControlPlaneStorageConfig& storageConfig,
+        const NConfig::TComputeConfig& computeConfig, const NConfig::TCommonConfig& commonConfig, const NYql::TS3GatewayConfig& s3Config);
 };
 
-} // NFq
+}   // namespace NFq

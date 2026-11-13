@@ -32,4 +32,4 @@ struct TPredicateNode {
     bool CanBePushed = false;
 };
 
-} // namespace NYql::NPushdown
+}   // namespace NYql::NPushdown

@@ -29,6 +29,8 @@ ResultSet
 Tables: [episodes]
 ```
 
+### AST {#ast}
+
 In addition to the query execution plan, you can get an AST (abstract syntax tree).
 The AST section contains a representation in the internal miniKQL language.
 

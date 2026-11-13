@@ -15,7 +15,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/kqp/common
     ydb/core/kqp/counters
     ydb/core/mind

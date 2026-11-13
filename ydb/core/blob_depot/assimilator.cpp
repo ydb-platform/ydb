@@ -134,6 +134,14 @@ namespace NKikimr::NBlobDepot {
             UpdateAssimilatorPosition();
         }
 
+        // the blobs assimilated before the restart are in the index already, so reads don't have to look for them in the
+        // group being decommitted; the state is stored with the last data it covers, so it is never ahead of the index
+        if (Self->DecommitState >= EDecommitState::BlobsFinished) {
+            Self->Data->LastAssimilatedBlobId = Max<TLogoBlobID>();
+        } else if (SkipBlobsUpTo) {
+            Self->Data->LastAssimilatedBlobId = *SkipBlobsUpTo;
+        }
+
         Become(&TThis::StateFunc);
         Action();
         UpdateBytesCopiedQ();
@@ -163,8 +171,10 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedResponse, Handle);
             cFunc(TEvPrivate::EvResume, Action);
+            cFunc(TEvPrivate::EvRetryAssimilate, HandleRetryAssimilate);
             cFunc(TEvPrivate::EvResumeScanDataForPlanning, HandleResumeScanDataForPlanning);
             cFunc(TEvPrivate::EvResumeScanDataForCopying, HandleResumeScanDataForCopying);
+            cFunc(TEvPrivate::EvRestartScanDataForCopying, RestartScanDataForCopying);
             fFunc(TEvPrivate::EvTxComplete, HandleTxComplete);
             cFunc(TEvPrivate::EvUpdateBytesCopiedQ, UpdateBytesCopiedQ);
             cFunc(TEvents::TSystem::Poison, PassAway);
@@ -348,6 +358,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         if (ev->Get()->Status == NKikimrProto::OK) {
+            AssimilateRetryBackoff.Reset();
             Self->Execute(std::make_unique<TTxPutAssimilatedData>(this, ev));
         } else {
             YDB_LOG_INFO("TEvAssimilate failed",
@@ -356,9 +367,17 @@ namespace NKikimr::NBlobDepot {
                 {"status", ev->Get()->Status},
                 {"errorReason", ev->Get()->ErrorReason});
 
-            ActionInProgress = false;
-            Action();
+            // the failure is likely to repeat right away (e.g. the group doesn't know yet that its decommission has
+            // started), so retry with a delay; action remains in progress until then
+            TActivationContext::Schedule(AssimilateRetryBackoff.Next(), new IEventHandle(TEvPrivate::EvRetryAssimilate,
+                0, SelfId(), {}, nullptr, 0));
         }
+    }
+
+    void TAssimilator::HandleRetryAssimilate() {
+        Y_DEBUG_ABORT_UNLESS(ActionInProgress);
+        ActionInProgress = false;
+        Action();
     }
 
     void TAssimilator::ScanDataForPlanning() {
@@ -506,15 +525,23 @@ namespace NKikimr::NBlobDepot {
                 // there are some unprocessed get queries, still have to wait
             } else if (!EntriesToProcess) { // we have finished scanning the whole table without any entries, copying is done
                 OnCopyDone();
+            } else if (std::exchange(CopyRetryNeeded, false)) { // some blobs couldn't be copied, try them again later
+                TActivationContext::Schedule(CopyRetryBackoff.Next(), new IEventHandle(
+                    TEvPrivate::EvRestartScanDataForCopying, 0, SelfId(), {}, nullptr, 0));
             } else { // we have finished scanning, but we have replicated some data, restart scanning to ensure that nothing left
-                LastScannedKey.reset();
-                LastPlanScannedKey.reset();
-                EntriesToProcess = PlanningComplete = ActionInProgress = false;
-                LeastBlobQueue.clear();
-                Action();
+                CopyRetryBackoff.Reset();
+                RestartScanDataForCopying();
             }
             break;
         }
+    }
+
+    void TAssimilator::RestartScanDataForCopying() {
+        LastScannedKey.reset();
+        LastPlanScannedKey.reset();
+        EntriesToProcess = PlanningComplete = ActionInProgress = false;
+        LeastBlobQueue.clear();
+        Action();
     }
 
     void TAssimilator::HandleResumeScanDataForCopying() {
@@ -566,6 +593,8 @@ namespace NKikimr::NBlobDepot {
                         const bool inserted1 = Puts.try_emplace(putId, TData::TKey(resp.Id), it->first).second;
                         Y_ABORT_UNLESS(inserted1);
                         ++get.PutsPending;
+                    } else {
+                        CopyRetryNeeded = true;
                     }
                     break;
 
@@ -579,6 +608,7 @@ namespace NKikimr::NBlobDepot {
 
                 default:
                     ++Self->AsStats.BlobsReadError;
+                    CopyRetryNeeded = true;
                     continue;
             }
 
@@ -675,6 +705,10 @@ namespace NKikimr::NBlobDepot {
             get.BlobIds.push_back(key.GetBlobId());
             get.AssimilatedBlobs.push_back({std::move(key), TData::TAssimilatedBlobInfo::TUpdate{
                 TBlobSeqId::FromLogoBlobId(msg.Id)}});
+        } else {
+            // this copy won't ever get its blob bound to the key, the retry writes another one, so it doesn't hold
+            // garbage collection back anymore
+            Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromLogoBlobId(msg.Id));
         }
         if (!--get.PutsPending) {
             Self->Data->ExecuteTxCommitAssimilatedBlob(std::move(get.AssimilatedBlobs), TEvPrivate::EvTxComplete,
@@ -772,16 +806,19 @@ namespace NKikimr::NBlobDepot {
             {"marker", "BDT39"},
             {"id", Self->GetLogId()},
             {"status", msg.Status});
-        if (msg.Status != NKikimrProto::OK) {
+        // pipe closed after erroneous response is recreated on resume, so its events are ignored
+        if (msg.ClientId == PipeId && msg.Status != NKikimrProto::OK) {
             CreatePipe();
         }
     }
 
-    void TAssimilator::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr /*ev*/) {
+    void TAssimilator::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         YDB_LOG_DEBUG("Received TEvClientDestroyed",
             {"marker", "BDT40"},
             {"id", Self->GetLogId()});
-        CreatePipe();
+        if (ev->Get()->ClientId == PipeId) {
+            CreatePipe();
+        }
     }
 
     void TAssimilator::Handle(TEvBlobStorage::TEvControllerGroupDecommittedResponse::TPtr ev) {
@@ -820,7 +857,9 @@ namespace NKikimr::NBlobDepot {
             Self->Execute(std::make_unique<TTxFinishDecommission>(this));
             PassAway();
         } else {
+            // retry notification later; action is over, it is restarted on resume
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeId);
+            ActionInProgress = false;
             TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvResume, 0, SelfId(), {}, nullptr, 0));
         }
     }
@@ -830,7 +869,7 @@ namespace NKikimr::NBlobDepot {
 
         const ui8 stateBits = (SkipBlocksUpTo ? TStateBits::Blocks : 0)
             | (SkipBarriersUpTo ? TStateBits::Barriers : 0)
-            | (SkipBlocksUpTo ? TStateBits::Blocks : 0);
+            | (SkipBlobsUpTo ? TStateBits::Blobs : 0);
 
         Save(&stream, stateBits);
 

@@ -539,7 +539,7 @@ private:
         TPromise<void> Promise;
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::queue<TEntry> Queue_;
     TError Error_;
     bool Closed_ = false;
@@ -693,14 +693,14 @@ private:
     const IAsyncZeroCopyInputStreamPtr UnderlyingStream_;
     const size_t WindowSize_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TError Error_;
     std::queue<TSharedRef> PrefetchedBlocks_;
     size_t PrefetchedSize_ = 0;
     TFuture<void> OutstandingResult_;
 
 
-    TFuture<void> Prefetch(TGuard<NThreading::TSpinLock>* guard)
+    TFuture<void> Prefetch(TGuard<TSpinLock>* guard)
     {
         if (OutstandingResult_) {
             return OutstandingResult_;
@@ -730,7 +730,7 @@ private:
         return PopBlock(&guard);
     }
 
-    void PushBlock(TGuard<NThreading::TSpinLock>* guard, const TErrorOr<TSharedRef>& result)
+    void PushBlock(TGuard<TSpinLock>* guard, const TErrorOr<TSharedRef>& result)
     {
         YT_ASSERT(OutstandingResult_);
         OutstandingResult_.Reset();
@@ -746,7 +746,7 @@ private:
         }
     }
 
-    TSharedRef PopBlock(TGuard<NThreading::TSpinLock>* guard)
+    TSharedRef PopBlock(TGuard<TSpinLock>* guard)
     {
         YT_ASSERT(!PrefetchedBlocks_.empty());
         auto block = PrefetchedBlocks_.front();
@@ -807,7 +807,7 @@ private:
     const IAsyncInputStreamPtr UnderlyingStream_;
     const size_t WindowSize_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TError Error_;
     TSharedMutableRef Prefetched_;
     TSharedMutableRef Buffer_;
@@ -815,7 +815,7 @@ private:
     bool EndOfStream_ = false;
     TFuture<void> OutstandingResult_;
 
-    TFuture<void> Prefetch(TGuard<NThreading::TSpinLock>* guard)
+    TFuture<void> Prefetch(TGuard<TSpinLock>* guard)
     {
         if (OutstandingResult_) {
             return OutstandingResult_;
@@ -850,7 +850,7 @@ private:
         return TSharedRef();
     }
 
-    void AppendPrefetched(TGuard<NThreading::TSpinLock>* guard, const TErrorOr<size_t>& result)
+    void AppendPrefetched(TGuard<TSpinLock>* guard, const TErrorOr<size_t>& result)
     {
         YT_ASSERT(OutstandingResult_);
         OutstandingResult_.Reset();
@@ -878,7 +878,7 @@ private:
         }
     }
 
-    TSharedRef CopyPrefetched(TGuard<NThreading::TSpinLock>* guard)
+    TSharedRef CopyPrefetched(TGuard<TSpinLock>* guard)
     {
         YT_ASSERT(PrefetchedSize_ != 0);
         auto block = Prefetched_.Slice(0, PrefetchedSize_);
@@ -947,7 +947,7 @@ private:
     const IAsyncZeroCopyInputStreamPtr UnderlyingStream_;
     const TDuration Timeout_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
 
     bool Fetching_ = false;
     std::optional<TErrorOr<TSharedRef>> PendingBlock_;
@@ -1047,7 +1047,7 @@ public:
 private:
     const IAsyncZeroCopyInputStreamPtr UnderlyingStream_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
 
     bool Fetching_ = false;
     std::optional<TErrorOr<TSharedRef>> PendingBlock_;

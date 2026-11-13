@@ -6,6 +6,8 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+double DefaultJitterRandomGenerator();
+
 //! TRandomGenerator is required to produce numbers only in range [-1, 1].
 //! Will crash otherwise
 template <NMpl::CScalable<double> TValue, NMpl::CInvocable<double()> TRandomGenerator>

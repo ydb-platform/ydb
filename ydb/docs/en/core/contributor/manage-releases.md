@@ -42,7 +42,7 @@ Version compatibility {{ ydb-short-name }} guarantees that the cluster can opera
 
 To ensure such compatibility, major releases are released in pairs:
 
-* In odd-numbered versions, new functionality is added, disabled via feature flags.
+* In odd-numbered versions, new functionality is added, disabled via [feature flags](../reference/configuration/feature_flags.md).
 * In even versions, this functionality is enabled by default.
 
 For example, version `25.1` ships with new functionality disabled, and can be gradually deployed on a cluster running `24.4` without stopping the cluster. Once `25.1` is running on all cluster nodes, the cluster can be further updated to `25.2` to use the new features.
@@ -63,13 +63,13 @@ For example, version `25.1` ships with new functionality disabled, and can be gr
 
 #### General scheme of working with branches {#release_branch_scheme}
 
-![General scheme of working with branches](_assets/major_release_branches.svg)
+![General scheme of working with branches](_assets/major_release_branches.svg){inline=false}
 
 The release cycle for an odd major release begins with the branching of a major branch from `main` by a member of the [{{ ydb-short-name }} team](https://github.com/orgs/ydb-platform/teams/engineering). The name of the release branch starts with the prefix `stable-`, followed by the major version with dots replaced by hyphens (for example, `stable-25-1`).
 
 The release cycle for an even major release (for example, `stable-25-2`) begins with branching from the previous odd major release branch.
 
-A minor branch is branched from the major branch. All minor version releases for odd and even major releases go through a testing cycle, during which a number of patches are released. Each patch is fixed by assigning a release tag with the full version number. Thus, in the minor branch `stable-25-1-1`, there can be tags `25.1.1.1`, `25.1.1.2`, etc. Once the tag has successfully passed the necessary testing, we consider it stable, register the release on GitHub, add it to the [download pages](../downloads/index.md#ydb-server), and to the [change log](../changelog-server.md). There can be more than one stable release for a major version.
+A minor branch is branched from the major branch. All minor version releases for odd and even major releases go through a testing cycle, during which a number of patches are released. Each patch is fixed by assigning a release tag with the full version number. Thus, in the minor branch `stable-25-1-1`, there can be tags `25.1.1.1`, `25.1.1.2`, etc. Once the tag has successfully passed the necessary testing, we consider it stable, register the release on GitHub, add it to the [download pages](../downloads/ydb-open-source-database.md), and to the [change log](../changelog-server.md). There can be more than one stable release for a major version.
 
 ### Testing {#server-testing}
 
@@ -79,7 +79,7 @@ Each minor version undergoes acceptance testing — a comprehensive process of c
 
 ### Stable release {#server-stable}
 
-If the testing iteration confirms the quality of the minor release, the [release team {{ ydb-short-name }}](https://github.com/orgs/ydb-platform/teams/release) prepares the [list of changes](../changelog-server.md) and publishes the release on the [Releases](https://github.com/ydb-platform/ydb/releases) pages on GitHub and [Downloads](../downloads/index.md#ydb-server) in the documentation, declaring it stable.
+If the testing iteration confirms the quality of the minor release, the [release team {{ ydb-short-name }}](https://github.com/orgs/ydb-platform/teams/release) prepares the [list of changes](../changelog-server.md) and publishes the release on the [Releases](https://github.com/ydb-platform/ydb/releases) pages on GitHub and [Downloads](../downloads/ydb-open-source-database.md) in the documentation, declaring it stable.
 
 {% include [corp_release_stable.md](_includes/corp_release_stable.md) %}
 
@@ -107,6 +107,6 @@ Tags for {{ ydb-short-name }} CLI are assigned in the trunk (branch `main`) by a
 
 ### Stable release {#cli-stable}
 
-To declare the {{ ydb-short-name }} CLI tag stable, a member of the [release team {{ ydb-short-name }}](https://github.com/orgs/ydb-platform/teams/release) prepares a [changelog](../changelog-cli.md) and publishes the release on the GitHub [Releases](https://github.com/ydb-platform/ydb/releases) page and in the [Downloads](../downloads/index.md#ydb-cli) section of the documentation.
+To declare the {{ ydb-short-name }} CLI tag stable, a member of the [release team {{ ydb-short-name }}](https://github.com/orgs/ydb-platform/teams/release) prepares a [changelog](../changelog-cli.md) and publishes the release on the GitHub [Releases](https://github.com/ydb-platform/ydb/releases) page and in the [Downloads](../downloads/ydb-cli.md) section of the documentation.
 
 {% include [career](./_includes/career.md) %}

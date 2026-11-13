@@ -1,18 +1,17 @@
 #include "proxy_private.h"
 
-#include <ydb/library/services/services.pb.h>
+#include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
+#include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
-#include <library/cpp/yson/node/node_io.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
-#include <library/cpp/protobuf/interop/cast.h>
+#include <ydb/library/services/services.pb.h>
 
-#include <ydb/core/fq/libs/control_plane_storage/events/events.h>
-#include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
+#include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/yson/node/node_io.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQL_PRIVATE_PROXY
 
@@ -21,25 +20,20 @@ namespace NFq {
 using namespace NActors;
 using namespace NMonitoring;
 
-
-class TWriteTaskRequestActor
-    : public NActors::TActorBootstrapped<TWriteTaskRequestActor>
-{
+class TWriteTaskRequestActor: public NActors::TActorBootstrapped<TWriteTaskRequestActor> {
 public:
-    TWriteTaskRequestActor(
-        const NActors::TActorId& sender,
-        TIntrusivePtr<ITimeProvider> timeProvider,
-        TAutoPtr<TEvents::TEvWriteTaskResultRequest> ev,
-        TDynamicCounterPtr counters)
+    TWriteTaskRequestActor(const NActors::TActorId& sender, TIntrusivePtr<ITimeProvider> timeProvider,
+        TAutoPtr<TEvents::TEvWriteTaskResultRequest> ev, TDynamicCounterPtr counters)
         : Sender(sender)
         , TimeProvider(timeProvider)
         , Ev(std::move(ev))
         , Counters(std::move(counters->GetSubgroup("subsystem", "private_api")->GetSubgroup("subcomponent", "WriteTaskResult")))
-        , LifetimeDuration(Counters->GetHistogram("LifetimeDurationMs",  ExponentialHistogram(10, 2, 50)))
-        , RequestedMBytes(Counters->GetHistogram("RequestedMB",  ExponentialHistogram(6, 2, 3)))
+        , LifetimeDuration(Counters->GetHistogram("LifetimeDurationMs", ExponentialHistogram(10, 2, 50)))
+        , RequestedMBytes(Counters->GetHistogram("RequestedMB", ExponentialHistogram(6, 2, 3)))
         , StartTime(TInstant::Now())
 
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "YQ_PRIVATE_WRITE_RESULT_TASK";
 
@@ -82,8 +76,8 @@ public:
             {"requestId", RequestId},
             {"size", request.ByteSize()});
         RequestedMBytes->Collect(request.ByteSize() / 1024 / 1024);
-        Send(NFq::ControlPlaneStorageServiceActorId(),
-            new NFq::TEvControlPlaneStorage::TEvWriteResultDataRequest(std::move(request)), 0, RequestId);
+        Send(NFq::ControlPlaneStorageServiceActorId(), new NFq::TEvControlPlaneStorage::TEvWriteResultDataRequest(std::move(request)), 0,
+            RequestId);
     }
 
 private:
@@ -128,16 +122,9 @@ private:
     THolder<TEvents::TEvWriteTaskResultResponse> Res = MakeHolder<TEvents::TEvWriteTaskResultResponse>();
 };
 
-IActor* CreateWriteTaskResultRequestActor(
-    const NActors::TActorId& sender,
-    TIntrusivePtr<ITimeProvider> timeProvider,
-    TAutoPtr<TEvents::TEvWriteTaskResultRequest> ev,
-    TDynamicCounterPtr counters) {
-    return new TWriteTaskRequestActor(
-        sender,
-        timeProvider,
-        std::move(ev),
-        std::move(counters));
+IActor* CreateWriteTaskResultRequestActor(const NActors::TActorId& sender, TIntrusivePtr<ITimeProvider> timeProvider,
+    TAutoPtr<TEvents::TEvWriteTaskResultRequest> ev, TDynamicCounterPtr counters) {
+    return new TWriteTaskRequestActor(sender, timeProvider, std::move(ev), std::move(counters));
 }
 
-} /* NFq */
+}   // namespace NFq

@@ -11,7 +11,7 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/ut_common/ut_helpers.h>
 
-#include <ydb/library/arrow_kernels/ut_common.h>
+#include <ydb/library/formats/arrow/helpers/array.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
@@ -287,16 +287,27 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         auto records = std::make_shared<TGeneralContainer>(recordsCount);
         records->AddField(stats.GetField(0), builder.Finish()).Validate();
 
-        auto iterator = TColumnsData(stats, records).BuildIterator(0);
-        for (const auto& [recordIndex, value] : expected) {
-            UNIT_ASSERT(iterator.IsValid());
-            UNIT_ASSERT_VALUES_EQUAL(iterator.GetCurrentRecordIndex(), recordIndex);
-            const auto actual = iterator.GetValue().GetScalarOptional();
+        const auto checkValue = [](const TColumnsData::TIterator& current, const ui32 recordIndex, const TStringBuf value) {
+            UNIT_ASSERT(current.IsValid());
+            UNIT_ASSERT_VALUES_EQUAL(current.GetCurrentRecordIndex(), recordIndex);
+            const auto actual = current.GetValue().GetScalarOptional();
             UNIT_ASSERT(actual);
             UNIT_ASSERT_VALUES_EQUAL(*actual, value);
+        };
+
+        auto iterator = TColumnsData(stats, records).BuildIterator(0);
+        for (const auto& [recordIndex, value] : expected) {
+            checkValue(iterator, recordIndex, value);
             iterator.Next();
         }
         UNIT_ASSERT(!iterator.IsValid());
+
+        auto skipped = TColumnsData(stats, records).BuildIterator(0);
+        for (const auto& [recordIndex, value] : expected) {
+            UNIT_ASSERT(skipped.SkipRecordTo(recordIndex));
+            checkValue(skipped, recordIndex, value);
+        }
+        UNIT_ASSERT(!skipped.SkipRecordTo(recordsCount));
     }
 
     Y_UNIT_TEST(DictionaryThenPlainCompositeUsesGlobalChunkAddress) {
@@ -305,6 +316,13 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         auto plain = std::make_shared<TTrivialArray>(StringVecToArray({"plain-a", "plain-b"}));
         CheckCompositeValues(std::make_shared<TDictionaryArray>(dictionary, positions), plain,
                              {{0, "dict-a"}, {1, "dict-b"}, {2, "plain-a"}, {3, "plain-b"}});
+    }
+
+    Y_UNIT_TEST(AllNullDictionaryThenPlainCompositeIteratesAndSkips) {
+        auto dictionary = std::make_shared<TDictionaryArray>(
+            StringVecToArray({std::nullopt}), UInt8VecToArray({std::nullopt, std::nullopt, std::nullopt}));
+        auto plain = std::make_shared<TTrivialArray>(StringVecToArray({"plain-a", "plain-b"}));
+        CheckCompositeValues(dictionary, plain, {{3, "plain-a"}, {4, "plain-b"}});
     }
 
     Y_UNIT_TEST(PlainThenSparseCompositeUsesGlobalChunkAddress) {
@@ -543,7 +561,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     void CheckMostSpecificStoredPath(const std::initializer_list<std::pair<TStringBuf, TStringBuf>>& columns, const TStringBuf otherName,
         const TStringBuf otherValue, const TStringBuf path, const TStringBuf expected) {
         auto array = BuildArrayWithStoredPaths(columns, otherName, otherValue);
-        auto accessorResult = array->GetPathAccessor(path, 1);
+        auto accessorResult = array->GetPathAccessor(NSubColumns::ParseJsonPath(path).DetachResult(), 1);
         UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
         accessorResult.DetachResult()->VisitValues([expected](const std::optional<TStringBuf>& value) {
             UNIT_ASSERT_VALUES_EQUAL(value, expected);
@@ -755,7 +773,9 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         TSubColumnsPartialArray partial(std::move(header), 1, arrow::binary(), NSubColumns::TSettings());
         partial.AddColumn(partial.GetHeader().GetColumnStats().GetExactKeyIndexVerified(R"("a")"), CreateTrivialArrayAccessor(R"({"b":{"c":"value"}})"));
 
-        auto accessorResult = partial.GetPathAccessor("$.a.b.c", 1);
+        auto parsedPath = NSubColumns::ParseJsonPath("$.a.b.c");
+        UNIT_ASSERT_C(parsedPath.IsSuccess(), parsedPath.GetErrorMessage());
+        auto accessorResult = partial.GetPathAccessor(parsedPath.GetResult(), 1);
         UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
         accessorResult.DetachResult()->VisitValues([](const std::optional<TStringBuf>& value) {
             UNIT_ASSERT_VALUES_EQUAL(value, "value");
@@ -774,7 +794,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
 
     Y_UNIT_TEST(JsonPathAccessorReturnsNullForMissingPath) {
         auto array = BuildArrayWithStoredPaths({ { R"("a")", R"("columns")" } }, R"("b")", R"("others")");
-        auto accessorResult = array->GetPathAccessor("$.missing", 1);
+        auto accessorResult = array->GetPathAccessor(NSubColumns::ParseJsonPath("$.missing").DetachResult(), 1);
         UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
         accessorResult.DetachResult()->VisitValues([](const std::optional<TStringBuf>& value) {
             UNIT_ASSERT(!value);
@@ -784,7 +804,9 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson } }), NSubColumns::TDictStats::BuildEmpty(),
             NKikimrArrowAccessorProto::TSubColumnsAccessor(), 0);
         TSubColumnsPartialArray partial(std::move(header), 1, arrow::binary(), NSubColumns::TSettings());
-        accessorResult = partial.GetPathAccessor("$.missing", 1);
+        auto parsedPath = NSubColumns::ParseJsonPath("$.missing");
+        UNIT_ASSERT_C(parsedPath.IsSuccess(), parsedPath.GetErrorMessage());
+        accessorResult = partial.GetPathAccessor(parsedPath.GetResult(), 1);
         UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
         accessorResult.DetachResult()->VisitValues([](const std::optional<TStringBuf>& value) {
             UNIT_ASSERT(!value);

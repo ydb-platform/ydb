@@ -925,6 +925,24 @@ Y_UNIT_TEST(GroupByInvalidPragma) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:27: Error: Expected unsigned integer literal as a single argument for: GroupByCubeLimit\n");
 }
 
+Y_UNIT_TEST(GroupingLimitsFromTranslationSettings) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.GroupByCubeLimit = 1;
+    const TString query = "SELECT key FROM plato.Input GROUP BY CUBE(key, subkey);";
+    auto result = SqlToYqlWithSettings(query, settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "only for 1 columns");
+    result = SqlToYqlWithSettings("PRAGMA GroupByCubeLimit = '2'; " + query, settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+    settings.GroupByCubeLimit = 2;
+    settings.GroupByLimit = 3;
+    result = SqlToYqlWithSettings(query, settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "more than 3 groups");
+    result = SqlToYqlWithSettings("PRAGMA GroupByLimit = '4'; " + query, settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+}
+
 Y_UNIT_TEST(GroupByHugeCubeDeniedPragme) {
     NYql::TAstParseResult res = SqlToYql("PRAGMA GroupByCubeLimit = '4'; SELECT key FROM plato.Input GROUP BY CUBE (key, subkey, value, key + subkey as sum, key - subkey as sub);");
     UNIT_ASSERT(!res.IsOk());

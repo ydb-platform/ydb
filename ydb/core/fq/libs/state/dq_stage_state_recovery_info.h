@@ -1,15 +1,15 @@
 #pragma once
 
 #include <ydb/core/fq/libs/graph_params/proto/graph_params.pb.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
-
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_node.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 #include <memory>
 
@@ -47,7 +47,7 @@ public:
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() const;
 
 private:
-    NKikimr::NMiniKQL::TScopedAlloc Alloc{__LOCATION__, NKikimr::TAlignedPagePoolCounters(), /* supportsSizedAllocators */ false, /* initiallyAcquired */ false};
+    NKikimr::NMiniKQL::TScopedAlloc Alloc{ __LOCATION__, NKikimr::TAlignedPagePoolCounters(), /* initiallyAcquired */ false };
     std::unique_ptr<NKikimr::NMiniKQL::TTypeEnvironment> Env;
 };
 
@@ -68,6 +68,11 @@ public:
 };
 
 struct TStageStateRecoveryInfo {
+    enum class EMode {
+        Analyze,
+        HistoryReplay,
+    };
+
     struct THoppingSettings {
         ui64 HopTimeUs = 0;
         ui64 WindowSizeUs = 0;
@@ -75,13 +80,15 @@ struct TStageStateRecoveryInfo {
 
     TMaybe<THoppingSettings> Hopping;
     bool HasWatermarkGenerator = false;
+    bool HasState = false;
 
-    TStageStateRecoveryInfo() = default;;
+    TStageStateRecoveryInfo() = default;
+    ;
 
-    explicit TStageStateRecoveryInfo(const TStageStateInfo& stage);
+    explicit TStageStateRecoveryInfo(const TStageStateInfo& stage, EMode mode = EMode::HistoryReplay);
 
     // Earliest input needed to produce all hop ends at or after outputStartTimeUs.
     ui64 InputStartForOutput(const ui64 outputStartTimeUs) const;
 };
 
-} // namespace NFq
+}   // namespace NFq

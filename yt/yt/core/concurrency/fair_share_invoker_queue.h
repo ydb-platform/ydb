@@ -10,8 +10,8 @@
 
 #include <yt/yt/library/ytprof/api/api.h>
 
-#include <library/cpp/yt/threading/event_count.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/event_count.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NConcurrency {
 
@@ -30,13 +30,13 @@ class TFairShareInvokerQueue
 {
 public:
     TFairShareInvokerQueue(
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         const std::vector<TBucketDescription>& bucketDescriptions,
         NProfiling::IRegistryPtr registry = {});
 
     ~TFairShareInvokerQueue();
 
-    void SetThreadId(NThreading::TThreadId threadId);
+    void SetThreadId(TThreadId threadId);
 
     const IInvokerPtr& GetInvoker(int bucketIndex, int queueIndex) const;
 
@@ -68,7 +68,7 @@ private:
 
     std::atomic<bool> NeedToReconfigure_ = false;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, WeightsLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, WeightsLock_);
     std::vector<double> Weights_;
 
     TBucket* CurrentBucket_ = nullptr;

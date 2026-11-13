@@ -6,6 +6,7 @@ SRCS(
     extract_predicate_impl.cpp
     extract_predicate_impl.h
     extract_predicate.h
+    extract_predicate.cpp
 )
 
 PEERDIR(

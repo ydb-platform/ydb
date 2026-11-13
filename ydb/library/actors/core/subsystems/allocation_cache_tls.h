@@ -7,7 +7,7 @@ namespace NActors {
 
 template<class TTag>
 TAllocationCache<TTag>* TAllocationCache<TTag>::GetCurrent() noexcept {
-    auto* context = TlsThreadContext;
+    TThreadContext* context = TlsThreadContext;
     if (!context) {
         return nullptr;
     }

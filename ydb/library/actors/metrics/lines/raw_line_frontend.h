@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../line.h"
+#include "compressed_line_storage.h"
 #include "../line_storage.h"
 
 #include <util/datetime/base.h>
@@ -14,10 +15,10 @@ namespace NActors {
 
     template<class TFrontend>
     class TLine;
-    template<class TValue>
+    template<class TValue, class TStoragePolicy>
     struct TOnChangeLineFrontend;
 
-    template<class TValue = ui64>
+    template<class TValue = ui64, class TStoragePolicy = TUncompressedLineStorage>
     struct TRawLineFrontend {
         using TValueType = TValue;
 
@@ -34,7 +35,11 @@ namespace NActors {
         struct TConfig {};
 
         static TValue DecodeValue(ui64 value) noexcept {
-            return NInMemoryMetricsPrivate::DecodeLineValue<TValue>(value);
+            if constexpr (TStoragePolicy::Enabled) {
+                return TStoragePolicy::template Decode<0, TValue>(value);
+            } else {
+                return NInMemoryMetricsPrivate::DecodeLineValue<TValue>(value);
+            }
         }
 
         static void ReadRange(const TLineSnapshot& snapshot,
@@ -49,6 +54,12 @@ namespace NActors {
 
         template<class TCallback>
         static void ForEachStoredRecord(const TLineSnapshot& snapshot, TCallback&& cb) {
+            if constexpr (TStoragePolicy::Enabled) {
+                TStoragePolicy::template ForEachRecord<1>(snapshot, [&](TInstant timestamp, const auto& values) {
+                    cb(timestamp, DecodeValue(values[0]));
+                });
+                return;
+            }
             NInMemoryMetricsPrivate::TLineSnapshotAccess::ForEachChunk(snapshot, [&](const NInMemoryMetricsPrivate::TChunkSnapshotView& chunk) {
                 if (chunk.Payload.size() < sizeof(TChunkHeader)) {
                     return;
@@ -81,7 +92,7 @@ namespace NActors {
         static const TLineFrontendOps& Descriptor() noexcept {
             static const TLineFrontendOps descriptor{
                 .Name = "raw",
-                .ReadRange = &TRawLineFrontend<TValue>::ReadRange,
+                .ReadRange = &TRawLineFrontend<TValue, TStoragePolicy>::ReadRange,
                 .ReadNumericRange = &ReadNumericRange,
             };
             return descriptor;
@@ -100,32 +111,43 @@ namespace NActors {
             });
         }
 
-        friend class TLine<TRawLineFrontend<TValue>>;
-        friend struct TOnChangeLineFrontend<TValue>;
+        friend class TLine<TRawLineFrontend<TValue, TStoragePolicy>>;
+        friend struct TOnChangeLineFrontend<TValue, TStoragePolicy>;
 
         static bool Append(IMetricLine& line, const TValueType& value) noexcept;
         static bool WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept;
     };
 
-    template<class TValue>
-    bool TRawLineFrontend<TValue>::Append(IMetricLine& line, const TValue& value) noexcept {
-        const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
+    template<class TValue, class TStoragePolicy>
+    bool TRawLineFrontend<TValue, TStoragePolicy>::Append(IMetricLine& line, const TValue& value) noexcept {
+        ui64 encoded;
+        if constexpr (TStoragePolicy::Enabled) {
+            if (!TStoragePolicy::template Encode<0>(value, &encoded)) {
+                return false;
+            }
+        } else {
+            encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
+        }
         const NHPTimer::STime nowTs = line.CurrentTimestampTs();
 
         TStorageRecord record{
             .TimestampTs = nowTs,
             .Value = encoded,
         };
-        if (!line.AccessChunkMemory(&record, &TRawLineFrontend<TValue>::WriteRecordToChunkMemory)) {
+        if (!line.AccessChunkMemory(&record, &TRawLineFrontend<TValue, TStoragePolicy>::WriteRecordToChunkMemory)) {
             return false;
         }
         line.MarkMaterialized(encoded);
         return true;
     }
 
-    template<class TValue>
-    bool TRawLineFrontend<TValue>::WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept {
+    template<class TValue, class TStoragePolicy>
+    bool TRawLineFrontend<TValue, TStoragePolicy>::WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept {
         const auto& record = *static_cast<const TStorageRecord*>(opaque);
+        if constexpr (TStoragePolicy::Enabled) {
+            typename TStoragePolicy::template TRecord<1> packed{record.TimestampTs, {record.Value}};
+            return TStoragePolicy::template WriteRecord<1>(&packed, chunkMemory);
+        }
         const ui32 oldCommittedBytes = chunkMemory.UsedPayloadBytes;
         const ui32 requiredBytes = oldCommittedBytes == 0
             ? sizeof(TChunkHeader) + sizeof(TStorageRecord)

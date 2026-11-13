@@ -9,12 +9,13 @@ namespace NKikimr::NUdfStore {
 //! Persists the exclusive rights reserved by the last scheduling round and only
 //! then hands them out. An assignment a restart would forget is worse than one
 //! that starts a moment later.
-class TWasmCompileController::TTxAssign : public TTxBase {
+class TWasmCompileController::TTxAssign: public TTxBase {
 public:
     TTxAssign(TWasmCompileController* self, TVector<TPendingAssign>&& pending)
         : TTxBase("TxAssign", self)
         , Pending(std::move(pending))
-    {}
+    {
+    }
 
     TTxType GetTxType() const override {
         return TXTYPE_ASSIGN;
@@ -27,11 +28,9 @@ public:
             const auto& key = item.Key;
             db.Table<Schema::Assignments>()
                 .Key(key.Name, key.Kind, key.Uid, key.CpuSpec)
-                .Update(
-                    NIceDb::TUpdate<Schema::Assignments::AssignmentId>(item.Assignment.AssignmentId),
+                .Update(NIceDb::TUpdate<Schema::Assignments::AssignmentId>(item.Assignment.AssignmentId),
                     NIceDb::TUpdate<Schema::Assignments::NodeId>(item.Assignment.NodeId),
-                    NIceDb::TUpdate<Schema::Assignments::DeadlineSeconds>(
-                        item.Assignment.Deadline.Seconds()),
+                    NIceDb::TUpdate<Schema::Assignments::DeadlineSeconds>(item.Assignment.Deadline.Seconds()),
                     NIceDb::TUpdate<Schema::Assignments::Generation>(item.Assignment.Generation));
         }
 
@@ -51,8 +50,7 @@ public:
             // typically because the node disconnected. Handing it out now would
             // point a second node at a gap somebody else has already been given.
             const auto it = Self->Assignments.find(item.Key);
-            if (it == Self->Assignments.end()
-                || it->second.AssignmentId != item.Assignment.AssignmentId)
+            if (it == Self->Assignments.end() || it->second.AssignmentId != item.Assignment.AssignmentId)
             {
                 continue;
             }
@@ -68,4 +66,4 @@ void TWasmCompileController::RunTxAssign(TVector<TPendingAssign>&& pending) {
     Execute(new TTxAssign(this, std::move(pending)), TActivationContext::AsActorContext());
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

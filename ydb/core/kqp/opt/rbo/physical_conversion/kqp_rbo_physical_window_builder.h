@@ -8,14 +8,14 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-class TPhysicalWindowBuilder: public TPhysicalUnaryOpBuilder {
+class TPhysicalWindowBuilder: public TPhysicalWideUnaryOpBuilder {
 public:
     TPhysicalWindowBuilder(TOpWindow& window, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
-        : TPhysicalUnaryOpBuilder(ctx, pos, names)
+        : TPhysicalWideUnaryOpBuilder(ctx, pos, names)
         , Window(window) {
     }
 
-    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
+    NPhysicalConvertionUtils::TStageBody BuildPhysicalOp(const NPhysicalConvertionUtils::TStageBody& input) override;
     static bool CanBuildWindow(const TOpWindow& window);
     static bool UsesWholePartition(const TOpWindow& window);
     static bool UsesRangeCarry(const TOpWindow& window);
@@ -34,7 +34,7 @@ private:
     TExprNode::TPtr BuildGroupSwitchLambda() const;
 
     TExprNode::TPtr BuildChain(TExprNode::TPtr wideFlow) const;
-    TExprNode::TPtr BuildChainLambda(bool update) const;
+    TExprNode::TPtr BuildChainLambda(bool update, bool flat) const;
     TExprNode::TPtr BuildAccumulator(const TOpWindowFunc& func, ui32 funcIndex, TExprNode::TPtr itemArg, TExprNode::TPtr previousState,
                                      TExprNode::TPtr sortKeyChanged, TVector<std::pair<TString, TExprNode::TPtr>>& stateMembers) const;
     TExprNode::TPtr BuildWholePartition(TExprNode::TPtr wideFlow) const;
@@ -59,7 +59,7 @@ private:
     TExprNode::TPtr BuildRangeBound(EWindowFrameBound kind, ui64 value, const TString& sortedColumn) const;
     TExprNode::TPtr BuildPartitionHandler(TExprNode::TPtr wideFlow) const;
     TExprNode::TPtr BuildExpandFromStructs(TExprNode::TPtr list) const;
-    TExprNode::TPtr BuildExpandFromChain(TExprNode::TPtr chained) const;
+    TExprNode::TPtr BuildExpandToOutputs(TExprNode::TPtr flow) const;
 
     TString AccumulatorName(ui32 funcIndex) const;
     TString PositionName(ui32 funcIndex) const;
@@ -70,7 +70,9 @@ private:
     TExprNode::TPtr BuildSumCastTarget(TInfoUnitId column) const;
     TExprNode::TPtr BuildAvgAccumulatorDataType(TInfoUnitId column) const;
     TExprNode::TPtr BuildAvgAccumulatorType(TInfoUnitId column) const;
-    TExprNode::TPtr BuildResultFromAccumulator(const TOpWindowFunc& func, TExprNode::TPtr accumulator) const;
+    bool IsNonOptionalAggregate(TInfoUnitId column) const;
+    TExprNode::TPtr BuildResultFromAccumulator(TInfoUnitId column, TExprNode::TPtr accumulator) const;
+    TExprNode::TPtr BuildAverage(const TOpWindowFunc& func, TExprNode::TPtr accumulator) const;
     TExprNode::TPtr MakeOptional(TExprNode::TPtr value, bool alreadyOptional) const;
     TExprNode::TPtr BuildUint64(ui64 value) const;
 
@@ -79,6 +81,8 @@ private:
     TMappedIUs<ui32> Indexes;
     TVector<TInfoUnitId> Functions;
     TVector<TInfoUnitId> OutputLayout;
+    // Output columns live past the window, in OutputLayout order.
+    TVector<TInfoUnitId> OutputColumns;
     bool NeedsPeerKey = false;
     bool WholePartition = false;
     bool RangeCarry = false;

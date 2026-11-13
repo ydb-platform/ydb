@@ -709,6 +709,62 @@ document.addEventListener("DOMContentLoaded", ready);
                 }
             }
 
+            if (MoveData.IsInProgress()) {
+                DIV_CLASS("panel panel-info") {
+                    auto formatGroups = [](const THashSet<ui32>& groups) {
+                        TStringStream str;
+                        for (const ui32 groupId : groups) {
+                            str << groupId << " ";
+                        }
+                        return str.Str();
+                    };
+                    auto formatPhase = [](TMoveDataState::EPhase phase) {
+                        switch (phase) {
+                            case TMoveDataState::EPhase::Idle:
+                                return "Idle";
+                            case TMoveDataState::EPhase::ScanningIndex:
+                                return "Scanning index";
+                            case TMoveDataState::EPhase::CopyingBlob:
+                                return "Copying blob";
+                            case TMoveDataState::EPhase::UpdatingIndex:
+                                return "Updating index";
+                            case TMoveDataState::EPhase::PreparingTrashCheck:
+                                return "Preparing trash check";
+                            case TMoveDataState::EPhase::CheckingTrash:
+                                return "Checking trash";
+                            case TMoveDataState::EPhase::Vacuum:
+                                return "Vacuum";
+                        }
+                    };
+                    auto formatLocator = [](const NKikimrBlobDepot::TBlobLocator& locator) {
+                        return TStringBuilder() << locator.GetGroupId()
+                            << " " << TBlobSeqId::FromProto(locator.GetBlobSeqId()).ToString();
+                    };
+                    DIV_CLASS("panel-heading") {
+                        s << "Move data operation";
+                    }
+                    const auto& state = MoveData;
+                    DIV_CLASS("panel-body") {
+                        KEYVALUE_TABLE({
+                            KEYVALUE_P("State", formatPhase(state.Phase));
+                            KEYVALUE_P("Groups", formatGroups(state.Groups));
+                            KEYVALUE_P("Key", state.Key ? TData::TKey::FromBinaryKey(*state.Key, Config).MakeTextualKey() : "<null>");
+                            KEYVALUE_P("Value chain index", state.ValueChainIndex);
+                            KEYVALUE_P("Value version", state.ValueVersion);
+                            KEYVALUE_P("Record touched", state.RecordTouched ? "true" : "false");
+                            KEYVALUE_P("Needs another pass", state.NeedsAnotherPass ? "true" : "false");
+                            KEYVALUE_P("Blob id", state.BlobId.ToString());
+                            KEYVALUE_P("Blob locator", formatLocator(state.BlobLocator));
+                            KEYVALUE_P("New blob locator", formatLocator(state.NewBlobLocator));
+                            KEYVALUE_P("New blob seq id", state.NewBlobSeqId.ToString());
+                            KEYVALUE_P("Blob id to new locator count", state.BlobIdToNewLocator.size());
+                            KEYVALUE_P("Protected blob seq ids count", state.ProtectedBlobSeqIds.size());
+                            KEYVALUE_P("Records scanned", state.RecordsScanned);
+                        })
+                    }
+                }
+            }
+
             // These two tables are rendered once per page load (they are not part of the incremental JSON
             // refresh above), which is enough: they exist to answer "who is pinning garbage collection" and
             // "who is holding the S3 write slots" when a tablet looks stuck.

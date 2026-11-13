@@ -6,6 +6,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 
+#include <ydb/library/actors/core/monotonic.h>
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -48,7 +50,7 @@ bool CheckLtCounter(::NMonitoring::TDynamicCounterPtr group, const char* sensorN
 }
 
 bool CheckLabeledCounters(::NMonitoring::TDynamicCounterPtr databaseGroup, const TString& dbId,
-    std::function<bool(::NMonitoring::TDynamicCounterPtr)> particularCountersCheck) {
+    std::function<bool(::NMonitoring::TDynamicCounterPtr)> particularCountersCheck, bool dumpCounters) {
     bool isGood{true};
     Y_UNUSED(dbId);
 
@@ -59,7 +61,7 @@ bool CheckLabeledCounters(::NMonitoring::TDynamicCounterPtr databaseGroup, const
             ->GetSubgroup("host", "")
             ->GetSubgroup("topic", topicName);
     {
-        {
+        if (dumpCounters) {
             TStringStream ss;
             topicGroup->OutputHtml(ss);
             Cerr << ss.Str() << Endl;
@@ -73,8 +75,14 @@ bool CheckLabeledCounters(::NMonitoring::TDynamicCounterPtr databaseGroup, const
 
 void GetCounters(TTestEnv& env, const TString& databaseName, const TString& databasePath,
                  std::function<bool(::NMonitoring::TDynamicCounterPtr)> particularCountersCheck) {
-    for (size_t iter = 0; iter < 35; ++iter) {
-        Cerr << "iteration " << iter << Endl;
+    const auto deadline = TMonotonic::Now() + TDuration::Seconds(350);
+    auto nextDump = TMonotonic::Now();
+    while (TMonotonic::Now() < deadline) {
+        // Poll readiness more frequently without multiplying full counter dumps.
+        const bool dumpCounters = TMonotonic::Now() >= nextDump;
+        if (dumpCounters) {
+            nextDump = TMonotonic::Now() + TDuration::Seconds(10);
+        }
 
         bool checkDb = false;
 
@@ -85,7 +93,7 @@ void GetCounters(TTestEnv& env, const TString& databaseName, const TString& data
 
             auto databaseGroup = labeledGroup->FindSubgroup("database", databasePath);
             if (databaseGroup) {
-                checkDb = CheckLabeledCounters(databaseGroup, databaseName, particularCountersCheck);
+                checkDb = CheckLabeledCounters(databaseGroup, databaseName, particularCountersCheck, dumpCounters);
             }
         }
 
@@ -93,9 +101,9 @@ void GetCounters(TTestEnv& env, const TString& databaseName, const TString& data
             return;
         }
 
-        Sleep(TDuration::Seconds(10));
+        Sleep(TDuration::Seconds(1));
     }
-    UNIT_ASSERT_C(false, "out of 35 iterations with delay 10s");
+    UNIT_ASSERT_C(false, "counters did not become ready within 350s");
 }
 
 } // namespace
@@ -171,12 +179,6 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
         {
             auto check = [](::NMonitoring::TDynamicCounterPtr topicGroup) {
                 bool isGood{true};
-
-                {
-                    TStringStream ss;
-                    topicGroup->OutputHtml(ss);
-                    Cerr << ss.Str() << Endl;
-                }
 
                 isGood &= CheckCounter(topicGroup, "topic.partition.alive_count", partitionsN, false);
                 isGood &= CheckCounter(topicGroup, "topic.partition.write.speed_limit_bytes_per_second", 50'000'000, false);

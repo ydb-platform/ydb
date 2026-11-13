@@ -87,7 +87,7 @@ namespace NTest {
         {
             auto *scheme = new TPartScheme(subset.Scheme->Cols);
 
-            TWriterBundle blocks(scheme->Groups.size(), logo);
+            TWriterBundle blocks(TPartSlots(scheme->Groups.size(), Conf.Layout).SlotsCount(), logo);
 
             Tags = subset.Scheme->Tags();
             NPage::TConf conf = Conf;

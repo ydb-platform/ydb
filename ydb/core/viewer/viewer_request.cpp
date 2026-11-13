@@ -85,19 +85,17 @@ public:
         auto response = MakeHolder<TEvViewer::TEvViewerResponse>();
         auto& locationResponded = (*response->Record.MutableLocationResponded());
 
-        if (TBase::RequestSettings.MergeFields) {
-            auto perNodeStateInfo = TBase::GetPerNodeStateInfo();
-            for (const auto& [nodeId, nodeResponse] : perNodeStateInfo) {
+        for (auto& [nodeId, nodeResponse] : TBase::NodeResponses) {
+            if (nodeResponse.IsOk()) {
                 locationResponded.AddNodeId(nodeId);
-            }
-            MergeWhiteboardResponses(response.Get(), perNodeStateInfo, TBase::RequestSettings.MergeFields);
-        } else {
-            for (auto& [nodeId, nodeResponse] : TBase::NodeResponses) {
-                if (nodeResponse.IsOk()) {
-                    locationResponded.AddNodeId(nodeId);
+                if (!TBase::RequestSettings.MergeFields) {
                     Merge(response->Record, nodeId, nodeResponse.Get()->Record);
                 }
             }
+        }
+        if (TBase::RequestSettings.MergeFields) {
+            auto perNodeStateInfo = TBase::GetPerNodeStateInfo();
+            MergeWhiteboardResponses(response.Get(), perNodeStateInfo, TBase::RequestSettings.MergeFields);
         }
 
         TBase::Send(Event->Sender, response.Release(), 0, Event->Cookie);

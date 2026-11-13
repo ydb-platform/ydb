@@ -10,7 +10,7 @@
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
-#include <yql/essentials/core/sql_types/spark_functions.h>
+#include <yql/essentials/core/spark_meta/functions.h>
 #include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -40,10 +40,16 @@ TNodePtr ApplySparkBinding(TPosition pos, TStringBuf binding, const TVector<TNod
     return new TCallNodeImpl(pos, "Apply", applyArgs);
 }
 
-TNodeResult BuildSparkAggregation(TPosition pos, TStringBuf name, TNodePtr input, EAggregateMode mode) {
+TNodeResult BuildSparkAggregation(TPosition pos, TStringBuf name, const TVector<TNodePtr>& arguments, EAggregateMode mode) {
     const auto& function = NYql::NSpark::GetAggregateFunction(name);
+    TNodePtr input = arguments.front();
     if (!function.PreprocessorBinding.empty()) {
-        input = ApplySparkBinding(pos, function.PreprocessorBinding, {input});
+        TVector<TNodePtr> preprocessArguments{input};
+        if (function.HasNullTreatment) {
+            preprocessArguments.push_back(arguments.size() == 2 ? arguments[1]
+                                                                : new TCallNodeImpl(pos, "Bool", {BuildQuotedAtom(pos, "false")}));
+        }
+        input = ApplySparkBinding(pos, function.PreprocessorBinding, preprocessArguments);
     }
     TVector<TNodePtr> aggregates(Reserve(function.Arity));
     for (ui32 index = 0; index < function.Arity; ++index) {
@@ -3981,7 +3987,7 @@ TNodeResult BuildBuiltinFunc(
                 ctx.Error(pos) << "Spark aggregate functions do not support OVER";
                 return std::unexpected(ESQLError::Basic);
             }
-            return BuildSparkAggregation(pos, lowerName, args.front(), aggMode);
+            return BuildSparkAggregation(pos, lowerName, args, aggMode);
         }
         return TNonNull(ApplySparkBinding(pos, functionInfo->GetBindingName(args.size()), args));
     }
@@ -4780,10 +4786,10 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, const TFu
         };
     }
 
-    NYql::NSpark::EnumerateFunctions([&map](const TString& name, const TString& bindingName) {
-        if (!bindingName.empty()) {
+    NYql::NSpark::EnumerateFunctions([&map](const TString& name, const NYql::NSpark::TFunction& function) {
+        if (function.IsAggregate || !function.BindingName.empty()) {
             map[TString("Spark::") + name] = {
-                .Kind = "Normal",
+                .Kind = function.IsAggregate ? "Agg" : "Normal",
             };
         }
     });

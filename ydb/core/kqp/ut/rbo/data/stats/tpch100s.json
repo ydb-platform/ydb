@@ -1,0 +1,755 @@
+{
+    "/Root/customer": {
+        "byte_size": 1578400481,
+        "n_rows": 15000000,
+        "n_attrs": 8,
+        "key_columns": [
+            "c_custkey"
+        ],
+        "columns": [
+            {
+                "name": "c_acctbal",
+                "most_common_value": [
+                    {
+                        "frequency": 4,
+                        "value": -938.94,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1088741
+            },
+            {
+                "name": "c_address",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "7 QOqGqqSy9jfV51BC71jcHJSD0",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 14850705
+            },
+            {
+                "name": "c_comment",
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "s. furiously unusual excuses sleep slyly. blithely unusual packages about the slyly regular accounts are accou",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 14528572
+            },
+            {
+                "name": "c_custkey",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 52,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 15236038
+            },
+            {
+                "name": "c_mktsegment",
+                "most_common_value": [
+                    {
+                        "frequency": 3002858,
+                        "value": "AUTOMOBILE",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 5
+            },
+            {
+                "name": "c_name",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "Customer#000000052",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 14997215
+            },
+            {
+                "name": "c_nationkey",
+                "most_common_value": [
+                    {
+                        "frequency": 601469,
+                        "value": 3,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 25
+            },
+            {
+                "name": "c_phone",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "21-186-284-5998",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 14996996
+            }
+        ]
+    },
+    "/Root/lineitem": {
+        "byte_size": 41682657607,
+        "n_rows": 600037902,
+        "n_attrs": 16,
+        "key_columns": [
+            "l_linenumber",
+            "l_orderkey"
+        ],
+        "columns": [
+            {
+                "name": "l_comment",
+                "most_common_value": [
+                    {
+                        "frequency": 76910,
+                        "value": " furiously",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 141303885
+            },
+            {
+                "name": "l_commitdate",
+                "most_common_value": [
+                    {
+                        "frequency": 31237,
+                        "value": "1996-08-09",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 2452
+            },
+            {
+                "name": "l_discount",
+                "most_common_value": [
+                    {
+                        "frequency": 54558312,
+                        "value": 0.08,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 11
+            },
+            {
+                "name": "l_extendedprice",
+                "most_common_value": [
+                    {
+                        "frequency": 43,
+                        "value": 49248,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 3765406
+            },
+            {
+                "name": "l_linenumber",
+                "most_common_value": [
+                    {
+                        "frequency": 150000000,
+                        "value": 1,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "l_linestatus",
+                "most_common_value": [
+                    {
+                        "frequency": 300058170,
+                        "value": "O",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "l_orderkey",
+                "most_common_value": [
+                    {
+                        "frequency": 7,
+                        "value": 25824,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 143258798
+            },
+            {
+                "name": "l_partkey",
+                "most_common_value": [
+                    {
+                        "frequency": 5,
+                        "value": 7709770,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20066648
+            },
+            {
+                "name": "l_quantity",
+                "most_common_value": [
+                    {
+                        "frequency": 12007954,
+                        "value": 40,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 50
+            },
+            {
+                "name": "l_receiptdate",
+                "most_common_value": [
+                    {
+                        "frequency": 34929,
+                        "value": "1996-12-03",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 2541
+            },
+            {
+                "name": "l_returnflag",
+                "most_common_value": [
+                    {
+                        "frequency": 303922760,
+                        "value": "N",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "l_shipdate",
+                "most_common_value": [
+                    {
+                        "frequency": 31123,
+                        "value": "1996-09-11",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 2515
+            },
+            {
+                "name": "l_shipinstruct",
+                "most_common_value": [
+                    {
+                        "frequency": 150025621,
+                        "value": "COLLECT COD",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "l_shipmode",
+                "most_common_value": [
+                    {
+                        "frequency": 85734456,
+                        "value": "RAIL",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "l_suppkey",
+                "most_common_value": [
+                    {
+                        "frequency": 24,
+                        "value": 77315,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 855928
+            },
+            {
+                "name": "l_tax",
+                "most_common_value": [
+                    {
+                        "frequency": 66680086,
+                        "value": 0.08,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 9
+            }
+        ]
+    },
+    "/Root/nation": {
+        "byte_size": 3758,
+        "n_rows": 25,
+        "n_attrs": 4,
+        "key_columns": [
+            "n_nationkey"
+        ],
+        "columns": [
+            {
+                "name": "n_comment",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": " haggle. carefully final deposits detect slyly agai",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 25
+            },
+            {
+                "name": "n_name",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "ALGERIA",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 25
+            },
+            {
+                "name": "n_nationkey",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 0,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 25
+            },
+            {
+                "name": "n_regionkey",
+                "most_common_value": [
+                    {
+                        "frequency": 5,
+                        "value": 0,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 5
+            }
+        ]
+    },
+    "/Root/orders": {
+        "byte_size": 9159017758,
+        "n_rows": 150000000,
+        "n_attrs": 9,
+        "key_columns": [
+            "o_orderkey"
+        ],
+        "columns": [
+            {
+                "name": "o_clerk",
+                "most_common_value": [
+                    {
+                        "frequency": 75,
+                        "value": "Clerk#000091853",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 99684
+            },
+            {
+                "name": "o_comment",
+                "most_common_value": [
+                    {
+                        "frequency": 28,
+                        "value": "ly regular deposits",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 111947442
+            },
+            {
+                "name": "o_custkey",
+                "most_common_value": [
+                    {
+                        "frequency": 5,
+                        "value": 12744202,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 10252640
+            },
+            {
+                "name": "o_orderdate",
+                "most_common_value": [
+                    {
+                        "frequency": 7777,
+                        "value": "1994-10-31",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 2397
+            },
+            {
+                "name": "o_orderkey",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 736,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 143258798
+            },
+            {
+                "name": "o_orderpriority",
+                "most_common_value": [
+                    {
+                        "frequency": 30004093,
+                        "value": "4-NOT SPECIFIED",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 5
+            },
+            {
+                "name": "o_orderstatus",
+                "most_common_value": [
+                    {
+                        "frequency": 73086053,
+                        "value": "O",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "o_shippriority",
+                "most_common_value": [
+                    {
+                        "frequency": 150000000,
+                        "value": 0,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "o_totalprice",
+                "most_common_value": [
+                    {
+                        "frequency": 4,
+                        "value": 160994.53,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 35028231
+            }
+        ]
+    },
+    "/Root/part": {
+        "byte_size": 1460288880,
+        "n_rows": 20000000,
+        "n_attrs": 9,
+        "key_columns": [
+            "p_partkey"
+        ],
+        "columns": [
+            {
+                "name": "p_brand",
+                "most_common_value": [
+                    {
+                        "frequency": 801207,
+                        "value": "Brand#31",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 25
+            },
+            {
+                "name": "p_comment",
+                "most_common_value": [
+                    {
+                        "frequency": 6949,
+                        "value": " the ",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 3930797
+            },
+            {
+                "name": "p_container",
+                "most_common_value": [
+                    {
+                        "frequency": 501669,
+                        "value": "SM CAN",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 40
+            },
+            {
+                "name": "p_mfgr",
+                "most_common_value": [
+                    {
+                        "frequency": 4001096,
+                        "value": "Manufacturer#1",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 5
+            },
+            {
+                "name": "p_name",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "purple blue light sienna deep",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 20182889
+            },
+            {
+                "name": "p_partkey",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 57,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20066648
+            },
+            {
+                "name": "p_retailprice",
+                "most_common_value": [
+                    {
+                        "frequency": 20,
+                        "value": 1611.56,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 120005
+            },
+            {
+                "name": "p_size",
+                "most_common_value": [
+                    {
+                        "frequency": 401087,
+                        "value": 13,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 50
+            },
+            {
+                "name": "p_type",
+                "most_common_value": [
+                    {
+                        "frequency": 115973,
+                        "value": "ECONOMY PLATED STEEL",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 150
+            }
+        ]
+    },
+    "/Root/partsupp": {
+        "byte_size": 5068061409,
+        "n_rows": 80000000,
+        "n_attrs": 5,
+        "key_columns": [
+            "ps_partkey",
+            "ps_suppkey"
+        ],
+        "columns": [
+            {
+                "name": "ps_availqty",
+                "most_common_value": [
+                    {
+                        "frequency": 636,
+                        "value": 5311,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 9985
+            },
+            {
+                "name": "ps_comment",
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "lent instructions. blithely bold ideas nag carefully about the ironic, pending platelets.",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 71948610
+            },
+            {
+                "name": "ps_partkey",
+                "most_common_value": [
+                    {
+                        "frequency": 4,
+                        "value": 3,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 20066648
+            },
+            {
+                "name": "ps_suppkey",
+                "most_common_value": [
+                    {
+                        "frequency": 8,
+                        "value": 250994,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 855928
+            },
+            {
+                "name": "ps_supplycost",
+                "most_common_value": [
+                    {
+                        "frequency": 37,
+                        "value": 29.88,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 100025
+            }
+        ]
+    },
+    "/Root/region": {
+        "byte_size": 1280,
+        "n_rows": 5,
+        "n_attrs": 3,
+        "key_columns": [
+            "r_regionkey"
+        ],
+        "columns": [
+            {
+                "name": "r_comment",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "lar deposits. blithely final packages cajole. regular waters are final requests. regular accounts are according to ",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 5
+            },
+            {
+                "name": "r_name",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "AFRICA",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 5
+            },
+            {
+                "name": "r_regionkey",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 0,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 5
+            }
+        ]
+    },
+    "/Root/supplier": {
+        "byte_size": 95577702,
+        "n_rows": 1000000,
+        "n_attrs": 7,
+        "key_columns": [
+            "s_suppkey"
+        ],
+        "columns": [
+            {
+                "name": "s_acctbal",
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": 9757.91,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 656403
+            },
+            {
+                "name": "s_address",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "PGGVE5PWAMwKDZw ",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 1000455
+            },
+            {
+                "name": "s_comment",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "accounts snooze slyly furiously bold ",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 992251
+            },
+            {
+                "name": "s_name",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "Supplier#000000018",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 1002142
+            },
+            {
+                "name": "s_nationkey",
+                "most_common_value": [
+                    {
+                        "frequency": 40288,
+                        "value": 5,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 25
+            },
+            {
+                "name": "s_phone",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "26-729-551-1115",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 997059
+            },
+            {
+                "name": "s_suppkey",
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 18,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 855928
+            }
+        ]
+    }
+}

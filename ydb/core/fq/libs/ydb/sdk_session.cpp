@@ -1,29 +1,24 @@
-#include <ydb/core/fq/libs/ydb/sdk_session.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-#include <library/cpp/threading/future/core/future.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-
-#include <ydb/core/fq/libs/ydb/session.h>
 #include <ydb/core/fq/libs/ydb/query_actor.h>
+#include <ydb/core/fq/libs/ydb/sdk_session.h>
+#include <ydb/core/fq/libs/ydb/session.h>
 
 #include <ydb/library/table_creator/table_creator.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
+#include <library/cpp/threading/future/core/future.h>
 
 namespace NFq {
 
 namespace {
 
-struct TSdkSession : public ISession { 
-
+struct TSdkSession: public ISession {
     explicit TSdkSession(NYdb::NTable::TSession session)
-        : Session(session) {
+        : Session(session)
+    {
     }
 
-    NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
-        const TString& sql,
-        NFq::ISession::TTxControl txControl,
-        std::shared_ptr<NYdb::TParamsBuilder> paramsBuilder,
-        const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {}) override {
+    NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(const TString& sql, NFq::ISession::TTxControl txControl,
+        std::shared_ptr<NYdb::TParamsBuilder> paramsBuilder, const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {}) override {
         NYdb::NTable::TTxControl tx = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW());
         if (txControl.SnapshotRead_) {
             tx = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SnapshotRO());
@@ -47,11 +42,12 @@ struct TSdkSession : public ISession {
         return future;
     }
 
-    NYdb::TAsyncStatus CreateTable(const TString& /*db*/, const TString& path, NYdb::NTable::TTableDescription&& tableDesc, const NACLib::TDiffACL& /*acl*/) override {
+    NYdb::TAsyncStatus CreateTable(
+        const TString& /*db*/, const TString& path, NYdb::NTable::TTableDescription&& tableDesc, const NACLib::TDiffACL& /*acl*/) override {
         return Session.CreateTable(path, std::move(tableDesc));
     }
 
-    NYdb::TAsyncStatus DropTable( const TString& path) override {
+    NYdb::TAsyncStatus DropTable(const TString& path) override {
         return Session.DropTable(path);
     }
 
@@ -63,15 +59,15 @@ struct TSdkSession : public ISession {
         return Transaction && Transaction->IsActive();
     }
 
-private: 
+private:
     NYdb::NTable::TSession Session;
     std::optional<NYdb::NTable::TTransaction> Transaction;
 };
 
-} // namespace
+}   // namespace
 
 ISession::TPtr CreateSdkSession(NYdb::NTable::TSession session) {
     return MakeIntrusive<TSdkSession>(session);
 }
 
-} // namespace NFq
+}   // namespace NFq

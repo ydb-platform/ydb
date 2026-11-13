@@ -7,6 +7,7 @@ SRCS(
     data_center_info.h
     domain_info.h
     drain.h
+    event_history.h
     hive.h
     hive_domains.h
     hive_events.h
@@ -17,6 +18,7 @@ SRCS(
     leader_tablet_info.h
     metrics.h
     monitoring.h
+    named_resources.h
     node_info.h
     object_distribution.h
     outgoing_requests.h
@@ -26,6 +28,7 @@ SRCS(
     storage_group_info.h
     storage_pool_info.h
     tablet_info.h
+    tx__reassign_tablets.h
     tx__unlock_tablet.cpp
 )
 
@@ -49,6 +52,7 @@ JOIN_SRCS(
     hive_impl.cpp
     hive_log.cpp
     hive_statics.cpp
+    named_resources.cpp
 )
 
 JOIN_SRCS(
@@ -63,6 +67,7 @@ JOIN_SRCS(
     reassign_actor.cpp
     tx__reassign_groups.cpp
     tx__reassign_groups_on_decommit.cpp
+    tx__reassign_tablets.cpp
 )
 
 JOIN_SRCS(
@@ -137,6 +142,7 @@ JOIN_SRCS(
     tx__lock_tablet.cpp
     monitoring.cpp
     move_data_actor.cpp
+    event_history.cpp
     node_info.cpp
     tx__register_node.cpp
     tx__response_tablet_seq.cpp

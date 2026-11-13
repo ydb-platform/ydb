@@ -3,9 +3,9 @@
 
 #include <ydb/core/kqp/runtime/streaming/kqp_streaming_aggregation.h>
 
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/public/udf/udf_terminator.h>
@@ -15,39 +15,13 @@
 
 namespace NKikimr::NMiniKQL {
 
-void TKqpComputeContextBase::SetWakeupCallback(std::function<void()> wakeupCallback) {
-    WakeupCallback = std::move(wakeupCallback);
-}
-
-const std::function<void()>& TKqpComputeContextBase::GetWakeupCallback() const {
-    return WakeupCallback;
-}
-
-void TKqpComputeContextBase::SetCheckpointContext(TIntrusiveConstPtr<NYql::NDq::TCheckpointContext> checkpointContext) {
-    CheckpointContext = std::move(checkpointContext);
-}
-
-TIntrusiveConstPtr<NYql::NDq::TCheckpointContext> TKqpComputeContextBase::GetCheckpointContext() const {
-    return CheckpointContext;
-}
-
-void TKqpComputeContextBase::SetQueryContext(const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
-    Database = database;
-    UserToken = std::move(userToken);
-}
-
-const TString& TKqpComputeContextBase::GetDatabase() const {
-    return Database;
-}
-
-const TIntrusiveConstPtr<NACLib::TUserToken>& TKqpComputeContextBase::GetUserToken() const {
-    return UserToken;
-}
-
 TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* computeCtx) {
     return [baseFactory = NYql::NDq::GetDqBaseComputeFactory(computeCtx), computeCtx](TCallable& callable, const TComputationNodeFactoryContext& ctx) {
         if (callable.GetType()->GetName() == "KqpStreamingAggregation") {
             return WrapKqpStreamingAggregation(callable, ctx, *computeCtx);
+        }
+        if (callable.GetType()->GetName() == "FulltextAnalyze") {
+            return WrapFulltextAnalyze(callable, ctx);
         }
         return baseFactory(callable, ctx);
     };

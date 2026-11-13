@@ -15,6 +15,7 @@ SRCS(
     udf_ptr.h
     udf_registrator.cpp
     udf_registrator.h
+    udf_static_library.h
     udf_static_registry.cpp
     udf_static_registry.h
     udf_string.cpp
@@ -38,6 +39,18 @@ SRCS(
     udf_value_builder.h
     udf_value_inl.h
     udf_version.h
+    udf_pg_type_description.cpp
+    udf_ptr.cpp
+    udf_string_ref.cpp
+    udf_string_ref.h
+    udf_terminator.cpp
+    udf_terminator.h
+    udf_type_ops.cpp
+    udf_type_size_check.cpp
+    udf_ut_helpers.cpp
+    udf_value_utils.cpp
+    udf_value_utils.h
+    udf_version.cpp
 )
 
 PEERDIR(

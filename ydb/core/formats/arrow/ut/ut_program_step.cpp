@@ -14,10 +14,12 @@
 #include <ydb/core/formats/arrow/program/projection.h>
 #include <ydb/core/formats/arrow/program/stream_logic.h>
 
+#include <ydb/library/formats/arrow/helpers/array.h>
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/arrow_kernels/ut_common.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
 #include <library/cpp/testing/unittest/registar.h>

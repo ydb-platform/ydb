@@ -8,6 +8,7 @@
 
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
 #include <ydb/core/tablet/resource_broker.h>
 
@@ -29,6 +30,7 @@ struct TEnvironmentSetup {
     const ui32 NumGroups = 1;
     TIntrusivePtr<NFake::TProxyDS> Group0 = MakeIntrusive<NFake::TProxyDS>();
     TPDiskMockStates PDiskMockStates;
+    std::map<std::pair<ui32, TString>, std::shared_ptr<TPDiskMockState::TMetadata>> PDiskMetadataByPath;
     TVector<TActorId> PDiskActors;
     std::set<TActorId> CommencedReplication;
     std::unordered_map<ui32, TString> Cache;
@@ -87,9 +89,16 @@ struct TEnvironmentSetup {
         const bool SetupResourceBroker = false;
         // Global blob_storage_config knob. Unset stays unset, so the flag alone leaves the size-class heap.
         const std::optional<ui32> VDiskHeapAllocatorNumLeadingDisks = std::nullopt;
+        // number of nodes listed in the initial config of automatically bootstrapped cluster (all of them, if zero);
+        // nodes not listed there are not started until the test adds them to the config, see ConfiguredNodeCount
+        const ui32 InitialConfiguredNodeCount = 0;
     };
 
     const TSettings Settings;
+
+    // number of first nodes listed in the config of automatically bootstrapped cluster; the test changes it when it
+    // adds nodes to the cluster config, so that nodes started afterwards get the new startup config
+    ui32 ConfiguredNodeCount = 0;
 
     class TFakeConfigDispatcher : public TActor<TFakeConfigDispatcher> {
         std::unordered_set<TActorId> Subscribers;
@@ -207,6 +216,7 @@ struct TEnvironmentSetup {
 
     TEnvironmentSetup(TSettings&& settings)
         : Settings(std::move(settings))
+        , ConfiguredNodeCount(Settings.InitialConfiguredNodeCount ? Settings.InitialConfiguredNodeCount : Settings.NodeCount)
     {
         struct TSetupEnv { TSetupEnv() { TEnvironmentSetup::SetupEnv(); } };
         Singleton<TSetupEnv>();
@@ -288,8 +298,13 @@ struct TEnvironmentSetup {
                     const auto policy = Settings.TrackSharedQuotaInPDiskMock
                         ? TPDiskMockState::ESpaceColorPolicy::SharedQuota
                         : TPDiskMockState::ESpaceColorPolicy::None;
+                    // Temporary and configured PDisk ids open the same physical metadata.
+                    auto& metadata = PDiskMetadataByPath[{nodeId, cfg.Path}];
+                    if (!metadata) {
+                        metadata = std::make_shared<TPDiskMockState::TMetadata>();
+                    }
                     auto state = MakeIntrusive<TPDiskMockState>(nodeId, pdiskId, cfg.PDiskGuid,
-                        Settings.PDiskSize, chunkSize, cfg.ReadOnly, Settings.DiskType, policy);
+                        Settings.PDiskSize, chunkSize, cfg.ReadOnly, Settings.DiskType, policy, metadata);
                     state->SetReportVDiskMetrics(Settings.ReportVDiskMetricsInPDiskMock);
                     return state;
                 },
@@ -313,6 +328,17 @@ struct TEnvironmentSetup {
         SetupStaticStorage();
         SetupStorage();
         SetupTablet();
+        for (ui32 nodeId : Runtime->GetNodes()) {
+            if (IsNodeConfigured(nodeId)) {
+                SetupTenantPool(nodeId);
+            } else {
+                Runtime->StopNode(nodeId); // node is not part of the cluster config yet
+            }
+        }
+    }
+
+    bool IsNodeConfigured(ui32 nodeId) const {
+        return nodeId <= ConfiguredNodeCount;
     }
 
     void StopNode(ui32 nodeId) {
@@ -328,9 +354,13 @@ struct TEnvironmentSetup {
         }
         if (nodeId == Settings.ControllerNodeId) {
             SetupStaticStorage();
+        }
+        // node warden must be started before tablets as bootstrapper queries it for storage config in bridge mode
+        SetupStorage(nodeId);
+        if (nodeId == Settings.ControllerNodeId) {
             SetupTablet();
         }
-        SetupStorage(nodeId);
+        SetupTenantPool(nodeId);
     }
 
     void RestartNode(ui32 nodeId) {
@@ -422,7 +452,7 @@ struct TEnvironmentSetup {
 
     void SetupStorage(ui32 targetNodeId = 0) {
         for (ui32 nodeId : Runtime->GetNodes()) {
-            if (targetNodeId && nodeId != targetNodeId) {
+            if (targetNodeId ? nodeId != targetNodeId : !IsNodeConfigured(nodeId)) {
                 continue;
             }
 
@@ -449,6 +479,9 @@ struct TEnvironmentSetup {
 
                         auto *box = config->BlobStorageConfig->MutableDefineBox();
                         for (ui32 nodeId : Runtime->GetNodes()) {
+                            if (!IsNodeConfigured(nodeId)) {
+                                continue;
+                            }
                             auto *node = config->NameserviceConfig->AddNode();
                             node->SetNodeId(nodeId);
                             node->SetHost(TStringBuilder() << "host_" << nodeId);
@@ -463,9 +496,33 @@ struct TEnvironmentSetup {
                         auto makeHosts = [&] {
                             TStringBuilder res;
                             for (ui32 nodeId : Runtime->GetNodes()) {
-                                res << "  - {host: host_" << nodeId << ", location: {data_center: my_dc, rack: rack_"
-                                    << nodeId << ", unit: unit_" << nodeId << ", bridge_pile_name: pile_"
-                                    << (nodeId - 1) / 8 + 1 << "}}\n";
+                                if (!IsNodeConfigured(nodeId)) {
+                                    continue;
+                                }
+                                NActorsInterconnect::TNodeLocation location;
+                                Settings.LocationGenerator(nodeId).Serialize(&location, false);
+                                res << "  - {host: host_" << nodeId << ", location: {data_center: " << location.GetDataCenter()
+                                    << ", rack: " << location.GetRack() << ", unit: " << location.GetUnit();
+                                if (location.HasBridgePileName()) {
+                                    res << ", bridge_pile_name: " << location.GetBridgePileName();
+                                }
+                                res << "}}\n";
+                            }
+                            return res;
+                        };
+
+                        auto makeBridgeConfig = [&] {
+                            TStringBuilder res;
+                            if (Settings.NumPiles) {
+                                // the test may change the set of piles, then nodes started after that get new one
+                                res << "  bridge_config:\n";
+                                if (Runtime->GetAppDataBridgeConfig().GetEnableNonUniformStorage()) {
+                                    res << "    enable_non_uniform_storage: true\n";
+                                }
+                                res << "    piles:\n";
+                                for (const auto& pile : Runtime->GetAppDataBridgeConfig().GetPiles()) {
+                                    res << "    - name: " << pile.GetName() << "\n";
+                                }
                             }
                             return res;
                         };
@@ -477,23 +534,14 @@ metadata:
   cluster: \"\"
   version: 0
 config:
-  erasure: block-4-2
+  erasure: )" << TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()) << R"(
   default_disk_type: NVME
   self_management_config:
     enabled: true
     automatic_bootstrap: true
-  bridge_config:
-    piles:
-    - name: pile_1
-    - name: pile_2
-    - name: pile_3
-  host_configs:
+)" << makeBridgeConfig() << R"(  host_configs:
   - nvme:
-    - SectorMap:0:1000
-    - SectorMap:1:1000
-    - SectorMap:2:1000
-    - SectorMap:3:1000
-    - SectorMap:4:1000
+    - SectorMap:X:1000
   hosts:
 )" << makeHosts();
                     }
@@ -529,8 +577,10 @@ config:
                         *Settings.VDiskHeapAllocatorNumLeadingDisks);
                 }
 
-                if (Settings.NumPiles) {
-                    config->BridgeConfig = std::make_unique<NKikimrConfig::TBridgeConfig>(Runtime->GetAppDataBridgeConfig());
+                // bridge config is taken from the runtime when the node starts, so the test may change it between
+                // node restarts (this is what happens when the cluster is being converted into bridged one)
+                if (const auto& bridgeConfig = Runtime->GetAppDataBridgeConfig(); bridgeConfig.PilesSize()) {
+                    config->BridgeConfig = std::make_unique<NKikimrConfig::TBridgeConfig>(bridgeConfig);
                 }
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
@@ -660,6 +710,13 @@ config:
             bool working = true;
             Runtime->Sim([&] { return working; }, [&](IEventHandle& event) { working = event.GetTypeRewrite() != TEvTablet::EvBoot; });
         }
+    }
+
+    // start services making node able to run tablets launched by Hive
+    void SetupTenantPool(ui32 nodeId) {
+        if (!Settings.SetupHive) {
+            return;
+        }
 
         auto localConfig = MakeIntrusive<TLocalConfig>();
 
@@ -674,16 +731,11 @@ config:
         auto tenantPoolConfig = MakeIntrusive<TTenantPoolConfig>(localConfig);
         tenantPoolConfig->AddStaticSlot(DomainName);
 
-        if (Settings.SetupHive) {
-            for (ui32 nodeId : Runtime->GetNodes()) {
-                Runtime->RegisterService(MakeTenantPoolRootID(),
-                    Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeId));
-                Runtime->RegisterService(NSysView::MakeSysViewServiceID(nodeId),
-                    Runtime->Register(NSysView::CreateSysViewServiceForTests().Release(), nodeId));
-                Runtime->Register(CreateTenantNodeEnumerationPublisher(), nodeId);
-                Runtime->Register(CreateLabelsMaintainer({}), nodeId);
-            }
-        }
+        Runtime->RegisterService(MakeTenantPoolRootID(), Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeId));
+        Runtime->RegisterService(NSysView::MakeSysViewServiceID(nodeId),
+            Runtime->Register(NSysView::CreateSysViewServiceForTests().Release(), nodeId));
+        Runtime->Register(CreateTenantNodeEnumerationPublisher(), nodeId);
+        Runtime->Register(CreateLabelsMaintainer({}), nodeId);
     }
 
     void CreateBoxAndPool(ui32 numDrivesPerNode = 0, ui32 numGroups = 0, ui32 numStorageNodes = 0,
@@ -935,6 +987,23 @@ config:
     void Sim(TDuration delta = TDuration::Zero()) {
         TInstant barrier = Runtime->GetClock() + delta;
         Runtime->Sim([&] { return Runtime->GetClock() <= barrier; });
+    }
+
+    // Stops the tablet and makes the resolver forget it, so that it starts anew. The time runs on for settlingTime then.
+    void RebootTablet(ui64 tabletId, TDuration settlingTime = TDuration::Zero()) {
+        const TActorId sender = Runtime->AllocateEdgeActor(Settings.ControllerNodeId, __FILE__, __LINE__);
+        Runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvForward(tabletId,
+            new IEventHandle(TActorId(), sender, new TEvents::TEvPoison), {}, TEvTabletResolver::TEvForward::EActor::Tablet)),
+            sender.NodeId());
+        const auto res = WaitForEdgeActorEvent<TEvTabletResolver::TEvForwardResult>(sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        Sim(TDuration::Seconds(5));
+        Runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId,
+            TActorId())), sender.NodeId());
+        if (settlingTime) {
+            Sim(settlingTime);
+        }
+        Runtime->DestroyActor(sender);
     }
 
     TString Dump(const TActorId& vdiskActorId, const TVDiskID& vdiskId) {

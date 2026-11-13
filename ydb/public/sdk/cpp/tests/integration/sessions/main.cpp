@@ -115,7 +115,7 @@ TEST(YdbSdkSessions, TestSessionPool) {
     driver.Stop(true);
 }
 
-TEST(YdbSdkSessions, TestMultipleSessions) {
+static void CheckMultipleSessions(bool retainQueryFuture) {
     std::string location = std::getenv("YDB_ENDPOINT");
 
     auto driver = NYdb::TDriver(
@@ -139,8 +139,11 @@ TEST(YdbSdkSessions, TestMultipleSessions) {
     NThreading::WaitExceptionOrAll(results).Wait();
     ASSERT_EQ(client.GetActiveSessionCount(), 10);
 
+    // A completion callback can still hold a future after Wait() returns.
+    const auto completingResult = retainQueryFuture ? results.back() : TAsyncDataQueryResult();
+
     for (auto& result : results) {
-        ASSERT_EQ(result.GetValue().GetStatus(), EStatus::SUCCESS);
+        ASSERT_EQ(result.ExtractValue().GetStatus(), EStatus::SUCCESS);
     }
     sids.clear();
     results.clear();
@@ -148,6 +151,14 @@ TEST(YdbSdkSessions, TestMultipleSessions) {
     ASSERT_EQ(client.GetActiveSessionCount(), 0);
 
     driver.Stop(true);
+}
+
+TEST(YdbSdkSessions, TestMultipleSessions) {
+    CheckMultipleSessions(false);
+}
+
+TEST(YdbSdkSessions, TestMultipleSessionsWithRetainedQueryFuture) {
+    CheckMultipleSessions(true);
 }
 
 TEST(YdbSdkSessions, TestActiveSessionCountAfterBadSession) {
@@ -183,9 +194,9 @@ TEST(YdbSdkSessions, TestActiveSessionCountAfterBadSession) {
 
     for (size_t i = 0; i < results.size(); i++) {
         if (i == 9) {
-            ASSERT_EQ(results[i].GetValue().GetStatus(), EStatus::BAD_SESSION);
+            ASSERT_EQ(results[i].ExtractValue().GetStatus(), EStatus::BAD_SESSION);
         } else {
-            ASSERT_EQ(results[i].GetValue().GetStatus(), EStatus::SUCCESS);
+            ASSERT_EQ(results[i].ExtractValue().GetStatus(), EStatus::SUCCESS);
         }
     }
     sids.clear();

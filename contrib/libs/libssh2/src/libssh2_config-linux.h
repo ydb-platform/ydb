@@ -16,21 +16,17 @@
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #define HAVE_ARPA_INET_H 1
 
-/* Define to 1 if you have the declaration of 'SecureZeroMemory', and to 0 if
-   you don't. */
-/* #undef HAVE_DECL_SECUREZEROMEMORY */
-
-/* disabled non-blocking sockets */
-/* #undef HAVE_DISABLED_NONBLOCKING */
-
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #define HAVE_DLFCN_H 1
 
 /* Define to 1 if you have the <errno.h> header file. */
 #define HAVE_ERRNO_H 1
 
-/* Define to 1 if you have the 'EVP_aes_128_ctr' function. */
-#define HAVE_EVP_AES_128_CTR 1
+/* Define to 1 if you have the 'explicit_bzero' function. */
+#define HAVE_EXPLICIT_BZERO 1
+
+/* Define to 1 if you have the 'explicit_memset' function. */
+/* #undef HAVE_EXPLICIT_MEMSET */
 
 /* Define to 1 if you have the <fcntl.h> header file. */
 #define HAVE_FCNTL_H 1
@@ -44,17 +40,11 @@
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
 
-/* use ioctlsocket() for non-blocking sockets */
-/* #undef HAVE_IOCTLSOCKET */
-
 /* use Ioctlsocket() for non-blocking sockets */
 /* #undef HAVE_IOCTLSOCKET_CASE */
 
 /* Define if you have the bcrypt library. */
 /* #undef HAVE_LIBBCRYPT */
-
-/* Define if you have the crypt32 library. */
-/* #undef HAVE_LIBCRYPT32 */
 
 /* Define if you have the gcrypt library. */
 /* #undef HAVE_LIBGCRYPT */
@@ -65,23 +55,17 @@
 /* Define if you have the ssl library. */
 #define HAVE_LIBSSL 1
 
+/* Define if you have the wolfssl library. */
+/* #undef HAVE_LIBWOLFSSL */
+
 /* Define if you have the z library. */
 #define HAVE_LIBZ 1
-
-/* Define to 1 if the compiler supports the 'long long' data type. */
-#define HAVE_LONGLONG 1
 
 /* Define to 1 if you have the 'memset_s' function. */
 /* #undef HAVE_MEMSET_S */
 
 /* Define to 1 if you have the <netinet/in.h> header file. */
 #define HAVE_NETINET_IN_H 1
-
-/* Define to 1 if you have the <ntdef.h> header file. */
-/* #undef HAVE_NTDEF_H */
-
-/* Define to 1 if you have the <ntstatus.h> header file. */
-/* #undef HAVE_NTSTATUS_H */
 
 /* use O_NONBLOCK for non-blocking sockets */
 #define HAVE_O_NONBLOCK 1
@@ -91,6 +75,9 @@
 
 /* Define to 1 if you have the select function. */
 #define HAVE_SELECT 1
+
+/* Define to 1 if you have the 'snprintf' function. */
+#define HAVE_SNPRINTF 1
 
 /* use SO_NONBLOCK for non-blocking sockets */
 /* #undef HAVE_SO_NONBLOCK */
@@ -143,23 +130,11 @@
 /* Define to 1 if you have the <windows.h> header file. */
 /* #undef HAVE_WINDOWS_H */
 
-/* Define to 1 if you have the <winsock2.h> header file. */
-/* #undef HAVE_WINSOCK2_H */
-
-/* Define to 1 if you have the <ws2tcpip.h> header file. */
-/* #undef HAVE_WS2TCPIP_H */
-
 /* to make a symbol visible */
 /* #undef LIBSSH2_API */
 
-/* Enable clearing of memory before being freed */
-/* #undef LIBSSH2_CLEAR_MEMORY */
-
-/* Enable "none" cipher -- NOT RECOMMENDED */
-/* #undef LIBSSH2_CRYPT_NONE */
-
-/* Enable newer diffie-hellman-group-exchange-sha1 syntax */
-#define LIBSSH2_DH_GEX_NEW 1
+/* Enable WinCNG ECDSA support */
+/* #undef LIBSSH2_ECDSA_WINCNG */
 
 /* Compile in zlib support */
 #define LIBSSH2_HAVE_ZLIB 1
@@ -167,17 +142,20 @@
 /* Use libgcrypt */
 /* #undef LIBSSH2_LIBGCRYPT */
 
-/* Enable "none" MAC -- NOT RECOMMENDED */
-/* #undef LIBSSH2_MAC_NONE */
-
 /* Use mbedtls */
 /* #undef LIBSSH2_MBEDTLS */
+
+/* Disable clearing of memory before being freed */
+/* #undef LIBSSH2_NO_CLEAR_MEMORY */
 
 /* Use openssl */
 #define LIBSSH2_OPENSSL 1
 
 /* Use wincng */
 /* #undef LIBSSH2_WINCNG */
+
+/* Use wolfssl */
+/* #undef LIBSSH2_WOLFSSL */
 
 /* Define to the sub-directory where libtool stores uninstalled libraries. */
 #define LT_OBJDIR ".libs/"
@@ -189,7 +167,7 @@
 #define PACKAGE "libssh2"
 
 /* Define to the address where bug reports for this package should be sent. */
-#define PACKAGE_BUGREPORT "libssh2-devel@cool.haxx.se"
+#define PACKAGE_BUGREPORT "libssh2-devel@lists.haxx.se"
 
 /* Define to the full name of this package. */
 #define PACKAGE_NAME "libssh2"

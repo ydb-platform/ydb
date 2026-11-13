@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/library/actors/core)
 
 FORK_SUBTESTS()
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -38,9 +38,13 @@ SRCS(
     executor_pools_ut.cpp
     inmemory_metrics_ut.cpp
     metric_system_ut.cpp
+    log_mon_ut.cpp
+    log_contract_ut.cpp
     log_ut.cpp
     mon_ut.cpp
+    node_location_ut.cpp
     scheduler_actor_ut.cpp
+    scheduler_cookie_ut.cpp
     subsystem_ut.cpp
     mailbox_lockfree_ut.cpp
     servicemap_ut.cpp

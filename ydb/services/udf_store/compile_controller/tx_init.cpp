@@ -4,11 +4,12 @@
 
 namespace NKikimr::NUdfStore {
 
-class TWasmCompileController::TTxInit : public TTxBase {
+class TWasmCompileController::TTxInit: public TTxBase {
 public:
     explicit TTxInit(TWasmCompileController* self)
         : TTxBase("TxInit", self)
-    {}
+    {
+    }
 
     TTxType GetTxType() const override {
         return TXTYPE_INIT;
@@ -22,8 +23,7 @@ public:
         auto workers = db.Table<Schema::Workers>().Range().Select();
         auto assignments = db.Table<Schema::Assignments>().Range().Select();
         auto attempts = db.Table<Schema::Attempts>().Range().Select();
-        if (!sysParams.IsReady() || !workers.IsReady()
-            || !assignments.IsReady() || !attempts.IsReady())
+        if (!sysParams.IsReady() || !workers.IsReady() || !assignments.IsReady() || !attempts.IsReady())
         {
             return false;
         }
@@ -74,8 +74,7 @@ public:
             TAssignment assignment{
                 .AssignmentId = assignments.GetValue<Schema::Assignments::AssignmentId>(),
                 .NodeId = assignments.GetValue<Schema::Assignments::NodeId>(),
-                .Deadline = TInstant::Seconds(
-                    assignments.GetValue<Schema::Assignments::DeadlineSeconds>()),
+                .Deadline = TInstant::Seconds(assignments.GetValue<Schema::Assignments::DeadlineSeconds>()),
                 .Generation = assignments.GetValue<Schema::Assignments::Generation>(),
                 // This leader has only just learned of the assignment, so the
                 // worker gets the usual grace to re-declare it in a heartbeat
@@ -120,4 +119,4 @@ void TWasmCompileController::RunTxInit(const TActorContext& ctx) {
     Execute(new TTxInit(this), ctx);
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

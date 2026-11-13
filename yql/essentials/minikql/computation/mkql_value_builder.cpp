@@ -4,6 +4,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
 #include <library/cpp/yson/node/node_io.h>
 
@@ -25,6 +26,16 @@ TDefaultValueBuilder::TDefaultValueBuilder(const THolderFactory& holderFactory, 
     , PgBuilder_(NYql::CreatePgBuilder())
 {
 }
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 48)
+NUdf::TUnboxedValue TDefaultValueBuilder::ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePod value) const {
+    return NMiniKQL::ValueToString(type, value);
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef value) const {
+    return NMiniKQL::ValueFromString(type, value);
+}
+#endif
 
 void TDefaultValueBuilder::SetSecureParamsProvider(const NUdf::ISecureParamsProvider* provider) {
     SecureParamsProvider_ = provider;

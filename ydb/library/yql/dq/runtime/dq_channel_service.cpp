@@ -338,7 +338,9 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
             Aggregator->UpdateCount(FillLevel, fillLevel);
         }
         FillLevel = fillLevel;
-        NotifyOutput(Queue.empty() || Finished.load());
+        // HardLimit -> SoftLimit and SoftLimit -> NoLimit can unblock different consumers.
+        // The first notification must not suppress the second one if the producer is still waiting.
+        NotifyOutput(true);
     } else if (Queue.empty() || Finished.load())  {
         NotifyOutput(true);
     }
@@ -381,7 +383,7 @@ void TLocalBuffer::StorageWakeupHandler() {
             Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
         }
         FillLevel = EDqFillLevel::SoftLimit;
-        NotifyOutput(false);
+        NotifyOutput(true);
     }
 
     ui32 chunksLoaded = 0;
@@ -718,7 +720,7 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
         return;
     }
 
-    bool flushed = false;
+    bool notifyOutput = false;
 
     {
         std::lock_guard lock(FlowControlMutex);
@@ -731,11 +733,12 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
             ReloadSpilled(nodeState, self);
         }
 
-        if (!RecalcFillLevel() && PushBytes.load() > RemotePopBytes.load()) {
+        const bool fillLevelChanged = RecalcFillLevel();
+        if (!fillLevelChanged && PushBytes.load() > RemotePopBytes.load()) {
             return;
         }
 
-        flushed = PushBytes.load() == RemotePopBytes.load();
+        const bool flushed = PushBytes.load() == RemotePopBytes.load();
         // what is still in the storage is a checkpoint after the finish, or the confirmation of the finish
         if (flushed && FinishPushed.load() && IsStorageEmpty()) {
             LOG_T(nodeState->LogPrefix << "OD FINISH, ChannelId=" << Info.ChannelId
@@ -747,9 +750,12 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
                 (*FinishEpoch)++;
             }
         }
+        // A producer woken at SoftLimit may still need a notification when the window reopens.
+        // Clear the flag under the same lock as PushDataChunk, so a later push can arm it again.
+        notifyOutput = NeedToNotifyOutput.exchange(false) || fillLevelChanged || flushed;
     }
 
-    if (NeedToNotifyOutput.exchange(false) || flushed) {
+    if (notifyOutput) {
         ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     }
 }
@@ -893,9 +899,8 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
             Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
         }
         FillLevel = EDqFillLevel::SoftLimit;
-        if (NeedToNotifyOutput.exchange(false)) {
-            ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
-        }
+        NeedToNotifyOutput.store(false);
+        ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     }
 
     DrainLoadingQueue(nodeState, self);
@@ -2129,8 +2134,12 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                         StartReconciliation(false, 'R');
                         return;
                     }
-                    Y_DEBUG_ABORT_UNLESS(Reconciliation.load() != 0, "%s, a discovery reply outside a reconciliation", LogPrefix.c_str());
-                    LOG_D(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo << " confirmed by discovery");
+                    // a retried discovery is answered twice, the 2nd reply may come after the reconciliation
+                    if (Reconciliation.load()) {
+                        LOG_D(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo << " confirmed by discovery");
+                    } else {
+                        LOG_W(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo << " confirmed by a late discovery reply");
+                    }
                 }
 
                 // The progress of a channel comes with TEvChannelUpdateV2 only, EarlyFinished and PopBytes of the

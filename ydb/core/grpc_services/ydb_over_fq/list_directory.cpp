@@ -8,12 +8,9 @@
 
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
-class ListDirectoryRPC
-    : public TRpcBase<
-        ListDirectoryRPC, Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse> {
+class ListDirectoryRPC: public TRpcBase<ListDirectoryRPC, Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse> {
 public:
-    using TBase = TRpcBase<
-        ListDirectoryRPC, Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse>;
+    using TBase = TRpcBase<ListDirectoryRPC, Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse>;
     static constexpr std::string_view RpcName = "ListDirectory";
 
     using TBase::TBase;
@@ -83,4 +80,4 @@ std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> Ge
         f.RegisterActor(new ListDirectoryRPC(p.release(), grpcProxyId));
     };
 }
-}
+}   // namespace NKikimr::NGRpcService::NYdbOverFq

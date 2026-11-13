@@ -997,3 +997,61 @@ def test_multidict_shrink_regression() -> None:
     # Verify new entries
     for i in range(50):
         assert md[f"new{i}"] == f"val{i}"
+
+
+def test_add_many_duplicate_keys(
+    any_multidict_class: type[MultiDict[str]],
+) -> None:
+    md = any_multidict_class()
+    expected = []
+    for i in range(1000):
+        for key in ("a", "b", f"k{i}"):
+            md.add(key, str(i))
+            expected.append((key, str(i)))
+
+    assert list(md.items()) == expected
+    assert md.getall("a") == [str(i) for i in range(1000)]
+    assert md["k999"] == "999"
+
+    copied = md.copy()
+    for i in range(1000, 1500):
+        copied.add("a", str(i))
+    assert copied.getall("a") == [str(i) for i in range(1500)]
+    assert md.getall("a") == [str(i) for i in range(1000)]
+
+
+def test_add_many_duplicate_keys_after_delete(
+    any_multidict_class: type[MultiDict[str]],
+) -> None:
+    md = any_multidict_class([("a", str(i)) for i in range(1000)])
+    for i in range(200):
+        assert md.popone("a") == str(i)
+    for i in range(1000, 1500):
+        md.add("a", str(i))
+    assert md.getall("a") == [str(i) for i in range(200, 1500)]
+
+    md.update([("a", str(-i)) for i in range(1300)])
+    assert md.getall("a") == [str(-i) for i in range(1300)]
+
+
+def test_create_with_many_duplicate_keys(
+    any_multidict_class: type[MultiDict[str]],
+) -> None:
+    values = [str(i) for i in range(25000)]
+    md = any_multidict_class([("a", v) for v in values])
+    assert md.getall("a") == values
+
+
+@pytest.mark.skipif(
+    sys.implementation.name == "pypy",
+    reason="getsizeof() is not implemented on PyPy",
+)
+def test_duplicate_key_hints_only_allocated_when_needed(
+    any_multidict_class: type[MultiDict[str]],
+) -> None:
+    distinct = any_multidict_class([(f"k{i}", "v") for i in range(5000)])
+    duplicates = any_multidict_class([("a", "v")] * 5000)
+    # copy() drops the hints, compare what it drops for both
+    distinct_drop = sys.getsizeof(distinct) - sys.getsizeof(distinct.copy())
+    duplicates_drop = sys.getsizeof(duplicates) - sys.getsizeof(duplicates.copy())
+    assert duplicates_drop > distinct_drop

@@ -8,24 +8,6 @@ using namespace NKikimr::NKqp;
 
 namespace {
 
-template <class TTransform>
-TExprNode::TPtr TransformInputStage(TExprNode::TPtr input, TTransform&& transform, const IOperator& producer, TExprContext& ctx) {
-    // Special case for row tables.
-    if (TDqPhyStage::Match(input.Get())) {
-        const auto program = TDqPhyStage(input).Program().Ptr();
-        return ctx.ChangeChild(*input, TDqPhyStage::idx_Program, ctx.ChangeChild(*program, 1,
-            TransformInputStage(program->TailPtr(), transform, producer, ctx)));
-    }
-    if (producer.Kind == EOperator::Replicate && input->IsCallable("Switch")) {
-        Y_ENSURE(producer.Props.StageOutputIndex);
-        // Switch(input, buffer, [input indexes], lambda, ...).
-        const auto index = 3 + 2 * *producer.Props.StageOutputIndex;
-        const auto branch = input->ChildPtr(index);
-        return ctx.ChangeChild(*input, index, ctx.ChangeChild(*branch, 1, transform(branch->TailPtr())));
-    }
-    return transform(input);
-}
-
 TCoNameValueTuple BuildMemberTuple(const TString& name, const TString& sourceName, const TExprBase& row, TExprContext& ctx,
                                    TPositionHandle pos) {
     // clang-format off
@@ -69,9 +51,9 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
             columns.emplace_back(names.Get(id), column);
             types.push_back(ctx.MakeType<TItemExprType>(column, input.GetIUType(id, ctx)));
         }
-        auto stage = TransformInputStage(inputStage, [&](TExprNode::TPtr body) {
+        auto stage = NPhysicalConvertionUtils::TransformStageOutput(inputStage, [&](TExprNode::TPtr body) {
             return NPhysicalConvertionUtils::BuildRenameMap(body, columns, ctx);
-        }, input, ctx);
+        }, GetReplicateOutputIndex(input), ctx);
         auto type = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(types));
         return {std::move(stage), NYql::ExpandType(pos, *type, ctx)};
     }
@@ -221,7 +203,7 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
         // clang-format on
     };
 
-    const auto newInputStage = TransformInputStage(inputStage, buildKeys, input, ctx);
+    const auto newInputStage = NPhysicalConvertionUtils::TransformStageOutput(inputStage, buildKeys, GetReplicateOutputIndex(input), ctx);
 
     // Tuple: (left row, lookup key).
     const TTypeAnnotationNode::TListType tupleItems{
@@ -232,7 +214,35 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
 
     YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical lookup join keys] " << KqpExprToPrettyString(TExprBase(newInputStage), ctx);
 
-    return {newInputStage, NYql::ExpandType(pos, *keysType, ctx)};
+    return {newInputStage, NYql::ExpandType(pos, *keysType, ctx), ctx.MakeType<TStructExprType>(leftItems)};
+}
+
+TExprNode::TPtr BuildKeysFromInputLookupType(const TOpTableLookup& inputLookup, const TStructExprType* leftRowType,
+                                             const TPhysicalNames& names, const TInfoUnitRegistry& registry, TExprContext& ctx) {
+    Y_ENSURE(inputLookup.IsJoin(), "Keys are taken from a table lookup in join mode only");
+    Y_ENSURE(leftRowType, "Type of the left rows of the input lookup is not available");
+    Y_ENSURE(inputLookup.Type, "Type of the input lookup is not available");
+
+    // The logical type of the input lookup names fetched columns by display name, the stream lookup
+    // returns them by storage name.
+    const auto* tupleType = inputLookup.Type->Cast<TListExprType>()->GetItemType()->Cast<TTupleExprType>();
+    const auto* fetchedRowType = tupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<const TItemExprType*> keyItems;
+    for (const auto id : inputLookup.GetColumns()) {
+        // The logical type of a lookup names its fetched columns by information-unit ID.
+        const auto* type = fetchedRowType->FindItemType(ToString(id));
+        Y_ENSURE(type, "Type of the fetched column " << names.Get(id) << " is not available");
+        keyItems.push_back(ctx.MakeType<TItemExprType>(registry.Get(id).GetColumnName(), type));
+    }
+
+    // Tuple: (left row, lookup key, cookie).
+    const TTypeAnnotationNode::TListType tupleItems{
+        leftRowType,
+        ctx.MakeType<TOptionalExprType>(ctx.MakeType<TStructExprType>(keyItems)),
+        ctx.MakeType<TDataExprType>(EDataSlot::Uint64),
+    };
+    const auto* keysType = ctx.MakeType<TListExprType>(ctx.MakeType<TTupleExprType>(tupleItems));
+    return NYql::ExpandType(inputLookup.Pos, *keysType, ctx);
 }
 
 } // namespace NKikimr::NKqp::NLookupJoinBuilder

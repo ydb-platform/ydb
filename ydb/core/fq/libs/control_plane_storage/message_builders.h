@@ -1,14 +1,13 @@
 #pragma once
 
-#include <util/datetime/base.h>
-
-#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/public/api/protos/draft/fq.pb.h>
-
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
+
 #include <library/cpp/protobuf/interop/cast.h>
+#include <util/datetime/base.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NFq {
 
@@ -450,13 +449,8 @@ public:
     }
 
     template <typename TConnection>
-    TCreateConnectionBuilder& CreateGeneric(
-        TConnection& conn,
-        const TString& databaseId,
-        const TString& login,
-        const TString& password,
-        const TString& serviceAccount,
-        const TString& databaseName)
+    TCreateConnectionBuilder& CreateGeneric(TConnection& conn, const TString& databaseId, const TString& login, const TString& password,
+        const TString& serviceAccount, const TString& databaseName)
     {
         // auto& ch = *Request.mutable_content()->mutable_setting()->mutable_clickhouse_cluster();
         if (serviceAccount) {
@@ -609,7 +603,8 @@ public:
         return *this;
     }
 
-    TModifyConnectionBuilder& CreateClickHouse(const TString& databaseId, const TString& login, const TString& password, const TString& serviceAccount)
+    TModifyConnectionBuilder& CreateClickHouse(
+        const TString& databaseId, const TString& login, const TString& password, const TString& serviceAccount)
     {
         auto& ch = *Request.mutable_content()->mutable_setting()->mutable_clickhouse_cluster();
         if (serviceAccount) {
@@ -1185,9 +1180,11 @@ public:
         return *this;
     }
 
-    TPingTaskBuilder& AddCreatedConsumer(const TString& databaseId, const TString& database, const TString& topicPath, const TString& consumerName, const TString& clusterEndpoint, bool useSsl)
+    TPingTaskBuilder& AddCreatedConsumer(const TString& databaseId, const TString& database, const TString& topicPath,
+        const TString& consumerName, const TString& clusterEndpoint, bool useSsl)
     {
-        CreatedTopicConsumers.emplace_back(NFq::TEvControlPlaneStorage::TTopicConsumer{databaseId, database, topicPath, consumerName, clusterEndpoint, useSsl, "", false});
+        CreatedTopicConsumers.emplace_back(
+            NFq::TEvControlPlaneStorage::TTopicConsumer{ databaseId, database, topicPath, consumerName, clusterEndpoint, useSsl, "", false });
         return *this;
     }
 
@@ -1209,7 +1206,7 @@ public:
         return *this;
     }
 
-std::unique_ptr<NFq::TEvControlPlaneStorage::TEvPingTaskRequest> Build()
+    std::unique_ptr<NFq::TEvControlPlaneStorage::TEvPingTaskRequest> Build()
     {
         Fq::Private::PingTaskRequest request;
         request.set_owner_id(Owner);
@@ -1284,7 +1281,8 @@ class TNodesHealthCheckBuilder {
 
 public:
     TNodesHealthCheckBuilder()
-    {}
+    {
+    }
 
     TNodesHealthCheckBuilder& SetTenantName(const TString& tenantName)
     {
@@ -1396,7 +1394,9 @@ public:
     }
 };
 
-using TCreateRateLimiterResourceBuilder = TRateLimiterResourceBuilderImpl<NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest, Fq::Private::CreateRateLimiterResourceRequest>;
-using TDeleteRateLimiterResourceBuilder = TRateLimiterResourceBuilderImpl<NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest, Fq::Private::DeleteRateLimiterResourceRequest>;
+using TCreateRateLimiterResourceBuilder = TRateLimiterResourceBuilderImpl<NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest,
+    Fq::Private::CreateRateLimiterResourceRequest>;
+using TDeleteRateLimiterResourceBuilder = TRateLimiterResourceBuilderImpl<NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest,
+    Fq::Private::DeleteRateLimiterResourceRequest>;
 
-}
+}   // namespace NFq

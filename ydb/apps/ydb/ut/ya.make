@@ -20,7 +20,6 @@ SRCS(
     export.cpp
     import.cpp
     mock_env.cpp
-    parse_command_line.cpp
     run_ydb.cpp
     sql_resource_pool.cpp
     supported_codecs.cpp
@@ -34,6 +33,7 @@ PEERDIR(
     contrib/libs/grpc
     contrib/libs/fmt
     contrib/libs/jwt-cpp
+    library/cpp/json
     library/cpp/json/writer
     ydb/core/security/certificate_check/test_utils
     ydb/core/wrappers/ut_helpers
@@ -47,3 +47,7 @@ PEERDIR(
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 END()
+
+RECURSE(
+    auth
+)

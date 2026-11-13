@@ -1,0 +1,176 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(winnow)
+
+CRATE_VERSION(1.0.4)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    examples/css/parser.rs
+    src/_topic/arithmetic.rs
+    src/_topic/error.rs
+    src/_topic/fromstr.rs
+    src/_topic/http.rs
+    src/_topic/ini.rs
+    src/_topic/json.rs
+    src/_topic/language.rs
+    src/_topic/lexing.rs
+    src/_topic/mod.rs
+    src/_topic/nom.rs
+    src/_topic/partial.rs
+    src/_topic/performance.rs
+    src/_topic/s_expression.rs
+    src/_topic/stream.rs
+    src/_topic/why.rs
+    src/_tutorial/chapter_0.rs
+    src/_tutorial/chapter_1.rs
+    src/_tutorial/chapter_2.rs
+    src/_tutorial/chapter_3.rs
+    src/_tutorial/chapter_4.rs
+    src/_tutorial/chapter_5.rs
+    src/_tutorial/chapter_6.rs
+    src/_tutorial/chapter_7.rs
+    src/_tutorial/chapter_8.rs
+    src/_tutorial/mod.rs
+    src/ascii/caseless.rs
+    src/ascii/mod.rs
+    src/ascii/tests.rs
+    src/binary/bits/mod.rs
+    src/binary/bits/stream.rs
+    src/binary/bits/tests.rs
+    src/binary/mod.rs
+    src/binary/tests.rs
+    src/combinator/branch.rs
+    src/combinator/core.rs
+    src/combinator/debug/internals.rs
+    src/combinator/debug/mod.rs
+    src/combinator/expression.rs
+    src/combinator/impls.rs
+    src/combinator/mod.rs
+    src/combinator/multi.rs
+    src/combinator/sequence.rs
+    src/combinator/tests.rs
+    src/error.rs
+    src/macros/dispatch.rs
+    src/macros/mod.rs
+    src/macros/seq.rs
+    src/macros/tests.rs
+    src/macros/unordered_seq.rs
+    src/parser.rs
+    src/stream/bstr.rs
+    src/stream/bytes.rs
+    src/stream/locating.rs
+    src/stream/mod.rs
+    src/stream/partial.rs
+    src/stream/range.rs
+    src/stream/recoverable.rs
+    src/stream/stateful.rs
+    src/stream/tests.rs
+    src/stream/token.rs
+    src/token/mod.rs
+    src/token/tests.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    Cargo.lock
+    LICENSE-MIT
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+LICENSE("MIT")
+VERSION(1.0.4)
+ORIGINAL_SOURCE(https://static.crates.io/crates/winnow/winnow-1.0.4.crate)
+
+CRATE_SOURCES(
+    examples/arithmetic/parser.rs
+    examples/arithmetic/parser_ast.rs
+    examples/arithmetic/parser_lexer.rs
+    examples/c_expression/parser.rs
+    examples/css/parser.rs
+    examples/custom_error.rs
+    examples/http/parser.rs
+    examples/ini/parser.rs
+    examples/json/parser_dispatch.rs
+    examples/ndjson/main.rs
+    examples/ndjson/parser.rs
+    examples/s_expression/parser.rs
+    examples/string/parser.rs
+)
+
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/_topic/arithmetic.rs
+    src/_topic/error.rs
+    src/_topic/fromstr.rs
+    src/_topic/http.rs
+    src/_topic/ini.rs
+    src/_topic/json.rs
+    src/_topic/language.rs
+    src/_topic/lexing.rs
+    src/_topic/mod.rs
+    src/_topic/nom.rs
+    src/_topic/partial.rs
+    src/_topic/performance.rs
+    src/_topic/s_expression.rs
+    src/_topic/stream.rs
+    src/_topic/why.rs
+    src/_tutorial/chapter_0.rs
+    src/_tutorial/chapter_1.rs
+    src/_tutorial/chapter_2.rs
+    src/_tutorial/chapter_3.rs
+    src/_tutorial/chapter_4.rs
+    src/_tutorial/chapter_5.rs
+    src/_tutorial/chapter_6.rs
+    src/_tutorial/chapter_7.rs
+    src/_tutorial/chapter_8.rs
+    src/_tutorial/mod.rs
+    src/ascii/caseless.rs
+    src/ascii/mod.rs
+    src/ascii/tests.rs
+    src/binary/bits/mod.rs
+    src/binary/bits/stream.rs
+    src/binary/bits/tests.rs
+    src/binary/mod.rs
+    src/binary/tests.rs
+    src/combinator/branch.rs
+    src/combinator/core.rs
+    src/combinator/debug/internals.rs
+    src/combinator/debug/mod.rs
+    src/combinator/expression.rs
+    src/combinator/impls.rs
+    src/combinator/mod.rs
+    src/combinator/multi.rs
+    src/combinator/sequence.rs
+    src/combinator/tests.rs
+    src/error.rs
+    src/lib.rs
+    src/macros/dispatch.rs
+    src/macros/mod.rs
+    src/macros/seq.rs
+    src/macros/tests.rs
+    src/macros/unordered_seq.rs
+    src/parser.rs
+    src/stream/bstr.rs
+    src/stream/bytes.rs
+    src/stream/locating.rs
+    src/stream/mod.rs
+    src/stream/partial.rs
+    src/stream/range.rs
+    src/stream/recoverable.rs
+    src/stream/stateful.rs
+    src/stream/tests.rs
+    src/stream/token.rs
+    src/token/mod.rs
+    src/token/tests.rs
+)
+
+END()

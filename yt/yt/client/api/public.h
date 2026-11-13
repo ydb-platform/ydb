@@ -28,7 +28,7 @@ namespace NYT::NApi {
 ////////////////////////////////////////////////////////////////////////////////
 
 using TClusterTag = NObjectClient::TCellTag;
-using TStrongOrderingTagsMap = THashMap<NObjectClient::TCellId, std::vector<std::string>>;
+using TCellIdToStrongOrderingTagSet = THashMap<NObjectClient::TCellId, THashSet<std::string>>;
 
 // Keep in sync with NRpcProxy::NProto::EMasterReadKind.
 // On cache miss request is redirected to next level as follows:
@@ -147,6 +147,9 @@ struct TTabletRangeOptions;
 
 struct TGetFileFromCacheResult;
 struct TPutFileToCacheResult;
+
+struct TTableReaderTimingStatistics;
+struct TRemoteTableReaderTimingStatistics;
 
 struct TGetCurrentUserOptions;
 struct TGetJobStderrOptions;

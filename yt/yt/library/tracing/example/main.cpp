@@ -123,6 +123,13 @@ int main(int argc, char* argv[])
         config->ServiceName = "example";
         config->ProcessTags["host"] = "prime-dev.qyp.yandex-team.ru";
         config->TvmService = test ? GetTvmMockConfig() : GetTvmConfig();
+        if (test) {
+            config->CollectorHeaders = {
+                {"x-wl-monium-project", "test-project"},
+                {"x-wl-monium-cluster", "test-cluster"},
+                {"x-wl-monium-service", "test-service"},
+            };
+        }
 
         auto jaeger = New<NTracing::TJaegerTracer>(config);
         SetGlobalTracer(jaeger);

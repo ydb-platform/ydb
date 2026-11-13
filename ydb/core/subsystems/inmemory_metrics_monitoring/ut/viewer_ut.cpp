@@ -93,11 +93,14 @@ Y_UNIT_TEST_SUITE(TInMemoryMetricsViewerTest) {
     }
 
     Y_UNIT_TEST(HistoryIsBoundedAndNonfiniteIsNull) {
-        TInMemoryMetricsBackend backend({.MemoryBytes = 256 * 1024, .ChunkSizeBytes = 64 * 1024, .MaxLines = 2});
+        TInMemoryMetricsBackend backend({.MemoryBytes = 4 * 1024 * 1024, .ChunkSizeBytes = 64 * 1024, .MaxLines = 2});
         auto line = backend.CreateLine<TRawLineFrontend<double>>("number", {});
         Pump(&backend);
         for (size_t i = 0; i < MaxHistoryPoints + 10; ++i) {
-            UNIT_ASSERT(line.Append(static_cast<double>(i)));
+            if (!line.Append(static_cast<double>(i))) {
+                Pump(&backend);
+                UNIT_ASSERT(line.Append(static_cast<double>(i)));
+            }
         }
         UNIT_ASSERT(line.Append(std::numeric_limits<double>::quiet_NaN()));
         const auto json = Json(backend.CaptureSnapshot(), backend);

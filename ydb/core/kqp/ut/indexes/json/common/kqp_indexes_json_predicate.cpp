@@ -1616,7 +1616,7 @@ private:
                     bld.AddParam(pn).Json(R"(["v"])").Build();
                 },
                 "Error executing jsonpath",
-                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters");
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics");
         }
 
         if (Opts.EnableJsonValue) {
@@ -1629,7 +1629,7 @@ private:
                     bld.AddParam(pn).Json(R"(["v"])").Build();
                 },
                 "Error executing jsonpath",
-                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters");
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics");
 
             pn = NewPname();
             vn = pn.substr(1);
@@ -1640,7 +1640,7 @@ private:
                     bld.AddParam(pn).Json("[]").Build();
                 },
                 "",
-                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters");
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics");
         }
     }
 

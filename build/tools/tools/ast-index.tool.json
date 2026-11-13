@@ -1,0 +1,6 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Fast code search for Android/Kotlin/Java, iOS/Swift/ObjC, TypeScript, Rust, Ruby, C#, Python, Go, C++, Perl, Proto projects"
+    }
+}

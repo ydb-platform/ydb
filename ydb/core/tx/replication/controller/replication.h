@@ -9,6 +9,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -46,7 +47,8 @@ public:
         Done,
         Removing,
         Paused,
-        Attaching,
+        Attaching, // Deprecated.
+        WaitingImport,
         Error = Max<ui8>()
     };
 
@@ -91,10 +93,11 @@ public:
         virtual EDstState GetDstState() const = 0;
         virtual void SetDstState(const EDstState value) = 0;
 
+        virtual bool IsExpectedDstCreator(const TActorId& actorId) const = 0;
+        virtual bool IsExpectedDstAlterer(const TActorId& actorId) const = 0;
+
         virtual const TPathId& GetDstPathId() const = 0;
         virtual void SetDstPathId(const TPathId& value) = 0;
-        virtual const TPathId& GetPendingDstPathId() const = 0;
-        virtual void SetPendingDstPathId(const TPathId& value) = 0;
 
         virtual const TString& GetStreamName() const = 0;
         virtual void SetStreamName(const TString& value) = 0;
@@ -104,6 +107,7 @@ public:
 
         virtual EStreamState GetStreamState() const = 0;
         virtual void SetStreamState(EStreamState value) = 0;
+        virtual bool IsExpectedStreamCreator(const TActorId& actorId) const = 0;
 
         virtual std::optional<bool> GetStreamSchemaChanges() const = 0;
         virtual void SetStreamSchemaChanges(bool value) = 0;
@@ -115,6 +119,7 @@ public:
         virtual void RemoveWorker(ui64 id) = 0;
         virtual TVector<ui64> GetWorkers() const = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
+        virtual void InvalidateLag(ui64 workerId) = 0;
         virtual const std::optional<TDuration> GetLag() const = 0;
 
         virtual bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
@@ -133,7 +138,7 @@ public:
     friend class TTargetBase;
     void AddPendingAlterTarget(ui64 id);
     void RemovePendingAlterTarget(ui64 id);
-    void UpdateLag(ui64 targetId, TDuration lag);
+    void UpdateLag(ui64 targetId, std::optional<TDuration> lag);
 
     struct TDropOp {
         TActorId Sender;
@@ -154,12 +159,17 @@ public:
     TVector<ITarget*> GetTargets() const;
     TVector<TString> GetTargetTablePaths() const;
 
+    bool IsExpectedTargetDiscoverer(const TActorId& actorId) const;
+    void FinishTargetDiscovery();
+
     void Progress(const TActorContext& ctx);
     void Shutdown(const TActorContext& ctx);
 
     ui64 GetId() const;
     const TPathId& GetPathId() const;
     const TActorId& GetYdbProxy() const;
+    void AddTargetDescriber(const TActorId& actorId);
+    void RemoveTargetDescriber(const TActorId& actorId);
     ui64 GetSchemeShardId() const;
     void SetConfig(NKikimrReplication::TReplicationConfig&& config);
     void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location);
@@ -171,15 +181,18 @@ public:
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
     const std::optional<TDuration> GetLag() const;
+    void SetLagChangedCallback(std::function<void()> callback);
     const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;
 
+    bool IsCredentialsReady() const;
     void UpdateSecret(const TString& secretValue);
-    ui64 GetExpectedSecretResolverCookie() const;
+    bool IsExpectedSecretResolver(const TActorId& actorId, ui64 cookie) const;
 
     void UpdateResourceId(const TString& value);
+    bool IsExpectedResourceIdResolver(const TActorId& actorId) const;
 
     void SetDatabase(const TString& value);
     const TString& GetDatabase() const;

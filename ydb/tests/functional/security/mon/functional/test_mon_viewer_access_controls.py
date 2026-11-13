@@ -7,6 +7,7 @@ import requests
 
 from ydb.tests.functional.security.lib.cluster_config import create_ydb_configurator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.common.wait_for import retry_assertions
 from ydb.tests.functional.security.lib.security_test_helpers import (
     DATABASE,
     grant_describe_schema_provided,
@@ -82,6 +83,58 @@ def _build_topic_path(endpoint, with_database_cgi):
     )
 
 
+@pytest.mark.parametrize('use_hive_tablets', ('false', 'true'))
+def test_storage_stats_hides_foreign_serverless_tablets(serverless_storage_databases, use_hive_tablets):
+    databases = serverless_storage_databases
+    base = databases['base']
+
+    def storage_stats(database, token='root@builtin', **params):
+        response = requests.get(
+            base + '/viewer/storage_stats',
+            params={'database': database, 'everything': 'true', 'debug': 'true', **params},
+            headers={'Authorization': token},
+            verify=False,
+            timeout=60,
+        )
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert not result.get('Problems'), result
+        return result
+
+    # Verify the precondition: both databases have live tablets with blobs in the same storage groups.
+    tables = {}
+
+    def wait_for_shared_storage():
+        for name in ('own', 'foreign'):
+            table = storage_stats(databases[name], path='data')['Paths'][0]
+            assert table['Tablets'] and table['StorageSize'] > 0, table
+            tables[name] = table
+        own_groups = {group['GroupId'] for group in tables['own']['Groups']}
+        foreign_groups = {group['GroupId'] for group in tables['foreign']['Groups']}
+        assert own_groups & foreign_groups, tables
+
+    retry_assertions(wait_for_shared_storage)
+    own_ids = {tablet['TabletId'] for tablet in tables['own']['Tablets']}
+    foreign_ids = {tablet['TabletId'] for tablet in tables['foreign']['Tablets']}
+    assert own_ids.isdisjoint(foreign_ids), (
+        f'Test databases must have distinct tablets: own={own_ids}, foreign={foreign_ids}'
+    )
+
+    def get_stats_with_own_tablets():
+        result = storage_stats(
+            databases['own'], 'database@builtin', group_by='tablet_type', use_hive_tablets=use_hive_tablets,
+        )
+        tablet_ids = {tablet_id for entry in result['Tablets'] for tablet_id in entry['TabletIds']}
+        assert own_ids <= tablet_ids, result
+        own_data = next(entry for entry in result['Tablets'] if own_ids & set(entry['TabletIds']))
+        assert own_data['StorageSize'] > 0 and own_data['Groups'], result
+        return result
+
+    result = retry_assertions(get_stats_with_own_tablets)
+    tablet_ids = {tablet_id for entry in result['Tablets'] for tablet_id in entry['TabletIds']}
+    assert foreign_ids.isdisjoint(tablet_ids), result
+
+
 @pytest.fixture
 def topic_created(mon_base_url_with_extra_sids_control):
     with with_topic(mon_base_url_with_extra_sids_control, TOPIC_NAME):
@@ -108,6 +161,40 @@ def test_viewer_config_access_controls(mon_base_url_with_extra_sids_control):
         _assert_status(mon_base_url_with_extra_sids_control, ep, 'viewer@builtin', 200)
         _assert_status(mon_base_url_with_extra_sids_control, ep, 'monitoring@builtin', 200)
         _assert_status(mon_base_url_with_extra_sids_control, ep, 'root@builtin', 200)
+
+
+def test_empty_monitoring_sids_only_allows_administrators(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+    )
+    security = configurator.yaml_config['domains_config']['security_config']
+    security['database_allowed_sids'] = ['database@builtin']
+    security['viewer_allowed_sids'] = ['viewer@builtin']
+    security['monitoring_allowed_sids'] = []
+    security['administration_allowed_sids'] = ['root@builtin']
+
+    cluster = KiKiMR(configurator)
+    try:
+        cluster.start()
+        base_url = mon_base_url(cluster)
+        wait_for_viewer_ready(base_url)
+
+        viewer_path = '/viewer/cluster'
+        _assert_status(base_url, viewer_path, None, 401)
+        _assert_status(base_url, viewer_path, 'database@builtin', 403)
+        _assert_status(base_url, viewer_path, 'viewer@builtin', 200)
+        _assert_status(base_url, viewer_path, 'root@builtin', 200)
+
+        monitoring_path = '/tablets'
+        # Empty monitoring_allowed_sids list doesn't provide access to any valid token for monitoring endpoints.
+        # Endpoints requiring monitoring-level access are accessible only to administrators in this case.
+        _assert_status(base_url, monitoring_path, None, 401)
+        _assert_status(base_url, monitoring_path, 'database@builtin', 403)
+        _assert_status(base_url, monitoring_path, 'viewer@builtin', 403)
+        _assert_status(base_url, monitoring_path, 'root@builtin', 200)
+    finally:
+        cluster.stop()
 
 
 def test_viewer_v2_aliases_access_controls(mon_base_url_with_extra_sids_control, describe_schema_grants):

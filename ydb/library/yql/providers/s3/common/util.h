@@ -1,8 +1,8 @@
 #pragma once
 
 #include <util/string/builder.h>
-#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NYql::NS3Util {
 
@@ -14,7 +14,8 @@ TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues);
 // '#', '?'
 TString UrlEscapeRet(const TStringBuf from);
 
-bool ValidateS3ReadSchema(TPositionHandle pos, std::string_view format, const TStructExprType* schemaStructRowType, bool enableCoroReadActor, TExprContext& ctx);
+bool ValidateS3ReadSchema(
+    TPositionHandle pos, std::string_view format, const TStructExprType* schemaStructRowType, bool enableCoroReadActor, TExprContext& ctx);
 bool ValidateS3WriteSchema(TPositionHandle pos, std::string_view format, const TStructExprType* schemaStructRowType, TExprContext& ctx);
 
 class TUrlBuilder {
@@ -35,4 +36,4 @@ private:
     TString MainUri;
 };
 
-}
+}   // namespace NYql::NS3Util

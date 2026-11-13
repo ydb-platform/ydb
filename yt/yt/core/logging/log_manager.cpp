@@ -21,6 +21,7 @@
 #include <yt/yt/core/concurrency/thread_pool.h>
 
 #include <yt/yt/core/misc/collection_helpers.h>
+#include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/inotify.h>
 #include <yt/yt/core/misc/spsc_queue.h>
@@ -50,10 +51,9 @@
 #include <library/cpp/yt/misc/tls.h>
 
 
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 #include <library/cpp/yt/system/handle_eintr.h>
 #include <library/cpp/yt/system/thread_id.h>
-
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/containers/expiring_set.h>
 
@@ -210,8 +210,8 @@ public:
         // Sync is done via event so there is no need for stronger memory orders.
         // Case of recursive call is alright, because there sync is done via sequenced-before ordering.
         if (InitializationStarted_.exchange(true, std::memory_order::relaxed)) [[likely]] {
-            NThreading::TThreadId initializerThreadId = NThreading::InvalidThreadId;
-            while (initializerThreadId == NThreading::InvalidThreadId) {
+            TThreadId initializerThreadId = InvalidThreadId;
+            while (initializerThreadId == InvalidThreadId) {
                 initializerThreadId = InitializerThreadId_.load(std::memory_order::relaxed);
             }
             if (GetSystemThreadId() == initializerThreadId) {
@@ -496,6 +496,11 @@ public:
 
     void Synchronize(TInstant deadline = TInstant::Max())
     {
+        ++PendingSynchronizationCount_;
+        auto guard = Finally([&] {
+            --PendingSynchronizationCount_;
+        });
+
         DequeueExecutor_->ScheduleOutOfBand();
         auto enqueuedEvents = EnqueuedEvents_.load();
         while (enqueuedEvents > FlushedEvents_.load() && TInstant::Now() < deadline) {
@@ -706,6 +711,7 @@ private:
                     .EnableSourceLocation = writerConfig->EnableSourceLocation,
                     .EnableSystemFields = writerConfig->EnableSystemFields,
                     .EnableHostField = writerConfig->EnableHostField,
+                    .EnableSpanIdField = writerConfig->EnableSpanIdField,
                     .EnableNativeTags = writerConfig->EnableNativeTags,
                     .JsonFormat = writerConfig->JsonFormat,
                     .YsonFormat = writerConfig->YsonFormat,
@@ -1167,14 +1173,15 @@ private:
 
         auto eventsWritten = ProcessTimeOrderedBuffer();
 
-        if (eventsWritten == 0) {
+        auto synchronizationPending = PendingSynchronizationCount_.load() > 0;
+        if (eventsWritten == 0 && !synchronizationPending) {
             return;
         }
 
         WrittenEvents_ += eventsWritten;
 
         auto config = Config_.Acquire();
-        if (!config->FlushPeriod || ShutdownRequested_) {
+        if (!config->FlushPeriod || ShutdownRequested_ || synchronizationPending) {
             FlushWriters();
         }
     }
@@ -1288,7 +1295,7 @@ private:
     }
 
 private:
-    const TIntrusivePtr<NThreading::TEventCount> EventCount_ = New<NThreading::TEventCount>();
+    const TIntrusivePtr<TEventCount> EventCount_ = New<TEventCount>();
     const TMpscInvokerQueuePtr EventQueue_;
     const TIntrusivePtr<TLoggingThread> LoggingThread_;
     const TShutdownCookie ShutdownCookie_ = RegisterShutdownCallback(
@@ -1301,7 +1308,7 @@ private:
     TAtomicIntrusivePtr<TLogManagerConfig> Config_;
 
     // Protects the section of members below.
-    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, SpinLock_);
     THashMap<std::string, std::unique_ptr<TLoggingCategory>> NameToCategory_;
     THashMap<std::string, ILogWriterFactoryPtr> TypeNameToWriterFactory_;
 
@@ -1318,8 +1325,8 @@ private:
     std::atomic<bool> AbortOnAlert_ = false;
 
     std::atomic<bool> InitializationStarted_ = false;
-    std::atomic<NThreading::TThreadId> InitializerThreadId_ = NThreading::InvalidThreadId;
-    NThreading::TEvent InitializationFinished_;
+    std::atomic<TThreadId> InitializerThreadId_ = InvalidThreadId;
+    TEvent InitializationFinished_;
 
     std::once_flag Started_;
     std::atomic<bool> Suspended_ = false;
@@ -1349,6 +1356,8 @@ private:
     std::atomic<ui64> FlushedEvents_ = 0;
     std::atomic<ui64> SuppressedEvents_ = 0;
     std::atomic<ui64> DroppedEvents_ = 0;
+
+    std::atomic<int> PendingSynchronizationCount_ = 0;
 
     THashMap<std::string, ILogWriterPtr> NameToWriter_;
     THashMap<TLogWriterCacheKey, std::vector<ILogWriterPtr>> KeyToCachedWriter_;

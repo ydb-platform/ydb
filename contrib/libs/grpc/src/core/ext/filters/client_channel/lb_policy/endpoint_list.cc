@@ -69,6 +69,9 @@ class EndpointList::Endpoint::Helper
       grpc_connectivity_state state, const y_absl::Status& status,
       RefCountedPtr<LoadBalancingPolicy::SubchannelPicker> picker) override {
     auto old_state = std::exchange(endpoint_->connectivity_state_, state);
+    if (!old_state.has_value()) {
+      ++endpoint_->endpoint_list_->num_endpoints_seen_initial_state_;
+    }
     endpoint_->picker_ = std::move(picker);
     endpoint_->OnStateUpdate(old_state, state, status);
   }
@@ -118,7 +121,7 @@ void EndpointList::Endpoint::Init(
   GPR_ASSERT(config.ok());
   // Update child policy.
   LoadBalancingPolicy::UpdateArgs update_args;
-  update_args.addresses.emplace().emplace_back(addresses);
+  update_args.addresses = std::make_shared<SingleEndpointIterator>(addresses);
   update_args.args = child_args;
   update_args.config = std::move(*config);
   // TODO(roth): If the child reports a non-OK status with the update,
@@ -163,28 +166,22 @@ RefCountedPtr<SubchannelInterface> EndpointList::Endpoint::CreateSubchannel(
 //
 
 void EndpointList::Init(
-    const EndpointAddressesList& endpoints, const ChannelArgs& args,
-    y_absl::AnyInvocable<OrphanablePtr<Endpoint>(RefCountedPtr<EndpointList>,
-                                               const EndpointAddresses&,
-                                               const ChannelArgs&)>
+    EndpointAddressesIterator* endpoints, const ChannelArgs& args,
+    y_absl::FunctionRef<OrphanablePtr<Endpoint>(RefCountedPtr<EndpointList>,
+                                              const EndpointAddresses&,
+                                              const ChannelArgs&)>
         create_endpoint) {
-  for (const EndpointAddresses& addresses : endpoints) {
+  if (endpoints == nullptr) return;
+  endpoints->ForEach([&](const EndpointAddresses& endpoint) {
     endpoints_.push_back(
-        create_endpoint(Ref(DEBUG_LOCATION, "Endpoint"), addresses, args));
-  }
+        create_endpoint(Ref(DEBUG_LOCATION, "Endpoint"), endpoint, args));
+  });
 }
 
 void EndpointList::ResetBackoffLocked() {
   for (const auto& endpoint : endpoints_) {
     endpoint->ResetBackoffLocked();
   }
-}
-
-bool EndpointList::AllEndpointsSeenInitialState() const {
-  for (const auto& endpoint : endpoints_) {
-    if (!endpoint->connectivity_state().has_value()) return false;
-  }
-  return true;
 }
 
 }  // namespace grpc_core

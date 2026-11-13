@@ -34,6 +34,21 @@ TExprNode::TPtr ExpandOptionalIf(const TExprNode::TPtr& node, TExprContext& ctx)
     return ctx.NewCallable(node->Pos(), "If", {node->HeadPtr(), std::move(item), std::move(empty)});
 }
 
+bool CanLiftSafeCastOptional(const TExprNode::TPtr& node) {
+    if (!node->IsCallable("SafeCast")) {
+        return false;
+    }
+    const auto source = node->Head().GetTypeAnn();
+    const auto target = node->GetTypeAnn();
+    if (!source || !target ||
+        RemoveAllOptionals(source)->GetKind() != ETypeAnnotationKind::Data ||
+        RemoveAllOptionals(target)->GetKind() != ETypeAnnotationKind::Data ||
+        GetOptionalLevel(source) >= GetOptionalLevel(target)) {
+        return false;
+    }
+    return !(CastResult<false>(source, target->Cast<TOptionalExprType>()->GetItemType()) & NUdf::ECastOptions::MayFail);
+}
+
 bool IsSqlScalar(const TTypeAnnotationNode* type) {
     return type && (IsDataOrOptionalOfData(type) || type->GetKind() == ETypeAnnotationKind::Null);
 }
@@ -333,7 +348,7 @@ TExprNode::TPtr ExpandScalarHasNull(
 TExprNode::TPtr FindCompatibilityNode(const TExprNode::TPtr& root) {
     return FindNode(root, [](const TExprNode::TPtr& node) {
         return node->IsCallable({"ExtractMembers", "OptionalIf", "StrictCast", "HasNull", "SqlIn", "RangeEmpty", "AsRange", "RangeFor"}) ||
-            IsComplexComparison(node);
+            CanLiftSafeCastOptional(node) || IsComplexComparison(node);
     });
 }
 
@@ -355,6 +370,13 @@ NYql::TExprNode::TPtr RewriteRboCompatibilityNode(
     }
     if (node->IsCallable("StrictCast")) {
         return NPhysicalConvertionUtils::ExpandScalarStrictCast(node, ctx);
+    }
+    if (CanLiftSafeCastOptional(node)) {
+        // MiniKQL casts such as ToDecimal and ToString preserve input optionality.
+        // Add an optional result explicitly when the inner cast cannot fail.
+        const auto* itemType = node->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
+        auto cast = ctx.ChangeChild(*node, 1, ExpandType(node->Tail().Pos(), *itemType, ctx));
+        return ctx.NewCallable(node->Pos(), "Just", {std::move(cast)});
     }
     if (node->IsCallable("HasNull")) {
         return ExpandScalarHasNull(node, ctx, types);

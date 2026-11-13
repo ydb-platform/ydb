@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(200)
+SPLIT_FACTOR(180)
 
 REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
@@ -22,6 +22,7 @@ ENDIF()
 SRCS(
     kqp_block_hash_join_ut.cpp
     kqp_join_order_ut.cpp
+    kqp_scalar_hash_join_ut.cpp
     kqp_benches_ut.cpp
 )
 

@@ -1,5 +1,7 @@
 #include "wasm_artifact.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
 namespace NKikimr::NUdfStore {
 
 TVector<NKikimrSchemeOp::TColumnDescription> TUdfWasmArtifact::GetColumnDescription() {
@@ -28,7 +30,7 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfWasmArtifact::GetColumnDescript
 }
 
 TVector<TString> TUdfWasmArtifact::GetPk() {
-    return {IdColName, KindColName, UidColName};
+    return { IdColName, KindColName, UidColName };
 }
 
 TString WasmArtifactKindToString(EWasmArtifactKind kind) {
@@ -41,4 +43,4 @@ TString WasmArtifactKindToString(EWasmArtifactKind kind) {
     return "unknown";
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

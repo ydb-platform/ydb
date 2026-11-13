@@ -16,6 +16,7 @@
 #include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/core/protos/pqevents_global.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -30,6 +31,7 @@
 
 #include <ydb/core/persqueue/events/internal/protos/events.pb.h>
 
+#include <util/generic/deque.h>
 #include <util/generic/maybe.h>
 #include <expected>
 
@@ -248,6 +250,9 @@ struct TEvPQ {
         EvProcessBatchKeysResult,
         EvResetOffsetRequest,
         EvResetOffsetResponse,
+        EvReplicationData,
+        EvReplicationDataAck,
+        EvPersistDone,
         EvEnd,
     };
 
@@ -345,6 +350,7 @@ struct TEvPQ {
         bool IsDirectWrite;
         std::optional<ui64> InitialSeqNo;
         EWriteExternalDeduplicationStatus ExternalDeduplicationStatus;
+        bool FromMirrorer = false;
     };
 
     struct TEvReadTimeout : public TEventLocal<TEvReadTimeout, EvReadTimeout> {
@@ -394,6 +400,7 @@ struct TEvPQ {
         TActorId PipeClient;
         ui64 LastOffset;
         TActorId ReplyTo;
+        TActorId ReadSessionActor;
 
         bool IsInternal() {
             return !!ReplyTo;
@@ -497,6 +504,7 @@ struct TEvPQ {
         bool Strict;
         bool MLPRequest;
         TActorId PipeClient;
+        TActorId ReadSessionActor;
         std::optional<TString> CommittedMetadata;
         bool IsInternal = false;
         bool AllowInactiveRewind = false;
@@ -675,6 +683,7 @@ struct TEvPQ {
         TActorId Sender;
         bool Force;
         bool RegisterIfNotExists;
+        TDuration WriteSessionQuotaWaitTime = TDuration::Zero();
     };
 
     struct TEvPipeDisconnected : public TEventLocal<TEvPipeDisconnected, EvPipeDisconnected> {
@@ -1368,6 +1377,19 @@ struct TEvPQ {
         ui64 Cookie;
     };
 
+    struct TEvReplicationData : public TEventLocal<TEvReplicationData, EvReplicationData> {
+        THashMap<TString, ui64> OffsetsByConsumers;
+        TMaybe<ui64> MirroredOffset;
+    };
+
+    struct TEvPersistDone : public TEventLocal<TEvPersistDone, EvPersistDone> {
+        explicit TEvPersistDone(ui64 endOffset)
+            : EndOffset(endOffset)
+        {}
+
+        ui64 EndOffset;
+    };
+
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {
         TEvPartitionScaleStatusChanged() = default;
 
@@ -1834,6 +1856,10 @@ struct TEvPQ {
         ui32 GetPartitionId() const {
             return Record.GetPartitionId();
         }
+
+        std::optional<ui64> GetToOffset() const {
+            return Record.HasToOffset() ? std::make_optional(Record.GetToOffset()) : std::nullopt;
+        }
     };
 
     struct TEvMLPPurgeResponse : TEventPB<TEvMLPPurgeResponse, NKikimrPQ::TEvMLPPurgeResponse, EvMLPPurgeResponse> {
@@ -1995,6 +2021,77 @@ struct TEvPQ {
 
     struct TEvTopicSqsActionMetrics : TEventPB<TEvTopicSqsActionMetrics, NKikimrPQ::TEvTopicSqsActionMetrics, EvTopicSqsActionMetrics> {
         TEvTopicSqsActionMetrics() = default;
+    };
+};
+
+struct TEvWriteSessionsQuoter {
+    enum EEv {
+        EvNotify = InternalEventSpaceBegin(NPQ::NEvents::EServices::WRITE_SESSIONS_QUOTER),
+        EvAcquireQuota,
+        EvQuotaAcquired,
+        EvRemove,
+        EvQuotaDeclined,
+        EvEnd,
+    };
+
+    static_assert(EvEnd <= InternalEventSpaceBegin(NPQ::NEvents::EServices::END));
+
+    struct TEvNotify : TEventLocal<TEvNotify, EvNotify> {
+        TEvNotify(const TString& database, const TString& topic, ui32 partition, ui32 generation)
+            : Database(database)
+            , Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Database;
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
+    };
+
+    struct TEvAcquireQuota : TEventLocal<TEvAcquireQuota, EvAcquireQuota> {
+        TEvAcquireQuota(const TString& database, const TString& topic, ui32 partition, ui32 generation)
+            : Database(database)
+            , Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Database;
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
+    };
+
+    struct TEvQuotaAcquired : TEventLocal<TEvQuotaAcquired, EvQuotaAcquired> {
+        TEvQuotaAcquired(TDuration quotaWaitTime)
+            : QuotaWaitTime(quotaWaitTime)
+        {
+        }
+
+        const TDuration QuotaWaitTime;
+    };
+
+    struct TEvQuotaDeclined : TEventLocal<TEvQuotaDeclined, EvQuotaDeclined> {
+        TEvQuotaDeclined() = default;
+    };
+
+    struct TEvRemove : TEventLocal<TEvRemove, EvRemove> {
+        TEvRemove(const TString& database, const TString& topic, ui32 partition, ui32 generation)
+            : Database(database)
+            , Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Database;
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
     };
 };
 

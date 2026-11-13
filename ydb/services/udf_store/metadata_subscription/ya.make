@@ -14,6 +14,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/core/base
     ydb/core/keyvalue
+    ydb/core/protos
     ydb/core/tx/scheme_cache
     ydb/library/aclib
     ydb/library/table_creator

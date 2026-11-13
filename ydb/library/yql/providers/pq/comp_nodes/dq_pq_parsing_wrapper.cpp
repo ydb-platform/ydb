@@ -1,15 +1,14 @@
 #include "dq_pq_parsing_wrapper.h"
 
-#include <yql/essentials/minikql/computation/mkql_computation_node.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/mkql_node_cast.h>
-
-#include <memory>
-
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+
+#include <memory>
 
 namespace NKikimr::NMiniKQL {
 
@@ -27,22 +26,16 @@ struct TWatermarkState {
     TVector<NUdf::TUnboxedValue> Values;
 };
 
-class TDqPqParsingWrapper : public TStatefulSourceComputationNode<TDqPqParsingWrapper> {
+class TDqPqParsingWrapper: public TStatefulSourceComputationNode<TDqPqParsingWrapper> {
     using TBase = TStatefulSourceComputationNode<TDqPqParsingWrapper>;
 
 public:
-    class TInputStreamValue : public TComputationValue<TInputStreamValue> {
+    class TInputStreamValue: public TComputationValue<TInputStreamValue> {
     public:
         using TBase = TComputationValue<TInputStreamValue>;
 
-        TInputStreamValue(
-            TMemoryUsageInfo* memInfo,
-            TComputationContext& ctx,
-            NUdf::TUnboxedValue&& input,
-            ui32 lambdaInputWidth,
-            TVector<TMaybe<ui32>>&& sourceToLambdaInput,
-            TVector<TColumnMapping>&& metadata,
-            std::shared_ptr<TWatermarkState> state)
+        TInputStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, NUdf::TUnboxedValue&& input, ui32 lambdaInputWidth,
+            TVector<TMaybe<ui32>>&& sourceToLambdaInput, TVector<TColumnMapping>&& metadata, std::shared_ptr<TWatermarkState> state)
             : TBase(memInfo)
             , Ctx_(ctx)
             , Input_(std::move(input))
@@ -86,18 +79,12 @@ public:
         const std::shared_ptr<TWatermarkState> State_;
     };
 
-    class TOutputStreamValue : public TComputationValue<TOutputStreamValue> {
+    class TOutputStreamValue: public TComputationValue<TOutputStreamValue> {
     public:
         using TBase = TComputationValue<TOutputStreamValue>;
 
-        TOutputStreamValue(
-            TMemoryUsageInfo* memInfo,
-            TComputationContext& ctx,
-            NUdf::TUnboxedValue&& input,
-            ui32 outputWidth,
-            TVector<TMaybe<ui32>>&& lambdaOutputToOutput,
-            TVector<TColumnMapping>&& metadata,
-            std::shared_ptr<TWatermarkState> state)
+        TOutputStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, NUdf::TUnboxedValue&& input, ui32 outputWidth,
+            TVector<TMaybe<ui32>>&& lambdaOutputToOutput, TVector<TColumnMapping>&& metadata, std::shared_ptr<TWatermarkState> state)
             : TBase(memInfo)
             , Ctx_(ctx)
             , Input_(std::move(input))
@@ -141,16 +128,9 @@ public:
         const std::shared_ptr<TWatermarkState> State_;
     };
 
-    TDqPqParsingWrapper(
-        TComputationMutables& mutables,
-        IComputationNode* input,
-        IComputationExternalNode* lambdaArg,
-        IComputationNode* lambdaBody,
-        ui32 lambdaInputWidth,
-        ui32 outputWidth,
-        TVector<TMaybe<ui32>>&& sourceToLambdaInput,
-        TVector<TMaybe<ui32>>&& lambdaOutputToOutput,
-        TVector<TColumnMapping>&& metadata)
+    TDqPqParsingWrapper(TComputationMutables& mutables, IComputationNode* input, IComputationExternalNode* lambdaArg,
+        IComputationNode* lambdaBody, ui32 lambdaInputWidth, ui32 outputWidth, TVector<TMaybe<ui32>>&& sourceToLambdaInput,
+        TVector<TMaybe<ui32>>&& lambdaOutputToOutput, TVector<TColumnMapping>&& metadata)
         : TBase(mutables)
         , Input_(input)
         , LambdaArg_(lambdaArg)
@@ -190,21 +170,11 @@ private:
         auto state = std::make_shared<TWatermarkState>();
         state->Values.resize(Metadata_.size());
 
-        LambdaArg_->SetValue(ctx, ctx.HolderFactory.Create<TInputStreamValue>(
-            ctx,
-            Input_->GetValue(ctx),
-            LambdaInputWidth_,
-            TVector<TMaybe<ui32>>(SourceToLambdaInput_),
-            TVector<TColumnMapping>(Metadata_),
-            state));
+        LambdaArg_->SetValue(ctx, ctx.HolderFactory.Create<TInputStreamValue>(ctx, Input_->GetValue(ctx), LambdaInputWidth_,
+                                      TVector<TMaybe<ui32>>(SourceToLambdaInput_), TVector<TColumnMapping>(Metadata_), state));
 
-        return ctx.HolderFactory.Create<TOutputStreamValue>(
-            ctx,
-            LambdaBody_->GetValue(ctx),
-            OutputWidth_,
-            TVector<TMaybe<ui32>>(LambdaOutputToOutput_),
-            TVector<TColumnMapping>(Metadata_),
-            std::move(state));
+        return ctx.HolderFactory.Create<TOutputStreamValue>(ctx, LambdaBody_->GetValue(ctx), OutputWidth_,
+            TVector<TMaybe<ui32>>(LambdaOutputToOutput_), TVector<TColumnMapping>(Metadata_), std::move(state));
     }
 
 private:
@@ -218,10 +188,7 @@ private:
     const TVector<TColumnMapping> Metadata_;
 };
 
-TVector<TMaybe<ui32>> BuildStructMapping(
-    const TStructType& sourceType,
-    const TStructType& targetType
-) {
+TVector<TMaybe<ui32>> BuildStructMapping(const TStructType& sourceType, const TStructType& targetType) {
     TVector<TMaybe<ui32>> result(targetType.GetMembersCount());
     for (ui32 index = 0; index < targetType.GetMembersCount(); ++index) {
         if (const auto sourceIndex = sourceType.FindMemberIndex(targetType.GetMemberName(index))) {
@@ -231,11 +198,7 @@ TVector<TMaybe<ui32>> BuildStructMapping(
     return result;
 }
 
-TVector<TColumnMapping> BuildMetadataMapping(
-    TCallable& callable,
-    const TStructType& sourceType,
-    const TStructType& outputType
-) {
+TVector<TColumnMapping> BuildMetadataMapping(TCallable& callable, const TStructType& sourceType, const TStructType& outputType) {
     const auto metadataMapping = AS_VALUE(TListLiteral, callable.GetInput(3));
     MKQL_ENSURE(metadataMapping->GetItemsCount() % 2 == 0, "Expected even metadata mapping item count");
 
@@ -246,22 +209,16 @@ TVector<TColumnMapping> BuildMetadataMapping(
         const auto targetName = AS_VALUE(TDataLiteral, metadataMapping->GetItems()[index + 1])->AsValue().AsStringRef();
 
         result.push_back(TColumnMapping{
-            TString(sourceName),
-            TString(targetName),
-            sourceType.GetMemberIndex(TStringBuf(sourceName)),
-            outputType.GetMemberIndex(TStringBuf(targetName)),
-            index / 2,
+            TString(sourceName), TString(targetName), sourceType.GetMemberIndex(TStringBuf(sourceName)),
+            outputType.GetMemberIndex(TStringBuf(targetName)), index / 2,
         });
     }
     return result;
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
-IComputationNode* WrapDqPqParsingWrapper(
-    TCallable& callable,
-    const TComputationNodeFactoryContext& ctx
-) {
+IComputationNode* WrapDqPqParsingWrapper(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     const auto inputStreamType = AS_TYPE(TStreamType, callable.GetInput(0).GetStaticType());
     const auto sourceItemType = AS_TYPE(TStructType, inputStreamType->GetItemType());
     const auto lambdaInputStreamType = AS_TYPE(TStreamType, callable.GetInput(1).GetStaticType());
@@ -271,17 +228,10 @@ IComputationNode* WrapDqPqParsingWrapper(
     const auto outputStreamType = AS_TYPE(TStreamType, callable.GetType()->GetReturnType());
     const auto outputItemType = AS_TYPE(TStructType, outputStreamType->GetItemType());
 
-    return new TDqPqParsingWrapper(
-        ctx.Mutables,
-        LocateNode(ctx.NodeLocator, callable, 0),
-        LocateExternalNode(ctx.NodeLocator, callable, 1),
-        LocateNode(ctx.NodeLocator, callable, 2),
-        lambdaInputItemType->GetMembersCount(),
-        outputItemType->GetMembersCount(),
-        BuildStructMapping(*sourceItemType, *lambdaInputItemType),
-        BuildStructMapping(*lambdaOutputItemType, *outputItemType),
-        BuildMetadataMapping(callable, *sourceItemType, *outputItemType)
-    );
+    return new TDqPqParsingWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), LocateExternalNode(ctx.NodeLocator, callable, 1),
+        LocateNode(ctx.NodeLocator, callable, 2), lambdaInputItemType->GetMembersCount(), outputItemType->GetMembersCount(),
+        BuildStructMapping(*sourceItemType, *lambdaInputItemType), BuildStructMapping(*lambdaOutputItemType, *outputItemType),
+        BuildMetadataMapping(callable, *sourceItemType, *outputItemType));
 }
 
-} // namespace NKikimr::NMiniKQL
+}   // namespace NKikimr::NMiniKQL

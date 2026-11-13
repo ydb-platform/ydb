@@ -1,5 +1,3 @@
 #include "common.h"
 
-namespace NKikimr::NMetadata::NProvider {
-
-}
+namespace NKikimr::NMetadata::NProvider {}

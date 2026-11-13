@@ -72,7 +72,6 @@ SET(ORIG_SOURCES
     mkql_computation_node_ut.cpp
     mkql_group_ut.cpp
     mkql_dict_ut.cpp
-    mkql_isa_detection_ut.cpp
     mkql_iterable_ut.cpp
     mkql_join_ut.cpp
     mkql_join_dict_ut.cpp
@@ -104,6 +103,7 @@ SET(ORIG_SOURCES
     mkql_mapnext_ut.cpp
     mkql_rh_hash_ut.cpp
     mkql_runtime_feature_ut.cpp
+    mkql_program_builder_test_utils.cpp
 )
 
 PEERDIR(

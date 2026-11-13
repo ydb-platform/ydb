@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "status": "prepared_local_only_registration_deferred_by_owner",
+  "playwright_version": "1.64.1",
+  "chromium_headless_shell_revision": "1248",
+  "node_version": "24.22.1",
+  "platforms": {
+    "linux-x86_64": {
+      "node_uri": "sbr:14113657856",
+      "bundle_uri": null,
+      "bundle_sha256": "c2e9eb654a355e99165590872ce96b1ef162635e65431047ad8e0844b7884286",
+      "browser_relative_path": "browser/chrome-headless-shell-linux64/chrome-headless-shell",
+      "native_libraries": "native/lib",
+      "host_dependencies": [
+        "glibc >= 2.31",
+        "ELF loader"
+      ],
+      "prepared_archive_name": "skipper-browser-linux-x86_64-pw1.64.1-r1248.tar.gz",
+      "prepared_archive_bytes": 147411201,
+      "native_validation": "Debian bullseye DT_NEEDED closure passed; maximum required GLIBC2.30; supported host baseline2.31; Linux launch pending",
+      "bundle_manifest_sha256": "68688e6f45378abb3a55e7b3ba2e65a85e9e599a1baab1101a3417f0a8b37b86"
+    },
+    "darwin-arm64": {
+      "node_uri": "sbr:14113707928",
+      "bundle_uri": null,
+      "bundle_sha256": "8b2d0732d75ce7aff9326370bbb4dcab55e7802f1088ef009738eaafdfcd1e68",
+      "browser_relative_path": "browser/chrome-headless-shell-mac-arm64/chrome-headless-shell",
+      "native_libraries": null,
+      "host_dependencies": [
+        "macOS system frameworks"
+      ],
+      "prepared_archive_name": "skipper-browser-darwin-arm64-pw1.64.1-r1248.tar.gz",
+      "prepared_archive_bytes": 100904577,
+      "native_validation": "official macOS arm64 binary; browser acceptance pending",
+      "bundle_manifest_sha256": "648be10b0c26b987f879703c83b789c29d3b84024d617f5de4a6dd3a767b81ee"
+    }
+  }
+}

@@ -9,6 +9,7 @@ YQL_ABI_VERSION(
 SRCS(
     static_udf.cpp
     topfreq.cpp
+    topfreq_udf.cpp
 )
 
 PEERDIR(

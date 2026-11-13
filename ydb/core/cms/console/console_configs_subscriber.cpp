@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -100,7 +101,6 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPrivate::TEvRetryPoolStatus, Handle);
             HFuncTraced(TEvTenantPool::TEvTenantPoolStatus, Handle);
-            HFuncTraced(TEvConsole::TEvGetNodeConfigResponse, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionResponse, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionError, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
@@ -157,31 +157,10 @@ public:
             Die(ctx);
         }
 
-        if (!FirstUpdateSent) {
-            auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
-            request->Record.MutableNode()->SetNodeId(SelfId().NodeId());
-            request->Record.MutableNode()->SetHost(FQDNHostName());
-            request->Record.MutableNode()->SetTenant(Tenant);
-            request->Record.MutableNode()->SetNodeType(NodeType);
-            for (auto &kind : Kinds) {
-                request->Record.AddItemKinds(kind);
-            }
-
-            NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
-        }
-    }
-
-    void Handle(TEvConsole::TEvGetNodeConfigResponse::TPtr &ev, const TActorContext &ctx) {
-        if (!FirstUpdateSent) {
-            ctx.Send(
-                new NActors::IEventHandle(
-                    SelfId(),
-                    ev->Sender,
-                    new NConsole::TEvConsole::TEvConfigSubscriptionNotification(
-                        Generation,
-                        ev->Get()->Record.GetConfig(),
-                        THashSet<ui32>(Kinds.begin(), Kinds.end()))));
-        }
+        // Console always sends an initial notification, even when the config
+        // has not changed. Wait for it instead of racing it with GetNodeConfig:
+        // a synthetic notification cannot participate in the subscription's
+        // ordered stream and would trigger a resubscription.
     }
 
     void Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx) {

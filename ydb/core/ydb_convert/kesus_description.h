@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 #include <util/generic/fwd.h>
 
 namespace Ydb {
@@ -22,6 +24,14 @@ namespace NKikimrKesus {
 }
 
 namespace NKikimr {
+
+// Validates the resource type and metering properties before conversion.
+// Path validation and container-level constraints belong to the caller.
+bool ValidateRateLimiterResourceProperties(
+    const Ydb::RateLimiter::Resource& resource,
+    bool canConfigureMetering,
+    Ydb::StatusIds::StatusCode& status,
+    TString& error);
 
 void FillKesusDescription(
     NKikimrSchemeOp::TKesusDescription& out,

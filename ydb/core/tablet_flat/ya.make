@@ -82,6 +82,10 @@ SRCS(
     flat_table_observer.h
     flat_table_committed.cpp
     flat_table_committed.h
+    flat_tier_policy.cpp
+    flat_tier_policy.h
+    flat_tier_predicate.cpp
+    flat_tier_predicate.h
     flat_update_op.h
     probes.cpp
     shared_handle.cpp
@@ -95,7 +99,6 @@ SRCS(
     tablet_flat_executor.cpp
     tablet_flat_executed.h
     tablet_flat_executed.cpp
-    flat_executor.proto
 )
 
 GENERATE_ENUM_SERIALIZATION(flat_comp_gen.h)
@@ -117,6 +120,8 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/protobuf
+    contrib/libs/zstd
+    library/cpp/blockcodecs
     ydb/library/actors/util
     ydb/library/actors/core
     ydb/library/services

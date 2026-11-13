@@ -1,35 +1,97 @@
 IF (NOT EXPORT_CMAKE)
     RECURSE(
         compress_base
+        compress_base/impl
         datetime2
+        datetime2/impl
         digest
+        digest/impl
         file
+        file/impl
         histogram
+        histogram/impl
         hyperloglog
+        hyperloglog/impl
         ip_base
+        ip_base/impl
+        ip_base/fat
         json
         json2
+        json2/impl
         math
+        math/impl
         pire
+        pire/impl
         protobuf
+        protobuf/impl
         python
         re2
+        re2/impl
         reservoir_sampling
+        reservoir_sampling/impl
         set
+        set/impl
         stat
+        stat/impl
         streaming
+        streaming/impl
         string
+        string/impl
         top
+        top/impl
         topfreq
+        topfreq/impl
         unicode_base
+        unicode_base/impl
         url_base
+        url_base/impl
         vector
+        vector/impl
         yson2
+        yson2/impl
     )
-
+    IF (OS_LINUX AND ARCH_X86_64)
+        IF (SANITIZER_TYPE != "undefined")
+            RECURSE(
+                compress_base/fat
+                datetime2/fat
+                digest/fat
+                file/fat
+                histogram/fat
+                hyperloglog/fat
+                hyperscan/fat
+                json2/fat
+                math/fat
+                pire/fat
+                protobuf/fat
+                re2/fat
+                reservoir_sampling/fat
+                set/fat
+                stat/fat
+                streaming/fat
+                string/fat
+                top/fat
+                topfreq/fat
+                unicode_base/fat
+                url_base/fat
+                vector/fat
+                yson2/fat
+            )
+        ENDIF()
+        IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+            RECURSE(
+                string/static_host
+            )
+        ELSEIF (SANITIZER_TYPE == "undefined")
+            RECURSE(
+                string/static_host
+            )
+        ENDIF()
+    ENDIF()
     IF (ARCH_X86_64)
         RECURSE(
             hyperscan
+            hyperscan/impl
         )
     ENDIF()
 ENDIF()

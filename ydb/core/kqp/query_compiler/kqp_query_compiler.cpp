@@ -1,6 +1,7 @@
 #include "kqp_query_compiler.h"
 
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/kqp_expr_helpers.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
@@ -9,6 +10,7 @@
 #include <ydb/core/kqp/query_compiler/kqp_mkql_compiler.h>
 #include <ydb/core/kqp/query_compiler/kqp_olap_compiler.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/query_data/kqp_request_predictor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -517,6 +519,7 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta
 
     if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadOlapRanges>) {
         readProto.SetSorted(settings.IsSorted());
+        readProto.SetRequireSortedRead(settings.RequireSortedRead);
         if (settings.TabletId) {
             readProto.SetTabletId(*settings.TabletId);
         }
@@ -565,7 +568,7 @@ std::vector<std::string> GetResultColumnNames(const NKikimr::NMiniKQL::TType* re
 template <class T>
 void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResultType,
     const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyOpReadOlapRanges& readProto, TExprContext &ctx,
-    TTypeAnnotationContext& typesCtx)
+    TTypeAnnotationContext& typesCtx, TCompileTrace* trace)
 {
     if (NYql::HasSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames)) {
         auto groupByKeys = NYql::GetSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames);
@@ -577,7 +580,7 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
         }
     }
     auto resultColNames = GetResultColumnNames(miniKqlResultType);
-    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, typesCtx);
+    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, typesCtx, trace);
 }
 
 THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& secretNames) {
@@ -727,7 +730,7 @@ public:
         , Database(database)
         , TablesData(optimizeCtx.Tables)
         , FuncRegistry(funcRegistry)
-        , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
+        , Alloc(__LOCATION__)
         , TypeEnv(Alloc)
         // 1 == StreamLookupJoinCookieVersionV1 (see kqp_stream_lookup_join_helpers.h);
         // kept as a literal to avoid a runtime PEERDIR from the compiler.
@@ -758,8 +761,18 @@ public:
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());
 
-        queryProto.SetForceImmediateEffectsExecution(
-            Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
+        // An unsafe truncate must see the writes that precede it in the same query, so their
+        // effects cannot be deferred past it.
+        bool hasUnsafeTruncate = false;
+        for (const auto& tx : query.Transactions()) {
+            if (GetTableTruncateSettings(tx)) {
+                hasUnsafeTruncate = true;
+                break;
+            }
+        }
+
+        queryProto.SetForceImmediateEffectsExecution(hasUnsafeTruncate
+            || Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
         queryProto.SetDisablePessimisticLocks(
             Config->KqpDisablePessimisticLocks.Get().GetOrElse(false));
 
@@ -1018,11 +1031,6 @@ private:
                 FillTableId(readTable.Table(), *tableOp.MutableTable());
                 FillColumns(readTable.Columns(), *tableMeta, tableOp, true);
                 FillReadRange(readTable, *tableMeta, *tableOp.MutableReadRange());
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeWideReadTableRanges = node.Maybe<TKqpWideReadTableRanges>()) {
                 auto readTableRanges = maybeWideReadTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1033,11 +1041,6 @@ private:
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges());
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeReadWideTableRanges = node.Maybe<TKqpWideReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadWideTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1049,13 +1052,11 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
-                FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
+                {
+                    TCompileTraceScope traceScope(OptimizeCtx.GetCompileTrace(), TCompileTraceLevels::Step, "Compile OLAP program");
+                    FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx, OptimizeCtx.GetCompileTrace());
                 }
+                FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
             } else if (auto maybeReadBlockTableRanges = node.Maybe<TKqpBlockReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadBlockTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1067,14 +1068,12 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
+                {
+                    TCompileTraceScope traceScope(OptimizeCtx.GetCompileTrace(), TCompileTraceLevels::Step, "Compile OLAP program");
+                    FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx, OptimizeCtx.GetCompileTrace());
+                }
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeDqSourceWrapBase = node.Maybe<TDqSourceWrapBase>()) {
                 stageCost += GetDqSourceWrapBaseCost(maybeDqSourceWrapBase.Cast(), TypesCtx);
             } else if (auto maybeDqReadWrapBase = node.Maybe<TDqReadWrapBase>()) {
@@ -1087,9 +1086,10 @@ private:
         });
 
         stageProto.SetStageCost(stageCost);
-        if (auto stats = OptimizeCtx.KqpStats.GetStats(stage.Program().Body().Raw())) {
-            stageProto.SetEstimatedRows(stats->Nrows);
-        }
+        // TODO: fill TKqpPhyStage::EstimatedRows and TKqpPhyTableOperation::EstimatedRows when:
+        //  - read estimates take key ranges into account: now a read by ranges, e.g. `key IN $param`,
+        //    is estimated as the whole table;
+        //  - TShardInfo::EstimatedRows gets a consumer, e.g. task placement in TMaxTasksGraph.
         const auto& secureParams = FindSecureParams(stage.Program().Ptr(), TypesCtx, SecretNames);
         stageProto.MutableSecureParams()->insert(secureParams.begin(), secureParams.end());
 
@@ -1152,6 +1152,10 @@ private:
                         settingsProto,
                         tablesMap,
                         stage);
+                    // A returning sink cannot run without this metadata. Fail
+                    // compilation so New RBO can fall back before any effects.
+                    YQL_ENSURE(!settingsProto.GetReturningColumns().empty(),
+                        "Returning table sink requires returning-column metadata");
                     transformProto->MutableInternalSink()->MutableSettings()->PackFrom(settingsProto);
                     transformProto->SetOutputIndex(FromString(TStringBuf(transformNode.Index())));
 
@@ -1423,6 +1427,7 @@ private:
 
             TString indexName = TString(settings.Index().Cast().StringValue());
             fullTextProto.SetIndex(settings.Index().Cast().StringValue());
+            fullTextProto.SetMainTableCovered(settings.MainTableCovered().Cast().Value() == "true");
 
             auto type = settings.Raw()->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
 
@@ -1572,8 +1577,23 @@ private:
             }
 
             {
-                for (const auto& expr: settings.Query().Maybe<TExprList>().Cast()) {
-                    auto* value = fullTextProto.MutableQuerySettings()->AddQueryValue();
+                for (auto expr: settings.Query().Maybe<TExprList>().Cast()) {
+                    NKqpProto::TKqpPhyValue* value;
+                    if (const auto query = NOpt::TryParseFulltextPatternQuery(expr.Ptr())) {
+                        auto* patternQuery = fullTextProto.MutableQuerySettings()->AddPatternQueries();
+                        if (query->Escape) {
+                            patternQuery->SetEscape(TString(1, *query->Escape));
+                        }
+                        using TPatternQuery = NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TPatternQuery;
+                        TPatternQuery::EMatchMode matchMode;
+                        YQL_ENSURE(TPatternQuery::EMatchMode_Parse(TString(query->Mode), &matchMode),
+                            "Unexpected string match mode: " << query->Mode);
+                        patternQuery->SetMode(matchMode);
+                        value = patternQuery->MutablePattern();
+                        expr = TExprBase(query->Pattern);
+                    } else {
+                        value = fullTextProto.MutableQuerySettings()->AddQueryValue();
+                    }
                     if (expr.Maybe<TCoParameter>()) {
                         value->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
                     } else {
@@ -2612,7 +2632,14 @@ private:
     void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TString, THashSet<TString>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
-        if (IsTableSink(dataSinkCategory)) {
+        if (dataSinkCategory == KqpTableTruncateSinkName) {
+            const auto settings = sink.Settings().Cast<TKqpTableTruncateSettings>();
+            NKikimrKqp::TKqpTableTruncateSettings settingsProto;
+            settingsProto.SetTablePath(settings.TablePath().StringValue());
+            auto& internalSink = *protoSink->MutableInternalSink();
+            internalSink.SetType(TString(KqpTableTruncateSinkName));
+            internalSink.MutableSettings()->PackFrom(settingsProto);
+        } else if (IsTableSink(dataSinkCategory)) {
             auto settings = sink.Settings().Maybe<TKqpTableSinkSettings>();
             YQL_ENSURE(settings, "Unsupported sink type");
             NKqpProto::TKqpInternalSink& internalSinkProto = *protoSink->MutableInternalSink();
@@ -2656,6 +2683,11 @@ private:
             }
         }
         YQL_ENSURE(indexDesc);
+        // Old schemas omit the index owner; use the same fallback as the
+        // metadata loader when resolving the index implementation tables.
+        vectorTopK.MutableHnswIndexId()->SetOwnerId(
+            indexDesc->PathOwnerId ? indexDesc->PathOwnerId : mainTable->Metadata->PathId.OwnerId());
+        vectorTopK.MutableHnswIndexId()->SetLocalId(indexDesc->LocalPathId);
 
         // Index settings
         auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
@@ -3147,6 +3179,9 @@ private:
 
             const auto* indexDesc = tableMeta->GetIndex(vectorSearch.Index().Value()).second;
             YQL_ENSURE(indexDesc);
+            proto.MutableHnswIndexId()->SetOwnerId(
+                indexDesc->PathOwnerId ? indexDesc->PathOwnerId : tableMeta->PathId.OwnerId());
+            proto.MutableHnswIndexId()->SetLocalId(indexDesc->LocalPathId);
 
             // Index settings
             const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);

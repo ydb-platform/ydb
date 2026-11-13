@@ -38,7 +38,7 @@ const TObjectType EchoType = {
     &EchoDestroy,
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TObjectFrameworkTest) {
     Y_UNIT_TEST(CreateGetDestroyTwoObjects) {

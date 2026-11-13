@@ -6,9 +6,6 @@ class IComputationNode;
 class TCallable;
 struct TComputationNodeFactoryContext;
 
-IComputationNode* WrapDqPqParsingWrapper(
-    TCallable& callable,
-    const TComputationNodeFactoryContext& ctx
-);
+IComputationNode* WrapDqPqParsingWrapper(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-} // namespace NKikimr::NMiniKQL
+}   // namespace NKikimr::NMiniKQL

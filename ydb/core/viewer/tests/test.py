@@ -1422,7 +1422,7 @@ class TestViewer(object):
     def test_pqrb_tablet(cls):
         response_create_topic = cls.call_viewer("/viewer/query", {
             'database': cls.dedicated_db,
-            'query': 'CREATE TOPIC topic1(CONSUMER consumer1)',
+            'query': 'CREATE TOPIC IF NOT EXISTS topic1(CONSUMER consumer1)',
             'schema': 'multi'
         })
 
@@ -2292,19 +2292,52 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_storage_stats_tablet_type_response(cls):
+        # Use path=table1 to check grouping by tablet type for a single table.
+        for database in (cls.dedicated_db, cls.serverless_db):
+            params = {'database': database, 'path': 'table1', 'everything': 'true', 'debug': 'true'}
+
+            def get_table_with_storage_stats():
+                by_path = cls.get_viewer('/viewer/storage_stats', params)
+                table = by_path['Paths'][0]
+                assert table['StorageSize'] > 0 and table['Tablets'], table
+                return table
+
+            # Storage statistics become available asynchronously after the fixture writes data.
+            table = retry_assertions(get_table_with_storage_stats)
+
+            tablet_ids = {tablet['TabletId'] for tablet in table['Tablets']}
+            by_type = cls.get_viewer('/viewer/storage_stats', {**params, 'group_by': 'tablet_type'})
+            assert len(by_type['Tablets']) == 1, by_type
+            tablets = by_type['Tablets'][0]
+            assert tablets['Type'] == 'DataShard', tablets
+            assert set(tablets['TabletIds']) == tablet_ids, tablets
+            assert tablets['TabletCount'] == len(tablet_ids), tablets
+            assert tablets['StorageSize'] > 0, tablets
+
+    @classmethod
     def test_storage_stats(cls):
-        result = {}
-        tries = 15
-        while tries > 0:
-            result = cls.get_viewer_normalized("/viewer/storage_stats", {
+        response_create_topic = cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'query': 'CREATE TOPIC IF NOT EXISTS topic1(CONSUMER consumer1)',
+            'schema': 'multi'
+        })
+        assert response_create_topic.get('status') == 'SUCCESS', response_create_topic
+
+        def get_paths_with_storage_stats():
+            result = cls.get_viewer("/viewer/storage_stats", {
                 'database': cls.dedicated_db,
                 'path': '.,table1,topic1',
             })
-            if result['Paths'][2]['Groups'] != 0:
-                break
-            tries -= 1
-            time.sleep(1)
-        return result
+            paths = result.get('Paths', [])
+            assert len(paths) == 3, result
+            for path in paths:
+                for field in ('Groups', 'Media', 'Tablets', 'StorageCount', 'StorageSize'):
+                    assert path.get(field, 0) > 0, path
+            assert paths[1].get('DataSize', 0) > 0, paths[1]
+            return cls.normalize_result(result)
+
+        return retry_assertions(get_paths_with_storage_stats)
 
     @classmethod
     def test_viewer_peers(cls):

@@ -148,7 +148,6 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
         first_message_id = self._send_message_and_assert(
             queue_url, self._msg_body_template.format('0'), seq_no=1, group_id='group'
         )
-        time.sleep(5 + self._visibility_timeout_unlock_grace_sec())
         self._send_message_and_assert(
             queue_url, self._msg_body_template.format('1'), seq_no=2, group_id='group'
         )
@@ -166,12 +165,10 @@ class SqsFifoMessagingTest(KikimrSqsTestBase):
             queue_url, message_count=pack_size, msg_body_template=self._msg_body_template, is_fifo=True,
             group_id='1',
         )
-        time.sleep(5 + self._visibility_timeout_unlock_grace_sec())
         second_pack_ids = self._send_messages(
             queue_url, message_count=pack_size, msg_body_template=self._msg_body_template, is_fifo=True,
             group_id='2'
         )
-        time.sleep(5 + self._visibility_timeout_unlock_grace_sec())
         self._read_messages_and_assert(
             queue_url, messages_count=10, visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids(

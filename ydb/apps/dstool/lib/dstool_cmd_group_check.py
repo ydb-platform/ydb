@@ -18,6 +18,7 @@ def check_failure_model(args):
     storage_pools = base_config_and_storage_pools['StoragePools']
 
     pdisks_map = common.build_pdisk_map(base_config)
+    node_locations = {node.NodeId: node.Location for node in base_config.Node}
     storage_pool_groups_map = common.build_storage_pool_groups_map(base_config, args.group_ids)
 
     node_to_fdom = {
@@ -90,7 +91,7 @@ def check_failure_model(args):
 
             for id_ in group.VSlotId:
                 pdisk = pdisks_map[id_.NodeId, id_.PDiskId]
-                if not common.pdisk_matches_storage_pool(pdisk, sp):
+                if not common.pdisk_matches_storage_pool(pdisk, sp, node_locations.get(pdisk.NodeId)):
                     error_reason += 'Group %d from %s contains incorrect PDisk\n' % (group.GroupId, sp_name)
                     success = False
 

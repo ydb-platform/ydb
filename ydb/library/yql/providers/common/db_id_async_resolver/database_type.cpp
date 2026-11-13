@@ -1,36 +1,33 @@
 #include "db_async_resolver.h"
 
+#include <util/generic/serialized_enum.h>
 #include <util/string/cast.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 namespace NYql {
 
 std::set<TString> GetAllExternalDataSourceTypes() {
-    static std::set<TString> allTypes = {
-        ToString(NYql::EDatabaseType::ObjectStorage),
-        ToString(NYql::EDatabaseType::ClickHouse),
-        ToString(NYql::EDatabaseType::PostgreSQL),
-        ToString(NYql::EDatabaseType::MySQL),
-        ToString(NYql::EDatabaseType::Ydb),
-        ToString(NYql::EDatabaseType::YT),
-        ToString(NYql::EDatabaseType::Greenplum),
-        ToString(NYql::EDatabaseType::MsSQLServer),
-        ToString(NYql::EDatabaseType::Oracle),
-        ToString(NYql::EDatabaseType::Logging),
-        ToString(NYql::EDatabaseType::Solomon),
-        ToString(NYql::EDatabaseType::MoniumMetrics),
-        ToString(NYql::EDatabaseType::Iceberg),
-        ToString(NYql::EDatabaseType::Redis),
-        ToString(NYql::EDatabaseType::Prometheus),
-        ToString(NYql::EDatabaseType::OpenSearch),
-        ToString(NYql::EDatabaseType::DataStreams),
-    };
+    static const std::set<TString> allTypes = [] {
+        std::set<TString> types;
+        for (const auto type : GetEnumAllValues<EDatabaseType>()) {
+            types.insert(ToString(type));
+        }
+        return types;
+    }();
     return allTypes;
 }
 
 bool IsValidAvailableExternalDataSourceType(const TString& type) {
     static const auto allTypes = GetAllExternalDataSourceTypes();
     return type == "YdbTopics" || allTypes.contains(type);
+}
+
+std::set<EDatabaseType> GetAllExternalDataSourceDatabaseTypes() {
+    static const std::set<EDatabaseType> allTypes = [] {
+        const auto values = GetEnumAllValues<EDatabaseType>();
+        return std::set<EDatabaseType>(values.begin(), values.end());
+    }();
+    return allTypes;
 }
 
 EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSourceKind) {
@@ -60,7 +57,7 @@ EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSo
         case NYql::EGenericDataSourceKind::MONGO_DB:
             return EDatabaseType::MongoDB;
         case NYql::EGenericDataSourceKind::OPENSEARCH:
-            return EDatabaseType::OpenSearch; 
+            return EDatabaseType::OpenSearch;
         default:
             ythrow yexception() << "Unknown data source kind: " << NYql::EGenericDataSourceKind_Name(dataSourceKind);
     }
@@ -93,7 +90,7 @@ NYql::EGenericDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType database
         case EDatabaseType::MongoDB:
             return NYql::EGenericDataSourceKind::MONGO_DB;
         case EDatabaseType::OpenSearch:
-            return NYql::EGenericDataSourceKind::OPENSEARCH;    
+            return NYql::EGenericDataSourceKind::OPENSEARCH;
         default:
             ythrow yexception() << "Unknown database type: " << ToString(databaseType);
     }
@@ -110,4 +107,12 @@ TString DatabaseTypeToMdbUrlPath(EDatabaseType databaseType) {
     return DatabaseTypeLowercase(databaseType);
 }
 
-} // NYql
+std::optional<EDatabaseType> DatabaseTypeFromString(const TString& type) {
+    EDatabaseType databaseType;
+    if (!TryFromString<EDatabaseType>(type, databaseType)) {
+        return std::nullopt;
+    }
+    return databaseType;
+}
+
+}   // namespace NYql

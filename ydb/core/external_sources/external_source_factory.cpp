@@ -1,14 +1,15 @@
-#include "external_source_factory.h"
-#include "object_storage.h"
 #include "external_data_source.h"
-#include "iceberg_fields.h"
 #include "external_source_builder.h"
+#include "external_source_factory.h"
+#include "iceberg_fields.h"
+#include "object_storage.h"
+
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 
 #include <util/generic/map.h>
 #include <util/string/cast.h>
-
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 namespace NKikimr::NExternalSource {
 
@@ -17,72 +18,50 @@ namespace {
 // Aliases for external data source types: alias -> canonical type.
 // Resolved before any lookup / availability check so that aliases behave as
 // true synonyms (cannot be enabled/disabled independently from the canonical type).
-const TMap<TString, TString>& GetExternalSourceTypeAliases() {
-    static const TMap<TString, TString> aliases = {
-        {ToString(NYql::EDatabaseType::MoniumMetrics), ToString(NYql::EDatabaseType::Solomon)},
+NYql::EDatabaseType ResolveExternalSourceTypeAlias(NYql::EDatabaseType type) {
+    static const TMap<NYql::EDatabaseType, NYql::EDatabaseType> aliases = {
+        { NYql::EDatabaseType::MoniumMetrics, NYql::EDatabaseType::Solomon },
     };
-    return aliases;
-}
-
-// Legacy configuration aliases: only for available_external_data_sources config.
-// These are NOT used for EDS type validation (users cannot create EDS with these types).
-const TMap<TString, TString>& GetLegacyConfigAliases() {
-    static const TMap<TString, TString> aliases = {
-        // "YdbTopics" in config now means "Ydb" (topics are distinguished by EKind)
-        {"YdbTopics", ToString(NYql::EDatabaseType::Ydb)},
-    };
-    return aliases;
-}
-
-TString ResolveExternalSourceTypeAlias(const TString& type) {
-    const auto& aliases = GetExternalSourceTypeAliases();
     auto it = aliases.find(type);
     return it == aliases.end() ? type : it->second;
 }
 
-struct TExternalSourceFactory : public IExternalSourceFactory {
-    TExternalSourceFactory(
-        const TMap<TString, IExternalSource::TPtr>& sources,
-        bool allExternalDataSourcesAreAvailable,
-        const std::set<TString>& availableExternalDataSources)
+struct TExternalSourceFactory: public IExternalSourceFactory {
+    TExternalSourceFactory(const TMap<TString, IExternalSource::TPtr>& sources, bool allExternalDataSourcesAreAvailable,
+        const std::set<NYql::EDatabaseType>& availableExternalDataSources)
         : Sources(sources)
         , AllExternalDataSourcesAreAvailable(allExternalDataSourcesAreAvailable)
         , AvailableExternalDataSources(NormalizeAvailableTypes(availableExternalDataSources))
     {
-        for (const auto& [type, source] : sources) {
-            if (AvailableExternalDataSources.contains(type)) {
+        for (const auto& [typeStr, source] : sources) {
+            const auto databaseType = NYql::DatabaseTypeFromString(typeStr);
+            if (databaseType && AvailableExternalDataSources.contains(*databaseType)) {
                 AvailableProviders.insert(source->GetName());
             }
         }
     }
 
 private:
-    static std::set<TString> NormalizeAvailableTypes(const std::set<TString>& types) {
-        std::set<TString> normalized;
-        const auto& legacyAliases = GetLegacyConfigAliases();
+    static std::set<NYql::EDatabaseType> NormalizeAvailableTypes(const std::set<NYql::EDatabaseType>& types) {
+        std::set<NYql::EDatabaseType> normalized;
         for (const auto& type : types) {
-            // First check legacy config aliases (e.g., "YdbTopics" → "Ydb")
-            auto legacyIt = legacyAliases.find(type);
-            if (legacyIt != legacyAliases.end()) {
-                normalized.insert(legacyIt->second);
-            } else {
-                // Then apply standard aliases (e.g., "MoniumMetrics" → "Solomon")
-                normalized.insert(ResolveExternalSourceTypeAlias(type));
-            }
+            normalized.insert(ResolveExternalSourceTypeAlias(type));
         }
         return normalized;
     }
 
 public:
-
-    IExternalSource::TPtr GetOrCreate(const TString& type) const override {
-        const TString canonicalType = ResolveExternalSourceTypeAlias(type);
-        auto it = Sources.find(canonicalType);
+    IExternalSource::TPtr GetOrCreate(const NYql::EDatabaseType& type) const override {
+        const TString typeStr = ToString(type);
+        const auto canonicalType = ResolveExternalSourceTypeAlias(type);
+        const TString canonicalTypeStr = ToString(canonicalType);
+        auto it = Sources.find(canonicalTypeStr);
         if (it == Sources.end()) {
-            throw TExternalSourceException() << "External source with type " << type << " was not found";
+            throw TExternalSourceException() << "External source with type " << typeStr << " was not found";
         }
         if (!AllExternalDataSourcesAreAvailable && !AvailableExternalDataSources.contains(canonicalType)) {
-            throw TExternalSourceException() << "External source with type " << type << " is disabled. Please contact your system administrator to enable it";
+            throw TExternalSourceException() << "External source with type " << typeStr
+                                             << " is disabled. Please contact your system administrator to enable it";
         }
         return it->second;
     }
@@ -97,65 +76,40 @@ public:
 private:
     const TMap<TString, IExternalSource::TPtr> Sources;
     bool AllExternalDataSourcesAreAvailable;
-    const std::set<TString> AvailableExternalDataSources;
+    const std::set<NYql::EDatabaseType> AvailableExternalDataSources;
     std::set<TString> AvailableProviders;
 };
 
-}
-
+}   // namespace
 
 IExternalSource::TPtr BuildIcebergSource(const std::vector<TRegExMatch>& hostnamePatternsRegEx) {
     using namespace NKikimr::NExternalSource::NIceberg;
 
-    return TExternalSourceBuilder(TString{NYql::GenericProviderName})
+    return TExternalSourceBuilder(TString{ NYql::GenericProviderName })
         // Basic, Token and SA Auth are available only if warehouse type is set to s3
-        .Auth(
-            {"BASIC", "TOKEN", "SERVICE_ACCOUNT"},
-            GetHasSettingCondition(WAREHOUSE_TYPE, VALUE_S3)
-        )
+        .Auth({ "BASIC", "TOKEN", "SERVICE_ACCOUNT" }, GetHasSettingCondition(WAREHOUSE_TYPE, VALUE_S3))
         // DataBase is a required field
         .Property(WAREHOUSE_DB, GetRequiredValidator())
         // Tls is an optional field
         .Property(WAREHOUSE_TLS)
         // Warehouse type is a required field and can be equal only to "s3"
-        .Property(
-            WAREHOUSE_TYPE,
-            GetIsInListValidator({VALUE_S3}, true)
-        )
+        .Property(WAREHOUSE_TYPE, GetIsInListValidator({ VALUE_S3 }, true))
         // If a warehouse type is equal to "s3", fields "s3_endpoint", "s3_region" and "s3_uri" are required
-        .Properties(
-            {
-                WAREHOUSE_S3_ENDPOINT,
-                WAREHOUSE_S3_REGION,
-                WAREHOUSE_S3_URI
-            },
-            GetRequiredValidator(),
-            GetHasSettingCondition(WAREHOUSE_TYPE, VALUE_S3)
-        )
+        .Properties({ WAREHOUSE_S3_ENDPOINT, WAREHOUSE_S3_REGION, WAREHOUSE_S3_URI }, GetRequiredValidator(),
+            GetHasSettingCondition(WAREHOUSE_TYPE, VALUE_S3))
         // Catalog type is a required field and can be equal only to "hive_metastore" or "hadoop"
-        .Property(
-            CATALOG_TYPE,
-            GetIsInListValidator({VALUE_HIVE_METASTORE, VALUE_HADOOP}, true)
-        )
+        .Property(CATALOG_TYPE, GetIsInListValidator({ VALUE_HIVE_METASTORE, VALUE_HADOOP }, true))
         // If catalog type is equal to "hive_metastore" the field "catalog_hive_metastore_uri" is required
-        .Property(
-            CATALOG_HIVE_METASTORE_URI,
-            GetRequiredValidator(),
-            GetHasSettingCondition(CATALOG_TYPE, VALUE_HIVE_METASTORE)
-        )
+        .Property(CATALOG_HIVE_METASTORE_URI, GetRequiredValidator(), GetHasSettingCondition(CATALOG_TYPE, VALUE_HIVE_METASTORE))
         .HostnamePatterns(hostnamePatternsRegEx)
         .Build();
 }
 
-IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns,
-                                                         NActors::TActorSystem* actorSystem,
-                                                         size_t pathsLimit,
-                                                         std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory,
-                                                         bool enableInfer,
-                                                         bool allowLocalFiles,
-                                                         bool allExternalDataSourcesAreAvailable,
-                                                         const std::set<TString>& availableExternalDataSources) {
+IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns, NActors::TActorSystem* actorSystem,
+    size_t pathsLimit, std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory, bool enableInfer, bool allowLocalFiles,
+    bool allExternalDataSourcesAreAvailable, const std::set<NYql::EDatabaseType>& availableExternalDataSources) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
+    // clang-format off
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
             ToString(NYql::EDatabaseType::ObjectStorage),
@@ -176,6 +130,10 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::Ydb),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::YdbExternal),
+            CreateExternalDataSource(TString{NYql::YdbExternalProviderName}, {"NONE", "TOKEN"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::YT),
@@ -223,7 +181,8 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
     },
     allExternalDataSourcesAreAvailable,
-    availableExternalDataSources); 
+    availableExternalDataSources);
+    // clang-format on
 }
 
-}
+}   // namespace NKikimr::NExternalSource

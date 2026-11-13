@@ -1,9 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
 
-FORK_SUBTESTS()
-
-SPLIT_FACTOR(10)
-
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -20,6 +16,7 @@ PEERDIR(
     ydb/core/tx/datashard/ut_common
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/wrappers/ut_helpers
+    ydb/public/lib/value
 )
 
 SRCS(

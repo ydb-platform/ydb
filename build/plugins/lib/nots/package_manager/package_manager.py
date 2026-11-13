@@ -24,14 +24,12 @@ class PackageManager(object):
         sources_path,
         module_path=None,
         sources_root=None,
-        inject_peers=False,
     ):
         self.module_path = build_path[len(build_root) + 1 :] if module_path is None else module_path
         self.build_path = build_path
         self.sources_path = sources_path
         self.build_root = build_root
         self.sources_root = sources_path[: -len(self.module_path) - 1] if sources_root is None else sources_root
-        self.inject_peers = inject_peers
 
     @classmethod
     def load_package_json(cls, path):
@@ -74,12 +72,28 @@ class PackageManager(object):
         """
         return cls.load_lockfile(build_lockfile_path(dir_path))
 
-    def get_local_peers_from_package_json(self):
+    def get_local_peers_from_package_json(self, pj=None, settings=None):
         """
         Returns paths of direct workspace dependencies (source root related).
         :rtype: list of str
         """
-        return self.load_package_json_from_dir(self.sources_path).get_workspace_dep_paths(base_path=self.module_path)
+        from .common_config import load_effective_pnpm_config, workspace_settings_paths
+
+        if pj is None:
+            pj = self.load_package_json_from_dir(self.sources_path)
+        if settings is None:
+            _, _, settings = load_effective_pnpm_config(pj, self.sources_root, self.sources_path)
+        peers = pj.get_workspace_dep_paths(base_path=self.module_path)
+        candidates = workspace_settings_paths(settings)
+        candidates.extend(spec[len("file:") :] for _, spec in pj.dependencies_iter() if spec.startswith("file:"))
+        for relative in candidates:
+            if os.path.isabs(relative):
+                continue
+            source_peer = os.path.normpath(os.path.join(self.sources_path, relative))
+            build_peer = os.path.normpath(os.path.join(self.build_path, relative))
+            if os.path.isfile(os.path.join(source_peer, "ya.make")) or os.path.isfile(build_ws_config_path(build_peer)):
+                peers.append(os.path.normpath(os.path.join(self.module_path, relative)))
+        return sorted(set(peers))
 
     def _tarballs_store_path(self, pkg, store_path):
         return os.path.join(self.module_path, store_path, pkg.tarball_path)
@@ -90,20 +104,21 @@ class PackageManager(object):
         store_path: str,
         has_deps: bool,
         local_cli: bool,
+        platform=None,
+        supported_architectures=None,
     ) -> tuple[list[str], list[str], list[str]]:
-        ins = [
-            s_rooted(build_pj_path(self.module_path)),
-        ]
+        ins = [s_rooted(build_pj_path(self.module_path))]
         if has_deps or os.path.exists(build_lockfile_path(self.sources_path)):
             ins.append(s_rooted(build_lockfile_path(self.module_path)))
-        outs = [
-            b_rooted(build_pj_path(self.module_path)),
-            b_rooted(build_ws_config_path(self.module_path)),
-        ]
+        outs = [b_rooted(build_pj_path(self.module_path)), b_rooted(build_ws_config_path(self.module_path))]
         resources = []
 
         if has_deps and not local_cli:
-            for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
+            for pkg in self.extract_packages_meta_from_lockfiles(
+                [build_lockfile_path(self.sources_path)],
+                platform=platform,
+                supported_architectures=supported_architectures,
+            ):
                 resources.append(pkg.to_uri())
                 outs.append(b_rooted(self._tarballs_store_path(pkg, store_path)))
 
@@ -130,9 +145,9 @@ class PackageManager(object):
         return ins, outs
 
     @timeit
-    def extract_packages_meta_from_lockfiles(self, lf_paths):
+    def extract_packages_meta_from_lockfiles(self, lf_paths, platform=None, supported_architectures=None):
         """
-        :type lf_paths: iterable of BaseLockfile
+        :type lf_paths: iterable of paths or already loaded Lockfile objects
         :rtype: iterable of LockfilePackageMeta
         """
         tarballs = set()
@@ -140,7 +155,8 @@ class PackageManager(object):
 
         for lf_path in lf_paths:
             try:
-                for pkg in self.load_lockfile(lf_path).get_packages_meta():
+                lockfile = lf_path if isinstance(lf_path, Lockfile) else self.load_lockfile(lf_path)
+                for pkg in lockfile.get_packages_meta(platform, supported_architectures):
                     if pkg.tarball_path not in tarballs:
                         tarballs.add(pkg.tarball_path)
                         yield pkg

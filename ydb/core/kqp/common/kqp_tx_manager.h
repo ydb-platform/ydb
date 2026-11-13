@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
@@ -16,6 +17,27 @@ struct TTableInfo {
     bool IsOlap = false;
     THashSet<TStringBuf> Pathes;
 };
+
+// Known metadata of a tx participant datashard: which table it belongs to and
+// which key range the shard covered at the moment it was first registered in
+// the transaction. Borders always come from a scheme-cache-resolved partitioning
+// whose version is recorded alongside.
+// Borders default-constructed (undefined From/To) means "unknown" — e.g. for
+// shards that never were a part of any resolved partitioning in this process.
+struct TShardMeta {
+    TTableId TableId;
+    TOwnedTableRange Borders;
+    ui64 PartitioningVersion = 0;
+
+    bool IsKnown() const {
+        return PartitioningVersion != 0;
+    }
+};
+
+// True when both ranges carry the same key borders: same From/To cells (compared
+// byte-wise; borders always come from the same SchemeShard serialization), plus
+// matching inclusivity and point flags.
+bool SameBorders(const TTableRange& lhs, const TTableRange& rhs);
 
 class IKqpTransactionManager {
 public:
@@ -33,11 +55,13 @@ public:
     enum EAction {
         READ = 1,
         WRITE = 2,
+        // Shards pessimistically locked via EvLock (TEvLockRows).
+        PESSIMISTIC_LOCK = 4,
     };
 
     using TActionFlags = ui8;
 
-    virtual void AddShard(ui64 shardId, bool isOlap, const TString& path) = 0;
+    virtual void AddShard(ui64 shardId, bool isOlap, const TString& path, const TShardMeta& meta = {}) = 0;
     virtual void AddAction(ui64 shardId, ui8 action) = 0;
     virtual void AddAction(ui64 shardId, ui8 action, ui64 querySpanId) = 0;
     virtual void AddTopic(ui64 topicId, const TString& path) = 0;
@@ -50,6 +74,12 @@ public:
     // Targets must exactly cover the removed shard's range (computed by the caller
     // from the partitionings) — a wrong target does not hold the transferred lock
     // and would break the commit.
+    // The move is verified when both the removed shard and a target carry filled
+    // partitioning metadata: the target's partitioning version must be strictly
+    // newer and its borders must intersect the removed shard's range (AFL_ENSURE,
+    // fail closed). The border comparison uses the moved table's key schema stored
+    // by SetTableMeta (the table metadata must be stored); shards without filled
+    // metadata (e.g. a fresh EnsureShards-only target) are safely skipped.
     // Returns false when a transferred lock merged inconsistently with a lock already
     // stored on a target (a WriteSeqNum regression: the shard's uncommitted write chain
     // collapsed underneath the stored lock). The lock is marked invalidated and the
@@ -61,6 +91,8 @@ public:
     virtual TVector<NKikimrDataEvents::TLock> GetLocks(ui64 shardId) const = 0;
 
     virtual TTableInfo GetShardTableInfo(ui64 shardId) const = 0;
+
+    virtual const TShardMeta& GetShardMeta(ui64 shardId) const = 0;
 
     virtual bool ShouldReattach(ui64 shardId, TInstant now) = 0;
     virtual void Reattached(ui64 shardId) = 0;
@@ -80,8 +112,19 @@ public:
     virtual void SetError(ui64 shardId) = 0;
     virtual void SetError() = 0;
 
-    virtual void SetPartitioning(const TTableId tableId, const TPartitioning::TCPtr& partitioning) = 0;
-    virtual TPartitioning::TCPtr GetPartitioning(const TTableId tableId) const = 0;
+    // Metadata of a table participating in the transaction: the partitioning the
+    // table was resolved with when it first joined the transaction (the "initial"
+    // partitioning — it does not track later split/merges) and the table's key
+    // schema, used to compare shard key borders (e.g. in MoveShardTo).
+    struct TTableMeta {
+        TPartitioning::TCPtr InitialPartitioning;
+        TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    };
+
+    // Overwrites any previously stored metadata of the table.
+    virtual void SetTableMeta(const TTableId tableId, TTableMeta tableMeta) = 0;
+    // Empty (null InitialPartitioning) when the table's metadata was never stored.
+    virtual TTableMeta GetTableMeta(const TTableId tableId) const = 0;
 
     virtual void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) = 0;
     virtual const NTopic::TTopicOperations& GetTopicOperations() const = 0;

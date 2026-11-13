@@ -254,7 +254,10 @@ class TestStreamingAggregation(StreamingTestBase):
         future = kikimr.ydb_client.query_async(query, timeout=120)
         time.sleep(1)
         self.write_stream(
-            [json.dumps(dict(key=key, value=value)) for key, value in [("a", 2), ("b", 10), ("a", 3), ("b", -3), ("a", 1000)]],
+            [
+                json.dumps(dict(key=key, value=value))
+                for key, value in [("a", 2), ("b", 10), ("a", 3), ("b", -3), ("a", 1000)]
+            ],
             endpoint=endpoint,
         )
         future.result(timeout=120)
@@ -409,7 +412,9 @@ class TestStreamingAggregation(StreamingTestBase):
             assert "state_table_path" not in ast
             batches = [([2], 3), ([3], 6)] if checkpoints else [([2, 3], 6)]
             for values, expected in batches:
-                self.write_stream([json.dumps(dict(key="a", subkey="b", value=value)) for value in values], endpoint=endpoint)
+                self.write_stream(
+                    [json.dumps(dict(key="a", subkey="b", value=value)) for value in values], endpoint=endpoint
+                )
                 self.check_rows(kikimr, f"SELECT value FROM `{names['first']}`;", [(expected,)])
 
     @pytest.mark.parametrize("modify_first", [False, True])
@@ -513,7 +518,7 @@ class TestStreamingAggregation(StreamingTestBase):
 
     # The read actor's TRACE cell formatter does not support parameterized Decimal types.
     # Remove this workaround after https://github.com/ydb-platform/ydb/issues/54964 is fixed.
-    # Keep DEBUG for KQP_COMPUTE and preserve the default TRACE level for other components.
+    # Limit KQP_COMPUTE to DEBUG even if the global log level is set to TRACE.
     @pytest.mark.parametrize("kikimr", [{"log_levels": {"KQP_COMPUTE": 7}}], indirect=True)
     @pytest.mark.parametrize("nullable", [False, True])
     def test_standard_aggregates_use_defaults(self, kikimr, entity_name, nullable):

@@ -298,7 +298,7 @@ bool TSyncSlruCacheBase<TKey, TValue, THash>::TryInsert(const TValuePtr& value, 
 }
 
 template <class TKey, class TValue, class THash>
-void TSyncSlruCacheBase<TKey, TValue, THash>::Trim(TShard* shard, NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard)
+void TSyncSlruCacheBase<TKey, TValue, THash>::Trim(TShard* shard, TWriterGuard<TReaderWriterSpinLock>& guard)
 {
     auto capacity = Capacity_.load();
     auto youngerSizeFraction = YoungerSizeFraction_.load();

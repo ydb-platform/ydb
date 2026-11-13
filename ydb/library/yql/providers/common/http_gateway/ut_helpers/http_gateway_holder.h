@@ -28,4 +28,4 @@ struct THttpGatewayHolder {
 
 const THttpGatewayHolder& GetGlobalHttpGatewayHolder();
 
-}  // namespace NYql::NTestHelpers
+}   // namespace NYql::NTestHelpers

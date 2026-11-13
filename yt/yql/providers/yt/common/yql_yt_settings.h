@@ -169,8 +169,8 @@ public:
     NCommon::TConfSetting<TString, Static> DefaultCluster;
     NCommon::TConfSetting<TDuration, Static> BinaryExpirationInterval;
     NCommon::TConfSetting<bool, Static> IgnoreTypeV3;
-    NCommon::TConfSetting<bool, Static> _UseMultisetAttributes;
     NCommon::TConfSetting<TDuration, Static> FileCacheTtl;
+    NCommon::TConfSetting<bool, Static> _EnableFileCacheLock;
     NCommon::TConfSetting<TString, Static> _ImpersonationUser;
     NCommon::TConfSetting<EInferSchemaMode, Static> InferSchemaMode;
     NCommon::TConfSetting<ui32, Static> BatchListFolderConcurrency;
@@ -355,6 +355,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseTypeV2;
     NCommon::TConfSetting<bool, Static> UseNativeYtTypes;
     NCommon::TConfSetting<bool, Static> UseNativeDescSort;
+    NCommon::TConfSetting<bool, Static> _AllowNativeDescSort;
     NCommon::TConfSetting<bool, Static> UseIntermediateSchema;
     NCommon::TConfSetting<bool, Static> UseIntermediateStreams;
     NCommon::TConfSetting<bool, Static> PassSqlFlagsForViewTranslation;
@@ -411,7 +412,7 @@ using TSecureTmpStatePtr = std::shared_ptr<const std::atomic<bool>>;
 TString GetUserTablesTmpFolder(const TYtSettings& settings, const TString& cluster);
 TString GetTablesTmpFolder(const TYtSettings& settings, const TString& cluster, const TSecureTmpStatePtr& useSecureTmp, const TYqlOperationOptions& operationOptions);
 
-struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher {
+struct TYtConfiguration : public NCommon::TDispatcherAndSettings<TYtSettings> {
     using TPtr = TIntrusivePtr<TYtConfiguration>;
 
     TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext = {});
@@ -437,6 +438,7 @@ struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher
         for (auto& cluster: config.GetClusterMapping()) {
             this->DispatchWithActivationPolicy(cluster.GetName(), cluster.GetSettings(), activationPolicy);
         }
+        this->ApplyProjectSettings(typeCtx.ProjectSettings);
         this->FreezeDefaults();
     }
 

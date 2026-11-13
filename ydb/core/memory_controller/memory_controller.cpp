@@ -7,8 +7,8 @@
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/base/memory_controller_iface.h_serialized.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/mon_alloc/stats.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
@@ -17,7 +17,6 @@
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
-#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
@@ -298,6 +297,18 @@ constexpr TConsumerTraits ConsumerTraits[] = {
         .StatsSummed = true,
         .StatsWithLimit = false,
     },
+    {
+        // The compute scheduler: reports the memory of the queries and limits it by the given limit
+        .Kind = EMemoryConsumerKind::QueryExecution,
+        .ElasticLimit = false,
+        .CanZeroLimit = false,
+        .GetMinBytes = &GetQueryExecutionLimitBytes,
+        .GetMaxBytes = &GetQueryExecutionLimitBytes,
+        .LimitDelivery = ELimitDelivery::LimitShares,
+        .WriteStats = &WriteQueryExecutionStats,
+        .StatsSummed = true,
+        .StatsWithLimit = false,
+    },
 };
 
 constexpr bool ConsumerTraitsFollowEnumOrder() {
@@ -392,6 +403,16 @@ private:
     }
 
     void HandleWakeup(const TActorContext& ctx) noexcept {
+        for (auto it = Collections.begin(); it != Collections.end();) {
+            it->second.CollectRetired();
+            if (it->second.IsEmpty()) {
+                ResetConsumerCounters(it->first);
+                Collections.erase(it++);
+            } else {
+                ++it;
+            }
+        }
+
         auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
 
         bool hasMemTotalHardLimit = false;
@@ -400,7 +421,7 @@ private:
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(Config, hardLimitBytes);
         ui64 activitiesLimitBytes = ResourceBrokerSelfConfig.LimitBytes
             ? ResourceBrokerSelfConfig.LimitBytes // for backward compatibility
-            : GetActivitiesLimitBytes(Config, hardLimitBytes);
+            : GetResourceBrokerLimitBytes(Config, hardLimitBytes, Collections.contains(EMemoryConsumerKind::QueryExecution));
 
         TVector<TConsumerState> consumers(::Reserve(Consumers.size() + Collections.size()));
         ui64 consumersConsumption = 0;
@@ -530,7 +551,7 @@ private:
         const auto *msg = ev->Get();
         // A kind the controller feeds itself has no registrant and must not be taken over
         Y_ABORT_UNLESS(!Consumers.contains(msg->Kind), "Consumer kind is owned by the memory controller");
-        TIntrusivePtr<IMemoryConsumer> consumer = Collections[msg->Kind].Register(ev->Sender);
+        TIntrusivePtr<IMemoryConsumer> consumer = Collections[msg->Kind].Register(ev->Sender, msg->DemandOnly);
         YDB_LOG_INFO_CTX(ctx, "Consumer registered",
             {"msgKind", msg->Kind},
             {"sender", ev->Sender});
@@ -540,7 +561,7 @@ private:
     void Handle(TEvConsumerUnregister::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
         auto it = Collections.find(msg->Kind);
-        if (it == Collections.end() || !it->second.Unregister(ev->Sender)) {
+        if (it == Collections.end() || !it->second.Unregister(ev->Sender, msg->RetainUntilUnused)) {
             YDB_LOG_WARN_CTX(ctx, "Consumer unregister ignored",
                 {"msgKind", msg->Kind},
                 {"sender", ev->Sender});
@@ -709,14 +730,18 @@ private:
         }
 
         // TODO: counters and logs for all column table queues
-        ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
-        YDB_LOG_INFO_CTX(ctx, "Consumer QueryExecution state",
-            {"consumption", HumanReadableBytes(queryExecutionConsumption)},
-            {"limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});
-        Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
-        Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
-        memoryStats.SetQueryExecutionConsumption(memoryStats.GetQueryExecutionConsumption() + queryExecutionConsumption);
-        memoryStats.SetQueryExecutionLimit(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
+        if (Collections.contains(EMemoryConsumerKind::QueryExecution)) {
+            memoryStats.SetQueryExecutionLimit(GetQueryExecutionLimitBytes(Config, hardLimitBytes));
+        } else {
+            ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
+            YDB_LOG_INFO_CTX(ctx, "Consumer QueryExecution state",
+                {"consumption", HumanReadableBytes(queryExecutionConsumption)},
+                {"limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});
+            Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
+            Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
+            memoryStats.SetQueryExecutionConsumption(memoryStats.GetQueryExecutionConsumption() + queryExecutionConsumption);
+            memoryStats.SetQueryExecutionLimit(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
+        }
 
         // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
         ApplyResourceBrokerConfig(config);

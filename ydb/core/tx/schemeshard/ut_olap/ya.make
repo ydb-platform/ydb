@@ -15,7 +15,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
-    ydb/core/testlib/default
+    ydb/core/testlib/pg
     ydb/core/kqp/compute_actor
     ydb/core/formats
     ydb/core/tx
@@ -27,6 +27,8 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(ut_olap_enums.h)
 
 SRCS(
     ut_olap.cpp

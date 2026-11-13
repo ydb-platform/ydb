@@ -168,31 +168,6 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Controls node availability for failure simulation.
-class IChaosInjectorControl
-{
-public:
-    virtual ~IChaosInjectorControl() = default;
-
-    // Makes subsequent requests to nodeId fail with an undelivery error.
-    virtual void DisableNode(ui32 nodeId) = 0;
-
-    // Makes subsequent requests to nodeId use the underlying transport.
-    virtual void EnableNode(ui32 nodeId) = 0;
-
-    // Returns true when requests to nodeId are configured to fail.
-    [[nodiscard]] virtual bool IsNodeDisabled(ui32 nodeId) const = 0;
-};
-
-// Combines storage transport operations with node-failure controls.
-class ITransportWithChaosInjectorControl
-    : public IStorageTransport
-    , public IChaosInjectorControl
-{
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 // Creates either a direct-session or actor-based storage transport.
 [[nodiscard]] TStorageTransportPtr CreateStorageTransport(
     NActors::TActorSystem* actorSystem,
@@ -200,10 +175,6 @@ class ITransportWithChaosInjectorControl
     ui32 dbgIndex,
     bool useDirectSessionTransport,
     bool enableChecksums);
-
-// Wraps a storage transport with a node-failure simulation layer.
-[[nodiscard]] TTransportWithChaosInjectorControlPtr
-CreateTransportChaosInjector(TStorageTransportPtr underlyingTransport);
 
 ////////////////////////////////////////////////////////////////////////////////
 

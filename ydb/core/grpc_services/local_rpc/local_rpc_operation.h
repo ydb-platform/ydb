@@ -3,17 +3,19 @@
 #include "local_rpc.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
 namespace NKikimr::NRpcService {
 
 using TLocalRpcOperationResult = std::pair<NYdb::TStatus, ::google::protobuf::Any>;
-using TLocalRpcOperationRequestCreator = std::function<void(std::unique_ptr<NGRpcService::IRequestOpCtx>, const NKikimr::NGRpcService::IFacilityProvider&)>;
+using TLocalRpcOperationRequestCreator =
+    std::function<void(std::unique_ptr<NGRpcService::IRequestOpCtx>, const NKikimr::NGRpcService::IFacilityProvider&)>;
 
 template <typename TRpc, typename TOperationSettings>
-class TOperationRequestExecuter final : public TActorBootstrapped<TOperationRequestExecuter<TRpc, TOperationSettings>>, public NGRpcService::IFacilityProvider {
+class TOperationRequestExecuter final: public TActorBootstrapped<TOperationRequestExecuter<TRpc, TOperationSettings>>,
+                                       public NGRpcService::IFacilityProvider {
     using TBase = TActorBootstrapped<TOperationRequestExecuter<TRpc, TOperationSettings>>;
     using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
     using TCtx = TLocalRpcCtx<TRpc, TCbWrapper>;
@@ -63,20 +65,24 @@ public:
     }
 
 private:
-    static std::unique_ptr<TCtx> CreateCtx(typename TRpc::TRequest&& proto, const TSettings& settings, std::shared_ptr<std::atomic_bool> clientLostStatus) {
+    static std::unique_ptr<TCtx> CreateCtx(
+        typename TRpc::TRequest&& proto, const TSettings& settings, std::shared_ptr<std::atomic_bool> clientLostStatus) {
         const auto& operationSettings = settings.OperationSettings;
         FillOperationParams(*proto.mutable_operation_params(), operationSettings);
 
         auto responsePromise = NThreading::NewPromise<typename TRpc::TResponse>();
-        auto req = std::make_unique<TCtx>(std::move(proto), TCbWrapper(responsePromise), typename TCtx::TSettings{
-            .DatabaseName = settings.Database,
-            .Token = settings.Token,
-            .RequestType = operationSettings.RequestType_.empty() ? Nothing() : TMaybe<TString>(operationSettings.RequestType_),
-            .PeerName = TStringBuilder() << "localhost/" << settings.OperationName,
-            .TraceId = TString(operationSettings.TraceId_),
-            .Deadline = TInstant::MicroSeconds(std::chrono::duration_cast<std::chrono::microseconds>(operationSettings.Deadline_.GetTimePoint().time_since_epoch()).count()),
-            .ClientLostStatus = clientLostStatus,
-        });
+        auto req = std::make_unique<TCtx>(std::move(proto), TCbWrapper(responsePromise),
+            typename TCtx::TSettings{
+                .DatabaseName = settings.Database,
+                .Token = settings.Token,
+                .RequestType = operationSettings.RequestType_.empty() ? Nothing() : TMaybe<TString>(operationSettings.RequestType_),
+                .PeerName = TStringBuilder() << "localhost/" << settings.OperationName,
+                .TraceId = TString(operationSettings.TraceId_),
+                .Deadline = TInstant::MicroSeconds(
+                    std::chrono::duration_cast<std::chrono::microseconds>(operationSettings.Deadline_.GetTimePoint().time_since_epoch())
+                        .count()),
+                .ClientLostStatus = clientLostStatus,
+            });
 
         if (!operationSettings.TraceParent_.empty()) {
             req->PutPeerMeta(NYdb::OTEL_TRACE_HEADER, TString(operationSettings.TraceParent_));
@@ -92,13 +98,15 @@ private:
 
             NYdb::NIssue::TIssues opIssues;
             NYdb::NIssue::IssuesFromMessage(response.issues(), opIssues);
-            promise.SetValue(std::make_pair(NYdb::TStatus(static_cast<NYdb::EStatus>(response.status()), std::move(opIssues)), response.result()));
+            promise.SetValue(
+                std::make_pair(NYdb::TStatus(static_cast<NYdb::EStatus>(response.status()), std::move(opIssues)), response.result()));
         });
 
         return req;
     }
 
-    static void FillOperationParams(Ydb::Operations::OperationParams& params, const NYdb::TOperationRequestSettings<TOperationSettings>& settings) {
+    static void FillOperationParams(
+        Ydb::Operations::OperationParams& params, const NYdb::TOperationRequestSettings<TOperationSettings>& settings) {
         params.set_operation_mode(Ydb::Operations::OperationParams::SYNC);
 
         if (settings.CancelAfter_) {
@@ -140,4 +148,4 @@ private:
     std::unique_ptr<TCtx> Ctx;
 };
 
-} // namespace NKikimr::NRpcService
+}   // namespace NKikimr::NRpcService

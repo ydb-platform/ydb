@@ -896,6 +896,77 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
         }
     }
 
+    Y_UNIT_TEST(UnsupportedTypeFallbackToGraceJoin) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/left_table` (
+                        id Int32 NOT NULL,
+                        PRIMARY KEY (id)
+                    );
+
+                    CREATE TABLE `/Root/right_table` (
+                        id Int32 NOT NULL,
+                        PRIMARY KEY (id)
+                    );
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/left_table` (id) VALUES (1), (2);
+                    INSERT INTO `/Root/right_table` (id) VALUES (2), (3);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        // AsList stays under the join: ON uses it, and a table column cannot be List
+        const TString joinQuery = R"(
+            PRAGMA TablePathPrefix='/Root';
+            PRAGMA ydb.UseBlockHashJoin = 'true';
+            PRAGMA ydb.HashJoinMode = 'grace';
+            PRAGMA ydb.CostBasedOptimizationLevel = '0';
+
+            SELECT L.id AS left_id, R.id AS right_id
+            FROM (SELECT id, AsList(id) AS items FROM `left_table`) AS L
+            INNER JOIN (SELECT id, AsList(id) AS items FROM `right_table`) AS R
+            ON L.id = R.id AND L.items = R.items
+            ORDER BY left_id;
+        )";
+
+        auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(status.GetResultSets()[0].RowsCount(), 1);
+
+        auto explainResult = queryClient.ExecuteQuery(
+            joinQuery,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+        ).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+        auto astOpt = explainResult.GetStats()->GetAst();
+        UNIT_ASSERT(astOpt.has_value());
+        TString ast = TString(*astOpt);
+        Cout << "AST (unsupported List payload): " << ast << Endl;
+
+        UNIT_ASSERT_C(ast.Contains("GraceJoin"),
+            TStringBuilder() << "Unsupported column type should fall back to GraceJoin. Actual AST: " << ast);
+        UNIT_ASSERT_C(!ast.Contains("BlockHashJoin") && !ast.Contains("DqBlockHashJoin"),
+            TStringBuilder() << "Unsupported column type should NOT use BlockHashJoin. Actual AST: " << ast);
+    }
+
     Y_UNIT_TEST(BlockHashJoinWithTypeRemapping) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

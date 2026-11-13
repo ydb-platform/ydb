@@ -61,9 +61,14 @@ namespace {
                 sessionId = params.Get("sessionId");
             }
 
+            bool fullMemRec = false;
+            if (params.Has("fullMemRec") && !TryFromString(params.Get("fullMemRec"), fullMemRec)) {
+                return generateError("Invalid fullMemRec value");
+            }
+
             const ui64 cookie = ++LastCookie;
             Send(MakeBlobStorageVDiskID(SelfId().NodeId(), pdiskId, vdiskSlotId),
-                new TEvBlobStorage::TEvMonStreamQuery(sessionId, {}, {}),
+                new TEvBlobStorage::TEvMonStreamQuery(sessionId, {}, {}, fullMemRec),
                 IEventHandle::FlagTrackDelivery, cookie);
             RequestsInFlight[cookie] = std::make_tuple(ev->Sender, ev->Cookie, ev->Get()->SubRequestId);
         }

@@ -6,6 +6,7 @@
 #include "schema.h"
 #include "mon_main.h"
 
+#include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
@@ -379,6 +380,8 @@ namespace NKikimr::NBlobDepot {
             THashMap<TLogoBlobID, NKikimrBlobDepot::TBlobLocator> BlobIdToNewLocator;
             TSet<TBlobSeqId> ProtectedBlobSeqIds;
             bool ApplyingIndexUpdate = false;
+
+            ui64 RecordsScanned = 0;
 
             enum class ETrashStatus {
                 WaitingForGC,

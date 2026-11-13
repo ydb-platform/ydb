@@ -5,7 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/chaos_injector_control.h>
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
@@ -15,6 +15,7 @@
 
 #include <util/generic/bitmap.h>
 #include <util/generic/set.h>
+#include <util/generic/vector.h>
 
 #include <algorithm>
 #include <thread>
@@ -65,8 +66,24 @@ public:
         return DisabledNodes.contains(nodeId);
     }
 
+    void ArmFaultRule(NTransport::TFaultRule rule) override
+    {
+        Rules.push_back(std::move(rule));
+    }
+
+    void ClearFaultRules() override
+    {
+        Rules.clear();
+    }
+
+    [[nodiscard]] TVector<NTransport::TFaultRule> GetFaultRules() const override
+    {
+        return Rules;
+    }
+
 private:
     TSet<ui32> DisabledNodes;
+    TVector<NTransport::TFaultRule> Rules;
 };
 
 void AssertChaosMode(

@@ -1,15 +1,13 @@
 #include "yql_qyt_blocking_queue.h"
 
-#include <util/datetime/base.h>
-
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/datetime/base.h>
 
 #include <thread>
 
 namespace NYql {
 
 Y_UNIT_TEST_SUITE(TBlockingEQueueTest) {
-
     Y_UNIT_TEST(PushPop) {
         TBlockingEQueue<TString> queue(1024);
         queue.Push(TString("hello"), 5);
@@ -28,7 +26,7 @@ Y_UNIT_TEST_SUITE(TBlockingEQueueTest) {
     }
 
     Y_UNIT_TEST(Backpressure) {
-        TBlockingEQueue<TString> queue(10); // max 10 bytes
+        TBlockingEQueue<TString> queue(10);   // max 10 bytes
 
         queue.Push(TString("hello"), 5);
         queue.Push(TString("world"), 5);
@@ -76,7 +74,6 @@ Y_UNIT_TEST_SUITE(TBlockingEQueueTest) {
         auto val = queue.Pop(/* block */ false);
         UNIT_ASSERT(!val.has_value());
     }
-
 }
 
-} // namespace NYql
+}   // namespace NYql

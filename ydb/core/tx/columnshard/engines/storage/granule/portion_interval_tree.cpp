@@ -73,7 +73,7 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
     const auto& rhsSchema = getSchema(rhs.Position);
 
     return getKeyView(Position)
-        .Compare(getKeyView(rhs.Position), lhsSchema->num_fields() <= rhsSchema->num_fields() ? lhsSchema : rhsSchema)
+        .Compare(getKeyView(rhs.Position), lhsSchema->num_fields() <= rhsSchema->num_fields() ? *lhsSchema : *rhsSchema)
         .GetResult();
 }
 

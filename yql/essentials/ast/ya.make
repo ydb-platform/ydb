@@ -21,6 +21,8 @@ SRCS(
     yql_gc_nodes.h
     yql_type_string.cpp
     yql_type_string.h
+    yql_pos_handle.cpp
+    yql_pos_handle.h
 )
 
 PEERDIR(
@@ -46,5 +48,6 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
+    benchmark
     ut
 )

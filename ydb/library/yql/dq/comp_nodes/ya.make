@@ -19,3 +19,9 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
 )
+
+IF (NOT OS_WINDOWS)
+    RECURSE_FOR_TESTS(
+        ut/hash_combine_perf
+    )
+ENDIF()

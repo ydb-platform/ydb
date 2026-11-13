@@ -4,8 +4,6 @@
 #include <yt/yt/core/concurrency/fls.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
-#include <yt/yt/core/net/local_address.h>
-
 #include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
@@ -47,7 +45,6 @@ namespace {
 struct TExtensionData
 {
     NConcurrency::TFiberId Fid = NConcurrency::InvalidFiberId;
-    TStringBuf HostName;
     TTraceId TraceId = InvalidTraceId;
     TSpanId SpanId = InvalidSpanId;
 
@@ -64,35 +61,13 @@ TExtensionData Decode(const TOriginAttributes::TErasedExtensionData& storage)
     return storage.AsConcrete<TExtensionData>();
 }
 
-void TryExtractHost(const TOriginAttributes& attributes)
-{
-    if (attributes.Host || !attributes.ExtensionData) {
-        return;
-    }
-
-    auto [
-        fid,
-        name,
-        traceId,
-        spanId
-    ] = Decode(*attributes.ExtensionData);
-
-    attributes.Host = name
-        ? TStringBuf(name)
-        : TStringBuf{};
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 bool HasHost(const TOriginAttributes& attributes) noexcept
 {
-    TryExtractHost(attributes);
     return attributes.Host.operator bool();
 }
 
 TStringBuf GetHost(const TOriginAttributes& attributes) noexcept
 {
-    TryExtractHost(attributes);
     return attributes.Host;
 }
 
@@ -131,7 +106,6 @@ void UpdateTracingAttributes(TOriginAttributes* attributes, const NTracing::TTra
         auto ext = Decode(*attributes->ExtensionData);
         attributes->ExtensionData.emplace(Encode(TExtensionData{
             .Fid = ext.Fid,
-            .HostName = ext.HostName,
             .TraceId = tracingAttributes.TraceId,
             .SpanId = tracingAttributes.SpanId,
         }));
@@ -150,7 +124,6 @@ TOriginAttributes::TErasedExtensionData GetExtensionDataOverride()
 {
     TExtensionData result;
     result.Fid = NConcurrency::GetCurrentFiberId();
-    result.HostName = NNet::GetLocalHostNameRaw();
 
     if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         result.TraceId = traceContext->GetTraceId();
@@ -162,7 +135,6 @@ TOriginAttributes::TErasedExtensionData GetExtensionDataOverride()
 
 std::string FormatOriginOverride(const TOriginAttributes& attributes)
 {
-    TryExtractHost(attributes);
     return Format("%v (pid %v, thread %v, fid %x)",
         attributes.Host,
         attributes.Pid,
@@ -189,8 +161,6 @@ TOriginAttributes ExtractFromDictionaryOverride(TErrorAttributes* attributes)
 
         static const std::string TraceIdKey("trace_id");
         ext.TraceId = attributes->GetAndRemove<NTracing::TTraceId>(TraceIdKey, NTracing::InvalidTraceId);
-
-        ext.HostName = result.Host;
 
         static const std::string SpanIdKey("span_id");
         ext.SpanId = attributes->GetAndRemove<NTracing::TSpanId>(SpanIdKey, NTracing::InvalidSpanId);

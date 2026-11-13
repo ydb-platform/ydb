@@ -335,7 +335,7 @@ message StreamReadMessage {
         // Indicates that the SDK supports auto partitioning.
         bool auto_partitioning_support = 5;
         // Max in flight bytes per partition
-        uint64 partition_max_in_flight_bytes = 6; 
+        uint64 partition_max_in_flight_bytes = 6;
 
         message TopicReadSettings {
             // Topic path.
@@ -478,7 +478,9 @@ message StreamReadMessage {
         // Identifier of partition session whose status was requested.
         int64 partition_session_id = 1;
 
-        // Partition contains messages with offsets in range [start, end).
+
+        // start is the committed offset; end is the partition end offset.
+        // start may precede the earliest retained offset.
         OffsetsRange partition_offsets = 2;
 
         // Each offset up to and including (committed_offset - 1) was fully processed.
@@ -500,11 +502,15 @@ message StreamReadMessage {
         // Each offset up to and including (committed_offset - 1) was fully processed.
         int64 committed_offset = 2;
 
-        // Partition contains messages with offsets in range [start, end).
+        // start is the initial read offset; end is the partition end offset.
+        // start may precede retained_start_offset.
         OffsetsRange partition_offsets = 3;
 
         // Partition location, filled only when InitRequest.direct_read is true.
         PartitionLocation partition_location = 4;
+
+        // Earliest offset retained by the partition
+        optional int64 retained_start_offset = 5;
     }
 
     // Signal for server that client is ready to recive data for partition.
@@ -1058,8 +1064,8 @@ message PartitioningSettings {
     // Auto merge would stop working when the partitions count reaches min_active_partitions
     // Zero value means default - 1.
     int64 min_active_partitions = 1 [(Ydb.value) = ">= 0"];
-    // Auto split would stop working when the partitions count reaches max_active_partitions
-    // Zero value means default - 1.
+    // Auto split stops when the partition count reaches max_active_partitions.
+    // A zero value means use the effective min_active_partitions value.
     int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
@@ -1097,8 +1103,9 @@ message AlterPartitioningSettings {
     // Minimum partition count auto merge would stop working at.
     // Zero value means default - 1.
     optional int64 set_min_active_partitions = 1 [(Ydb.value) = ">= 0"];
-    // Maximum partition count auto merge would stop working at.
-    // Zero value means default - 1.
+    // Maximum partition count at which auto split stops.
+    // A zero value means use the effective min_active_partitions value after applying
+    // set_min_active_partitions from the same request, if present.
     optional int64 set_max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.

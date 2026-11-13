@@ -1579,6 +1579,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::any_value",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::asin",
     "kind": "Normal"
   },
@@ -1599,12 +1603,24 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::avg",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::base64",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::between",
     "kind": "Normal"
   },
   {
     "name": "Spark::bin",
     "kind": "Normal"
+  },
+  {
+    "name": "Spark::bit_and",
+    "kind": "Agg"
   },
   {
     "name": "Spark::bit_count",
@@ -1617,6 +1633,22 @@
   {
     "name": "Spark::bit_length",
     "kind": "Normal"
+  },
+  {
+    "name": "Spark::bit_or",
+    "kind": "Agg"
+  },
+  {
+    "name": "Spark::bit_xor",
+    "kind": "Agg"
+  },
+  {
+    "name": "Spark::bool_and",
+    "kind": "Agg"
+  },
+  {
+    "name": "Spark::bool_or",
+    "kind": "Agg"
   },
   {
     "name": "Spark::btrim",
@@ -1667,11 +1699,43 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::count",
+    "kind": "Agg"
+  },
+  {
+    "name": "Spark::count_if",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::crc32",
     "kind": "Normal"
   },
   {
     "name": "Spark::csc",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::current_date",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::current_timestamp",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::day",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::dayofmonth",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::dayofweek",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::dayofyear",
     "kind": "Normal"
   },
   {
@@ -1695,6 +1759,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::every",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::exp",
     "kind": "Normal"
   },
@@ -1711,6 +1779,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::first",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::floor",
     "kind": "Normal"
   },
@@ -1720,6 +1792,10 @@
   },
   {
     "name": "Spark::hex",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::hour",
     "kind": "Normal"
   },
   {
@@ -1753,6 +1829,10 @@
   {
     "name": "Spark::isnull",
     "kind": "Normal"
+  },
+  {
+    "name": "Spark::last",
+    "kind": "Agg"
   },
   {
     "name": "Spark::lcase",
@@ -1811,11 +1891,31 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::max",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::md5",
     "kind": "Normal"
   },
   {
+    "name": "Spark::mean",
+    "kind": "Agg"
+  },
+  {
+    "name": "Spark::min",
+    "kind": "Agg"
+  },
+  {
+    "name": "Spark::minute",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::mod",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::month",
     "kind": "Normal"
   },
   {
@@ -1875,6 +1975,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::quarter",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::quote",
     "kind": "Normal"
   },
@@ -1916,6 +2020,10 @@
   },
   {
     "name": "Spark::sec",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::second",
     "kind": "Normal"
   },
   {
@@ -1987,6 +2095,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::sum",
+    "kind": "Agg"
+  },
+  {
     "name": "Spark::tan",
     "kind": "Normal"
   },
@@ -2044,6 +2156,18 @@
   },
   {
     "name": "Spark::validate_utf8",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::weekday",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::weekofyear",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::year",
     "kind": "Normal"
   },
   {

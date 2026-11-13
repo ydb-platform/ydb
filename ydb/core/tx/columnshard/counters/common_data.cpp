@@ -20,14 +20,15 @@ TDataOwnerSignals::TDataOwnerSignals(const TString& module, const TString dataNa
 }
 
 TLoadTimeSignals::TLoadTimer::~TLoadTimer() {
-    ui64 duration = (TInstant::Now() - Start).MicroSeconds();
+    const TDuration duration = TMonotonic::Now() - Start;
     if (Failed) {
-        Signals.AddFailedLoadingTime(duration);
+        Signals.AddFailedLoadingTime(duration.MicroSeconds());
     } else {
-        Signals.AddLoadingTime(duration);
+        Signals.AddLoadingTime(duration.MicroSeconds());
     }
-    YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-        {Name, duration});
+    if (Total) {
+        *Total += duration;
+    }
 }
 
 void TLoadTimeSignals::TLoadTimer::AddLoadingFail() {

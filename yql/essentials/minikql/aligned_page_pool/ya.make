@@ -7,11 +7,18 @@ SRCS(
     aligned_page_pool.h
     fake_mmap.cpp
     fake_mmap.h
+    frozen_page.h
     global_page_pool.h
     global_pools.h
     page_pool_constants.h
     system_mmap.cpp
     system_mmap.h
+    tracked_mmap.cpp
+    tracked_mmap.h
+    frozen_page.cpp
+    global_page_pool.cpp
+    global_pools.cpp
+    page_pool_constants.cpp
 )
 
 PEERDIR(

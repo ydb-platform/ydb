@@ -2,8 +2,18 @@
 
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <util/string/cast.h>
 
 Y_UNIT_TEST_SUITE(TTranslationSettings) {
+Y_UNIT_TEST(TranslatorLevelPragmas) {
+    for (const TStringBuf name : {"", "ClassicDivision", "DqEngine", "yson.Strict", "YSON.Strict", "YsOn.AutoConvert"}) {
+        UNIT_ASSERT_C(NSQLTranslation::IsTranslatorLevelPragma(name), name);
+    }
+    for (const TStringBuf name : {"yt.StaticPool", "hahn.Pool", "dq.DefaultAutoPercentage", "config.Flags", "ysonOther.Strict"}) {
+        UNIT_ASSERT_C(!NSQLTranslation::IsTranslatorLevelPragma(name), name);
+    }
+}
+
 Y_UNIT_TEST(InfersCustomSyntax) {
     NSQLTranslation::TTranslationSettings settings;
     NYql::TIssues issues;
@@ -45,6 +55,23 @@ Y_UNIT_TEST(InvalidKnownFlagValuesAreRejected) {
 
     UNIT_ASSERT_EXCEPTION_CONTAINS(ParseTranslationSettings(invalidYqlSelect, settings), yexception, "Bad YqlSelect args");
     UNIT_ASSERT_EXCEPTION_CONTAINS(ParseTranslationSettings(invalidMaxParseTreeDepth, settings), yexception, "Bad MaxParseTreeDepth args");
+}
+
+Y_UNIT_TEST(GroupingLimits) {
+    TTranslationSettings settings;
+    UNIT_ASSERT_VALUES_EQUAL(settings.GroupByLimit, 64);
+    UNIT_ASSERT_VALUES_EQUAL(settings.GroupByCubeLimit, 5);
+    for (TStringBuf value : {"0", "2", "4294967295"}) {
+        ParseTranslationSettings(TExtendedSqlFlags{{"GroupByLimit", {TString(value)}}, {"GroupByCubeLimit", {TString(value)}}}, settings);
+        UNIT_ASSERT_VALUES_EQUAL(settings.GroupByLimit, FromString<ui32>(value));
+        UNIT_ASSERT_VALUES_EQUAL(settings.GroupByCubeLimit, FromString<ui32>(value));
+    }
+    for (TStringBuf flag : {"GroupByLimit", "GroupByCubeLimit"}) {
+        for (TStringBuf value : {"-1", "invalid", "4294967296"}) {
+            const TExtendedSqlFlags flags{{TString(flag), {TString(value)}}};
+            UNIT_ASSERT_EXCEPTION_CONTAINS(ParseTranslationSettings(flags, settings), yexception, TString("Bad ") + flag);
+        }
+    }
 }
 
 Y_UNIT_TEST(UnknownValuableFlagIsIgnoredByDefault) {

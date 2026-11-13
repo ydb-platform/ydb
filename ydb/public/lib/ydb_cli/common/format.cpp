@@ -8,6 +8,7 @@
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/library/arrow_parquet/result_set_parquet_printer.h>
 #include <ydb/library/plan2svg/plan2svg.h>
+#include <ydb/library/plan2svg/parse.h>
 
 #include <iomanip>
 #include <regex>
@@ -100,7 +101,7 @@ namespace {
         TVector<TString> info;
         auto appendField = [&](TStringBuf field) {
             if (auto it = node.find(field); it != node.end()) {
-                info.emplace_back(TStringBuilder() << field << ": " << it->second.GetStringRobust());
+                info.emplace_back(TStringBuilder() << field << ": " << NPlan2Svg::FormatPlanProperty(field, it->second));
             }
         };
 
@@ -519,7 +520,7 @@ void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<T
             TVector<TString> info;
             for (const auto& [key, value] : op.GetMapSafe()) {
                 if (key != "Name") {
-                    info.emplace_back(TStringBuilder() << key << ": " << JsonToString(value));
+                    info.emplace_back(TStringBuilder() << key << ": " << NPlan2Svg::FormatPlanProperty(key, value));
                 }
             }
 
@@ -681,13 +682,13 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 } else if (key == "A-Rows") {
                     aRows = FormatPrettyTableDouble(std::to_string(value.GetDouble()));
                 } else if (key == "E-Cost") {
-                    eCost = FormatPrettyTableDouble(value.GetString());
+                    eCost = FormatPrettyTableDouble(value.GetStringRobust());
                 } else if (key == "E-Rows") {
-                    eRows = FormatPrettyTableDouble(value.GetString());
+                    eRows = FormatPrettyTableDouble(value.GetStringRobust());
                 } else if (key == "E-Size") {
-                    eSize = FormatPrettyTableDouble(value.GetString());
+                    eSize = FormatPrettyTableDouble(value.GetStringRobust());
                 } else if (key != "Name") {
-                    std::string valueWithoutInnerVars = JsonToString(value);
+                    std::string valueWithoutInnerVars = NPlan2Svg::FormatPlanProperty(key, value);
                     valueWithoutInnerVars = std::regex_replace(valueWithoutInnerVars, std::regex(R"((\b(item|state)\.\b))"), "");
 
                     if (key == "SsaProgram") {

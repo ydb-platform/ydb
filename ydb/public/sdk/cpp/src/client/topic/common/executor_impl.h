@@ -1,10 +1,10 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/executor.h>
-#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <util/thread/pool.h>
 
+#include <mutex>
 #include <queue>
 
 namespace NYdb::inline Dev::NTopic {

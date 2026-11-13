@@ -56,15 +56,17 @@ public:
     }
 
     TCheckSecretNameUnique(std::vector<TSecretId> secrets)
-        : TModificationStage(BuildRequest(secrets)) {
+        : TModificationStage(BuildRequest(secrets))
+    {
         for (const auto& id : secrets) {
             AFL_VERIFY(SecretNameToOwner.emplace(id.GetSecretId(), id.GetOwnerUserId()).second);
         }
     }
 };
 
-void TAccessManager::DoPrepareObjectsBeforeModification(std::vector<TAccess>&& patchedObjects, NModifications::IAlterPreparationController<TAccess>::TPtr controller,
-    const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const {
+void TAccessManager::DoPrepareObjectsBeforeModification(std::vector<TAccess>&& patchedObjects,
+    NModifications::IAlterPreparationController<TAccess>::TPtr controller, const TInternalModificationContext& context,
+    const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const {
     if (context.GetActivityType() == IOperationsManager::EActivityType::Alter) {
         controller->OnPreparationProblem("access object cannot be modified");
         return;
@@ -80,8 +82,8 @@ void TAccessManager::DoPrepareObjectsBeforeModification(std::vector<TAccess>&& p
     TActivationContext::Register(new TAccessPreparationActor(std::move(patchedObjects), controller, context));
 }
 
-NModifications::TOperationParsingResult TAccessManager::DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-    TInternalModificationContext& context) const {
+NModifications::TOperationParsingResult TAccessManager::DoBuildPatchFromSettings(
+    const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context) const {
     NInternal::TTableRecord result;
     TStringBuf sb(settings.GetObjectId().data(), settings.GetObjectId().size());
     TStringBuf l;
@@ -104,8 +106,8 @@ NModifications::TOperationParsingResult TAccessManager::DoBuildPatchFromSettings
     return result;
 }
 
-NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
-    TInternalModificationContext& context) const {
+NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings(
+    const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context) const {
     static const TString ExtraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
     NInternal::TTableRecord result;
     if (!context.GetExternalData().GetUserToken()) {
@@ -133,9 +135,7 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
         }
         return TConclusionStatus::Fail("incorrect character for secret id: '" + TString(c) + "'");
     }
-    {
-        result.SetColumn(TSecret::TDecoder::SecretId, NInternal::TYDBValue::Utf8(settings.GetObjectId()));
-    }
+    { result.SetColumn(TSecret::TDecoder::SecretId, NInternal::TYDBValue::Utf8(settings.GetObjectId())); }
     {
         auto fValue = settings.GetFeaturesExtractor().Extract(TSecret::TDecoder::Value);
         if (fValue) {
@@ -145,8 +145,9 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
     return result;
 }
 
-void TSecretManager::DoPrepareObjectsBeforeModification(std::vector<TSecret>&& patchedObjects, NModifications::IAlterPreparationController<TSecret>::TPtr controller,
-    const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const {
+void TSecretManager::DoPrepareObjectsBeforeModification(std::vector<TSecret>&& patchedObjects,
+    NModifications::IAlterPreparationController<TSecret>::TPtr controller, const TInternalModificationContext& context,
+    const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const {
     if (!!context.GetExternalData().GetUserToken()) {
         for (auto&& i : patchedObjects) {
             if (i.GetOwnerUserId() != context.GetExternalData().GetUserToken()->GetUserSID()) {
@@ -170,4 +171,4 @@ std::vector<NModifications::TModificationStage::TPtr> TSecretManager::GetPrecond
     }
     return {};
 }
-}
+}   // namespace NKikimr::NMetadata::NSecret

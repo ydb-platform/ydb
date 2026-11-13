@@ -824,7 +824,7 @@ namespace {
         }
 
         if (settings.has_m()
-            && !ValidateSettingInRange("M", settings.m(), 1, MaxHnswM, error)) {
+            && !ValidateSettingInRange("M", settings.m(), MinHnswM, MaxHnswM, error)) {
             return false;
         }
         if (settings.has_ef_construction()

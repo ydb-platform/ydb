@@ -6,6 +6,7 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 using namespace NYql::NNodes;
 using namespace NKikimr;
@@ -41,9 +42,10 @@ TExprNode::TPtr TPhysicalSourceBuilder::AddOlapAggregate(TExprNode::TPtr process
 
         // Column shards return AVG as its sum and count. Cast the input to Double
         // before SUM, so integer sums cannot overflow and Float sums are Double.
+        // Without scalar apply the sum keeps the stored type, see BuildOlapAverageState.
         TString sumColumn = column;
         const auto& columnType = *Read.GetIUType(*aggregation.Column, Ctx);
-        if (IsOlapAverageCast(columnType)) {
+        if (OlapAggregate->CastAverageInput && IsOlapAverageCast(columnType)) {
             const auto [it, inserted] = averageInputs.emplace(column, GetOlapAggregateField(aggregation.Output, "avg_input"));
             if (inserted) {
                 projections.push_back(BuildOlapDoubleCast(column, columnType, it->second));
@@ -153,10 +155,21 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildOlapAggregateRow(const TProgramFiel
 
 TExprNode::TPtr TPhysicalSourceBuilder::BuildOlapAverageState(const TOlapAggregation& aggregation, const TProgramFields& fields) const {
     // The AVG state of TPhysicalAggregationBuilder is (sum as Double, count).
-    // AddOlapAggregate already sums Double values.
+    // AddOlapAggregate sums Double values, unless the read program cannot cast the input:
+    // then, as in the old optimizer, the sum of the stored type is converted here.
+    const auto& columnType = *Read.GetIUType(*aggregation.Column, Ctx);
     auto sum = fields.at(GetOlapAggregateField(aggregation.Output, "sum"));
+    if (!OlapAggregate->CastAverageInput && IsOlapAverageCast(columnType)) {
+        // clang-format off
+        sum = Ctx.Builder(Pos)
+            .Callable("Convert")
+                .Add(0, std::move(sum))
+                .Atom(1, "Double")
+            .Seal().Build();
+        // clang-format on
+    }
     auto count = fields.at(GetOlapAggregateField(aggregation.Output, "count"));
-    if (!Read.GetIUType(*aggregation.Column, Ctx)->IsOptionalOrNull()) {
+    if (!columnType.IsOptionalOrNull()) {
         return Ctx.NewList(Pos, {std::move(sum), std::move(count)});
     }
 
@@ -182,6 +195,15 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildOlapAverageState(const TOlapAggrega
             .Seal()
         .Seal().Build();
     // clang-format on
+}
+
+TExprNode::TPtr TPhysicalSourceBuilder::AddOlapComputeSharding(TExprNode::TPtr settings) const {
+    TExprNode::TListType columns;
+    for (const auto& column : OlapComputeSharding->Columns) {
+        columns.push_back(Ctx.NewAtom(Pos, column));
+    }
+    const TString name(TKqpReadTableSettings::GroupByFieldNames);
+    return NYql::AddSetting(*settings, Pos, name, Ctx.NewList(Pos, std::move(columns)), Ctx);
 }
 
 NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
@@ -315,12 +337,17 @@ NPhysicalConvertionUtils::TStageBody TPhysicalSourceBuilder::BuildPhysicalOp() {
                 settings.SequentialInFlight = 1;
             }
 
+            auto settingsNode = settings.BuildNode(Ctx, Pos).Ptr();
+            if (OlapComputeSharding) {
+                settingsNode = AddOlapComputeSharding(std::move(settingsNode));
+            }
+
             // clang-format off
             auto olapRead = Build<TKqpBlockReadOlapTableRanges>(Ctx, Pos)
                 .Table(Read.TableCallable)
                 .Ranges(ranges)
                 .Columns().Add(columns).Build()
-                .Settings(settings.BuildNode(Ctx, Pos))
+                .Settings(settingsNode)
                 .ExplainPrompt<TCoNameValueTupleList>().Build()
                 .Process(processLambda)
             .Done().Ptr();

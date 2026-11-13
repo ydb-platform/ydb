@@ -63,22 +63,16 @@
               "args":
                 [
                   {
-                    "op_name":"HashShuffle",
+                    "op_name":"InnerJoin (BlockHash)",
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (BlockHash)",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"store_returns"
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"date_dim"
-                              }
-                            ]
+                          "op_name":"TableFullScan",
+                          "table":"store_returns"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"date_dim"
                         }
                       ]
                   }

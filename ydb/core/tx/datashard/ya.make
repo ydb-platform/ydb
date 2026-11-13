@@ -10,6 +10,8 @@ SRCS(
     datashard_direct_transaction.h
     datashard_failpoints.h
     datashard_impl.h
+    hnsw_index/datashard_hnsw.cpp
+    hnsw_index/hnsw_index_build_actor.cpp
     datashard_kqp.h
     datashard_locks_db.h
     datashard_outreadset.h
@@ -458,6 +460,7 @@ PEERDIR(
     library/cpp/monlib/service/pages
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
+    library/cpp/streams/zstd
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
@@ -473,8 +476,10 @@ PEERDIR(
     ydb/core/split
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tx/datashard/snapshot_retention
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/locks
+    ydb/core/tx/datashard/hnsw_index
     ydb/core/tx/sequenceproxy/public
     ydb/core/util
     ydb/core/wrappers
@@ -523,8 +528,14 @@ ENDIF()
 
 END()
 
+RECURSE(
+    hnsw_index
+)
+
 RECURSE_FOR_TESTS(
+    hnsw_index/ut
     build_index/ut
+    snapshot_retention
     ut_bloom_filter
     ut_borrowed_compaction
     ut_change_collector
@@ -537,6 +548,7 @@ RECURSE_FOR_TESTS(
     ut_export
     ut_external_blobs
     ut_followers
+    ut_hnsw_index
     ut_incremental_backup
     ut_incremental_restore_scan
     ut_import_s3_engine

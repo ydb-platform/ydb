@@ -67,6 +67,7 @@ TActorId TPartitionWriterCacheActorFixture::CreatePartitionWriterCacheActor(cons
     options.WithDatabase(params.Database);
     options.WithExpectedGeneration(params.Generation);
     options.WithSourceId(params.SourceId);
+    options.WithWriteSessionQuotaWaitTime(params.WriteSessionQuotaWaitTime);
 
     TActorId actorId = Ctx->Runtime->Register(NPQ::CreatePartitionWriterCacheActor(
         Ctx->Edge,

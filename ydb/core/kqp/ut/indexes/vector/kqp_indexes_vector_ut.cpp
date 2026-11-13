@@ -11,6 +11,7 @@
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -1902,10 +1903,11 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         return std::move(ev->Get()->Followers);
     }
 
-    Y_UNIT_TEST_QUAD(VectorSearchPushdown, Covered, Followers) {
+    void TestVectorSearchPushdown(bool Covered, bool Followers, bool omitIndexOwner = false, bool enableVectorSearchActor = true) {
         auto setting = NKikimrKqp::TKqpSetting();
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheMaxSizeBytes(300_MB);
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
 
         auto serverSettings = TKikimrSettings(appConfig)
             // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
@@ -1958,14 +1960,38 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         resolveActors("/Root/TestTable/index1/indexImplPostingTable", postingType);
         resolveActors("/Root/TestTable", mainType);
 
+        ui32 ownersCleared = 0;
+        auto legacyMetadata = runtime->AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+            [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+                if (!omitIndexOwner) { return; }
+                for (auto& entry : ev->Get()->Request->ResultSet) {
+                    for (auto& index : entry.Indexes) {
+                        if (index.GetName() == "index1") {
+                            index.ClearPathOwnerId();
+                            ++ownersCleared;
+                        }
+                    }
+                }
+            });
+        ui32 vectorReads = 0;
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
                 ui32 shardType = actorTypes[ev->GetRecipientRewrite()];
                 bool isFollower = (shardType & followerTypeFlag);
                 shardType = shardType & ~followerTypeFlag;
+                auto & read = ev->Get<TEvDataShard::TEvRead>()->Record;
+                if (!enableVectorSearchActor) {
+                    if (read.HasVectorTopK()) {
+                        ++vectorReads;
+                        const auto& topK = read.GetVectorTopK();
+                        UNIT_ASSERT_VALUES_EQUAL(topK.GetHnswIndexId().GetOwnerId(), read.GetTableId().GetOwnerId());
+                        UNIT_ASSERT_GT(topK.GetHnswIndexId().GetLocalId(), 0u);
+                        UNIT_ASSERT_VALUES_EQUAL(topK.GetTargetVector(), "\x67\x71\x02");
+                    }
+                    return false;
+                }
                 // Check that level & posting are read from followers
                 UNIT_ASSERT(isFollower == (Followers && (shardType == levelType || shardType == postingType)));
-                auto & read = ev->Get<TEvDataShard::TEvRead>()->Record;
                 if (shardType == levelType) {
                     // Level table reads do full scan for caching (VectorTopK cleared by cache layer)
                     UNIT_ASSERT(!read.HasVectorTopK());
@@ -1976,6 +2002,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     UNIT_ASSERT(shardType != 0);
                     UNIT_ASSERT(read.HasVectorTopK());
                     auto & topK = read.GetVectorTopK();
+                    ++vectorReads;
+                    if (shardType == postingType) {
+                        UNIT_ASSERT_VALUES_EQUAL(topK.GetHnswIndexId().GetOwnerId(), read.GetTableId().GetOwnerId());
+                        UNIT_ASSERT_GT(topK.GetHnswIndexId().GetLocalId(), 0u);
+                    } else {
+                        UNIT_ASSERT(!topK.HasHnswIndexId());
+                    }
                     // Check that target and limit are pushed down
                     UNIT_ASSERT(topK.GetTargetVector() == "\x67\x71\x02");
                     if (shardType == (Covered ? postingType : mainType)) {
@@ -2006,6 +2039,16 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             });
             UNIT_ASSERT(result.IsSuccess());
         }
+        UNIT_ASSERT_GT(vectorReads, 0u);
+        if (omitIndexOwner) { UNIT_ASSERT_GT(ownersCleared, 0u); }
+    }
+
+    Y_UNIT_TEST_QUAD(VectorSearchPushdown, Covered, Followers) {
+        TestVectorSearchPushdown(Covered, Followers);
+    }
+
+    Y_UNIT_TEST_TWIN(VectorSearchPushdownWithoutIndexOwner, EnableVectorSearchActor) {
+        TestVectorSearchPushdown(true, false, true, EnableVectorSearchActor);
     }
 
     Y_UNIT_TEST_QUAD(VectorIndexTruncateTable, Covered, Overlap) {

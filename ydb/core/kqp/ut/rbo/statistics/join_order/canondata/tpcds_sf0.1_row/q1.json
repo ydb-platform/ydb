@@ -3,7 +3,7 @@
   "args":
     [
       {
-        "op_name":"InnerJoin (BlockHash)",
+        "op_name":"HashShuffle",
         "args":
           [
             {
@@ -11,34 +11,40 @@
               "args":
                 [
                   {
-                    "op_name":"TableFullScan",
-                    "table":"customer"
-                  },
-                  {
-                    "op_name":"HashShuffle",
+                    "op_name":"InnerJoin (BlockHash)",
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (BlockHash)",
+                          "op_name":"TableFullScan",
+                          "table":"customer"
+                        },
+                        {
+                          "op_name":"HashShuffle",
                           "args":
                             [
                               {
-                                "op_name":"TableFullScan",
-                                "table":"store_returns"
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"date_dim"
+                                "op_name":"InnerJoin (BlockHash)",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"store_returns"
+                                    },
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"date_dim"
+                                    }
+                                  ]
                               }
                             ]
                         }
                       ]
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"store"
                   }
                 ]
-            },
-            {
-              "op_name":"TableFullScan",
-              "table":"store"
             }
           ]
       },

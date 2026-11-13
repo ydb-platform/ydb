@@ -137,6 +137,7 @@
 
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -174,6 +175,9 @@
 
 #include <ydb/core/tracing/tablet_info.h>
 
+#include <ydb/core/tx/cdc_aggregator/public/events.h>
+#include <ydb/core/tx/cdc_aggregator/service/service.h>
+#include <ydb/core/tx/cdc_aggregator/tablet/tablet.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -1472,6 +1476,7 @@ void TLocalServiceInitializer::InitializeServices(
     addToLocalConfig(TTabletTypes::GraphShard, &NGraph::CreateGraphShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BackupController, &NBackup::CreateBackupController, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::WasmCompileController, &NUdfStore::CreateWasmCompileController, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::CdcAggregator, &NCdcAggregator::CreateCdcAggregator, TMailboxType::ReadAsFilled, appData->UserPoolId);
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
     addToLocalConfig(TTabletTypes::BlockStoreVolumeDirect, &NYdb::NBS::NStorage::CreateVolumeTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BlockStorePartitionDirect, &NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
@@ -2471,6 +2476,17 @@ void TPersQueueDirectReadCacheInitializer::InitializeServices(NActors::TActorSys
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
+TWriteSessionsQuoterInitializer::TWriteSessionsQuoterInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TWriteSessionsQuoterInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    IActor* actor = NPQ::CreateWriteSessionsQuoter();
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        NPQ::MakeWriteSessionsQuoterId(),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
 TTopicDeferredPublishRegistryInitializer::TTopicDeferredPublishRegistryInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
 {}
@@ -3398,6 +3414,10 @@ void TReplicationServiceInitializer::InitializeServices(NActors::TActorSystemSet
     setup->LocalServices.emplace_back(
         NReplication::MakeReplicationServiceId(NodeId),
         TActorSetupCmd(NReplication::CreateReplicationService(), TMailboxType::HTSwap, appData->UserPoolId)
+    );
+    setup->LocalServices.emplace_back(
+        NCdcAggregator::MakeCdcAggregatorServiceId(NodeId),
+        TActorSetupCmd(NCdcAggregator::CreateCdcAggregatorService(), TMailboxType::HTSwap, appData->UserPoolId)
     );
 }
 

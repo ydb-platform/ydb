@@ -2009,6 +2009,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, NWilson::T
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
     THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
             req.GetCmdGetOwnership().GetForce(), req.GetCmdGetOwnership().GetRegisterIfNotExists());
+    event->WriteSessionQuotaWaitTime = TDuration::MilliSeconds(Max<i64>(0, req.GetCmdGetOwnership().GetQuotaWaitTimeMs()));
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 

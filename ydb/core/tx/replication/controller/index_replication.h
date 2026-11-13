@@ -4,7 +4,23 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/replication.pb.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 namespace NKikimr::NReplication::NController {
+
+inline bool EqualFulltextSettings(const Ydb::Table::FulltextIndexSettings& left,
+        const Ydb::Table::FulltextIndexSettings& right)
+{
+    return google::protobuf::util::MessageDifferencer::Equivalent(left, right);
+}
+
+inline bool IsFulltextRowIdIndex(const NKikimrSchemeOp::TIndexDescription& index) {
+    return index.GetName() == NTableIndex::NFulltext::RowIdUniqueIndexName
+        && index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique
+        && index.KeyColumnNamesSize() == 1
+        && index.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn
+        && !index.DataColumnNamesSize();
+}
 
 inline bool IsFulltextRowIdIndex(const Ydb::Table::TableIndexDescription& index) {
     return index.name() == NTableIndex::NFulltext::RowIdUniqueIndexName
@@ -34,15 +50,20 @@ inline bool IsFulltextIndex(const Ydb::Table::TableIndexDescription& index) {
         || index.has_global_json_index();
 }
 
-inline bool HasBuildingFulltextIndex(const Ydb::Table::DescribeTableResult& table) {
+inline TVector<TString> GetBuildingFulltextIndexes(const Ydb::Table::DescribeTableResult& table) {
+    TVector<TString> result;
     for (const auto& index : table.indexes()) {
         if ((IsFulltextIndex(index) || IsFulltextRowIdIndex(index))
             && index.status() != Ydb::Table::TableIndexDescription::STATUS_READY)
         {
-            return true;
+            result.emplace_back(index.name());
         }
     }
-    return false;
+    return result;
+}
+
+inline bool HasBuildingFulltextIndex(const Ydb::Table::DescribeTableResult& table) {
+    return !GetBuildingFulltextIndexes(table).empty();
 }
 
 inline bool HasSupportedFulltextLayout(const Ydb::Table::TableIndexDescription& index) {

@@ -86,6 +86,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvCancelCreateStream, Handle);
         HFunc(TEvPrivate::TEvCancelDropStream, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
+        HFunc(TEvPrivate::TEvSourceStatus, Handle);
         HFunc(TEvPrivate::TEvAlterDstResult, Handle);
         HFunc(TEvPrivate::TEvSchemaChangeDstAlterResult, Handle);
         HFunc(TEvPrivate::TEvSchemaChangeDstAlterTxId, Handle);
@@ -387,6 +388,32 @@ void TController::Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorC
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
     RunTxCreateDstResult(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvSourceStatus::TPtr& ev, const TActorContext&) {
+    const auto replication = Find(ev->Get()->ReplicationId);
+    if (!replication) {
+        return;
+    }
+    if (!ev->Get()->TargetId) {
+        const auto state = replication->GetState();
+        if (replication->IsExpectedTargetDiscoverer(ev->Sender)
+            && (state == TReplication::EState::Ready || state == TReplication::EState::Paused))
+        {
+            replication->SetState(state, ev->Get()->Issue);
+        }
+        return;
+    }
+    auto* target = replication->FindTarget(*ev->Get()->TargetId);
+    if (!target || !target->IsExpectedDstCreator(ev->Sender)
+        || (target->GetDstState() != TReplication::EDstState::Creating
+            && target->GetDstState() != TReplication::EDstState::Alter))
+    {
+        return;
+    }
+    // Transient creator diagnostics are visible in the monitoring target table.
+    // A restarted creator reports its current wait again; completion clears it.
+    target->SetIssue(ev->Get()->Issue);
 }
 
 void TController::Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx) {

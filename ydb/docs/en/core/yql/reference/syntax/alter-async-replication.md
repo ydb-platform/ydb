@@ -23,6 +23,8 @@ ALTER ASYNC REPLICATION <name> SET (option = value [, ...])
 
         * `FORCE` — forced failover.
 
+        For replication of fulltext or JSON indexes enabled by `EnableFulltextIndexReplication`, forced completion requires access to the source tables and their backing tables, with valid source credentials. Before making the replicas writable, {{ ydb-short-name }} reads the source sequence watermarks to prevent reuse of row identifiers and index generation numbers. Keep the source objects and credentials available until completion reaches `DONE`. If access is lost, restore it and retry completion; `FORCE` does not bypass this sequence handoff.
+
 * Authentication settings for the source database (one of the following):
 
   {% include [x](_includes/async_replication_authentification.md) %}

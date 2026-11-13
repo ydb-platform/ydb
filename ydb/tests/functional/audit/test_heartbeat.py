@@ -60,12 +60,13 @@ class TestHeartbeat(unittest.TestCase):
                 address = ipaddress.ip_address(interface_address.address.split('%', 1)[0])
                 if address.is_loopback or address.is_link_local or address.is_unspecified:
                     continue
-                addresses[address.version].add(address)
+                addresses[address.version].add(socket.inet_ntop(interface_address.family, address.packed))
         return addresses[4] or addresses[6]
 
     def check_heartbeat(self, cluster, node):
         node_id, _ = self.node_identity(node)
         addresses = self.local_addresses()
+        expected_address = min(addresses) if addresses else '{none}'
         deadline = time.monotonic() + plain_or_under_sanitizer(30, 120)
         records = []
         while time.monotonic() < deadline:
@@ -85,11 +86,7 @@ class TestHeartbeat(unittest.TestCase):
         for record in records:
             self.assertEqual(record['component'], 'audit-service')
             self.assertEqual(record['status'], 'SUCCESS')
-            if not addresses:
-                self.assertEqual(record['remote_address'], '{none}')
-                continue
-            address = ipaddress.ip_address(record['remote_address'])
-            self.assertIn(address, addresses, record)
+            self.assertEqual(record['remote_address'], expected_address, record)
 
     def test_static_node_ipv4(self):
         cluster = self.start_cluster(socket.AF_INET)

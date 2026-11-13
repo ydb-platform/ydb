@@ -11,6 +11,8 @@
 
 #include <ydb/core/audit/audit_log.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NAudit {
 
 namespace {
@@ -31,8 +33,7 @@ public:
     void Bootstrap() {
         Y_VERIFY(HeartbeatInterval);
         if (!EnableLogging) {
-            PassAway();
-            return;
+            return PassAway();
         }
 
         Become(&THeartbeatActor::StateFunc);
@@ -40,9 +41,8 @@ public:
     }
 
     TString GetNodeAddress() const {
-        // Pick a local IP to identify the node in heartbeat audit records.
-        TString ipv4;
-        TString ipv6;
+        // Pick a stable local IP to identify the node in heartbeat audit records.
+        TVector<std::pair<int, TString>> addresses;
         const auto interfaces = NetworkInterfacesProvider();
         for (const auto& interface : interfaces) {
             if (!interface.Address || NAddr::IsLoopback(*interface.Address)) {
@@ -56,16 +56,16 @@ public:
             if (ip.empty() || ip == "0.0.0.0" || ip == "::") {
                 continue;
             }
-            if (address.GetFamily() == AF_INET6) {
-                ipv6 = ip;
-            } else if (address.GetFamily() == AF_INET) {
-                ipv4 = ip;
+            int familyOrder = 2;
+            if (address.GetFamily() == AF_INET) {
+                familyOrder = 0;
+            } else if (address.GetFamily() == AF_INET6) {
+                familyOrder = 1;
             }
+            addresses.emplace_back(familyOrder, ip);
         }
-        if (!ipv4.empty()) {
-            return ipv4;
-        }
-        return ipv6;
+        Sort(addresses);
+        return addresses.empty() ? TString() : addresses.front().second;
     }
 
     void HeartbeatLog() {

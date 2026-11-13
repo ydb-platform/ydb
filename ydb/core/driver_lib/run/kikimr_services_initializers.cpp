@@ -3303,7 +3303,7 @@ void TAuditWriterInitializer::InitializeServices(TActorSystemSetup* setup, const
     if (appData->AuditConfig.GetHeartbeat().GetIntervalSeconds()) {
         auto heartbeatActor = NAudit::CreateHeartbeatActor(appData->AuditConfig);
         setup->LocalServices.emplace_back(
-            NActors::TActorId(), // Heartbeat does not need a well-known service ID
+            NActors::TActorId(), // We don't need external communication with this actor
             TActorSetupCmd(std::move(heartbeatActor), TMailboxType::HTSwap, appData->UserPoolId));
     }
 }

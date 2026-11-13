@@ -11,6 +11,7 @@
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <algorithm>
 #include <queue>
 #include <mutex>
 #include <condition_variable>
@@ -296,7 +297,24 @@ Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
     }
 
     Y_UNIT_TEST(LoggingHeartbeatPrefersIPv4) {
-        CheckHeartbeat({"2001:db8::10", "192.0.2.10", "2001:db8::20"}, "192.0.2.10");
+        CheckHeartbeat({"2001:db8::10", "203.0.113.10", "2001:db8::20"}, "203.0.113.10");
+    }
+
+    Y_UNIT_TEST(LoggingHeartbeatSortsIPv4Lexicographically) {
+        CheckHeartbeat({"192.0.2.2", "192.0.2.10", "192.0.2.3"}, "192.0.2.10");
+    }
+
+    Y_UNIT_TEST(LoggingHeartbeatSortsIPv6Lexicographically) {
+        CheckHeartbeat({"2001:db8::2", "2001:db8::10", "2001:db8::3"}, "2001:db8::10");
+    }
+
+    Y_UNIT_TEST(LoggingHeartbeatIgnoresInterfaceOrder) {
+        CheckHeartbeat([interfaces = MakeInterfaces({
+            "2001:db8::2", "203.0.113.2", "2001:db8::10", "203.0.113.10"
+        })]() mutable {
+            std::rotate(interfaces.begin(), interfaces.begin() + 1, interfaces.end());
+            return interfaces;
+        }, {"203.0.113.10", "203.0.113.10", "203.0.113.10", "203.0.113.10"});
     }
 
     Y_UNIT_TEST(LoggingHeartbeatSkipsSpecialAddresses) {

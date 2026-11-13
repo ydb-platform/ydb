@@ -1,11 +1,32 @@
 #pragma once
 
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <library/cpp/json/json_value.h>
+
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
 #error log macro definition clash
 #endif
 
 namespace NKikimr {
 namespace NHive {
+
+class THive;
+
+class TLoggedTransaction {
+    ui64 Index;
+    TString User;
+    TString LogPrefix;
+
+protected:
+    TLoggedTransaction(TString user, THive* self);
+
+    void WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op, TStringBuf description);
+
+    TString GetUserForLog() const {
+        return User.empty() ? TString("anonymous") : User;
+    }
+};
 
 TString GetLogPrefix();
 

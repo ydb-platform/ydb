@@ -462,6 +462,12 @@ struct TMetrics {
     void ToProto(NKikimrTabletBase::TMetrics* proto) const;
 };
 
+struct IReassignCallback {
+    virtual IEventBase* MakeEvent(ui64 tabletsDone) = 0;
+
+    virtual ~IReassignCallback() = default;
+};
+
 struct TReassignOperation {
     TTabletId TabletId;
     TVector<ui32> TabletChannels;

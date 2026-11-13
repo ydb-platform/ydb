@@ -1,7 +1,9 @@
 #pragma once
 #include <bitset>
+#include <deque>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/reassign_tablets.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/subdomain.h>
@@ -233,7 +235,7 @@ protected:
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;
     friend class TTxLockTabletExecution;
-    friend class TTxMonEvent_ReassignTablet;
+    friend class TTxReassignTablets;
     friend class TTxRegisterNode;
     friend class TTxSyncTablets;
     friend class TTxRequestTabletSequence;
@@ -257,7 +259,7 @@ protected:
     friend class TTxUpdateTabletsObject;
     friend class TTxUpdateTabletGroups;
     friend class TTxMonEvent_TabletAvailability;
-    friend class TLoggedMonTransaction;
+    friend class TLoggedTransaction;
     friend class TTxProcessUpdateFollowers;
     friend class TTxMonEvent_StopDomain;
     friend class TTxProcessTabletMetrics;
@@ -276,9 +278,11 @@ protected:
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     bool StartHiveStorageBalancer(TStorageBalancerSettings settings);
     // starts a new reassign for every tablet in the list
-    void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description);
+    TSubActorId StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
     // continues reassigns of tablets that were left in the middle of it (e.g. by a Hive restart)
     void ContinueInterruptedReassigns(std::vector<TReassignOperation> operations);
+    NKikimrReassignTablets::TEvGetResponse GetReassignTabletsResult(TSubActorId id);
+    void PruneReassignResults();
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
@@ -532,6 +536,12 @@ protected:
     std::unordered_set<TNodeId> ConnectedNodes;
     TString LastReassignStatus;
     ui32 ReassignsRunning = 0;
+    struct TReassignResult {
+        TSubActorId Id;
+        TInstant ExpiresAt;
+        NKikimrReassignTablets::TEvGetResponse Record;
+    };
+    std::deque<TReassignResult> ReassignResults;
 
     // normalized to be sorted list of unique values
     std::vector<TTabletTypes::EType> BalancerIgnoreTabletTypes; // built from CurrentConfig
@@ -605,6 +615,9 @@ protected:
     void Handle(TEvents::TEvUndelivered::TPtr&);
     void Handle(TEvHive::TEvTabletMetrics::TPtr&);
     void Handle(TEvHive::TEvReassignTablet::TPtr&);
+    void Handle(TEvReassignTablets::TEvCreateRequest::TPtr&);
+    void Handle(TEvReassignTablets::TEvCancelRequest::TPtr&);
+    void Handle(TEvReassignTablets::TEvGetRequest::TPtr&);
     void Handle(TEvHive::TEvInitiateBlockStorage::TPtr&);
     void Handle(TEvLocal::TEvSyncTablets::TPtr&);
     void Handle(TEvTabletBase::TEvBlockBlobStorageResult::TPtr&);

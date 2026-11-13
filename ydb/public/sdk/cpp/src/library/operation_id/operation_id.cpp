@@ -63,6 +63,9 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
         case Ydb::TOperationId::SCRIPT_EXECUTION:
             res << "ydb://scriptexec";
             break;
+        case Ydb::TOperationId::REASSIGN_TABLETS:
+            res << "ydb://reassigntablets";
+            break;
         default:
             Y_ABORT_UNLESS(false, "unexpected kind");
     }

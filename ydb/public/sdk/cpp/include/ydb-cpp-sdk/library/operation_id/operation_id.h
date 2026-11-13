@@ -25,6 +25,7 @@ public:
         IMPORT = 8,
         SCRIPT_EXECUTION = 9,
         SS_BG_TASKS = 10,
+        REASSIGN_TABLETS = 17,
     };
 
     struct TData {

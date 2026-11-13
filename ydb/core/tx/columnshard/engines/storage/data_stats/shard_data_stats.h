@@ -1,6 +1,6 @@
 #pragma once
 
-#include "granule_data_stats.h"
+#include "data_stats_by_storage.h"
 
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>

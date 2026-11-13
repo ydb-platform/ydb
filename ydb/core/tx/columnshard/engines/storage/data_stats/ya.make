@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    granule_data_stats.cpp
+    data_stats_by_storage.cpp
     shard_data_stats.cpp
 )
 

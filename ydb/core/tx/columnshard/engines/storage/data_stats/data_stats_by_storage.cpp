@@ -1,4 +1,4 @@
-#include "granule_data_stats.h"
+#include "data_stats_by_storage.h"
 
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 

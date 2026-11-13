@@ -17,6 +17,7 @@ SRCS(
     leader_tablet_info.h
     metrics.h
     monitoring.h
+    named_resources.h
     node_info.h
     object_distribution.h
     outgoing_requests.h
@@ -49,6 +50,7 @@ JOIN_SRCS(
     hive_impl.cpp
     hive_log.cpp
     hive_statics.cpp
+    named_resources.cpp
 )
 
 JOIN_SRCS(

@@ -5,7 +5,9 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -1513,8 +1515,25 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         });
 
         const auto tableInfo = ResolveRowTable(runtime, "/Root/Database/Table");
-        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
-        CheckTableSummaryRowCount(runtime, tableInfo.PathId, 2);
+        size_t scanRequests = 0;
+        auto observer = runtime.AddObserver<NKqp::TEvKqp::TEvQueryRequest>([&](auto& ev) {
+            const auto& request = *ev->Get();
+            const auto& query = request.GetQuery();
+            if (ev->Sender == request.GetRequestActorId()
+                && request.GetRequestType() == NRequestTypes::Analyze
+                && request.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN
+                && query.Contains("`/Root/Database/Table`")) {
+                ++scanRequests;
+                UNIT_ASSERT_C(!query.Contains(" WITH TabletId"), query);
+                UNIT_ASSERT_C(!query.Contains(" WHERE "), query);
+            }
+        });
+        const auto result = Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId},
+            "operationId", {}, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+        UNIT_ASSERT_GT(scanRequests, 0);
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(result.GetIssues(), issues);
+        UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "PostgreSQL types are not supported");
     }
 }
 

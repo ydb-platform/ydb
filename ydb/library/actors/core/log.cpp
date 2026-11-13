@@ -100,6 +100,7 @@ namespace {
 }
 
 namespace NActors {
+
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                                TAutoPtr<TLogBackend> logBackend,
                                TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
@@ -570,6 +571,26 @@ namespace NActors {
     }
 
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
+        auto sinks = Settings->Sinks.atomic_load();
+        if (sinks && !sinks->empty()) {
+            NStructuredLog::TLogMessage message {
+                .Time = evLog->Stamp,
+                .Priority = evLog->Level.ToPrio(),
+                .Component = evLog->Component,
+                .NodeId = Settings->NodeId,
+                .FileName = evLog->FileName,
+                .LineNumber = evLog->LineNumber,
+                .TextMessage = evLog->Line,
+                .StructuredMessage = evLog->StructuredMessage.GetOrElse({})};
+
+            for(auto& sink: *sinks) {
+                try {
+                    sink.second->Write(message);
+                } catch (...) {
+
+                }
+            }
+        }
         return OutputRecord(
             evLog->Stamp,
             evLog->Level.ToPrio(),

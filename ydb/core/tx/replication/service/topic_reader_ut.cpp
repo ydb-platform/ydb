@@ -11,7 +11,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/logger/stream.h>
-#include <util/generic/scope.h>
 #include <util/stream/str.h>
 
 #include <util/generic/hash_set.h>

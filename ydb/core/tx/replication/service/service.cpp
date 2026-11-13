@@ -13,6 +13,8 @@
 #include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/transfer/transfer_writer.h>
+#include <ydb/library/actors/async/async.h>
+#include <ydb/library/actors/async/sleep.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -729,15 +731,35 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         session.Handle(this, ev);
     }
 
+    void CleanupYdbProxies() {
+        for (;;) {
+            co_await NActors::AsyncSleepFor(TDuration::Seconds(30));
+            if (CurrentStateFunc() != &TThis::StateWork) {
+                co_return;
+            }
+
+            for (auto it = YdbProxies.begin(); it != YdbProxies.end();) {
+                // Factories and pending/stopping readers are independent users.
+                // Local database-only proxies retain their existing lifetime.
+                if (std::holds_alternative<TConnectionParams>(it->first) && it->second.use_count() == 1) {
+                    Send(*it->second, new TEvents::TEvPoison());
+                    YdbProxies.erase(it++);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
+
     template <typename... Args>
-    const TActorId& GetOrCreateYdbProxy(const TString& database, TConnectionParams&& params, Args&&... args) {
+    std::shared_ptr<const TActorId> GetOrCreateYdbProxy(const TString& database, TConnectionParams&& params, Args&&... args) {
         auto key = params.Endpoint().empty() ? TYdbProxyKey{database} : TYdbProxyKey{params};
         auto it = YdbProxies.find(key);
         if (it == YdbProxies.end()) {
             auto* actor = params.Endpoint().empty()
                 ? CreateLocalYdbProxy(database)
                 : CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), params.CaCert(), std::forward<Args>(args)...);
-            auto ydbProxy = Register(actor);
+            auto ydbProxy = std::make_shared<const TActorId>(Register(actor));
             auto res = YdbProxies.emplace(std::move(key), std::move(ydbProxy));
             Y_ABORT_UNLESS(res.second);
             it = res.first;
@@ -749,7 +771,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     std::function<IActor*(void)> ReaderFn(const TString& database, const NKikimrReplication::TRemoteTopicReaderSettings& settings,
         bool autoCommit, bool reportStats, bool failOnDataLoss
     ) {
-        TActorId ydbProxy;
+        std::shared_ptr<const TActorId> ydbProxy;
         auto authFailurePolicy = EAuthFailurePolicy::SourceRejectionOnly;
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
@@ -1194,6 +1216,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void PassAway() override {
         YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
+        Become(&TThis::StateDying);
         if (auto actorId = std::exchange(BoardPublisher, {})) {
             Send(actorId, new TEvents::TEvPoison());
         }
@@ -1203,7 +1226,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         for (const auto& [_, actorId] : YdbProxies) {
-            Send(actorId, new TEvents::TEvPoison());
+            Send(*actorId, new TEvents::TEvPoison());
         }
 
         if (CompilationService) {
@@ -1221,6 +1244,7 @@ public:
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         Become(&TThis::StateWork);
+        CleanupYdbProxies();
         RunBoardPublisher();
     }
 
@@ -1247,6 +1271,10 @@ public:
         }
     }
 
+    STATEFN(StateDying) {
+        Y_UNUSED(ev);
+    }
+
 private:
     TActorId BoardPublisher;
     THashMap<ui64, TSessionInfo> Sessions;
@@ -1266,7 +1294,7 @@ private:
         }
     };
 
-    THashMap<TYdbProxyKey, TActorId, TYdbProxyKeyHash> YdbProxies;
+    THashMap<TYdbProxyKey, std::shared_ptr<const TActorId>, TYdbProxyKeyHash> YdbProxies;
     THashMap<TActorId, ui64> WorkerActorIdToSession;
 
     mutable TMaybe<TActorId> CompilationService;

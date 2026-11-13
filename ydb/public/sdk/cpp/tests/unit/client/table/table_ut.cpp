@@ -240,6 +240,94 @@ namespace {
 
 } // namespace <anonymous>
 
+TEST(TableTest, ColumnFamilyCompressionRoundTrip) {
+    using NTable::EColumnFamilyCompression;
+    const std::pair<EColumnFamilyCompression, Ydb::Table::ColumnFamily::Compression> codecs[] = {
+        {EColumnFamilyCompression::None, Ydb::Table::ColumnFamily::COMPRESSION_NONE},
+        {EColumnFamilyCompression::LZ4, Ydb::Table::ColumnFamily::COMPRESSION_LZ4},
+        {EColumnFamilyCompression::ZSTD, Ydb::Table::ColumnFamily::COMPRESSION_ZSTD},
+    };
+    for (const auto& [codec, protoCodec] : codecs) {
+        const auto family = NTable::TColumnFamilyBuilder("compressed")
+                                .SetCompression(codec)
+                                .Build();
+        EXPECT_EQ(family.GetProto().compression(), protoCodec);
+        EXPECT_EQ(family.GetCompression(), codec);
+        EXPECT_FALSE(family.GetCompressionLevel().has_value());
+
+        Ydb::Table::ColumnFamily proto;
+        proto.set_compression(protoCodec);
+        EXPECT_EQ(NTable::TColumnFamilyDescription(proto).GetCompression(), codec);
+    }
+
+    Ydb::Table::ColumnFamily proto;
+    EXPECT_FALSE(NTable::TColumnFamilyDescription(proto).GetCompression().has_value());
+    proto.set_compression(static_cast<Ydb::Table::ColumnFamily::Compression>(999));
+    EXPECT_FALSE(NTable::TColumnFamilyDescription(proto).GetCompression().has_value());
+}
+
+TEST(TableTest, ColumnFamilyCompressionLevelRoundTrip) {
+    for (const std::int32_t level : {0, 1, 7, 22}) {
+        const auto family = NTable::TColumnFamilyBuilder("compressed")
+                                .SetCompression(NTable::EColumnFamilyCompression::ZSTD)
+                                .SetCompressionLevel(level)
+                                .Build();
+        ASSERT_TRUE(family.GetProto().has_compression_level());
+        EXPECT_EQ(family.GetProto().compression_level(), level);
+        EXPECT_EQ(family.GetCompressionLevel(), level);
+    }
+}
+
+TEST(TableTest, ZstdColumnFamilyRequests) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+    StartServerWithTableService(tableService, grpcServer, driver, tableClient, tableSession);
+
+    auto createFuture = tableSession->CreateTable(
+        "/Root/My/DB/test_table",
+        NTable::TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint64)
+            .SetPrimaryKeyColumn("Key")
+            .BeginColumnFamily("default")
+            .SetCompression(NTable::EColumnFamilyCompression::ZSTD)
+            .SetCompressionLevel(7)
+            .EndColumnFamily()
+            .Build());
+    ASSERT_TRUE(createFuture.Wait(TDuration::Seconds(10)));
+    ASSERT_TRUE(createFuture.ExtractValueSync().IsSuccess());
+    ASSERT_TRUE(tableService.LastCreateTableRequest.has_value());
+    ASSERT_EQ(tableService.LastCreateTableRequest->column_families_size(), 1);
+    const auto& createdFamily = tableService.LastCreateTableRequest->column_families(0);
+    EXPECT_EQ(createdFamily.compression(), Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+    EXPECT_EQ(createdFamily.compression_level(), 7);
+
+    auto alterFuture = tableSession->AlterTable(
+        "/Root/My/DB/test_table",
+        NTable::TAlterTableSettings()
+            .BeginAddColumnFamily("cold")
+            .SetCompression(NTable::EColumnFamilyCompression::ZSTD)
+            .SetCompressionLevel(22)
+            .EndAddColumnFamily()
+            .BeginAlterColumnFamily("default")
+            .SetCompressionLevel(0)
+            .EndAlterColumnFamily());
+    ASSERT_TRUE(alterFuture.Wait(TDuration::Seconds(10)));
+    ASSERT_TRUE(alterFuture.ExtractValueSync().IsSuccess());
+    ASSERT_TRUE(tableService.LastAlterTableRequest.has_value());
+    ASSERT_EQ(tableService.LastAlterTableRequest->add_column_families_size(), 1);
+    const auto& addedFamily = tableService.LastAlterTableRequest->add_column_families(0);
+    EXPECT_EQ(addedFamily.compression(), Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+    EXPECT_EQ(addedFamily.compression_level(), 22);
+    ASSERT_EQ(tableService.LastAlterTableRequest->alter_column_families_size(), 1);
+    const auto& alteredFamily = tableService.LastAlterTableRequest->alter_column_families(0);
+    EXPECT_EQ(alteredFamily.compression(), Ydb::Table::ColumnFamily::COMPRESSION_UNSPECIFIED);
+    ASSERT_TRUE(alteredFamily.has_compression_level());
+    EXPECT_EQ(alteredFamily.compression_level(), 0);
+}
+
 TEST(TableTest, FulltextSuperLemmerAnalyzerRoundTrip) {
     NTable::TFulltextIndexSettings settings;
     NTable::TFulltextIndexSettings::TColumnAnalyzers column;

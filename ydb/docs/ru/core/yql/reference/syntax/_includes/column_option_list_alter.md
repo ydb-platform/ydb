@@ -25,7 +25,7 @@
 
 Доступны следующие операции:
 
-{% if feature_alter_column_not_null == true %}
+{% if feature_flags.enable_set_column_constraint == true %}
 * `SET NOT NULL` — устанавливает ограничение `NOT NULL` для колонки.
 {% endif %}
 * `DROP NOT NULL` — снимает ограничение `NOT NULL` с колонки, снова разрешая значения `NULL`.

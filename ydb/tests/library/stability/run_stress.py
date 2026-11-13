@@ -29,7 +29,7 @@ from ydb.tests.library.stability.utils.workload_logs import (
 
 _FAILED_RUN_RETRY_DELAY_SECONDS = 10
 _WORKLOAD_TIMEOUT_GRACE_SECONDS = 60
-_PRE_POST_COMMAND_TIMEOUT_SECONDS = 300
+_PRE_POST_COMMAND_TIMEOUT_SECONDS = 3600
 
 
 class WorkloadRunOutcome(NamedTuple):

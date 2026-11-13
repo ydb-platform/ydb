@@ -1,226 +1,82 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import datetime
-import os
-import pytest
 import time
 
-import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.tools.fq_runner.fq_client import (
-    CONTROL_PLANE_REQUEST_TIMEOUT,
-    FederatedQueryClient,
-    StreamingDisposition,
-)
-from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 from ydb.tests.tools.datastreams_helpers.data_plane import READ_TOOL_TIMEOUT
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 
 
 class TestDisposition(TestYdsBase):
-    @yq_v1
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_disposition_oldest(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient):
-        client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
-        self.init_topics("disposition_oldest")
-
-        query_name = "disposition-oldest-query"
-        sql = Rf'''
-            PRAGMA dq.MaxTasksPerStage="1";
-
-            INSERT INTO yds.`{self.output_topic}`
-            SELECT Data FROM yds.`{self.input_topic}`;
-        '''
-
-        def run(input: list[str], output: list[str], query_id: str | None) -> str:
-            self.write_stream(input)
-
-            if query_id is None:
-                result: fq.CreateQueryResult = client.create_query(
-                    name=query_name,
-                    text=sql,
-                    type=fq.QueryContent.QueryType.STREAMING,
-                    streaming_disposition=StreamingDisposition.oldest(),
-                ).result
-                query_id = result.query_id
+    def test_disposition_oldest(self, ydb_topics):
+        io = ydb_topics('test_disposition_oldest')
+        sql = f'INSERT INTO {io.output} SELECT Data FROM {io.input};'
+        query = None
+        expected = []
+        for batch in (['1', '2'], ['3', '4'], ['5', '6']):
+            io.write(batch)
+            expected += batch
+            if query is None:
+                query = io.start(sql, disposition='OLDEST')
             else:
-                client.modify_query(
-                    query_id=query_id,
-                    name=query_name,
-                    text=sql,
-                    type=fq.QueryContent.QueryType.STREAMING,
-                    streaming_disposition=StreamingDisposition.oldest(),
-                )
-            client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+                io.resume(query, disposition='OLDEST')
+            assert io.read(len(expected)) == expected
+            io.stop(query)
 
-            time.sleep(5)
-
-            assert self.read_stream(len(output)) == output
-
-            client.abort_query(query_id)
-            client.wait_query(query_id)
-
-            return query_id
-
-        query_id = run(["1", "2"], ["1", "2"], None)
-        query_id = run(["3", "4"], ["1", "2", "3", "4"], query_id)
-        query_id = run(["5", "6"], ["1", "2", "3", "4", "5", "6"], query_id)
-
-    @yq_v1
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_disposition_fresh(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient):
-        client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
-        self.init_topics("disposition_fresh")
-
-        query_name = "disposition-fresh-query"
-        sql = Rf'''
-            PRAGMA dq.MaxTasksPerStage="1";
-
-            INSERT INTO yds.`{self.output_topic}`
-            SELECT Data FROM yds.`{self.input_topic}`;
-        '''
-
-        def run(input: list[str], output: list[str], query_id: str | None) -> str:
-            self.write_stream(input)
-
-            if query_id is None:
-                result: fq.CreateQueryResult = client.create_query(
-                    name=query_name,
-                    text=sql,
-                    type=fq.QueryContent.QueryType.STREAMING,
-                    streaming_disposition=StreamingDisposition.fresh(),
-                ).result
-                query_id = result.query_id
+    def test_disposition_fresh(self, ydb_topics):
+        io = ydb_topics('test_disposition_fresh')
+        sql = f'INSERT INTO {io.output} SELECT Data FROM {io.input};'
+        query = None
+        for batch in (['1', '2'], ['3', '4'], ['5', '6']):
+            io.write(batch)
+            if query is None:
+                query = io.start(sql, disposition='FRESH')
             else:
-                client.modify_query(
-                    query_id=query_id,
-                    name=query_name,
-                    text=sql,
-                    type=fq.QueryContent.QueryType.STREAMING,
-                    streaming_disposition=StreamingDisposition.fresh(),
-                )
-            client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+                io.resume(query, disposition='FRESH')
+            assert io.read(1, timeout=1) == []
+            io.stop(query)
 
-            time.sleep(5)
-
-            assert self.read_stream(len(output)) == output
-
-            client.abort_query(query_id)
-            client.wait_query(query_id)
-
-            return query_id
-
-        query_id = run(["1", "2"], [], None)
-        query_id = run(["3", "4"], [], query_id)
-        query_id = run(["5", "6"], [], query_id)
-
-    @yq_v1
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_disposition_from_time(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient):
-        client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
-        self.init_topics("disposition_from_time")
-        timestamp_consumer = self.consumer_name + "_timestamps"
-        create_read_rule(self.input_topic, timestamp_consumer)
-
-        query_name = "disposition-from-time-query"
-        sql = Rf'''
-            PRAGMA dq.MaxTasksPerStage="1";
-
-            INSERT INTO yds.`{self.output_topic}`
-            SELECT Data FROM yds.`{self.input_topic}`;
-        '''
-
-        def run(input: list[str], output: list[str], query_id: str | None) -> str:
-            self.write_stream(input)
-            with kikimr.driver.topic_client.reader(self.input_topic, consumer=timestamp_consumer) as reader:
-                messages = [reader.receive_message(timeout=READ_TOOL_TIMEOUT) for _ in input]
-                assert [message.data.decode("utf-8") for message in messages] == input
+    def test_disposition_from_time(self, ydb_topics):
+        io = ydb_topics('disposition_from_time')
+        timestamp_consumer = io.consumer_name + '_timestamps'
+        create_read_rule(io.input_topic, timestamp_consumer, default_endpoint=io.endpoint)
+        sql = f'INSERT INTO {io.output} SELECT Data FROM {io.input};'
+        query = None
+        for batch in (['1', '2'], ['3', '4'], ['5', '6']):
+            io.write(batch)
+            with io.kikimr.external_ydb_client.driver.topic_client.reader(
+                io.input_topic, consumer=timestamp_consumer
+            ) as reader:
+                messages = [reader.receive_message(timeout=READ_TOOL_TIMEOUT) for _ in batch]
+                assert [message.data.decode('utf-8') for message in messages] == batch
                 for message in messages:
                     reader.commit_with_ack(message, timeout=READ_TOOL_TIMEOUT)
-
-            # Topic write timestamps use the actor system's cached clock, which can
-            # lag behind the wall clock even for messages written after datetime.now().
+            # Use the topic's write timestamps rather than the wall clock.
             from_time = min(message.written_at for message in messages).replace(tzinfo=datetime.timezone.utc)
-
-            if query_id is None:
-                result: fq.CreateQueryResult = client.create_query(
-                    name=query_name,
-                    text=sql,
-                    type=fq.QueryContent.QueryType.STREAMING,
-                    streaming_disposition=StreamingDisposition.from_time(from_time.timestamp()),
-                ).result
-                query_id = result.query_id
+            timestamp = from_time.isoformat().replace('+00:00', 'Z')
+            disposition = f'(FROM_TIME = "{timestamp}")'
+            if query is None:
+                query = io.start(sql, disposition=disposition)
             else:
-                client.modify_query(
-                    query_id=query_id,
-                    name=query_name,
-                    text=sql,
-                    type=fq.QueryContent.QueryType.STREAMING,
-                    streaming_disposition=StreamingDisposition.from_time(from_time.timestamp()),
-                )
-            client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+                io.resume(query, disposition=disposition)
+            assert io.read(len(batch)) == batch
+            io.stop(query)
+            time.sleep(1)  # Keep batches in distinct topic write-time intervals.
 
-            time.sleep(5)
-
-            assert self.read_stream(len(output)) == output
-
-            client.abort_query(query_id)
-            client.wait_query(query_id)
-
-            return query_id
-
-        query_id = run(["1", "2"], ["1", "2"], None)
-        query_id = run(["3", "4"], ["3", "4"], query_id)
-        query_id = run(["5", "6"], ["5", "6"], query_id)
-
-    @yq_v1
-    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
-    def test_disposition_time_ago(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient):
-        client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
-        self.init_topics("disposition_time_ago")
-
-        query_name = "disposition-time-ago-query"
-        sql = Rf'''
-            PRAGMA dq.MaxTasksPerStage="1";
-
-            INSERT INTO yds.`{self.output_topic}`
-            SELECT Data FROM yds.`{self.input_topic}`;
-        '''
-
-        def run(input: list[str], output: list[str], query_id: str | None) -> str:
-            from_time = datetime.datetime.now()
-            self.write_stream(input)
-
-            if query_id is None:
-                result: fq.CreateQueryResult = client.create_query(
-                    name=query_name,
-                    text=sql,
-                    type=fq.QueryContent.QueryType.STREAMING,
-                    streaming_disposition=StreamingDisposition.time_ago(CONTROL_PLANE_REQUEST_TIMEOUT),
-                ).result
-                query_id = result.query_id
+    def test_disposition_time_ago(self, ydb_topics):
+        io = ydb_topics('disposition_time_ago')
+        sql = f'INSERT INTO {io.output} SELECT Data FROM {io.input};'
+        query = None
+        lookback = plain_or_under_sanitizer(30, 60)
+        for batch in (['1', '2'], ['3', '4'], ['5', '6']):
+            io.write(batch)
+            disposition = f'(TIME_AGO = "PT{lookback}S")'
+            if query is None:
+                query = io.start(sql, disposition=disposition)
             else:
-                client.modify_query(
-                    query_id=query_id,
-                    name=query_name,
-                    text=sql,
-                    type=fq.QueryContent.QueryType.STREAMING,
-                    streaming_disposition=StreamingDisposition.time_ago(CONTROL_PLANE_REQUEST_TIMEOUT),
-                )
-            client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-
-            time.sleep(5)
-
-            assert self.read_stream(len(output)) == output
-
-            client.abort_query(query_id)
-            client.wait_query(query_id)
-
-            time.sleep(CONTROL_PLANE_REQUEST_TIMEOUT - (datetime.datetime.now() - from_time).total_seconds())
-
-            return query_id
-
-        query_id = run(["1", "2"], ["1", "2"], None)
-        query_id = run(["3", "4"], ["3", "4"], query_id)
-        query_id = run(["5", "6"], ["5", "6"], query_id)
+                io.resume(query, disposition=disposition)
+            assert io.read(len(batch)) == batch
+            io.stop(query)
+            time.sleep(lookback + 1)

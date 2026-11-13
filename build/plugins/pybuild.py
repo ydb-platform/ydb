@@ -37,6 +37,10 @@ def _root_relative(path, unit):
     return rel
 
 
+def _py3_resfs_pack_group_size(unit):
+    return max(1, int(unit.get('PY3_RESFS_PACK_GROUP') or PY3_RESFS_PACK_GROUP))
+
+
 def _py3_resfs_pack_groups(items, group_size):
     """
     Content-defined grouping: items are ordered by resource name and a group ends after an item
@@ -67,8 +71,7 @@ def _add_py3_resfs_packs(unit, items, with_py, with_pyc, kv):
     if not with_pyc:
         flags.append('--no-pyc')
 
-    group_size = max(1, int(unit.get('PY3_RESFS_PACK_GROUP') or PY3_RESFS_PACK_GROUP))
-    for idx, group in enumerate(_py3_resfs_pack_groups(items, group_size)):
+    for idx, group in enumerate(_py3_resfs_pack_groups(items, _py3_resfs_pack_group_size(unit))):
         extra = kv if idx == 0 else []
         # named after the content, so that untouched groups keep their outputs (and cache hits)
         name = md5(json.dumps([flags, group, extra]).encode('utf-8')).hexdigest()[:16]
@@ -82,6 +85,19 @@ def _add_py3_resfs_packs(unit, items, with_py, with_pyc, kv):
             args += ['KV'] + extra
         unit.on_py3_resfs_pack(args)
     return True
+
+
+def _add_py3_assert_rewrite(unit, pys):
+    res = []
+    items = [(_root_relative(path, unit) + '-', 'py/' + mod.replace('.', '/') + '.py', path) for path, mod in pys]
+    for group in _py3_resfs_pack_groups(items, _py3_resfs_pack_group_size(unit)):
+        outs = [path + uniq_suffix(path, unit) + '.yapyc3ar' for _, _, path in group]
+        unit.on_py3_assert_rewrite(
+            ['SRCX'] + [srcx for srcx, _, _ in group] + ['SRC'] + [path for _, _, path in group] + ['OUT'] + outs
+        )
+        for (_, dest, _), out in zip(group, outs):
+            res += ['DEST', dest + '.yapyc3ar', out]
+    _split_macro_call(unit.onresource_files, res, 3)
 
 
 def _split_macro_call(macro_call, data, item_size, chunk_size=1024, compress=False):
@@ -659,6 +675,9 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
 
             if resfs_mocks:
                 unit.onresource(['DONT_COMPRESS'] + resfs_mocks)
+
+            if with_pyc and not external_py_files_mode and unit.get('PY3_ASSERT_REWRITE') != 'no':
+                _add_py3_assert_rewrite(unit, [(path, mod) for path, mod in pys if mod.startswith('__tests__.')])
 
             ns_packed = False
             if pack_items:

@@ -426,6 +426,45 @@ void TestOlapProjectionPushdown(bool explain) {
     }
 }
 
+// The names of the operators in the plan stage that reads `table`, or nothing if no stage reads it.
+TVector<TString> GetReadStageOperators(const NJson::TJsonValue& node, const TString& table) {
+    if (node.IsArray()) {
+        for (const auto& child : node.GetArraySafe()) {
+            if (auto operators = GetReadStageOperators(child, table); !operators.empty()) {
+                return operators;
+            }
+        }
+        return {};
+    }
+    if (!node.IsMap()) {
+        return {};
+    }
+
+    const auto& map = node.GetMapSafe();
+    if (const auto operators = map.find("Operators"); operators != map.end() && operators->second.IsArray()) {
+        TVector<TString> names;
+        bool reads = false;
+        for (const auto& op : operators->second.GetArraySafe()) {
+            const auto& opMap = op.GetMapSafe();
+            if (const auto name = opMap.find("Name"); name != opMap.end() && name->second.IsString()) {
+                names.push_back(name->second.GetStringSafe());
+            }
+            if (const auto path = opMap.find("Path"); path != opMap.end() && path->second.IsString()) {
+                reads |= path->second.GetStringSafe() == table;
+            }
+        }
+        if (reads) {
+            return names;
+        }
+    }
+    for (const auto& [_, child] : map) {
+        if (auto operators = GetReadStageOperators(child, table); !operators.empty()) {
+            return operators;
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 using namespace NYdb;
@@ -434,7 +473,7 @@ using namespace NYqlTests;
 
 Y_UNIT_TEST_SUITE(KqpRboYql) {
 
-    Y_UNIT_TEST(TopSortPushedToRowReadAndKept) {
+    Y_UNIT_TEST(TopSortPushedToRowRead) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -471,15 +510,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             return TString(result.GetAst());
         };
 
-        // ORDER BY a (PK) LIMIT 3: order is pushed into the read ("Sorted"), but the
-        // WideTopSort operator must stay in the AST.
+        // ORDER BY a (PK) LIMIT 3: the read returns its rows in the key order ("Sorted"), and the
+        // merge connection out of its stage keeps the order, so there is no sort.
         {
             auto ast = explainAst("SELECT a FROM `/Root/t1` ORDER BY a LIMIT 3;");
             UNIT_ASSERT_C(ast.Contains("'\"Sorted\""),
                 "Expected the \"Sorted\" pushdown into the read settings, AST: " << ast);
-            UNIT_ASSERT_C(ast.Contains("WideTopSort"),
-                "WideTopSort must stay after the TopSort pushdown to the row read "
-                "(merge connection for row storage is not produced yet), AST: " << ast);
+            UNIT_ASSERT_C(!ast.Contains("WideTopSort"), "The sorted row read needs no sort, AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("DqCnMerge"), "Expected a merge connection out of the read stage, AST: " << ast);
         }
 
         // ORDER BY a DESC (PK) LIMIT 3: the ascending direction is not pushed here, so
@@ -1287,6 +1325,245 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(0).GetOptionalJsonDocument(), R"({"x":"value"})");
         UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(1).GetOptionalUtf8(), "value");
         UNIT_ASSERT(!parser.TryNextRow());
+    }
+
+    Y_UNIT_TEST(RowReadStageRunsFiltersAndMaps) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Several shards, so that the read has several tasks, and each of them filters its own rows.
+        const auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64 NOT NULL,
+                PRIMARY KEY (a, b)
+            ) WITH (PARTITION_AT_KEYS = (1, 2));
+
+            CREATE TABLE `/Root/dim` (
+                a Int64 NOT NULL,
+                d Int64 NOT NULL,
+                PRIMARY KEY (a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, b, c] : std::vector<std::tuple<i64, i64, i64>>{{0, 9, 1}, {1, 1, 7}, {1, 2, 5}, {2, 1, 3}, {2, 2, 4}}) {
+            rows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("b").Int64(b).AddMember("c").Int64(c).EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder dimRows;
+        dimRows.BeginList();
+        for (const auto& [a, d] : std::vector<std::pair<i64, i64>>{{1, 100}, {2, 200}}) {
+            dimRows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("d").Int64(d).EndStruct();
+        }
+        dimRows.EndList();
+        const auto dimResult = db.BulkUpsert("/Root/dim", dimRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(dimResult.IsSuccess(), dimResult.GetIssues().ToString());
+
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // Whether the stage that reads `/Root/t` filters its rows, as in the old optimizer.
+            bool Filtered;
+            // Whether the ranges of the read are computed in a separate transaction.
+            bool ComputedRanges;
+        };
+
+        const std::vector<TCase> cases = {
+            {"select a, b from `/Root/t` where c > 3", "[[1;1];[1;2];[2;2]]", true, false},
+            // A map runs in the read stage too.
+            {"select a, b, c * 10 as d from `/Root/t` where c > 3", "[[1;1;70];[1;2;50];[2;2;40]]", true, false},
+            {"select a + b as s from `/Root/t`", "[[9];[2];[3];[3];[4]]", false, false},
+            // A filter on a non-key column over a literal key range and over computed ones.
+            {"select a, b from `/Root/t` where a = 1 and c > 5", "[[1;1]]", true, false},
+            {"select a, b from `/Root/t` where a in (0, 2) and c > 3", "[[2;2]]", true, true},
+            // The filtered read is the input of an aggregate and of a join.
+            {"select count(*) from `/Root/t` where c > 3", "[[3u]]", true, false},
+            {"select t.a, t.b, d.d from `/Root/t` as t join `/Root/dim` as d on t.a = d.a where t.c > 3",
+                "[[1;1;100];[1;2;100];[2;2;200]]", true, false},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; " + testCase.Query + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString plan{*explain.GetStats()->GetPlan()};
+            NJson::TJsonValue planJson;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+            const auto operators = GetReadStageOperators(planJson.GetMapSafe().at("Plan"), "/Root/t");
+            UNIT_ASSERT_C(!operators.empty(), query << ": no stage reads /Root/t, plan: " << plan);
+            const bool filtered = std::find(operators.begin(), operators.end(), "Filter") != operators.end();
+            UNIT_ASSERT_VALUES_EQUAL_C(filtered, testCase.Filtered, query << ", plan: " << plan);
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("RangeFinalize"), testCase.ComputedRanges, query << ", ast: " << ast);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYsonUnordered(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)), query);
+        }
+
+        // A system view is read by a row source as well.
+        const TString sysViewQuery = R"(PRAGMA YqlSelect = 'force'; select count(*) from `/Root/.sys/nodes` where Host = "::1"u;)";
+        auto sysViewResult = querySession.ExecuteQuery(sysViewQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(sysViewResult.IsSuccess(), sysViewResult.GetIssues().ToString());
+        CompareYson("[[1u]]", FormatResultSetYson(sysViewResult.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(SortByKeyOverFilteredRowRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Several shards, so that the merge of the read tasks decides the order of the result.
+        const auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Int64 NOT NULL,
+                PRIMARY KEY (a, b)
+            ) WITH (PARTITION_AT_KEYS = (1, 2));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, b, c] : std::vector<std::tuple<i64, i64, i64>>{{0, 9, 1}, {1, 1, 7}, {1, 2, 5}, {2, 1, 3}, {2, 2, 4}}) {
+            rows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("b").Int64(b).AddMember("c").Int64(c).EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // Whether the read returns its rows in the key order, so that the plan has no sort.
+            bool SortedRead;
+            // Whether the read takes the limit of the sort.
+            bool ReadLimit;
+        };
+
+        const std::vector<TCase> cases = {
+            // A filter drops rows, so the read takes no limit, and the limit of the result stops the read.
+            {"select a, b from `/Root/t` where c > 3 order by a, b limit 2", "[[1;1];[1;2]]", true, false},
+            {"select a, b from `/Root/t` where c > 3 order by a, b", "[[1;1];[1;2];[2;2]]", true, false},
+            {"select a, b, c * 10 as d from `/Root/t` where c > 3 order by a, b limit 2", "[[1;1;70];[1;2;50]]", true, false},
+            // Without a filter, each task of the read takes the first rows itself.
+            {"select a, b from `/Root/t` order by a, b limit 2", "[[0;9];[1;1]]", true, true},
+            // A map can rename the sort keys, and the sort keys can skip the point prefix of the key range.
+            {"select a as x, b as y from `/Root/t` where c > 3 order by x, y limit 2", "[[1;1];[1;2]]", true, false},
+            {"select a, b from `/Root/t` where a = 1 and c > 5 order by b limit 1", "[[1;1]]", true, false},
+            // The sort stays for keys out of the key order, for a computed key and for the descending order.
+            {"select a, b from `/Root/t` where c > 3 order by c limit 2", "[[2;2];[1;2]]", false, false},
+            {"select a + b as s from `/Root/t` where c > 3 order by s limit 2", "[[2];[3]]", false, false},
+            {"select a, b from `/Root/t` where c > 3 order by a desc, b desc limit 2", "[[2;2];[1;2]]", false, false},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; " + testCase.Query + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString plan{*explain.GetStats()->GetPlan()};
+            NJson::TJsonValue planJson;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+            const auto sorts = CountPlanNodesByKv(planJson, "Name", "Sort") + CountPlanNodesByKv(planJson, "Name", "TopSort");
+            UNIT_ASSERT_VALUES_EQUAL_C(sorts == 0, testCase.SortedRead, query << ", plan: " << plan);
+            const TString ast{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("'\"Sorted\""), testCase.SortedRead, query << ", ast: " << ast);
+            if (testCase.SortedRead) {
+                UNIT_ASSERT_C(ast.Contains("DqCnMerge"), query << ": expected a merge connection out of the read stage, ast: " << ast);
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("'\"ItemsLimit\""), testCase.ReadLimit, query << ", ast: " << ast);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYson(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ExistsDropsSubquerySort) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        const auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t` (
+                a Int64 NOT NULL,
+                c Int64 NOT NULL,
+                PRIMARY KEY (a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [a, c] : std::vector<std::pair<i64, i64>>{{1, 3}, {2, 1}, {3, 2}}) {
+            rows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("c").Int64(c).EndStruct();
+        }
+        rows.EndList();
+        const auto rowsResult = db.BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(rowsResult.IsSuccess(), rowsResult.GetIssues().ToString());
+
+        struct TCase {
+            TString Predicate;
+            TString Expected;
+            // Whether the plan still sorts the rows of the subquery.
+            bool Sorted;
+        };
+
+        // `c` is not a key, so only a sort can order the rows by it.
+        const TString sorted = "select s.a from `/Root/t` as s order by s.c";
+        const TString sortedEmpty = "select s.a from `/Root/t` as s where s.c > 5 order by s.c";
+        const TString all = "[[1];[2];[3]]";
+        const std::vector<TCase> cases = {
+            // EXISTS only checks that a row exists, so any row is an answer.
+            {"exists (" + sorted + ")", all, false},
+            {"not exists (" + sorted + ")", "[]", false},
+            {"exists (" + sortedEmpty + ")", "[]", false},
+            // The same for an EXISTS that is not a conjunct of the filter.
+            {"t.a = 1 or exists (" + sorted + ")", all, false},
+            {"t.a = 1 or exists (" + sortedEmpty + ")", "[[1]]", false},
+            // A limit written in the subquery depends on the order, whatever is above it.
+            {"exists (" + sorted + " limit 1 offset 2)", all, true},
+            {"exists (" + sorted + " limit 1 offset 3)", "[]", true},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            const TString query = "PRAGMA YqlSelect = 'force'; select t.a from `/Root/t` as t where " + testCase.Predicate + ";";
+            auto explain = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), query << ": " << explain.GetIssues().ToString());
+            const TString plan{*explain.GetStats()->GetPlan()};
+            NJson::TJsonValue planJson;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+            const bool planSorted = CountPlanNodesByKv(planJson, "Name", "Sort") + CountPlanNodesByKv(planJson, "Name", "TopSort") > 0;
+            UNIT_ASSERT_VALUES_EQUAL_C(planSorted, testCase.Sorted, query << ", plan: " << plan);
+
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            CompareYsonUnordered(testCase.Expected, FormatResultSetYson(result.GetResultSet(0)), query);
+        }
     }
 
 }

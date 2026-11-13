@@ -603,7 +603,7 @@ message TTableServiceConfig {
     // Prune key columns
     optional bool EnablePruneKeyColumns = 144 [default = true];
 
-    optional bool UseBlockHashJoinForCross = 145 [default = false, (InvalidateCompileCache) = true];
+    optional bool UseBlockHashJoinForCross = 145 [default = true, (InvalidateCompileCache) = true];
 
     // DQ channels 2.0: when the receiver node reports the resource manager memory pressure signal
     // (NRm::TTxState::GetMemoryAvailability() < 0), shrink the sender inflight window down to
@@ -620,7 +620,7 @@ message TTableServiceConfig {
     optional bool EnableWindowFunctionsV2 = 148 [default = true, (InvalidateCompileCache) = true];
 
     // When true, block hash join keys use IS NOT DISTINCT FROM (NULL matches NULL).
-    optional bool EnableBlockHashJoinEqualNulls = 149 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableBlockHashJoinEqualNulls = 149 [default = true, (InvalidateCompileCache) = true];
 
     // Fallback to legacy optimizer on data manipulation queries
     optional bool EnableFallbackOnDML = 150 [default = false, (InvalidateCompileCache) = true];
@@ -636,7 +636,7 @@ message TTableServiceConfig {
     optional bool UseScalarHashJoinForMap = 153 [default = false, (InvalidateCompileCache) = true];
 
     // Allows to collect point predicates for each valid index and use them for index lookup join if applicable.
-    optional bool EnableLookupJoinPointPrefixes = 154 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableLookupJoinPointPrefixes = 154 [default = true, (InvalidateCompileCache) = true];
 
     optional bool UseScalarHashJoin = 155 [default = false, (InvalidateCompileCache) = true];
 };

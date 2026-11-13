@@ -26,17 +26,17 @@ namespace NKikimr::NBsController {
 
     TBlobStorageController::TStoragePoolInfo TBlobStorageController::ResolveStoragePoolForPile(
             const TBoxStoragePoolId& id, const TStoragePoolInfo& pool, TBridgePileId pileId,
-            const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config) {
+            const TBridgeInfo *bridgeInfo, const TStoragePoolPileOverrideRules *rules) {
         auto result = pool;
         // Ordinary groups can span piles. Only physical parts with a pile identity use overrides.
-        if (pool.DDisk || !pileId || !bridgeInfo || !config) {
+        if (pool.DDisk || !pileId || !bridgeInfo || !rules) {
             return result;
         }
         const auto *pile = bridgeInfo->FindPile(pileId);
         if (!pile) {
             return result;
         }
-        const auto *rule = FindStoragePoolPileOverride(config->GetBlobStorageConfig(), pile->Name, pool.Kind);
+        const auto *rule = FindStoragePoolPileOverride(*rules, pile->Name, pool.Kind);
         if (!rule) {
             return result;
         }
@@ -57,7 +57,20 @@ namespace NKikimr::NBsController {
 
     TBlobStorageController::TStoragePoolInfo TBlobStorageController::GetStoragePoolForPile(
             const TBoxStoragePoolId& id, TBridgePileId pileId) const {
-        return ResolveStoragePoolForPile(id, StoragePools.at(id), pileId, BridgeInfo.get(), StorageConfig.get());
+        return ResolveStoragePoolForPile(id, StoragePools.at(id), pileId, BridgeInfo.get(), GetPileOverrideRules());
+    }
+
+    const TStoragePoolPileOverrideRules *TBlobStorageController::GetPileOverrideRules() const {
+        return AppliedPileOverrides ? &AppliedPileOverrides->GetRule()
+            : StorageConfig ? &StorageConfig->GetBlobStorageConfig().GetStoragePoolPileOverrides()
+            : nullptr;
+    }
+
+    const TStoragePoolPileOverrideRules *TBlobStorageController::GetPileOverrideRulesWith(
+            const NKikimrBlobStorage::TStorageConfig& config) const {
+        // the same choice TTxUpdatePileOverrides makes
+        const auto& rules = config.GetBlobStorageConfig().GetStoragePoolPileOverrides();
+        return AppliedPileOverrides && CheckGroupsAgainstPileOverrides(rules) ? &AppliedPileOverrides->GetRule() : &rules;
     }
 
     std::optional<TString> TBlobStorageController::ValidateStoragePoolPileOverrides(
@@ -65,6 +78,13 @@ namespace NKikimr::NBsController {
         if (auto error = NKikimr::ValidateStoragePoolPileOverrides(config.GetBlobStorageConfig())) {
             return error;
         }
+        // this is a preflight check only: groups may change before the config gets committed, so the overrides are
+        // checked again when BSC adopts them
+        return CheckGroupsAgainstPileOverrides(config.GetBlobStorageConfig().GetStoragePoolPileOverrides());
+    }
+
+    std::optional<TString> TBlobStorageController::CheckGroupsAgainstPileOverrides(
+            const TStoragePoolPileOverrideRules& rules) const {
         try {
             std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, TGroupGeometryInfo> geometries;
             for (const auto& [groupId, group] : GroupMap) {
@@ -74,7 +94,7 @@ namespace NKikimr::NBsController {
                 const auto [it, inserted] = geometries.try_emplace(std::make_pair(group->StoragePoolId, group->BridgePileId));
                 if (inserted) {
                     const auto pool = ResolveStoragePoolForPile(group->StoragePoolId, StoragePools.at(group->StoragePoolId),
-                        group->BridgePileId, BridgeInfo.get(), &config);
+                        group->BridgePileId, BridgeInfo.get(), &rules);
                     it->second = TGroupGeometryInfo(TBlobStorageGroupType(pool.ErasureSpecies), pool.GetGroupGeometry());
                 }
                 const auto& geometry = it->second;
@@ -138,11 +158,16 @@ namespace NKikimr::NBsController {
 
         const auto current = StoragePools.Get().find(id);
         const bool existing = current != StoragePools.Get().end();
-        const bool defaultBridgeMode = BridgeInfo && !BridgeInfo->IsImplicit;
+        // BSC may have made its pools ordinary ones already while the cluster state is still there, and no pools are
+        // made ordinary ones after that
+        const bool rollingBack = Self.IsBeingRolledBack();
+        const bool defaultBridgeMode = BridgeInfo && !BridgeInfo->IsImplicit && !rollingBack;
         const bool bridgeMode = existing ? current->second.BridgeMode
             : cmd.HasBridgeMode() ? cmd.GetBridgeMode() : defaultBridgeMode;
         if (existing && cmd.HasBridgeMode() && cmd.GetBridgeMode() != bridgeMode) {
             throw TExError() << "can't change storage pool BridgeMode";
+        } else if (!existing && bridgeMode && rollingBack) {
+            throw TExError() << "new storage pool can't be a bridged one while the cluster is being rolled back";
         }
         if (!existing && bridgeMode != defaultBridgeMode) {
             const auto& details = Self.StorageConfig
@@ -231,7 +256,7 @@ namespace NKikimr::NBsController {
             const auto [erasure, inserted] = erasures.try_emplace(group->BridgePileId);
             if (inserted) {
                 erasure->second = Self.ResolveStoragePoolForPile(id, storagePool, group->BridgePileId,
-                    BridgeInfo.get(), StorageConfig.get()).ErasureSpecies;
+                    BridgeInfo.get(), GetPileOverrideRules()).ErasureSpecies;
             }
             if (group->ErasureSpecies != erasure->second) {
                 throw TExError() << "GroupId# " << it->second << " has different erasure species";
@@ -890,6 +915,11 @@ namespace NKikimr::NBsController {
 
         const bool virtualGroupsOnly = cmd.GetVirtualGroupsOnly();
 
+        // The config reported is the one the commands executed so far make, and the groups they have changed get new
+        // generation at commit; report it too, so that it agrees with the placement shown (and may be used in further
+        // commands like ReassignGroupDisk once the request is committed).
+        Self.PropagateGroupContentChanged(*this);
+
         THashSet<TGroupId> groupFilter;
         THashSet<TVSlotId> vslotFilter;
         THashSet<TPDiskId> pdiskFilter;
@@ -924,7 +954,11 @@ namespace NKikimr::NBsController {
             }};
             VSlots.ForEach([&](TVSlotId vslotId, const TVSlotInfo& vslotInfo) {
                 if (vslotInfo.Group && (!virtualGroupsOnly || vslotFilter.contains(vslotId))) {
-                    Serialize(pb->AddVSlot(), vslotInfo, vslotFinder);
+                    auto *vslot = pb->AddVSlot();
+                    Serialize(vslot, vslotInfo, vslotFinder);
+                    if (GroupContentChanged.contains(vslotInfo.GroupId)) {
+                        vslot->SetGroupGeneration(vslotInfo.Group->Generation + 1);
+                    }
                 }
             });
         }
@@ -937,6 +971,9 @@ namespace NKikimr::NBsController {
                 if (!virtualGroupsOnly || groupFilter.contains(groupId)) {
                     auto* group = pb->AddGroup();
                     Serialize(group, groupInfo, finder, BridgeInfo.get());
+                    if (GroupContentChanged.contains(groupId)) {
+                        group->SetGroupGeneration(groupInfo.Generation + 1);
+                    }
                     if (group->FailRealmsSize()) {
                         for (const TVSlotInfo* slot : groupInfo.VDisksInGroup) {
                             UpdateFailRealmDataCenter(group->MutableFailRealms(slot->RingIdx),

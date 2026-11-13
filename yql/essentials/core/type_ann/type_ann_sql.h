@@ -30,7 +30,7 @@ bool ScanSqlLambdaColumns(
     TNodeSet& sublinks, bool& isUniversal, bool& rebuildSublinks, TExtContext& ctx);
 
 IGraphTransformer::TStatus RebuildSubLinks(
-    const TExprNode::TPtr& root, TExprNode::TPtr& output, const TNodeSet& sublinks,
+    const TExprNode::TPtr& root, TExprNode::TPtr& newRoot, const TNodeSet& sublinks,
     const TInputs& inputs, const TExprNode::TPtr& rowType, TExtContext& ctx);
 
 TExprNode::TPtr BuildSqlColumnRefMember(

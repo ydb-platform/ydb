@@ -233,10 +233,14 @@ struct TComposite {
         }
     }
 
-    // Evaluates at 100 and 120 with fresh replies and decides at 120.
-    TDecision Run() {
-        THealthEvaluation health;
-        for (const ui64 seconds : {100, 120}) {
+    void Bind() {
+        for (auto& reply : Replies.Connectivity) {
+            reply.Report.BindingInProgress = true;
+        }
+    }
+
+    TDecision Step(ui64 seconds, bool refresh = true) {
+        if (refresh) {
             for (auto& reply : Replies.SelfChecks) {
                 if (!Silent.contains(reply.Endpoint)) {
                     reply.SentAt = At(seconds);
@@ -247,18 +251,198 @@ struct TComposite {
                     reply.Report.SentAt = At(seconds);
                 }
             }
-            health = EvaluatePiles(View, Replies, At(seconds), Params, State);
-            Confirmations.Update(View, health.Piles, At(seconds));
         }
+        const auto health = EvaluatePiles(View, Replies, At(seconds), Params, State);
+        Confirmations.Update(View, health.Piles, At(seconds));
         TViewSelection selection;
         selection.View = View;
         return Decide(selection, health, Confirmations, {}, Replies.Endpoints, TDuration::Seconds(20));
+    }
+
+    TDecision Run() {
+        Step(100);
+        return Step(120);
     }
 };
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(BridgeSkipperPolicy) {
+    Y_UNIT_TEST(FallbackEvidencePrimaryRedIsConfirmedWhileConnectivityBinds) {
+        TComposite input({{"a", EPileState::Primary}, {"b", EPileState::Synchronized}});
+        input.AddSide("b", false, {"a"});
+        input.Bind();
+        UNIT_ASSERT(input.Step(100).Kind == EDecisionKind::Confirming);
+        UNIT_ASSERT(input.Step(119).Kind == EDecisionKind::Confirming);
+        AssertUpdate(input.Step(120), {{"a", EPileState::Disconnected}, {"b", EPileState::Primary}});
+    }
+
+    Y_UNIT_TEST(FallbackEvidenceCachedRedCannotCompleteConfirmation) {
+        TComposite input({{"a", EPileState::Primary}, {"b", EPileState::Synchronized}});
+        input.AddSide("b", false, {"a"});
+        input.Bind();
+        UNIT_ASSERT(input.Step(100).Kind == EDecisionKind::Confirming);
+        UNIT_ASSERT(input.Step(120, false).Kind == EDecisionKind::Confirming);
+        AssertUpdate(input.Step(121), {{"a", EPileState::Disconnected}, {"b", EPileState::Primary}});
+    }
+
+    Y_UNIT_TEST(FallbackEvidenceGreyMissingTruncatedAndSelfQuorumNeverProveFailure) {
+        for (unsigned mode = 0; mode != 6; ++mode) {
+            TComposite input({{"a", EPileState::Primary}, {"b", EPileState::Synchronized}});
+            input.AddSide("b", false, mode < 2 ? std::vector<TString>{} : std::vector<TString>{"a"},
+                mode == 1 ? std::vector<TString>{"a"} : std::vector<TString>{});
+            if (mode == 2) {
+                input.Replies.SelfChecks.front().Classification.Truncated = true;
+            } else if (mode == 3) {
+                input.AddSide("a", false, {"b"});
+            } else if (mode == 4) {
+                input.AddSelfCheck("a", true, {});
+            } else if (mode == 5) {
+                input.Replies.Endpoints.back().Identity = EEndpointIdentity::Mismatch;
+            }
+            input.Bind();
+            const auto decision = input.Run();
+            UNIT_ASSERT_C(decision.Kind == (mode == 4 ? EDecisionKind::Stable : EDecisionKind::Unknown), mode);
+            UNIT_ASSERT(!decision.Plan);
+        }
+    }
+
+    Y_UNIT_TEST(FallbackEvidenceContradictingOutsideRepliesBlockFailure) {
+        TComposite input({{"a", EPileState::Primary}, {"b", EPileState::Synchronized}, {"c", EPileState::Synchronized}});
+        input.AddSide("b", false, {"a"});
+        input.AddSide("c", false, {}, {"a"});
+        input.Bind();
+        UNIT_ASSERT(input.Run().Kind == EDecisionKind::Unknown);
+    }
+
+    Y_UNIT_TEST(FallbackEvidenceNonHostRedRemainsUnknown) {
+        TComposite input({{"a", EPileState::Primary}, {"b", EPileState::Synchronized}});
+        input.AddSide("a", false, {"b"});
+        input.Bind();
+        UNIT_ASSERT(input.Run().Kind == EDecisionKind::Unknown);
+    }
+
+    Y_UNIT_TEST(FallbackEvidenceTargetsPromotedHostInsteadOfStoredPrimary) {
+        TComposite input({{"a", EPileState::Primary}, {"b", EPileState::Promoted}, {"c", EPileState::Synchronized}});
+        input.AddSide("a", false, {"b"});
+        input.AddSide("c", false, {"b"});
+        for (auto& reply : input.Replies.Connectivity) {
+            reply.Report.Piles["a"] = {3, 3, true, true, true};
+            reply.Report.Piles["c"] = {3, 3, true, true, true};
+        }
+        input.Bind();
+        AssertUpdate(input.Run(), {{"b", EPileState::Disconnected}});
+    }
+
+    Y_UNIT_TEST(FallbackEvidenceGenerationChangeRejectsOlderSendsAndRestartsConfirmation) {
+        TComposite input({{"a", EPileState::Primary}, {"b", EPileState::Synchronized}});
+        input.AddSide("b", false, {"a"});
+        input.Bind();
+        input.Step(100);
+        input.Step(110);
+        ++input.View.Generation;
+        for (auto& reply : input.Replies.Connectivity) {
+            reply.Report.Generation = input.View.Generation;
+            reply.Report.SentAt = At(120);
+        }
+        UNIT_ASSERT(input.Step(120, false).Kind == EDecisionKind::Unknown);
+        UNIT_ASSERT(input.Step(121).Kind == EDecisionKind::Confirming);
+        UNIT_ASSERT(input.Step(140).Kind == EDecisionKind::Confirming);
+        const auto decision = input.Step(141);
+        UNIT_ASSERT(decision.Kind == EDecisionKind::Ready);
+        UNIT_ASSERT_VALUES_EQUAL(decision.Plan->ExpectedGeneration, 8);
+    }
+
+    Y_UNIT_TEST(FallbackEvidenceFreshGenerationStartsANewConfirmationWindow) {
+        TComposite input({{"a", EPileState::Primary}, {"b", EPileState::Synchronized}});
+        input.AddSide("b", false, {"a"});
+        input.Bind();
+        input.Step(100);
+        ++input.View.Generation;
+        input.Replies.Connectivity.front().Report.Generation = input.View.Generation;
+        UNIT_ASSERT(input.Step(120).Kind == EDecisionKind::Confirming);
+        UNIT_ASSERT(input.Step(139).Kind == EDecisionKind::Confirming);
+        UNIT_ASSERT(input.Step(140).Kind == EDecisionKind::Ready);
+    }
+
+    Y_UNIT_TEST(FallbackEvidenceRoleWarmupRequiresNewSendsBeforeConfirmation) {
+        TComposite input({{"a", EPileState::Primary}, {"b", EPileState::Synchronized}});
+        input.AddSide("b", false, {"a"});
+        input.Bind();
+        input.Params.BscWarmup = TDuration::Seconds(30);
+        input.Step(100);
+        input.View.Piles["a"] = EPileState::Synchronized;
+        input.View.Piles["b"] = EPileState::Primary;
+        ++input.View.Generation;
+        for (auto& reply : input.Replies.Connectivity) {
+            reply.Report.Generation = input.View.Generation;
+        }
+        input.Step(110);
+        input.View.Piles["a"] = EPileState::Primary;
+        input.View.Piles["b"] = EPileState::Synchronized;
+        ++input.View.Generation;
+        for (auto& reply : input.Replies.Connectivity) {
+            reply.Report.Generation = input.View.Generation;
+        }
+        UNIT_ASSERT(input.Step(150).Kind == EDecisionKind::Unknown);
+        UNIT_ASSERT(input.Step(170).Kind == EDecisionKind::Unknown);
+        UNIT_ASSERT(input.Step(180, false).Kind == EDecisionKind::Unknown);
+        UNIT_ASSERT(input.Step(181).Kind == EDecisionKind::Confirming);
+        UNIT_ASSERT(input.Step(200).Kind == EDecisionKind::Confirming);
+        UNIT_ASSERT(input.Step(201).Kind == EDecisionKind::Ready);
+    }
+
+    Y_UNIT_TEST(FallbackEvidenceStaleGapAndSourceChangeRestartConfirmation) {
+        for (const bool sourceChange : {false, true}) {
+            TComposite input({{"a", EPileState::Primary}, {"b", EPileState::Synchronized}});
+            input.AddSide("b", false, {"a"});
+            input.Bind();
+            input.Step(100);
+            if (sourceChange) {
+                input.AddSelfCheck("a", true, {"a"});
+                UNIT_ASSERT(input.Step(110).Kind == EDecisionKind::Confirming);
+                input.Replies.SelfChecks.pop_back();
+                UNIT_ASSERT(input.Step(120).Kind == EDecisionKind::Confirming);
+                UNIT_ASSERT(input.Step(139).Kind == EDecisionKind::Confirming);
+                UNIT_ASSERT(input.Step(140).Kind == EDecisionKind::Ready);
+            } else {
+                UNIT_ASSERT(input.Step(131, false).Kind == EDecisionKind::Unknown);
+                UNIT_ASSERT(input.Step(132).Kind == EDecisionKind::Confirming);
+                UNIT_ASSERT(input.Step(151).Kind == EDecisionKind::Confirming);
+                UNIT_ASSERT(input.Step(152).Kind == EDecisionKind::Ready);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(FallbackEvidenceCandidateRequiresItsOwnCompleteReply) {
+        for (unsigned mode = 0; mode != 4; ++mode) {
+            TComposite input({{"a", EPileState::Primary}, {"b", EPileState::Synchronized}});
+            input.AddSide("b", false, {});
+            if (mode == 0) {
+                input.Replies.SelfChecks.clear();
+            } else if (mode == 1) {
+                input.Replies.SelfChecks.front().Classification.Truncated = true;
+            } else {
+                auto endpoint = input.Replies.Endpoints.back();
+                endpoint.Endpoint = "b2:2135";
+                endpoint.Identity = mode == 2 ? EEndpointIdentity::Mismatch : EEndpointIdentity::Verified;
+                input.Replies.Endpoints.push_back(endpoint);
+                input.Replies.SelfChecks.front().Endpoint = endpoint.Endpoint;
+                input.Replies.SelfChecks.front().ResponderPile = mode == 2 ? "b" : "a";
+            }
+            AssertBlocked(input.Run(), EBlockerReason::NoCandidate);
+        }
+    }
+
+    Y_UNIT_TEST(FallbackEvidenceFreshCandidateReplyNeedsNoExtraConfirmationWindow) {
+        TComposite input({{"a", EPileState::Primary}, {"b", EPileState::Synchronized}});
+        input.AddSide("b", false, {});
+        input.Step(100);
+        input.Replies.Connectivity.front().Report.SentAt = At(131);
+        AssertBlocked(input.Step(131, false), EBlockerReason::NoCandidate);
+        AssertUpdate(input.Step(132), {{"a", EPileState::Disconnected}, {"b", EPileState::Primary}});
+    }
+
     Y_UNIT_TEST(ConfirmationNeedsAFreshlySentEvidenceSpan) {
         TConfirmations confirmations;
         std::map<TString, TPileVerdict> verdicts = {{"a", Verdict(EPileVerdict::Failed, 100)}};
@@ -277,6 +461,56 @@ Y_UNIT_TEST_SUITE(BridgeSkipperPolicy) {
         confirmations.Update(ViewAt(7), verdicts, At(122));
         UNIT_ASSERT(confirmations.IsConfirmed("a", TDuration::Seconds(20)));
         UNIT_ASSERT(!confirmations.IsConfirmed("missing", TDuration::Seconds(20)));
+    }
+
+    Y_UNIT_TEST(ChangingFailureEvidenceRestartsConfirmationInBothDirections) {
+        for (const auto from : {EFailureEvidence::Ordinary, EFailureEvidence::Fallback, EFailureEvidence::Storage}) {
+            for (const auto to : {EFailureEvidence::Ordinary, EFailureEvidence::Fallback, EFailureEvidence::Storage}) {
+                if (from == to) {
+                    continue;
+                }
+                TConfirmations confirmations;
+                std::map<TString, TPileVerdict> verdicts = {{"a", Verdict(EPileVerdict::Failed, 100)}};
+                verdicts.at("a").FailureEvidence = from;
+                confirmations.Update(ViewAt(7), verdicts, At(100));
+                verdicts.at("a").NewestEvidenceSentAt = At(120);
+                confirmations.Update(ViewAt(7), verdicts, At(120));
+                UNIT_ASSERT(confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+                verdicts.at("a").FailureEvidence = to;
+                verdicts.at("a").NewestEvidenceSentAt = At(121);
+                confirmations.Update(ViewAt(7), verdicts, At(121));
+                UNIT_ASSERT(!confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+                UNIT_ASSERT_VALUES_EQUAL(confirmations.Piles.at("a").FirstEvidenceSentAt, At(121));
+                verdicts.at("a").NewestEvidenceSentAt = At(140);
+                confirmations.Update(ViewAt(7), verdicts, At(140));
+                UNIT_ASSERT(!confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+                verdicts.at("a").NewestEvidenceSentAt = At(141);
+                confirmations.Update(ViewAt(7), verdicts, At(141));
+                UNIT_ASSERT(confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(FallbackProofKindsCannotCarryConfirmationAcrossGenerationOrRoleChanges) {
+        for (const auto kind : {EFailureEvidence::Ordinary, EFailureEvidence::Fallback, EFailureEvidence::Storage}) {
+            TConfirmations confirmations;
+            std::map<TString, TPileVerdict> verdicts = {{"a", Verdict(EPileVerdict::Failed, 100)}};
+            verdicts.at("a").FailureEvidence = kind;
+            confirmations.Update(ViewAt(7), verdicts, At(100));
+            verdicts.at("a").NewestEvidenceSentAt = At(120);
+            confirmations.Update(ViewAt(7), verdicts, At(120));
+            UNIT_ASSERT(confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+            confirmations.Update(ViewAt(8), verdicts, At(121));
+            UNIT_ASSERT_VALUES_EQUAL(confirmations.IsConfirmed("a", TDuration::Seconds(20)),
+                kind == EFailureEvidence::Ordinary);
+            verdicts.at("a").NewestEvidenceSentAt = At(140);
+            confirmations.Update(ViewAt(8), verdicts, At(140));
+            UNIT_ASSERT(confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+            const auto changedRoles = ViewAt(9, {{"a", EPileState::Synchronized}, {"b", EPileState::Primary}});
+            verdicts.at("a").NewestEvidenceSentAt = At(141);
+            confirmations.Update(changedRoles, verdicts, At(141));
+            UNIT_ASSERT(!confirmations.IsConfirmed("a", TDuration::Seconds(20)));
+        }
     }
 
     // RED replies sent at 100 and 110, then only failed attempts: the cached
@@ -389,7 +623,7 @@ Y_UNIT_TEST_SUITE(BridgeSkipperPolicy) {
         AssertUpdate(input.DecideAt(), {{"c", EPileState::Disconnected}});
     }
 
-    Y_UNIT_TEST(LostPrimaryFallbackRequiresSelfQuorumAndNoRedAndNoBsc) {
+    Y_UNIT_TEST(LostPrimaryFallbackRequiresOwnReplySelfQuorumAndNoRedAndNoBsc) {
         TPolicyCase input;
         input.Down("a", EPileVerdict::Lost);
         input.Health.Piles["b"] = Verdict(EPileVerdict::Unknown);
@@ -398,6 +632,8 @@ Y_UNIT_TEST_SUITE(BridgeSkipperPolicy) {
         input.Confirm();
         AssertBlocked(input.DecideAt(), EBlockerReason::NoCandidate);
         input.Health.Piles["b"].SelfQuorum = true;
+        AssertBlocked(input.DecideAt(), EBlockerReason::NoCandidate);
+        input.Health.Piles["b"].OwnFallback = true;
         AssertUpdate(input.DecideAt(), {{"a", EPileState::Disconnected}, {"b", EPileState::Primary}});
         input.Health.Piles["b"].FallbackRed = true;
         AssertBlocked(input.DecideAt(), EBlockerReason::NoCandidate);
@@ -696,6 +932,7 @@ Y_UNIT_TEST_SUITE(BridgeSkipperPolicy) {
         input.Health.Piles["b"] = Verdict(EPileVerdict::Unknown);
         input.Health.Piles["c"] = Verdict(EPileVerdict::Unknown);
         input.Health.Piles["c"].SelfQuorum = true;
+        input.Health.Piles["c"].OwnFallback = true;
         input.Confirm();
         AssertUpdate(input.DecideAt(), {{"a", EPileState::Disconnected}, {"c", EPileState::Primary}});
         input.Health.Piles["c"].FallbackRed = true;

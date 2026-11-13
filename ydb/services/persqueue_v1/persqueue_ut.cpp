@@ -52,6 +52,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 
 #include <thread>
+#include <mutex>
+#include <atomic>
 
 
 namespace NKikimr::NPersQueueTests {
@@ -1660,6 +1662,93 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(endOffset, resp.Range.second);
 
 
+    }
+
+    Y_UNIT_TEST(DirectReadMaxOffsetEndPartitionSessionDeferredUntilAck) {
+        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
+        SET_LOCALS;
+        TString topicPath{"acc/topic1"};
+        TDirectReadTestSetup setup{server};
+
+        Cerr << (TStringBuilder() << "XXXXX Write 10 messages" << Endl);
+        setup.DoWrite(pqClient->GetDriver(), topicPath, 10_KB, 10);
+
+        Cerr << (TStringBuilder() << "XXXXX InitControlSession" << Endl);
+        setup.InitControlSession(topicPath, 1_MB);
+
+        Cerr << "XXXXX GetNextAssign\n";
+        auto assignRes = setup.GetNextAssign(topicPath, 0, /*read_offset*/0, /*commit_offset*/0, /*max_offset*/4);
+        auto assignId = assignRes.AssignId;
+
+        Cerr << "XXXXX InitDirectSession\n";
+        setup.InitDirectSession(topicPath);
+        setup.SendReadSessionAssign(assignId, assignRes.Generation);
+
+        // Exhaust the max_offset window with an un-acked batch [0, 5)
+        // (offset 4 is the last one below/at the window bound).
+        Cerr << "XXXXX ReadDataNoAck\n";
+        auto resp = setup.ReadDataNoAck(assignId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp.Range.first, 0);
+        UNIT_ASSERT_VALUES_EQUAL(resp.Range.second, 5);
+
+        // The end_partition_session for the exhausted window goes to the
+        // control stream. Pump it from a background thread, because the
+        // deferred-EOF check below needs a bounded wait.
+        std::mutex controlMsgsMutex;
+        TVector<Ydb::Topic::StreamReadMessage::FromServer> controlMsgs;
+        std::atomic<bool> eofSeen{false};
+        std::thread controlReader([&]() {
+            while (true) {
+                Ydb::Topic::StreamReadMessage::FromServer r;
+                if (!setup.ControlStream->Read(&r)) {
+                    return;
+                }
+                bool msgIsEof = r.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kEndPartitionSession;
+                {
+                    std::lock_guard lock(controlMsgsMutex);
+                    controlMsgs.push_back(std::move(r));
+                }
+                if (msgIsEof) {
+                    eofSeen.store(true);
+                    return;
+                }
+            }
+        });
+
+        // While the direct read is not acked, the EOF must be deferred: no
+        // control stream messages at all are expected in this window (nothing
+        // else is in flight, so any message seen here is the bug).
+        Sleep(TDuration::Seconds(3));
+        {
+            std::lock_guard lock(controlMsgsMutex);
+            UNIT_ASSERT_C(controlMsgs.empty(),
+                "Unexpected control stream message while direct read is un-acked: expected deferred end_partition_session");
+        }
+
+        // Acks go over the control stream; concurrent Write from the main
+        // thread with the background Read is the intended gRPC usage. The
+        // server must flush the deferred EOF to the control stream once the
+        // last in-flight direct read is acked.
+        Cerr << "XXXXX Send direct read ack\n";
+        Ydb::Topic::StreamReadMessage::FromClient ackReq;
+        auto& ack = *ackReq.mutable_direct_read_ack();
+        ack.set_partition_session_id(assignId);
+        ack.set_direct_read_id(1);
+        UNIT_ASSERT(setup.ControlStream->Write(ackReq));
+
+        auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        while (!eofSeen.load() && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(eofSeen.load(), "Timed out waiting for end_partition_session after the direct read ack");
+
+        {
+            std::lock_guard lock(controlMsgsMutex);
+            UNIT_ASSERT_VALUES_EQUAL(controlMsgs.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(controlMsgs[0].end_partition_session().partition_session_id(), assignId);
+        }
+
+        controlReader.join();
     }
 
     Y_UNIT_TEST(DirectReadBadCases) {

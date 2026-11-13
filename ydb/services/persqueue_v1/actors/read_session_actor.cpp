@@ -542,6 +542,15 @@ void TReadSessionActor<Protocol>::SendWindowExhaustedIfNeeded(TPartitionsMap::it
 
     partitionInfo.WindowExhausted = false;
 
+    if (partitionInfo.Releasing || partitionInfo.ReleaseSent) {
+        // The partition is already being released: a stop_partition_session
+        // request is on its way to the client (or the partition was never
+        // announced to it). The stop is the authoritative teardown signal,
+        // so a separate end_partition_session would be redundant and could
+        // arrive out of order with it.
+        return;
+    }
+
     if constexpr (Protocol == EProtocol::Topic) {
         TServerMessage result;
         result.set_status(Ydb::StatusIds::SUCCESS);
@@ -551,6 +560,8 @@ void TReadSessionActor<Protocol>::SendWindowExhaustedIfNeeded(TPartitionsMap::it
         LOG_I("Sending to client end partition stream event (max_offset reached, direct reads drained)");
         SendControlMessage(partitionInfo.Partition, std::move(result), ctx);
     }
+
+    partitionInfo.WindowExhaustedSent = true;
 }
 
 template <EProtocol Protocol>
@@ -2607,8 +2618,22 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
                 }
             }
 
-            LOG_I("Sending to client end partition stream event");
-            SendControlMessage(partitionInfo->Partition, std::move(result), ctx);
+            if (partitionInfo->WindowExhaustedSent) {
+                // The client already received end_partition_session for this
+                // partition session when its max_offset window was exhausted.
+                // A second one (even with child partition ids after a split)
+                // would be a duplicate for the same partition session id.
+                LOG_I("Suppressing duplicate end partition stream event (max_offset exhaustion already reported)",
+                    {"partition", partitionInfo->Partition});
+            } else {
+                LOG_I("Sending to client end partition stream event");
+                SendControlMessage(partitionInfo->Partition, std::move(result), ctx);
+            }
+
+            // A real finish supersedes a deferred exhaustion EOF: drop the
+            // latch so a later flush in SendWindowExhaustedIfNeeded cannot
+            // emit a duplicate empty end_partition_session.
+            partitionInfo->WindowExhausted = false;
         }
     }
 

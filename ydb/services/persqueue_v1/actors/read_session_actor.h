@@ -61,6 +61,14 @@ struct TPartitionActorInfo {
     // batch when it stops the partition session on EOF).
     bool WindowExhausted = false;
 
+    // True when the end_partition_session caused by max_offset exhaustion has
+    // already been delivered to the client for this partition session. A later
+    // TEvReadingFinished (e.g. from auto-partitioning) must not send a second
+    // end_partition_session for the same partition session id: the balancer is
+    // still notified about the real finish, but the client already considers
+    // the partition done.
+    bool WindowExhaustedSent = false;
+
 
     struct TDirectReadInfo {
         ui64 DirectReadId = 0;

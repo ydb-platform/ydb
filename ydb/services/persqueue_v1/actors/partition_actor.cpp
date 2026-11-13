@@ -1280,7 +1280,7 @@ void TPartitionActor::SendPartitionReady(const TActorContext& ctx) {
 
 void TPartitionActor::SendReadWindowExhausted(const TActorContext& ctx) {
     WindowExhaustedSent = true;
-    ctx.Send(ParentId, new TEvPQProxy::TEvReadWindowExhausted(Topic->GetInternalName(), Partition.Partition, Partition.AssignId, EndOffset));
+    ctx.Send(ParentId, new TEvPQProxy::TEvReadWindowExhausted(Topic->GetInternalName(), Partition.Partition, Partition.AssignId));
 }
 
 

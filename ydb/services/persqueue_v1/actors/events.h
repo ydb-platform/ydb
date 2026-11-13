@@ -650,11 +650,10 @@ struct TEvPQProxy {
     // balancer must not be notified; the partition stays locked to the session
     // until the session is closed.
     struct TEvReadWindowExhausted : public TEventLocal<TEvReadWindowExhausted, EvReadWindowExhausted> {
-        TEvReadWindowExhausted(const TString& topic, ui32 partitionId, ui64 assignId, ui64 endOffset)
+        TEvReadWindowExhausted(const TString& topic, ui32 partitionId, ui64 assignId)
             : Topic(topic)
             , PartitionId(partitionId)
             , AssignId(assignId)
-            , EndOffset(endOffset)
         {}
 
         TString Topic;

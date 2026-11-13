@@ -420,7 +420,7 @@ namespace NKikimr {
         State->PerformMemOverflowAction();
         PrintStatus("after memory overflow: ");
 
-        const auto snap = State->GetSyncLogSnapshot();
+        const TSyncLogSnapshotPtr snap = State->GetSyncLogSnapshot();
         TMemRecLogSnapshot::TIterator it(snap->MemSnapPtr);
         it.Seek(confirmedLsn + 1);
         UNIT_ASSERT_C(it.Valid(), "no records after lsn# " << confirmedLsn);

@@ -69,6 +69,31 @@ Y_UNIT_TEST_SUITE(ExportSessionStateMachine) {
         session->Abort("second abort");
         UNIT_ASSERT(session->IsAborted());
     }
+
+    Y_UNIT_TEST(AbortErrorMessageSurvivesStateReload) {
+        auto session = MakeExportSession();
+        session->Confirm();
+        session->Abort("Scan error: blob read failed");
+        const TString state = session->SerializeStateToString();
+
+        auto reloaded = MakeExportSession();
+        UNIT_ASSERT(reloaded->DeserializeStateFromString(state).IsSuccess());
+        UNIT_ASSERT(reloaded->IsAborted());
+        const auto status = reloaded->GetStatus();
+        UNIT_ASSERT(!status.Success);
+        UNIT_ASSERT_VALUES_EQUAL(status.ErrorMessage, "Scan error: blob read failed");
+    }
+
+    Y_UNIT_TEST(AbortedStateWithoutErrorMessageReportsStatus) {
+        NKikimrColumnShardExportProto::TExportSessionState proto;
+        proto.SetStatus(::ToString(NOlap::NExport::TSession::EStatus::Aborted));
+
+        auto reloaded = MakeExportSession();
+        UNIT_ASSERT(reloaded->DeserializeStateFromString(proto.SerializeAsString()).IsSuccess());
+        const auto status = reloaded->GetStatus();
+        UNIT_ASSERT(!status.Success);
+        UNIT_ASSERT_STRING_CONTAINS(status.ErrorMessage, "aborted");
+    }
 }
 
 namespace {
@@ -875,15 +900,22 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
             new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, txBody.SerializeAsString()));
-        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
-        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
-        const TPlanStep dupPlanStep{ ev->Get()->Record.GetMinStep() };
+        // A propose for a completed backup is ignored without a reply or a new operator.
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender, TDuration::Seconds(1)));
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
 
-        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(dupPlanStep, backupTxId), false);
+        // Replay the original plan step: the duplicate propose does not return a new one.
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, backupTxId), false);
 
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvColumnShard::TEvNotifyTxCompletion(backupTxId));
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender, TDuration::Seconds(10));
+        UNIT_ASSERT_C(ev, "Completed backup must reply after a duplicate propose and plan");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        UNIT_ASSERT(ev->Get()->Record.HasOpResult());
+        UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
         VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
@@ -923,14 +955,22 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
             new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, txBody.SerializeAsString()));
-        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
-        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        // A propose for a completed backup is ignored without a reply or a new operator.
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender, TDuration::Seconds(1)));
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCancelBackup(backupTxId, tableId));
 
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvColumnShard::TEvNotifyTxCompletion(backupTxId));
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender, TDuration::Seconds(10));
+        UNIT_ASSERT_C(ev, "Completed backup must reply after a duplicate propose and cancel");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        UNIT_ASSERT(ev->Get()->Record.HasOpResult());
+        UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 }
 

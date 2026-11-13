@@ -10,7 +10,7 @@ jobs:
   # Keep runner and build/test settings in sync with the build_and_test job in pr_check.yml.
   # Experiment: build first, then rerun the full test selection on 128 cores with the normal build cache.
   benchmark:
-    name: Build, then tests (128 cores, 32 test slots)
+    name: Build, then tests (128 cores, 128 test slots)
     runs-on: [self-hosted, auto-provisioned, build-preset-relwithdebinfo-xxl]
 
     steps:
@@ -31,7 +31,7 @@ jobs:
           increment: false
           run_tests: true
           test_size: small,medium
-          test_threads: 32
+          test_threads: 128
           link_threads: 4
           put_build_results_to_cache: true
           additional_ya_make_args: -DDEBUGINFO_LINES_ONLY # we don't need full symbols in CI checks

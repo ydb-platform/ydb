@@ -19,7 +19,7 @@ SRCS(
     flat_executor_database_ut.cpp
     flat_executor_gclogic_ut.cpp
     flat_executor_leases_ut.cpp
-    flat_executor_tiering_caps_ut.cpp
+    flat_executor_tiering_adjacent_ut.cpp
     flat_executor_tiering_concurrency_ut.cpp
     flat_executor_tiering_versions_ut.cpp
     flat_range_cache_ut.cpp

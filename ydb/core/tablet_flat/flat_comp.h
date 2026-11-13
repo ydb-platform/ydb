@@ -24,9 +24,8 @@ namespace NTable {
         TInstant Now;
         bool AllowCooling = false;
         THashMap<ui32, ui32> OutputTiers;
-        // Parallel scans pin an envelope of keys that other compactions may
-        // relocate between tiers.
-        bool UseConservativeMasks = false;
+        // Preserve erase markers when a parallel memory compaction has keys
+        // that are absent from this operation's captured underlay mask.
         bool HasUnknownRemaining = false;
         bool HasMemoryInputs = false;
         // Executor-thread validation state, advanced only by known successful

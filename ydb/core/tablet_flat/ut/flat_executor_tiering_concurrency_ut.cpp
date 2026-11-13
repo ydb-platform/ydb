@@ -22,12 +22,12 @@ namespace {
         return static_cast<const NTable::NCompGen::TGenCompactionParams&>(*Product(event).Params).Generation;
     }
 
-    void CheckArchiveOutputs(const TProdCompact& product) {
+    void CheckAdjacentOutputs(const TProdCompact& product, ui32 tier) {
         UNIT_ASSERT(!product.Results.empty());
         UNIT_ASSERT(product.Params->Tiering);
         for (const auto& output : product.Results) {
-            UNIT_ASSERT_VALUES_EQUAL(product.Params->Tiering->OutputTiers.at(output.OutputId), ArchiveTier);
-            UNIT_ASSERT_VALUES_EQUAL(output.Part->GetDataChannel({}), 3);
+            UNIT_ASSERT_VALUES_EQUAL(product.Params->Tiering->OutputTiers.at(output.OutputId), tier);
+            UNIT_ASSERT_VALUES_EQUAL(output.Part->GetDataChannel({}), tier == ColdTier ? 2 : 3);
             UNIT_ASSERT_VALUES_EQUAL(output.Part->GetSlotChannel(output.Part->DescriptorSlot()), 1);
             UNIT_ASSERT_VALUES_EQUAL(output.Part->Epoch, product.Params->Context->Epochs->Max);
         }
@@ -49,6 +49,15 @@ namespace {
         });
     }
 
+    void CheckInventory(TEnv& env, const THashMap<TLogoBlobID, ui32>& expected, TStringBuf stage) {
+        env.CheckLevels(expected, stage);
+        const auto parts = env.Parts();
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), expected.size());
+        for (const auto& part : parts) {
+            UNIT_ASSERT_C(expected.contains(part->Label), stage);
+        }
+    }
+
     NLocalDb::TCompactionPolicy PrepareTwoGenerations(TEnv& env) {
         for (ui64 key : {10, 11, 20, 21}) {
             env.Write({TRow{.Key = key, .Time = 0, .Value = ToString(key)}});
@@ -61,7 +70,9 @@ namespace {
         });
         auto levels = env.Levels();
         for (size_t i = 0; i < parts.size(); ++i) {
-            levels[parts[i]->Label] = i < 2 ? 4 : 1;
+            // Adjacent hot outputs enter the upper cold generation, leaving
+            // this lower generation's epoch interval independently runnable.
+            levels[parts[i]->Label] = i < 2 ? 5 : 1;
         }
         env.SeedLevels(levels);
         NLocalDb::TCompactionPolicy policy;
@@ -71,8 +82,79 @@ namespace {
         });
         UNIT_ASSERT_VALUES_EQUAL(policy.Generations.size(), 7);
         policy.Generations[0].ForceCountToCompact = 2;
-        policy.Generations[3].ForceCountToCompact = 2;
+        policy.Generations[4].ForceCountToCompact = 2;
         return policy;
+    }
+
+    void CheckEmptyAdjacentTierIsNotSkipped(bool warming) {
+        TEnv env;
+        constexpr ui64 key = 20;
+        const TRowVersion oldVersion(1, 1);
+        const TRowVersion newVersion(2, 2);
+        const ui64 time = warming ? Max<ui64>() : 0;
+        const auto older = env.FlushPart({{key, time, "older", 0, oldVersion}});
+        const auto newer = env.FlushPart({{key, time, "newer", 0, newVersion}});
+        const auto source = warming ? older : newer;
+        const auto remaining = warming ? newer : older;
+        const ui32 sourceGeneration = warming ? 7 : 2;
+        const ui32 remainingGeneration = warming ? 6 : 3;
+        const ui32 expectedTier = ColdTier;
+        const THashMap<TLogoBlobID, ui32> placement{
+            {source->Label, sourceGeneration},
+            {remaining->Label, remainingGeneration},
+        };
+        env.SeedLevels(placement);
+
+        auto policy = MakePolicy();
+        policy->Generations[sourceGeneration - 1].ForceCountToCompact = 1;
+        env.Enable();
+        TBlockEvents<NOps::TEvResult> blocked(env.Env);
+        env.Policy(*policy);
+        env->WaitFor("held TAC entering the empty adjacent tier", [&] {
+            return blocked.size() == 1;
+        });
+        const auto& product = Product(blocked.front());
+        UNIT_ASSERT_VALUES_EQUAL(Generation(blocked.front()), sourceGeneration);
+        UNIT_ASSERT(product.Params->Mode == NTable::TCompactionParams::EMode::TierAware);
+        UNIT_ASSERT_VALUES_EQUAL(product.Params->Context->Inputs.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(product.Params->Context->Inputs.front().Label(), source->Label);
+        UNIT_ASSERT_VALUES_EQUAL(product.Params->Context->Remaining.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(product.Params->Context->Remaining.front().Label(), remaining->Label);
+        UNIT_ASSERT(!product.Results.empty());
+        TVector<TLogoBlobID> outputs;
+        for (const auto& output : product.Results) {
+            // An empty neighboring tier is still the only allowed step,
+            // even when another version remains in the source tier.
+            UNIT_ASSERT_VALUES_EQUAL(product.Params->Tiering->OutputTiers.at(output.OutputId), expectedTier);
+            UNIT_ASSERT_VALUES_EQUAL(output.Part->GetDataChannel({}), 2);
+            UNIT_ASSERT_VALUES_EQUAL(output.Part->Epoch, source->Epoch);
+            outputs.push_back(output.Part->Label);
+        }
+        CheckInventory(env, placement, "before adjacent TAC publication");
+
+        auto* state = env.State;
+        UNIT_ASSERT(state);
+        blocked.Stop().Unblock();
+        env->WaitFor("adjacent TAC publication", [&] {
+            const auto levels = state->Tables.at(TableId).Strategy->SnapshotState().PartLevels;
+            return std::all_of(outputs.begin(), outputs.end(), [&](const auto& label) {
+                return levels.contains(label);
+            });
+        });
+        const auto levels = env.Levels();
+        UNIT_ASSERT_VALUES_EQUAL(levels.size(), outputs.size() + 1);
+        UNIT_ASSERT(!levels.contains(source->Label));
+        UNIT_ASSERT_VALUES_EQUAL(levels.at(remaining->Label), remainingGeneration);
+        for (const auto& label : outputs) {
+            UNIT_ASSERT_VALUES_EQUAL(env.Tier(levels.at(label)), expectedTier);
+        }
+        CheckInventory(env, levels, "after adjacent TAC publication");
+        env.Read(key, "newer");
+        env.Read(key, "older", oldVersion);
+        env.Restart();
+        env.CheckLevels(levels, "after adjacent TAC/restart");
+        env.Read(key, "newer");
+        env.Read(key, "older", oldVersion);
     }
 }
 
@@ -80,42 +162,68 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringConcurrency) {
     Y_UNIT_TEST(ParallelTacPublicationsKeepBothInputsAndReadsValid) {
         TEnv env;
         const auto policy = PrepareTwoGenerations(env);
+        const auto originalLevels = env.Levels();
         env.Enable(true);
         TBlockEvents<NOps::TEvResult> blocked(env.Env);
         env.Policy(policy);
-        env->WaitFor("two disjoint real TAC results", [&] { return blocked.size() == 2; });
+        env->WaitFor("two held TAC results", [&] { return blocked.size() == 2; });
 
         THashSet<ui32> generations;
         THashSet<TLogoBlobID> inputs;
         TVector<TLogoBlobID> outputs;
+        THashMap<TLogoBlobID, ui32> outputTiers;
+        THashSet<TLogoBlobID> firstInputs;
+        TVector<TLogoBlobID> firstOutputs;
+        const auto& first = Product(blocked.front());
+        for (const auto& input : first.Params->Context->Inputs) {
+            firstInputs.insert(input.Label());
+        }
+        for (const auto& output : first.Results) {
+            firstOutputs.push_back(output.Part->Label);
+        }
         for (const auto& event : blocked) {
             const auto& product = Product(event);
-            generations.insert(Generation(event));
+            UNIT_ASSERT(generations.insert(Generation(event)).second);
             UNIT_ASSERT(product.Params->Mode == NTable::TCompactionParams::EMode::TierAware);
             UNIT_ASSERT_VALUES_EQUAL(product.Params->Context->Inputs.size(), 2);
-            CheckArchiveOutputs(product);
+            const ui32 tier = Generation(event) == 1 ? ColdTier : ArchiveTier;
+            CheckAdjacentOutputs(product, tier);
             for (const auto& input : product.Params->Context->Inputs) {
                 UNIT_ASSERT(inputs.insert(input.Label()).second);
             }
             for (const auto& output : product.Results) {
-                UNIT_ASSERT_VALUES_EQUAL(output.Part->Epoch, product.Params->Context->Epochs->Max);
                 outputs.push_back(output.Part->Label);
+                outputTiers.emplace(output.Part->Label, tier);
             }
         }
         UNIT_ASSERT(generations.contains(1));
-        UNIT_ASSERT(generations.contains(4));
+        UNIT_ASSERT(generations.contains(5));
+        CheckInventory(env, originalLevels, "before first TAC publication");
         CheckRows(env);
 
-        // Publish one operation while the other still holds its original masks.
-        // The second result must remain usable after that known replacement.
-        const TLogoBlobID firstOutput = Product(blocked.front()).Results.front().Part->Label;
+        // Publish one operation while the other retains its prepared inputs.
+        // The known replacement must leave the held second result usable.
+        auto* state = env.State;
+        UNIT_ASSERT(state);
         blocked.Unblock(1);
-        TCompactionLogicState* state = nullptr;
-        env.Call([&](TExecutor&, TCompactionLogicState& current) { state = &current; });
         env->WaitFor("first TAC publication", [&] {
-            return state->Tables.at(TableId).Strategy->SnapshotState().PartLevels.contains(firstOutput);
+            const auto levels = state->Tables.at(TableId).Strategy->SnapshotState().PartLevels;
+            return std::all_of(firstOutputs.begin(), firstOutputs.end(), [&](const auto& label) {
+                return levels.contains(label);
+            });
         });
-        UNIT_ASSERT_VALUES_EQUAL(env.Tier(env.Levels().at(firstOutput)), ArchiveTier);
+        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1);
+        const auto afterFirst = env.Levels();
+        auto expectedAfterFirst = originalLevels;
+        for (const auto& label : firstInputs) {
+            UNIT_ASSERT_VALUES_EQUAL(expectedAfterFirst.erase(label), 1);
+        }
+        for (const auto& label : firstOutputs) {
+            UNIT_ASSERT(afterFirst.contains(label));
+            UNIT_ASSERT_VALUES_EQUAL(env.Tier(afterFirst.at(label)), outputTiers.at(label));
+            expectedAfterFirst.emplace(label, afterFirst.at(label));
+        }
+        CheckInventory(env, expectedAfterFirst, "before second TAC publication");
         CheckRows(env);
 
         blocked.Stop().Unblock();
@@ -126,22 +234,84 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringConcurrency) {
             });
         });
         const auto levels = env.Levels();
+        UNIT_ASSERT_VALUES_EQUAL(levels.size(), outputs.size());
         for (const auto& label : inputs) {
             UNIT_ASSERT(!levels.contains(label));
         }
         for (const auto& label : outputs) {
-            UNIT_ASSERT_VALUES_EQUAL(env.Tier(levels.at(label)), ArchiveTier);
+            UNIT_ASSERT_VALUES_EQUAL(env.Tier(levels.at(label)), outputTiers.at(label));
         }
+        CheckInventory(env, levels, "after both TAC publications");
         CheckRows(env);
         env.Restart();
         env.CheckLevels(levels, "after restart");
         CheckRows(env);
     }
 
+    Y_UNIT_TEST(RegularCompactionsOfDisjointGenerationsRemainParallel) {
+        TEnv env;
+        const auto policy = PrepareTwoGenerations(env);
+        const auto originalLevels = env.Levels();
+        TBlockEvents<NOps::TEvResult> blocked(env.Env);
+        env.Policy(policy);
+        env->WaitFor("two held regular results", [&] { return blocked.size() == 2; });
+
+        THashSet<ui32> generations;
+        THashSet<TLogoBlobID> inputs;
+        TVector<TLogoBlobID> outputs;
+        for (const auto& event : blocked) {
+            const auto& product = Product(event);
+            const ui32 generation = Generation(event);
+            UNIT_ASSERT(generations.insert(generation).second);
+            UNIT_ASSERT(product.Params->Mode == NTable::TCompactionParams::EMode::Regular);
+            UNIT_ASSERT_VALUES_EQUAL(product.Params->Context->Inputs.size(), 2);
+            for (const auto& input : product.Params->Context->Inputs) {
+                UNIT_ASSERT(inputs.insert(input.Label()).second);
+            }
+            UNIT_ASSERT(!product.Results.empty());
+            for (const auto& output : product.Results) {
+                UNIT_ASSERT_VALUES_EQUAL(product.Params->Tiering->OutputTiers.at(output.OutputId),
+                    generation == 1 ? 0 : ColdTier);
+                outputs.push_back(output.Part->Label);
+            }
+        }
+        UNIT_ASSERT(generations.contains(1));
+        UNIT_ASSERT(generations.contains(5));
+        CheckInventory(env, originalLevels, "before parallel regular publications");
+        CheckRows(env);
+
+        auto* state = env.State;
+        UNIT_ASSERT(state);
+        blocked.Stop().Unblock();
+        env->WaitFor("both regular publications", [&] {
+            const auto levels = state->Tables.at(TableId).Strategy->SnapshotState().PartLevels;
+            return std::all_of(outputs.begin(), outputs.end(), [&](const auto& label) {
+                return levels.contains(label);
+            });
+        });
+        const auto levels = env.Levels();
+        for (const auto& label : inputs) {
+            UNIT_ASSERT(!levels.contains(label));
+        }
+        CheckInventory(env, levels, "after parallel regular publications");
+        CheckRows(env);
+        env.Restart();
+        env.CheckLevels(levels, "after restart");
+        CheckRows(env);
+    }
+
+    Y_UNIT_TEST(CoolingEntersAnEmptyAdjacentTierWithAnOlderVersionInTheSourceTier) {
+        CheckEmptyAdjacentTierIsNotSkipped(false);
+    }
+
+    Y_UNIT_TEST(WarmingEntersAnEmptyAdjacentTierWithANewerVersionInTheSourceTier) {
+        CheckEmptyAdjacentTierIsNotSkipped(true);
+    }
+
     Y_UNIT_TEST(DisablingTieringRejectsAHeldTacAndPublishesItsRegularRetryAtomically) {
         TEnv env;
         auto policy = PrepareTwoGenerations(env);
-        policy.Generations[3].ForceCountToCompact = 1000;
+        policy.Generations[4].ForceCountToCompact = 1000;
         const auto originalLevels = env.Levels();
         env.Enable(true);
         TBlockEvents<NOps::TEvResult> blocked(env.Env);
@@ -151,7 +321,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringConcurrency) {
         const auto& tac = Product(blocked.front());
         UNIT_ASSERT(tac.Params->Mode == NTable::TCompactionParams::EMode::TierAware);
         UNIT_ASSERT(tac.Params->Tiering->AllowCooling);
-        CheckArchiveOutputs(tac);
+        CheckAdjacentOutputs(tac, ColdTier);
         TVector<TLogoBlobID> discardedOutputs;
         TVector<TLogoBlobID> originalInputs;
         for (const auto& output : tac.Results) {

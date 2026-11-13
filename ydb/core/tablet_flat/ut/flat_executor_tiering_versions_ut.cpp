@@ -157,7 +157,7 @@ namespace {
             tiers.insert(tier);
             UNIT_ASSERT_VALUES_EQUAL(part->Epoch, epoch);
             UNIT_ASSERT_VALUES_EQUAL(env.Tier(levels.at(part->Label)), tier);
-            UNIT_ASSERT_VALUES_EQUAL(part->GetDataChannel({}), tier == 0 ? 1 : 3);
+            UNIT_ASSERT_VALUES_EQUAL(part->GetDataChannel({}), tier == 0 ? 1 : tier == ColdTier ? 2 : 3);
             UNIT_ASSERT_VALUES_EQUAL(part->GetSlotChannel(part->DescriptorSlot()), 1);
         }
         // Every scenario has a fresh key for default and an old key for
@@ -184,7 +184,7 @@ namespace {
         env.Enable();
         constexpr ui64 fresh = Max<ui64>();
         const auto old = env.FlushPart({{1, 0, "old", 10, TRowVersion(1, 10)}});
-        UNIT_ASSERT_VALUES_EQUAL(env.Tier(env.Levels().at(old->Label)), ArchiveTier);
+        UNIT_ASSERT_VALUES_EQUAL(env.Tier(env.Levels().at(old->Label)), ColdTier);
         THashSet<TLogoBlobID> before;
         for (const auto& part : env.Parts()) {
             before.insert(part->Label);
@@ -200,7 +200,7 @@ namespace {
                 if (env.Tier(levels.at(part->Label)) == 0) {
                     hot = part;
                 } else {
-                    UNIT_ASSERT_VALUES_EQUAL(env.Tier(levels.at(part->Label)), ArchiveTier);
+                    UNIT_ASSERT_VALUES_EQUAL(env.Tier(levels.at(part->Label)), ColdTier);
                     cold = part;
                 }
             }
@@ -219,7 +219,7 @@ namespace {
             staged[last->Label] = 6;
             env.SeedLevels(staged);
         }
-        const auto compacted = CompactGeneration(env, 6);
+        const auto compacted = CompactGeneration(env, lowerBoundary ? 6 : 4);
         if (lowerBoundary) {
             const TVector<TLogoBlobID> required{hot->Label, cold->Label, last->Label};
             CheckEpochClosure(env, compacted, required, hot->Epoch, last->Epoch);
@@ -297,11 +297,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringVersions) {
         const auto last = env.FlushPart({{2, 0, "other", 30, TRowVersion(3, 30)}});
         UNIT_ASSERT(old->Epoch < hot->Epoch && hot->Epoch < last->Epoch);
         const auto before = env.Levels();
-        UNIT_ASSERT_VALUES_EQUAL(env.Tier(before.at(old->Label)), ArchiveTier);
+        UNIT_ASSERT_VALUES_EQUAL(env.Tier(before.at(old->Label)), ColdTier);
         UNIT_ASSERT_VALUES_EQUAL(env.Tier(before.at(hot->Label)), 0);
-        UNIT_ASSERT_VALUES_EQUAL(env.Tier(before.at(last->Label)), ArchiveTier);
+        UNIT_ASSERT_VALUES_EQUAL(env.Tier(before.at(last->Label)), ColdTier);
 
-        const auto compacted = CompactGeneration(env, 6);
+        const auto compacted = CompactGeneration(env, 4);
         const TVector<TLogoBlobID> required{old->Label, hot->Label, last->Label};
         CheckEpochClosure(env, compacted, required, old->Epoch, last->Epoch);
         CheckRows(env, {{1, fresh, "new", 20}, {2, 0, "other", 30}});

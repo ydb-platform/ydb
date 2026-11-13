@@ -118,17 +118,6 @@ Y_UNIT_TEST_SUITE(TCompactionKeySpacePgTest) {
         UNIT_ASSERT(!mask->HasKey(f.Key(outside)));
     }
 
-    Y_UNIT_TEST(CapStopsAtEquivalentNumericKeyInBothDirections) {
-        TFixture f;
-        const auto equivalent = f.EquivalentKeyRejectedByRawBloom();
-        const auto key = f.Key(equivalent);
-        const TVector<TCompactionPartInfo> remaining{{f.Part, 3, 42}};
-        TCompactionTierCap cap(f.Scheme->Keys, remaining, {0, 42, 7});
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier(key, 0, 7), 42);
-        cap.Reset();
-        UNIT_ASSERT_VALUES_EQUAL(cap.LimitTier(key, 7, 0), 42);
-    }
-
     Y_UNIT_TEST(GarbageConfKeepsEraseForEquivalentNumericKey) {
         TFixture f;
         const auto equivalent = f.EquivalentKeyRejectedByRawBloom();

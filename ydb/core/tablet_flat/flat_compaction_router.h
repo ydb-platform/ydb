@@ -36,6 +36,7 @@ namespace NKikimr::NTabletFlatExecutor {
         // The policy, evaluation time and physical tier order are fixed for the
         // operation. No policy preserves source placement; allowCooling=false
         // also permits maintenance without scheduling new cooling decisions.
+        // Each routing decision moves at most one tier toward the policy target.
         TTierCompactionRouter(const TCompactCfg& conf,
             std::optional<NTable::TTieringPolicy> policy, TInstant now,
             TVector<ui32> tierOrder, bool allowCooling = true);
@@ -45,16 +46,12 @@ namespace NKikimr::NTabletFlatExecutor {
         TVector<ui32> GetUnrepresentableTierIds() const override;
 
     private:
-        const TIntrusiveConstPtr<NTable::TCompactionContext> Context;
         const std::optional<NTable::TTieringPolicy> Policy;
         const TInstant Now;
         const TVector<ui32> TierOrder;
         const bool AllowCooling;
-        const bool UseConservativeMasks;
-        const bool HasUnknownRemaining;
         THashMap<ui32, ui32> OutputByTier;
         THolder<NTable::TTierPredicate> Predicate;
-        THolder<NTable::TCompactionTierCap> Cap;
         bool Prepared = false;
     };
 

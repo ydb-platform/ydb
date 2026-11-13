@@ -629,7 +629,7 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
         UNIT_ASSERT(f.Current(*params));
     }
 
-    Y_UNIT_TEST(AKnownRemainingReplacementPreservesThePinnedMaskContext) {
+    Y_UNIT_TEST(AKnownRemainingReplacementPreservesThePinnedContext) {
         TFixture f;
         const auto hot = f.AddPart(40, 1);
         const auto oldCold = f.AddPart(10, 3, 2);
@@ -637,7 +637,6 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
         TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
         subset.Flatten = {hot};
         f.Prepare(*params, subset);
-        params->Tiering->UseConservativeMasks = true;
 
         const auto archive = f.MakePart(10, 2);
         f.Parts.back() = archive;
@@ -661,7 +660,6 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
         TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
         subset.Flatten = {hot};
         f.Prepare(*params, subset);
-        params->Tiering->UseConservativeMasks = true;
 
         f.AddPart(40, 3, 2);
         params->Tiering->ExpectedInventory = DescribeCompactionParts(
@@ -677,7 +675,6 @@ Y_UNIT_TEST_SUITE(TTieringCompactionPreparation) {
         TSubset subset(TEpoch::Zero(), f.Layout.RowScheme());
         subset.Flatten = {hot};
         f.Prepare(*params, subset);
-        params->Tiering->UseConservativeMasks = true;
 
         f.Parts.front() = hot.CloneWithEpoch(TEpoch::FromIndex(40));
         params->Tiering->ExpectedInventory = DescribeCompactionParts(
@@ -1172,6 +1169,50 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         }
     }
 
+    Y_UNIT_TEST(UpliftUsesRemainingEpochsAfterClosingInputsAcrossGenerations) {
+        TStrategyFixture f;
+        const auto retained = f.AddPart(30, 3, 100);
+        const auto upperPeer = f.AddPart(20, 3, 101);
+        const auto lowerPeer = f.AddPart(20, 4, 102);
+        const auto oldest = f.AddPart(10, 4, 103);
+        f.Policy->Generations[2].UpliftPartSize = Max<ui64>();
+        f.Policy->Generations[2].ForceCountToCompact = 3;
+        f.Policy->Generations[3].UpliftPartSize = Max<ui64>();
+        f.Policy->Generations[3].ForceCountToCompact = 2;
+        f.Start();
+        UNIT_ASSERT(f.Broker.RunPending(4));
+        const ui64 id = f.Backend.OnlyStarted();
+        const auto& params = *f.Backend.Started.at(id);
+        UNIT_ASSERT_VALUES_EQUAL(params.Context->Inputs.size(), 3);
+        UNIT_ASSERT(Contains(params.Parts, upperPeer->Label));
+        UNIT_ASSERT(Contains(params.Parts, lowerPeer->Label));
+        UNIT_ASSERT(Contains(params.Parts, oldest->Label));
+        UNIT_ASSERT(!Contains(params.Parts, retained->Label));
+
+        // Closing [10, 20] removes one of gen3's two epochs. Its remaining
+        // epoch plus the result fit below the limit of three, allowing uplift.
+        const auto changes = f.Complete(id, {ColdTier});
+        UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(changes.NewPartLevels.begin()->second, 3);
+        UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(retained->Label), 3);
+        UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.size(), 2);
+        UNIT_ASSERT(!f.Broker.HasPending());
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetOverloadFactor(), 0.0f);
+        ui64 backing = 0;
+        for (const auto& part : f.Parts) {
+            backing += part->BackingSize();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetBackingSize(), backing);
+
+        const auto placement = f.State.PartLevels;
+        f.Strategy->Stop();
+        f.Strategy->Start(f.State);
+        UNIT_ASSERT(f.Strategy->SnapshotState().PartLevels == placement);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetBackingSize(), backing);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetOverloadFactor(), 0.0f);
+        UNIT_ASSERT(!f.Broker.HasPending());
+    }
+
     Y_UNIT_TEST(MemoryCompactionRunsBesideADisjointDiskCompaction) {
         TStrategyFixture f;
         f.Backend.Enabled = true;
@@ -1187,8 +1228,9 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
         UNIT_ASSERT(memoryId != diskId);
         UNIT_ASSERT(f.Backend.Cancelled.empty());
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
+        UNIT_ASSERT(f.Backend.Started.at(diskId)->Mode == TCompactionParams::EMode::TierAware);
+        UNIT_ASSERT(f.Backend.Started.at(memoryId)->Mode == TCompactionParams::EMode::TierAware);
         UNIT_ASSERT(f.Backend.Started.at(memoryId)->Context->Inputs.empty());
-        UNIT_ASSERT(f.Backend.Started.at(memoryId)->Tiering->UseConservativeMasks);
         UNIT_ASSERT(!f.Backend.Started.at(memoryId)->Tiering->AllowCooling);
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(memoryId)->Context->Epochs->Max,
             TEpoch::FromIndex(30));
@@ -1200,120 +1242,373 @@ Y_UNIT_TEST_SUITE(TTieringCompactionStrategy) {
     }
 
     Y_UNIT_TEST(DisjointGenerationsCanCompactConcurrently) {
-        TStrategyFixture f;
-        f.AddPart(40, 1, 100);
-        f.AddPart(41, 1, 101);
-        f.AddPart(10, 3, 100);
-        f.AddPart(11, 3, 101);
-        f.Policy->Generations[0].ForceCountToCompact = 2;
-        f.Policy->Generations[2].ForceCountToCompact = 2;
-        f.Start();
+        for (bool enabled : {false, true}) {
+            TStrategyFixture f;
+            f.Backend.Enabled = enabled;
+            f.AddPart(40, 1, 100);
+            f.AddPart(41, 1, 101);
+            f.AddPart(10, 3, 100);
+            f.AddPart(11, 3, 101);
+            f.Policy->Generations[0].ForceCountToCompact = 2;
+            f.Policy->Generations[2].ForceCountToCompact = 2;
+            f.Start();
 
-        UNIT_ASSERT(f.Broker.RunPending(1));
-        const ui64 hotId = f.Backend.StartedGeneration(1);
-        UNIT_ASSERT(f.Broker.RunPending(3));
-        const ui64 coldId = f.Backend.StartedGeneration(3);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
-        UNIT_ASSERT(f.Backend.Cancelled.empty());
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(hotId)->Context->Inputs.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(coldId)->Context->Inputs.size(), 2);
+            UNIT_ASSERT(f.Broker.RunPending(1));
+            const ui64 hotId = f.Backend.StartedGeneration(1);
+            UNIT_ASSERT(f.Broker.RunPending(3));
+            const ui64 coldId = f.Backend.StartedGeneration(3);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
+            UNIT_ASSERT(f.Backend.Cancelled.empty());
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(hotId)->Context->Inputs.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(coldId)->Context->Inputs.size(), 2);
+            const auto mode = enabled ? TCompactionParams::EMode::TierAware : TCompactionParams::EMode::Regular;
+            UNIT_ASSERT(f.Backend.Started.at(hotId)->Mode == mode);
+            UNIT_ASSERT(f.Backend.Started.at(coldId)->Mode == mode);
 
-        f.Complete(coldId, {ColdTier});
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), hotId);
-        UNIT_ASSERT(f.Current(*f.Backend.Started.at(hotId)));
-        const auto external = f.AddPart(100, 1, 999);
-        UNIT_ASSERT(!f.Current(*f.Backend.Started.at(hotId)));
-        f.Parts.pop_back();
-        f.State.PartLevels.erase(external->Label);
-        UNIT_ASSERT(f.Current(*f.Backend.Started.at(hotId)));
-        f.Complete(hotId, {0});
-        UNIT_ASSERT(f.Backend.Started.empty());
+            f.Complete(coldId, {ColdTier});
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), hotId);
+            UNIT_ASSERT(f.Current(*f.Backend.Started.at(hotId), enabled));
+            const auto external = f.AddPart(100, 1, 999);
+            UNIT_ASSERT(!f.Current(*f.Backend.Started.at(hotId), enabled));
+            f.Parts.pop_back();
+            f.State.PartLevels.erase(external->Label);
+            UNIT_ASSERT(f.Current(*f.Backend.Started.at(hotId), enabled));
+            f.Complete(hotId, {0});
+            UNIT_ASSERT(f.Backend.Started.empty());
+        }
     }
 
     Y_UNIT_TEST(AParallelDiskTacTreatsMemoryOutputsAsUnknownRemainingKeys) {
+        for (bool tierAwareMemory : {false, true}) {
+            TStrategyFixture f;
+            f.Backend.Enabled = tierAwareMemory;
+            f.Backend.MemoryEpoch = TEpoch::FromIndex(40);
+            f.AddPart(10, 3, 100);
+            f.AddPart(20, 3, 101);
+            f.Policy->Generations[2].ForceCountToCompact = 2;
+            f.Start();
+            const ui64 memoryId = f.Strategy->BeginMemCompaction(0, {0, TEpoch::Max()}, 0);
+            UNIT_ASSERT(memoryId != 0);
+            const auto memoryMode = tierAwareMemory
+                ? TCompactionParams::EMode::TierAware : TCompactionParams::EMode::Regular;
+            UNIT_ASSERT(f.Backend.Started.at(memoryId)->Mode == memoryMode);
+            UNIT_ASSERT(f.Backend.Started.at(memoryId)->Tiering->HasMemoryInputs);
+
+            f.Backend.Enabled = true;
+            UNIT_ASSERT(f.Broker.RunPending(3));
+            const ui64 diskId = f.Backend.StartedGeneration(3);
+            const auto& disk = *f.Backend.Started.at(diskId);
+            UNIT_ASSERT(disk.Mode == TCompactionParams::EMode::TierAware);
+            UNIT_ASSERT(disk.Tiering->HasUnknownRemaining);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
+
+            f.Complete(diskId, {ColdTier});
+            UNIT_ASSERT(f.Current(*f.Backend.Started.at(memoryId), true));
+            f.Complete(memoryId, {});
+        }
+    }
+
+    Y_UNIT_TEST(AForcedMemoryTacWaitsForConflictingDiskInputs) {
         TStrategyFixture f;
         f.Backend.Enabled = true;
-        f.Backend.MemoryEpoch = TEpoch::FromIndex(40);
+        f.Backend.MemoryEpoch = TEpoch::FromIndex(30);
         f.AddPart(10, 3, 100);
         f.AddPart(20, 3, 101);
         f.Policy->Generations[2].ForceCountToCompact = 2;
         f.Start();
-        const ui64 memoryId = f.Strategy->BeginMemCompaction(0, {0, TEpoch::Max()}, 0);
-        UNIT_ASSERT(memoryId != 0);
-        UNIT_ASSERT(f.Backend.Started.at(memoryId)->Tiering->HasMemoryInputs);
+        const ui64 diskId = f.RunPending();
+        constexpr ui64 forcedId = 777;
 
-        UNIT_ASSERT(f.Broker.RunPending(3));
-        const ui64 diskId = f.Backend.StartedGeneration(3);
-        const auto& disk = *f.Backend.Started.at(diskId);
-        UNIT_ASSERT(disk.Mode == TCompactionParams::EMode::TierAware);
-        UNIT_ASSERT(disk.Tiering->UseConservativeMasks);
-        UNIT_ASSERT(disk.Tiering->HasUnknownRemaining);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
-
+        // A forced request selects the cold disk inputs already reserved
+        // by the running TAC, even though its memory epoch is disjoint.
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->BeginMemCompaction(0,
+            {0, TEpoch::Max()}, forcedId), 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), diskId);
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Rejected.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Rejected.back(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.MemoryRetryRequests, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), 0);
         f.Complete(diskId, {ColdTier});
-        UNIT_ASSERT(f.Current(*f.Backend.Started.at(memoryId), true));
-        f.Complete(memoryId, {});
+
+        UNIT_ASSERT(f.Backend.MemoryRetryRequests > 0);
+        const ui64 memoryId = f.Strategy->BeginMemCompaction(0,
+            {0, TEpoch::Max()}, forcedId);
+        UNIT_ASSERT(memoryId != 0);
+        UNIT_ASSERT(f.Backend.Started.at(memoryId)->Mode == TCompactionParams::EMode::TierAware);
+        f.Complete(memoryId, {0});
+        UNIT_ASSERT_VALUES_EQUAL(f.Strategy->GetLastFinishedForcedCompactionId(), forcedId);
     }
 
-    Y_UNIT_TEST(ALateCancellationDoesNotReleaseTheReplacementOrAnotherGeneration) {
+    Y_UNIT_TEST(EpochClosureUpgradedMaintenanceTacRunsBesideTheActiveTac) {
         TStrategyFixture f;
+        f.Backend.Enabled = true;
+        auto& next = f.Policy->Generations[1];
+        next.ExtraCompactionPercent = 0;
+        next.ExtraCompactionExpPercent = 0;
+        next.ExtraCompactionMinSize = 0;
         f.AddPart(40, 1, 100);
         f.AddPart(41, 1, 101);
-        f.AddPart(10, 3, 100);
-        f.AddPart(11, 3, 101);
+        f.AddPart(20, 2, 102);
+        f.AddPart(10, 3, 103);
+        f.AddPart(30, 3, 104);
         f.Policy->Generations[0].ForceCountToCompact = 2;
         f.Policy->Generations[2].ForceCountToCompact = 2;
         f.Start();
         UNIT_ASSERT(f.Broker.RunPending(1));
-        const ui64 originalId = f.Backend.StartedGeneration(1);
+        const ui64 hotId = f.Backend.OnlyStarted();
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.at(hotId)->Context->Inputs.size(), 2);
+
+        // With the flag off this request starts as Regular. Epoch closure
+        // adds gen2 and upgrades it to a maintenance TAC before reservation.
+        f.Backend.Enabled = false;
         UNIT_ASSERT(f.Broker.RunPending(3));
         const ui64 coldId = f.Backend.StartedGeneration(3);
-        f.Cancel(originalId);
-
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), coldId);
-        UNIT_ASSERT(f.Broker.RunPending(1));
-        const ui64 retryId = f.Backend.StartedGeneration(1);
-        UNIT_ASSERT(retryId != originalId);
-        f.Strategy->CompactionCancelled(originalId, *f.Backend.Cancelled.at(originalId));
+        const auto& cold = *f.Backend.Started.at(coldId);
+        UNIT_ASSERT(cold.Mode == TCompactionParams::EMode::TierAware);
+        UNIT_ASSERT(!cold.Tiering->AllowCooling);
+        UNIT_ASSERT_VALUES_EQUAL(cold.Context->Inputs.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(1), retryId);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(3), coldId);
-        f.Complete(coldId, {ColdTier});
-        f.Complete(retryId, {0});
+        UNIT_ASSERT(f.Backend.Rejected.empty());
+
+        f.Backend.Enabled = true;
+        f.Complete(hotId, {});
+        UNIT_ASSERT(f.Current(*f.Backend.Started.at(coldId), true));
+        f.Complete(coldId, {0, ColdTier});
+    }
+
+    Y_UNIT_TEST(AMaintenanceTacRunsBesideDisjointRegularAndTierAwareCompactions) {
+        TStrategyFixture f;
+        f.AddPart(80, 1, 100);
+        f.AddPart(81, 1, 101);
+        f.AddPart(20, 2, 102);
+        f.AddPart(10, 3, 103);
+        f.AddPart(30, 3, 104);
+        f.AddPart(60, 5, 105);
+        f.AddPart(61, 5, 106);
+        for (ui32 generation : {1, 3, 5}) {
+            f.Policy->Generations[generation - 1].ForceCountToCompact = 2;
+        }
+        f.Start();
+        UNIT_ASSERT(f.Broker.RunPending(3));
+        const ui64 coldId = f.Backend.OnlyStarted();
+        UNIT_ASSERT(f.Backend.Started.at(coldId)->Mode == TCompactionParams::EMode::TierAware);
+        UNIT_ASSERT(!f.Backend.Started.at(coldId)->Tiering->AllowCooling);
+
+        UNIT_ASSERT(f.Broker.RunPending(5));
+        const ui64 archiveId = f.Backend.StartedGeneration(5);
+        UNIT_ASSERT(f.Backend.Started.at(archiveId)->Mode == TCompactionParams::EMode::Regular);
+        f.Backend.Enabled = true;
+        UNIT_ASSERT(f.Broker.RunPending(1));
+        const ui64 hotId = f.Backend.StartedGeneration(1);
+        UNIT_ASSERT(f.Backend.Started.at(hotId)->Mode == TCompactionParams::EMode::TierAware);
+        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 3);
+        UNIT_ASSERT(f.Backend.Rejected.empty());
+
+        f.Complete(archiveId, {});
+        UNIT_ASSERT(f.Current(*f.Backend.Started.at(coldId), true));
+        UNIT_ASSERT(f.Current(*f.Backend.Started.at(hotId), true));
+        f.Complete(coldId, {});
+        f.Complete(hotId, {0});
+    }
+
+    Y_UNIT_TEST(DisjointGenerationsAndTierFinalsCanRunConcurrentTacs) {
+        for (bool finals : {false, true}) {
+            TStrategyFixture f;
+            f.Backend.Enabled = true;
+            const ui32 firstLevel = finals ? f.Policy->GetFinalLevel(ColdTier) : 4;
+            const ui32 secondLevel = finals ? f.Policy->GetFinalLevel(ArchiveTier) : 3;
+            f.AddPart(10, firstLevel, 100);
+            f.AddPart(11, firstLevel, 101);
+            f.AddPart(40, secondLevel, 102);
+            f.AddPart(41, secondLevel, 103);
+            if (!finals) {
+                f.Policy->Generations[firstLevel - 1].ForceCountToCompact = 2;
+                f.Policy->Generations[secondLevel - 1].ForceCountToCompact = 2;
+            }
+            f.Start();
+            UNIT_ASSERT(f.Broker.RunPending(firstLevel));
+            const ui64 firstId = f.Backend.OnlyStarted();
+            UNIT_ASSERT(f.Broker.RunPending(secondLevel));
+            const ui64 secondId = f.Backend.StartedGeneration(secondLevel);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
+            UNIT_ASSERT(f.Backend.Rejected.empty());
+            UNIT_ASSERT(f.Backend.Started.at(firstId)->Mode == TCompactionParams::EMode::TierAware);
+            UNIT_ASSERT(f.Backend.Started.at(secondId)->Mode == TCompactionParams::EMode::TierAware);
+
+            f.Complete(firstId, {});
+            UNIT_ASSERT(f.Current(*f.Backend.Started.at(secondId), true));
+            f.Complete(secondId, {f.Tier(secondLevel)});
+        }
+    }
+
+    Y_UNIT_TEST(StoppingOrReflectingSchemaReleasesConcurrentTacReservations) {
+        for (bool reflectSchema : {false, true}) {
+            TStrategyFixture f;
+            f.Backend.Enabled = true;
+            f.AddPart(40, 1, 100);
+            f.AddPart(41, 1, 101);
+            f.AddPart(10, 3, 102);
+            f.AddPart(11, 3, 103);
+            f.Policy->Generations[0].ForceCountToCompact = 2;
+            f.Policy->Generations[2].ForceCountToCompact = 2;
+            f.Start();
+            UNIT_ASSERT(f.Broker.RunPending(1));
+            const ui64 originalId = f.Backend.OnlyStarted();
+            UNIT_ASSERT(f.Broker.RunPending(3));
+            const ui64 originalColdId = f.Backend.StartedGeneration(3);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
+
+            if (reflectSchema) {
+                f.Strategy->ReflectSchema();
+            } else {
+                const auto state = f.Strategy->SnapshotState();
+                f.Strategy->Stop();
+                f.Strategy->Start(state);
+            }
+            UNIT_ASSERT(f.Backend.Cancelled.contains(originalId));
+            UNIT_ASSERT(f.Backend.Cancelled.contains(originalColdId));
+            UNIT_ASSERT(f.Backend.Started.empty());
+            UNIT_ASSERT(f.Broker.RunPending(1));
+            const ui64 hotId = f.Backend.OnlyStarted();
+            UNIT_ASSERT(f.Broker.RunPending(3));
+            const ui64 coldId = f.Backend.StartedGeneration(3);
+            f.Strategy->CompactionCancelled(originalId, *f.Backend.Cancelled.at(originalId));
+            f.Strategy->CompactionCancelled(originalColdId, *f.Backend.Cancelled.at(originalColdId));
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(1), hotId);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(3), coldId);
+            f.Complete(coldId, {ColdTier});
+            f.Complete(hotId, {0});
+        }
+    }
+
+    Y_UNIT_TEST(MergingAPartCancelsConcurrentTacsAndRetriesCaptureTheNewInventory) {
+        for (bool unloaded : {false, true}) {
+            TStrategyFixture f;
+            f.Backend.Enabled = true;
+            f.AddPart(40, 1, 100);
+            f.AddPart(41, 1, 101);
+            f.AddPart(10, 3, 102);
+            f.AddPart(11, 3, 103);
+            f.Policy->Generations[0].ForceCountToCompact = 2;
+            f.Policy->Generations[2].ForceCountToCompact = 2;
+            f.Start();
+            UNIT_ASSERT(f.Broker.RunPending(1));
+            const ui64 originalHotId = f.Backend.OnlyStarted();
+            UNIT_ASSERT(f.Broker.RunPending(3));
+            const ui64 originalColdId = f.Backend.StartedGeneration(3);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
+
+            // An external merge must cancel both operations before either can
+            // publish using an inventory that does not contain the new part.
+            const auto mergedLabel = [&] {
+                if (unloaded) {
+                    const auto merged = f.AddColdPart(5, 255);
+                    f.Strategy->PartMerged(merged, 255);
+                    return merged->Label;
+                }
+                const auto merged = f.AddPart(5, 255, 999);
+                f.Strategy->PartMerged(merged, 255);
+                return merged->Label;
+            }();
+            UNIT_ASSERT(f.Backend.Cancelled.contains(originalHotId));
+            UNIT_ASSERT(f.Backend.Cancelled.contains(originalColdId));
+            UNIT_ASSERT(f.Backend.Started.empty());
+
+            UNIT_ASSERT(f.Broker.RunPending(1));
+            const ui64 hotId = f.Backend.OnlyStarted();
+            UNIT_ASSERT(f.Broker.RunPending(3));
+            const ui64 coldId = f.Backend.StartedGeneration(3);
+            UNIT_ASSERT(hotId != originalHotId);
+            UNIT_ASSERT(coldId != originalColdId);
+            const auto hasMerged = [&](const auto& inventory) {
+                return std::any_of(inventory.begin(), inventory.end(), [&](const auto& part) {
+                    return part.Label() == mergedLabel;
+                });
+            };
+            for (ui64 id : {hotId, coldId}) {
+                const auto& params = *f.Backend.Started.at(id);
+                UNIT_ASSERT(params.Mode == TCompactionParams::EMode::TierAware);
+                UNIT_ASSERT(hasMerged(params.Tiering->ExpectedInventory));
+                UNIT_ASSERT(hasMerged(params.Context->Remaining));
+                UNIT_ASSERT(f.Current(params, true));
+            }
+
+            f.Complete(coldId, {ColdTier});
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), hotId);
+            UNIT_ASSERT(f.Current(*f.Backend.Started.at(hotId), true));
+            UNIT_ASSERT(hasMerged(f.Backend.Started.at(hotId)->Tiering->ExpectedInventory));
+            f.Complete(hotId, {0});
+            UNIT_ASSERT(f.Backend.Started.empty());
+            UNIT_ASSERT_VALUES_EQUAL(f.State.PartLevels.at(mergedLabel), 255);
+        }
+    }
+
+    Y_UNIT_TEST(ALateCancellationDoesNotReleaseTheReplacementOrAnotherGeneration) {
+        for (bool enabled : {false, true}) {
+            TStrategyFixture f;
+            f.Backend.Enabled = enabled;
+            f.AddPart(40, 1, 100);
+            f.AddPart(41, 1, 101);
+            f.AddPart(10, 3, 100);
+            f.AddPart(11, 3, 101);
+            f.Policy->Generations[0].ForceCountToCompact = 2;
+            f.Policy->Generations[2].ForceCountToCompact = 2;
+            f.Start();
+            UNIT_ASSERT(f.Broker.RunPending(1));
+            const ui64 originalId = f.Backend.StartedGeneration(1);
+            UNIT_ASSERT(f.Broker.RunPending(3));
+            const ui64 coldId = f.Backend.StartedGeneration(3);
+            f.Cancel(originalId);
+
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), coldId);
+            UNIT_ASSERT(f.Broker.RunPending(1));
+            const ui64 retryId = f.Backend.StartedGeneration(1);
+            UNIT_ASSERT(retryId != originalId);
+            f.Strategy->CompactionCancelled(originalId, *f.Backend.Cancelled.at(originalId));
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(1), retryId);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(3), coldId);
+            f.Complete(coldId, {ColdTier});
+            f.Complete(retryId, {0});
+        }
     }
 
     Y_UNIT_TEST(ALateFinalCancellationKeepsOtherTierFinalReservations) {
-        TStrategyFixture f;
-        const ui32 coldLevel = f.Policy->GetFinalLevel(ColdTier);
-        const ui32 archiveLevel = f.Policy->GetFinalLevel(ArchiveTier);
-        f.AddPart(40, coldLevel, 100);
-        f.AddPart(41, coldLevel, 101);
-        f.AddPart(10, archiveLevel, 100);
-        f.AddPart(11, archiveLevel, 101);
-        f.Start();
-        UNIT_ASSERT(f.Broker.RunPending(coldLevel));
-        const ui64 originalId = f.Backend.StartedGeneration(coldLevel);
-        UNIT_ASSERT(f.Broker.RunPending(archiveLevel));
-        const ui64 archiveId = f.Backend.StartedGeneration(archiveLevel);
-        f.Cancel(originalId);
+        for (bool enabled : {false, true}) {
+            TStrategyFixture f;
+            f.Backend.Enabled = enabled;
+            const ui32 coldLevel = f.Policy->GetFinalLevel(ColdTier);
+            const ui32 archiveLevel = f.Policy->GetFinalLevel(ArchiveTier);
+            f.AddPart(40, coldLevel, 100);
+            f.AddPart(41, coldLevel, 101);
+            f.AddPart(10, archiveLevel, 100);
+            f.AddPart(11, archiveLevel, 101);
+            f.Start();
+            UNIT_ASSERT(f.Broker.RunPending(coldLevel));
+            const ui64 originalId = f.Backend.StartedGeneration(coldLevel);
+            UNIT_ASSERT(f.Broker.RunPending(archiveLevel));
+            const ui64 archiveId = f.Backend.StartedGeneration(archiveLevel);
+            f.Cancel(originalId);
 
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), archiveId);
-        UNIT_ASSERT(f.Broker.RunPending(coldLevel));
-        const ui64 retryId = f.Backend.StartedGeneration(coldLevel);
-        UNIT_ASSERT(retryId != originalId);
-        f.Strategy->CompactionCancelled(originalId, *f.Backend.Cancelled.at(originalId));
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(coldLevel), retryId);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(archiveLevel), archiveId);
-        const auto archive = f.Complete(archiveId, {ArchiveTier});
-        UNIT_ASSERT_VALUES_EQUAL(archive.NewPartLevels.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(archive.NewPartLevels.begin()->second, archiveLevel);
-        UNIT_ASSERT(f.Current(*f.Backend.Started.at(retryId)));
-        const auto cold = f.Complete(retryId, {ColdTier});
-        UNIT_ASSERT_VALUES_EQUAL(cold.NewPartLevels.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(cold.NewPartLevels.begin()->second, coldLevel);
-        UNIT_ASSERT(f.Backend.Started.empty());
-        UNIT_ASSERT(!f.Broker.HasPending());
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.OnlyStarted(), archiveId);
+            UNIT_ASSERT(f.Broker.RunPending(coldLevel));
+            const ui64 retryId = f.Backend.StartedGeneration(coldLevel);
+            UNIT_ASSERT(retryId != originalId);
+            f.Strategy->CompactionCancelled(originalId, *f.Backend.Cancelled.at(originalId));
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.Started.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(coldLevel), retryId);
+            UNIT_ASSERT_VALUES_EQUAL(f.Backend.StartedGeneration(archiveLevel), archiveId);
+            const auto archive = f.Complete(archiveId, {ArchiveTier});
+            UNIT_ASSERT_VALUES_EQUAL(archive.NewPartLevels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(archive.NewPartLevels.begin()->second, archiveLevel);
+            UNIT_ASSERT(f.Current(*f.Backend.Started.at(retryId), enabled));
+            const auto cold = f.Complete(retryId, {ColdTier});
+            UNIT_ASSERT_VALUES_EQUAL(cold.NewPartLevels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cold.NewPartLevels.begin()->second, coldLevel);
+            UNIT_ASSERT(f.Backend.Started.empty());
+            UNIT_ASSERT(!f.Broker.HasPending());
+        }
     }
 
     Y_UNIT_TEST(BusyExtraInputsCancelOnlyTheRequestingGenerationUntilOccupancyChanges) {

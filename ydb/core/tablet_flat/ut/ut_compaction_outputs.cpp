@@ -1524,7 +1524,7 @@ Y_UNIT_TEST_SUITE(TCompactionScanOutputsTest) {
         UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
     }
 
-    Y_UNIT_TEST(TierAwareScanStopsAtTheFirstPossibleIntermediateTier) {
+    Y_UNIT_TEST(TierAwareScanMovesOnlyToTheAdjacentTier) {
         for (bool intermediate : {false, true}) {
             TCompactionScanEnv env;
             auto input = TierScanInput();
@@ -1544,8 +1544,7 @@ Y_UNIT_TEST_SUITE(TCompactionScanOutputsTest) {
             UNIT_ASSERT(product.Success);
             const auto result = TProdCompact::MakeCompactionResult(product.Results);
             UNIT_ASSERT_VALUES_EQUAL(result->Parts.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(result->PartOutputIds.at(result->Parts.front()->Label),
-                intermediate ? 31 : 73);
+            UNIT_ASSERT_VALUES_EQUAL(result->PartOutputIds.at(result->Parts.front()->Label), 31);
         }
     }
 

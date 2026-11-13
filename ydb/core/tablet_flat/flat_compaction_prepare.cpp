@@ -175,7 +175,7 @@ bool IsTieringCompactionCurrent(const TCompactionParams& params,
     }
     // Only publications admitted by the strategy may replace remaining
     // sources in this inventory. The original context stays pinned: its
-    // conservative masks also cover those publications' resulting keys.
+    // underlay mask still covers the keys of those known publications.
     THashMap<TLogoBlobID, const TCompactionPartInfo*> expected;
     for (const auto& part : settings.ExpectedInventory) {
         if (!expected.emplace(part.Label(), &part).second) {

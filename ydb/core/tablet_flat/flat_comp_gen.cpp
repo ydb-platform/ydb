@@ -1640,7 +1640,6 @@ bool TGenCompactionStrategy::TryReserveCompaction(TCompactionParams& rawParams) 
         }
     }
     auto& settings = *params.Tiering;
-    settings.UseConservativeMasks = true;
     for (const auto& [generation, active] : TierCompactions) {
         if (active.Params->Tiering->HasMemoryInputs) {
             settings.HasUnknownRemaining = true;
@@ -1648,8 +1647,8 @@ bool TGenCompactionStrategy::TryReserveCompaction(TCompactionParams& rawParams) 
         Y_UNUSED(generation);
     }
     if (params.Generation == 0 && !TierCompactions.empty()) {
-        // Older scans only captured existing parts. New memory keys may not
-        // enter intermediate tiers behind those scans' captured cap masks.
+        // Older scans only captured existing parts. Keep new memory keys in
+        // the default tier until those scans have finished.
         settings.AllowCooling = false;
     }
     auto& active = TierCompactions[params.Generation];
@@ -1979,8 +1978,12 @@ ui32 TGenCompactionStrategy::UpliftTierLevel(ui32 tierId, TEpoch epoch,
         if (outputStats.BackingSize > policy.UpliftPartSize) {
             break;
         }
-        const ui64 size = gen.Stats.BackingSize + outputStats.BackingSize;
-        ui64 epochs = gen.PartEpochCount;
+        // Inputs have been removed, but generation statistics are rebuilt only
+        // after placement. Inspect the remaining parts of this candidate.
+        TPartAggregator remaining;
+        remaining.Add(gen.Parts);
+        const ui64 size = remaining.Stats.BackingSize + outputStats.BackingSize;
+        ui64 epochs = remaining.PartEpochCount;
         if (gen.Parts.empty() || gen.Parts.back().Epoch != epoch) {
             ++epochs;
         }
@@ -2046,7 +2049,6 @@ TCompactionChanges TGenCompactionStrategy::FinishTierCompaction(ui64 compactionI
     }
     Y_ENSURE(removed == leaving.size(), "Tier-managed compaction inputs are missing from the strategy");
     Y_ENSURE(result.PartOutputIds.size() == result.Parts.size(), "Missing tier-managed compaction output ids");
-    RebuildTierStats();
     THashMap<ui32, TStats> statsByTier;
     for (const auto& part : result.Parts) {
         const auto output = result.PartOutputIds.find(part->Label);
@@ -2085,9 +2087,13 @@ TCompactionChanges TGenCompactionStrategy::FinishTierCompaction(ui64 compactionI
     }
     RebuildTierStats();
 
-    // An independently validated switch outside another operation's epoch
-    // interval may replace its remaining sources. Advance only this known
-    // lineage; arbitrary external changes must still invalidate publication.
+    // Preparation and reservation run synchronously on the executor actor,
+    // capturing the full disk inventory, not just the selected epoch interval.
+    // Every managed publication updates all active inventories, including new
+    // labels from memory flushes. External additions/removals and schema changes
+    // cancel active operations (PartMerged, PartsRemoved, ReflectSchema).
+    // Thus every leaving label must be known to every still-active operation.
+    // Advance only this known lineage; other changes still invalidate publication.
     for (auto& [generation, active] : TierCompactions) {
         Y_UNUSED(generation);
         Y_ENSURE(!params.Context->Epochs || !active.Context->Epochs

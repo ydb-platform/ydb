@@ -4,18 +4,17 @@ namespace NKikimr::NTabletFlatExecutor {
 namespace {
     using namespace NTieringTest;
 
-    enum class EBlocker {
+    enum class ERemaining {
         SameKey,
-        OutsideBounds,
-        MissingBloom,
+        DifferentKey,
         Erase,
     };
 
     constexpr ui32 DeepTier = 99;
 
-    NLocalDb::TCompactionPolicyPtr CasePolicy(bool multipleIntermediate) {
+    NLocalDb::TCompactionPolicyPtr CasePolicy(bool withDeepTier) {
         auto policy = MakePolicy();
-        if (multipleIntermediate) {
+        if (withDeepTier) {
             auto generation = policy->Generations.back();
             generation.TierId = DeepTier;
             policy->Generations.push_back(generation);
@@ -37,10 +36,10 @@ namespace {
         TVector<TOutput> Outputs;
     };
 
-    void CheckCap(bool warming, ui32 blockerGeneration, EBlocker kind,
-            bool restartBefore = false, bool adjacent = false, bool multipleIntermediate = false) {
+    void CheckAdjacentTransition(bool warming, ui32 remainingGeneration, ERemaining kind,
+            bool restartBefore = false, bool adjacent = false, bool withDeepTier = false) {
         TEnv env;
-        if (multipleIntermediate) {
+        if (withDeepTier) {
             auto policy = CasePolicy(true);
             env.Exec([&](TTransactionContext& txc) {
                 auto tiering = MakeTierPolicy();
@@ -62,49 +61,41 @@ namespace {
         // Exercise the cold family's external-blob channel as well as its
         // descriptor/data layout when the routed result lands in tier1.
         const TString sourceValue(1024, 's');
-        const TString blockerValue = "remaining-newer-version";
+        const TString remainingValue = "remaining-newer-version";
         const ui64 sourceTime = warming ? Max<ui64>() : 0;
-        const ui32 sourceGeneration = warming ? multipleIntermediate ? 8 : 6 : 2;
+        const ui32 sourceGeneration = warming ? (withDeepTier ? 8 : 6) : 2;
         const TRowVersion sourceVersion = warming ? oldVersion : newVersion;
-        const TRowVersion blockerVersion = warming ? newVersion : oldVersion;
-        if (kind == EBlocker::Erase) {
-            auto policy = CasePolicy(multipleIntermediate);
+        const TRowVersion remainingVersion = warming ? newVersion : oldVersion;
+        if (kind == ERemaining::Erase) {
+            auto policy = CasePolicy(withDeepTier);
             policy->KeepEraseMarkers = true;
             env.Policy(*policy);
         }
 
-        TVector<TRow> blockerRows;
-        if (kind == EBlocker::SameKey) {
-            blockerRows.push_back({key, std::nullopt, blockerValue, 0, blockerVersion});
-        } else if (kind == EBlocker::MissingBloom) {
-            // The searched key is absent, but bounds [10,30] alone cannot
-            // prove that. No bloom filter has been configured for this table.
-            blockerRows.push_back({10, std::nullopt, "left", 0, blockerVersion});
-            blockerRows.push_back({30, std::nullopt, "right", 0, blockerVersion});
-        } else if (kind == EBlocker::Erase) {
-            blockerRows.push_back({key, std::nullopt, {}, 0, blockerVersion, true});
+        TVector<TRow> remainingRows;
+        if (kind == ERemaining::SameKey) {
+            remainingRows.push_back({key, std::nullopt, remainingValue, 0, remainingVersion});
+        } else if (kind == ERemaining::Erase) {
+            remainingRows.push_back({key, std::nullopt, {}, 0, remainingVersion, true});
         } else {
-            blockerRows.push_back({10, std::nullopt, "outside", 0, blockerVersion});
+            remainingRows.push_back({10, std::nullopt, "other", 0, remainingVersion});
         }
 
         NTable::TPartView source;
-        NTable::TPartView blocker;
+        NTable::TPartView remaining;
         if (warming) {
             source = env.FlushPart({{key, sourceTime, sourceValue, 0, sourceVersion}});
-            blocker = env.FlushPart(std::move(blockerRows));
-            UNIT_ASSERT(source->Epoch < blocker->Epoch);
+            remaining = env.FlushPart(std::move(remainingRows));
+            UNIT_ASSERT(source->Epoch < remaining->Epoch);
         } else {
-            blocker = env.FlushPart(std::move(blockerRows));
+            remaining = env.FlushPart(std::move(remainingRows));
             source = env.FlushPart({{key, sourceTime, sourceValue, 0, sourceVersion}});
-            UNIT_ASSERT(blocker->Epoch < source->Epoch);
-        }
-        if (kind == EBlocker::MissingBloom) {
-            UNIT_ASSERT(blocker->ByKeyPrefixes.empty());
+            UNIT_ASSERT(remaining->Epoch < source->Epoch);
         }
 
         THashMap<TLogoBlobID, ui32> placement{
             {source->Label, sourceGeneration},
-            {blocker->Label, blockerGeneration},
+            {remaining->Label, remainingGeneration},
         };
         env.SeedLevels(placement);
         if (restartBefore) {
@@ -113,11 +104,10 @@ namespace {
         }
 
         if (adjacent) {
-            // Restrict the policy target to the adjacent tier. A matching key
-            // in that target tier is not an intermediate-tier cap.
+            // The requested tier is already adjacent and must be reached.
             env.Exec([&](TTransactionContext& txc) {
                 auto policy = MakeTierPolicy();
-                UNIT_ASSERT(!warming && !multipleIntermediate);
+                UNIT_ASSERT(!warming && !withDeepTier);
                 policy.Rules.erase(policy.Rules.begin());
                 txc.DB.Alter().SetTieringPolicy(TableId, policy);
                 return true;
@@ -150,14 +140,14 @@ namespace {
             }
         });
 
-        auto policy = CasePolicy(multipleIntermediate);
-        if (kind == EBlocker::Erase) {
+        auto policy = CasePolicy(withDeepTier);
+        if (kind == ERemaining::Erase) {
             policy->KeepEraseMarkers = true;
         }
         policy->Generations[sourceGeneration - 1].ForceCountToCompact = 1;
         env.Enable();
         env.Policy(*policy);
-        env.Env.WaitFor("tiering cap compaction", [&] { return observed.Seen; });
+        env.Env.WaitFor("adjacent tier compaction", [&] { return observed.Seen; });
         env.WaitFor<NFake::TEvCompacted>();
         observer.Remove();
 
@@ -165,25 +155,22 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(observed.Inputs.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(observed.Inputs.front(), source->Label);
         UNIT_ASSERT_VALUES_EQUAL(observed.Remaining.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(observed.Remaining.front(), blocker->Label);
+        UNIT_ASSERT_VALUES_EQUAL(observed.Remaining.front(), remaining->Label);
         UNIT_ASSERT_VALUES_EQUAL(observed.Outputs.size(), 1);
 
-        const bool canSkip = kind == EBlocker::OutsideBounds;
-        const ui32 intermediate = warming && multipleIntermediate ? ArchiveTier : ColdTier;
-        const ui32 expectedTier = adjacent || !canSkip ? intermediate
-            : warming ? 0 : multipleIntermediate ? DeepTier : ArchiveTier;
+        const ui32 expectedTier = warming && withDeepTier ? ArchiveTier : ColdTier;
         const auto& output = observed.Outputs.front();
         UNIT_ASSERT_VALUES_EQUAL(output.Tier, expectedTier);
         UNIT_ASSERT_VALUES_EQUAL(output.Part->Epoch, source->Epoch);
         const auto levels = env.Levels();
         UNIT_ASSERT(!levels.contains(source->Label));
-        UNIT_ASSERT_VALUES_EQUAL(levels.at(blocker->Label), blockerGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(levels.at(remaining->Label), remainingGeneration);
         UNIT_ASSERT_VALUES_EQUAL(env.Tier(levels.at(output.Part->Label)), expectedTier);
         UNIT_ASSERT_VALUES_EQUAL(output.Part->GetDataChannel({}),
             expectedTier == 0 ? 1 : expectedTier == ColdTier ? 2 : 3);
         UNIT_ASSERT_VALUES_EQUAL(output.Part->GetSlotChannel(output.Part->DescriptorSlot()), 1);
 
-        const auto expected = warming && kind == EBlocker::SameKey ? blockerValue : sourceValue;
+        const auto expected = warming && kind == ERemaining::SameKey ? remainingValue : sourceValue;
         env.Read(key, expected);
         env.Read(key, sourceValue, sourceVersion);
         env.Restart();
@@ -193,42 +180,36 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringCaps) {
-    Y_UNIT_TEST(CoolingStopsAtTheFirstGenerationOfTheIntermediateTier) {
-        CheckCap(false, 4, EBlocker::SameKey, true);
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_TieringAdjacentTransitions) {
+    Y_UNIT_TEST(CoolingWithAVersionInTheFirstGenerationOfTheAdjacentTier) {
+        CheckAdjacentTransition(false, 4, ERemaining::SameKey, true);
     }
-    Y_UNIT_TEST(CoolingStopsAtTheLastGenerationOfTheIntermediateTier) {
-        CheckCap(false, 5, EBlocker::SameKey);
+    Y_UNIT_TEST(CoolingWithAVersionInTheLastGenerationOfTheAdjacentTier) {
+        CheckAdjacentTransition(false, 5, ERemaining::SameKey);
     }
-    Y_UNIT_TEST(WarmingStopsAtTheFirstGenerationOfTheIntermediateTier) {
-        CheckCap(true, 4, EBlocker::SameKey, true);
+    Y_UNIT_TEST(WarmingWithAVersionInTheFirstGenerationOfTheAdjacentTier) {
+        CheckAdjacentTransition(true, 4, ERemaining::SameKey, true);
     }
-    Y_UNIT_TEST(WarmingStopsAtTheLastGenerationOfTheIntermediateTier) {
-        CheckCap(true, 5, EBlocker::SameKey);
+    Y_UNIT_TEST(WarmingWithAVersionInTheLastGenerationOfTheAdjacentTier) {
+        CheckAdjacentTransition(true, 5, ERemaining::SameKey);
     }
-    Y_UNIT_TEST(CoolingSkipsTheIntermediateTierWhenAllRemainingBoundsExcludeTheKey) {
-        CheckCap(false, 5, EBlocker::OutsideBounds, true);
+    Y_UNIT_TEST(CoolingMovesOneTierWhenTheAdjacentTierHasOnlyADifferentKey) {
+        CheckAdjacentTransition(false, 5, ERemaining::DifferentKey, true);
     }
-    Y_UNIT_TEST(WarmingSkipsTheIntermediateTierWhenAllRemainingBoundsExcludeTheKey) {
-        CheckCap(true, 4, EBlocker::OutsideBounds, true);
+    Y_UNIT_TEST(WarmingMovesOneTierWhenTheAdjacentTierHasOnlyADifferentKey) {
+        CheckAdjacentTransition(true, 4, ERemaining::DifferentKey, true);
     }
-    Y_UNIT_TEST(CoolingDoesNotInferAbsenceFromBoundsWithoutABloom) {
-        CheckCap(false, 4, EBlocker::MissingBloom);
+    Y_UNIT_TEST(CoolingKeepsTheAdjacentTierEraseAndMvccHistory) {
+        CheckAdjacentTransition(false, 5, ERemaining::Erase);
     }
-    Y_UNIT_TEST(WarmingDoesNotInferAbsenceFromBoundsWithoutABloom) {
-        CheckCap(true, 5, EBlocker::MissingBloom);
+    Y_UNIT_TEST(CoolingReachesAnAdjacentPolicyTarget) {
+        CheckAdjacentTransition(false, 5, ERemaining::SameKey, false, true);
     }
-    Y_UNIT_TEST(AnIntermediateEraseMarkerStopsCooling) {
-        CheckCap(false, 5, EBlocker::Erase);
+    Y_UNIT_TEST(CoolingTowardsADistantTargetStillMovesOnlyOneTier) {
+        CheckAdjacentTransition(false, 5, ERemaining::SameKey, true, false, true);
     }
-    Y_UNIT_TEST(AnAdjacentCoolingTargetDoesNotActAsAnIntermediateTier) {
-        CheckCap(false, 5, EBlocker::SameKey, false, true);
-    }
-    Y_UNIT_TEST(CoolingAcrossSeveralTiersStopsAtTheFirstPossibleIntermediateTier) {
-        CheckCap(false, 5, EBlocker::SameKey, true, false, true);
-    }
-    Y_UNIT_TEST(WarmingAcrossSeveralTiersStopsAtTheFirstPossibleIntermediateTier) {
-        CheckCap(true, 7, EBlocker::SameKey, true, false, true);
+    Y_UNIT_TEST(WarmingTowardsADistantTargetStillMovesOnlyOneTier) {
+        CheckAdjacentTransition(true, 7, ERemaining::SameKey, true, false, true);
     }
 }
 }

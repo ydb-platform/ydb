@@ -1072,7 +1072,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
 
         std::vector<NKikimrBlobStorage::TEvNodeWardenDynamicConfigPush> olderPushes, pushes;
-        SubscribeDynamicNode(runtime, keepers.front(), 5, NStorage::BridgeFeatureLevelPileList, olderPushes);
+        SubscribeDynamicNode(runtime, keepers.front(), 5, NStorage::BridgeFeatureLevelRollback, olderPushes);
         SubscribeDynamicNode(runtime, keepers.front(), 6, NStorage::BridgeFeatureLevel, pushes);
 
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();

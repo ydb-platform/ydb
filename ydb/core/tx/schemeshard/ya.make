@@ -19,6 +19,7 @@ RECURSE_FOR_TESTS(
     ut_consistent_copy_tables
     ut_continuous_backup
     ut_continuous_backup_reboots
+    ut_database_freeze
     ut_shred
     ut_shred_reboots
     ut_export
@@ -241,6 +242,7 @@ SRCS(
     schemeshard__state_changed_reply.cpp
     schemeshard__storage_space.cpp
     schemeshard__sync_update_tenants.cpp
+    schemeshard_database_freeze.cpp
     schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp

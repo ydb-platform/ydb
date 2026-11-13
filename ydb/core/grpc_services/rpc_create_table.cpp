@@ -330,6 +330,7 @@ private:
                 case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                 case Ydb::Table::TableIndex::kGlobalUniqueIndex:
                 case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+                case Ydb::Table::TableIndex::kGlobalHnswIndex:
                 case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
                 case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
                 case Ydb::Table::TableIndex::kGlobalJsonIndex:
@@ -479,12 +480,6 @@ private:
                 issues.AddIssue(NYql::TIssue(error));
                 return Reply(code, issues, ctx);
             }
-        }
-
-        if (families.Modified && !families.ValidateColumnFamilies(&code, &error)) {
-            NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue(error));
-            return Reply(code, issues, ctx);
         }
 
         // Attributes

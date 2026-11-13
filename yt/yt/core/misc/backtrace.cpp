@@ -19,7 +19,11 @@ using TBacktraceBuffer = std::array<const void*, 99>; // 99 is to keep formattin
 Y_NO_INLINE NBacktrace::TBacktrace GetBacktrace(TBacktraceBuffer* buffer)
 {
 #ifdef _unix_
-    NBacktrace::TLibunwindCursor cursor;
+    unw_context_t context;
+    if (unw_getcontext(&context) != 0) {
+        return {};
+    }
+    NBacktrace::TLibunwindCursor cursor(context);
 #else
     NBacktrace::TDummyCursor cursor;
 #endif

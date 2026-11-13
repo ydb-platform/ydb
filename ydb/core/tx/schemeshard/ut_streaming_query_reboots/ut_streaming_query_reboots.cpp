@@ -5,15 +5,13 @@
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
-    void CompareProperties(const NKikimrSchemeOp::TStreamingQueryProperties& expected, const NKikimrSchemeOp::TStreamingQueryProperties& actual) {
+    void CompareProperties(
+        const NKikimrSchemeOp::TStreamingQueryProperties& expected, const NKikimrSchemeOp::TStreamingQueryProperties& actual) {
         const auto& expectedProperties = expected.properties();
         const auto& actualProperties = actual.properties();
 
         const auto isManagedProperty = [](const auto& key) {
-            return IsIn({
-                "__created_by", "__modified_by", "__started_by",
-                "__stopped_by", "__created_at", "__modified_at"
-            }, key);
+            return IsIn({ "__created_by", "__modified_by", "__started_by", "__stopped_by", "__created_at", "__modified_at" }, key);
         };
 
         size_t actualUserPropertiesCount = 0;
@@ -48,7 +46,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
                     }
                 )");
 
-            t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId-1});
+            t.TestEnv->TestWaitNotification(runtime, { t.TxId, t.TxId - 1 });
 
             NKikimrSchemeOp::TStreamingQueryProperties expectedProperties;
             {
@@ -59,8 +57,8 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                auto describeResult =  DescribePath(runtime, "/MyRoot/DirStreamingQuery/MyStreamingQuery");
-                TestDescribeResult(describeResult, {NLs::Finished});
+                auto describeResult = DescribePath(runtime, "/MyRoot/DirStreamingQuery/MyStreamingQuery");
+                TestDescribeResult(describeResult, { NLs::Finished });
                 const auto& pathDescription = describeResult.GetPathDescription();
                 UNIT_ASSERT(pathDescription.HasStreamingQueryDescription());
                 const auto& streamingQueryDescription = pathDescription.GetStreamingQueryDescription();
@@ -79,14 +77,14 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
                 )");
 
             AsyncDropStreamingQuery(runtime, ++t.TxId, "/MyRoot", "DropMe");
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
 
             TestDropStreamingQuery(runtime, ++t.TxId, "/MyRoot", "DropMe");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DropMe"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DropMe"), { NLs::PathNotExist });
             }
         });
     }
@@ -107,7 +105,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/StreamingQuery"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/StreamingQuery"), { NLs::PathNotExist });
             }
         });
     }
@@ -129,7 +127,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/StreamingQuery"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/StreamingQuery"), { NLs::PathNotExist });
             }
         });
     }
@@ -151,7 +149,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/StreamingQuery"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/StreamingQuery"), { NLs::PathNotExist });
 
                 TestCreateStreamingQuery(runtime, ++t.TxId, "/MyRoot", R"(
                         Name: "StreamingQuery"
@@ -161,7 +159,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
                 TestDropStreamingQuery(runtime, ++t.TxId, "/MyRoot", "StreamingQuery");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/StreamingQuery"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/StreamingQuery"), { NLs::PathNotExist });
             }
         });
     }
@@ -220,7 +218,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/StreamingQuery"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/StreamingQuery"), { NLs::PathNotExist });
             }
         });
     }
@@ -274,8 +272,8 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                auto describeResult =  DescribePath(runtime, "/MyRoot/MyStreamingQuery");
-                TestDescribeResult(describeResult, {NLs::Finished});
+                auto describeResult = DescribePath(runtime, "/MyRoot/MyStreamingQuery");
+                TestDescribeResult(describeResult, { NLs::Finished });
                 const auto& pathDescription = describeResult.GetPathDescription();
                 UNIT_ASSERT(pathDescription.HasStreamingQueryDescription());
                 const auto& streamingQueryDescription = pathDescription.GetStreamingQueryDescription();

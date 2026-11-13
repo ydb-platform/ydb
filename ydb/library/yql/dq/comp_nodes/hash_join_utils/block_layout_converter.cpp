@@ -60,6 +60,9 @@ struct IColumnDataExtractor {
     
     virtual ui32 GetElementSize() = 0;
     virtual NPackedTuple::EColumnSizeType GetElementSizeType() = 0;
+    virtual bool IsFloatingPoint() {
+        return false;
+    }
     virtual std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) = 0;
     // Ugly interface, but I dont care
     virtual void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) = 0;
@@ -122,6 +125,10 @@ public:
 
     NPackedTuple::EColumnSizeType GetElementSizeType() override {
         return NPackedTuple::EColumnSizeType::Fixed;
+    }
+
+    bool IsFloatingPoint() override {
+        return std::is_floating_point_v<TLayout>;
     }
 
     std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
@@ -536,6 +543,10 @@ public:
         return Inner_->GetElementSizeType();
     }
 
+    bool IsFloatingPoint() override {
+        return Inner_->IsFloatingPoint();
+    }
+
     std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
         std::shared_ptr<arrow::Buffer> nullBitmap;
         if (!isBitmapNull) {
@@ -627,13 +638,8 @@ struct TColumnDataExtractorTraits {
 
     constexpr static bool PassType = true;
 
-    static TResult::TPtr MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
-        Y_UNUSED(pgBuilder);
-        if (desc.PassByValue) {
-            return std::make_unique<TFixedSize<ui64, true>>(type, pool);
-        } else {
-            return std::make_unique<TStrings<arrow::BinaryType, true, NKikimr::NUdf::EDataSlot::String>>(type, pool);
-        }
+    static TResult::TPtr MakePg(const NUdf::TPgTypeDescription&, const NUdf::IPgBuilder*, const NYql::NUdf::TType*, arrow::MemoryPool*) {
+        MKQL_ENSURE(false, "PG types are not supported in block hash join");
     }
 
     template <bool IsNull>
@@ -721,6 +727,7 @@ public:
             auto& descr = columnDescrs[i];
             descr.DataSize = InnerExtractors_[i]->GetElementSize();
             descr.SizeType = InnerExtractors_[i]->GetElementSizeType();
+            descr.FloatingPoint = InnerExtractors_[i]->IsFloatingPoint();
         }
 
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);
@@ -806,7 +813,13 @@ public:
     }
 
     void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) override {
-        TupleLayout_->ApplyEqualNulls(equalNullsJoinKeys);
+        TVector<ui32> flattened;
+        for (ui32 inputColumn : equalNullsJoinKeys) {
+            Y_ENSURE(inputColumn < InnerMapping_.size(), "EqualNulls column index is out of range");
+            const auto& mapping = InnerMapping_[inputColumn];
+            flattened.insert(flattened.end(), mapping.begin(), mapping.end());
+        }
+        TupleLayout_->ApplyEqualNulls(flattened);
     }
 
 private:

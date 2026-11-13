@@ -1,4 +1,20 @@
+#include "func_common.h"
+#include "functions.h"
 #include "ut_common.h"
+
+#include <ydb/library/formats/arrow/helpers/array.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernels/codegen_internal.h>
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <cstdint>
+#include <cstdlib>
+#include <ctime>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace cp = ::arrow::compute;
 using cp::internal::applicator::ScalarBinary;

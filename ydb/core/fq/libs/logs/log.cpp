@@ -1,12 +1,11 @@
 #include "log.h"
 
-#include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 
-#include <ydb/library/yql/utils/actor_log/log.h>
-
-#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_LOG_UPDATER
 
@@ -14,14 +13,15 @@ namespace NKikimr {
 
 using namespace NActors;
 
-class TYqlLogsUpdater : public TActorBootstrapped<TYqlLogsUpdater> {
+class TYqlLogsUpdater: public TActorBootstrapped<TYqlLogsUpdater> {
 public:
     static constexpr char ActorName[] = "YQ_LOGS_UPDATER";
 
     TYqlLogsUpdater(const NKikimrConfig::TLogConfig& logConfig)
         : YqlLoggerScope(new NYql::NLog::TTlsLogBackend(new TNullLogBackend()))
         , LogConfig(logConfig)
-    { }
+    {
+    }
 
     void Bootstrap() {
         UpdateYqlLogLevels();
@@ -29,9 +29,7 @@ public:
         // Subscribe for Logger config changes
         ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
-                {logConfigKind}),
-            IEventHandle::FlagTrackDelivery);
+            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({ logConfigKind }), IEventHandle::FlagTrackDelivery);
 
         Become(&TYqlLogsUpdater::MainState);
     }
@@ -42,9 +40,8 @@ private:
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
-        default:
-            Y_ABORT("TYqlLogsUpdater: unexpected event type: %" PRIx32 " event: %s",
-                ev->GetTypeRewrite(), ev->ToString().data());
+            default:
+                Y_ABORT("TYqlLogsUpdater: unexpected event type: %" PRIx32 " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
         }
     }
 

@@ -81,12 +81,27 @@ public:
             node.ServicedDomains.swap(servicedDomains);
             node.LastSeenServicedDomains = node.ServicedDomains;
             node.Name = name;
-            if (Record.HasBridgePileId()) {
-                node.BridgePileId = TBridgePileId::FromProto(&Record, &decltype(Record)::GetBridgePileId);
-                Self->GetPile(node.BridgePileId).Nodes.insert(nodeId);
-                db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
+            TBridgePileId bridgePileId;
+            if (!IsBridgeMode(TActivationContext::AsActorContext())) {
+                // piles are not used without bridge mode; the node may still report the one it had while the cluster
+                // was prepared for bridge mode (it is being restarted without bridge config), and the pile it had
+                // then must go away, as balancing compares nodes of the same pile only
+                if (node.BridgePileId) {
+                    node.BridgePileId = {};
+                    db.Table<Schema::Node>().Key(nodeId).UpdateToNull<Schema::Node::BridgePileId>();
+                }
+            } else if (Record.HasBridgePileId()) {
+                bridgePileId = TBridgePileId::FromProto(&Record, &decltype(Record)::GetBridgePileId);
+            } else if (const auto implicitPileId = NBridge::GetImplicitPileId(Self->BridgeInfo.get())) {
+                // node is not bridge-capable yet (it is being restarted while converting the cluster into bridged
+                // one), but the cluster has single pile, so the node implicitly belongs to it
+                bridgePileId = implicitPileId;
             } else {
                 Y_ENSURE(!Self->BridgeInfo, "Running in bridge mode, but node " << nodeId << " has no pile");
+            }
+            if (bridgePileId) {
+                node.BridgePileId = bridgePileId;
+                db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
             }
 
             Self->UpdateNodeSegments(&node);
@@ -123,7 +138,7 @@ public:
                 << " location=" << GetLocationString(node.Location)
                 << " tabletTypesAvailable=" << node.TabletAvailability.size();
             Self->RecordNodeEvent(node, EHiveEventType::Registered,
-                localChanged ? EHiveEventReason::NewLocalActor : EHiveEventReason::SameLocalActor, details);
+                localChanged ? EHiveEventReason::NewLocalActor : EHiveEventReason::SameLocalActor, std::move(details));
         }
         return true;
     }

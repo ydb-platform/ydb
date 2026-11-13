@@ -1,37 +1,37 @@
 #pragma once
 
-#include <grpcpp/support/status.h>
-
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/error.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+
+#include <grpcpp/support/status.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NConnector {
-    NApi::TError NewSuccess();
+NApi::TError NewSuccess();
 
-    template <typename TResponse>
-    bool IsSuccess(const TResponse& response) {
-        if (!response.has_error()) {
-            return true;
-        }
-
-        return response.error().status() == Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS;
+template <typename TResponse>
+bool IsSuccess(const TResponse& response) {
+    if (!response.has_error()) {
+        return true;
     }
 
-    TIssues ErrorToIssues(const NApi::TError& error, TString prefix = "");
+    return response.error().status() == Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS;
+}
 
-    NDqProto::StatusIds::StatusCode ErrorToDqStatus(const NApi::TError& error);
+TIssues ErrorToIssues(const NApi::TError& error, TString prefix = "");
 
-    NApi::TError ErrorFromGRPCStatus(const NYdbGrpc::TGrpcStatus& status);
+NDqProto::StatusIds::StatusCode ErrorToDqStatus(const NApi::TError& error);
 
-    inline bool GrpcStatusEndOfStream(const NYdbGrpc::TGrpcStatus& status) noexcept {
-        return status.GRpcStatusCode == grpc::OUT_OF_RANGE && status.Msg == "Read EOF";
-    }
+NApi::TError ErrorFromGRPCStatus(const NYdbGrpc::TGrpcStatus& status);
 
-    inline bool GrpcStatusNeedsRetry(const NYdbGrpc::TGrpcStatus& status) noexcept {
-        return status.GRpcStatusCode == grpc::UNAVAILABLE;
-    }
-} // namespace NYql::NConnector
+inline bool GrpcStatusEndOfStream(const NYdbGrpc::TGrpcStatus& status) noexcept {
+    return status.GRpcStatusCode == grpc::OUT_OF_RANGE && status.Msg == "Read EOF";
+}
+
+inline bool GrpcStatusNeedsRetry(const NYdbGrpc::TGrpcStatus& status) noexcept {
+    return status.GRpcStatusCode == grpc::UNAVAILABLE;
+}
+}   // namespace NYql::NConnector

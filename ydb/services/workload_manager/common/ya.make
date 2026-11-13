@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
 
     ydb/core/base
+    ydb/core/resource_pools
     ydb/core/scheme
 
 

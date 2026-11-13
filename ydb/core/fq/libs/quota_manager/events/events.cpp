@@ -11,4 +11,4 @@ void TQuotaUsage::Merge(const TQuotaUsage& other) {
     }
 }
 
-} /* NFq */
+}   // namespace NFq

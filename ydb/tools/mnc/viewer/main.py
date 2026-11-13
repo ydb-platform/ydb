@@ -804,6 +804,12 @@ class Viewer(App):
             AgentsPane(self._state),
         )
 
+    def _bin_path_placeholder(self) -> str:
+        source_root = self._mnc_config.get("git_ydb_root")
+        if not source_root:
+            return f"Set git_ydb_root in {MNC_CONFIG_PATH}"
+        return os.path.join(source_root, DEPLOY_CONTEXT_DEFAULTS["relative_binary_path"])
+
     async def action_open_operation(self, operation_id: str) -> None:
         choices = {choice_id: (title, description) for choice_id, title, description in self.operation_choices()}
         if operation_id not in choices:
@@ -839,7 +845,13 @@ class Viewer(App):
         await self._open_tab(
             tab_id,
             title,
-            OperationsPane(self._state, self._handle_operation_request, operation_id, title),
+            OperationsPane(
+                self._state,
+                self._handle_operation_request,
+                operation_id,
+                title,
+                self._bin_path_placeholder,
+            ),
         )
 
     async def on_list_view_selected(self, event: ListView.Selected) -> None:

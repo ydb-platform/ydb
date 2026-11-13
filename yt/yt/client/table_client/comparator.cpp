@@ -107,19 +107,41 @@ int TComparator::CompareKeyBounds(const TKeyBound& lhs, const TKeyBound& rhs, in
     ValidateKeyBound(lhs);
     ValidateKeyBound(rhs);
 
+    return CompareKeyBoundsUnchecked(ToKeyBoundRef(lhs), ToKeyBoundRef(rhs), lowerVsUpper);
+}
+
+int TComparator::CompareKeyBounds(const TKeyBoundRef& lhs, const TKeyBoundRef& rhs, int lowerVsUpper) const
+{
+    auto maxLength = std::max(std::ssize(lhs), std::ssize(rhs));
+    THROW_ERROR_EXCEPTION_IF(
+        maxLength > GetLength(),
+        "Comparator %v is used with a key bound of length %v",
+        *this,
+        maxLength);
+
+    for (const auto* bound : {&lhs, &rhs}) {
+        for (const auto& value : *bound) {
+            ValidateDataValueType(value.Type);
+        }
+    }
+
+    return CompareKeyBoundsUnchecked(lhs, rhs, lowerVsUpper);
+}
+
+int TComparator::CompareKeyBoundsUnchecked(const TKeyBoundRef& lhs, const TKeyBoundRef& rhs, int lowerVsUpper) const
+{
     int comparisonResult = 0;
 
     // In case when one key bound is a proper prefix of another, points to the shorter one.
-    const TKeyBound* shorter = nullptr;
+    const TKeyBoundRef* shorter = nullptr;
 
     for (int index = 0; ; ++index) {
-        if (index >= static_cast<int>(lhs.Prefix.GetCount()) &&
-            index >= static_cast<int>(rhs.Prefix.GetCount()))
+        if (index >= std::ssize(lhs) && index >= std::ssize(rhs))
         {
             // Prefixes coincide. Check if key bounds are indeed at the same point.
             {
-                auto lhsInclusivenessAsUpper = (lhs.IsUpper && lhs.IsInclusive) || (!lhs.IsUpper && !lhs.IsInclusive);
-                auto rhsInclusivenessAsUpper = (rhs.IsUpper && rhs.IsInclusive) || (!rhs.IsUpper && !rhs.IsInclusive);
+                auto lhsInclusivenessAsUpper = (lhs.Upper && lhs.Inclusive) || (!lhs.Upper && !lhs.Inclusive);
+                auto rhsInclusivenessAsUpper = (rhs.Upper && rhs.Inclusive) || (!rhs.Upper && !rhs.Inclusive);
                 if (lhsInclusivenessAsUpper != rhsInclusivenessAsUpper) {
                     return lhsInclusivenessAsUpper - rhsInclusivenessAsUpper;
                 }
@@ -132,21 +154,21 @@ int TComparator::CompareKeyBounds(const TKeyBound& lhs, const TKeyBound& rhs, in
             }
 
             // Break ties using #upperFirst.
-            comparisonResult = lhs.IsUpper - rhs.IsUpper;
+            comparisonResult = lhs.Upper - rhs.Upper;
 
             if (lowerVsUpper > 0) {
                 comparisonResult = -comparisonResult;
             }
             return comparisonResult;
-        } else if (index >= static_cast<int>(lhs.Prefix.GetCount())) {
+        } else if (index >= std::ssize(lhs)) {
             shorter = &lhs;
             break;
-        } else if (index >= static_cast<int>(rhs.Prefix.GetCount())) {
+        } else if (index >= std::ssize(rhs)) {
             shorter = &rhs;
             break;
         } else {
-            const auto& lhsValue = lhs.Prefix[index];
-            const auto& rhsValue = rhs.Prefix[index];
+            const auto& lhsValue = lhs[index];
+            const auto& rhsValue = rhs[index];
             comparisonResult = CompareValues(index, lhsValue, rhsValue);
             if (comparisonResult != 0) {
                 return comparisonResult;
@@ -157,7 +179,7 @@ int TComparator::CompareKeyBounds(const TKeyBound& lhs, const TKeyBound& rhs, in
 
     // By this moment, longer operand is strictly between shorter operand and toggleInclusiveness(shorter operand).
     // Thus we have to check if shorter operand is "largest" among itself and its toggleInclusiveness counterpart.
-    if ((shorter->IsUpper && shorter->IsInclusive) || (!shorter->IsUpper && !shorter->IsInclusive)) {
+    if ((shorter->Upper && shorter->Inclusive) || (!shorter->Upper && !shorter->Inclusive)) {
         comparisonResult = -1;
     } else {
         comparisonResult = 1;

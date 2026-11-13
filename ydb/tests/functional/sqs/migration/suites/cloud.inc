@@ -27,6 +27,3 @@ PEERDIR(
     contrib/python/xmltodict
     contrib/python/botocore
 )
-
-FORK_SUBTESTS()
-SPLIT_FACTOR(40)

@@ -1,0 +1,19 @@
+PDiskTestList {
+    PDiskTestList {
+        PDiskWriteLoad {
+            Tag: 1
+            PDiskId: 1
+            PDiskGuid: 12345
+            VDiskId { GroupID: 1 GroupGeneration: 5 Ring: 1 Domain: 1 VDisk: 1 }
+            Chunks { Slots: 32768 Weight: 1 }
+            DurationSeconds: 2
+            DelayBeforeMeasurementsSeconds: 0
+            IntervalMsMin: 0
+            IntervalMsMax: 0
+            InFlightWrites: 1
+            LogMode: LOG_SEQUENTIAL
+            Sequential: false
+            IsWardenlessTest: true
+        }
+    }
+}

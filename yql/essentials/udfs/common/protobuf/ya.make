@@ -1,20 +1,10 @@
 YQL_UDF_CONTRIB(protobuf_udf)
 
-YQL_ABI_VERSION(
-    2
-    46
-    0
-)
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+ENDIF()
 
-SRCS(
-    protobuf_udf.cpp
-)
-
-PEERDIR(
-    library/cpp/protobuf/yql
-    yql/essentials/minikql/protobuf_udf
-    yql/essentials/public/udf
-)
+INCLUDE(ya.make.inc)
 
 END()
 

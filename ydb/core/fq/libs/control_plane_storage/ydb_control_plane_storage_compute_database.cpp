@@ -1,12 +1,12 @@
 #include "validators.h"
 #include "ydb_control_plane_storage_impl.h"
 
-#include <util/string/join.h>
+#include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
+#include <ydb/core/fq/libs/db_schema/db_schema.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
-#include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
-#include <ydb/core/fq/libs/db_schema/db_schema.h>
+#include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
 
@@ -30,28 +30,28 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatab
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase");
     queryBuilder.AddString("scope", scope);
-    queryBuilder.AddText(
-        "SELECT `" SCOPE_COLUMN_NAME "` FROM `" COMPUTE_DATABASES_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope;"
-    );
+    queryBuilder.AddText("SELECT `" SCOPE_COLUMN_NAME "` FROM `" COMPUTE_DATABASES_TABLE_NAME
+                         "`\n"
+                         "WHERE `" SCOPE_COLUMN_NAME "` = $scope;");
 
-    auto prepareParams = [tablePathPrefix=YdbConnection->TablePathPrefix, scope, request](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [tablePathPrefix = YdbConnection->TablePathPrefix, scope, request](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (parser.TryNextRow()) {
-            return make_pair(TString{}, NYdb::TParamsBuilder{}.Build()); // already exists
+            return make_pair(TString{}, NYdb::TParamsBuilder{}.Build());   // already exists
         }
 
         TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "CreateDatabase");
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("internal", request.SerializeAsString());
-        writeQueryBuilder.AddText(
-            "INSERT INTO `" COMPUTE_DATABASES_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`, `" CREATED_AT_COLUMN_NAME "`, `" LAST_ACCESS_AT_COLUMN_NAME"`) VALUES\n"
-            "    ($scope, $internal, CurrentUtcTimestamp(), CurrentUtcTimestamp());"
-        );
+        writeQueryBuilder.AddText("INSERT INTO `" COMPUTE_DATABASES_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME
+                                  "`, `" CREATED_AT_COLUMN_NAME "`, `" LAST_ACCESS_AT_COLUMN_NAME
+                                  "`) VALUES\n"
+                                  "    ($scope, $internal, CurrentUtcTimestamp(), CurrentUtcTimestamp());");
         const auto writeQuery = writeQueryBuilder.Build();
         return make_pair(writeQuery.Sql, writeQuery.Params);
     };
@@ -59,22 +59,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatab
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(query.Sql, query.Params, prepareParams, requestCounters, debugInfo);
-    auto prepare = [] { return std::make_tuple<NYql::TIssues>(NYql::TIssues{}); };
+    auto prepare = [] {
+        return std::make_tuple<NYql::TIssues>(NYql::TIssues{});
+    };
     auto success = SendResponseTuple<TEvControlPlaneStorage::TEvCreateDatabaseResponse, std::tuple<NYql::TIssues>>(
-        MakeLogPrefix(scope, "internal", request.id()) + "CreateDatabaseRequest",
-        NActors::TActivationContext::ActorSystem(),
-        result,
-        SelfId(),
-        ev,
-        startTime,
-        requestCounters,
-        prepare,
-        debugInfo);
+        MakeLogPrefix(scope, "internal", request.id()) + "CreateDatabaseRequest", NActors::TActivationContext::ActorSystem(), result, SelfId(),
+        ev, startTime, requestCounters, prepare, debugInfo);
 
     success.Apply([=](const auto& future) {
-            TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(CreateDatabaseRequest, scope, "internal", delta, byteSize, future.GetValue());
-        });
+        TDuration delta = TInstant::Now() - startTime;
+        LWPROBE(CreateDatabaseRequest, scope, "internal", delta, byteSize, future.GetValue());
+    });
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeDatabaseRequest::TPtr& ev)
@@ -93,48 +88,43 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeDat
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DescribeDatabase");
     queryBuilder.AddString("scope", scope);
-    queryBuilder.AddText(
-        "SELECT `" INTERNAL_COLUMN_NAME "` FROM `" COMPUTE_DATABASES_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope;"
-    );
+    queryBuilder.AddText("SELECT `" INTERNAL_COLUMN_NAME "` FROM `" COMPUTE_DATABASES_TABLE_NAME
+                         "`\n"
+                         "WHERE `" SCOPE_COLUMN_NAME "` = $scope;");
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = [resultSets=resultSets, commonCounters=requestCounters.Common] {
+    auto prepare = [resultSets = resultSets, commonCounters = requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Database does not exist or permission denied. Please check the id database or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED)
+                << "Database does not exist or permission denied. Please check the id database or your access rights";
         }
 
         FederatedQuery::Internal::ComputeDatabaseInternal result;
         if (!result.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for internal compute database. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Error parsing proto message for internal compute database. Please contact internal support";
         }
 
         return result;
     };
 
     auto success = SendResponse<TEvControlPlaneStorage::TEvDescribeDatabaseResponse, FederatedQuery::Internal::ComputeDatabaseInternal>(
-        MakeLogPrefix(scope, "internal", scope) + "DescribeDatabaseRequest",
-        NActors::TActivationContext::ActorSystem(),
-        result,
-        SelfId(),
-        std::move(ev),
-        startTime,
-        requestCounters,
-        prepare,
-        debugInfo);
+        MakeLogPrefix(scope, "internal", scope) + "DescribeDatabaseRequest", NActors::TActivationContext::ActorSystem(), result, SelfId(),
+        std::move(ev), startTime, requestCounters, prepare, debugInfo);
 
     success.Apply([=](const auto& future) {
-            TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(DescribeDatabaseRequest, scope, "internal", delta, byteSize, future.GetValue());
-        });
+        TDuration delta = TInstant::Now() - startTime;
+        LWPROBE(DescribeDatabaseRequest, scope, "internal", delta, byteSize, future.GetValue());
+    });
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatabaseRequest::TPtr& ev)
@@ -150,36 +140,30 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
 
     YDB_LOG_TRACE("ModifyDatabaseRequest",
         {"logPrefix", MakeLogPrefix(scope, "internal", scope)});
-    
+
     // only write part
     if (event.LastAccessAt) {
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase(write)");
         writeQueryBuilder.AddTimestamp("last_access_at", *event.LastAccessAt);
         writeQueryBuilder.AddString("scope", scope);
-        writeQueryBuilder.AddText(
-            "UPSERT INTO `" COMPUTE_DATABASES_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" LAST_ACCESS_AT_COLUMN_NAME "`)\n"
-            "VALUES ($scope, $last_access_at);"
-        );
+        writeQueryBuilder.AddText("UPSERT INTO `" COMPUTE_DATABASES_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" LAST_ACCESS_AT_COLUMN_NAME
+                                  "`)\n"
+                                  "VALUES ($scope, $last_access_at);");
         const auto writeQuery = writeQueryBuilder.Build();
         auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
         auto result = Write(writeQuery.Sql, writeQuery.Params, requestCounters, debugInfo);
 
-        auto prepare = [] { return std::make_tuple<NYql::TIssues>(NYql::TIssues{}); };
+        auto prepare = [] {
+            return std::make_tuple<NYql::TIssues>(NYql::TIssues{});
+        };
         auto success = SendResponseTuple<TEvControlPlaneStorage::TEvModifyDatabaseResponse, std::tuple<NYql::TIssues>>(
-            MakeLogPrefix(scope, "internal", scope) + "ModifyDatabaseRequest",
-            NActors::TActivationContext::ActorSystem(),
-            result,
-            SelfId(),
-            ev,
-            startTime,
-            requestCounters,
-            prepare,
-            debugInfo);
+            MakeLogPrefix(scope, "internal", scope) + "ModifyDatabaseRequest", NActors::TActivationContext::ActorSystem(), result, SelfId(), ev,
+            startTime, requestCounters, prepare, debugInfo);
 
         success.Apply([=](const auto& future) {
-                TDuration delta = TInstant::Now() - startTime;
-                LWPROBE(ModifyDatabaseRequest, scope, "internal", delta, byteSize, future.GetValue());
-            });
+            TDuration delta = TInstant::Now() - startTime;
+            LWPROBE(ModifyDatabaseRequest, scope, "internal", delta, byteSize, future.GetValue());
+        });
 
         return;
     }
@@ -187,25 +171,29 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
     // read write part
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase");
     queryBuilder.AddString("scope", scope);
-    queryBuilder.AddText(
-        "SELECT `" INTERNAL_COLUMN_NAME "` FROM `" COMPUTE_DATABASES_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope;"
-    );
+    queryBuilder.AddText("SELECT `" INTERNAL_COLUMN_NAME "` FROM `" COMPUTE_DATABASES_TABLE_NAME
+                         "`\n"
+                         "WHERE `" SCOPE_COLUMN_NAME "` = $scope;");
 
-    auto prepareParams = [synchronized=ev->Get()->Synchronized, workloadManagerSynchronized=ev->Get()->WorkloadManagerSynchronized, commonCounters=requestCounters.Common, scope, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [synchronized = ev->Get()->Synchronized, workloadManagerSynchronized = ev->Get()->WorkloadManagerSynchronized,
+                             commonCounters = requestCounters.Common, scope,
+                             tablePathPrefix = YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (!parser.TryNextRow()) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Database does not exist or permission denied. Please check the id database or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED)
+                << "Database does not exist or permission denied. Please check the id database or your access rights";
         }
 
         FederatedQuery::Internal::ComputeDatabaseInternal result;
         if (!result.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for internal compute database. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Error parsing proto message for internal compute database. Please contact internal support";
         }
 
         if (synchronized) {
@@ -219,10 +207,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
         TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "ModifyDatabase(write)");
         writeQueryBuilder.AddString("internal", result.SerializeAsString());
         writeQueryBuilder.AddString("scope", scope);
-        writeQueryBuilder.AddText(
-            "UPDATE `" COMPUTE_DATABASES_TABLE_NAME "` SET `" INTERNAL_COLUMN_NAME "` = $internal\n"
-            "WHERE `" SCOPE_COLUMN_NAME "` = $scope;"
-        );
+        writeQueryBuilder.AddText("UPDATE `" COMPUTE_DATABASES_TABLE_NAME "` SET `" INTERNAL_COLUMN_NAME
+                                  "` = $internal\n"
+                                  "WHERE `" SCOPE_COLUMN_NAME "` = $scope;");
         const auto writeQuery = writeQueryBuilder.Build();
         return make_pair(writeQuery.Sql, writeQuery.Params);
     };
@@ -231,23 +218,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(query.Sql, query.Params, prepareParams, requestCounters, debugInfo);
 
-
-    auto prepare = [] { return std::make_tuple<NYql::TIssues>(NYql::TIssues{}); };
+    auto prepare = [] {
+        return std::make_tuple<NYql::TIssues>(NYql::TIssues{});
+    };
     auto success = SendResponseTuple<TEvControlPlaneStorage::TEvModifyDatabaseResponse, std::tuple<NYql::TIssues>>(
-        MakeLogPrefix(scope, "internal", scope) + "ModifyDatabaseRequest",
-        NActors::TActivationContext::ActorSystem(),
-        result,
-        SelfId(),
-        ev,
-        startTime,
-        requestCounters,
-        prepare,
-        debugInfo);
+        MakeLogPrefix(scope, "internal", scope) + "ModifyDatabaseRequest", NActors::TActivationContext::ActorSystem(), result, SelfId(), ev,
+        startTime, requestCounters, prepare, debugInfo);
 
     success.Apply([=](const auto& future) {
-            TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(ModifyDatabaseRequest, scope, "internal", delta, byteSize, future.GetValue());
-        });
+        TDuration delta = TInstant::Now() - startTime;
+        LWPROBE(ModifyDatabaseRequest, scope, "internal", delta, byteSize, future.GetValue());
+    });
 }
 
-} // NFq
+}   // namespace NFq

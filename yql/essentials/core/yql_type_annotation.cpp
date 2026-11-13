@@ -7,7 +7,7 @@
 #include <yql/essentials/ast/yql_constraint.h>
 #include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/minikql/runtime_settings/runtime_settings_configuration.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <util/stream/file.h>
 #include <util/string/join.h>
@@ -162,6 +162,9 @@ TString TColumnOrder::AddColumn(const TString& name) {
     ++UseCountLcase_[lcase];
     if (uint64_t count = ++UseCount_[name]; count > 1) {
         TString generated = name + "_generated_" + ToString(count);
+        while (GeneratedToOriginal_.contains(generated)) {
+            generated = name + "_generated_" + ToString(++count);
+        }
         GeneratedToOriginal_[generated] = name;
         Order_.emplace_back(name, generated);
         ++UseCount_[generated];

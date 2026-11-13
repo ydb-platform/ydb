@@ -6,6 +6,24 @@
 
 namespace NYql {
 
+TVector<const TItemExprType*> GetSqlStarItems(const TStructExprType& type, const TColumnOrder& order) {
+    TVector<const TItemExprType*> items;
+    items.reserve(type.GetSize());
+    THashSet<ui32> used;
+    for (const auto& column : order) {
+        if (const auto index = type.FindItem(column.PhysicalName); index && used.insert(*index).second) {
+            items.push_back(type.GetItems()[*index]);
+        }
+    }
+    // Preserve struct order for any members not listed in the source column order.
+    for (ui32 index = 0; index < type.GetSize(); ++index) {
+        if (!used.contains(index)) {
+            items.push_back(type.GetItems()[index]);
+        }
+    }
+    return items;
+}
+
 TExprNode::TPtr ExpandYqlTraitsFactory(
     const TExprNode::TPtr& factory,
     TExprNode::TPtr listType,
@@ -37,6 +55,13 @@ TExprNode::TPtr ExpandYqlTraitsFactory(
         .Apply(traitsFactory)
             .With(0, std::move(listType))
             .With(1, std::move(extractor))
+            .Do([&](TExprNodeReplaceBuilder& parent) -> TExprNodeReplaceBuilder& {
+                for (ui32 index = 1; index < factory->ChildrenSize(); ++index) {
+                    parent.With(index + 1, factory->ChildPtr(index));
+                }
+
+                return parent;
+            })
         .Seal()
         .Build();
     // clang-format on
@@ -71,6 +96,19 @@ TExprNode::TPtr ExpandResultType(
     TExprNode::TPtr init = ctxExpr.Builder(traits->Pos())
         .Apply(traits->Child(1))
             .With(0, body)
+            .Do([&](TExprNodeReplaceBuilder& parent) -> TExprNodeReplaceBuilder& {
+                if (traits->Child(1)->Head().ChildrenSize() == 2) {
+                    parent.With(1, ctxExpr.Builder(traits->Pos())
+                        .Callable("InstanceOf")
+                            .Callable(0, "DataType")
+                                .Atom(0, "Uint32")
+                            .Seal()
+                        .Seal()
+                        .Build());
+                }
+
+                return parent;
+            })
         .Seal()
         .Build();
     // clang-format on
@@ -273,18 +311,27 @@ TExprNode::TPtr ExpandSqlWindowCall(
         // clang-format on
     }
 
-    if (((name == "firstvalue" || name == "lastvalue") && argsCount == 1) ||
-        (name == "nthvalue" && argsCount == 2))
+    const bool ignoreNulls = isYql && name.EndsWith("ignorenulls");
+    TStringBuf valueFunction(name);
+    if (ignoreNulls) {
+        valueFunction.ChopSuffix("ignorenulls");
+    }
+    if (((valueFunction == "firstvalue" || valueFunction == "lastvalue") && argsCount == 1) ||
+        (valueFunction == "nthvalue" && argsCount == 2))
     {
         TString traitName;
-        if (name == "firstvalue") {
+        if (valueFunction == "firstvalue") {
             traitName = "first_value";
-        } else if (name == "lastvalue") {
+        } else if (valueFunction == "lastvalue") {
             traitName = "last_value";
-        } else if (name == "nthvalue") {
+        } else if (valueFunction == "nthvalue") {
             traitName = "nth_value";
         } else {
             YQL_ENSURE(false, "unexpected " << name);
+        }
+
+        if (ignoreNulls) {
+            traitName += "_ignore_nulls";
         }
 
         TString path = "/lib/yql/window.yqls";

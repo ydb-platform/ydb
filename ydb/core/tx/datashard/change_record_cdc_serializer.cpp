@@ -20,8 +20,11 @@
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <util/charset/utf8.h>
 #include <util/stream/str.h>
 #include <util/string/printf.h>
+
+#include <cmath>
 
 namespace NKikimr::NDataShard {
 
@@ -108,12 +111,6 @@ class TJsonSerializer: public TBaseSerializer {
     friend class TChangeRecord; // used in GetPartitionKey()
 
 protected:
-    static auto ParseBody(const TString& protoBody) {
-        NKikimrChangeExchange::TDataChange body;
-        Y_ENSURE(body.ParseFromArray(protoBody.data(), protoBody.size()));
-        return body;
-    }
-
     static NJson::TJsonValue StringToJson(TStringBuf in) {
         NJson::TJsonValue result;
         Y_ENSURE(NJson::ReadJsonTree(in, &result));
@@ -221,8 +218,44 @@ protected:
         }
     }
 
+    static bool IsStrictUtf8(TStringBuf value) {
+        const auto* current = reinterpret_cast<const unsigned char*>(value.data());
+        const auto* end = current + value.size();
+        while (current != end) {
+            wchar32 rune;
+            if (ReadUTF8CharAndAdvance<StrictUTF8::Yes>(rune, current, end) != RECODE_OK) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    static bool HasValidJsonStrings(const NJson::TJsonValue& value) {
+        if (value.IsString()) {
+            return IsStrictUtf8(value.GetString());
+        }
+
+        if (value.IsArray()) {
+            for (const auto& item : value.GetArray()) {
+                if (!HasValidJsonStrings(item)) {
+                    return false;
+                }
+            }
+        } else if (value.IsMap()) {
+            for (const auto& [key, item] : value.GetMap()) {
+                if (!IsStrictUtf8(key) || !HasValidJsonStrings(item)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     static void SerializeJsonValue(TUserTable::TCPtr schema, NJson::TJsonValue& value,
-        const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
+        const NKikimrChangeExchange::TDataChange::TSerializedCells& in,
+        NJson::TJsonValue* ysonValues = nullptr)
     {
         TSerializedCellVec cells;
         Y_ENSURE(TSerializedCellVec::TryParse(in.GetData(), cells));
@@ -236,7 +269,16 @@ protected:
             Y_ENSURE(it != schema->Columns.end());
 
             const auto& column = it->second;
-            value.InsertValue(column.Name, ToJson(cell, column.Type));
+            auto projection = ToJson(cell, column.Type);
+            if (ysonValues && column.Type.GetTypeId() == NScheme::NTypeIds::Yson && !cell.IsNull()) {
+                (*ysonValues)[column.Name] = Base64Encode(cell.AsBuf());
+                // YSON strings and map keys may contain arbitrary bytes. Keep
+                // those bytes in metadata without producing invalid JSON.
+                if (!HasValidJsonStrings(projection)) {
+                    projection.SetType(NJson::JSON_NULL);
+                }
+            }
+            value.InsertValue(column.Name, std::move(projection));
         }
     }
 
@@ -253,9 +295,33 @@ protected:
         }
     }
 
+    static void WriteJson(NJson::TJsonWriter& writer, const NJson::TJsonValue& value) {
+        if (value.IsMap()) {
+            writer.OpenMap();
+            for (const auto& [key, item] : value.GetMap()) {
+                writer.WriteKey(key);
+                WriteJson(writer, item);
+            }
+            writer.CloseMap();
+        } else if (value.IsArray()) {
+            writer.OpenArray();
+            for (const auto& item : value.GetArray()) {
+                WriteJson(writer, item);
+            }
+            writer.CloseArray();
+        } else if (value.GetType() == NJson::JSON_DOUBLE && value.GetDouble() == 0.0 && std::signbit(value.GetDouble())) {
+            // Integer parsing of "-0" loses its sign during replication.
+            writer.UnsafeWrite("-0.0");
+        } else {
+            writer.Write(value);
+        }
+    }
+
     TString JsonToString(const NJson::TJsonValue& json) const {
         TStringStream str;
-        NJson::WriteJson(&str, &json, JsonConfig);
+        NJson::TJsonWriter writer(&str, JsonConfig, true);
+        WriteJson(writer, json);
+        writer.Flush();
         return str.Str();
     }
 
@@ -282,7 +348,10 @@ public:
 
     TString DebugString(const TChangeRecord& record) override {
         NJson::TJsonValue json;
-        SerializeToJson(json, record);
+        // Debug output may be generated before persistence. Parsing a copy keeps
+        // the original serialized body available for the database write.
+        TChangeRecord copy = record;
+        SerializeToJson(json, copy);
 
         if (record.GetLockId()) {
             json["lock"]["id"] = record.GetLockId();
@@ -300,10 +369,23 @@ protected:
 }; // TJsonSerializer
 
 class TYdbJsonSerializer: public TJsonSerializer {
+    static void SerializeYdbJsonValue(TUserTable::TCPtr schema, NJson::TJsonValue& json, TStringBuf section,
+        const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
+    {
+        NJson::TJsonValue ysonValues;
+        SerializeJsonValue(schema, json[section], in, &ysonValues);
+        if (ysonValues.IsDefined()) {
+            // Keep the legacy JSON representation for existing CDC consumers.
+            // Its projection loses YSON attributes and types; replication uses
+            // these exact bytes instead. SQL NULL has no entry, unlike YSON #.
+            json["yson"][section] = std::move(ysonValues);
+        }
+    }
+
 protected:
     void SerializeDataChange(NJson::TJsonValue& json, const TChangeRecord& record) {
         Y_ENSURE(record.GetSchema());
-        const auto body = ParseBody(record.GetBody());
+        const auto& body = record.GetDataChange();
 
         if (record.GetKind() == TChangeRecord::EKind::CdcDataChange) {
             SerializeJsonKey(record.GetSchema(), json["key"], body.GetKey());
@@ -313,11 +395,11 @@ protected:
         }
 
         if (body.HasOldImage()) {
-            SerializeJsonValue(record.GetSchema(), json["oldImage"], body.GetOldImage());
+            SerializeYdbJsonValue(record.GetSchema(), json, "oldImage", body.GetOldImage());
         }
 
         if (body.HasNewImage()) {
-            SerializeJsonValue(record.GetSchema(), json["newImage"], body.GetNewImage());
+            SerializeYdbJsonValue(record.GetSchema(), json, "newImage", body.GetNewImage());
         }
 
         auto userCtx = record.GetUserCtx();
@@ -335,13 +417,13 @@ protected:
         case NKikimrChangeExchange::TDataChange::kUpsert:
             json["update"].SetType(NJson::JSON_MAP);
             if (!hasAnyImage) {
-                SerializeJsonValue(record.GetSchema(), json["update"], body.GetUpsert());
+                SerializeYdbJsonValue(record.GetSchema(), json, "update", body.GetUpsert());
             }
             break;
         case NKikimrChangeExchange::TDataChange::kReset:
             json["reset"].SetType(NJson::JSON_MAP);
             if (!hasAnyImage) {
-                SerializeJsonValue(record.GetSchema(), json["reset"], body.GetReset());
+                SerializeYdbJsonValue(record.GetSchema(), json, "reset", body.GetReset());
             }
             break;
         case NKikimrChangeExchange::TDataChange::kErase:
@@ -398,7 +480,18 @@ protected:
             if (!data.GetAllowOtherKinds() && data.GetPreferredPoolKind()) {
                 definition["data"]["media"] = data.GetPreferredPoolKind();
             }
-            definition["compression"] = family.Codec == NTable::NPage::ECodec::Plain ? "off" : "lz4";
+            switch (family.Codec) {
+                case NTable::NPage::ECodec::Plain:
+                    definition["compression"] = "off";
+                    break;
+                case NTable::NPage::ECodec::LZ4:
+                    definition["compression"] = "lz4";
+                    break;
+                case NTable::NPage::ECodec::ZSTD:
+                    definition["compression"] = "zstd";
+                    definition["compressionLevel"] = family.GetCodecLevel();
+                    break;
+            }
             definition["cacheMode"] = family.CacheMode == NTable::NPage::ECacheMode::Regular
                 ? "regular" : "in_memory";
         }
@@ -538,7 +631,7 @@ protected:
         });
 
         auto& dynamodb = json["dynamodb"];
-        const auto body = ParseBody(record.GetBody());
+        const auto& body = record.GetDataChange();
 
         bool keysOnly = false;
         bool newAndOldImages = false;
@@ -615,7 +708,7 @@ protected:
         Y_ENSURE(record.GetKind() == TChangeRecord::EKind::CdcDataChange);
         Y_ENSURE(record.GetSchema());
 
-        const auto body = ParseBody(record.GetBody());
+        const auto& body = record.GetDataChange();
         auto& keyJson = json["key"];
         auto& valueJson = json["value"];
 
@@ -680,17 +773,11 @@ protected:
         NJson::TJsonValue json;
         SerializeToJson(json, record);
         {
-            TStringStream str;
-            NJson::WriteJson(&str, &json["key"], JsonConfig);
             auto& messageMeta = *data.AddMessageMeta();
             messageMeta.set_key("__key");
-            messageMeta.set_value(str.Str());
+            messageMeta.set_value(JsonToString(json["key"]));
         }
-        {
-            TStringStream str;
-            NJson::WriteJson(&str, &json["value"], JsonConfig);
-            data.SetData(str.Str());
-        }
+        data.SetData(JsonToString(json["value"]));
     }
 
 public:
@@ -731,7 +818,7 @@ TString TChangeRecord::GetPartitionKey() const {
     Y_ENSURE(Kind == EKind::CdcDataChange);
     Y_ENSURE(Schema);
 
-    const auto body = TJsonSerializer::ParseBody(Body);
+    const auto& body = GetDataChange();
 
     NJson::TJsonValue key;
     TJsonSerializer::SerializeJsonKey(Schema, key, body.GetKey());

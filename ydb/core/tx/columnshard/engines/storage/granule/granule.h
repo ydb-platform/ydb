@@ -1,5 +1,6 @@
 #pragma once
 
+#include "loaded_key_ranges.h"
 #include "portion_interval_tree.h"
 #include "portions_index.h"
 
@@ -149,10 +150,10 @@ private:
     mutable TInstant NextActualizations = TInstant::Zero();
 
     NGranule::NPortionsIndex::TPortionsIndex PortionsIndex;
+    TLoadedKeyRanges LoadedKeyRanges = TLoadedKeyRanges::BuildNothing();
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
-    void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter,
-        NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard, const bool onLoad = false);
+    void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool onLoad = false);
     void OnAdditiveSummaryChange() const;
 
     TConclusion<std::shared_ptr<TPortionInfo>> GetInnerPortion(const TPortionInfo::TConstPtr& portion) const {
@@ -218,7 +219,7 @@ public:
         AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
         OnBeforeChangePortion(innerPortion);
         modifier(innerPortion);
-        OnAfterChangePortion(innerPortion, nullptr);
+        OnAfterChangePortion(innerPortion);
     }
 
     void InsertPortionOnExecute(
@@ -325,21 +326,32 @@ public:
     }
 
     void OnAfterPortionsLoad() {
-        auto g = OptimizerPlanner->StartModificationGuard();
         for (auto&& i : Portions) {
-            OnAfterChangePortion(i.second, &g, true);
-        }
-        if (MetadataMemoryManager->NeedPrefetch() && Portions.size()) {
-            auto request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::FETCH_ON_LOAD);
-            for (auto&& p : Portions) {
-                request->AddPortion(p.second);
-            }
-            request->RegisterSubscriber(std::make_shared<TFakeDataAccessorsSubscriber>());
-
-            DataAccessorsManager->AskData(request);
+            OnAfterChangePortion(i.second, true);
         }
         if (ActualizationIndex->IsStarted()) {
             RefreshScheme();
+        }
+    }
+
+    void PrefetchPortionsMetadata() {
+        if (!MetadataMemoryManager->NeedPrefetch() || Portions.empty()) {
+            return;
+        }
+        auto request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::FETCH_ON_LOAD);
+        for (auto&& p : Portions) {
+            request->AddPortion(p.second);
+        }
+        request->RegisterSubscriber(std::make_shared<TFakeDataAccessorsSubscriber>());
+        DataAccessorsManager->AskData(request);
+    }
+
+    void AddLoadedPortionsToOptimizer() {
+        auto g = OptimizerPlanner->StartModificationGuard();
+        for (auto&& [_, portion] : Portions) {
+            if (!portion->HasRemoveSnapshot()) {
+                g.AddPortion(portion);
+            }
         }
     }
 
@@ -356,7 +368,7 @@ public:
     }
 
     bool IsErasable() const {
-        return Portions.empty() && InsertedPortions.empty();
+        return Portions.empty() && InsertedPortions.empty() && LoadedKeyRanges.CoversAll();
     }
 
     void OnCompactionStarted();
@@ -410,6 +422,14 @@ public:
 
     TInternalPathId GetPathId() const {
         return PathId;
+    }
+
+    const TLoadedKeyRanges& GetLoadedKeyRanges() const {
+        return LoadedKeyRanges;
+    }
+
+    void SetLoadedKeyRanges(TLoadedKeyRanges&& loadedKeyRanges) {
+        LoadedKeyRanges = std::move(loadedKeyRanges);
     }
 
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {

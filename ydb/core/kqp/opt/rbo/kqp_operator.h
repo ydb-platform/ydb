@@ -25,7 +25,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, GroupingSets, Window, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, TableEffect, Root, Replicate };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, GroupingSets, Window, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, TableEffect, Root, Replicate, Sequencer };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -114,7 +114,9 @@ struct TPhysicalOpProps {
         Analysis.Clear();
     }
 
-    std::optional<int> StageId;
+    std::optional<TStageId> StageId;
+    // Physical boundary bindings, indexed by operator child.
+    TVector<std::optional<TStageEdgeId>> StageInputEdges;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
 
@@ -141,6 +143,7 @@ struct TPhysicalOpProps {
 private:
     void CopyPhysicalFrom(const TPhysicalOpProps& other) {
         StageId = other.StageId;
+        StageInputEdges = other.StageInputEdges;
         Algorithm = other.Algorithm;
         OrderEnforcer = other.OrderEnforcer;
         Metadata = other.Metadata;
@@ -642,7 +645,8 @@ public:
     // Reconstruction preserves the supplied bindings; it never allocates IDs.
     TOpRead(const TString& alias, TUnorderedIUs columns, const NYql::EStorageType storageType,
             const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, std::optional<TRangeInfo> ranges,
-            const std::optional<TExpression>& originalPredicate, const ESortDir sortDirection, const TPhysicalOpProps& props, TPositionHandle pos);
+            const std::optional<TExpression>& originalPredicate, const ESortDir sortDirection, const TPhysicalOpProps& props, TPositionHandle pos,
+            bool requireSortedRead = false);
 
     const TUnorderedIUs& GetColumns() const Y_LIFETIME_BOUND { return Columns_; }
     TUnorderedIUs& GetColumns() Y_LIFETIME_BOUND { return Columns_; }
@@ -681,6 +685,7 @@ public:
     // Bound to the pre-program input row, also using IDs.
     std::optional<TExpression> OriginalPredicate;
     ESortDir SortDir{ESortDir::None};
+    bool RequireSortedRead = false;
     std::optional<TRangeInfo> RangeInfo;
 
 protected:
@@ -847,8 +852,13 @@ public:
         Props.OutputIUs.reset();
     }
     bool IsDistinctAll() const { return DistinctAll; }
-    // DISTINCT and grouping-only aggregates just remove duplicate rows.
-    bool IsDeduplication() const { return IsDistinctAll() || Aggregations.Keys().Empty(); }
+    // A trivial DISTINCT: DISTINCT or a grouping-only aggregate, which just
+    // removes duplicate rows.
+    bool IsTrivialDistinct() const { return IsDistinctAll() || Aggregations.Keys().Empty(); }
+    // An intermediate aggregate pushed down to column shards. It is computed by
+    // the program of the column table read under it, see MatchOlapAggregate.
+    bool IsPushedToOlap() const { return PushedToOlap; }
+    void SetPushedToOlap() { PushedToOlap = true; }
 
 protected:
     TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
@@ -859,6 +869,7 @@ private:
     TOrderedIUs<> KeyColumns;
     EOpPhase AggregationPhase;
     bool DistinctAll;
+    bool PushedToOlap = false;
 };
 
 class TOpGroupingSets: public IUnaryOperator {
@@ -982,6 +993,7 @@ public:
     TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
     NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
     TString GetExplainName() const override { return "Window"; }
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
 
     const TWindowIUs& GetWindowFuncs() const Y_LIFETIME_BOUND { return WindowFuncs; }
     const TOrderedIUs<>& GetPartitionKeys() const Y_LIFETIME_BOUND { return PartitionKeys; }
@@ -1175,6 +1187,7 @@ public:
     TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond,
              std::optional<TExpression> offsetCond, const EOpPhase limitPhase);
 
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     const TUnorderedIUs& GetUniqueRawInputIUs() const override;
     virtual TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
@@ -1192,9 +1205,14 @@ public:
     TExpression GetLimitCond() const { return LimitCond; }
     bool HasOffset() const { return OffsetCond.has_value(); }
     std::optional<TExpression> GetOffsetCond() const { return OffsetCond; }
+    // The number of input rows this limit consumes: the rows it returns and the rows its offset skips.
+    TExpression GetInputRowsLimit(TExprContext& ctx, TPlanProps& props) const;
 
     // Make private.
     TExpression LimitCond;
+    // Whether the rows of the limit depend on the order of its input. A limit of a select without ORDER BY
+    // takes any rows, so the order of a subquery below it is not needed.
+    bool OrderedInput = true;
 
 protected:
     TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
@@ -1209,6 +1227,7 @@ private:
 
 class TOpSort: public IUnaryOperator {
 public:
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     const TUnorderedIUs& GetOutputIUs() override { return GetInput()->GetOutputIUs(); }
     TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, TSortIUs keys,
         std::optional<TExpression> limit = std::nullopt);
@@ -1320,6 +1339,7 @@ private:
  ***/
 class TOpIndexLookupJoin: public IUnaryOperator {
 public:
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind, TJoinIUs joinKeys);
     void PropagateLiveness(ILivenessContext& ctx) override;
@@ -1393,10 +1413,40 @@ enum class EEffectType : ui32 {
     DeleteRowsIndex
 };
 
+// Allocates sequence/default values once per input row. Generated columns are
+// owned definitions; input columns are forwarded uses with fixed storage labels.
+// This is a rewrite barrier: it must not be copied, duplicated, or pushed across
+// operators that change which rows consume sequence values. CopyImpl therefore
+// keeps IOperator's non-copyable default; replication must share its output.
+class TOpSequencer: public IUnaryOperator {
+public:
+    TOpSequencer(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
+        TOrderedIUs<TString> inputColumns, TOrderedIUs<TString> generatedColumns);
+    TString GetExplainName() const override { return "Sequencer"; }
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
+    TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
+    void RenameUsedIUs(const TSubstitutions& substitutions) override;
+    void PropagateLiveness(ILivenessContext& ctx) override;
+    const TOrderedIUs<TString>& GetInputColumns() const Y_LIFETIME_BOUND { return InputColumns_; }
+    const TOrderedIUs<TString>& GetGeneratedColumns() const Y_LIFETIME_BOUND { return GeneratedColumns_; }
+
+    TExprNode::TPtr Table;
+
+protected:
+    void ComputeOutputIUs() override;
+
+private:
+    TOrderedIUs<TString> InputColumns_;
+    TOrderedIUs<TString> GeneratedColumns_;
+};
+
 struct TEffectOptions {
-    std::optional<TVector<TString>> Columns;
-    std::optional<TVector<TString>> ReturningColumns;
-    std::optional<TVector<TString>> DefaultColumns;
+    // Write-row columns are input uses; returning columns are output definitions.
+    // Destination labels stay fixed when input IUs are renamed.
+    TOrderedIUs<TString> Columns;
+    TOrderedIUs<TString> ReturningColumns;
+    // Input attributes whose supplied defaults apply only when inserting a row.
+    TUnorderedIUs DefaultColumns;
     std::optional<TString> OnConflict;
     std::optional<bool> IsBatch;
     std::optional<TVector<TExprNode::TPtr>> Settings;
@@ -1405,28 +1455,24 @@ struct TEffectOptions {
 class TOpTableEffect: public IUnaryOperator {
 public:
     TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
-        EEffectType type, TEffectOptions options, TOrderedIUs<TString> columns, TOrderedIUs<TString> returning);
+        EEffectType type, TEffectOptions options);
     TString GetExplainName() const override;
     TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
-    const TUnorderedIUs& GetOutputIUs() override { return ReturningColumns_.Unordered(); }
-    const TOrderedIUs<TString>& GetColumns() const Y_LIFETIME_BOUND { return Columns_; }
-    const TOrderedIUs<TString>& GetReturningColumns() const Y_LIFETIME_BOUND { return ReturningColumns_; }
+    const TUnorderedIUs& GetOutputIUs() override { return Options.ReturningColumns.Unordered(); }
+    const TOrderedIUs<TString>& GetColumns() const Y_LIFETIME_BOUND { return Options.Columns; }
+    const TOrderedIUs<TString>& GetReturningColumns() const Y_LIFETIME_BOUND { return Options.ReturningColumns; }
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     void PropagateLiveness(ILivenessContext& ctx) override;
     TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    TExprNode::TPtr BuildSettings(TExprContext& ctx);
+    TExprNode::TPtr BuildSettings(TExprContext& ctx, ui64 priority);
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
 
     TExprNode::TPtr Table;
     EEffectType EffectType;
-    const TEffectOptions Options; // Storage settings; these names are not IU identity.
+    TEffectOptions Options;
 
 protected:
     TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
-
-private:
-    // Target names and positions are fixed; only the input bindings can change.
-    TOrderedIUs<TString> Columns_;
-    const TOrderedIUs<TString> ReturningColumns_;
 };
 
 // End-of-traversal sentinel for TOpIterator
@@ -1730,7 +1776,7 @@ private:
     // redirect an entry to an equivalent input ID, including repeated IDs.
     TOrderedIUs<TString> Columns_;
     // YQL's optional result hints are distinct from the actual output schema.
-    // In particular, an empty hint list must remain empty at export.
+    // An empty hint list does not override the resolved order in Columns_.
     const TVector<TString> QueryColumns_;
 
 protected:

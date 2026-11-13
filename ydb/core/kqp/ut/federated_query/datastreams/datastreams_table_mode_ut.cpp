@@ -14,7 +14,6 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsTableMode) {
-
     Y_UNIT_TEST_F(DisableTopicsSqlIoOperations, TStreamingTestFixture) {
         InternalInitFederatedQuerySetupFactory = true;
         auto& config = SetupAppConfig();
@@ -78,10 +77,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsTableMode) {
         WriteTopicMessage(topic_input, "data", 0, /* local */ true);
         WriteTopicMessage(topic_input, "data", 1, /* local */ true);
 
-        ExecQuery(fmt::format(R"(INSERT INTO `{topic_output}` SELECT * FROM `{topic_input}`)",
-            "topic_input"_a = topic_input,
-            "topic_output"_a = topic_output));
-        ReadTopicMessages(topic_output, {"data", "data"}, TInstant::Now() - TDuration::Seconds(100), false, true);
+        ExecQuery(fmt::format(
+            R"(INSERT INTO `{topic_output}` SELECT * FROM `{topic_input}`)", "topic_input"_a = topic_input, "topic_output"_a = topic_output));
+        ReadTopicMessages(topic_output, { "data", "data" }, TInstant::Now() - TDuration::Seconds(100), false, true);
     }
 
     Y_UNIT_TEST_F(TableModeWithWriteTimePredicate, TStreamingTestFixture) {
@@ -115,45 +113,47 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsTableMode) {
                         key as data
                     FROM {topic}
                     WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
-                    WHERE {filter})",
-                    "topic"_a = topicRef,
-                    "filter"_a = filter
-                );
+                    WHERE {filter})", "topic"_a = topicRef, "filter"_a = filter);
                 auto result = ExecQuery(text);
                 CheckScriptResult(result[0], 3, rowCount, validator);
             };
 
             // Empty topic: equality predicate (any value) — must return 0 rows
-            test("__ydb_write_time = Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {});
+            test("__ydb_write_time = Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {
+            });
             // Empty topic: greater-than predicate — must return 0 rows
-            test("__ydb_write_time > Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {});
+            test("__ydb_write_time > Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {
+            });
 
-            WriteTopicMessage(topicName, "data", 0, local);                   // wrong schema
+            WriteTopicMessage(topicName, "data", 0, local);   // wrong schema
             WriteTopicMessage(topicName, "{\"key\": \"data1\"}", 0, local);
             WriteTopicMessage(topicName, "{\"key\": \"data2\"}", 0, local);
             Sleep(TDuration::Seconds(5));
-            WriteTopicMessage(topicName, "data3", 0, local);                   // wrong schema
+            WriteTopicMessage(topicName, "data3", 0, local);   // wrong schema
 
-            auto received = ReadTopicMessages(topicName, {"1", "2", "3", "4"}, TInstant{}, false, local, false);
+            auto received = ReadTopicMessages(topicName, { "1", "2", "3", "4" }, TInstant{}, false, local, false);
             UNIT_ASSERT_VALUES_EQUAL(received.size(), 4);
 
-            test("__ydb_write_time = Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {});
-            test("__ydb_write_time < Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {});
-            test("__ydb_write_time = Timestamp(\"2020-01-01T00:00:00Z\") AND __ydb_write_time > Timestamp(\"2021-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {});
+            test("__ydb_write_time = Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {
+            });
+            test("__ydb_write_time < Timestamp(\"2020-01-01T00:00:00Z\")", 0, [&](TResultSetParser& /*resultSet*/) {
+            });
+            test("__ydb_write_time = Timestamp(\"2020-01-01T00:00:00Z\") AND __ydb_write_time > Timestamp(\"2021-01-01T00:00:00Z\")", 0,
+                [&](TResultSetParser& /*resultSet*/) {
+                });
             test("__ydb_write_time = Timestamp(\"" + received[1].second.ToString() + "\")", 1, [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
             });
-            test("__ydb_write_time >= Timestamp(\"" + received[1].second.ToString() + "\") \
-                AND __ydb_write_time <= Timestamp(\"" + received[2].second.ToString() + "\")", 2, [&](TResultSetParser& resultSet) {
+            test("__ydb_write_time >= Timestamp(\"" + received[1].second.ToString() +
+                     "\") \
+                AND __ydb_write_time <= Timestamp(\"" +
+                     received[2].second.ToString() + "\")", 2, [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
 
             auto test_raw = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
                 TString text = fmt::format(R"(
-                    SELECT __ydb_write_time as offset, Data FROM {topic} WHERE {filter})",
-                    "topic"_a = topicRef,
-                    "filter"_a = filter
-                );
+                    SELECT __ydb_write_time as offset, Data FROM {topic} WHERE {filter})", "topic"_a = topicRef, "filter"_a = filter);
                 auto result = ExecQuery(text);
                 CheckScriptResult(result[0], 2, rowCount, validator);
             };
@@ -163,7 +163,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsTableMode) {
             });
             WriteTopicMessage(topicName, "{\"key\": \"data3\"}", 0, local);
             Sleep(TDuration::Seconds(2));
-            test("__ydb_write_time > CurrentUtcTimestamp(1) - Interval('PT1S')", 0, [&](TResultSetParser& /*resultSet*/) {});
+            test("__ydb_write_time > CurrentUtcTimestamp(1) - Interval('PT1S')", 0, [&](TResultSetParser& /*resultSet*/) {
+            });
         };
 
         runTest(/* local */ false);
@@ -171,4 +172,4 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsTableMode) {
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

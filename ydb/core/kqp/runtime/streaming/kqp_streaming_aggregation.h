@@ -10,12 +10,13 @@ class TCallable;
 class TKqpComputeContextBase;
 struct TComputationNodeFactoryContext;
 
-IComputationNode* WrapKqpStreamingAggregation(TCallable& callable, const TComputationNodeFactoryContext& ctx, const TKqpComputeContextBase& computeCtx);
+IComputationNode* WrapKqpStreamingAggregation(
+    TCallable& callable, const TComputationNodeFactoryContext& ctx, const TKqpComputeContextBase& computeCtx);
 
 namespace NPrivate {
 
 TString QuoteStreamingAggregationIdentifier(const TStringBuf& name);
 
-} // namespace NPrivate
+}   // namespace NPrivate
 
-} // namespace NKikimr::NMiniKQL
+}   // namespace NKikimr::NMiniKQL

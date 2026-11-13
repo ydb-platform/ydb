@@ -9,7 +9,7 @@ namespace {
 
 using namespace NMetadata::NInitializer;
 
-class TStreamingQueriesTablesCreator final : public NTableCreator::TMultiTableCreator {
+class TStreamingQueriesTablesCreator final: public NTableCreator::TMultiTableCreator {
     using TBase = NTableCreator::TMultiTableCreator;
 
     static constexpr TDuration TTL_DEADLINE_OFFSET = TDuration::Minutes(20);
@@ -17,10 +17,11 @@ class TStreamingQueriesTablesCreator final : public NTableCreator::TMultiTableCr
 
 public:
     TStreamingQueriesTablesCreator(const TString& modificationId, IModifierExternalController::TPtr externalController)
-        : TBase({GetStreamingQueriesCreator()})
+        : TBase({ GetStreamingQueriesCreator() })
         , ModificationId(modificationId)
         , ExternalController(externalController)
-    {}
+    {
+    }
 
 protected:
     static IActor* GetStreamingQueriesCreator() {
@@ -28,22 +29,16 @@ protected:
         acl.ClearAccess();
         acl.SetInterruptInheritance(AppData()->FeatureFlags.GetEnableSecureScriptExecutions());
 
-        return CreateTableCreator(
-            SplitPath(TStreamingQueryConfig::GetTablesPath()),
+        return CreateTableCreator(SplitPath(TStreamingQueryConfig::GetTablesPath()),
             {
                 Col(TStreamingQueryConfig::TColumns::DatabaseId, NScheme::NTypeIds::Utf8),
                 Col(TStreamingQueryConfig::TColumns::QueryPath, NScheme::NTypeIds::Utf8),
                 Col(TStreamingQueryConfig::TColumns::State, NScheme::NTypeIds::Json),
                 Col(TStreamingQueryConfig::TColumns::ExpireAt, NScheme::NTypeIds::Timestamp),
             },
-            { TStreamingQueryConfig::TColumns::DatabaseId, TStreamingQueryConfig::TColumns::QueryPath },
-            NKikimrServices::KQP_PROXY,
-            TtlCol(TStreamingQueryConfig::TColumns::ExpireAt, TTL_DEADLINE_OFFSET, TTL_BRO_RUN_INTERVAL),
-            {},
-            /* isSystemUser */ true,
-            Nothing(),
-            acl
-        );
+            { TStreamingQueryConfig::TColumns::DatabaseId, TStreamingQueryConfig::TColumns::QueryPath }, NKikimrServices::KQP_PROXY,
+            TtlCol(TStreamingQueryConfig::TColumns::ExpireAt, TTL_DEADLINE_OFFSET, TTL_BRO_RUN_INTERVAL), {}, /* isSystemUser */ true, Nothing(),
+            acl);
     }
 
     void OnTablesCreated(bool success, NYql::TIssues issues) final {
@@ -59,13 +54,14 @@ private:
     const IModifierExternalController::TPtr ExternalController;
 };
 
-class TStreamingQueriesTablesInitializer final : public ITableModifier {
+class TStreamingQueriesTablesInitializer final: public ITableModifier {
     static constexpr char MODIFICATION_ID[] = "create-generic";
 
 public:
     TStreamingQueriesTablesInitializer()
         : ITableModifier(MODIFICATION_ID, /* supportDbCache */ false)
-    {}
+    {
+    }
 
 protected:
     bool DoExecute(IModifierExternalController::TPtr externalController, const NMetadata::NRequest::TConfig& config) const final {
@@ -76,10 +72,10 @@ protected:
     }
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 void TStreamingQueryInitializer::DoPrepare(IInitializerInput::TPtr controller) const {
-    controller->OnPreparationFinished({std::make_shared<TStreamingQueriesTablesInitializer>()});
+    controller->OnPreparationFinished({ std::make_shared<TStreamingQueriesTablesInitializer>() });
 }
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

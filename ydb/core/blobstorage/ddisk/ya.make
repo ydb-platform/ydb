@@ -3,6 +3,7 @@ LIBRARY()
     SRCS(
         ddisk.cpp
         ddisk.h
+        chunk_manager.h
         ddisk_checksums.cpp
         ddisk_checksums.h
         ddisk_actor.cpp
@@ -26,7 +27,6 @@ LIBRARY()
         persistent_buffer_barriers_manager.cpp
         persistent_buffer_space_allocator.cpp
         persistent_buffer_mon.cpp
-        segment_manager.cpp
         write_persistent_buffers_request_actor.cpp
     )
 
@@ -35,6 +35,7 @@ LIBRARY()
         ydb/core/protos
         ydb/core/blobstorage/vdisk/common
         ydb/library/pdisk_io
+        ydb/library/actors/async
         library/cpp/containers/absl
         contrib/libs/xxhash
     )

@@ -20,7 +20,8 @@ struct TS3Credentials {
     };
 
     TS3Credentials() = default;
-    TS3Credentials(IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const TString& structuredTokenJson, bool addBearerToToken = false);
+    TS3Credentials(
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const TString& structuredTokenJson, bool addBearerToToken = false);
 
     TAuthInfo GetAuthInfo() const;
 
@@ -35,4 +36,4 @@ private:
 
 TS3Credentials::TAuthInfo GetAuthInfo(IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const TString& structuredTokenJson);
 
-}
+}   // namespace NYql

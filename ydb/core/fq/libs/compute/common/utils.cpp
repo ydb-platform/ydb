@@ -1,13 +1,13 @@
 #include "utils.h"
+
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NFq {
 
@@ -29,6 +29,7 @@ struct TAggregate {
     ui64 Max = 0;
     ui64 Sum = 0;
     ui64 Count = 0;
+
     void Add(ui64 value) {
         if (Count) {
             if (Min > value) {
@@ -43,21 +44,21 @@ struct TAggregate {
         }
         Count++;
     }
-    
+
     void Write(NYson::TYsonWriter& writer, const TString& keyName) {
         if (Count) {
             writer.OnKeyedItem(keyName);
             writer.OnBeginMap();
-                writer.OnKeyedItem("min");
-                WriteValue(writer, keyName, Min);
-                writer.OnKeyedItem("max");
-                WriteValue(writer, keyName, Max);
-                writer.OnKeyedItem("avg");
-                WriteValue(writer, keyName, Sum / Count);
-                writer.OnKeyedItem("sum");
-                WriteValue(writer, keyName, Sum);
-                writer.OnKeyedItem("count");
-                writer.OnInt64Scalar(Count);
+            writer.OnKeyedItem("min");
+            WriteValue(writer, keyName, Min);
+            writer.OnKeyedItem("max");
+            WriteValue(writer, keyName, Max);
+            writer.OnKeyedItem("avg");
+            WriteValue(writer, keyName, Sum / Count);
+            writer.OnKeyedItem("sum");
+            WriteValue(writer, keyName, Sum);
+            writer.OnKeyedItem("count");
+            writer.OnInt64Scalar(Count);
             writer.OnEndMap();
         }
     }
@@ -183,9 +184,9 @@ struct TDurationParser {
     constexpr std::chrono::microseconds ParseDuration() {
         auto fraction = ConsumeLastFraction();
         if (fraction == "us") {
-            return std::chrono::microseconds{ConsumeNumberPortion()};
+            return std::chrono::microseconds{ ConsumeNumberPortion() };
         } else if (fraction == "ms") {
-            return std::chrono::milliseconds{ConsumeNumberPortion()};
+            return std::chrono::milliseconds{ ConsumeNumberPortion() };
         }
 
         std::chrono::microseconds result{};
@@ -199,27 +200,27 @@ struct TDurationParser {
                 Src.remove_suffix(1);
                 result += std::chrono::seconds(ConsumeNumberPortion());
             } else {
-                result += std::chrono::seconds{part};
+                result += std::chrono::seconds{ part };
             }
             fraction = ConsumeLastFraction();
         }
         if (fraction == "m") {
-            result += std::chrono::minutes{ConsumeNumberPortion()};
+            result += std::chrono::minutes{ ConsumeNumberPortion() };
             fraction = ConsumeLastFraction();
         }
 
         if (fraction == "h") {
-            result += std::chrono::hours{ConsumeNumberPortion()};
+            result += std::chrono::hours{ ConsumeNumberPortion() };
         }
         return result;
     }
 
     std::string_view Src;
 };
-}
+}   // namespace detail
 
 TDuration ParseDuration(TStringBuf str) {
-    return detail::TDurationParser{.Src = str}.ParseDuration();
+    return detail::TDurationParser{ .Src = str }.ParseDuration();
 }
 
 TString FormatInstant(TInstant instant) {
@@ -237,7 +238,7 @@ void WriteNamedNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, c
     switch (node.GetType()) {
         case NJson::JSON_INTEGER:
         case NJson::JSON_DOUBLE:
-        case NJson::JSON_UINTEGER: 
+        case NJson::JSON_UINTEGER:
             if (name) {
                 auto sum = node.GetIntegerSafe();
                 if (name == "TotalInputRows") {
@@ -253,10 +254,10 @@ void WriteNamedNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, c
                 }
                 writer.OnKeyedItem(name);
                 writer.OnBeginMap();
-                    writer.OnKeyedItem("sum");
-                    WriteValue(writer, name, sum);
-                    writer.OnKeyedItem("count");
-                    writer.OnInt64Scalar(1);
+                writer.OnKeyedItem("sum");
+                WriteValue(writer, name, sum);
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(1);
                 writer.OnEndMap();
             }
             break;
@@ -283,7 +284,7 @@ void WriteNamedNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, c
             if (auto* subNode = node.GetValueByPath("Sum")) {
                 sum = subNode->GetIntegerSafe();
                 if (sum && *sum) {
-                           if (name == "InputBytes") {
+                    if (name == "InputBytes") {
                         totals.InputBytes.Add(*sum);
                     } else if (name == "InputRows") {
                         totals.InputRows.Add(*sum);
@@ -334,7 +335,7 @@ void WriteNamedNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, c
             if (count || sum || min || max) {
                 writer.OnKeyedItem(name);
                 writer.OnBeginMap();
-                if (name.EndsWith("Us")) { // TDuration
+                if (name.EndsWith("Us")) {   // TDuration
                     if (sum) {
                         writer.OnKeyedItem("sum");
                         writer.OnStringScalar(FormatDurationUs(*sum));
@@ -355,12 +356,12 @@ void WriteNamedNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, c
                         writer.OnKeyedItem("min");
                         writer.OnStringScalar(FormatDurationUs(*min));
                     }
-                } else if (name.EndsWith("Ms")) { // TInstant
-                    if (sum) { // sum of timestamps has no meaning
+                } else if (name.EndsWith("Ms")) {   // TInstant
+                    if (sum) {   // sum of timestamps has no meaning
                         writer.OnKeyedItem("avg");
                         writer.OnStringScalar(FormatInstant(TInstant::MilliSeconds((count && *count) ? (*sum / *count) : *sum)));
-                    } 
-                    if (min && max) { // render duration here
+                    }
+                    if (min && max) {   // render duration here
                         writer.OnKeyedItem("sum");
                         writer.OnStringScalar(FormatDurationMs(*max - *min));
                     }
@@ -425,7 +426,6 @@ void EnumeratePlans(NYson::TYsonWriter& writer, const NJson::TJsonValue& value, 
         }
     }
     if (auto* statNode = value.GetValueByPath("Stats")) {
-
         TStringBuilder builder;
         stageViewIndex++;
         if (stageViewIndex < 10) {
@@ -441,7 +441,7 @@ void EnumeratePlans(NYson::TYsonWriter& writer, const NJson::TJsonValue& value, 
 
         writer.OnKeyedItem(builder);
         writer.OnBeginMap();
-            WriteNamedNode(writer, *statNode, "", totals);
+        WriteNamedNode(writer, *statNode, "", totals);
         writer.OnEndMap();
     }
 }
@@ -579,20 +579,9 @@ struct TStatsAggregator {
         return success;
     }
 
-    THashMap<TString, i64> Aggregates{std::pair<TString, i64>
-        {"IngressBytes", 0},
-        {"IngressDecompressedBytes", 0},
-        {"EgressBytes", 0},
-        {"IngressRows", 0},
-        {"EgressRows", 0},
-        {"InputBytes", 0},
-        {"OutputBytes", 0},
-        {"CpuTimeUs", 0},
-        {"IngressFilteredBytes", 0},
-        {"IngressFilteredRows", 0},
-        {"IngressQueuedBytes", 0},
-        {"IngressQueuedRows", 0}
-    };
+    THashMap<TString, i64> Aggregates{ std::pair<TString, i64>{ "IngressBytes", 0 }, { "IngressDecompressedBytes", 0 }, { "EgressBytes", 0 },
+        { "IngressRows", 0 }, { "EgressRows", 0 }, { "InputBytes", 0 }, { "OutputBytes", 0 }, { "CpuTimeUs", 0 }, { "IngressFilteredBytes", 0 },
+        { "IngressFilteredRows", 0 }, { "IngressQueuedBytes", 0 }, { "IngressQueuedRows", 0 } };
 };
 
 void TraverseOperators(const NJson::TJsonValue& node, TStatsAggregator& aggregator) {
@@ -602,7 +591,7 @@ void TraverseOperators(const NJson::TJsonValue& node, TStatsAggregator& aggregat
             if (auto sourceType = node.GetValueByPath("SourceType")) {
                 aggregator.Aggregates["Operator." + sourceType->GetStringSafe()]++;
             }
-                        
+
             if (auto format = node.GetValueByPath("Format")) {
                 aggregator.Aggregates["Format." + format->GetStringSafe()]++;
             }
@@ -652,7 +641,7 @@ void TraversePlans(const NJson::TJsonValue& node, TStatsAggregator& aggregator) 
         TraverseOperators(*operators, aggregator);
     }
 }
-}
+}   // namespace
 
 THashMap<TString, i64> AggregateStats(TStringBuf plan) {
     TStatsAggregator aggregator;
@@ -676,14 +665,19 @@ THashMap<TString, i64> AggregateStats(TStringBuf plan) {
     return aggregator.Aggregates;
 }
 
-std::optional<ui64> WriteMetric(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& column, const TString& name, const TString& tag) {
+std::optional<ui64> WriteMetric(
+    NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& column, const TString& name, const TString& tag) {
     std::optional<ui64> value;
     if (auto* subNode = node.GetValueByPath(name)) {
         auto t = tag;
         if (t == "") {
-            if (column == "first" || column == "pause") t = "Min";
-            else if (column == "resume" || column == "last") t = "Max";
-            else t = "Sum";
+            if (column == "first" || column == "pause") {
+                t = "Min";
+            } else if (column == "resume" || column == "last") {
+                t = "Max";
+            } else {
+                t = "Sum";
+            }
         }
 
         if (t == "Avg") {
@@ -718,20 +712,12 @@ std::optional<ui64> WriteMetric(NYson::TYsonWriter& writer, const NJson::TJsonVa
     return value;
 }
 
-const std::vector<std::pair<TString, TString>> columns = {
-    std::make_pair<TString, TString>("id", ""), 
-    std::make_pair<TString, TString>("cpu", ""), 
-    std::make_pair<TString, TString>("scpu", ""), 
-    std::make_pair<TString, TString>("mem", ""), 
-    std::make_pair<TString, TString>("first", "FirstMessageMs"),
-    std::make_pair<TString, TString>("pause", "PauseMessageMs"),
-    std::make_pair<TString, TString>("resume", "PauseMessageMs"),
-    std::make_pair<TString, TString>("last", "LastMessageMs"),
-    std::make_pair<TString, TString>("active", "ActiveTimeUs"),
-    std::make_pair<TString, TString>("wait", "WaitTimeUs"),
-    std::make_pair<TString, TString>("bytes", "Bytes"),
-    std::make_pair<TString, TString>("rows", "Rows")
-};
+const std::vector<std::pair<TString, TString>> columns = { std::make_pair<TString, TString>("id", ""),
+    std::make_pair<TString, TString>("cpu", ""), std::make_pair<TString, TString>("scpu", ""), std::make_pair<TString, TString>("mem", ""),
+    std::make_pair<TString, TString>("first", "FirstMessageMs"), std::make_pair<TString, TString>("pause", "PauseMessageMs"),
+    std::make_pair<TString, TString>("resume", "PauseMessageMs"), std::make_pair<TString, TString>("last", "LastMessageMs"),
+    std::make_pair<TString, TString>("active", "ActiveTimeUs"), std::make_pair<TString, TString>("wait", "WaitTimeUs"),
+    std::make_pair<TString, TString>("bytes", "Bytes"), std::make_pair<TString, TString>("rows", "Rows") };
 
 void WriteAggregates(NYson::TYsonWriter& writer, const TAggregates& aggregates) {
     for (const auto& p : aggregates) {
@@ -766,66 +752,66 @@ void MergeAggregates(TAggregates& parentAggregates, const TAggregates& aggregate
 }
 
 void WriteAsyncStatNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& name, TAggregates& aggregates) {
-        writer.OnKeyedItem(name);
-        writer.OnBeginMap();
-            for (const auto& p : columns) {
-                if (p.second) {
-                    auto value = WriteMetric(writer, node, p.first, p.second, "");
-                    if (value) {
-                        auto& aggr = aggregates[p.first];
-                        if (!aggr) {
-                            aggr = *value;
-                        } else if (p.first == "first" || p.first == "pause") {
-                            aggr = std::min(*aggr, *value);
-                        } else if (p.first == "resume" || p.first == "last") {
-                            aggr = std::max(*aggr, *value);
-                        } else {
-                            *aggr += *value;
-                        }
-                    }
+    writer.OnKeyedItem(name);
+    writer.OnBeginMap();
+    for (const auto& p : columns) {
+        if (p.second) {
+            auto value = WriteMetric(writer, node, p.first, p.second, "");
+            if (value) {
+                auto& aggr = aggregates[p.first];
+                if (!aggr) {
+                    aggr = *value;
+                } else if (p.first == "first" || p.first == "pause") {
+                    aggr = std::min(*aggr, *value);
+                } else if (p.first == "resume" || p.first == "last") {
+                    aggr = std::max(*aggr, *value);
+                } else {
+                    *aggr += *value;
                 }
             }
-            writer.OnKeyedItem("1_Min");
-            writer.OnBeginMap();
-            for (const auto& p : columns) {
-                if (p.second) {
-                    WriteMetric(writer, node, p.first, p.second, "Min");
-                }
-            }
-            writer.OnEndMap();
-            writer.OnKeyedItem("2_Avg");
-            writer.OnBeginMap();
-            for (const auto& p : columns) {
-                if (p.second) {
-                    WriteMetric(writer, node, p.first, p.second, "Avg");
-                }
-            }
-            writer.OnEndMap();
-            writer.OnKeyedItem("3_Max");
-            writer.OnBeginMap();
-            for (const auto& p : columns) {
-                if (p.second) {
-                    WriteMetric(writer, node, p.first, p.second, "Max");
-                }
-            }
-            writer.OnEndMap();
-            writer.OnKeyedItem("4_Sum");
-            writer.OnBeginMap();
-            for (const auto& p : columns) {
-                if (p.second) {
-                    WriteMetric(writer, node, p.first, p.second, "Sum");
-                }
-            }
-            writer.OnEndMap();
-            writer.OnKeyedItem("5_Count");
-            writer.OnBeginMap();
-            for (const auto& p : columns) {
-                if (p.second) {
-                    WriteMetric(writer, node, p.first, p.second, "Count");
-                }
-            }
-            writer.OnEndMap();
-        writer.OnEndMap();
+        }
+    }
+    writer.OnKeyedItem("1_Min");
+    writer.OnBeginMap();
+    for (const auto& p : columns) {
+        if (p.second) {
+            WriteMetric(writer, node, p.first, p.second, "Min");
+        }
+    }
+    writer.OnEndMap();
+    writer.OnKeyedItem("2_Avg");
+    writer.OnBeginMap();
+    for (const auto& p : columns) {
+        if (p.second) {
+            WriteMetric(writer, node, p.first, p.second, "Avg");
+        }
+    }
+    writer.OnEndMap();
+    writer.OnKeyedItem("3_Max");
+    writer.OnBeginMap();
+    for (const auto& p : columns) {
+        if (p.second) {
+            WriteMetric(writer, node, p.first, p.second, "Max");
+        }
+    }
+    writer.OnEndMap();
+    writer.OnKeyedItem("4_Sum");
+    writer.OnBeginMap();
+    for (const auto& p : columns) {
+        if (p.second) {
+            WriteMetric(writer, node, p.first, p.second, "Sum");
+        }
+    }
+    writer.OnEndMap();
+    writer.OnKeyedItem("5_Count");
+    writer.OnBeginMap();
+    for (const auto& p : columns) {
+        if (p.second) {
+            WriteMetric(writer, node, p.first, p.second, "Count");
+        }
+    }
+    writer.OnEndMap();
+    writer.OnEndMap();
 }
 
 void WriteAsyncIoNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& prefix, TAggregates& parentAggregates) {
@@ -862,7 +848,6 @@ void EnumeratePlansV2(NYson::TYsonWriter& writer, const NJson::TJsonValue& value
         }
     }
     if (auto* statNode = value.GetValueByPath("Stats")) {
-
         TStringBuilder builder;
         stageViewIndex++;
         if (stageViewIndex < 10) {
@@ -878,39 +863,39 @@ void EnumeratePlansV2(NYson::TYsonWriter& writer, const NJson::TJsonValue& value
 
         writer.OnKeyedItem(builder);
         writer.OnBeginMap();
-            TAggregates aggregates;
-            if (auto* subNode = statNode->GetValueByPath("Ingress")) {
-                WriteAsyncIoNode(writer, *subNode, "1_Ingress", aggregates);
-            }
-            if (auto* subNode = statNode->GetValueByPath("Push")) {
-                WriteAsyncIoNode(writer, *subNode, "2_Push", aggregates);
-            }
-            if (auto* subNode = statNode->GetValueByPath("Pop")) {
-                WriteAsyncIoNode(writer, *subNode, "3_Pop", aggregates);
-            }
-            if (auto* subNode = statNode->GetValueByPath("Egress")) {
-                WriteAsyncIoNode(writer, *subNode, "4_Egress", aggregates);
-            }
-            WriteAggregates(writer, aggregates);
-            MergeAggregates(totals.Aggregates, aggregates);
-            if (auto* subNode = statNode->GetValueByPath("MaxMemoryUsage.Sum")) {
-                auto sum = subNode->GetIntegerSafe();
-                totals.MaxMemoryUsage.Add(sum);
-                writer.OnKeyedItem("mem");
-                writer.OnInt64Scalar(sum);
-            }
-            if (auto* subNode = statNode->GetValueByPath("CpuTimeUs.Sum")) {
-                auto sum = subNode->GetIntegerSafe();
-                totals.CpuTimeUs.Add(sum);
-                writer.OnKeyedItem("cpu");
-                writer.OnStringScalar(FormatDurationUs(sum));
-            }
-            if (auto* subNode = statNode->GetValueByPath("SourceCpuTimeUs.Sum")) {
-                auto sum = subNode->GetIntegerSafe();
-                totals.SourceCpuTimeUs.Add(sum);
-                writer.OnKeyedItem("scpu");
-                writer.OnStringScalar(FormatDurationUs(sum));
-            }
+        TAggregates aggregates;
+        if (auto* subNode = statNode->GetValueByPath("Ingress")) {
+            WriteAsyncIoNode(writer, *subNode, "1_Ingress", aggregates);
+        }
+        if (auto* subNode = statNode->GetValueByPath("Push")) {
+            WriteAsyncIoNode(writer, *subNode, "2_Push", aggregates);
+        }
+        if (auto* subNode = statNode->GetValueByPath("Pop")) {
+            WriteAsyncIoNode(writer, *subNode, "3_Pop", aggregates);
+        }
+        if (auto* subNode = statNode->GetValueByPath("Egress")) {
+            WriteAsyncIoNode(writer, *subNode, "4_Egress", aggregates);
+        }
+        WriteAggregates(writer, aggregates);
+        MergeAggregates(totals.Aggregates, aggregates);
+        if (auto* subNode = statNode->GetValueByPath("MaxMemoryUsage.Sum")) {
+            auto sum = subNode->GetIntegerSafe();
+            totals.MaxMemoryUsage.Add(sum);
+            writer.OnKeyedItem("mem");
+            writer.OnInt64Scalar(sum);
+        }
+        if (auto* subNode = statNode->GetValueByPath("CpuTimeUs.Sum")) {
+            auto sum = subNode->GetIntegerSafe();
+            totals.CpuTimeUs.Add(sum);
+            writer.OnKeyedItem("cpu");
+            writer.OnStringScalar(FormatDurationUs(sum));
+        }
+        if (auto* subNode = statNode->GetValueByPath("SourceCpuTimeUs.Sum")) {
+            auto sum = subNode->GetIntegerSafe();
+            totals.SourceCpuTimeUs.Add(sum);
+            writer.OnKeyedItem("scpu");
+            writer.OnStringScalar(FormatDurationUs(sum));
+        }
         writer.OnEndMap();
     }
 }
@@ -919,7 +904,7 @@ TString GetV1StatFromV2PlanV2(const TString& plan, double* cpuUsage) {
     TStringStream out;
     NYson::TYsonWriter writer(&out);
     writer.OnBeginMap();
- 
+
     writer.OnKeyedItem("Columns");
     writer.OnBeginList();
     for (const auto& p : columns) {
@@ -927,7 +912,7 @@ TString GetV1StatFromV2PlanV2(const TString& plan, double* cpuUsage) {
         writer.OnStringScalar(p.first);
     }
     writer.OnEndList();
- 
+
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue stat;
     if (NJson::ReadJsonTree(plan, &jsonConfig, &stat)) {
@@ -972,19 +957,19 @@ void RemapValue(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const
     writer.OnKeyedItem(key);
     if (auto* keyNode = node.GetValueByPath(key)) {
         switch (keyNode->GetType()) {
-        case NJson::JSON_BOOLEAN:
-            writer.OnBooleanScalar(keyNode->GetBoolean());
-            break;
-        case NJson::JSON_INTEGER:
-            writer.OnInt64Scalar(keyNode->GetInteger());
-            break;
-        case NJson::JSON_DOUBLE:
-            writer.OnDoubleScalar(keyNode->GetDouble());
-            break;
-        case NJson::JSON_STRING:
-        default:
-            writer.OnStringScalar(keyNode->GetStringSafe());
-            break;
+            case NJson::JSON_BOOLEAN:
+                writer.OnBooleanScalar(keyNode->GetBoolean());
+                break;
+            case NJson::JSON_INTEGER:
+                writer.OnInt64Scalar(keyNode->GetInteger());
+                break;
+            case NJson::JSON_DOUBLE:
+                writer.OnDoubleScalar(keyNode->GetDouble());
+                break;
+            case NJson::JSON_STRING:
+            default:
+                writer.OnStringScalar(keyNode->GetStringSafe());
+                break;
         }
     } else {
         writer.OnStringScalar("-");
@@ -995,15 +980,15 @@ void RemapNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const 
     if (auto* subNode = node.GetValueByPath(path)) {
         writer.OnKeyedItem(key);
         writer.OnBeginMap();
-            RemapValue(writer, *subNode, "sum");
-            RemapValue(writer, *subNode, "count");
-            RemapValue(writer, *subNode, "avg");
-            RemapValue(writer, *subNode, "max");
-            RemapValue(writer, *subNode, "min");
+        RemapValue(writer, *subNode, "sum");
+        RemapValue(writer, *subNode, "count");
+        RemapValue(writer, *subNode, "avg");
+        RemapValue(writer, *subNode, "max");
+        RemapValue(writer, *subNode, "min");
         writer.OnEndMap();
     }
 }
-}
+}   // namespace
 
 TString GetPrettyStatistics(const TString& statistics) {
     TStringStream out;
@@ -1012,8 +997,7 @@ TString GetPrettyStatistics(const TString& statistics) {
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue stat;
     if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
-
-        //  EXP 
+        //  EXP
         if (stat.GetValueByPath("Columns")) {
             return statistics;
         }
@@ -1023,49 +1007,49 @@ TString GetPrettyStatistics(const TString& statistics) {
             if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
                 writer.OnKeyedItem(p.first);
                 writer.OnBeginMap();
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.Tasks", "Tasks");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.CpuTimeUs", "CpuTimeUs");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressBytes", "IngressBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.DecompressedBytes", "DecompressedBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressRows", "IngressRows");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputBytes", "InputBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputRows", "InputRows");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputBytes", "OutputBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputRows", "OutputRows");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultBytes", "ResultBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultRows", "ResultRows");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressBytes", "EgressBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressRows", "EgressRows");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.MkqlMaxMemoryUsage", "MaxMemoryUsage");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressFilteredBytes", "IngressFilteredBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressFilteredRows", "IngressFilteredRows");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressQueuedBytes", "IngressQueuedBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressQueuedRows", "IngressQueuedRows");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.Tasks", "Tasks");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.CpuTimeUs", "CpuTimeUs");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressBytes", "IngressBytes");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.DecompressedBytes", "DecompressedBytes");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressRows", "IngressRows");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputBytes", "InputBytes");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputRows", "InputRows");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputBytes", "OutputBytes");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputRows", "OutputRows");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultBytes", "ResultBytes");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultRows", "ResultRows");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressBytes", "EgressBytes");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressRows", "EgressRows");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.MkqlMaxMemoryUsage", "MaxMemoryUsage");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressFilteredBytes", "IngressFilteredBytes");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressFilteredRows", "IngressFilteredRows");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressQueuedBytes", "IngressQueuedBytes");
+                RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressQueuedRows", "IngressQueuedRows");
                 writer.OnEndMap();
             }
             // YQv2
-            // if (p.first.StartsWith("Query")) 
+            // if (p.first.StartsWith("Query"))
             else {
                 writer.OnKeyedItem(p.first);
                 writer.OnBeginMap();
-                    RemapNode(writer, p.second, "Tasks", "Tasks");
-                    RemapNode(writer, p.second, "CpuTimeUs", "CpuTimeUs");
-                    RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
-                    RemapNode(writer, p.second, "IngressDecompressedBytes", "IngressDecompressedBytes");
-                    RemapNode(writer, p.second, "IngressRows", "IngressRows");
-                    RemapNode(writer, p.second, "InputBytes", "InputBytes");
-                    RemapNode(writer, p.second, "InputRows", "InputRows");
-                    RemapNode(writer, p.second, "OutputBytes", "OutputBytes");
-                    RemapNode(writer, p.second, "OutputRows", "OutputRows");
-                    RemapNode(writer, p.second, "ResultBytes", "ResultBytes");
-                    RemapNode(writer, p.second, "ResultRows", "ResultRows");
-                    RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
-                    RemapNode(writer, p.second, "EgressRows", "EgressRows");
-                    RemapNode(writer, p.second, "MaxMemoryUsage", "MaxMemoryUsage");
-                    RemapNode(writer, p.second, "IngressFilteredBytes", "IngressFilteredBytes");
-                    RemapNode(writer, p.second, "IngressFilteredRows", "IngressFilteredRows");
-                    RemapNode(writer, p.second, "IngressQueuedBytes", "IngressQueuedBytes");
-                    RemapNode(writer, p.second, "IngressQueuedRows", "IngressQueuedRows");
+                RemapNode(writer, p.second, "Tasks", "Tasks");
+                RemapNode(writer, p.second, "CpuTimeUs", "CpuTimeUs");
+                RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
+                RemapNode(writer, p.second, "IngressDecompressedBytes", "IngressDecompressedBytes");
+                RemapNode(writer, p.second, "IngressRows", "IngressRows");
+                RemapNode(writer, p.second, "InputBytes", "InputBytes");
+                RemapNode(writer, p.second, "InputRows", "InputRows");
+                RemapNode(writer, p.second, "OutputBytes", "OutputBytes");
+                RemapNode(writer, p.second, "OutputRows", "OutputRows");
+                RemapNode(writer, p.second, "ResultBytes", "ResultBytes");
+                RemapNode(writer, p.second, "ResultRows", "ResultRows");
+                RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
+                RemapNode(writer, p.second, "EgressRows", "EgressRows");
+                RemapNode(writer, p.second, "MaxMemoryUsage", "MaxMemoryUsage");
+                RemapNode(writer, p.second, "IngressFilteredBytes", "IngressFilteredBytes");
+                RemapNode(writer, p.second, "IngressFilteredRows", "IngressFilteredRows");
+                RemapNode(writer, p.second, "IngressQueuedBytes", "IngressQueuedBytes");
+                RemapNode(writer, p.second, "IngressQueuedRows", "IngressQueuedRows");
                 writer.OnEndMap();
             }
         }
@@ -1135,8 +1119,7 @@ TPublicStat GetPublicStat(const TString& statistics) {
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue stat;
     if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
-
-        //  EXP 
+        //  EXP
         if (stat.GetValueByPath("Columns")) {
             return counters;
         }
@@ -1197,7 +1180,7 @@ TString SimplifiedPlan(const TString& plan) {
     return plan;
 }
 
-struct TNoneStatProcessor : IPlanStatProcessor {
+struct TNoneStatProcessor: IPlanStatProcessor {
     NYdb::NQuery::EStatsMode GetStatsMode() override {
         return NYdb::NQuery::EStatsMode::None;
     }
@@ -1224,13 +1207,13 @@ struct TNoneStatProcessor : IPlanStatProcessor {
     }
 };
 
-struct TBasicStatProcessor : TNoneStatProcessor {
+struct TBasicStatProcessor: TNoneStatProcessor {
     NYdb::NQuery::EStatsMode GetStatsMode() override {
         return NYdb::NQuery::EStatsMode::Basic;
     }
 };
 
-struct TPlanStatProcessor : IPlanStatProcessor {
+struct TPlanStatProcessor: IPlanStatProcessor {
     NYdb::NQuery::EStatsMode GetStatsMode() override {
         return NYdb::NQuery::EStatsMode::Full;
     }
@@ -1256,25 +1239,25 @@ struct TPlanStatProcessor : IPlanStatProcessor {
     }
 };
 
-struct TFullStatProcessor : TPlanStatProcessor {
+struct TFullStatProcessor: TPlanStatProcessor {
     TString GetPlanVisualization(const TString& plan) override {
         return CleanupPlanStats(plan);
     }
 };
 
-struct TCostStatProcessor : TPlanStatProcessor {
+struct TCostStatProcessor: TPlanStatProcessor {
     TString GetPlanVisualization(const TString& plan) override {
         return SimplifiedPlan(plan);
     }
 };
 
-struct TProfileStatProcessor : TPlanStatProcessor {
+struct TProfileStatProcessor: TPlanStatProcessor {
     NYdb::NQuery::EStatsMode GetStatsMode() override {
         return NYdb::NQuery::EStatsMode::Profile;
     }
 };
 
-struct TProdStatProcessor : TFullStatProcessor {
+struct TProdStatProcessor: TFullStatProcessor {
     TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline, TString* timelineError) override {
         return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline, timelineError));
     }
@@ -1284,17 +1267,29 @@ std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewN
     // disallow none and basic stat since they do not support metering
     // if (statViewName == "stat_none") return std::make_unique<TNoneStatProcessor>();
     // if (statViewName == "stat_basc") return std::make_unique<TBasicStatProcessor>();
-    if (statViewName == "stat_plan") return std::make_unique<TPlanStatProcessor>();
-    if (statViewName == "stat_full") return std::make_unique<TFullStatProcessor>();
-    if (statViewName == "stat_cost") return std::make_unique<TCostStatProcessor>();
-    if (statViewName == "stat_prof") return std::make_unique<TProfileStatProcessor>();
-    if (statViewName == "stat_prod") return std::make_unique<TProdStatProcessor>();
+    if (statViewName == "stat_plan") {
+        return std::make_unique<TPlanStatProcessor>();
+    }
+    if (statViewName == "stat_full") {
+        return std::make_unique<TFullStatProcessor>();
+    }
+    if (statViewName == "stat_cost") {
+        return std::make_unique<TCostStatProcessor>();
+    }
+    if (statViewName == "stat_prof") {
+        return std::make_unique<TProfileStatProcessor>();
+    }
+    if (statViewName == "stat_prod") {
+        return std::make_unique<TProdStatProcessor>();
+    }
     return std::make_unique<TFullStatProcessor>();
 }
 
-PingTaskRequestBuilder::PingTaskRequestBuilder(const NConfig::TCommonConfig& commonConfig, std::unique_ptr<IPlanStatProcessor>&& processor) 
+PingTaskRequestBuilder::PingTaskRequestBuilder(const NConfig::TCommonConfig& commonConfig, std::unique_ptr<IPlanStatProcessor>&& processor)
     : Compressor(commonConfig.GetQueryArtifactsCompressionMethod(), commonConfig.GetQueryArtifactsCompressionMinSize())
-    , Processor(std::move(processor)), ShowQueryTimeline(commonConfig.GetShowQueryTimeline()), MaxQueryTimelineSize(commonConfig.GetMaxQueryTimelineSize())
+    , Processor(std::move(processor))
+    , ShowQueryTimeline(commonConfig.GetShowQueryTimeline())
+    , MaxQueryTimelineSize(commonConfig.GetMaxQueryTimelineSize())
 {
     if (!MaxQueryTimelineSize) {
         MaxQueryTimelineSize = 200_KB;
@@ -1317,7 +1312,8 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
     // Builder own (internal) issues will be logged later, just warn the user
     if (Issues) {
         auto* issue = pingTaskRequest.add_issues();
-        issue->set_message("There are minor issues with query statistics processing. You can supply query ID and ask support for the information.");
+        issue->set_message(
+            "There are minor issues with query statistics processing. You can supply query ID and ask support for the information.");
         issue->set_severity(NYql::TSeverityIds::S_WARNING);
     }
 
@@ -1332,9 +1328,8 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(
     return pingTaskRequest;
 }
 
-
 Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const NYdb::NQuery::TExecStats& queryStats) {
-    const auto& statsProto = NYdb::TProtoAccessor().GetProto(queryStats); 
+    const auto& statsProto = NYdb::TProtoAccessor().GetProto(queryStats);
     return Build(statsProto.query_plan(), statsProto.query_ast(), statsProto.compilation().duration_us(), statsProto.total_duration_us());
 }
 
@@ -1346,14 +1341,14 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
     auto plan = queryPlan;
     try {
         plan = Processor->ConvertPlan(plan);
-    } catch(const NJson::TJsonException& ex) {
+    } catch (const NJson::TJsonException& ex) {
         Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error plan conversion: " << ex.what()));
     }
 
     auto planView = plan;
     try {
         planView = Processor->GetPlanVisualization(planView);
-    } catch(const NJson::TJsonException& ex) {
+    } catch (const NJson::TJsonException& ex) {
         Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error plan visualization: " << ex.what()));
     }
 
@@ -1381,7 +1376,8 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
         }
 
         if (MaxQueryTimelineSize && timeline.size() > MaxQueryTimelineSize) {
-            Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Timeline size  " << timeline.size() << " exceeds limit of " << MaxQueryTimelineSize));
+            Issues.AddIssue(
+                NYql::TIssue(TStringBuilder() << "Timeline size  " << timeline.size() << " exceeds limit of " << MaxQueryTimelineSize));
             timeline = "";
         }
 
@@ -1434,4 +1430,4 @@ TString GetStatViewName(const TRunActorParams& params) {
     }
 }
 
-} // namespace NFq
+}   // namespace NFq

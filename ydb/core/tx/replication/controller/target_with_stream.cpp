@@ -218,7 +218,7 @@ bool TTargetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 va
 }
 
 bool TTargetWithStream::CanDetachWithoutStream() const {
-    if (!IsIndexBuild() || GetReplication()->GetDesiredState() != TReplication::EState::Done) {
+    if (GetReplication()->GetDesiredState() != TReplication::EState::Done) {
         return false;
     }
 
@@ -227,6 +227,7 @@ bool TTargetWithStream::CanDetachWithoutStream() const {
     }
 
     switch (GetDstState()) {
+    case EDstState::Attaching:
     case EDstState::Paused:
     case EDstState::Alter:
     case EDstState::Done:
@@ -239,11 +240,38 @@ bool TTargetWithStream::CanDetachWithoutStream() const {
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
 
+    if (replication->GetState() == TReplication::EState::Removing
+        && GetStreamState() == EStreamState::Removed)
+    {
+        Reset(StreamCreator);
+        Reset(StreamRemover);
+        if (GetDstState() != EDstState::Removing && GetDstState() != EDstState::Attaching) {
+            if (HasWorkers()) {
+                RemoveWorkers(ctx);
+            } else {
+                ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropStreamResult(
+                    replication->GetId(), GetId(), NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+            }
+            return;
+        }
+    }
+
     if (CanDetachWithoutStream()) {
+        Reset(StreamCreator);
         // Keep the stream metadata so a later DROP can clean up a stream whose
-        // creation was already submitted when the build was cancelled.
+        // creation was already submitted when DONE was requested.
         TTargetBase::Progress(ctx);
         return;
+    }
+
+    // Source setup can return before destination progress, including while the
+    // replication is initially PAUSED. Refresh retained source actors first.
+    if (replication->GetYdbProxy()) {
+        for (const auto& actor : {StreamCreator, StreamRemover}) {
+            if (actor) {
+                ctx.Send(actor, new TEvPrivate::TEvUpdateYdbProxy(replication->GetYdbProxy()));
+            }
+        }
     }
 
     switch (GetStreamState()) {
@@ -286,6 +314,14 @@ void TTargetWithStream::Shutdown(const TActorContext& ctx) {
     }
 
     TTargetBase::Shutdown(ctx);
+}
+
+bool TTargetWithStream::IsExpectedStreamCreator(const TActorId& actorId) const {
+    return StreamCreator && StreamCreator == actorId;
+}
+
+TString TTargetWithStream::GetStreamPath() const {
+    return BuildStreamPath();
 }
 
 void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {

@@ -2,13 +2,15 @@
 
 #include "grpc_request_context_wrapper.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/service_fq.h>
-#include <ydb/library/services/services.pb.h>
 #include <ydb/core/public_http/protos/fq.pb.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/services/services.pb.h>
+
+#include <library/cpp/protobuf/json/json2proto.h>
 
 #include <type_traits>
 
@@ -25,7 +27,10 @@ using ::google::protobuf::RepeatedPtrField;
 #define SIMPLE_COPY_FIELD(field) dst.set_##field(src.field())
 #define SIMPLE_COPY_RENAME_FIELD(srcField, dstField) dst.set_##dstField(src.srcField())
 
-#define SIMPLE_COPY_MUTABLE_OPTIONAL_FIELD(field) if (src.has_##field()) { *dst.mutable_##field() = src.field(); }
+#define SIMPLE_COPY_MUTABLE_OPTIONAL_FIELD(field) \
+    if (src.has_##field()) {                      \
+        *dst.mutable_##field() = src.field();     \
+    }
 
 #define SIMPLE_COPY_MUTABLE_FIELD(field) *dst.mutable_##field() = src.field()
 #define SIMPLE_COPY_MUTABLE_RENAME_FIELD(srcField, dstField) *dst.mutable_##dstField() = src.srcField()
@@ -55,16 +60,16 @@ void FqConvert(const T& src, ::google::protobuf::Empty& dst) {
 TString RemapSeverity(int severity) {
     // values from yql/essentials/public/issue/protos/issue_severity.proto
     switch (severity) {
-    case 0:
-        return "FATAL";
-    case 1:
-        return "ERROR";
-    case 2:
-        return "WARNING";
-    case 3:
-        return "INFO";
-    default:
-        return "UNKNOWN";
+        case 0:
+            return "FATAL";
+        case 1:
+            return "ERROR";
+        case 2:
+            return "WARNING";
+        case 3:
+            return "INFO";
+        default:
+            return "UNKNOWN";
     }
 }
 
@@ -141,18 +146,18 @@ void FqConvert(const FederatedQuery::QueryMeta& src, FQHttp::QueryMeta& dst) {
 
 FQHttp::GetQueryResult::ComputeStatus RemapQueryStatus(FederatedQuery::QueryMeta::ComputeStatus status) {
     switch (status) {
-    case FederatedQuery::QueryMeta::COMPLETED:
-        return FQHttp::GetQueryResult::COMPLETED;
+        case FederatedQuery::QueryMeta::COMPLETED:
+            return FQHttp::GetQueryResult::COMPLETED;
 
-    case FederatedQuery::QueryMeta::ABORTED_BY_USER:
-        [[fallthrough]];
-    case FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM:
-        [[fallthrough]];
-    case FederatedQuery::QueryMeta::FAILED:
-        return FQHttp::GetQueryResult::FAILED;
+        case FederatedQuery::QueryMeta::ABORTED_BY_USER:
+            [[fallthrough]];
+        case FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM:
+            [[fallthrough]];
+        case FederatedQuery::QueryMeta::FAILED:
+            return FQHttp::GetQueryResult::FAILED;
 
-    default:
-        return FQHttp::GetQueryResult::RUNNING;
+        default:
+            return FQHttp::GetQueryResult::RUNNING;
     }
 }
 
@@ -241,20 +246,22 @@ void SetIdempotencyKey(T& dst, const TString& key) {
     Y_UNUSED(dst);
     Y_UNUSED(key);
 
-    if constexpr (
-        std::is_same<T, FederatedQuery::CreateQueryRequest>::value ||
-        std::is_same<T, FederatedQuery::ControlQueryRequest>::value)
+    if constexpr (std::is_same<T, FederatedQuery::CreateQueryRequest>::value || std::is_same<T, FederatedQuery::ControlQueryRequest>::value)
     {
         dst.set_idempotency_key(key);
     }
 }
 
-template <typename GrpcProtoRequestType, typename HttpProtoRequestType, typename GrpcProtoResultType, typename HttpProtoResultType, typename GrpcProtoResponseType>
-class TGrpcCallWrapper : public TActorBootstrapped<TGrpcCallWrapper<GrpcProtoRequestType, HttpProtoRequestType, GrpcProtoResultType, HttpProtoResultType, GrpcProtoResponseType>> {
+template <typename GrpcProtoRequestType, typename HttpProtoRequestType, typename GrpcProtoResultType, typename HttpProtoResultType,
+    typename GrpcProtoResponseType>
+class TGrpcCallWrapper
+    : public TActorBootstrapped<
+          TGrpcCallWrapper<GrpcProtoRequestType, HttpProtoRequestType, GrpcProtoResultType, HttpProtoResultType, GrpcProtoResponseType>> {
 protected:
     THttpRequestContext RequestContext;
 
-    typedef std::function<std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent>(TIntrusivePtr<NYdbGrpc::IRequestContextBase> ctx)> TGrpcProxyEventFactory;
+    typedef std::function<std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent>(TIntrusivePtr<NYdbGrpc::IRequestContextBase> ctx)>
+        TGrpcProxyEventFactory;
     TGrpcProxyEventFactory EventFactory;
 
     NProtobufJson::TJson2ProtoConfig Json2ProtoConfig;
@@ -275,9 +282,8 @@ public:
         : RequestContext(requestContext)
         , EventFactory(eventFactory)
     {
-        Json2ProtoConfig = NProtobufJson::TJson2ProtoConfig()
-            .SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameCamelCase)
-            .SetMapAsObject(true);
+        Json2ProtoConfig =
+            NProtobufJson::TJson2ProtoConfig().SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameCamelCase).SetMapAsObject(true);
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -287,7 +293,8 @@ public:
     virtual void BootstrapWrapper(const TActorContext& ctx) {
         auto grpcRequest = std::make_unique<TGrpcProtoRequestType>();
         if (Parse(*grpcRequest)) {
-            TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = new TGrpcRequestContextWrapper(RequestContext, std::move(grpcRequest), &SendReply);
+            TIntrusivePtr<TGrpcRequestContextWrapper> requestContext =
+                new TGrpcRequestContextWrapper(RequestContext, std::move(grpcRequest), &SendReply);
             auto event = EventFactory(requestContext);
             event->DisablePathNormalization();
             ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), event.release());
@@ -334,18 +341,18 @@ public:
         }
 
         switch (field->cpp_type()) {
-        case FieldDescriptor::CPPTYPE_INT32:
-            return reflection->SetInt32(&request, field, FromString<i32>(value));
-        case FieldDescriptor::CPPTYPE_INT64:
-            return reflection->SetInt64(&request, field, FromString<i64>(value));
-        case FieldDescriptor::CPPTYPE_UINT32:
-            return reflection->SetUInt32(&request, field, FromString<ui32>(value));
-        case FieldDescriptor::CPPTYPE_UINT64:
-            return reflection->SetUInt64(&request, field, FromString<ui64>(value));
-        case FieldDescriptor::CPPTYPE_STRING:
-            return reflection->SetString(&request, field, TString(value));
-        default:
-            break;
+            case FieldDescriptor::CPPTYPE_INT32:
+                return reflection->SetInt32(&request, field, FromString<i32>(value));
+            case FieldDescriptor::CPPTYPE_INT64:
+                return reflection->SetInt64(&request, field, FromString<i64>(value));
+            case FieldDescriptor::CPPTYPE_UINT32:
+                return reflection->SetUInt32(&request, field, FromString<ui32>(value));
+            case FieldDescriptor::CPPTYPE_UINT64:
+                return reflection->SetUInt64(&request, field, FromString<ui64>(value));
+            case FieldDescriptor::CPPTYPE_STRING:
+                return reflection->SetString(&request, field, TString(value));
+            default:
+                break;
         }
     }
 
@@ -387,16 +394,23 @@ public:
     }
 };
 
-#define DECLARE_YQ_GRPC_ACTOR_IMPL(action, internalAction, t1, t2, t3, t4, t5)           \
-class TJson##action : public TGrpcCallWrapper<t1, t2, t3, t4, t5> {                      \
-    typedef TGrpcCallWrapper<t1, t2, t3, t4, t5> TBase;                                  \
-public:                                                                                  \
-    explicit TJson##action(const THttpRequestContext& request)                           \
-      :  TBase(request, &NGRpcService::CreateFederatedQuery##internalAction##RequestOperationCall) {}  \
-}
+#define DECLARE_YQ_GRPC_ACTOR_IMPL(action, internalAction, t1, t2, t3, t4, t5)                          \
+    class TJson##action: public TGrpcCallWrapper<t1, t2, t3, t4, t5> {                                  \
+        typedef TGrpcCallWrapper<t1, t2, t3, t4, t5> TBase;                                             \
+                                                                                                        \
+    public:                                                                                             \
+        explicit TJson##action(const THttpRequestContext& request)                                      \
+            : TBase(request, &NGRpcService::CreateFederatedQuery##internalAction##RequestOperationCall) \
+        {                                                                                               \
+        }                                                                                               \
+    }
 
-#define DECLARE_YQ_GRPC_ACTOR(action, internalAction) DECLARE_YQ_GRPC_ACTOR_IMPL(action, internalAction, FederatedQuery::internalAction##Request, FQHttp::action##Request, FederatedQuery::internalAction##Result, FQHttp::action##Result, FederatedQuery::internalAction##Response)
-#define DECLARE_YQ_GRPC_ACTOR_WIHT_EMPTY_RESULT(action, internalAction) DECLARE_YQ_GRPC_ACTOR_IMPL(action, internalAction, FederatedQuery::internalAction##Request, FQHttp::action##Request, FederatedQuery::internalAction##Result, ::google::protobuf::Empty, FederatedQuery::internalAction##Response)
+#define DECLARE_YQ_GRPC_ACTOR(action, internalAction)                                                                    \
+    DECLARE_YQ_GRPC_ACTOR_IMPL(action, internalAction, FederatedQuery::internalAction##Request, FQHttp::action##Request, \
+        FederatedQuery::internalAction##Result, FQHttp::action##Result, FederatedQuery::internalAction##Response)
+#define DECLARE_YQ_GRPC_ACTOR_WIHT_EMPTY_RESULT(action, internalAction)                                                  \
+    DECLARE_YQ_GRPC_ACTOR_IMPL(action, internalAction, FederatedQuery::internalAction##Request, FQHttp::action##Request, \
+        FederatedQuery::internalAction##Result, ::google::protobuf::Empty, FederatedQuery::internalAction##Response)
 
 DECLARE_YQ_GRPC_ACTOR(CreateQuery, CreateQuery);
 DECLARE_YQ_GRPC_ACTOR(GetQuery, DescribeQuery);
@@ -404,68 +418,69 @@ DECLARE_YQ_GRPC_ACTOR(GetQueryStatus, GetQueryStatus);
 DECLARE_YQ_GRPC_ACTOR_WIHT_EMPTY_RESULT(StopQuery, ControlQuery);
 DECLARE_YQ_GRPC_ACTOR(GetResultData, GetResultData);
 
-class TJsonStartQuery : public TGrpcCallWrapper<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse> {
+class TJsonStartQuery: public TGrpcCallWrapper<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResult,
+                           google::protobuf::Empty, FederatedQuery::ModifyQueryResponse> {
 public:
-    typedef TGrpcCallWrapper<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse> TGrpcCallWrapperBase;
-    
+    typedef TGrpcCallWrapper<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResult,
+        google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>
+        TGrpcCallWrapperBase;
+
     TJsonStartQuery(const THttpRequestContext& ctx)
-    : TGrpcCallWrapperBase(ctx, &NGRpcService::CreateFederatedQueryDescribeQueryRequestOperationCall)
-    {}
+        : TGrpcCallWrapperBase(ctx, &NGRpcService::CreateFederatedQueryDescribeQueryRequestOperationCall)
+    {
+    }
 
     void BootstrapWrapper(const TActorContext& ctx) override {
-
         auto describeRequest = std::make_unique<FederatedQuery::DescribeQueryRequest>();
         if (!Parse(*describeRequest)) {
             this->Die(ctx);
             return;
         }
 
-        TProtoStringType queryId =  describeRequest->Getquery_id();
-        TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = MakeIntrusive<TGrpcRequestContextWrapper>(
-            RequestContext,
-            std::move(describeRequest),
-            [query_id = std::move(queryId), actorSystem = TActivationContext::ActorSystem()](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 /* status */) {
+        TProtoStringType queryId = describeRequest->Getquery_id();
+        TIntrusivePtr<TGrpcRequestContextWrapper> requestContext =
+            MakeIntrusive<TGrpcRequestContextWrapper>(RequestContext, std::move(describeRequest),
+                [query_id = std::move(queryId), actorSystem = TActivationContext::ActorSystem()](
+                    const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 /* status */) {
+                    Y_ABORT_UNLESS(resp);
+                    Y_ABORT_UNLESS(resp->GetArena());
 
-            Y_ABORT_UNLESS(resp);
-            Y_ABORT_UNLESS(resp->GetArena());
+                    auto* typedResponse = static_cast<FederatedQuery::DescribeQueryResponse*>(resp);
+                    if (!typedResponse->operation().result().template Is<FederatedQuery::DescribeQueryResult>()) {
+                        TStringStream json;
+                        auto httpResult = std::unique_ptr<FQHttp::Error>(new FQHttp::Error());
+                        FqConvert(typedResponse->operation(), *httpResult);
+                        FqPackToJson(json, *httpResult, jsonSettings);
+                        requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());
+                        return;
+                    }
 
-            auto* typedResponse = static_cast<FederatedQuery::DescribeQueryResponse*>(resp);
-            if (!typedResponse->operation().result().template Is<FederatedQuery::DescribeQueryResult>()) {                                   
-                TStringStream json;                                                                             
-                auto httpResult = std::unique_ptr<FQHttp::Error>(new FQHttp::Error());     
-                FqConvert(typedResponse->operation(), *httpResult);                                             
-                FqPackToJson(json, *httpResult, jsonSettings);                                                  
-                requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());     
-                return;                                                                                         
-            }
+                    std::unique_ptr<FederatedQuery::DescribeQueryResult> describeResult =
+                        std::unique_ptr<FederatedQuery::DescribeQueryResult>(new FederatedQuery::DescribeQueryResult());
+                    if (!typedResponse->operation().result().UnpackTo(&*describeResult)) {
+                        requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Error in response unpack");
+                        return;
+                    }
 
-            std::unique_ptr<FederatedQuery::DescribeQueryResult> describeResult = std::unique_ptr<FederatedQuery::DescribeQueryResult>(new FederatedQuery::DescribeQueryResult());
-            if (!typedResponse->operation().result().UnpackTo(&*describeResult)) {
-                requestContext.ResponseBadRequest(Ydb::StatusIds::INTERNAL_ERROR, "Error in response unpack");
-                return;
-            }
+                    // modify
+                    auto modifyRequest = std::unique_ptr<FederatedQuery::ModifyQueryRequest>(new FederatedQuery::ModifyQueryRequest());
 
-            // modify
-            auto modifyRequest = std::unique_ptr<FederatedQuery::ModifyQueryRequest>(new FederatedQuery::ModifyQueryRequest());
+                    modifyRequest->set_query_id(query_id);
+                    *modifyRequest->mutable_content() = describeResult->query().content();
+                    modifyRequest->set_execute_mode(::FederatedQuery::ExecuteMode::RUN);
+                    modifyRequest->set_state_load_mode(::FederatedQuery::StateLoadMode::STATE_LOAD_MODE_UNSPECIFIED);
+                    modifyRequest->set_previous_revision(describeResult->query().meta().Getlast_job_query_revision());
+                    modifyRequest->set_idempotency_key(requestContext.GetIdempotencyKey());
 
-            modifyRequest->set_query_id(query_id);
-            *modifyRequest->mutable_content() = describeResult->query().content();
-            modifyRequest->set_execute_mode(::FederatedQuery::ExecuteMode::RUN);
-            modifyRequest->set_state_load_mode(::FederatedQuery::StateLoadMode::STATE_LOAD_MODE_UNSPECIFIED);
-            modifyRequest->set_previous_revision(describeResult->query().meta().Getlast_job_query_revision());
-            modifyRequest->set_idempotency_key(requestContext.GetIdempotencyKey());
+                    TIntrusivePtr<TGrpcRequestContextWrapper> requestContextModify = new TGrpcRequestContextWrapper(requestContext,
+                        std::move(modifyRequest), TGrpcCallWrapper<FederatedQuery::ModifyQueryRequest, int, FederatedQuery::ModifyQueryResult,
+                                                      google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>::SendReply);
 
-            TIntrusivePtr<TGrpcRequestContextWrapper> requestContextModify = new TGrpcRequestContextWrapper(
-                requestContext,
-                std::move(modifyRequest),
-                TGrpcCallWrapper<FederatedQuery::ModifyQueryRequest, int, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>::SendReply
-            );
-
-            // new event -> new EventFactory
-            auto event = NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall(std::move(requestContextModify));
-            event->DisablePathNormalization();
-            actorSystem->Send(NGRpcService::CreateGRpcRequestProxyId(), event.release());
-        });
+                    // new event -> new EventFactory
+                    auto event = NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall(std::move(requestContextModify));
+                    event->DisablePathNormalization();
+                    actorSystem->Send(NGRpcService::CreateGRpcRequestProxyId(), event.release());
+                });
 
         auto event = EventFactory(std::move(requestContext));
         event->DisablePathNormalization();
@@ -476,4 +491,4 @@ public:
 
 #undef TGrpcCallWrapperBase
 
-} // namespace NKikimr::NPublicHttp
+}   // namespace NKikimr::NPublicHttp

@@ -1,23 +1,34 @@
 #include "defs.h"
 #include "datashard_distributed_erase.h"
+#include "datashard_impl.h"
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common_tx.h>
+#include <ydb/core/tx/datashard/ut_common/database_freeze.h>
 
+#include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tablet_flat/shared_cache_events.h>
+#include <ydb/core/tablet_flat/flat_scan_events.h>
+#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
@@ -29,6 +40,9 @@
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <util/string/strip.h>
+
+#include <array>
+#include <optional>
 
 namespace NKikimr {
 
@@ -823,6 +837,48 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
             "ikey = 10, pkey = 1\nikey = 20, pkey = 2");
     }
 
+    Y_UNIT_TEST(DatabaseFreezeDrainsAsyncIndexBeforeClosingItsInput) {
+        using namespace NDataShard::NTest;
+        using TStage = NKikimrTxDataShard::TDatabaseFreezeState;
+        TPortManager pm;
+        TServer::TPtr server = new TServer(TServerSettings(pm.GetPort(2134))
+            .SetDomainName("Root").SetUseRealThreads(false).SetEnableDataColumnForIndexTable(true));
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        const auto [baseShards, tableId] = CreateShardedTable(server, sender, "/Root", "Table", TableWithIndex(SimpleAsyncIndex()));
+        const auto indexShards = GetTableShards(server, sender, "/Root/Table/by_ikey/indexImplTable");
+        const TPathId domain(tableId.PathId.OwnerId, 1);
+        TBlockEvents<TEvChangeExchange::TEvApplyRecords> apply(runtime);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (1, 10);");
+        runtime.WaitFor("pending async index record", [&] { return !apply.empty(); });
+        auto lateApply = MakeHolder<TEvChangeExchange::TEvApplyRecords>();
+        lateApply->Record.CopyFrom(apply.front()->Get()->Record);
+
+        for (const auto shard : {baseShards.at(0), indexShards.at(0)}) {
+            WaitDatabaseFreezeStage(runtime, shard, tableId.PathId.OwnerId, domain, 1, TStage::FENCE_WRITES);
+        }
+        const auto pending = SendDatabaseFreeze(runtime, baseShards.at(0), tableId.PathId.OwnerId,
+            domain, 1, TStage::DRAIN_INDEXES);
+        UNIT_ASSERT(!pending.GetReady());
+        apply.Stop().Unblock();
+        for (const auto stage : {TStage::DRAIN_INDEXES, TStage::DRAIN_CDC}) {
+            for (const auto shard : {baseShards.at(0), indexShards.at(0)}) {
+                WaitDatabaseFreezeStage(runtime, shard, tableId.PathId.OwnerId, domain, 1, stage);
+            }
+        }
+        WaitForContent(server, "/Root/Table/by_ikey/indexImplTable", "ikey = 10, pkey = 1");
+        runtime.SendToPipe(indexShards.at(0), sender, lateApply.Release(), 0, GetPipeConfigWithRetries());
+        const auto rejected = runtime.GrabEdgeEventRethrow<TEvChangeExchange::TEvStatus>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(rejected->Get()->Record.GetStatus()), ui32(NKikimrChangeExchange::TEvStatus::STATUS_REJECT));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(rejected->Get()->Record.GetReason()), ui32(NKikimrChangeExchange::TEvStatus::REASON_WRONG_STATE));
+        for (const auto shard : {baseShards.at(0), indexShards.at(0)}) {
+            WaitDatabaseFreezeStage(runtime, shard, tableId.PathId.OwnerId, domain, 2, TStage::OPEN);
+        }
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (2, 20);");
+        WaitForContent(server, "/Root/Table/by_ikey/indexImplTable", "ikey = 10, pkey = 1\nikey = 20, pkey = 2");
+    }
+
     Y_UNIT_TEST(ShouldNotReorderChangesOnRace) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -964,7 +1020,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             const TCdcStream& streamDesc,
             bool useRealThreads = true,
             const TString& root = "Root",
-            const TString& tableName = "Table")
+            const TString& tableName = "Table",
+            bool enableGrpc = false)
         {
             auto settings = TServerSettings(PortManager.GetPort(2134), {}, DefaultPQConfig())
                 .SetUseRealThreads(useRealThreads)
@@ -979,7 +1036,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableParameterizedDecimal(true);
 
             Server = new TServer(settings);
-            if (useRealThreads) {
+            if (useRealThreads || enableGrpc) {
                 Server->EnableGRpc(settings.GrpcPort);
             }
 
@@ -993,13 +1050,18 @@ Y_UNIT_TEST_SUITE(Cdc) {
             CreateShardedTable(Server, EdgeActor, database, tableName, tableDesc);
             WaitTxNotification(Server, EdgeActor, AsyncAlterAddStream(Server, database, tableName, streamDesc));
 
-            if (useRealThreads) {
+            if (useRealThreads || enableGrpc) {
                 TString endpoint = "localhost:" + ToString(settings.GrpcPort);
                 auto driverConfig = NYdb::TDriverConfig()
                     .SetEndpoint(endpoint)
                     .SetDatabase("/" + settings.DomainName);
-                auto driver = NYdb::TDriver(driverConfig);
-                Client = TDerived::MakeClient(driver, database);
+                if (!useRealThreads) {
+                    // Synchronous discovery blocks the client constructor while
+                    // simulated actors need DispatchEvents to serve discovery.
+                    driverConfig.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+                }
+                Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+                Client = TDerived::MakeClient(*Driver, CanonizePath(database));
             }
         }
 
@@ -1013,6 +1075,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
             return *Client;
         }
 
+        NYdb::TDriver& GetDriver() {
+            UNIT_ASSERT(Driver);
+            return *Driver;
+        }
+
         const TActorId& GetEdgeActor() const {
             return EdgeActor;
         }
@@ -1021,6 +1088,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         TPortManager PortManager;
         TServer::TPtr Server;
         TActorId EdgeActor;
+        THolder<NYdb::TDriver> Driver;
         THolder<TClient> Client;
 
     }; // TTestEnv
@@ -1602,6 +1670,153 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
     };
+
+    Y_UNIT_TEST(ReadRowsAfterCdcDoesNotReturnStaleValue) {
+        static constexpr ui32 Key = 1;
+        static constexpr ui32 InitialValue = 1;
+        static constexpr ui32 UpdatedValue = 2;
+
+        // Event observers only intercept actor delivery in simulated runtime.
+        // Keep gRPC enabled to exercise the public Topic and Table SDKs.
+        TTestTopicEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson),
+            false, "Root", "Table", true);
+        auto& runtime = *env.GetServer()->GetRuntime();
+        auto& topicClient = env.GetClient();
+        NYdb::NTable::TTableClient tableClient(env.GetDriver());
+
+        {
+            auto result = runtime.WaitFuture(topicClient.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                .BeginAddConsumer("user").EndAddConsumer()));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto reader = topicClient.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
+            .AppendTopics(std::string{"/Root/Table/Stream"})
+            .ConsumerName("user"));
+
+        auto readCdcRecord = [&]() -> std::pair<ui32, ui32> {
+            while (true) {
+                runtime.WaitFuture(reader->WaitEvent());
+                auto event = reader->GetEvent(false);
+                UNIT_ASSERT(event);
+
+                if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    UNIT_ASSERT_VALUES_EQUAL(data->GetMessages().size(), 1);
+
+                    NJson::TJsonValue json;
+                    UNIT_ASSERT(NJson::ReadJsonTree(TString{data->GetMessages().front().GetData()}, &json));
+                    return {
+                        json["key"][0].GetUIntegerSafe(),
+                        json["update"]["value"].GetUIntegerSafe(),
+                    };
+                }
+
+                if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    start->Confirm();
+                } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    stop->Confirm();
+                } else if (auto* closed = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                    UNIT_FAIL(TStringBuilder() << "CDC read session closed: " << closed->DebugString());
+                }
+            }
+        };
+
+        const auto tableId = ResolveTableId(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
+        const auto shard = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table").at(0);
+
+        auto sendUpsert = [&](ui32 value) {
+            const auto sender = runtime.AllocateEdgeActor();
+            auto request = MakeWriteRequest(std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, std::vector<ui32>{1, 2},
+                std::vector<TCell>{TCell::Make(Key), TCell::Make(value)});
+            runtime.SendToPipe(shard, sender, request.release());
+            return sender;
+        };
+
+        {
+            WaitForWriteCompleted(runtime, sendUpsert(InitialValue));
+            const auto [cdcKey, cdcValue] = readCdcRecord();
+            UNIT_ASSERT_VALUES_EQUAL(cdcKey, Key);
+            UNIT_ASSERT_VALUES_EQUAL(cdcValue, InitialValue);
+        }
+
+        NTxHelpers::TTransactionState snapshotReader(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+
+        TBlockEvents<TEvMediatorTimecast::TEvUpdate> blockUpdate(runtime);
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranular(runtime);
+
+        // Protect the acquired snapshot so the next immediate write is ahead
+        // of the observed mediator step.
+        UNIT_ASSERT_VALUES_EQUAL(snapshotReader.ReadKey(tableId, shard, Key), "1, 1\n");
+
+        // Select the write version after UnprotectedReadEdge has been promoted.
+        // Neither its reply nor CDC may expose it before it is readable.
+        bool cdcRequested = false;
+        auto observeRequests = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRequestRecords>(
+            [&](auto&) { cdcRequested = true; });
+        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvRecords> cdcBodies(runtime,
+            [](const auto& ev) {
+                return AnyOf(ev->Get()->Records, [](const auto& record) {
+                    return record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcDataChange;
+                });
+            });
+        const auto writeSender = sendUpsert(UpdatedValue);
+        runtime.WaitFor("CDC body request", [&] { return cdcRequested; });
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(
+            writeSender, TDuration::Seconds(1)));
+
+        const bool cdcWaitedForVisibility = cdcBodies.empty();
+        cdcBodies.Stop().Unblock();
+        if (cdcWaitedForVisibility) {
+            // A correct shard withholds CDC until time advances. If a body was
+            // published early, keep time frozen through CDC -> ReadRows so the
+            // unfixed shard reproduces the stale value observed by consumers.
+            blockUpdate.Stop().Unblock();
+            blockGranular.Stop().Unblock();
+        }
+
+        const auto [cdcKey, cdcValue] = readCdcRecord();
+        // Cancel the streaming RPC while simulated actors are still being
+        // dispatched below. Leaving it to the destructor would make gRPC
+        // shutdown wait for a session whose server actor cannot run anymore.
+        reader->Close(TDuration::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(cdcKey, Key);
+        UNIT_ASSERT_VALUES_EQUAL(cdcValue, UpdatedValue);
+
+        NYdb::TValueBuilder keys;
+        keys.BeginList()
+            .AddListItem()
+                .BeginStruct()
+                    .AddMember("key").Uint32(cdcKey)
+                .EndStruct()
+            .EndList();
+
+        auto readResult = runtime.WaitFuture(tableClient.ReadRows("/Root/Table", keys.Build()),
+            TDuration::Seconds(10));
+
+        UNIT_ASSERT_C(readResult.IsSuccess(), readResult.GetIssues().ToString());
+
+        NYdb::TResultSetParser parser(readResult.GetResultSet());
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetOptionalUint32().value(), cdcKey);
+        const ui32 readValue = parser.ColumnParser("value").GetOptionalUint32().value();
+        UNIT_ASSERT(!parser.TryNextRow());
+
+        if (!cdcWaitedForVisibility) {
+            blockUpdate.Stop().Unblock();
+            blockGranular.Stop().Unblock();
+        }
+        // Await the write reply only for cleanup, after capturing ReadRows.
+        WaitForWriteCompleted(runtime, writeSender);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(readValue, cdcValue,
+            "ReadRows returned a row version older than the CDC record");
+        UNIT_ASSERT_C(cdcWaitedForVisibility, "CDC was published before its row version became readable");
+        UNIT_ASSERT_VALUES_EQUAL_C(snapshotReader.ReadKey(tableId, shard, Key), "1, 1\n",
+            "Publishing CDC must not change an existing snapshot");
+    }
 
     static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false, TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr) {
         NJsonWriter::TBuf body;
@@ -2563,6 +2778,485 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }
 
+    static TActorId SendCdcVisibilityUpsert(TTestActorRuntime& runtime, ui64 shard, const TTableId& tableId, ui32 value) {
+        const auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeWriteRequest(std::nullopt,
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            tableId, std::vector<ui32>{1, 2},
+            std::vector<TCell>{TCell::Make(ui32(1)), TCell::Make(value)});
+        runtime.SendToPipe(shard, sender, request.release());
+        return sender;
+    }
+
+    static TVector<ui32> ReadCdcVisibilityValues(TTestActorRuntime& runtime, const TActorId& sender,
+            const TString& path = "/Root/Table/Stream") {
+        TVector<ui32> values;
+        for (const auto& [_, body] : GetRecords(runtime, sender, path, 0)) {
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(body, &json));
+            UNIT_ASSERT_VALUES_EQUAL(json["key"][0].GetUIntegerSafe(), 1);
+            values.push_back(json["update"]["value"].GetUIntegerSafe());
+        }
+        return values;
+    }
+
+    static TVector<ui32> WaitForCdcVisibilityValues(TTestActorRuntime& runtime, const TActorId& sender, size_t count,
+            const TString& path = "/Root/Table/Stream") {
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
+            auto values = ReadCdcVisibilityValues(runtime, sender, path);
+            if (values.size() >= count) {
+                UNIT_ASSERT_VALUES_EQUAL(values.size(), count);
+                return values;
+            }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_FAIL("Timed out waiting for " << count << " CDC records in " << path);
+        return {};
+    }
+
+    Y_UNIT_TEST(CdcVisibilityWaitDoesNotBlockAnotherStream) {
+        TTestPqEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), false);
+        auto server = env.GetServer();
+        auto& runtime = *server->GetRuntime();
+        const auto sender = env.GetEdgeActor();
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson, "Stream2")));
+        const auto tableId = ResolveTableId(server, sender, "/Root/Table");
+        const auto shard = GetTableShards(server, sender, "/Root/Table").at(0);
+        const auto shardActor = ResolveTablet(runtime, shard);
+        const TString secondTopic = "/Root/Table/Stream2";
+        const auto secondStreamId = Ls(runtime, sender, secondTopic)->ResultSet.at(0).TableId.PathId;
+
+        // Hold only the second stream's forwarded enqueues. The first stream
+        // continues normally, while the second retains the initial row change.
+        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> secondEnqueues(runtime,
+            [&](const auto& ev) {
+                return ev->Sender != shardActor && AnyOf(ev->Get()->Records, [&](const auto& record) {
+                    return record.PathId == secondStreamId;
+                });
+            });
+        THashSet<TActorId> requestingSenders;
+        TActorId firstStreamSender;
+        bool updateRequested = false;
+        auto observeRequests = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRequestRecords>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == shardActor) {
+                requestingSenders.insert(ev->Sender);
+                if (ev->Sender == firstStreamSender) {
+                    updateRequested = true;
+                }
+            }
+        });
+
+        WaitForWriteCompleted(runtime, SendCdcVisibilityUpsert(runtime, shard, tableId, 1));
+        UNIT_ASSERT_VALUES_EQUAL(WaitForCdcVisibilityValues(runtime, sender, 1).front(), 1);
+        runtime.WaitFor("second stream initial enqueue", [&] { return !secondEnqueues.empty(); }, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(requestingSenders.size(), 1);
+        firstStreamSender = *requestingSenders.begin();
+        UNIT_ASSERT(GetRecords(runtime, sender, secondTopic, 0).empty());
+
+        TBlockEvents<TEvMediatorTimecast::TEvUpdate> updates(runtime);
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> granular(runtime);
+        NTxHelpers::TTransactionState snapshotReader(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+        UNIT_ASSERT_VALUES_EQUAL(snapshotReader.ReadKey(tableId, shard, 1), "1, 1\n");
+        const auto writeSender = SendCdcVisibilityUpsert(runtime, shard, tableId, 2);
+        runtime.WaitFor("first stream future body request", [&] { return updateRequested; }, TDuration::Seconds(5));
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(
+            writeSender, TDuration::Seconds(1)));
+        UNIT_ASSERT_VALUES_EQUAL(WaitForCdcVisibilityValues(runtime, sender, 1).front(), 1);
+        auto* source = dynamic_cast<TDataShard*>(runtime.FindActor(shardActor));
+        UNIT_ASSERT(source);
+        UNIT_ASSERT_C(source->GetSnapshotManager().GetImmediateWriteEdge().Step > source->GetMaxObservedStep(),
+            "The updated row must remain ahead of the observed step");
+
+        // The first sender is now parked. The second must still load and
+        // deliver the initial value, then wait for the same future update.
+        secondEnqueues.Stop().Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(WaitForCdcVisibilityValues(runtime, sender, 1, secondTopic).front(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(requestingSenders.size(), 2);
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(
+            writeSender, TDuration::Seconds(1)));
+        UNIT_ASSERT_VALUES_EQUAL(WaitForCdcVisibilityValues(runtime, sender, 1).front(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(WaitForCdcVisibilityValues(runtime, sender, 1, secondTopic).front(), 1);
+
+        updates.Stop().Unblock();
+        granular.Stop().Unblock();
+        WaitForWriteCompleted(runtime, writeSender);
+        for (const TString& path : {TString("/Root/Table/Stream"), secondTopic}) {
+            const auto values = WaitForCdcVisibilityValues(runtime, sender, 2, path);
+            UNIT_ASSERT_VALUES_EQUAL(values[0], 1);
+            UNIT_ASSERT_VALUES_EQUAL(values[1], 2);
+        }
+    }
+
+    static void TestCdcVisibilityWaitQueueChanges(bool removeWaitingRecord) {
+        TTestPqEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), false);
+        auto server = env.GetServer();
+        auto& runtime = *server->GetRuntime();
+        const auto sender = env.GetEdgeActor();
+        const auto tableId = ResolveTableId(server, sender, "/Root/Table");
+        const auto shard = GetTableShards(server, sender, "/Root/Table").at(0);
+        const auto shardActor = ResolveTablet(runtime, shard);
+
+        // Retain the first body so a sender can request it again after a
+        // delivery failure, while a later body is waiting for visibility.
+        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvRemoveRecords> keepRecords(runtime);
+        std::optional<NChangeExchange::TEvChangeExchange::TEvRequestRecords::TRecordInfo> firstRecord;
+        TActorId cdcSender;
+        ui32 firstRecordDeliveries = 0;
+        ui32 futureRecordDeliveries = 0;
+        auto observeBodies = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRecords>([&](auto& ev) {
+            if (ev->Sender != shardActor) {
+                return;
+            }
+            for (const auto& record : ev->Get()->Records) {
+                if (record->GetKind() != NChangeExchange::IChangeRecord::EKind::CdcDataChange) {
+                    continue;
+                }
+                if (!firstRecord) {
+                    firstRecord.emplace(record->GetOrder(), record->GetBodySize());
+                    cdcSender = ev->Recipient;
+                }
+                if (record->GetOrder() == firstRecord->Order) {
+                    ++firstRecordDeliveries;
+                } else {
+                    ++futureRecordDeliveries;
+                }
+            }
+        });
+
+        WaitForWriteCompleted(runtime, SendCdcVisibilityUpsert(runtime, shard, tableId, 1));
+        UNIT_ASSERT_VALUES_EQUAL(WaitForCdcVisibilityValues(runtime, sender, 1).front(), 1);
+        UNIT_ASSERT(firstRecord);
+        UNIT_ASSERT_VALUES_EQUAL(firstRecordDeliveries, 1);
+
+        TBlockEvents<TEvMediatorTimecast::TEvUpdate> updates(runtime);
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> granular(runtime);
+        NTxHelpers::TTransactionState snapshotReader(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+        UNIT_ASSERT_VALUES_EQUAL(snapshotReader.ReadKey(tableId, shard, 1), "1, 1\n");
+        std::optional<ui64> waitingOrder;
+        auto observeRequests = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRequestRecords>([&](auto& ev) {
+            if (ev->Sender == cdcSender && ev->GetRecipientRewrite() == shardActor) {
+                for (const auto& record : ev->Get()->Records) {
+                    if (record.Order != firstRecord->Order) {
+                        waitingOrder = record.Order;
+                    }
+                }
+            }
+        });
+        const auto writeSender = SendCdcVisibilityUpsert(runtime, shard, tableId, 2);
+        runtime.WaitFor("future CDC body request", [&] { return waitingOrder.has_value(); }, TDuration::Seconds(5));
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(
+            writeSender, TDuration::Seconds(1)));
+        UNIT_ASSERT_VALUES_EQUAL(futureRecordDeliveries, 0);
+
+        bool forgotten = false;
+        auto observeForget = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvForgetRecords>([&](auto& ev) {
+            if (ev->Sender == shardActor && Find(ev->Get()->Records, *waitingOrder) != ev->Get()->Records.end()) {
+                forgotten = true;
+            }
+        });
+        if (removeWaitingRecord) {
+            keepRecords.Stop().Unblock();
+            runtime.Send(new IEventHandle(shardActor, cdcSender,
+                new NChangeExchange::TEvChangeExchange::TEvRemoveRecords(TVector<ui64>{*waitingOrder})), 0, true);
+            runtime.WaitFor("forget removed body without waiting for visibility", [&] {
+                return forgotten;
+            }, TDuration::Seconds(5));
+        } else {
+            runtime.Send(new IEventHandle(shardActor, cdcSender,
+                new NChangeExchange::TEvChangeExchange::TEvRequestRecords(
+                    TVector<NChangeExchange::TEvChangeExchange::TEvRequestRecords::TRecordInfo>{*firstRecord})),
+                0, true);
+            runtime.WaitFor("earlier body while later CDC is waiting", [&] {
+                return firstRecordDeliveries == 2;
+            }, TDuration::Seconds(5));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(futureRecordDeliveries, 0);
+
+        updates.Stop().Unblock();
+        granular.Stop().Unblock();
+        WaitForWriteCompleted(runtime, writeSender);
+        const auto values = WaitForCdcVisibilityValues(runtime, sender, removeWaitingRecord ? 1 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 1);
+        if (!removeWaitingRecord) {
+            UNIT_ASSERT_VALUES_EQUAL(values[1], 2);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(snapshotReader.ReadKey(tableId, shard, 1), "1, 1\n");
+        keepRecords.Stop().Unblock();
+    }
+
+    Y_UNIT_TEST(CdcVisibilityWaitAllowsEarlierRequest) {
+        TestCdcVisibilityWaitQueueChanges(false);
+    }
+
+    Y_UNIT_TEST(CdcVisibilityWaitClearedAfterRecordRemoval) {
+        TestCdcVisibilityWaitQueueChanges(true);
+    }
+
+    Y_UNIT_TEST(CdcPublicationSurvivesMigrationBeforeWriteReply) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134), {}, DefaultPQConfig());
+        settings.SetUseRealThreads(false).SetDomainName("Root").SetNodeCount(2);
+        settings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(true);
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        // Keep GC from persisting the CDC read floor before migration: this
+        // test specifically exercises transfer of the in-memory replied edge.
+        for (ui32 nodeIndex = 0; nodeIndex < 2; ++nodeIndex) {
+            runtime.GetAppData(nodeIndex).DataShardConfig.SetCleanupSnapshotPeriod(TDuration::Hours(1).MilliSeconds());
+        }
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        std::optional<NKikimrHive::TEvCreateTablet> createShard;
+        auto pinShard = runtime.AddObserver<TEvHive::TEvCreateTablet>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (record.GetTabletType() == TTabletTypes::DataShard) {
+                record.ClearAllowedNodeIDs();
+                record.AddAllowedNodeIDs(runtime.GetNodeId(0));
+                createShard = record;
+            }
+        });
+        CreateShardedTable(server, sender, "/Root", "Table", SimpleTable());
+        pinShard.Remove();
+        UNIT_ASSERT(createShard);
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+        const auto tableId = ResolveTableId(server, sender, "/Root/Table");
+        const auto shard = GetTableShards(server, sender, "/Root/Table").at(0);
+        const ui64 hive = ChangeStateStorage(Hive, settings.Domain);
+        const auto sourceActor = ResolveTablet(runtime, shard);
+        UNIT_ASSERT_VALUES_EQUAL(sourceActor.NodeId(), runtime.GetNodeId(0));
+
+        WaitForWriteCompleted(runtime, SendCdcVisibilityUpsert(runtime, shard, tableId, 1));
+        UNIT_ASSERT_VALUES_EQUAL(WaitForCdcVisibilityValues(runtime, sender, 1).front(), 1);
+
+        TBlockEvents<TEvMediatorTimecast::TEvUpdate> destinationUpdates(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite().NodeId() == runtime.GetNodeId(1);
+        });
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> destinationGranular(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite().NodeId() == runtime.GetNodeId(1);
+        });
+        TBlockEvents<TEvMediatorTimecast::TEvUpdate> sourceUpdates(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite().NodeId() == runtime.GetNodeId(0);
+        });
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> sourceGranular(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite().NodeId() == runtime.GetNodeId(0);
+        });
+        NTxHelpers::TTransactionState snapshotReader(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+        UNIT_ASSERT_VALUES_EQUAL(snapshotReader.ReadKey(tableId, shard, 1), "1, 1\n");
+
+        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvRequestRecords> bodyRequests(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() == sourceActor;
+        });
+        TBlockEvents<TEvMediatorTimecast::TEvNotifyPlanStep> notifications(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() == sourceActor;
+        });
+        const auto writeSender = SendCdcVisibilityUpsert(runtime, shard, tableId, 2);
+        runtime.WaitFor("CDC body request", [&] { return !bodyRequests.empty(); }, TDuration::Seconds(5));
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(
+            writeSender, TDuration::Seconds(1)));
+        auto* source = dynamic_cast<TDataShard*>(runtime.FindActor(sourceActor));
+        UNIT_ASSERT(source);
+        const auto writeVersion = source->GetSnapshotManager().GetImmediateWriteEdge();
+        UNIT_ASSERT(source->GetSnapshotManager().GetImmediateWriteEdgeReplied() < writeVersion);
+
+        // Advance the shared timecast, but keep the DataShard notification
+        // blocked so SendImmediateWriteResult cannot acknowledge this write.
+        sourceUpdates.Stop().Unblock();
+        sourceGranular.Stop().Unblock();
+        runtime.WaitFor("timecast reaches the write version", [&] {
+            return AnyOf(notifications, [&](const auto& ev) {
+                return ev->Get()->PlanStep >= writeVersion.Step;
+            });
+        }, TDuration::Seconds(5));
+        bodyRequests.Stop().Unblock();
+        const auto values = WaitForCdcVisibilityValues(runtime, sender, 2);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[1], 2);
+        UNIT_ASSERT(source->GetSnapshotManager().GetImmediateWriteEdgeReplied() >= writeVersion);
+        UNIT_ASSERT(source->GetSnapshotManager().GetCompleteEdge().Step < writeVersion.Step);
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(
+            writeSender, TDuration::MilliSeconds(100)));
+
+        bool migrated = false;
+        auto observeMigration = runtime.AddObserver<TEvDataShard::TEvInMemoryStateRequest>([&](auto&) {
+            migrated = true;
+        });
+        // Update the existing tablet's placement constraints, preserving its
+        // owner and channel bindings, then restart it on the only allowed node.
+        auto moveShard = MakeHolder<TEvHive::TEvCreateTablet>();
+        moveShard->Record = *createShard;
+        moveShard->Record.ClearAllowedNodeIDs();
+        moveShard->Record.AddAllowedNodeIDs(runtime.GetNodeId(1));
+        const auto moveSender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(hive, moveSender, moveShard.Release());
+        auto moved = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(moveSender, TDuration::Seconds(5));
+        UNIT_ASSERT(moved);
+        UNIT_ASSERT_VALUES_EQUAL(moved->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(moved->Get()->Record.GetTabletID(), shard);
+        RebootTablet(runtime, shard, sender);
+        const auto destinationActor = ResolveTablet(runtime, shard);
+        UNIT_ASSERT_VALUES_EQUAL(destinationActor.NodeId(), runtime.GetNodeId(1));
+        runtime.WaitFor("in-memory state migration", [&] { return migrated; }, TDuration::Seconds(5));
+        auto* destination = dynamic_cast<TDataShard*>(runtime.FindActor(destinationActor));
+        UNIT_ASSERT(destination);
+        runtime.WaitFor("CDC read floor restored by migration", [&] {
+            return destination->GetSnapshotManager().GetImmediateWriteEdgeReplied() >= writeVersion;
+        }, TDuration::Seconds(5));
+
+        auto request = MakeHolder<TEvDataShard::TEvRead>();
+        request->Record.SetReadId(1);
+        request->Record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+        request->Record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+        request->Record.AddColumns(1);
+        request->Record.AddColumns(2);
+        request->Record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+        request->Keys.emplace_back(TVector<TCell>{TCell::Make(ui32(1))});
+        // Inject a local request on node 1. A remote sender would require the
+        // interconnect session normally attached when crossing the network.
+        const auto readSender = runtime.AllocateEdgeActor(1);
+        runtime.Send(new IEventHandle(destinationActor, readSender, request.Release()), 1, true);
+        auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender, TDuration::Seconds(5));
+        UNIT_ASSERT_C(result, "HEAD read must finish despite the destination timecast lag");
+        UNIT_ASSERT_C(destination->GetMaxObservedStep() < writeVersion.Step,
+            "The test must preserve the destination timecast lag");
+        UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(result->Get()), "1, 2\n");
+        destinationUpdates.Stop().Unblock();
+        destinationGranular.Stop().Unblock();
+    }
+
+    static void TestCdcVisibilityHandoff(bool reboot, bool split, bool migrateState = true) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134), {}, DefaultPQConfig());
+        settings.SetUseRealThreads(false).SetDomainName("Root").SetNodeCount(2);
+        settings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(migrateState);
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        ui32 tabletNode = runtime.GetNodeId(0);
+        auto pinTablets = runtime.AddObserver<TEvHive::TEvCreateTablet>([&](auto& ev) {
+            ev->Get()->Record.ClearAllowedNodeIDs();
+            ev->Get()->Record.AddAllowedNodeIDs(tabletNode);
+        });
+        CreateShardedTable(server, sender, "/Root", "Table", SimpleTable().Indexes({
+            {"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+        }));
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+        const auto tableId = ResolveTableId(server, sender, "/Root/Table");
+        const auto shard = GetTableShards(server, sender, "/Root/Table").at(0);
+
+        WaitForWriteCompleted(runtime, SendCdcVisibilityUpsert(runtime, shard, tableId, 1));
+        UNIT_ASSERT_VALUES_EQUAL(WaitForCdcVisibilityValues(runtime, sender, 1).front(), 1);
+
+        NTxHelpers::TTransactionState snapshotReader(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+        TBlockEvents<TEvMediatorTimecast::TEvUpdate> sourceUpdates(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite().NodeId() == runtime.GetNodeId(0);
+        });
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> sourceGranular(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite().NodeId() == runtime.GetNodeId(0);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(snapshotReader.ReadKey(tableId, shard, 1), "1, 1\n");
+
+        ui32 requestTransactions = 0;
+        auto observeRequestTransactions = runtime.AddObserver<IEventHandle>([&](auto& ev) {
+            if (ev->GetTypeName().Contains("TEvRequestChangeRecords")) {
+                ++requestTransactions;
+            }
+        });
+        const auto write2 = SendCdcVisibilityUpsert(runtime, shard, tableId, 2);
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(write2, TDuration::Seconds(1)));
+        const auto write3 = SendCdcVisibilityUpsert(runtime, shard, tableId, 3);
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(write3, TDuration::Seconds(1)));
+
+        // A parked CDC body must not stall the independent async-index sender.
+        const TString indexPath = "/Root/Table/by_value/indexImplTable";
+        TString indexContent;
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
+            indexContent = StripString(ReadShardedTable(server, indexPath));
+            if (indexContent == "value = 3, key = 1") {
+                break;
+            }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(indexContent, "value = 3, key = 1", indexPath);
+        UNIT_ASSERT_VALUES_EQUAL(ReadCdcVisibilityValues(runtime, sender).size(), 1);
+        const ui32 requestsBefore = requestTransactions;
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL_C(requestTransactions, requestsBefore,
+            "Waiting for CDC visibility must not busy-loop change-record requests");
+
+        if (reboot) {
+            RebootTablet(runtime, shard, sender);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(ReadCdcVisibilityValues(runtime, sender).size(), 1);
+        }
+
+        THolder<TBlockEvents<TEvMediatorTimecast::TEvUpdate>> destinationUpdates;
+        THolder<TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate>> destinationGranular;
+        ui64 splitTxId = 0;
+        if (split) {
+            tabletNode = runtime.GetNodeId(1);
+            destinationUpdates = MakeHolder<TBlockEvents<TEvMediatorTimecast::TEvUpdate>>(runtime,
+                [&](const auto& ev) { return ev->GetRecipientRewrite().NodeId() == tabletNode; });
+            destinationGranular = MakeHolder<TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate>>(runtime,
+                [&](const auto& ev) { return ev->GetRecipientRewrite().NodeId() == tabletNode; });
+            SetSplitMergePartCountLimit(&runtime, -1);
+            splitTxId = AsyncSplitTable(server, sender, "/Root/Table", shard, 10);
+        }
+
+        sourceUpdates.Stop().Unblock();
+        sourceGranular.Stop().Unblock();
+        if (!reboot) {
+            WaitForWriteCompleted(runtime, write2);
+            WaitForWriteCompleted(runtime, write3);
+        }
+        const auto values = WaitForCdcVisibilityValues(runtime, sender, 3);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[1], 2);
+        UNIT_ASSERT_VALUES_EQUAL(values[2], 3);
+
+        if (split) {
+            WaitTxNotification(server, sender, splitTxId);
+            const auto destination = GetTableShards(server, sender, "/Root/Table").at(0);
+            auto request = MakeHolder<TEvDataShard::TEvRead>();
+            request->Record.SetReadId(1);
+            request->Record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+            request->Record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+            request->Record.AddColumns(1);
+            request->Record.AddColumns(2);
+            request->Record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            request->Keys.emplace_back(TVector<TCell>{TCell::Make(ui32(1))});
+            const auto readSender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, destination, readSender, request.Release());
+            auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender, TDuration::Seconds(1));
+            if (result) {
+                UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(result->Get()), "1, 3\n");
+            }
+            destinationUpdates->Stop().Unblock();
+            destinationGranular->Stop().Unblock();
+            if (!result) {
+                result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+                UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(result->Get()), "1, 3\n");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(CdcVisibilityWaitDoesNotBlockAsyncIndex) {
+        TestCdcVisibilityHandoff(false, false);
+    }
+
+    Y_UNIT_TEST_TWIN(CdcVisibilityWaitSurvivesRestart, MigrateState) {
+        TestCdcVisibilityHandoff(true, false, MigrateState);
+    }
+
+    Y_UNIT_TEST(CdcVisibilityWaitSurvivesSplit) {
+        TestCdcVisibilityHandoff(false, true);
+    }
+
     void AssertColumn(const NJson::TJsonValue& table, const TString& name,
             const TString& type, const TString& family)
     {
@@ -3343,6 +4037,358 @@ Y_UNIT_TEST_SUITE(Cdc) {
         InitialScanTest(true);
     }
 
+    void IndexStream(NKikimrSchemeOp::EIndexType type, bool initialScan) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        InitRoot(server, edgeActor);
+
+        const auto table = WithExtraColumn().Indexes({
+            {"by_value", {"value"}, {"extra"}, type},
+        });
+        CreateShardedTable(server, edgeActor, "/Root", "Table", table);
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value, extra) VALUES
+                (1, 10, 100), (2, 20, 200);
+        )");
+
+        auto stream = Updates(NKikimrSchemeOp::ECdcStreamFormatJson);
+        if (initialScan) {
+            stream = WithInitialScan(stream);
+        }
+
+        ui64 readyTxId = 0;
+        auto observeReady = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.HasAlterCdcStream() && tx.GetAlterCdcStream().HasGetReady()) {
+                    readyTxId = ev->Get()->Record.GetTxId();
+                }
+            }
+        });
+
+        const auto txId = AsyncAlterAddStream(server, "/Root/Table/by_value", "indexImplTable", stream);
+        WaitTxNotification(server, edgeActor, txId);
+
+        const TString streamPath = "/Root/Table/by_value/indexImplTable/Stream";
+        TVector<TString> expected;
+        if (initialScan) {
+            expected = {
+                R"({"update":{"extra":100},"key":[10,1]})",
+                R"({"update":{"extra":200},"key":[20,2]})",
+            };
+            WaitForContent(server, edgeActor, streamPath, expected);
+            WaitFor(runtime, [&] { return readyTxId != 0; }, "automatic index scan completion");
+            WaitTxNotification(server, edgeActor, readyTxId);
+        }
+
+        const auto schemeShard = ResolveTableId(server, edgeActor, "/Root/Table").PathId.OwnerId;
+        TestDescribeResult(DescribePrivatePath(runtime, schemeShard, streamPath), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        ExecSQL(server, edgeActor, "UPDATE `/Root/Table` SET extra = 101 WHERE key = 1;");
+        ExecSQL(server, edgeActor, "UPDATE `/Root/Table` SET value = 100 WHERE key = 1;");
+        ExecSQL(server, edgeActor, "DELETE FROM `/Root/Table` WHERE key = 2;");
+        ExecSQL(server, edgeActor, "INSERT INTO `/Root/Table` (key, value, extra) VALUES (3, 30, 300);");
+
+        // Ordinary CDC emits only changes after stream creation; the scan adds
+        // the two snapshot records before these same updates and erases.
+        // Updating a covered column replaces the index row with an erase/upsert.
+        expected.insert(expected.end(), {
+            R"({"erase":{},"key":[10,1]})",
+            R"({"update":{"extra":101},"key":[10,1]})",
+            R"({"erase":{},"key":[10,1]})",
+            R"({"update":{"extra":101},"key":[100,1]})",
+            R"({"erase":{},"key":[20,2]})",
+            R"({"update":{"extra":300},"key":[30,3]})",
+        });
+        WaitForContent(server, edgeActor, streamPath, expected);
+    }
+
+    Y_UNIT_TEST_TWIN(GlobalIndexStream, InitialScan) {
+        IndexStream(NKikimrSchemeOp::EIndexTypeGlobal, InitialScan);
+    }
+
+    Y_UNIT_TEST_TWIN(UniqueIndexStream, InitialScan) {
+        IndexStream(NKikimrSchemeOp::EIndexTypeGlobalUnique, InitialScan);
+    }
+
+    void InitialScanTopicSplitRecovery(bool topicAutoPartitioning, bool rebootPq, bool pauseAutoPartitioning = false, bool delayedPrepared = false) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10), (2, 20), (3, 30);
+        )");
+
+        std::vector<std::unique_ptr<IEventHandle>> scans;
+        auto blockScans = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>([&](auto& ev) {
+            scans.emplace_back(ev.Release());
+        });
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithTopicAutoPartitioning(topicAutoPartitioning,
+                WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson)))));
+        WaitFor(runtime, [&]{ return !scans.empty(); }, "initial scan request");
+        const auto schemeShard = scans.front()->Get<TEvDataShard::TEvCdcStreamScanRequest>()
+            ->Record.GetTablePathId().GetOwnerId();
+
+        if (pauseAutoPartitioning) {
+            constexpr ui64 pauseTxId = 99999;
+            AsyncSend(runtime, schemeShard, InternalTransaction(AlterPQGroupRequest(pauseTxId, "/Root/Table/Stream", R"(
+                Name: "streamImpl"
+                PQTabletConfig {
+                    PartitionConfig {}
+                    PartitionStrategy { PartitionStrategyType: PAUSED }
+                }
+            )")));
+            TestModificationResults(runtime, pauseTxId, {NKikimrScheme::StatusAccepted});
+            WaitTxNotification(server, edgeActor, pauseTxId);
+        }
+
+        auto checkDisabledScaling = [&] {
+            const auto topic = GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream");
+            auto request = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>(0, NKikimrPQ::EScaleStatus::NEED_SPLIT);
+            request->Record.SetSplitBoundary("a");
+            runtime.SendToPipe(topic.GetBalancerTabletID(), edgeActor, request.Release(), 0, GetPipeConfigWithRetries());
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream").PartitionsSize(), 1);
+        };
+        if (!topicAutoPartitioning) {
+            checkDisabledScaling();
+        }
+
+        constexpr ui64 splitTxId = 100000;
+        THashSet<ui64> preparedTablets;
+        ui64 minStep = 0;
+        TActorId schemeShardActor;
+        std::unique_ptr<IEventHandle> duplicatePrepared;
+        auto observePrepared = runtime.AddObserver<TEvPersQueue::TEvProposeTransactionResult>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTxId() == splitTxId && record.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::PREPARED) {
+                preparedTablets.insert(record.GetOrigin());
+                minStep = Max(minStep, record.GetMinStep());
+                schemeShardActor = ev->Recipient;
+                if (delayedPrepared && !duplicatePrepared) {
+                    auto duplicate = MakeHolder<TEvPersQueue::TEvProposeTransactionResult>();
+                    duplicate->Record.CopyFrom(record);
+                    duplicatePrepared = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender, duplicate.Release());
+                }
+            }
+        });
+        std::vector<std::unique_ptr<IEventHandle>> plans;
+        TActorId initialProposer;
+        auto blockPlans = runtime.AddObserver<TEvTxProxy::TEvProposeTransaction>([&](auto& ev) {
+            if (ev->Get()->Record.GetTransaction().GetTxId() == splitTxId) {
+                if (!initialProposer) {
+                    initialProposer = ev->Sender;
+                }
+                plans.emplace_back(ev.Release());
+            }
+        });
+
+        std::unique_ptr<IEventHandle> proposeProgress;
+        bool heldProposeProgress = false;
+        auto delayProgress = runtime.AddObserver<NSchemeShard::TEvPrivate::TEvProgressOperation>([&](auto& ev) {
+            if (delayedPrepared && !heldProposeProgress && schemeShardActor
+                    && ev->Recipient == schemeShardActor && ev->Get()->TxId == splitTxId) {
+                heldProposeProgress = true;
+                proposeProgress.reset(ev.Release());
+            }
+        });
+        bool splitCompleted = false;
+        auto observeCompletion = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>([&](auto& ev) {
+            if (ev->Get()->Record.GetTxId() == splitTxId) {
+                splitCompleted = true;
+            }
+        });
+
+        AsyncSend(runtime, schemeShard, InternalTransaction(AlterPQGroupRequest(splitTxId, "/Root/Table/Stream", R"(
+            Name: "streamImpl"
+            Split {
+                Partition: 0
+                SplitBoundary: 'a'
+            }
+        )")));
+        TestModificationResults(runtime, splitTxId, {topicAutoPartitioning
+            ? NKikimrScheme::StatusAccepted : NKikimrScheme::StatusInvalidParameter});
+
+        if (delayedPrepared) {
+            WaitFor(runtime, [&]{ return bool(proposeProgress); }, "Propose state before its first progress event");
+            UNIT_ASSERT(duplicatePrepared);
+            UNIT_ASSERT(plans.empty());
+            const auto notifyEdge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(schemeShard, notifyEdge,
+                new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(splitTxId), 0, GetPipeConfigWithRetries());
+            runtime.Send(duplicatePrepared.release(), 0, true);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_C(!splitCompleted, "Split completed after a duplicate PREPARED, before any coordinator proposal");
+            UNIT_ASSERT(plans.empty());
+            delayProgress.Remove();
+            runtime.Send(proposeProgress.release(), 0, true);
+        }
+        delayProgress.Remove();
+
+        if (topicAutoPartitioning) {
+            WaitFor(runtime, [&]{ return !plans.empty(); }, "split waiting for coordinator");
+            UNIT_ASSERT_C(!preparedTablets.empty(), "The split must prepare real PQ config transactions");
+            UNIT_ASSERT_C(minStep > 0, "Prepared PQ participants must constrain the plan step");
+        } else {
+            UNIT_ASSERT(preparedTablets.empty());
+            UNIT_ASSERT(plans.empty());
+            UNIT_ASSERT_VALUES_EQUAL(GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream").PartitionsSize(), 1);
+        }
+
+        ui32 enqueued = 0;
+        auto observeEnqueued = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>([&](auto&) {
+            ++enqueued;
+        });
+        blockScans.Remove();
+        for (auto& ev : scans) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        WaitFor(runtime, [&]{ return enqueued > 0; }, "scan produces CDC records");
+
+        // Lose the outgoing proposal and recover from persisted SchemeShard state.
+        plans.clear();
+        if (rebootPq) {
+            const auto participants = preparedTablets;
+            for (ui64 tablet : participants) {
+                RebootTablet(runtime, tablet, edgeActor);
+            }
+        }
+        RebootTablet(runtime, schemeShard, edgeActor);
+        IEventHandle* recoveredPlan = nullptr;
+        if (topicAutoPartitioning) {
+            WaitFor(runtime, [&] {
+                for (const auto& plan : plans) {
+                    if (plan->Sender != initialProposer) {
+                        recoveredPlan = plan.get();
+                        return true;
+                    }
+                }
+                return false;
+            }, "split proposal from the recovered SchemeShard actor");
+            const auto& proposal = recoveredPlan->Get<TEvTxProxy::TEvProposeTransaction>()->Record.GetTransaction();
+            UNIT_ASSERT_C(proposal.GetMinStep() >= minStep, "Recovery must preserve the prepared minimum step");
+            THashSet<ui64> affected;
+            for (const auto& entry : proposal.GetAffectedSet()) {
+                affected.insert(entry.GetTabletId());
+            }
+            UNIT_ASSERT(affected.contains(schemeShard));
+            for (ui64 tablet : preparedTablets) {
+                UNIT_ASSERT_C(affected.contains(tablet), "A prepared PQ tablet was omitted from the recovered plan");
+            }
+        }
+        blockPlans.Remove();
+        for (auto& ev : plans) {
+            // An old actor's delayed proposal must not rescue a broken recovery path.
+            if (ev->Sender != initialProposer) {
+                runtime.Send(ev.release(), 0, true);
+            }
+        }
+        if (topicAutoPartitioning) {
+            WaitTxNotification(server, edgeActor, splitTxId);
+        }
+
+        // CDC preserves key order, but records from different topic partitions may interleave.
+        auto waitForRecords = [&](const TVector<TString>& expected) {
+            for (ui32 attempt = 0; attempt < 100; ++attempt) {
+                TVector<TString> actual;
+                const auto topic = GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream");
+                for (const auto& partition : topic.GetPartitions()) {
+                    for (const auto& record : GetRecords(runtime, edgeActor, "/Root/Table/Stream", partition.GetPartitionId())) {
+                        actual.push_back(record.second);
+                    }
+                }
+                UNIT_ASSERT_C(actual.size() <= expected.size(), "Unexpected or duplicated CDC records");
+                TVector<bool> matched(expected.size(), false);
+                for (const auto& record : actual) {
+                    bool found = false;
+                    for (size_t i = 0; i < expected.size(); ++i) {
+                        if (!matched[i] && AreJsonsEqual(record, expected[i])) {
+                            matched[i] = found = true;
+                            break;
+                        }
+                    }
+                    UNIT_ASSERT_C(found, "Unexpected CDC record: " << record);
+                }
+                if (actual.size() == expected.size()) {
+                    return;
+                }
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_FAIL("CDC records did not arrive across the recovered topic partitions");
+        };
+        waitForRecords({
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+        });
+        // CDC hashes the JSON key, then the topic chooser hashes that partition key.
+        // These updates route to opposite children of the 'a' boundary.
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, 11), (8, 80);
+        )");
+        waitForRecords({
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"update":{"value":11},"key":[1]})",
+            R"({"update":{"value":80},"key":[8]})",
+        });
+        UNIT_ASSERT_VALUES_EQUAL(GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream").PartitionsSize(),
+            topicAutoPartitioning ? 3 : 1);
+        if (topicAutoPartitioning) {
+            UNIT_ASSERT_C(!GetRecords(runtime, edgeActor, "/Root/Table/Stream", 1).empty(), "Left child must serve CDC records");
+            UNIT_ASSERT_C(!GetRecords(runtime, edgeActor, "/Root/Table/Stream", 2).empty(), "Right child must serve CDC records");
+        }
+        if (!topicAutoPartitioning) {
+            checkDisabledScaling();
+        }
+        for (ui32 attempt = 0; attempt < 100; ++attempt) {
+            const auto describe = DescribePrivatePath(runtime, schemeShard, "/Root/Table/Stream");
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), NKikimrScheme::StatusSuccess);
+            UNIT_ASSERT(describe.GetPathDescription().HasCdcStreamDescription());
+            if (describe.GetPathDescription().GetCdcStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateReady) {
+                return;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Initial scan did not complete after recovery");
+    }
+
+    Y_UNIT_TEST(InitialScanTopicSplitAfterSchemeShardRecovery) {
+        InitialScanTopicSplitRecovery(true, false);
+    }
+
+    Y_UNIT_TEST(InitialScanTopicSplitAfterParticipantRecovery) {
+        InitialScanTopicSplitRecovery(true, true);
+    }
+
+    Y_UNIT_TEST(InitialScanTopicSplitDisabledAfterRecovery) {
+        InitialScanTopicSplitRecovery(false, false);
+    }
+
+    Y_UNIT_TEST(InitialScanTopicSplitPausedAfterRecovery) {
+        InitialScanTopicSplitRecovery(true, true, true);
+    }
+
+    Y_UNIT_TEST(InitialScanTopicSplitDelayedPreparedBeforePropose) {
+        InitialScanTopicSplitRecovery(true, false, false, true);
+    }
+
     Y_UNIT_TEST(InitialScanDebezium) {
         TTestTopicEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson, "UnusedStream"));
         auto& client = env.GetClient();
@@ -3440,6 +4486,200 @@ Y_UNIT_TEST_SUITE(Cdc) {
         WaitFor(runtime, [&]{ return done; }, "done");
     }
 
+    void InitialScanRetry(bool queued) {
+        using TEvResourceBroker = NResourceBroker::TEvResourceBroker;
+
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10), (2, 20);");
+        const auto shard = GetTableShards(server, edgeActor, "/Root/Table").at(0);
+        const auto schemeShard = ResolveTableId(server, edgeActor, "/Root/Table").PathId.OwnerId;
+
+        ui64 scanTaskId = 0;
+        TActorId scanExecutor;
+        auto observeTask = runtime.AddObserver<TEvResourceBroker::TEvSubmitTask>([&](auto& ev) {
+            if (ev->Get()->Task.Type == runtime.GetAppData().DataShardConfig.GetCdcInitialScanTaskName()) {
+                scanTaskId = ev->Get()->Task.TaskId;
+                scanExecutor = ev->Sender;
+            }
+        });
+        THolder<IEventHandle> blockedStart;
+        auto blockStart = runtime.AddObserver<TEvResourceBroker::TEvResourceAllocated>([&](auto& ev) {
+            if (queued && scanTaskId && ev->Get()->TaskId == scanTaskId && ev->GetRecipientRewrite() == scanExecutor) {
+                blockedStart.Reset(ev.Release());
+            }
+        });
+        TBlockEvents<NTabletFlatExecutor::NOps::TEvResult> blockFinish(runtime, [&](auto& ev) {
+            // Client scan serials are even; system scans (e.g. compactions) are odd.
+            return !queued && !(ev->Get()->Serial & 1) && ev->GetRecipientRewrite() == scanExecutor;
+        });
+        // The obsolete SchemeShard must not finalize the stream before its restart.
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanResponse> blockDone(runtime, [&](auto& ev) {
+            return ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE;
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        runtime.WaitFor("paused initial scan", [&] {
+            return queued ? bool(blockedStart) : !blockFinish.empty();
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, schemeShard, "/Root/Table/Stream"), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateScan),
+            NLs::StreamInitialScanProgress(1, 0),
+        });
+
+        bool retrySeen = false;
+        TActorId requester;
+        auto observeRetry = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>([&](auto& ev) {
+            retrySeen = true;
+            requester = ev->Sender;
+        });
+        RebootTablet(runtime, schemeShard, edgeActor);
+        runtime.WaitFor("initial scan retry after SchemeShard restart", [&] { return retrySeen; });
+        // A request handled while queued or after scanner exit must update the subscriber.
+        // The counter request is a mailbox barrier before releasing the held scan event.
+        GetAppCounters(runtime, shard);
+        observeRetry.Remove();
+
+        ui64 readyTxId = 0;
+        auto observeReady = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.HasAlterCdcStream() && tx.GetAlterCdcStream().HasGetReady()) {
+                    readyTxId = ev->Get()->Record.GetTxId();
+                }
+            }
+        });
+        bool done = false;
+        auto observeDone = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanResponse>([&](auto& ev) {
+            if (ev->Recipient == requester &&
+                ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE)
+            {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStats().GetRowsProcessed(), 2);
+                UNIT_ASSERT(ev->Get()->Record.GetStats().GetBytesProcessed() > 0);
+                done = true;
+            }
+        });
+        blockDone.Stop(); // discard any response addressed to the old SchemeShard
+        blockStart.Remove();
+        if (blockedStart) {
+            runtime.Send(blockedStart.Release(), 0, true);
+        }
+        blockFinish.Stop().Unblock();
+        runtime.WaitFor("completion addressed to restarted SchemeShard", [&] { return done; }, TDuration::Seconds(10));
+
+        runtime.WaitFor("initial scan finalization", [&] { return readyTxId; }, TDuration::Seconds(10));
+        WaitTxNotification(server, edgeActor, readyTxId);
+        TestDescribeResult(DescribePrivatePath(runtime, schemeShard, "/Root/Table/Stream"), {
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+        });
+    }
+
+    Y_UNIT_TEST(InitialScanRetryWhileQueued) {
+        InitialScanRetry(true);
+    }
+
+    Y_UNIT_TEST(InitialScanRetryAfterScannerExit) {
+        InitialScanRetry(false);
+    }
+
+    // https://github.com/ydb-platform/ydb/issues/18806
+    // A storage error inside the initial scan must not be reported as a completed scan.
+    Y_UNIT_TEST(InitialScanStorageError) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        // move rows out of the memtable, so the scan has to load pages
+        const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
+        CompactTable(runtime, shards.at(0), ResolveTableId(server, edgeActor, "/Root/Table"), false);
+
+        bool scanStarted = false;
+        ui32 failedLoads = 0;
+        TVector<NKikimrTxDataShard::TEvCdcStreamScanResponse::EStatus> responses;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCdcStreamScanRequest:
+                scanStarted = true;
+                break;
+            case TEvDataShard::EvCdcStreamScanResponse:
+                responses.push_back(ev->Get<TEvDataShard::TEvCdcStreamScanResponse>()->Record.GetStatus());
+                break;
+            case NSharedCache::TEvResult::EventType:
+                // fail the first page load of the scan (e.g. NODATA from a degraded group)
+                if (scanStarted && !failedLoads && runtime.FindActorName(ev->GetRecipientRewrite()) == "TABLET_OPS_HOST_A") {
+                    auto* msg = ev->Get<NSharedCache::TEvResult>();
+                    ev = new IEventHandle(ev->Recipient, ev->Sender,
+                        new NSharedCache::TEvResult(msg->PageCollection, NKikimrProto::NODATA, msg->Cookie),
+                        0, ev->Cookie);
+                    ++failedLoads;
+                }
+                break;
+            }
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        WaitFor(runtime, [&]{
+            return failedLoads && Find(responses, NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED) != responses.end();
+        }, "aborted scan");
+        observer.Remove();
+
+        // a marker row written after the changefeed is ready
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (4, 40);");
+
+        // the resumed scan and the marker can be written in any order
+        TVector<TString> records;
+        for (int i = 0; i < 60; ++i) {
+            records.clear();
+            for (const auto& [_, data] : GetRecords(runtime, edgeActor, "/Root/Table/Stream", 0)) {
+                records.push_back(data);
+            }
+            if (records.size() >= 4) {
+                break;
+            }
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), 4, "initial scan rows lost: " << JoinSeq(" ", records));
+        for (const auto* key : {"[1]", "[2]", "[3]", "[4]"}) {
+            UNIT_ASSERT_C(AnyOf(records, [&](const auto& r) { return r.Contains(key); }),
+                "missing key " << key << ": " << JoinSeq(" ", records));
+        }
+    }
+
     Y_UNIT_TEST(InitialScanUpdatedRows) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
@@ -3514,6 +4754,975 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"erase":{},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
         });
+    }
+
+    class TConcurrentScanQueries {
+    public:
+        explicit TConcurrentScanQueries(TServer::TPtr server)
+            : Runtime(*server->GetRuntime())
+            , Session(CreateSessionRPC(Runtime, "/Root"))
+            , QueryEdge(Runtime.AllocateEdgeActor())
+        {
+            const TVector<TString> views = {"", " VIEW by_value", " VIEW by_other", " VIEW by_both"};
+            for (const auto& view : views) {
+                const TString sql = "SELECT key, value, other FROM `/Root/Table`" + view + " ORDER BY key;";
+                auto query = PrepareQuery(sql);
+                Reads.push_back(std::move(query));
+            }
+
+            for (const auto operation : WriteOrder) {
+                const auto sql = WriteSql(operation);
+                auto query = PrepareQuery(sql);
+                Writes.push_back({operation, std::move(query)});
+            }
+        }
+
+        void CheckReads() {
+            for (auto& query : Reads) {
+                for (const bool cached : {true, false}) {
+                    const auto result = Execute(query, cached);
+                    CheckResult(result);
+                }
+            }
+        }
+
+        void CheckWritesAndReads() {
+            const bool cached = ++WriteRound % 2;
+
+            for (auto& write : Writes) {
+                Execute(write.Query, cached);
+                ApplyExpectedWrite(write.Operation);
+                CheckReads();
+            }
+        }
+
+    private:
+        enum class EWrite {
+            Insert,
+            Upsert,
+            ChangeIndexedKeys,
+            DeleteOriginalRow,
+            DeleteInsertedRow,
+        };
+
+        static constexpr std::array<EWrite, 5> WriteOrder = {
+            EWrite::Insert,
+            EWrite::Upsert,
+            EWrite::ChangeIndexedKeys,
+            EWrite::DeleteOriginalRow,
+            EWrite::DeleteInsertedRow,
+        };
+
+        struct TQuery {
+            TString Sql;
+            TString PreparedId;
+        };
+
+        struct TWriteQuery {
+            EWrite Operation;
+            TQuery Query;
+        };
+
+        struct TRow {
+            ui32 Value;
+            ui32 Other;
+        };
+
+        static TString WriteSql(EWrite operation) {
+            switch (operation) {
+            case EWrite::Insert:
+                return "INSERT INTO `/Root/Table` (key, value, other) VALUES (4, 40, 400);";
+            case EWrite::Upsert:
+                return "UPSERT INTO `/Root/Table` (key, value, other) VALUES (1, 100, 1000);";
+            case EWrite::ChangeIndexedKeys:
+                return "UPDATE `/Root/Table` SET value = value + 1u, other = other + 1u WHERE key = 3;";
+            case EWrite::DeleteOriginalRow:
+                return "DELETE FROM `/Root/Table` WHERE key = 2;";
+            case EWrite::DeleteInsertedRow:
+                return "DELETE FROM `/Root/Table` WHERE key = 4;";
+            }
+
+            Y_ABORT("Unexpected write operation");
+        }
+
+        void ApplyExpectedWrite(EWrite operation) {
+            switch (operation) {
+            case EWrite::Insert:
+                Expected[4] = {40, 400};
+                break;
+            case EWrite::Upsert:
+                Expected[1] = {100, 1000};
+                break;
+            case EWrite::ChangeIndexedKeys:
+                ++Expected[3].Value;
+                ++Expected[3].Other;
+                break;
+            case EWrite::DeleteOriginalRow:
+                Expected.erase(2);
+                break;
+            case EWrite::DeleteInsertedRow:
+                Expected.erase(4);
+                break;
+            }
+        }
+
+        TQuery PrepareQuery(const TString& sql) {
+            auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+            auto& query = *request->Record.MutableRequest();
+            query.SetSessionId(Session);
+            query.SetDatabase("/Root");
+            query.SetAction(NKikimrKqp::QUERY_ACTION_PREPARE);
+            query.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            query.SetQuery(sql);
+
+            const auto response = ExecRequest(Runtime, QueryEdge, std::move(request));
+            const auto& record = response->Get()->Record;
+            const auto status = record.GetYdbStatus();
+            UNIT_ASSERT_VALUES_EQUAL_C(status, Ydb::StatusIds::SUCCESS, record);
+
+            const auto& id = record.GetResponse().GetPreparedQuery();
+            UNIT_ASSERT(!id.empty());
+
+            const TString preparedId = NOperationId::FormatPreparedQueryIdCompat(id);
+            return {sql, preparedId};
+        }
+
+        Ydb::Table::ExecuteDataQueryResponse Submit(const TString& sql, const TString& preparedId) {
+            auto request = MakeSimpleRequestRPC(sql, Session, {}, true);
+            if (!preparedId.empty()) {
+                request.mutable_query()->set_id(preparedId);
+            }
+
+            auto future = SendRequest(Runtime, std::move(request), "/Root");
+            return AwaitResponse(Runtime, std::move(future));
+        }
+
+        Ydb::Table::ExecuteQueryResult Execute(TQuery& query, bool cached) {
+            TString sql = query.Sql;
+            TString preparedId;
+            if (cached) {
+                preparedId = query.PreparedId;
+            } else {
+                sql += TStringBuilder() << " -- fresh compilation " << ++QueryRound;
+            }
+
+            auto response = Submit(sql, preparedId);
+            const bool staleId = response.operation().status() == Ydb::StatusIds::NOT_FOUND;
+            if (cached && staleId) {
+                // Reprepare invalidated ids once, as an ordinary client does.
+                query = PrepareQuery(query.Sql);
+                response = Submit(query.Sql, query.PreparedId);
+            }
+
+            const auto status = response.operation().status();
+            const TString message = TStringBuilder() << sql << ": " << response.operation().issues();
+            UNIT_ASSERT_VALUES_EQUAL_C(status, Ydb::StatusIds::SUCCESS, message);
+
+            Ydb::Table::ExecuteQueryResult result;
+            UNIT_ASSERT(response.operation().result().UnpackTo(&result));
+
+            return result;
+        }
+
+        void CheckResult(const Ydb::Table::ExecuteQueryResult& result) const {
+            UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1);
+
+            const auto& rows = result.result_sets(0).rows();
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), Expected.size());
+
+            size_t rowIndex = 0;
+            for (const auto& [key, expected] : Expected) {
+                const auto& actual = rows[rowIndex++];
+                UNIT_ASSERT_VALUES_EQUAL(actual.items(0).uint32_value(), key);
+                UNIT_ASSERT_VALUES_EQUAL(actual.items(1).uint32_value(), expected.Value);
+                UNIT_ASSERT_VALUES_EQUAL(actual.items(2).uint32_value(), expected.Other);
+            }
+        }
+
+        TTestActorRuntime& Runtime;
+        const TString Session;
+        const TActorId QueryEdge;
+        TVector<TQuery> Reads;
+        TVector<TWriteQuery> Writes;
+        TMap<ui32, TRow> Expected = {
+            {1, {10, 100}},
+            {2, {20, 200}},
+            {3, {30, 300}},
+            {9, {90, 900}},
+        };
+        ui32 QueryRound = 0;
+        ui32 WriteRound = 0;
+    };
+
+    class TConcurrentCdcScans {
+    public:
+        enum class EScan {
+            Base,
+            ByValue,
+            ByOther,
+            ByBoth,
+        };
+
+        TConcurrentCdcScans()
+            : Server(CreateServer(PortManager))
+            , Runtime(*Server->GetRuntime())
+            , Edge(Runtime.AllocateEdgeActor())
+        {
+            InitRoot(Server, Edge);
+            CreateTable();
+            ResolveScans();
+            ObserveScans();
+        }
+
+        TServer::TPtr GetServer() const {
+            return Server;
+        }
+
+        void StartAll(bool indexesFirst) {
+            const std::array<EScan, 4> indexesFirstOrder = {
+                EScan::ByValue,
+                EScan::ByOther,
+                EScan::ByBoth,
+                EScan::Base,
+            };
+            const auto& order = indexesFirst ? indexesFirstOrder : AllScans;
+
+            for (const auto which : order) {
+                Start(which);
+            }
+        }
+
+        void RunAllToFirstBatch() {
+            for (auto& scan : Scans) {
+                ReleaseRequests(scan);
+            }
+
+            for (auto& scan : Scans) {
+                WaitPartialProgress(scan);
+            }
+        }
+
+        void RecreatePaused(EScan which) {
+            Start(which);
+
+            auto& scan = GetScan(which);
+            ReleaseRequests(scan);
+            WaitPartialProgress(scan);
+            AssertAllScanning();
+        }
+
+        void RebootSchemeShard() {
+            RebootTablet(Runtime, SchemeShard(), Edge);
+        }
+
+        void RebootDataShards() {
+            for (auto& scan : Scans) {
+                const auto rowsBeforeReboot = scan.RowsProcessed;
+                scan.Continuation.Reset();
+
+                RebootTablet(Runtime, scan.Shard, Edge);
+                WaitPartialProgress(scan);
+
+                UNIT_ASSERT_GT(scan.RowsProcessed, rowsBeforeReboot);
+            }
+        }
+
+        void Drop(EScan which) {
+            auto& scan = GetScan(which);
+            const auto [parent, name] = ParentAndName(scan);
+            const auto txId = AsyncAlterDropStream(Server, parent, name, "Stream");
+            WaitTxNotification(Server, Edge, txId);
+
+            scan.HoldRequests = false;
+            scan.Requests.clear();
+            scan.Continuation.Reset();
+
+            const auto description = Describe(scan);
+            TestDescribeResult(description, {NLs::PathNotExist});
+        }
+
+        void AssertScanning(std::initializer_list<EScan> scans) {
+            for (const auto which : scans) {
+                const auto& scan = GetScan(which);
+                AssertScanning(scan);
+            }
+        }
+
+        void AssertAllScanning() {
+            for (auto& scan : Scans) {
+                AssertScanning(scan);
+            }
+        }
+
+        void Finish(EScan which) {
+            auto& scan = GetScan(which);
+            scan.PauseProgress = false;
+            Runtime.Send(scan.Continuation.Release(), 0, true);
+
+            const auto hasDoneResponse = [&] { return scan.Done; };
+            WaitFor(Runtime, hasDoneResponse, "scan DONE response");
+
+            const auto isReady = [&] {
+                const auto description = Describe(scan);
+                const auto state = description.GetPathDescription().GetCdcStreamDescription().GetState();
+                return state == NKikimrSchemeOp::ECdcStreamStateReady;
+            };
+            WaitFor(Runtime, isReady, "independent GetReady");
+
+            CheckRecords(which);
+        }
+
+    private:
+        static constexpr std::array<EScan, 4> AllScans = {
+            EScan::Base,
+            EScan::ByValue,
+            EScan::ByOther,
+            EScan::ByBoth,
+        };
+
+        struct TScan {
+            explicit TScan(const TString& path)
+                : Path(path)
+            {}
+
+            TString Path;
+            TPathId TableId;
+            TPathId StreamId;
+            ui64 Shard = 0;
+            ui64 RowsProcessed = 0;
+            bool HoldRequests = true;
+            bool PauseProgress = true;
+            bool Done = false;
+            TVector<THolder<IEventHandle>> Requests;
+            THolder<IEventHandle> Continuation;
+        };
+
+        struct TRequiredRecord {
+            TString Key;
+            TString Action;
+
+            bool Matches(const TString& data) const {
+                const bool hasKey = data.Contains(Key);
+                const bool hasAction = data.Contains(Action);
+                return hasKey && hasAction;
+            }
+        };
+
+        static TServer::TPtr CreateServer(TPortManager& portManager) {
+            const auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetEnableChangefeedInitialScan(true)
+                .SetEnableChangefeedsOnIndexTables(true);
+
+            // The default broker admits two CDC scanners per node. Four slots
+            // let this test pause all four after actual persisted progress.
+            auto& broker = *settings.AppConfig->MutableResourceBrokerConfig();
+            broker = NResourceBroker::MakeDefaultConfig();
+            for (auto& queue : *broker.MutableQueues()) {
+                if (queue.GetName() == "queue_cdc_initial_scan") {
+                    queue.MutableLimit()->SetCpu(AllScans.size());
+                }
+            }
+
+            return new TServer(settings);
+        }
+
+        void CreateTable() {
+            const auto options = TShardedTableOptions()
+                .Columns({
+                    {"key", "Uint32", true, false},
+                    {"value", "Uint32", false, false},
+                    {"other", "Uint32", false, false},
+                })
+                .Indexes({
+                    {"by_value", {"value"}},
+                    {"by_other", {"other"}},
+                    {"by_both", {"value", "other"}},
+                });
+            CreateShardedTable(Server, Edge, "/Root", "Table", options);
+
+            const TString initialData = R"(
+                UPSERT INTO `/Root/Table` (key, value, other) VALUES
+                    (1, 10, 100), (2, 20, 200), (3, 30, 300), (9, 90, 900);
+            )";
+            ExecSQL(Server, Edge, initialData);
+        }
+
+        void ResolveScans() {
+            const TVector<TString> paths = {
+                "/Root/Table",
+                "/Root/Table/by_value/indexImplTable",
+                "/Root/Table/by_other/indexImplTable",
+                "/Root/Table/by_both/indexImplTable",
+            };
+
+            for (const auto& path : paths) {
+                auto& scan = Scans.emplace_back(path);
+                scan.TableId = ResolveTableId(Server, Edge, path).PathId;
+
+                const auto shards = GetTableShards(Server, Edge, path);
+                UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+                scan.Shard = shards.front();
+            }
+        }
+
+        void ObserveScans() {
+            using TScanRequest = TEvDataShard::TEvCdcStreamScanRequest;
+            using TScanResponse = TEvDataShard::TEvCdcStreamScanResponse;
+
+            RequestObserver = Runtime.AddObserver<TScanRequest>([this](auto& ev) {
+                HandleScanRequest(ev);
+            });
+
+            ContinuationObserver = Runtime.AddObserver([this](IEventHandle::TPtr& ev) {
+                HandleScanContinuation(ev);
+            });
+
+            ResponseObserver = Runtime.AddObserver<TScanResponse>([this](auto& ev) {
+                HandleScanResponse(ev);
+            });
+        }
+
+        void HandleScanRequest(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev) {
+            auto& record = ev->Get()->Record;
+            record.MutableLimits()->SetBatchMaxRows(1);
+            const auto tableId = TPathId::FromProto(record.GetTablePathId());
+            auto& scan = FindScan(tableId);
+            scan.StreamId = TPathId::FromProto(record.GetStreamPathId());
+            ShardActors[ev->GetRecipientRewrite()] = tableId;
+
+            if (scan.HoldRequests) {
+                scan.Requests.emplace_back(ev.Release());
+            }
+        }
+
+        void HandleScanContinuation(IEventHandle::TPtr& ev) {
+            // Observe the private event without exposing DataShard internals.
+            if (!ev->GetTypeName().EndsWith("::TEvCdcStreamScanContinue")) {
+                return;
+            }
+
+            const auto actor = ShardActors.find(ev->Sender);
+            if (actor == ShardActors.end()) {
+                return;
+            }
+
+            auto& scan = FindScan(actor->second);
+            auto* shard = dynamic_cast<TDataShard*>(Runtime.FindActor(ev->Sender));
+            UNIT_ASSERT(shard);
+
+            const auto* progress = shard->GetCdcStreamScanManager().Get(scan.StreamId);
+            if (!progress || progress->ActorId != ev->Recipient) {
+                return;
+            }
+
+            UNIT_ASSERT(progress->LastKey);
+            scan.RowsProcessed = progress->Stats.RowsProcessed;
+
+            if (scan.PauseProgress) {
+                scan.Continuation.Reset(ev.Release());
+            }
+        }
+
+        void HandleScanResponse(TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
+                const auto tableId = TPathId::FromProto(record.GetTablePathId());
+                FindScan(tableId).Done = true;
+            }
+        }
+
+        TScan& GetScan(EScan which) {
+            return Scans.at(static_cast<size_t>(which));
+        }
+
+        TScan& FindScan(const TPathId& tableId) {
+            for (auto& scan : Scans) {
+                if (scan.TableId == tableId) {
+                    return scan;
+                }
+            }
+
+            Y_ABORT("Unknown scan table");
+        }
+
+        ui64 SchemeShard() const {
+            return Scans.front().TableId.OwnerId;
+        }
+
+        static std::pair<TString, TString> ParentAndName(const TScan& scan) {
+            const auto slash = scan.Path.rfind('/');
+            return {scan.Path.substr(0, slash), scan.Path.substr(slash + 1)};
+        }
+
+        NKikimrScheme::TEvDescribeSchemeResult Describe(const TScan& scan) {
+            const TString path = scan.Path + "/Stream";
+            return DescribePrivatePath(Runtime, SchemeShard(), path);
+        }
+
+        void AssertScanning(const TScan& scan) {
+            const auto description = Describe(scan);
+            const auto state = NKikimrSchemeOp::ECdcStreamStateScan;
+            const auto expectedState = NLs::StreamState(state);
+            const auto expectedProgress = NLs::StreamInitialScanProgress(1, 0);
+
+            TestDescribeResult(description, {expectedState, expectedProgress});
+        }
+
+        void Start(EScan which) {
+            auto& scan = GetScan(which);
+            scan.HoldRequests = true;
+            scan.Done = false;
+            scan.Requests.clear();
+            scan.Continuation.Reset();
+            scan.RowsProcessed = 0;
+
+            const auto [parent, name] = ParentAndName(scan);
+            const auto updates = Updates(NKikimrSchemeOp::ECdcStreamFormatJson);
+            const auto stream = WithInitialScan(updates);
+            const auto txId = AsyncAlterAddStream(Server, parent, name, stream);
+            WaitTxNotification(Server, Edge, txId);
+
+            const auto hasRequest = [&] { return !scan.Requests.empty(); };
+            WaitFor(Runtime, hasRequest, "scan request");
+            AssertScanning(scan);
+        }
+
+        void ReleaseRequests(TScan& scan) {
+            scan.HoldRequests = false;
+
+            for (auto& ev : std::exchange(scan.Requests, {})) {
+                Runtime.Send(ev.Release(), 0, true);
+            }
+        }
+
+        void WaitPartialProgress(TScan& scan) {
+            const TString message = TStringBuilder() << "persisted scan batch: " << scan.Path;
+            const auto hasContinuation = [&] { return bool(scan.Continuation); };
+            WaitFor(Runtime, hasContinuation, message);
+
+            UNIT_ASSERT_GT(scan.RowsProcessed, 0);
+            UNIT_ASSERT(!scan.Done);
+            AssertScanning(scan);
+        }
+
+        static TVector<TRequiredRecord> RequiredRecords(EScan which) {
+            switch (which) {
+            case EScan::Base:
+                return {
+                    {"\"key\":[9]", "\"value\":90"},
+                    {"\"key\":[1]", "\"value\":10"},
+                    {"\"key\":[1]", "\"value\":100"},
+                    {"\"key\":[2]", "\"erase\":{}"},
+                    {"\"key\":[3]", "\"value\":31"},
+                };
+            case EScan::ByValue:
+                return {
+                    {"\"key\":[90,9]", "\"update\":"},
+                    {"\"key\":[10,1]", "\"erase\":{}"},
+                    {"\"key\":[100,1]", "\"update\":"},
+                    {"\"key\":[20,2]", "\"erase\":{}"},
+                    {"\"key\":[31,3]", "\"update\":"},
+                };
+            case EScan::ByOther:
+                return {{"\"key\":[900,9]", "\"update\":"}};
+            case EScan::ByBoth:
+                return {
+                    {"\"key\":[90,900,9]", "\"update\":"},
+                    {"\"key\":[10,100,1]", "\"erase\":{}"},
+                    {"\"key\":[100,1000,1]", "\"update\":"},
+                    {"\"key\":[20,200,2]", "\"erase\":{}"},
+                    {"\"key\":[31,301,3]", "\"update\":"},
+                };
+            }
+
+            Y_ABORT("Unexpected scan");
+        }
+
+        static bool ContainsRecords(
+            const TVector<std::pair<TString, TString>>& records,
+            const TVector<TRequiredRecord>& required)
+        {
+            for (const auto& expected : required) {
+                bool found = false;
+                for (const auto& record : records) {
+                    if (expected.Matches(record.second)) {
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        void CheckRecords(EScan which) {
+            const auto& scan = GetScan(which);
+            const TString path = scan.Path + "/Stream";
+            const auto required = RequiredRecords(which);
+            const auto hasRecords = [&] {
+                const auto records = GetRecords(Runtime, Edge, path, 0);
+                return ContainsRecords(records, required);
+            };
+
+            // Check the snapshot, old/new index keys, and erases made while paused.
+            WaitFor(Runtime, hasRecords, "snapshot, indexed-key changes and deletes in stream");
+        }
+
+        TPortManager PortManager;
+        TServer::TPtr Server;
+        TTestActorRuntime& Runtime;
+        const TActorId Edge;
+        TVector<TScan> Scans;
+        THashMap<TActorId, TPathId> ShardActors;
+        TTestActorRuntime::TEventObserverHolder RequestObserver;
+        TTestActorRuntime::TEventObserverHolder ContinuationObserver;
+        TTestActorRuntime::TEventObserverHolder ResponseObserver;
+    };
+
+    Y_UNIT_TEST_TWIN(InitialScanConcurrentIndexes, BaseFinishesFirst) {
+        using EScan = TConcurrentCdcScans::EScan;
+
+        TConcurrentCdcScans scans;
+        TConcurrentScanQueries queries(scans.GetServer());
+        queries.CheckReads();
+
+        // Exercise starting the base scan both before and after the indexes.
+        const bool indexesStartFirst = BaseFinishesFirst;
+        scans.StartAll(indexesStartFirst);
+        scans.RunAllToFirstBatch();
+        queries.CheckWritesAndReads();
+
+        // Recover all four snapshots and require each scanner to advance again.
+        scans.RebootSchemeShard();
+        scans.RebootDataShards();
+        queries.CheckWritesAndReads();
+
+        scans.Drop(EScan::ByOther);
+        scans.AssertScanning({EScan::Base, EScan::ByValue, EScan::ByBoth});
+        queries.CheckWritesAndReads();
+
+        // Reuse the dropped scan's lock/snapshot while the others stay paused.
+        scans.RecreatePaused(EScan::ByOther);
+        scans.RebootSchemeShard();
+        scans.AssertAllScanning();
+        queries.CheckWritesAndReads();
+
+        const EScan first = BaseFinishesFirst ? EScan::Base : EScan::ByValue;
+        const EScan second = BaseFinishesFirst ? EScan::ByValue : EScan::Base;
+
+        scans.Finish(first);
+        scans.AssertScanning({second, EScan::ByBoth});
+        queries.CheckWritesAndReads();
+
+        scans.Finish(second);
+        scans.AssertScanning({EScan::ByBoth});
+        queries.CheckWritesAndReads();
+
+        scans.Finish(EScan::ByBoth);
+        queries.CheckWritesAndReads();
+
+        scans.Finish(EScan::ByOther);
+        scans.RebootSchemeShard();
+        queries.CheckWritesAndReads();
+    }
+
+    Y_UNIT_TEST_TWIN(InitialScanPrecharge, KeysOnly) {
+        TPortManager portManager;
+        auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableDataShardVolatileTransactions(false);
+        settings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
+        TServer::TPtr server = new TServer(settings);
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        InitRoot(server, edgeActor);
+
+        // Each row has its own page. All values are inline in the primary
+        // family, so key precharge is sufficient once scan reads are detected.
+        auto policy = NLocalDb::CreateDefaultTablePolicy();
+        policy->MinDataPageSize = 1;
+        auto opts = SimpleTable()
+            .Policy(policy.Get())
+            .ExecutorCacheSize(1);
+        const auto [shards, tableId] = CreateShardedTable(server, edgeActor, "/Root", "Table", opts);
+        const ui64 shard = shards.at(0);
+
+        constexpr ui32 rowCount = 32;
+        const std::vector<ui32> columnIds = {1, 2};
+        std::vector<TCell> initialCells;
+        std::vector<TCell> updatedCells;
+        TVector<TString> expectedRecords;
+        TStringBuilder expectedTable;
+        for (ui32 key = 1; key <= rowCount; ++key) {
+            initialCells.push_back(TCell::Make(key));
+            initialCells.push_back(TCell::Make(key * 10));
+            updatedCells.push_back(TCell::Make(key));
+            updatedCells.push_back(TCell::Make(key * 100));
+            if constexpr (KeysOnly) {
+                expectedRecords.push_back(TStringBuilder() << "{\"update\":{},\"key\":[" << key << "]}");
+                expectedRecords.push_back(TStringBuilder() << "{\"update\":{},\"key\":[" << key << "]}");
+            } else {
+                expectedRecords.push_back(TStringBuilder()
+                    << "{\"update\":{\"value\":" << key * 10 << "},\"key\":[" << key << "]}");
+                expectedRecords.push_back(TStringBuilder()
+                    << "{\"update\":{\"value\":" << key * 100 << "},\"key\":[" << key << "]}");
+            }
+            expectedTable << "key = " << key << ", value = " << key * 100 << "\n";
+        }
+
+        Upsert(runtime, edgeActor, shard, tableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, initialCells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(CompactTable(runtime, shard, tableId).GetStatus(),
+            NKikimrTxDataShard::TEvCompactTableResult::OK);
+
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest> blockScanRequest(runtime);
+        const auto stream = TCdcStream{
+            .Name = "Stream",
+            .Mode = KeysOnly ? NKikimrSchemeOp::ECdcStreamModeKeysOnly : NKikimrSchemeOp::ECdcStreamModeUpdate,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatJson,
+            .InitialState = NKikimrSchemeOp::ECdcStreamStateScan,
+        };
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table", stream));
+        runtime.WaitFor("blocked initial scan", [&]{ return !blockScanRequest.empty(); });
+        const auto currentTableId = ResolveTableId(server, edgeActor, "/Root/Table");
+
+        // The scan snapshot sees the only stored version. Reboot with a tiny
+        // executor cache and no shared cache so the batch needs cold data pages.
+        RebootTablet(runtime, shard, edgeActor);
+        const ui64 notReadyBefore = GetCumulativeCounter(runtime, shard, "DataShard/TxTabletNotReady");
+
+        // Neither stream mode normally reads before an upsert. The pending
+        // initial scan must nevertheless cause all batch keys to be precharged.
+        Upsert(runtime, edgeActor, shard, currentTableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, updatedCells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        const ui64 pageFaults = GetCumulativeCounter(runtime, shard, "DataShard/TxTabletNotReady") - notReadyBefore;
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, currentTableId), expectedTable);
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", expectedRecords);
+
+        bool scanDone = false;
+        auto observeScanDone = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanResponse>([&](auto& ev) {
+            if (ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
+                scanDone = true;
+            }
+        });
+        blockScanRequest.Unblock().Stop();
+        runtime.WaitFor("initial scan completion", [&]{ return scanDone; });
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", expectedRecords);
+
+        UNIT_ASSERT_C(pageFaults > 0, "The write must encounter cold data pages");
+        UNIT_ASSERT_C(pageFaults <= 2, "Initial scan reads must precharge the batch, got " << pageFaults << " retries");
+    }
+
+    Y_UNIT_TEST(InitialScanHistoricalPrecharge) {
+        TPortManager portManager;
+        auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableDataShardVolatileTransactions(false);
+        settings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
+        TServer::TPtr server = new TServer(settings);
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        InitRoot(server, edgeActor);
+
+        // Keep both current and historical rows on separate small pages, with
+        // inline values in a single family to isolate history precharge.
+        auto policy = NLocalDb::CreateDefaultTablePolicy();
+        policy->MinDataPageSize = 1;
+        const auto opts = SimpleTable()
+            .Policy(policy.Get())
+            .ExecutorCacheSize(1);
+        const auto [shards, tableId] = CreateShardedTable(server, edgeActor, "/Root", "Table", opts);
+        const ui64 shard = shards.at(0);
+
+        constexpr ui32 rowCount = 32;
+        const std::vector<ui32> columnIds = {1, 2};
+        std::vector<TCell> initialCells;
+        std::vector<TCell> updatedCells;
+        std::vector<TCell> finalCells;
+        TVector<TString> expectedUpdates;
+        TVector<TString> expectedImages;
+        for (ui32 key = 1; key <= rowCount; ++key) {
+            initialCells.push_back(TCell::Make(key));
+            initialCells.push_back(TCell::Make(key * 10));
+            updatedCells.push_back(TCell::Make(key));
+            updatedCells.push_back(TCell::Make(key * 100));
+            finalCells.push_back(TCell::Make(key));
+            finalCells.push_back(TCell::Make(key * 1000));
+            expectedUpdates.push_back(TStringBuilder()
+                << "{\"update\":{\"value\":" << key * 10 << "},\"key\":[" << key << "]}");
+            expectedUpdates.push_back(TStringBuilder()
+                << "{\"update\":{\"value\":" << key * 100 << "},\"key\":[" << key << "]}");
+            expectedImages.push_back(TStringBuilder()
+                << "{\"update\":{},\"newImage\":{\"value\":" << key * 100 << "},\"key\":[" << key << "]}");
+        }
+
+        Upsert(runtime, edgeActor, shard, tableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, initialCells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+        // The ready image stream already requires precharge independently of
+        // initial-scan detection, matching the mixed-stream configuration.
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            NewImage(NKikimrSchemeOp::ECdcStreamFormatJson, "Images")));
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest> blockScanRequest(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson, "Updates"))));
+        runtime.WaitFor("blocked initial scan", [&]{ return !blockScanRequest.empty(); });
+        const auto currentTableId = ResolveTableId(server, edgeActor, "/Root/Table");
+
+        // Move every row past the protected scan snapshot, then compact both
+        // versions into the same part so snapshot reads need history pages.
+        Upsert(runtime, edgeActor, shard, currentTableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, updatedCells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        WaitForContent(server, edgeActor, "/Root/Table/Updates", expectedUpdates);
+        WaitForContent(server, edgeActor, "/Root/Table/Images", expectedImages);
+        UNIT_ASSERT_VALUES_EQUAL(CompactTable(runtime, shard, currentTableId).GetStatus(),
+            NKikimrTxDataShard::TEvCompactTableResult::OK);
+        RebootTablet(runtime, shard, edgeActor);
+
+        TStringBuilder expectedTable;
+        for (ui32 key = 1; key <= rowCount; ++key) {
+            expectedUpdates.push_back(TStringBuilder()
+                << "{\"update\":{\"value\":" << key * 1000 << "},\"key\":[" << key << "]}");
+            expectedImages.push_back(TStringBuilder()
+                << "{\"update\":{},\"newImage\":{\"value\":" << key * 1000 << "},\"key\":[" << key << "]}");
+            expectedTable << "key = " << key << ", value = " << key * 1000 << "\n";
+        }
+
+        const ui64 notReadyBefore = GetCumulativeCounter(runtime, shard, "DataShard/TxTabletNotReady");
+        Upsert(runtime, edgeActor, shard, currentTableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, finalCells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        const ui64 pageFaults = GetCumulativeCounter(runtime, shard, "DataShard/TxTabletNotReady") - notReadyBefore;
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, currentTableId), expectedTable);
+        WaitForContent(server, edgeActor, "/Root/Table/Updates", expectedUpdates);
+        WaitForContent(server, edgeActor, "/Root/Table/Images", expectedImages);
+
+        bool scanDone = false;
+        auto observeScanDone = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanResponse>([&](auto& ev) {
+            if (ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
+                scanDone = true;
+            }
+        });
+        blockScanRequest.Unblock().Stop();
+        runtime.WaitFor("initial scan completion", [&]{ return scanDone; });
+        WaitForContent(server, edgeActor, "/Root/Table/Updates", expectedUpdates);
+        WaitForContent(server, edgeActor, "/Root/Table/Images", expectedImages);
+
+        UNIT_ASSERT_C(pageFaults > 0, "The write must encounter cold data pages");
+        UNIT_ASSERT_C(pageFaults <= 3, "CDC reads must precharge history for the batch, got " << pageFaults << " retries");
+    }
+
+    Y_UNIT_TEST_TWIN(InitialScanPrechargeCompletedPrefix, Images) {
+        TPortManager portManager;
+        auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableDataShardVolatileTransactions(false);
+        settings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        InitRoot(server, edgeActor);
+
+        auto policy = NLocalDb::CreateDefaultTablePolicy();
+        policy->MinDataPageSize = 1;
+        const auto opts = SimpleTable().Policy(policy.Get()).ExecutorCacheSize(1 << 20);
+        const auto [shards, tableId] = CreateShardedTable(server, edgeActor, "/Root", "Table", opts);
+        const ui64 shard = shards.at(0);
+        constexpr ui32 rowCount = 32;
+        constexpr ui32 lastKey = 16;
+        const std::vector<ui32> columnIds = {1, 2};
+        std::vector<TCell> initialCells;
+        std::vector<TCell> updatedCells;
+        std::vector<TCell> finalCells;
+        for (ui32 key = 1; key <= rowCount; ++key) {
+            initialCells.push_back(TCell::Make(key));
+            initialCells.push_back(TCell::Make(key * 10));
+            updatedCells.push_back(TCell::Make(key));
+            updatedCells.push_back(TCell::Make(key * 100));
+            if (key <= lastKey || key == rowCount) {
+                finalCells.push_back(TCell::Make(key));
+                finalCells.push_back(TCell::Make(key * 1000));
+            }
+        }
+        Upsert(runtime, edgeActor, shard, tableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, initialCells);
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest> blockScanRequest(runtime);
+        const auto stream = TCdcStream{
+            .Name = "Stream",
+            .Mode = Images ? NKikimrSchemeOp::ECdcStreamModeNewAndOldImages : NKikimrSchemeOp::ECdcStreamModeUpdate,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatJson,
+            .InitialState = NKikimrSchemeOp::ECdcStreamStateScan,
+        };
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table", stream));
+        runtime.WaitFor("blocked initial scan", [&]{ return !blockScanRequest.empty(); });
+        const auto currentTableId = ResolveTableId(server, edgeActor, "/Root/Table");
+        Upsert(runtime, edgeActor, shard, currentTableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, updatedCells);
+        CompactTable(runtime, shard, currentTableId);
+        RebootTablet(runtime, shard, edgeActor);
+
+        // Warm only current pages for the completed prefix. Keep the last
+        // batch key cold so its snapshot read triggers batch precharge.
+        auto warmRequest = MakeHolder<TEvTablet::TEvLocalMKQL>();
+        warmRequest->Record.MutableProgram()->MutableProgram()->SetText(R"((
+            (let range '( '('key (Uint32 '1) (Uint32 '17)) ))
+            (let result (SelectRange '__user__Table range '('key 'value) '()))
+            (return (AsList (SetResult 'Result result)))
+        ))");
+        runtime.SendToPipe(shard, edgeActor, warmRequest.Release(), 0, GetPipeConfigWithRetries());
+        auto warmResult = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(edgeActor);
+        UNIT_ASSERT_VALUES_EQUAL(warmResult->Get()->Record.GetStatus(), NKikimrProto::OK);
+
+        bool progressSet = false;
+        auto setProgress = runtime.AddObserver<NEvents::TDataEvents::TEvWrite>([&](auto& ev) {
+            if (!progressSet) {
+                auto* dataShard = dynamic_cast<TDataShard*>(runtime.FindActor(ev->GetRecipientRewrite()));
+                UNIT_ASSERT(dataShard);
+                const auto& streams = dataShard->GetUserTables().at(currentTableId.PathId.LocalPathId)->CdcStreams;
+                const TVector<TCell> key{TCell::Make(lastKey)};
+                dataShard->GetCdcStreamScanManager().Get(streams.begin()->first)->LastKey = TSerializedCellVec(key);
+                progressSet = true;
+            }
+        });
+        ui32 dataPages = 0;
+        auto observePages = runtime.AddObserver<NSharedCache::TEvRequest>([&](auto& ev) {
+            if (ev->Get()->PageCollection->Label().TabletID() == shard &&
+                ev->Cookie == static_cast<ui64>(NSharedCache::ERequestTypeCookie::Transaction))
+            {
+                for (const auto& page : ev->Get()->Pages) {
+                    dataPages += page.Type == NTable::NPage::EPage::DataPage;
+                }
+            }
+        });
+        Upsert(runtime, edgeActor, shard, currentTableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, finalCells);
+        UNIT_ASSERT(progressSet);
+        // The cold key may request its current/history pages across retries.
+        // Completed-prefix keys must not add a history request per warm row,
+        // even when the stream also reads ordinary old/new images.
+        UNIT_ASSERT_C(dataPages > 0 && dataPages <= 3, "Unexpected data page requests: " << dataPages);
     }
 
     Y_UNIT_TEST(InitialScanAndLimits) {
@@ -4897,7 +7106,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         WaitTxNotification(server, edgeActor, AsyncSetEnableFilterByKey(server, "/Root", "Table", true));
     }
 
-    Y_UNIT_TEST(SchemaChangesColumnFamilies) {
+    Y_UNIT_TEST_TWIN(SchemaChangesColumnFamilies, Zstd) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
@@ -4905,6 +7114,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         );
 
         auto& runtime = *server->GetRuntime();
+        runtime.GetAppData().FeatureFlags.SetEnableRowTableZstdCompression(Zstd);
         const auto edgeActor = runtime.AllocateEdgeActor();
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
@@ -4914,7 +7124,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
         WaitTxNotification(server, edgeActor, AsyncSetColumnFamily(server, "/Root", "Table", "value",
-            {.Name = "archive", .ColumnCodec = NKikimrSchemeOp::ColumnCodecLZ4, .DataPoolKind = "hdd"}));
+            {.Name = "archive",
+                .ColumnCodec = Zstd ? NKikimrSchemeOp::ColumnCodecZSTD : NKikimrSchemeOp::ColumnCodecLZ4,
+                .ColumnCodecLevel = Zstd ? TMaybe<i32>(7) : TMaybe<i32>(),
+                .DataPoolKind = "hdd"}));
         ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);");
         const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
@@ -4962,10 +7175,16 @@ Y_UNIT_TEST_SUITE(Cdc) {
         AssertColumn(added, "value", "Uint32", "archive");
         UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"].GetMap().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"]["default"]["compression"].GetString(), "off");
-        AssertFamily(added, "archive", "lz4", "regular");
+        AssertFamily(added, "archive", Zstd ? "zstd" : "lz4", "regular");
+        if (Zstd) {
+            UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"]["archive"]["compressionLevel"].GetInteger(), 7);
+        } else {
+            UNIT_ASSERT(!added["columnFamilies"]["archive"].Has("compressionLevel"));
+        }
 
         const auto& modified = tableAt(3);
         AssertFamily(modified, "archive", "off", "regular");
+        UNIT_ASSERT(!modified["columnFamilies"]["archive"].Has("compressionLevel"));
         AssertColumn(modified, "value", "Uint32", "archive");
 
         const auto& empty = tableAt(4);
@@ -4984,6 +7203,44 @@ Y_UNIT_TEST_SUITE(Cdc) {
         const auto& droppedColumn = tableAt(11);
         UNIT_ASSERT(!droppedColumn["columns"].Has("extra"));
         AssertFamily(droppedColumn, "empty", "lz4", "regular");
+    }
+
+    Y_UNIT_TEST(SchemaChangesColumnFamilyCompressionLevel) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+        auto& runtime = *server->GetRuntime();
+        runtime.GetAppData().FeatureFlags.SetEnableRowTableZstdCompression(true);
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable()
+            .Families({{.Name = "default", .ColumnCodec = NKikimrSchemeOp::ColumnCodecZSTD}}));
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        // The effective default is already 1, so specifying it does not change the schema.
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "default", .ColumnCodecLevel = 1}));
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "default", .ColumnCodecLevel = 0}));
+        const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
+        RebootTablet(runtime, shards.at(0), edgeActor);
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "default", .ColumnCodecLevel = 7}));
+
+        const auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"tableChanges":"***","ts":"***"})",
+        });
+        for (size_t index = 0; index < records.size(); ++index) {
+            const auto& table = records[index]["tableChanges"][0]["table"];
+            AssertFamily(table, "default", "zstd", "regular");
+            UNIT_ASSERT_VALUES_EQUAL(table["columnFamilies"]["default"]["compressionLevel"].GetUIntegerRobust(),
+                index == 0 ? 0 : 7);
+        }
     }
 
     Y_UNIT_TEST(SchemaChangesCompositePrimaryKey) {

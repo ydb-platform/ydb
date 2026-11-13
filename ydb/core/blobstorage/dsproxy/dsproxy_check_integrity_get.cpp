@@ -253,6 +253,9 @@ public:
 
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vDiskId = Info->GetVDiskId(vdisk.OrderNumber);
+            if (Info->IsFailRealmExcluded(vDiskId.FailRealm)) {
+                continue;
+            }
 
             if (!Info->BelongsToSubgroup(vDiskId, Id.Hash())) {
                 continue;

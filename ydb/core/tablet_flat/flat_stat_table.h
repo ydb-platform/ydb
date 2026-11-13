@@ -127,7 +127,7 @@ struct TStats {
     }
 
     TString ToString() const {
-        return TStringBuilder() 
+        return TStringBuilder()
             << "RowCount: " << RowCount
             << " DataSize: " << DataSize.Size
             << " IndexSize: " << IndexSize.Size
@@ -136,6 +136,23 @@ struct TStats {
             << " DataSizeHistogram: " << DataSizeHistogram.size();
     }
 };
+
+// Adds index sizes of the part by channels of the page collections with its indexes
+inline void AddIndexSize(TChanneledDataSize& indexSize, const TPart& part) {
+    if (part.IndexPages.HasBTree()) {
+        // Raw size of b-tree indexes is the sum of their sizes
+        for (bool historic : {false, true}) {
+            const auto& metas = historic ? part.IndexPages.BTreeHistoric : part.IndexPages.BTreeGroups;
+            for (ui32 groupIndex : xrange(metas.size())) {
+                const NPage::TGroupId groupId(groupIndex, historic);
+                indexSize.Add(metas[groupIndex].IndexSize, part.GetIndexChannel(groupId));
+            }
+        }
+    } else {
+        // Flat indexes are written only to a single page collection
+        indexSize.Add(part.IndexesRawSize, part.GetIndexChannel({ }));
+    }
+}
 
 class TKeyAccessSample {
 public:
@@ -206,24 +223,28 @@ private:
 using TBuildStatsYieldHandler = std::function<void()>;
 
 #ifndef NDEBUG
-#define LOG_BUILD_STATS(stream) \
+#define LOG_BUILD_STATS(T, ...) \
     do { \
         if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
-            LOG_TRACE_S(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, logPrefix << stream); \
+            YDB_LOG_TRACE_CTX_COMP(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, T, {"logPrefix", logPrefix}, __VA_ARGS__); \
         } else { \
-            Cerr << logPrefix << stream << Endl; \
+            TStringBuilder str; \
+            str << logPrefix << " " << T << " "; \
+            NActors::NStructuredLog::TTextWriter writer; \
+            writer.Write(str, YDB_LOG_CREATE_MESSAGE(__VA_ARGS__)); \
+            Cerr << str << Endl; \
         } \
     } while (0)
 #else
-#define LOG_BUILD_STATS(stream) \
+#define LOG_BUILD_STATS(T, ...) \
     do { \
         if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
-            LOG_TRACE_S(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, logPrefix << stream); \
+            YDB_LOG_TRACE_CTX_COMP(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, T, {"logPrefix", logPrefix}, __VA_ARGS__); \
         } \
     } while (0)
 #endif
 
-bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, 
+bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env,
     TBuildStatsYieldHandler yieldHandler, const TString& logPrefix = {});
 
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners);

@@ -62,6 +62,17 @@ public:
         }
 
         if (Replication->GetState() == TReplication::EState::Removing) {
+            if (record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON) {
+                NIceDb::TNiceDb db(txc.DB);
+                // An older controller may have admitted this FORCE as ordinary DROP.
+                for (auto* target : Replication->GetTargets()) {
+                    if (target->GetStreamState() != TReplication::EStreamState::Removed) {
+                        target->SetStreamState(TReplication::EStreamState::Removed);
+                        db.Table<Schema::SrcStreams>().Key(Replication->GetId(), target->GetId()).Update(
+                            NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
+                    }
+                }
+            }
             Replication->SetDropOp(PubEv->Sender, std::make_pair(opId.GetTxId(), opId.GetPartId()));
             return true;
         }
@@ -109,18 +120,16 @@ public:
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
 
-            const bool attaching = target->GetDstState() == TReplication::EDstState::Attaching;
-            if (!attaching) {
-                target->Shutdown(ctx);
-            }
+            target->Shutdown(ctx);
 
-            target->SetStreamState(TReplication::EStreamState::Removing);
+            target->SetStreamState(record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON
+                ? TReplication::EStreamState::Removed
+                : TReplication::EStreamState::Removing);
             db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );
 
-            // Keep the creator until its submitted ALTER has finished; the imported table is detached afterwards.
-            if (!attaching && record.GetCascade()) {
+            if (record.GetCascade()) {
                 target->SetDstState(TReplication::EDstState::Removing);
                 db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                     NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
@@ -168,6 +177,7 @@ public:
             Result = MakeHolder<IEventHandle>(op->Sender, ctx.SelfID, ev.Release());
         }
 
+        Replication->Shutdown(ctx);
         Self->Remove(rid);
         Replication.Reset();
 

@@ -23,7 +23,7 @@ namespace NKikimr {
                         for (TGroupId groupId : iter->second) {
                             const TGroupInfo *group = controller.FindGroup(groupId);
                             Y_DEBUG_ABORT_UNLESS(group);
-                            if (group && group->Listable() && !group->BridgePileId) {
+                            if (group && group->Listable() && !group->IsBridgePileOnly()) {
                                 groups.push_back(group);
                             }
                         }
@@ -51,7 +51,7 @@ namespace NKikimr {
                                 it != storagePoolGroups.end() && it->first == id; ++it) {
                             const TGroupInfo *groupInfo = findGroupCallback(it->second);
                             Y_DEBUG_ABORT_UNLESS(groupInfo);
-                            if (groupInfo && groupInfo->Listable() && !groupInfo->BridgePileId) {
+                            if (groupInfo && groupInfo->Listable() && !groupInfo->IsBridgePileOnly()) {
                                 groups.push_back(groupInfo);
                             }
                         }

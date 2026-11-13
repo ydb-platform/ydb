@@ -8,7 +8,7 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 
-from ydb.tests.library.kv.helpers import get_kv_tablet_ids, create_kv_tablets_and_wait_for_start
+from ydb.tests.library.kv.helpers import get_kv_volume_tablet_ids, create_kv_tablets_and_wait_for_start
 
 TIMEOUT_SECONDS = 240
 
@@ -40,7 +40,7 @@ class TestHive(object):
         response = self.kv_client.create_tablets(num_of_tablets_in_batch, table_path)
 
         assert_that(response.operation.status == StatusIds.SUCCESS)
-        tablet_ids = get_kv_tablet_ids(self.swagger_client)
+        tablet_ids = get_kv_volume_tablet_ids(self.client, table_path, num_of_tablets_in_batch)
 
         self.cluster.add_storage_pool(erasure=Erasure.BLOCK_4_2)
         self.client.tablet_kill(TabletTypes.FLAT_HIVE.tablet_id_for(0))

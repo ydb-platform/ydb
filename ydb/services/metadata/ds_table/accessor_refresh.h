@@ -19,13 +19,16 @@ private:
     virtual void OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& qResult, NFetcher::ISnapshot::TPtr snapshot) override final;
 
     virtual void OnConstructSnapshotError(const TString& errorMessage) override final;
+
 protected:
     virtual void OnBootstrap() override;
     virtual void OnSnapshotModified() = 0;
     virtual void OnSnapshotRefresh() = 0;
+
     bool IsReady() const {
         return !!CurrentSnapshot;
     }
+
 public:
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {
@@ -34,13 +37,12 @@ public:
                 TBase::StateMain(ev);
         }
     }
+
     TDSAccessorRefresher(const TConfig& config, NFetcher::ISnapshotsFetcher::TPtr snapshotConstructor)
         : TBase(config.GetRequestConfig(), snapshotConstructor)
         , Config(config)
     {
-
     }
-
 };
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

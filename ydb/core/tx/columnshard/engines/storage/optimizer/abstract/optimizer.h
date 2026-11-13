@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
@@ -196,6 +197,10 @@ protected:
         return false;
     }
 
+    virtual bool DoLimitsPortionOverlaps() const {
+        return true;
+    }
+
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
 
@@ -372,6 +377,10 @@ public:
 
     bool UsesPullCompactionScheduling() const {
         return DoUsesPullCompactionScheduling();
+    }
+
+    bool LimitsPortionOverlaps() const {
+        return DoLimitsPortionOverlaps();
     }
 
     TOptimizationPriority GetUsefulMetric() const {

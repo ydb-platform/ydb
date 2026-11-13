@@ -23,6 +23,7 @@
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
+#include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <util/folder/dirut.h>
 
@@ -33,12 +34,24 @@
 using namespace NKikimr;
 using namespace NStorage;
 
+namespace {
+
+    constexpr ui64 DefaultReplTotalRequestBytesPerSecond = 500'000'000;
+    constexpr ui64 DefaultReplTotalResponseBytesPerSecond = 500'000'000;
+    constexpr ui64 DefaultReplPDiskBytesPerSecondHDD = 100'000'000;
+    constexpr ui64 DefaultReplPDiskBytesPerSecondSSD = 200'000'000;
+    constexpr ui64 DefaultReplPDiskBytesPerSecondNVME = 300'000'000;
+
+} // anonymous namespace
+
 TNodeWardenConfig::TNodeWardenConfig()
     : BlobStorageConfig(std::make_unique<NKikimrConfig::TBlobStorageConfig>())
     , NameserviceConfig(std::make_unique<NKikimrConfig::TStaticNameserviceConfig>())
     , AllVDiskKinds(new TAllVDiskKinds)
     , AllDriveModels(new NPDisk::TDriveModelDb)
     , FeatureFlags(std::make_unique<NKikimrConfig::TFeatureFlags>())
+    , SelfHealStateRequestTimeout(TDuration::MicroSeconds(NKikimrCms::TCmsConfig::TSentinelConfig::
+        TStateStorageSelfHealConfig::default_instance().GetSelfHealStateRequestTimeout()))
 {}
 
 TNodeWardenConfig::~TNodeWardenConfig()
@@ -237,6 +250,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenReadMetadata, Handle);
         hFunc(TEvNodeWardenWriteMetadata, Handle);
         hFunc(TEvPrivate::TEvDereferencePDisk, Handle);
+        hFunc(TEvPrivate::TEvCleanupTemporaryPDisk, Handle);
+        hFunc(TEvents::TEvPoisonTaken, Handle);
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
@@ -422,6 +437,62 @@ void TNodeWarden::PassAway() {
     return TActorBootstrapped::PassAway();
 }
 
+void TNodeWarden::ApplyReplBrokerConfig(
+        const NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig& config) {
+    ReplTotalRequestBytesPerSecond = DefaultReplTotalRequestBytesPerSecond;
+    if (config.HasTotalRequestBytesPerSecond()) {
+        ReplTotalRequestBytesPerSecond = config.GetTotalRequestBytesPerSecond();
+    } else if (config.HasRateBytesPerSecond()) {
+        ReplTotalRequestBytesPerSecond = config.GetRateBytesPerSecond();
+    }
+
+    ReplTotalResponseBytesPerSecond = config.HasTotalResponseBytesPerSecond()
+        ? config.GetTotalResponseBytesPerSecond()
+        : DefaultReplTotalResponseBytesPerSecond;
+
+    ReplPDiskRates.clear();
+    ReplPDiskRates.emplace(NPDisk::DEVICE_TYPE_ROT,
+        TReplPDiskRate{DefaultReplPDiskBytesPerSecondHDD, DefaultReplPDiskBytesPerSecondHDD});
+    ReplPDiskRates.emplace(NPDisk::DEVICE_TYPE_SSD,
+        TReplPDiskRate{DefaultReplPDiskBytesPerSecondSSD, DefaultReplPDiskBytesPerSecondSSD});
+    ReplPDiskRates.emplace(NPDisk::DEVICE_TYPE_NVME,
+        TReplPDiskRate{DefaultReplPDiskBytesPerSecondNVME, DefaultReplPDiskBytesPerSecondNVME});
+
+    for (const auto& item : config.GetMediaTypeQuota()) {
+        const auto it = ReplPDiskRates.find(PDiskTypeToPDiskType(item.GetType()));
+        if (it == ReplPDiskRates.end()) {
+            continue;
+        }
+        if (item.HasReadBytesPerSecond()) {
+            it->second.ReadBytesPerSecond = item.GetReadBytesPerSecond();
+        }
+        if (item.HasWriteBytesPerSecond()) {
+            it->second.WriteBytesPerSecond = item.GetWriteBytesPerSecond();
+        }
+    }
+
+    if (ReplNodeRequestQuoter) {
+        ReplNodeRequestQuoter->UpdateBytesPerSecond(ReplTotalRequestBytesPerSecond);
+    }
+    if (ReplNodeResponseQuoter) {
+        ReplNodeResponseQuoter->UpdateBytesPerSecond(ReplTotalResponseBytesPerSecond);
+    }
+
+    for (auto& [_, pdisk] : LocalPDisks) {
+        const TPDiskCategory category(pdisk.Record.GetPDiskCategory());
+        const auto it = ReplPDiskRates.find(category.Type());
+        if (it == ReplPDiskRates.end()) {
+            continue;
+        }
+        if (pdisk.ReplPDiskReadQuoter) {
+            pdisk.ReplPDiskReadQuoter->UpdateBytesPerSecond(it->second.ReadBytesPerSecond);
+        }
+        if (pdisk.ReplPDiskWriteQuoter) {
+            pdisk.ReplPDiskWriteQuoter->UpdateBytesPerSecond(it->second.WriteBytesPerSecond);
+        }
+    }
+}
+
 void TNodeWarden::Bootstrap() {
     YDB_LOG_DEBUG_COMP(BS_NODE, "Bootstrap",
         {"marker", "NW26"});
@@ -458,6 +529,9 @@ void TNodeWarden::Bootstrap() {
     CacheFileWriteError->Set(0);
 
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateStats);
+
+    const auto& replBrokerConfig = Cfg->BlobStorageConfig->GetServiceSet().GetReplBrokerConfig();
+    ApplyReplBrokerConfig(replBrokerConfig);
 
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
@@ -566,21 +640,8 @@ void TNodeWarden::Bootstrap() {
     }
 
     // start replication broker
-    const auto& replBrokerConfig = Cfg->BlobStorageConfig->GetServiceSet().GetReplBrokerConfig();
-
-    ui64 requestBytesPerSecond = 500000000; // 500 MB/s by default
-    if (replBrokerConfig.HasTotalRequestBytesPerSecond()) {
-        requestBytesPerSecond = replBrokerConfig.GetTotalRequestBytesPerSecond();
-    } else if (replBrokerConfig.HasRateBytesPerSecond()) { // compatibility option
-        requestBytesPerSecond = replBrokerConfig.GetRateBytesPerSecond();
-    }
-    ReplNodeRequestQuoter = std::make_shared<TReplQuoter>(requestBytesPerSecond);
-
-    ui64 responseBytesPerSecond = 500000000; // the same as for request
-    if (replBrokerConfig.HasTotalResponseBytesPerSecond()) {
-        responseBytesPerSecond = replBrokerConfig.GetTotalResponseBytesPerSecond();
-    }
-    ReplNodeResponseQuoter = std::make_shared<TReplQuoter>(responseBytesPerSecond);
+    ReplNodeRequestQuoter = std::make_shared<TReplQuoter>(ReplTotalRequestBytesPerSecond);
+    ReplNodeResponseQuoter = std::make_shared<TReplQuoter>(ReplTotalResponseBytesPerSecond);
 
     const ui64 maxBytes = replBrokerConfig.GetMaxInFlightReadBytes();
     actorSystem->RegisterLocalService(MakeBlobStorageReplBrokerID(), Register(CreateReplBrokerActor(maxBytes)));
@@ -595,7 +656,8 @@ void TNodeWarden::Bootstrap() {
         CreateSyncBrokerActor(MaxInProgressSyncCount)));
 
     // create bridge syncer rate quoter
-    SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond());
+    SyncRateConfigLimit = Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond();
+    SyncRateQuoter = std::make_shared<TReplQuoter>(SyncRateConfigLimit);
 
     // start compaction broker
     actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(
@@ -637,7 +699,7 @@ void TNodeWarden::Bootstrap() {
     if (Cfg->BlobStorageConfig->HasServiceSet()) {
         const auto& serviceSet = Cfg->BlobStorageConfig->GetServiceSet();
         if (serviceSet.GroupsSize()) {
-            ApplyServiceSet(Cfg->BlobStorageConfig->GetServiceSet(), true, false, false, "initial");
+            ApplyServiceSet(Cfg->BlobStorageConfig->GetServiceSet(), true, false, "initial");
         } else {
             Groups.try_emplace(0); // group is gonna be configured soon by DistributedConfigKeeper
         }
@@ -700,7 +762,7 @@ void TNodeWarden::HandleReadCache() {
                     InstanceId.emplace(proto.GetInstanceId());
                 }
 
-                ApplyServiceSet(proto.GetServiceSet(), false, false, false, "cache");
+                ApplyCachedServiceSet(proto.GetServiceSet());
             } catch (...) {
                 YDB_LOG_INFO_COMP(BS_NODE, "Bootstrap failed to fetch cache",
                     {"marker", "NW16"},
@@ -1056,13 +1118,13 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         OnRegisteredAtController();
     }
 
-    if (record.HasServiceSet()) {
+    if (record.HasServiceSet() || record.GetComprehensive()) {
         const bool comprehensive = record.GetComprehensive();
         IgnoreCache |= comprehensive;
         YDB_LOG_DEBUG_COMP(BS_NODE, "Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate)",
             {"marker", "NW17"},
             {"msg", record});
-        ApplyServiceSet(record.GetServiceSet(), false, comprehensive, true, "controller");
+        ApplyControllerServiceSet(record.GetServiceSet(), comprehensive);
     }
 
     for (const auto& item : record.GetGroupMetadata()) {
@@ -1145,6 +1207,25 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
             yaml.HasStorageConfigVersion() ? std::make_optional(yaml.GetStorageConfigVersion()) : std::nullopt);
 
         ExpectedSaveConfigCookie++;
+    }
+
+    if (record.HasControllerGeneration() && record.GetControllerGeneration() < ControllerGeneration) {
+        // the current BSC doesn't know about this and wouldn't correct the node until something changes for it
+        YDB_LOG_INFO_COMP(BS_NODE, "ignoring syncers and share from a previous BS_CONTROLLER instance",
+            {"marker", "NW106"},
+            {"generation", record.GetControllerGeneration()},
+            {"currentGeneration", ControllerGeneration});
+        return;
+    }
+    ControllerGeneration = Max(ControllerGeneration, record.GetControllerGeneration());
+
+    if (record.HasBridgeSyncNodeRateBytesPerSecond()) {
+        SyncRateControllerLimit = record.GetBridgeSyncNodeRateBytesPerSecond();
+        UpdateSyncRateQuoter();
+    } else if (record.GetComprehensive() && !record.GetKeepBridgeSyncNodeRate() && SyncRateControllerLimit) {
+        // this BSC doesn't support shares and won't ever update the one got from a newer instance
+        SyncRateControllerLimit = 0;
+        UpdateSyncRateQuoter();
     }
 
     if (record.GetUpdateSyncers()) {
@@ -1564,6 +1645,7 @@ void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPt
     auto& record = ev->Get()->Record;
     if (record.HasConfig() && record.GetConfig().HasBlobStorageConfig()) {
         const auto& bsConfig = record.GetConfig().GetBlobStorageConfig();
+        ApplyReplBrokerConfig(bsConfig.GetServiceSet().GetReplBrokerConfig());
         VDiskHeapAllocatorNumLeadingDisks = bsConfig.GetVDiskHeapAllocatorNumLeadingDisks();
         const auto& inferSettings = bsConfig.GetInferPDiskSlotCountSettings();
         auto equals = ::google::protobuf::util::MessageDifferencer::Equals;
@@ -1933,11 +2015,18 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         bsTo->ClearDefineBox();
     }
     bsTo->MutableDefineHostConfig()->CopyFrom(bsFrom.GetDefineHostConfig());
+    bsTo->MutableStoragePoolPileOverrides()->CopyFrom(bsFrom.GetStoragePoolPileOverrides());
 
     if (bsFrom.HasBscSettings()) {
         bsTo->MutableBscSettings()->CopyFrom(bsFrom.GetBscSettings());
     } else {
         bsTo->ClearBscSettings();
+    }
+
+    if (bsFrom.HasBridgeSyncRateBytesPerSecond()) {
+        bsTo->SetBridgeSyncRateBytesPerSecond(bsFrom.GetBridgeSyncRateBytesPerSecond());
+    } else {
+        bsTo->ClearBridgeSyncRateBytesPerSecond();
     }
 
     // copy PDiskConfig from DefineHostConfig/DefineBox if this section is managed automatically
@@ -1982,8 +2071,8 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 return false;
             }
         }
-        if (piles.size() < 2) {
-            *errorReason = "pile set can't be empty or contain less than two elements when bridge mode is enabled";
+        if (piles.empty()) {
+            *errorReason = "pile set can't be empty when bridge mode is enabled";
             return false;
         }
     }
@@ -2002,8 +2091,15 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         }
         const auto& bridgePileName = TNodeLocation(r->GetLocation()).GetBridgePileName();
         if (!piles.empty()) {
-            if (!bridgePileName) {
-                *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId();
+            // pile name may be omitted only for single-pile configuration (cluster converted from non-bridged one)
+            if (!bridgePileName && piles.size() != 1) {
+                *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId()
+                    << " (nodes of the cluster converted from non-bridged one have to get the name of its pile before"
+                    " other piles are added)";
+                return false;
+            } else if (bridgePileName && !piles.contains(*bridgePileName)) {
+                *errorReason = TStringBuilder() << "unknown pile name '" << *bridgePileName << "' for node "
+                    << r->GetNodeId();
                 return false;
             }
         } else if (bridgePileName) {
@@ -2028,7 +2124,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 
             auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
                 if (needMerge) {
-                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, from, *to);
+                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, *to, from);
                     if (!errorReason->empty()) {
                         return false;
                     }

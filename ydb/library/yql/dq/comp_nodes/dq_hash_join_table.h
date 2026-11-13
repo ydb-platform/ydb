@@ -118,6 +118,24 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.RequiredMemoryForBuild(nTuples);
     }
 
+    void PrefetchDirectory(const ui8* packed) const {
+        if (!Empty()) {
+            Table_.PrefetchDirectory(packed);
+        }
+    }
+
+    void PrefetchBuffer(const ui8* packed) const {
+        if (!Empty()) {
+            Table_.PrefetchBuffer(packed);
+        }
+    }
+
+    void PrefetchTuple(const ui8* packed) const {
+        if (!Empty()) {
+            Table_.PrefetchTuple(packed);
+        }
+    }
+
     // resumeIndex is where the scan of this probe continues, 0 once every match was consumed
     bool Lookup(TSingleTuple row, size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
                 std::predicate auto isFull) {

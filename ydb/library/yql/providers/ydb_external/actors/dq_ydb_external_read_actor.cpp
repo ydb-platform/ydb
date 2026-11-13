@@ -5,11 +5,11 @@
 
 namespace NYql::NDq {
 
-void RegisterYdbExternalReadActorFactory(TDqAsyncIoFactory& factory,
-    TYdbExternalDriverFactory driverFactory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
-    factory.RegisterSource<NYdbExternal::TSource>("YdbExternal",
-        [driverFactory = std::move(driverFactory), credentialsFactory = std::move(credentialsFactory)](
-            NYdbExternal::TSource&& source, IDqAsyncIoFactory::TSourceArguments&& args) {
+void RegisterYdbExternalReadActorFactory(
+    TDqAsyncIoFactory& factory, TYdbExternalDriverFactory driverFactory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
+    factory.RegisterSource<NYdbExternal::TSource>(
+        "YdbExternal", [driverFactory = std::move(driverFactory), credentialsFactory = std::move(credentialsFactory)](
+                           NYdbExternal::TSource&& source, IDqAsyncIoFactory::TSourceArguments&& args) {
             NYdbExternal::ValidateSource(source);
             YQL_ENSURE(args.ReadRanges.size() <= 1, "YdbExternal version 1 supports a single split");
             NYdb::NQuery::TClientSettings clientSettings;
@@ -39,17 +39,17 @@ void RegisterYdbExternalReadActorFactory(TDqAsyncIoFactory& factory,
             for (const auto& column : source.GetColumns()) {
                 settings.Columns.push_back(column.GetName());
             }
-            return NNative::CreateNativeReadActor(
-                [client, source = std::move(source)](const NNative::TReadContext& context) {
-                    return NYdbExternal::CreateReadStream(client, source, context);
-                }, std::move(settings), std::move(args));
+            return NNative::CreateNativeReadActor([client, source = std::move(source)](const NNative::TReadContext& context) {
+                return NYdbExternal::CreateReadStream(client, source, context);
+            }, std::move(settings), std::move(args));
         });
 }
 
-void RegisterYdbExternalReadActorFactory(TDqAsyncIoFactory& factory,
-    const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
-    RegisterYdbExternalReadActorFactory(factory,
-        [driver, tlsDriver](bool useTls) { return useTls ? tlsDriver : driver; }, std::move(credentialsFactory));
+void RegisterYdbExternalReadActorFactory(TDqAsyncIoFactory& factory, const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
+    RegisterYdbExternalReadActorFactory(factory, [driver, tlsDriver](bool useTls) {
+        return useTls ? tlsDriver : driver;
+    }, std::move(credentialsFactory));
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

@@ -11,35 +11,17 @@ struct TCommonPushdownSettings: public NPushdown::TSettings {
         using EFlag = NPushdown::TSettings::EFeatureFlag;
         Enable(
             // Operator features
-            EFlag::ExpressionAsPredicate |
-            EFlag::MinMax |
-            EFlag::ArithmeticalExpressions |
-            EFlag::ImplicitConversionToInt64 |
-            EFlag::StringTypes |
-            EFlag::LikeOperator |
-            EFlag::DoNotCheckCompareArgumentsTypes |
-            EFlag::InOperator |
-            EFlag::IsDistinctOperator |
-            EFlag::JustPassthroughOperators |
-            EFlag::DivisionExpressions |
-            EFlag::CastExpression |
-            EFlag::ToBytesFromStringExpressions |
-            EFlag::ToStringFromStringExpressions |
-            EFlag::FlatMapOverOptionals |
-            EFlag::PredicateAsExpression |
+            EFlag::ExpressionAsPredicate | EFlag::MinMax | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
+            EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator | EFlag::IsDistinctOperator |
+            EFlag::JustPassthroughOperators | EFlag::DivisionExpressions | EFlag::CastExpression | EFlag::ToBytesFromStringExpressions |
+            EFlag::ToStringFromStringExpressions | EFlag::FlatMapOverOptionals | EFlag::PredicateAsExpression |
             // EFlag::UnaryOperators | // TODO: no support in connector protocol/Format/Serialize
-            EFlag::StructOperators |
+            EFlag::StructOperators | EFlag::LikeOperatorComplex |
 
             // Type features
-            EFlag::DateCtor |
-            EFlag::DateTimeTypes |
-            EFlag::TimestampCtor |
-            EFlag::DecimalType |
-            EFlag::IntervalCtor |
-            0
-        );
-        EnableFunction("Re2.Grep");  // For REGEXP pushdown
+            EFlag::DateCtor | EFlag::DateTimeTypes | EFlag::TimestampCtor | EFlag::DecimalType | EFlag::IntervalCtor | 0);
+        EnableFunction("Re2.Grep");   // For REGEXP pushdown
     }
 };
 
-} // namespace NYql::NPq
+}   // namespace NYql::NPq

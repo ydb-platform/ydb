@@ -10,6 +10,7 @@
 #include <optional>
 #include <utility>
 
+#include <util/string/printf.h>
 #include <util/string/split.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
@@ -533,6 +534,32 @@ void AssertQueryPlanNotContains(
     UNIT_ASSERT(planRes.QueryStats.Defined());
     const TString ast = TString(planRes.QueryStats->Getquery_ast());
     UNIT_ASSERT_C(ast.find(needle) == TString::npos, ast);
+}
+
+TKikimrSettings PagedPortionSettings(const bool trivialReader) {
+    auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+    settings.SetColumnShardReaderClassName(trivialReader ? "TRIVIAL" : "SIMPLE");
+    settings.AppConfig.MutableColumnShardConfig()->SetMemoryLimitScanPortion(1);
+    return settings;
+}
+
+// One portion of 60 rows with 10 distinct resource_id values.
+void FillDictionaryScalarTable(TKikimrRunner& kikimr) {
+    TLocalHelperModuloTsSharding helper(kikimr);
+    helper.SetShardingMethod("HASH_FUNCTION_MODULO_N");
+    helper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    const auto result = session.ExecuteSchemeQuery(R"(
+        ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=resource_id,
+            `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`);
+    )")
+                            .GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    const auto ts = PickTimestampsForShard(0, 1, 60, 1);
+    const auto rids = MakeRepeatedResourceIds("rid", 10, 60);
+    helper.SendDataViaActorSystem("/Root/olapStore/olapTable", BuildBatchForRows(ts, rids, "u"));
 }
 
 } // namespace
@@ -1368,6 +1395,60 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             5u,
             "JSON_VALUE DISTINCT over a dictionary sub-column + JSON filter: pushdown must match plain",
             ECounterOnForce::MustStay);
+    }
+
+    // A portion that does not fit MemoryLimitScanPortion is read in pages sized in rows, while the dictionary-only fetch has one row per value.
+    Y_UNIT_TEST_QUAD(OneShard_ScalarDistinct_Dictionary_PagedPortion, Trivial, LimitBelowDistinct) {
+        TKikimrRunner kikimr(PagedPortionSettings(Trivial));
+        FillDictionaryScalarTable(kikimr);
+        auto tableClient = kikimr.GetTableClient();
+
+        const ui64 limit = LimitBelowDistinct ? 5 : 100;
+        const ui64 expectedRows = LimitBelowDistinct ? 5 : 10;
+        const auto run = RunDictionaryOnlyOnOff(kikimr, [&](bool withForce) {
+            return RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce,
+                                        "resource_id", "resource_id", {}, {}, limit);
+        });
+        UNIT_ASSERT_C(run.CounterAfterOn > run.CounterAfterOff, "dictionary-only fetch expected");
+        UNIT_ASSERT_VALUES_EQUAL(run.Off.RowsCount, expectedRows);
+        UNIT_ASSERT_VALUES_EQUAL(run.On.RowsCount, expectedRows);
+        if (!LimitBelowDistinct) {
+            CompareYsonUnordered(run.Off.ResultSetYson, run.On.ResultSetYson, "paged dictionary-only DISTINCT must match plain");
+        }
+    }
+
+    // A filter on the DISTINCT key keeps the scan aligned to portion rows.
+    Y_UNIT_TEST_TWIN(OneShard_ScalarDistinct_Dictionary_PagedPortion_SameKeyFilter, Trivial) {
+        TKikimrRunner kikimr(PagedPortionSettings(Trivial));
+        FillDictionaryScalarTable(kikimr);
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString where = R"(WHERE resource_id = "rid_1")";
+        const auto run = RunDictionaryOnlyOnOff(kikimr, [&](bool withForce) {
+            return RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce,
+                                        "resource_id", "resource_id", where, {}, 100);
+        });
+        CompareYson(R"([[["rid_1"]]])", run.Off.ResultSetYson);
+        CompareYson(R"([[["rid_1"]]])", run.On.ResultSetYson);
+        UNIT_ASSERT_VALUES_EQUAL(run.CounterAfterOn, run.CounterAfterOff);
+    }
+
+    Y_UNIT_TEST_TWIN(OneShard_ScalarDistinct_Dictionary_FullPkRange, Trivial) {
+        TKikimrRunner kikimr(PagedPortionSettings(Trivial));
+        FillDictionaryScalarTable(kikimr);
+        auto tableClient = kikimr.GetTableClient();
+
+        const auto ts = PickTimestampsForShard(0, 1, 60, 1);
+        const TString where = Sprintf(R"(WHERE `timestamp` >= DateTime::FromMicroseconds(%s) AND `timestamp` <= DateTime::FromMicroseconds(%s))",
+            ToString(ts.front()).c_str(), ToString(ts.back()).c_str());
+        const auto run = RunDictionaryOnlyOnOff(kikimr, [&](bool withForce) {
+            return RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce,
+                                        "resource_id", "resource_id", where, {}, 100);
+        });
+        UNIT_ASSERT_C(run.CounterAfterOn > run.CounterAfterOff, "dictionary-only fetch expected for full PK range");
+        UNIT_ASSERT_VALUES_EQUAL(run.Off.RowsCount, 10);
+        UNIT_ASSERT_VALUES_EQUAL(run.On.RowsCount, 10);
+        CompareYsonUnordered(run.Off.ResultSetYson, run.On.ResultSetYson, "full PK range dictionary-only DISTINCT must match plain");
     }
 
     // Same as DictionarySubColumn, but the JSON column is stored with dense dictionary encoding.

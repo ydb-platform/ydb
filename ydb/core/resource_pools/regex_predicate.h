@@ -5,9 +5,7 @@
 
 #include <memory>
 
-
 class TRegExMatch;
-
 
 namespace NKikimr::NResourcePool {
 
@@ -25,4 +23,4 @@ struct TRegexPredicate {
     bool Match(const TString& value) const;
 };
 
-}  // namespace NKikimr::NResourcePool
+}   // namespace NKikimr::NResourcePool

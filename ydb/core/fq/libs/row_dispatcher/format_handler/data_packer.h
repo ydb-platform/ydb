@@ -31,4 +31,4 @@ private:
     ui64 ItemsCount = 0;
 };
 
-} // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

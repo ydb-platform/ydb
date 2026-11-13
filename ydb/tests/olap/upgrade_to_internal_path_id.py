@@ -2,6 +2,7 @@ import logging
 
 import pytest
 import ydb
+from library.python.retry import RetryConf, retry
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -142,6 +143,15 @@ class TestUpgradeToInternalPathId:
         counted_internal_path_ids = mapping[external_path_id]
         return (external_path_id, counted_internal_path_ids)
 
+    # After restart, SELECT 1 can succeed before ColumnShard accepts the read snapshot.
+    @retry(
+        RetryConf(logger=logger).waiting(1).upto(seconds=30),
+        retriable=lambda error: isinstance(error, ydb.issues.BadRequest) and "Snapshot too old:" in error.message,
+    )
+    def validate_existing_table(self, table_name, start_value, expected_path_ids):
+        self.validate_table(table_name, start_value)
+        assert self.get_path_ids(table_name) == expected_path_ids
+
     def test(self):
         tables_path_mapping = []
         max_external_path_id = 0
@@ -150,10 +160,7 @@ class TestUpgradeToInternalPathId:
             logger.info(f"Iteration {i}, with generate_internal_path_id={generate_internal_path_id}")
             self.restart_cluster(generate_internal_path_id=generate_internal_path_id)
             for j in range(0, i):
-                existing_table_name = f"table{j}"
-                self.validate_table(existing_table_name, j)
-                assert j < len(tables_path_mapping)
-                assert self.get_path_ids(existing_table_name) == tables_path_mapping[j]
+                self.validate_existing_table(f"table{j}", j, tables_path_mapping[j])
             new_table_name = f"table{i}"
             self.create_table_with_data(new_table_name, i)
             self.validate_table(new_table_name, i)

@@ -1,12 +1,12 @@
 #include <ydb/core/fq/libs/ydb/query_actor.h>
-#include <ydb/library/actors/core/log.h>
 
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/query_actor/query_actor.h>
-
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <yql/essentials/public/issue/yql_issue.h>
+
 #include <library/cpp/threading/future/core/future.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT LogComponent
 
@@ -14,7 +14,7 @@ namespace NFq {
 
 namespace {
 
-class TQuerySession final : public NKikimr::TQueryBase {
+class TQuerySession final: public NKikimr::TQueryBase {
     using TBase = NKikimr::TQueryBase;
 
     struct TDataQuery {
@@ -22,6 +22,7 @@ class TQuerySession final : public NKikimr::TQueryBase {
         std::shared_ptr<NYdb::TParamsBuilder> Params;
         TEvQuerySession::TTxControl TxControl;
         NThreading::TPromise<NYdb::NTable::TDataQueryResult> Promise;
+        TDuration OperationTimeout;
     };
 
 public:
@@ -30,12 +31,11 @@ public:
     }
 
 private:
-
     TString LogPrefix() const {
         return "TQuerySession: ";
     }
 
-    TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId &self, const NActors::TActorId& parentId) override {
+    TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId& self, const NActors::TActorId& parentId) override {
         Y_UNUSED(parentId);
         Become(&TQuerySession::StateWork);
         return new NActors::IEventHandle(self, self, new NActors::TEvents::TEvBootstrap());
@@ -61,7 +61,14 @@ private:
         Y_ABORT_UNLESS(!IsExecuting);
         Y_ABORT_UNLESS(!DataQuery);
 
-        DataQuery = TDataQuery{ev->Get()->Sql, ev->Get()->Params, ev->Get()->TxControl, ev->Get()->Promise};
+        const auto& settings = ev->Get()->ExecDataQuerySettings;
+        auto operationTimeout = settings.OperationTimeout_;
+        if (!operationTimeout && settings.ClientTimeout_ && settings.ClientTimeout_ != TDuration::Max() &&
+            settings.UseClientTimeoutForOperation_) {
+            operationTimeout = settings.ClientTimeout_;
+        }
+
+        DataQuery = TDataQuery{ ev->Get()->Sql, ev->Get()->Params, ev->Get()->TxControl, ev->Get()->Promise, operationTimeout };
         ProcessQueries();
     }
 
@@ -82,7 +89,8 @@ private:
         auto status = NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues());
 
         IsExecuting = false;
-        promise.SetValue(NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
+        promise.SetValue(
+            NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
         if (IsFinishing) {
             Finish();
         }
@@ -91,7 +99,8 @@ private:
     void OnFinish(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) final {
         if (DataQuery) {
             NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), NYdb::NAdapters::ToSdkIssues(issues));
-            DataQuery->Promise.SetValue(NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
+            DataQuery->Promise.SetValue(
+                NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
         }
         DataQuery = std::nullopt;
     }
@@ -119,7 +128,7 @@ private:
             {"logPrefix", LogPrefix()},
             {"sql", DataQuery->Sql},
             {"commit", tx.Commit_});
-        RunDataQuery(DataQuery->Sql, DataQuery->Params.get(), tx);
+        RunDataQuery(DataQuery->Sql, DataQuery->Params.get(), tx, DataQuery->OperationTimeout);
     }
 
     void DoPassAway() {
@@ -137,10 +146,10 @@ private:
     bool IsFinishing = false;
 };
 
-} // namespace
+}   // namespace
 
 std::unique_ptr<NActors::IActor> MakeQuerySession() {
     return std::unique_ptr<NActors::IActor>(new TQuerySession());
 }
 
-} // namespace NFq
+}   // namespace NFq

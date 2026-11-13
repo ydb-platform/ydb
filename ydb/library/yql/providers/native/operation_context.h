@@ -12,4 +12,4 @@ struct TOperationContext {
     NThreading::TCancellationToken Cancellation = NThreading::TCancellationToken::Default();
 };
 
-} // namespace NYql::NNative
+}   // namespace NYql::NNative

@@ -6,18 +6,13 @@
 
 namespace NFq {
 
-class TDatabaseAsyncResolverImpl : public NYql::IDatabaseAsyncResolver {
+class TDatabaseAsyncResolverImpl: public NYql::IDatabaseAsyncResolver {
 public:
-    TDatabaseAsyncResolverImpl(
-        NActors::TActorSystem* actorSystem,
-        const NActors::TActorId& recipient,
-        const TString& ydbMvpEndpoint,
-        const TString& mdbGateway,
-        const NYql::IMdbEndpointGenerator::TPtr& endpointGenerator, 
-        const TString& traceId = ""
-    );
+    TDatabaseAsyncResolverImpl(NActors::TActorSystem* actorSystem, const NActors::TActorId& recipient, const TString& ydbMvpEndpoint,
+        const TString& mdbGateway, const NYql::IMdbEndpointGenerator::TPtr& endpointGenerator, const TString& traceId = "");
 
     NThreading::TFuture<NYql::TDatabaseResolverResponse> ResolveIds(const TDatabaseAuthMap& ids) const override;
+
 private:
     NActors::TActorSystem* ActorSystem;
     const NActors::TActorId Recipient;
@@ -27,4 +22,4 @@ private:
     const TString TraceId;
 };
 
-} // NFq
+}   // namespace NFq

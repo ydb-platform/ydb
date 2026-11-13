@@ -168,7 +168,7 @@ public:
             AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
             {
                 auto intervalSize = ProcessCountersInterval.MicroSeconds();
-                auto deadline = (TInstant::Now().MicroSeconds() / intervalSize + 1) * intervalSize;
+                auto deadline = (AppData()->TimeProvider->Now().MicroSeconds() / intervalSize + 1) * intervalSize;
                 deadline += RandomNumber<ui64>(intervalSize / 5);
                 Schedule(TInstant::MicroSeconds(deadline), new TEvPrivate::TEvProcessCounters());
             }
@@ -180,7 +180,7 @@ public:
         if (AppData()->FeatureFlags.GetEnableDbCounters()) {
             {
                 auto intervalSize = ProcessLabeledCountersInterval.MicroSeconds();
-                auto deadline = (TInstant::Now().MicroSeconds() / intervalSize + 1) * intervalSize;
+                auto deadline = (AppData()->TimeProvider->Now().MicroSeconds() / intervalSize + 1) * intervalSize;
                 deadline += RandomNumber<ui64>(intervalSize / 5);
                 Schedule(TInstant::MicroSeconds(deadline), new TEvPrivate::TEvProcessLabeledCounters());
             }
@@ -281,7 +281,7 @@ private:
 
     TInstant GetNextIntervalEnd() {
         auto intervalSize = TotalInterval.MicroSeconds();
-        auto rounded = (Now().MicroSeconds() / intervalSize + 1) * intervalSize;
+        auto rounded = (AppData()->TimeProvider->Now().MicroSeconds() / intervalSize + 1) * intervalSize;
         return TInstant::MicroSeconds(rounded);
     }
 
@@ -320,7 +320,7 @@ private:
 
     void Rotate() {
         auto summaryEnd = IntervalEnd;
-        auto delta = Now() - summaryEnd;
+        auto delta = AppData()->TimeProvider->Now() - summaryEnd;
 
         IntervalEnd = GetNextIntervalEnd();
         Schedule(IntervalEnd, new TEvPrivate::TEvProcessInterval(IntervalEnd));
@@ -362,7 +362,7 @@ private:
 
         // randomize send time
         auto windowUs = (SendInterval - delta).MicroSeconds() / 2;
-        auto now = Now();
+        auto now = AppData()->TimeProvider->Now();
         for (const auto& [database, _] : QueryLogs) {
             TInstant deadline = now + TDuration::MicroSeconds(windowUs + RandomNumber<ui64>(windowUs));
             Schedule(deadline, new TEvPrivate::TEvSendSummary(summaryEnd, database));
@@ -443,7 +443,13 @@ private:
         record.SetNodeId(SelfId().NodeId());
 
         for (auto& [service, state] : dbCounters.States) {
-            auto* serviceCounters = record.AddServiceCounters();
+            auto* list = record.MutableServiceCounters();
+            if constexpr (!isLabeled) {
+                if (service == NKikimrSysView::TABLETS_FOLLOWERS) {
+                    list = record.MutableFollowerServiceCounters(); // see sys_view.proto
+                }
+            }
+            auto* serviceCounters = list->Add();
             serviceCounters->SetService(service);
             auto* diff = serviceCounters->MutableCounters();
 
@@ -540,7 +546,7 @@ private:
         if (intervalEnd != prevIntervalEnd) {
             return;
         }
-        if (Now() > intervalEnd + CollectInterval) {
+        if (AppData()->TimeProvider->Now() > intervalEnd + CollectInterval) {
             return;
         }
         SendSummary(intervalEnd, ev->Get()->Database);
@@ -727,9 +733,9 @@ private:
     void Handle(TEvSysView::TEvRegisterDbCounters::TPtr& ev) {
         const auto service = ev->Get()->Service;
 
-        if (service == NKikimrSysView::TABLETS) { // register by path id
+        if (service == NKikimrSysView::TABLETS || service == NKikimrSysView::TABLETS_FOLLOWERS) { // register by path id
             auto pathId = ev->Get()->PathId;
-            UnresolvedTabletCounters[pathId] = ev->Get()->Counters;
+            UnresolvedTabletCounters[pathId][service] = ev->Get()->Counters;
             RequestDatabaseName(pathId);
 
             YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbCounters: registering counters by path id",
@@ -826,7 +832,7 @@ private:
         }
 
         auto summaryEnd = attempt.first;
-        auto deadline = Now() + SummaryRetryInterval;
+        auto deadline = AppData()->TimeProvider->Now() + SummaryRetryInterval;
         Schedule(deadline, new TEvPrivate::TEvSendSummary(summaryEnd, database));
     }
 
@@ -854,7 +860,9 @@ private:
                 return;
             }
 
-            RegisterDbCounters(database, NKikimrSysView::TABLETS, it->second);
+            for (const auto& [service, counters] : it->second) {
+                RegisterDbCounters(database, service, counters);
+            }
             UnresolvedTabletCounters.erase(it);
 
             YDB_LOG_INFO("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: navigate by path id succeeded",
@@ -1146,7 +1154,7 @@ private:
 
     std::unordered_map<TString, TDbCounters> DatabaseCounters;
     std::unordered_map<TString, TDbCounters> DatabaseLabeledCounters;
-    THashMap<TPathId, TIntrusivePtr<IDbCounters>> UnresolvedTabletCounters;
+    THashMap<TPathId, THashMap<NKikimrSysView::EDbCountersService, TIntrusivePtr<IDbCounters>>> UnresolvedTabletCounters;
     TActorId DbWatcherActorId;
 
     static constexpr i64 ConcurrentScansLimit = 5;

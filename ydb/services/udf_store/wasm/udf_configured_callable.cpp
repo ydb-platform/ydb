@@ -1,12 +1,11 @@
-#include "udf_configured_callable.h"
-
 #include "compartment_manager.h"
+#include "udf_configured_callable.h"
 #include "udf_function.h"
 
-#include <yql/essentials/minikql/mkql_terminator.h>
-#include <yql/essentials/public/issue/yql_issue.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+#include <yql/essentials/minikql/mkql_terminator.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <exception>
 #include <utility>
@@ -15,12 +14,8 @@ namespace NKikimr::NUdfStore::NWasm {
 
 using namespace NYql::NUdf;
 
-void TWasmConfiguredCallable::Register(
-    IFunctionTypeInfoBuilder& builder,
-    bool typesOnly,
-    TWasmCompartmentStatePtr state,
-    const TWasmUdfDescriptor& descriptor,
-    TString typeConfigBlob)
+void TWasmConfiguredCallable::Register(IFunctionTypeInfoBuilder& builder, bool typesOnly, TWasmCompartmentStatePtr state,
+    const TWasmUdfDescriptor& descriptor, TString typeConfigBlob)
 {
     builder.Returns(BuildTypeFromWasmTypeNode(builder, *descriptor.ResultType));
     auto args = builder.Args(descriptor.ArgTypes.size());
@@ -34,16 +29,13 @@ void TWasmConfiguredCallable::Register(
 }
 
 TWasmConfiguredCallable::TWasmConfiguredCallable(
-    IFunctionTypeInfoBuilder& builder,
-    TWasmCompartmentStatePtr state,
-    const TWasmUdfDescriptor& descriptor,
-    TString typeConfigBlob)
+    IFunctionTypeInfoBuilder& builder, TWasmCompartmentStatePtr state, const TWasmUdfDescriptor& descriptor, TString typeConfigBlob)
     : ConfigBlob_(std::move(typeConfigBlob))
     , Name_(descriptor.Name)
 {
     TWasmUdfDescriptor create;
     create.Name = create.ExportName = descriptor.CreateExport;
-    create.ArgTypes = {MakeLeafTypeNode(EUdfValueType::String)};
+    create.ArgTypes = { MakeLeafTypeNode(EUdfValueType::String) };
     create.ResultType = MakeLeafTypeNode(EUdfValueType::Uint64);
     Create_ = TWasmBridgeFunction::Create(builder, state, create);
 
@@ -57,7 +49,7 @@ TWasmConfiguredCallable::TWasmConfiguredCallable(
     if (!descriptor.DestroyExport.empty()) {
         TWasmUdfDescriptor destroy;
         destroy.Name = destroy.ExportName = descriptor.DestroyExport;
-        destroy.ArgTypes = {MakeLeafTypeNode(EUdfValueType::Uint64)};
+        destroy.ArgTypes = { MakeLeafTypeNode(EUdfValueType::Uint64) };
         destroy.ResultType = MakeLeafTypeNode(EUdfValueType::Null);
         Destroy_ = TWasmBridgeFunction::Create(builder, state, destroy);
     }
@@ -127,4 +119,4 @@ TUnboxedValue TWasmConfiguredCallable::Run(const IValueBuilder* valueBuilder, co
     return {};
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

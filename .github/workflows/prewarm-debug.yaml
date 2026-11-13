@@ -1,21 +1,22 @@
 name: Prewarm-debug
 on:
   schedule:
-    - cron: "0 * * * *"  # At minute 0
+    - cron: "0 */2 * * *"  # At minute 0 past every 2nd hour
   workflow_dispatch:
 jobs:
   build_and_test:
     strategy:
       fail-fast: false
       matrix:
-        build_preset: ["release", "relwithdebinfo", "release-asan", "debug"]
+        build_preset: ["release", "relwithdebinfo"]
+        branch: ["main"]
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
-    name: Build and test ${{ matrix.build_preset }}
+    name: Build and test ${{ matrix.build_preset }} on ${{ matrix.branch }}
     steps:
     - name: Checkout
       uses: actions/checkout@v5
       with:
-        ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+        ref: ${{ matrix.branch }}
         fetch-depth: 2
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials

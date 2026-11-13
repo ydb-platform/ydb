@@ -6,6 +6,7 @@
 
 #include <util/datetime/base.h>
 
+#include <optional>
 #include <span>
 
 namespace NYdb::inline Dev::NTopic {
@@ -283,10 +284,22 @@ struct TReadSessionEvent {
     struct TStartPartitionSessionEvent: public TPartitionSessionAccessor,
                                         public TPrintable<TStartPartitionSessionEvent> {
         explicit TStartPartitionSessionEvent(TPartitionSession::TPtr, uint64_t committedOffset, uint64_t endOffset);
+        explicit TStartPartitionSessionEvent(TPartitionSession::TPtr, uint64_t committedOffset, uint64_t readOffset,
+                                            uint64_t endOffset, std::optional<uint64_t> retainedStartOffset);
 
         //! Current committed offset in partition session.
         uint64_t GetCommittedOffset() const {
             return CommittedOffset;
+        }
+
+        //! Read position reported when the partition session starts.
+        uint64_t GetReadOffset() const {
+            return ReadOffset;
+        }
+
+        //! Earliest retained offset, when reported by the server.
+        std::optional<uint64_t> GetRetainedStartOffset() const {
+            return RetainedStartOffset;
         }
 
         //! Offset of first not existing message in partition session.
@@ -301,7 +314,9 @@ struct TReadSessionEvent {
 
     private:
         uint64_t CommittedOffset;
+        uint64_t ReadOffset;
         uint64_t EndOffset;
+        std::optional<uint64_t> RetainedStartOffset;
     };
 
     //! Server command for stopping and destroying partition session.

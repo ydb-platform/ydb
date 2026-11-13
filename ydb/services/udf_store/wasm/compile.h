@@ -17,4 +17,4 @@ void ValidateModuleSource(TStringBuf bytes, NYdb::NWasm::EBytecodeFormat format)
 
 TString CompileModuleObjectCode(TStringBuf wasmBytes, NYdb::NWasm::EBytecodeFormat format);
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

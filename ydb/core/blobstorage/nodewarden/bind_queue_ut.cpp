@@ -6,6 +6,28 @@ using namespace NKikimr;
 using namespace NKikimr::NStorage;
 
 Y_UNIT_TEST_SUITE(BindQueue) {
+    Y_UNIT_TEST(PostponedPeerSurvivesUpdatesAndEnable) {
+        TBindQueue bindQueue;
+        bindQueue.Update({1, 2});
+        const TMonotonic now = TMonotonic::Seconds(100);
+        const TMonotonic retryAt = now + TDuration::Seconds(60);
+        bindQueue.Postpone(1, retryAt);
+        TMonotonic closest;
+        UNIT_ASSERT_VALUES_EQUAL(bindQueue.Pick(now, &closest), std::make_optional<ui32>(2));
+        bindQueue.Disable(1);
+        bindQueue.Update({1});
+        bindQueue.Enable(1);
+        UNIT_ASSERT(!bindQueue.Pick(retryAt - TDuration::MicroSeconds(1), &closest));
+        UNIT_ASSERT_VALUES_EQUAL(closest, retryAt);
+        UNIT_ASSERT_VALUES_EQUAL(bindQueue.Pick(retryAt, &closest), std::make_optional<ui32>(1));
+        UNIT_ASSERT(!bindQueue.Pick(retryAt, &closest));
+        UNIT_ASSERT_VALUES_EQUAL(closest, retryAt + TDuration::Seconds(1));
+        bindQueue.Postpone(1, retryAt + TDuration::Seconds(90));
+        bindQueue.Postpone(1, retryAt + TDuration::Seconds(10));
+        UNIT_ASSERT(!bindQueue.Pick(retryAt + TDuration::Seconds(60), &closest));
+        UNIT_ASSERT_VALUES_EQUAL(closest, retryAt + TDuration::Seconds(90));
+    }
+
     Y_UNIT_TEST(Basic) {
         TBindQueue bindQueue;
 

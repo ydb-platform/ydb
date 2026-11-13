@@ -22,6 +22,9 @@ namespace NKikimr::NDDisk {
     constexpr size_t MinSectorSize = 4096;
     constexpr size_t DataAlignment = MinSectorSize;
 
+    // Public TEvWrite requests larger than this are rejected before allocation or I/O.
+    constexpr ui32 MaxWriteSize = 1u << 20;
+
     static_assert(MinSectorSize == IntegrityUnitSize);
 
     // DDisk uses the whole physical PDisk chunk and needs no room for PDisk per-sector metadata, so a
@@ -727,7 +730,8 @@ struct TPersistentBufferFormat {
 
         TEvReadResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt,
-                TRope data = {}, const std::vector<ui64>& checksums = {}) {
+                TRope data = {}, TConstArrayRef<ui64> checksums = {})
+        {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);

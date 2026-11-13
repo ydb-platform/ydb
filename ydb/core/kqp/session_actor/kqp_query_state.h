@@ -32,10 +32,6 @@
 
 namespace NKikimr {
 
-namespace NWorkloadManager {
-class IQueryClassifier;
-} // namespace NWorkloadManager
-
 namespace NKqp {
 
 class TKqpQueryCache;
@@ -141,8 +137,12 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
-        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType());
-        QueryClassifier = RequestEv->GetWmQueryClassifier();
+        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType())
+            || (RequestEv->IsInternalCall()
+                && RequestEv->GetRequestType() == NRequestTypes::ChecksumTable
+                && (QueryType == NKikimrKqp::QUERY_TYPE_SQL_DML
+                    || QueryType == NKikimrKqp::QUERY_TYPE_PREPARED_DML
+                    || QueryType == NKikimrKqp::QUERY_TYPE_AST_DML));
 
         if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
             YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
@@ -157,6 +157,7 @@ public:
     // this counter may be used as a cookie by a session actor to reject events
     // with cookie less than current QueryId.
     ui64 QueryId = 0;
+    TMaybe<TRowVersion> ExternalMvccVersion;
     ui64 QuerySpanId = 0;
     TString Database;
     TMaybe<TString> ApplicationName;
@@ -165,7 +166,6 @@ public:
     TActorId Sender;
     ui64 ProxyRequestId = 0;
     std::unique_ptr<TEvKqp::TEvQueryRequest> RequestEv;
-    std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TString QueryTextForLogging;
@@ -529,6 +529,12 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
+        AFL_ENSURE(UserRequestContext);
+        if (UserRequestContext->IsStreamingQuery) {
+            // Streaming queries are long-running: held-open read locks would be
+            // broken by any concurrent write and abort the query.
+            return false;
+        }
         if (*TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&

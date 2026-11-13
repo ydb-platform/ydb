@@ -155,8 +155,8 @@ bool ApplyNodePositionAnnotationsInplace(TAstNode& node, ui32 annotationIndex) {
     }
 
     auto lastNode = node.GetChild(node.GetChildrenCount() - 1);
-    // the file part points into the annotation atom's content, which lives as long as the tree
-    lastNode->SetPosition(col, row, str);
+    // the file part is copied from the annotation atom's content
+    lastNode->SetPosition(TPosition(col, row, TString(str)));
     if (lastNode->IsList()) {
         for (ui32 index = 0; index < lastNode->GetChildrenCount(); ++index) {
             if (!ApplyNodePositionAnnotationsInplace(*lastNode->GetChild(index), annotationIndex)) {

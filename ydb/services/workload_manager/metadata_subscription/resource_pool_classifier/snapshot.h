@@ -4,10 +4,9 @@
 
 #include <ydb/services/metadata/abstract/fetcher.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
-class TResourcePoolClassifierSnapshot : public NMetadata::NFetcher::ISnapshot {
+class TResourcePoolClassifierSnapshot: public NMetadata::NFetcher::ISnapshot {
     using TBase = NMetadata::NFetcher::ISnapshot;
 
 public:
@@ -51,14 +50,25 @@ public:
         }
     }
 
-    explicit operator bool() const { return Configs != nullptr; }
-    const TConfigsByRankMap* operator->() const { return Configs; }
-    const TConfigsByRankMap& operator*() const { return *Configs; }
-    const TConfigsByRankMap* Get() const { return Configs; }
+    explicit operator bool() const {
+        return Configs != nullptr;
+    }
+
+    const TConfigsByRankMap* operator->() const {
+        return Configs;
+    }
+
+    const TConfigsByRankMap& operator*() const {
+        return *Configs;
+    }
+
+    const TConfigsByRankMap* Get() const {
+        return Configs;
+    }
 
 private:
     TResourcePoolClassifierSnapshotPtr Snapshot;
     const TConfigsByRankMap* Configs = nullptr;
 };
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

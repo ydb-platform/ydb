@@ -7,7 +7,8 @@ namespace NFq {
 
 TCheckpointStorageSettings::TGcSettings::TGcSettings(const NConfig::TCheckpointGcConfig& config)
     : Enabled(config.GetEnabled())
-{}
+{
+}
 
 TCheckpointStorageSettings::TStateStorageLimits::TStateStorageLimits(const NConfig::TStateStorageLimitsConfig& config) {
     if (config.GetMaxGraphCheckpointsSizeBytes()) {
@@ -25,12 +26,14 @@ TCheckpointStorageSettings::TStateStorageLimits::TStateStorageLimits(const NConf
 
 TCheckpointStorageSettings::TCheckpointStorageSettings(const NKikimrConfig::TStreamingQueriesConfig::TExternalStorageConfig& config)
     : ExternalStorage(config)
-{}
+{
+}
 
 TCheckpointStorageSettings::TCheckpointStorageSettings(const NConfig::TCheckpointCoordinatorConfig& config)
     : StateStorageLimits(config.GetStateStorageLimits())
     , CheckpointGarbageConfig(config.GetCheckpointGarbageConfig())
     , ExternalStorage(config.GetStorage())
-{}
+{
+}
 
-} // namespace NFq
+}   // namespace NFq

@@ -1,47 +1,47 @@
 {
-    "test.test[BottomByTuple]": [
+    "test.test[Bottom-Results]": [
         {
-            "uri": "file://test.test_BottomByTuple_/results.txt"
+            "uri": "file://test.test_Bottom-Results_/results.txt"
         }
     ],
-    "test.test[BottomBy]": [
+    "test.test[BottomBy-Results]": [
         {
-            "uri": "file://test.test_BottomBy_/results.txt"
+            "uri": "file://test.test_BottomBy-Results_/results.txt"
         }
     ],
-    "test.test[Bottom]": [
+    "test.test[BottomByTuple-Results]": [
         {
-            "uri": "file://test.test_Bottom_/results.txt"
+            "uri": "file://test.test_BottomByTuple-Results_/results.txt"
         }
     ],
-    "test.test[TopBy]": [
+    "test.test[Top-Results]": [
         {
-            "uri": "file://test.test_TopBy_/results.txt"
+            "uri": "file://test.test_Top-Results_/results.txt"
         }
     ],
-    "test.test[TopList]": [
+    "test.test[TopBy-Results]": [
         {
-            "uri": "file://test.test_TopList_/results.txt"
+            "uri": "file://test.test_TopBy-Results_/results.txt"
         }
     ],
-    "test.test[TopTuple]": [
+    "test.test[TopList-Results]": [
         {
-            "uri": "file://test.test_TopTuple_/results.txt"
+            "uri": "file://test.test_TopList-Results_/results.txt"
         }
     ],
-    "test.test[TopVariant]": [
+    "test.test[TopTuple-Results]": [
         {
-            "uri": "file://test.test_TopVariant_/results.txt"
+            "uri": "file://test.test_TopTuple-Results_/results.txt"
         }
     ],
-    "test.test[Top]": [
+    "test.test[TopVariant-Results]": [
         {
-            "uri": "file://test.test_Top_/results.txt"
+            "uri": "file://test.test_TopVariant-Results_/results.txt"
         }
     ],
-    "test.test[Window]": [
+    "test.test[Window-Results]": [
         {
-            "uri": "file://test.test_Window_/results.txt"
+            "uri": "file://test.test_Window-Results_/results.txt"
         }
     ]
 }

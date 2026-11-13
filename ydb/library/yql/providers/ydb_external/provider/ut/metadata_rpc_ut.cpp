@@ -1,17 +1,16 @@
 #include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider_impl.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
-#include <yql/essentials/core/yql_type_annotation.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-
-#include <library/cpp/testing/common/network.h>
-#include <library/cpp/testing/unittest/registar.h>
 
 #include <grpcpp/completion_queue.h>
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 #include <grpcpp/support/async_unary_call.h>
+#include <library/cpp/testing/common/network.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <chrono>
 #include <thread>
@@ -30,7 +29,7 @@ template <typename TRequest, typename TResponse>
 struct TUnaryCall {
     grpc::ServerContext Context;
     TRequest Request;
-    grpc::ServerAsyncResponseWriter<TResponse> Writer{&Context};
+    grpc::ServerAsyncResponseWriter<TResponse> Writer{ &Context };
     TTag Accepted;
     TTag Finished;
     TTag Done;
@@ -50,12 +49,9 @@ public:
         Create.Context.AsyncNotifyWhenDone(&Create.Done);
         Describe.Context.AsyncNotifyWhenDone(&Describe.Done);
         Delete.Context.AsyncNotifyWhenDone(&Delete.Done);
-        Service_.RequestCreateSession(&Create.Context, &Create.Request, &Create.Writer,
-            Queue_.get(), Queue_.get(), &Create.Accepted);
-        Service_.RequestDescribeTable(&Describe.Context, &Describe.Request, &Describe.Writer,
-            Queue_.get(), Queue_.get(), &Describe.Accepted);
-        Service_.RequestDeleteSession(&Delete.Context, &Delete.Request, &Delete.Writer,
-            Queue_.get(), Queue_.get(), &Delete.Accepted);
+        Service_.RequestCreateSession(&Create.Context, &Create.Request, &Create.Writer, Queue_.get(), Queue_.get(), &Create.Accepted);
+        Service_.RequestDescribeTable(&Describe.Context, &Describe.Request, &Describe.Writer, Queue_.get(), Queue_.get(), &Describe.Accepted);
+        Service_.RequestDeleteSession(&Delete.Context, &Delete.Request, &Delete.Writer, Queue_.get(), Queue_.get(), &Delete.Accepted);
     }
 
     ~TMetadataServer() {
@@ -125,8 +121,8 @@ public:
     }
 
     void CheckNoSecondDelete() {
-        Service_.RequestDeleteSession(&SecondDelete.Context, &SecondDelete.Request, &SecondDelete.Writer,
-            Queue_.get(), Queue_.get(), &SecondDelete.Accepted);
+        Service_.RequestDeleteSession(
+            &SecondDelete.Context, &SecondDelete.Request, &SecondDelete.Writer, Queue_.get(), Queue_.get(), &SecondDelete.Accepted);
         UNIT_ASSERT(!WaitFor(SecondDelete.Accepted, TDuration::MilliSeconds(100), false));
     }
 
@@ -144,24 +140,25 @@ private:
 
 TExprNode::TPtr MakeRead(TExprContext& ctx) {
     const auto pos = ctx.AppendPosition({});
+    // clang-format off
     return ctx.NewCallable(pos, "Read!", {
         ctx.NewWorld(pos), ctx.NewCallable(pos, "DataSource", {
             ctx.NewAtom(pos, YdbExternalProviderName), ctx.NewAtom(pos, "remote")}),
         ctx.NewCallable(pos, "Key", {ctx.NewList(pos, {ctx.NewAtom(pos, "table"),
             ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "items")})})}),
         ctx.NewCallable(pos, "Void", {}), ctx.NewList(pos, {})});
+    // clang-format on
 }
 
 void CheckMetadataCleanup(bool rejectBeforeCompletion, bool unsupportedType = false) {
     TMetadataServer server;
-    NYdb::TDriver driver(NYdb::TDriverConfig().SetDiscoveryMode(NYdb::EDiscoveryMode::Off)
-        .SetNetworkThreadsNum(1).SetClientThreadsNum(1));
+    NYdb::TDriver driver(NYdb::TDriverConfig().SetDiscoveryMode(NYdb::EDiscoveryMode::Off).SetNetworkThreadsNum(1).SetClientThreadsNum(1));
     auto types = MakeIntrusive<TTypeAnnotationContext>();
-    auto state = MakeIntrusive<TState>(types.Get(),
-        [cache = CreateYdbExternalMetadataClientCache(driver, driver)] { return cache; },
-        CreateStructuredTokenCredentialsFactory());
-    AddCluster(*state, "remote", {{"location", server.Endpoint}, {"database_name", "/Remote"},
-        {"authMethod", "NONE"}, {"use_tls", "false"}});
+    auto state = MakeIntrusive<TState>(types.Get(), [cache = CreateYdbExternalMetadataClientCache(driver, driver)] {
+        return cache;
+    }, CreateStructuredTokenCredentialsFactory());
+    AddCluster(
+        *state, "remote", { { "location", server.Endpoint }, { "database_name", "/Remote" }, { "authMethod", "NONE" }, { "use_tls", "false" } });
     TExprContext ctx;
     auto input = MakeRead(ctx);
     auto transformer = CreateLoadMetadataTransformer(state);
@@ -197,27 +194,34 @@ void CheckMetadataCleanup(bool rejectBeforeCompletion, bool unsupportedType = fa
 
 void CheckMetadataCancellation(bool cancelDescribe, bool expireDeadline = false) {
     TMetadataServer server;
-    NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(server.Endpoint)
-        .SetDiscoveryMode(NYdb::EDiscoveryMode::Off).SetDatabase("/Remote")
-        .SetNetworkThreadsNum(1).SetClientThreadsNum(1));
-    NYdb::TDriver tlsDriver(NYdb::TDriverConfig().SetEndpoint(server.Endpoint)
-        .SetDiscoveryMode(NYdb::EDiscoveryMode::Off).SetDatabase("/Remote")
-        .SetNetworkThreadsNum(1).SetClientThreadsNum(1));
+    NYdb::TDriver driver(NYdb::TDriverConfig()
+                             .SetEndpoint(server.Endpoint)
+                             .SetDiscoveryMode(NYdb::EDiscoveryMode::Off)
+                             .SetDatabase("/Remote")
+                             .SetNetworkThreadsNum(1)
+                             .SetClientThreadsNum(1));
+    NYdb::TDriver tlsDriver(NYdb::TDriverConfig()
+                                .SetEndpoint(server.Endpoint)
+                                .SetDiscoveryMode(NYdb::EDiscoveryMode::Off)
+                                .SetDatabase("/Remote")
+                                .SetNetworkThreadsNum(1)
+                                .SetClientThreadsNum(1));
     auto types = MakeIntrusive<TTypeAnnotationContext>();
-    auto state = MakeIntrusive<TState>(types.Get(),
-        [cache = CreateYdbExternalMetadataClientCache(driver, tlsDriver)] { return cache; },
-        CreateStructuredTokenCredentialsFactory(),
-        TInstant::Now() + TDuration::Seconds(expireDeadline ? 5 : 30));
-    AddCluster(*state, "remote", {{"location", server.Endpoint}, {"database_name", "/Remote"},
-        {"authMethod", "NONE"}, {"use_tls", "false"}});
+    auto state = MakeIntrusive<TState>(types.Get(), [cache = CreateYdbExternalMetadataClientCache(driver, tlsDriver)] {
+        return cache;
+    }, CreateStructuredTokenCredentialsFactory(), TInstant::Now() + TDuration::Seconds(expireDeadline ? 5 : 30));
+    AddCluster(
+        *state, "remote", { { "location", server.Endpoint }, { "database_name", "/Remote" }, { "authMethod", "NONE" }, { "use_tls", "false" } });
     TExprContext ctx;
     const auto pos = ctx.AppendPosition({});
+    // clang-format off
     auto input = ctx.NewCallable(pos, "Read!", {
         ctx.NewWorld(pos), ctx.NewCallable(pos, "DataSource", {
             ctx.NewAtom(pos, YdbExternalProviderName), ctx.NewAtom(pos, "remote")}),
         ctx.NewCallable(pos, "Key", {ctx.NewList(pos, {ctx.NewAtom(pos, "table"),
             ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "items")})})}),
         ctx.NewCallable(pos, "Void", {}), ctx.NewList(pos, {})});
+    // clang-format on
     auto transformer = CreateLoadMetadataTransformer(state);
     TExprNode::TPtr output;
     UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(input, output, ctx).Level, IGraphTransformer::TStatus::Async);
@@ -233,8 +237,7 @@ void CheckMetadataCancellation(bool cancelDescribe, bool expireDeadline = false)
         server.WaitFor(server.Describe.Accepted);
         UNIT_ASSERT(server.Describe.Accepted.Ok);
         // Advancing to Describe must not grant a fresh metadata timeout.
-        UNIT_ASSERT(server.Describe.Context.deadline() <=
-            server.Create.Context.deadline() + std::chrono::milliseconds(100));
+        UNIT_ASSERT(server.Describe.Context.deadline() <= server.Create.Context.deadline() + std::chrono::milliseconds(100));
     }
     UNIT_ASSERT(!future.HasValue());
     if (!expireDeadline) {
@@ -271,12 +274,11 @@ void CheckMetadataCancellation(bool cancelDescribe, bool expireDeadline = false)
 
 // The public credential facility identifies the SDK database-state lifetime.
 // It lets us check eviction without exposing the SDK's private callback vector.
-class TTrackingCredentialsFactory final : public IStructuredTokenCredentialsFactory {
+class TTrackingCredentialsFactory final: public IStructuredTokenCredentialsFactory {
 public:
-    class TFactory final : public NYdb::ICredentialsProviderFactory {
+    class TFactory final: public NYdb::ICredentialsProviderFactory {
     public:
-        TFactory(std::shared_ptr<NYdb::ICredentialsProviderFactory> inner,
-                 TVector<std::weak_ptr<NYdb::ICoreFacility>>& facilities)
+        TFactory(std::shared_ptr<NYdb::ICredentialsProviderFactory> inner, TVector<std::weak_ptr<NYdb::ICoreFacility>>& facilities)
             : Inner_(std::move(inner))
             , Facilities_(facilities)
         {
@@ -310,7 +312,7 @@ private:
     const IStructuredTokenCredentialsFactory::TPtr Inner_ = CreateStructuredTokenCredentialsFactory();
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TYdbExternalMetadataRpc) {
     Y_UNIT_TEST(SlowSessionCleanupDoesNotDelaySuccessfulMetadata) {
@@ -347,8 +349,12 @@ Y_UNIT_TEST_SUITE(TYdbExternalMetadataRpc) {
         auto cache = CreateYdbExternalMetadataClientCache(driver, tlsDriver);
         auto credentials = CreateStructuredTokenCredentialsFactory();
         auto types = MakeIntrusive<TTypeAnnotationContext>();
-        TState first(types.Get(), [cache] { return cache; }, credentials);
-        TState second(types.Get(), [cache] { return cache; }, credentials);
+        TState first(types.Get(), [cache] {
+            return cache;
+        }, credentials);
+        TState second(types.Get(), [cache] {
+            return cache;
+        }, credentials);
         const TString token = ComposeStructuredTokenJsonForTokenAuthWithSecret("same-secret", "first-token");
         const TString rotated = ComposeStructuredTokenJsonForTokenAuthWithSecret("same-secret", "second-token");
         auto client = first.MetadataClientCacheFactory()->GetClient("localhost:1", "/Remote", false, token, credentials);
@@ -369,8 +375,10 @@ Y_UNIT_TEST_SUITE(TYdbExternalMetadataRpc) {
         // A regular SDK client keeps its database state alive throughout the
         // test, as a concurrent query stream would in production.
         NYdb::NTable::TTableClient otherClient(driver, NYdb::NTable::TClientSettings()
-            .Database("/Remote").DiscoveryEndpoint("localhost:1").DiscoveryMode(NYdb::EDiscoveryMode::Off)
-            .CredentialsProviderFactory(credentials->Create(token, false)));
+                                                           .Database("/Remote")
+                                                           .DiscoveryEndpoint("localhost:1")
+                                                           .DiscoveryMode(NYdb::EDiscoveryMode::Off)
+                                                           .CredentialsProviderFactory(credentials->Create(token, false)));
         UNIT_ASSERT_VALUES_EQUAL(credentials->Facilities.size(), 1);
         auto cache = CreateYdbExternalMetadataClientCache(driver, driver, 1);
         auto first = cache->GetClient("localhost:1", "/Remote", false, token, credentials);
@@ -416,4 +424,4 @@ Y_UNIT_TEST_SUITE(TYdbExternalMetadataRpc) {
     }
 }
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

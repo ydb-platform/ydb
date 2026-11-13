@@ -1,26 +1,12 @@
 #pragma once
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/fq/libs/config/protos/common.pb.h>
+#include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
+#include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/message_builders.h>
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
-
-#include <ydb/core/fq/libs/ydb/util.h>
-#include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
-#include <ydb/core/fq/libs/init/init.h>
-#include <ydb/library/testlib/common/test_utils.h>
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
-
-#include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-
-#include <ydb/core/fq/libs/config/protos/common.pb.h>
-#include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
@@ -28,18 +14,22 @@
 #include <ydb/core/fq/libs/rate_limiter/events/control_plane_events.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
-
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/testlib/common/test_utils.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/tests/tools/kqprun/runlib/utils.h>
 
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <util/datetime/base.h>
 #include <util/system/env.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 namespace NFq {
 
@@ -53,7 +43,7 @@ using TRuntimePtr = std::unique_ptr<TTestActorRuntime>;
 
 inline void AssertNoFullScan(TDebugInfoPtr debugInfo) {
     if (debugInfo) {
-        for (const auto& item: *debugInfo) {
+        for (const auto& item : *debugInfo) {
             UNIT_ASSERT_C(!item.Plan.Contains("FullScan"), item.ToString());
         }
     }
@@ -61,7 +51,7 @@ inline void AssertNoFullScan(TDebugInfoPtr debugInfo) {
 
 inline void AssertNoTopSort(TDebugInfoPtr debugInfo) {
     if (debugInfo) {
-        for (const auto& item: *debugInfo) {
+        for (const auto& item : *debugInfo) {
             UNIT_ASSERT_C(!item.Plan.Contains("TopSort"), item.ToString());
         }
     }
@@ -82,7 +72,7 @@ TString Exec(const TString& cmd) {
     return result;
 }
 
-}
+}   // namespace
 
 struct TTestBootstrap {
     NConfig::TControlPlaneStorageConfig Config;
@@ -116,7 +106,7 @@ struct TTestBootstrap {
 
         Config.AddSuperUsers("super_user@staff");
         Config.SetEnableDebugMode(true);
-        Config.SetNumTasksProportion(1); //Get all tasks from pending
+        Config.SetNumTasksProportion(1);   //Get all tasks from pending
 
         if (Config.AvailableBindingSize() == 0) {
             Config.AddAvailableBinding("DATA_STREAMS");
@@ -161,13 +151,14 @@ struct TTestBootstrap {
     {
         auto session = Connection->TableClient.GetSession().GetValue(RequestTimeout).GetSession();
         TSqlQueryBuilder queryBuilder(Connection->TablePathPrefix);
-        queryBuilder.AddText(
-            "SELECT * FROM " + tableName + "\n"
-            "LIMIT 1000;\n"
-        );
+        queryBuilder.AddText("SELECT * FROM " + tableName +
+                             "\n"
+                             "LIMIT 1000;\n");
 
         auto paramsBuilder = session.GetParamsBuilder();
-        auto result = session.ExecuteDataQuery(queryBuilder.Build().Sql, NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(), paramsBuilder.Build()).GetValueSync();
+        auto result = session.ExecuteDataQuery(queryBuilder.Build().Sql,
+                                                   NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
+                                                   paramsBuilder.Build()).GetValueSync();
 
         if (!result.IsSuccess() || result.GetResultSets().size() != 1) {
             ythrow yexception() << "Results size != 1 but results size = " << result.GetResultSets().size();
@@ -177,17 +168,16 @@ struct TTestBootstrap {
     }
 
     template <typename Request, typename Response>
-    std::pair<typename Response::TProto, NYql::TIssues> SendPublicRequest(
-        const typename Request::TProto& proto,
-        TPermissions permissions = TPermissions{},
-        const TString& scope = "yandexcloud://test_folder_id_1",
-        const TString& user = "test_user@staff",
-        const TString& token = "xxx")
+    std::pair<typename Response::TProto, NYql::TIssues> SendPublicRequest(const typename Request::TProto& proto,
+        TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1",
+        const TString& user = "test_user@staff", const TString& token = "xxx")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
 
         while (true) {
-            auto request = std::make_unique<Request>(scope, proto, user, token, "mock_cloud", permissions, TQuotaMap{{QUOTA_CPU_PERCENT_LIMIT, TQuotaUsage{42000}}}, std::make_shared<TTenantInfo>(), FederatedQuery::Internal::ComputeDatabaseInternal{});
+            auto request = std::make_unique<Request>(scope, proto, user, token, "mock_cloud", permissions,
+                TQuotaMap{ { QUOTA_CPU_PERCENT_LIMIT, TQuotaUsage{ 42000 } } }, std::make_shared<TTenantInfo>(),
+                FederatedQuery::Internal::ComputeDatabaseInternal{});
             Runtime->Send(new IEventHandle(ControlPlaneStorageServiceActorId(), sender, request.release()));
 
             TAutoPtr<IEventHandle> handle;
@@ -207,88 +197,128 @@ struct TTestBootstrap {
                 continue;
             }
 
-            return {event->Result, event->Issues};
+            return { event->Result, event->Issues };
         }
     }
 
-    inline auto CreateQuery(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvCreateQueryRequest, TEvControlPlaneStorage::TEvCreateQueryResponse>(proto, permissions, scope, user, token);
+    inline auto CreateQuery(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvCreateQueryRequest, TEvControlPlaneStorage::TEvCreateQueryResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto ListQueries(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvListQueriesRequest, TEvControlPlaneStorage::TEvListQueriesResponse>(proto, permissions, scope, user, token);
+    inline auto ListQueries(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvListQueriesRequest, TEvControlPlaneStorage::TEvListQueriesResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto DescribeQuery(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvDescribeQueryRequest, TEvControlPlaneStorage::TEvDescribeQueryResponse>(proto, permissions, scope, user, token);
+    inline auto DescribeQuery(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvDescribeQueryRequest, TEvControlPlaneStorage::TEvDescribeQueryResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto GetQueryStatus(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvGetQueryStatusRequest, TEvControlPlaneStorage::TEvGetQueryStatusResponse>(proto, permissions, scope, user, token);
+    inline auto GetQueryStatus(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvGetQueryStatusRequest, TEvControlPlaneStorage::TEvGetQueryStatusResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto DeleteQuery(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvDeleteQueryRequest, TEvControlPlaneStorage::TEvDeleteQueryResponse>(proto, permissions, scope, user, token);
+    inline auto DeleteQuery(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvDeleteQueryRequest, TEvControlPlaneStorage::TEvDeleteQueryResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto ModifyQuery(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvModifyQueryRequest, TEvControlPlaneStorage::TEvModifyQueryResponse>(proto, permissions, scope, user, token);
+    inline auto ModifyQuery(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvModifyQueryRequest, TEvControlPlaneStorage::TEvModifyQueryResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto ControlQuery(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvControlQueryRequest, TEvControlPlaneStorage::TEvControlQueryResponse>(proto, permissions, scope, user, token);
+    inline auto ControlQuery(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvControlQueryRequest, TEvControlPlaneStorage::TEvControlQueryResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto ListJobs(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvListJobsRequest, TEvControlPlaneStorage::TEvListJobsResponse>(proto, permissions, scope, user, token);
+    inline auto ListJobs(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1",
+        const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvListJobsRequest, TEvControlPlaneStorage::TEvListJobsResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto DescribeJob(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvDescribeJobRequest, TEvControlPlaneStorage::TEvDescribeJobResponse>(proto, permissions, scope, user, token);
+    inline auto DescribeJob(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvDescribeJobRequest, TEvControlPlaneStorage::TEvDescribeJobResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto GetResultData(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvGetResultDataRequest, TEvControlPlaneStorage::TEvGetResultDataResponse>(proto, permissions, scope, user, token);
+    inline auto GetResultData(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvGetResultDataRequest, TEvControlPlaneStorage::TEvGetResultDataResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto CreateConnection(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvCreateConnectionRequest, TEvControlPlaneStorage::TEvCreateConnectionResponse>(proto, permissions, scope, user, token);
+    inline auto CreateConnection(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvCreateConnectionRequest, TEvControlPlaneStorage::TEvCreateConnectionResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto ListConnections(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvListConnectionsRequest, TEvControlPlaneStorage::TEvListConnectionsResponse>(proto, permissions, scope, user, token);
+    inline auto ListConnections(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvListConnectionsRequest, TEvControlPlaneStorage::TEvListConnectionsResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto DescribeConnection(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvDescribeConnectionRequest, TEvControlPlaneStorage::TEvDescribeConnectionResponse>(proto, permissions, scope, user, token);
+    inline auto DescribeConnection(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvDescribeConnectionRequest, TEvControlPlaneStorage::TEvDescribeConnectionResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto DeleteConnection(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvDeleteConnectionRequest, TEvControlPlaneStorage::TEvDeleteConnectionResponse>(proto, permissions, scope, user, token);
+    inline auto DeleteConnection(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvDeleteConnectionRequest, TEvControlPlaneStorage::TEvDeleteConnectionResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto ModifyConnection(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvModifyConnectionRequest, TEvControlPlaneStorage::TEvModifyConnectionResponse>(proto, permissions, scope, user, token);
+    inline auto ModifyConnection(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvModifyConnectionRequest, TEvControlPlaneStorage::TEvModifyConnectionResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto CreateBinding(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvCreateBindingRequest, TEvControlPlaneStorage::TEvCreateBindingResponse>(proto, permissions, scope, user, token);
+    inline auto CreateBinding(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvCreateBindingRequest, TEvControlPlaneStorage::TEvCreateBindingResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto ListBindings(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvListBindingsRequest, TEvControlPlaneStorage::TEvListBindingsResponse>(proto, permissions, scope, user, token);
+    inline auto ListBindings(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvListBindingsRequest, TEvControlPlaneStorage::TEvListBindingsResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto DescribeBinding(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvDescribeBindingRequest, TEvControlPlaneStorage::TEvDescribeBindingResponse>(proto, permissions, scope, user, token);
+    inline auto DescribeBinding(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvDescribeBindingRequest, TEvControlPlaneStorage::TEvDescribeBindingResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto DeleteBinding(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvDeleteBindingRequest, TEvControlPlaneStorage::TEvDeleteBindingResponse>(proto, permissions, scope, user, token);
+    inline auto DeleteBinding(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvDeleteBindingRequest, TEvControlPlaneStorage::TEvDeleteBindingResponse>(
+            proto, permissions, scope, user, token);
     }
 
-    inline auto ModifyBinding(const auto& proto, TPermissions permissions = TPermissions{}, const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
-        return SendPublicRequest<TEvControlPlaneStorage::TEvModifyBindingRequest, TEvControlPlaneStorage::TEvModifyBindingResponse>(proto, permissions, scope, user, token);
+    inline auto ModifyBinding(const auto& proto, TPermissions permissions = TPermissions{},
+        const TString& scope = "yandexcloud://test_folder_id_1", const TString& user = "test_user@staff", const TString& token = "xxx") {
+        return SendPublicRequest<TEvControlPlaneStorage::TEvModifyBindingRequest, TEvControlPlaneStorage::TEvModifyBindingResponse>(
+            proto, permissions, scope, user, token);
     }
 
     template <typename Request, typename Response>
@@ -300,11 +330,12 @@ struct TTestBootstrap {
         TAutoPtr<IEventHandle> handle;
         Response* event = Runtime->GrabEdgeEvent<Response>(handle);
         AssertNoFullScan(event->DebugInfo);
-        return {handle, event};
+        return { handle, event };
     }
 
     inline auto WriteResultData(auto request) {
-        return SendInternalRequest<TEvControlPlaneStorage::TEvWriteResultDataRequest, TEvControlPlaneStorage::TEvWriteResultDataResponse>(std::move(request));
+        return SendInternalRequest<TEvControlPlaneStorage::TEvWriteResultDataRequest, TEvControlPlaneStorage::TEvWriteResultDataResponse>(
+            std::move(request));
     }
 
     inline auto GetTask(auto request) {
@@ -316,15 +347,18 @@ struct TTestBootstrap {
     }
 
     inline auto NodesHealthCheck(auto request) {
-        return SendInternalRequest<TEvControlPlaneStorage::TEvNodesHealthCheckRequest, TEvControlPlaneStorage::TEvNodesHealthCheckResponse>(std::move(request));
+        return SendInternalRequest<TEvControlPlaneStorage::TEvNodesHealthCheckRequest, TEvControlPlaneStorage::TEvNodesHealthCheckResponse>(
+            std::move(request));
     }
 
     inline auto CreateRateLimiterResource(auto request) {
-        return SendInternalRequest<TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest, TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse>(std::move(request));
+        return SendInternalRequest<TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest,
+            TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse>(std::move(request));
     }
 
     inline auto DeleteRateLimiterResource(auto request) {
-        return SendInternalRequest<TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest, TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse>(std::move(request));
+        return SendInternalRequest<TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest,
+            TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse>(std::move(request));
     }
 
 private:
@@ -353,13 +387,13 @@ private:
 
         const auto& credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        NFq::TYqSharedResources::TPtr yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResources(yqConfig, credFactory, counters));
+        NFq::TYqSharedResources::TPtr yqSharedResources =
+            NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResources(yqConfig, credFactory, counters));
         yqSharedResources->Init(runtime->GetAnyNodeActorSystem());
-        auto controlPlaneService = CreateYdbControlPlaneStorageServiceActor(Config, s3Config, common, NConfig::TComputeConfig{}, MakeIntrusive<NMonitoring::TDynamicCounters>(), yqSharedResources, credFactory, GetDefaultTenantName());
+        auto controlPlaneService = CreateYdbControlPlaneStorageServiceActor(Config, s3Config, common, NConfig::TComputeConfig{},
+            MakeIntrusive<NMonitoring::TDynamicCounters>(), yqSharedResources, credFactory, GetDefaultTenantName());
 
-        runtime->AddLocalService(
-            ControlPlaneStorageServiceActorId(),
-            TActorSetupCmd(controlPlaneService, TMailboxType::Simple, 0));
+        runtime->AddLocalService(ControlPlaneStorageServiceActorId(), TActorSetupCmd(controlPlaneService, TMailboxType::Simple, 0));
 
         {
             NConfig::TRateLimiterConfig rateLimiterConfig;
@@ -373,8 +407,7 @@ private:
             auto* rateLimiterControlPlaneService = CreateRateLimiterControlPlaneService(rateLimiterConfig, yqSharedResources, credFactory);
 
             runtime->AddLocalService(
-                RateLimiterControlPlaneServiceId(),
-                TActorSetupCmd(rateLimiterControlPlaneService, TMailboxType::Simple, 0));
+                RateLimiterControlPlaneServiceId(), TActorSetupCmd(rateLimiterControlPlaneService, TMailboxType::Simple, 0));
         }
 
         SetupTabletServices(*runtime);
@@ -388,8 +421,8 @@ private:
         WaitTable("result_sets");
         WaitTable("jobs");
 
-        return {std::move(runtime), std::move(yqSharedResources)};
+        return { std::move(runtime), std::move(yqSharedResources) };
     }
 };
 
-} // namespace NFq
+}   // namespace NFq

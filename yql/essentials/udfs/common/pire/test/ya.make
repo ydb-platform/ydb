@@ -1,6 +1,8 @@
-YQL_UDF_TEST()
+YQL_UDF_MINITEST()
 
-DEPENDS(yql/essentials/udfs/common/pire)
+DEPENDS(
+    yql/essentials/udfs/common/pire/impl
+)
 
 TIMEOUT(300)
 

@@ -12,10 +12,12 @@
 /.github/ @ydb-platform/ci
 /.github/workflows/docs_* @ydb-platform/docs
 /.github/workflows/ydbdoc-* @ydb-platform/docs
+/.github/config/cpp_format/.clang-format @ydb-platform/cs @ydb-platform/fq
 /.github/config/muted_ya*
+/.github/docker @ydb-platform/appteam
+/.github/scripts/cpp_format/ @ydb-platform/cs @ydb-platform/fq
 /.github/CODEOWNERS
 /.github/TESTOWNERS
-/.github/docker @ydb-platform/appteam
 
 /build @ydb-platform/synced-dirs
 /certs @ydb-platform/synced-dirs
@@ -29,6 +31,8 @@
 /yql @ydb-platform/synced-dirs
 /yt @ydb-platform/synced-dirs
 
+/build/internal/conf/autoincludes.json @ydb-platform/cs @ydb-platform/fq @ydb-platform/nbs_yandex
+
 /ydb/core/kqp/ @ydb-platform/qp
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
 /ydb/core/kqp/ut/indexes/ @ydb-platform/qp
@@ -37,6 +41,7 @@
 /ydb/core/kqp/ut/indexes/fulltext @ydb-platform/datashard
 /ydb/core/kqp/ut/knn/ @ydb-platform/datashard
 /ydb/core/kqp/ut/tli/ @ydb-platform/datashard
+/ydb/core/kqp/ut/query/kqp_analyze_ut.cpp  @ydb-platform/datashard
 
 /ydb/docs/ @ydb-platform/docs
 
@@ -77,6 +82,9 @@
 /ydb/core/protos/schemeshard @ydb-platform/schemeshard
 /ydb/core/tx/scheme_board @ydb-platform/schemeshard
 /ydb/core/tx/schemeshard @ydb-platform/schemeshard
+/ydb/core/tx/schemeshard/ut_column_build @ydb-platform/qp
+/ydb/core/tx/schemeshard/ut_column_build_reboots @ydb-platform/qp
+/ydb/core/tx/schemeshard/ut_generated_columns @ydb-platform/qp
 /ydb/tests/functional/limits @ydb-platform/schemeshard
 /ydb/tests/functional/scheme_shard @ydb-platform/schemeshard
 /ydb/tests/functional/tenants/test_dynamic_tenants.py @ydb-platform/schemeshard
@@ -103,22 +111,17 @@
 /ydb/core/grpc_services/ydb_over_fq/ @ydb-platform/fq
 /ydb/core/kqp/common/dynamic_function_registry.* @ydb-platform/fq
 /ydb/core/kqp/common/events/script_executions.h @ydb-platform/fq
-/ydb/core/kqp/common/kqp_script_executions.* @ydb-platform/fq
+/ydb/core/kqp/common/kqp_streaming_query_controller.h @ydb-platform/fq
 /ydb/core/kqp/common/ut/dynamic_function_registry_ut.cpp @ydb-platform/fq
 /ydb/core/kqp/executer_actor/kqp_streaming_helper.* @ydb-platform/fq
 /ydb/core/kqp/federated_query/ @ydb-platform/fq
-/ydb/core/kqp/finalize_script_service/ @ydb-platform/fq
 /ydb/core/kqp/gateway/behaviour/external_data_source/ @ydb-platform/fq
 /ydb/core/kqp/gateway/behaviour/streaming_query/ @ydb-platform/fq
 /ydb/core/kqp/opt/peephole/kqp_opt_peephole_streaming.cpp @ydb-platform/fq
+/ydb/core/kqp/provider/yql_kikimr_gateway_ut_helpers.h @ydb-platform/fq
 /ydb/core/kqp/provider/yql_kikimr_provider_streaming_ut.cpp @ydb-platform/fq
-/ydb/core/kqp/proxy_service/kqp_script_executions.* @ydb-platform/fq
-/ydb/core/kqp/proxy_service/kqp_script_executions_impl.h @ydb-platform/fq
-/ydb/core/kqp/proxy_service/kqp_script_executions_ut.cpp @ydb-platform/fq
-/ydb/core/kqp/proxy_service/proto/result_set_meta.proto @ydb-platform/fq
-/ydb/core/kqp/proxy_service/script_executions_utils/ @ydb-platform/fq
-/ydb/core/kqp/run_script_actor/ @ydb-platform/fq
 /ydb/core/kqp/runtime/streaming/ @ydb-platform/fq
+/ydb/core/kqp/script_executions/ @ydb-platform/fq
 /ydb/core/kqp/ut/federated_query/ @ydb-platform/fq
 /ydb/core/kqp/ut/service/kqp_qs_scripts_ut.cpp @ydb-platform/fq
 /ydb/core/local_proxy/ @ydb-platform/fq
@@ -233,6 +236,7 @@
 /ydb/core/tx/tiering @ydb-platform/cs
 /ydb/core/keyvalue @ydb-platform/cs
 /ydb/services/keyvalue @ydb-platform/cs
+/ydb/tests/olap @ydb-platform/cs
 
 /ydb/library/actors/core @ydb-platform/blobstorage
 /ydb/library/actors/interconnect @ydb-platform/blobstorage
@@ -265,6 +269,7 @@
 /ydb/tests/functional/secrets @ydb-platform/Security
 /ydb/tests/functional/security @ydb-platform/Security
 
+/ydb/tests/functional/tpc/medium @ydb-platform/Engineering
 /ydb/tests/library @ydb-platform/Engineering
 
 /ydb/core/nbs @ydb-platform/nbs_yandex

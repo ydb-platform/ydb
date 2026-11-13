@@ -10,16 +10,10 @@ namespace NYql::NDq {
 // per connection, returning offsets only for the requested partitions. Fatal failures
 // fail pending and future requests; error delivery is retried with backoff on transport
 // failures. The query owner stops the actor with TEvPoison.
-NActors::IActor* CreateDqPqControlPlaneActor(
-    NYdb::TDriver driver,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    IPqStaticGateway::TPtr pqGateway,
-    const THashMap<TString, TString>& secureParams);
+NActors::IActor* CreateDqPqControlPlaneActor(NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    IPqStaticGateway::TPtr pqGateway, const THashMap<TString, TString>& secureParams);
 
-void RegisterDqPqControlPlaneActorFactory(
-    TDqAsyncIoFactory& factory,
-    NYdb::TDriver driver,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    IPqStaticGateway::TPtr pqGateway);
+void RegisterDqPqControlPlaneActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, IPqStaticGateway::TPtr pqGateway);
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

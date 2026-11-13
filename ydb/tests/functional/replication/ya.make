@@ -26,7 +26,11 @@ SIZE(MEDIUM)
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:24 cpu:4)
 ELSE()
-    REQUIREMENTS(ram:16 cpu:2)
+    REQUIREMENTS(ram:16 cpu:1)
 ENDIF()
 
 END()
+
+RECURSE_FOR_TESTS(
+    rollback
+)

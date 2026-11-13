@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
 
         auto info = TIndexInfo::BuildFromProto(1, proto, storages, cache);
         UNIT_ASSERT(info);
-        return std::make_shared<TSnapshotSchema>(cache->UpsertIndexInfo(std::move(*info)), TSnapshot(1, 1));
+        return std::make_shared<TSnapshotSchema>(cache->GetOrInsertIndexInfo(std::move(*info)), TSnapshot(1, 1));
     }
 
     // Render each stored BinaryJson document as text. For the corrupt portion this will trigger rendering
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
         const auto& stats = merged->GetColumnsData().GetStats();
         UNIT_ASSERT_VALUES_EQUAL(stats.GetAccessorType(0), IChunkedArray::EType::Dictionary);
 
-        auto path = merged->GetPathAccessor("$.a", docs.size()).DetachResult();
+        auto path = merged->GetPathAccessor(ParseJsonPath("$.a").DetachResult(), docs.size()).DetachResult();
         TStringBuilder values;
         path->VisitValues([&](const std::optional<TStringBuf>& value) {
             values << (value ? *value : TStringBuf("<null>")) << ';';

@@ -438,7 +438,11 @@ void TSchemeShard::ProcessForcedCompactionOnSplitMerge(
             --ForcedCompactionTotalInQueues;
         }
         if (ForcedCompactionQueue) {
-            ForcedCompactionQueue->Remove(srcShardIdx);
+            // RemoveNoStart: avoid per-removal StartOperations() churn (and
+            // spurious TEvCompactTable RPCs) inside the split/merge transaction;
+            // the trailing ScheduleForcedCompactionProgress() performs a single
+            // consolidated refill of the freed inflight slots.
+            ForcedCompactionQueue->RemoveNoStart(srcShardIdx);
         }
         PersistForcedCompactionDoneShard(db, srcShardIdx);
     }

@@ -12,6 +12,35 @@
 
 namespace NKikimr::NOlap::NActualizer {
 
+namespace {
+
+bool NeedsTierChange(const TString& current, const TString& target, const TTiering& tiering) {
+    if (current == target) {
+        return false;
+    }
+
+    if (current == IStoragesManager::DefaultStorageId || target == IStoragesManager::DefaultStorageId ||
+        target == NTiering::NCommon::DeleteTierName) {
+        return true;
+    }
+
+    using NColumnShard::NTiers::TExternalStorageId;
+    const auto currentStorage = TExternalStorageId::FromString(current);
+    if (currentStorage.GetConfigPath() != TExternalStorageId::FromString(target).GetConfigPath()) {
+        return true;
+    }
+
+    for (auto&& tier : tiering.GetOrderedTiers()) {
+        if (tier.Get().GetExternalStorageId() == currentStorage) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+}   // namespace
+
 std::shared_ptr<NKikimr::NOlap::ISnapshotSchema> TTieringActualizer::GetTargetSchema(
     const std::shared_ptr<ISnapshotSchema>& portionSchema) const {
     if (!TargetCriticalSchema) {
@@ -49,17 +78,19 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
             }
         }
         const bool skipEviction = !NYDBTest::TControllers::GetColumnShardController()->CheckPortionForEvict(portion);
-        auto tieringInfo = Tiering->GetTierToMove(max, now, skipEviction);
+        auto tieringInfo = Tiering->GetTierToMove(
+            max, now, skipEviction, portionSchema->GetIndexInfo().GetColumnFeaturesVerified(*TieringColumnId).GetTypeInfo().GetTypeId());
         YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"tieringInfo", tieringInfo.DebugString()});
         std::optional<i64> d;
         std::set<TString> storagesWrite;
         TString targetTierName;
-        if (portion.GetTierNameDef(IStoragesManager::DefaultStorageId) != tieringInfo.GetCurrentTierName()) {
+        if (NeedsTierChange(currentTierName, tieringInfo.GetCurrentTierName(), *Tiering)) {
             d = -1 * tieringInfo.GetCurrentTierLag().GetValue();
             targetTierName = tieringInfo.GetCurrentTierName();
         } else if (tieringInfo.GetNextTierName()) {
-            d = tieringInfo.GetNextTierWaitingVerified().GetValue();
+            // DyNumber can represent dates beyond the signed scheduling range.
+            d = Min<ui64>(tieringInfo.GetNextTierWaitingVerified().GetValue(), Max<i64>());
             targetTierName = tieringInfo.GetNextTierNameVerified();
         }
         if (d) {

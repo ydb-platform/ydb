@@ -4,8 +4,9 @@
 
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/grpc_services/local_grpc/local_grpc.h>
-#include <ydb/core/grpc_services/service_fq.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
+#include <ydb/core/grpc_services/service_fq.h>
+
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_INTERNAL_SERVICE
@@ -15,15 +16,12 @@ namespace NKikimr::NGRpcService {
 namespace NYdbOverFq {
 
 template <typename TDerived, typename TReq, typename TResp, bool IsStreaming>
-class ExecuteDataQueryRPCBase
-    : public TRpcBase<
-        TDerived, TReq, TResp, !IsStreaming> {
+class ExecuteDataQueryRPCBase: public TRpcBase<TDerived, TReq, TResp, !IsStreaming> {
 public:
-    using TBase = TRpcBase<
-        TDerived, TReq, TResp, !IsStreaming>;
+    using TBase = TRpcBase<TDerived, TReq, TResp, !IsStreaming>;
 
-    using TBase::TBase;
     using TBase::SelfId;
+    using TBase::TBase;
     using typename TBase::TLogCtx;
 
     void Bootstrap(const TActorContext& ctx) {
@@ -38,11 +36,8 @@ public:
         if (!TBase::GetProtoRequest()->query().has_yql_text()) {
             YDB_LOG_INFO_CTX(ctx, "Got request with id instead of text",
                 {"logContext", TLogCtx{.Owner_ = *this}});
-            TBase::Reply(
-                Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder {} << "query id in " << TDerived::RpcName << " is not supported",
-                NKikimrIssues::TIssuesIds::EIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
-                ctx);
+            TBase::Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder{} << "query id in " << TDerived::RpcName << " is not supported",
+                NKikimrIssues::TIssuesIds::EIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, ctx);
             return;
         }
         const auto& text = TBase::GetProtoRequest()->query().yql_text();
@@ -75,8 +70,9 @@ public:
     void Handle(const FederatedQuery::DescribeQueryResult& result, const TActorContext& ctx) {
         auto status = result.query().meta().status();
         if (status != FederatedQuery::QueryMeta_ComputeStatus_COMPLETED) {
-            TString errorMsg = TStringBuilder{} << "created query " << result.query().meta().common().id() <<
-                " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
+            TString errorMsg =
+                TStringBuilder{} << "created query " << result.query().meta().common().id()
+                                 << " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
             YDB_LOG_INFO_CTX(ctx, "Query finished with non-success status",
                 {"logContext", TLogCtx{.Owner_ = *this}},
                 {"errorMsg", errorMsg});
@@ -122,12 +118,11 @@ protected:
 class ExecuteDataQueryRPC
     : public ExecuteDataQueryRPCBase<ExecuteDataQueryRPC, Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse, false> {
 public:
-    using TBase = ExecuteDataQueryRPCBase<
-        ExecuteDataQueryRPC, Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse, false>;
+    using TBase = ExecuteDataQueryRPCBase<ExecuteDataQueryRPC, Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse, false>;
     static constexpr std::string_view RpcName = "ExecuteDataQuery";
 
-    using TBase::TBase;
     using TBase::Handle;
+    using TBase::TBase;
     // GatherResultSetsImpl
 
     STRICT_STFUNC(GatherResultSetsState,
@@ -182,21 +177,22 @@ public:
         result.mutable_query_meta()->set_id(QueryId_);
         TBase::ReplyWithResult(Ydb::StatusIds_StatusCode_SUCCESS, result, ctx);
     }
+
 private:
     TString QueryId_;
     std::vector<Ydb::ResultSet> ResultSets_;
     i32 CurrentResultSet_ = 0;
 };
 
-class StreamExecuteScanQueryRPC
-    : public ExecuteDataQueryRPCBase<StreamExecuteScanQueryRPC, Ydb::Table::ExecuteScanQueryRequest, Ydb::Table::ExecuteScanQueryPartialResponse, true> {
+class StreamExecuteScanQueryRPC: public ExecuteDataQueryRPCBase<StreamExecuteScanQueryRPC, Ydb::Table::ExecuteScanQueryRequest,
+                                     Ydb::Table::ExecuteScanQueryPartialResponse, true> {
 public:
-    using TBase = ExecuteDataQueryRPCBase<
-        StreamExecuteScanQueryRPC, Ydb::Table::ExecuteScanQueryRequest, Ydb::Table::ExecuteScanQueryPartialResponse, true>;
+    using TBase = ExecuteDataQueryRPCBase<StreamExecuteScanQueryRPC, Ydb::Table::ExecuteScanQueryRequest,
+        Ydb::Table::ExecuteScanQueryPartialResponse, true>;
     static constexpr std::string_view RpcName = "StreamExecuteScanQuery";
 
-    using TBase::TBase;
     using TBase::Handle;
+    using TBase::TBase;
     using typename TBase::TLogCtx;
 
     // StreamResultSetsImpl
@@ -231,8 +227,8 @@ public:
         TString respSerialized;
         if (!response.SerializeToString(&respSerialized)) {
             NYql::TIssues issues;
-            auto issueMsg = TStringBuilder{} << "failed to serialize ResultSet[" << CurrentResultSet_ << "][" <<
-                SentRowsInCurrRS_ << ":" << (SentRowsInCurrRS_ + result.result_set().rows_size()) << "]";
+            auto issueMsg = TStringBuilder{} << "failed to serialize ResultSet[" << CurrentResultSet_ << "][" << SentRowsInCurrRS_ << ":"
+                                             << (SentRowsInCurrRS_ + result.result_set().rows_size()) << "]";
             issues.AddIssue(issueMsg);
             issues.back().SetCode(NYql::TIssuesIds::CORE_EXEC, NYql::TSeverityIds::S_ERROR);
             YDB_LOG_INFO_CTX(ctx, "Failed to serialize result set response",
@@ -286,11 +282,12 @@ std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> Ge
     };
 }
 
-std::function<void(std::unique_ptr<IRequestNoOpCtx>, const IFacilityProvider&)> GetStreamExecuteScanQueryExecutor(NActors::TActorId grpcProxyId) {
+std::function<void(std::unique_ptr<IRequestNoOpCtx>, const IFacilityProvider&)> GetStreamExecuteScanQueryExecutor(
+    NActors::TActorId grpcProxyId) {
     return [grpcProxyId](std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
         f.RegisterActor(new StreamExecuteScanQueryRPC(p.release(), grpcProxyId));
     };
 }
 
-} // namespace NYdbOverFq
-} // namespace NKikimr::NGRpcService
+}   // namespace NYdbOverFq
+}   // namespace NKikimr::NGRpcService

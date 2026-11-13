@@ -1,10 +1,11 @@
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/data_packer.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/ut/common/ut_common.h>
+
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <thread>
 
@@ -14,7 +15,7 @@ namespace {
 
 constexpr size_t PageSize = NKikimr::NMiniKQL::TBufferPage::DefaultPageAllocSize;
 
-class TCountingQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
+class TCountingQuotaManager: public NYql::NDq::TGuaranteeQuotaManager {
 public:
     using TGuaranteeQuotaManager::TGuaranteeQuotaManager;
 
@@ -32,10 +33,10 @@ public:
     ui64 Releases = 0;
 };
 
-class TDataPackerFixture : public TBaseFixture {
+class TDataPackerFixture: public TBaseFixture {
 public:
     const NKikimr::NMiniKQL::TType* MakeRowType(bool withUint64 = false) {
-        TVector<NKikimr::NMiniKQL::TType* const> columns{CheckSuccess(ParseTypeYson("[DataType; String]"))};
+        TVector<NKikimr::NMiniKQL::TType* const> columns{ CheckSuccess(ParseTypeYson("[DataType; String]")) };
         if (withUint64) {
             columns.push_back(CheckSuccess(ParseTypeYson("[DataType; Uint64]")));
         }
@@ -45,7 +46,7 @@ public:
     }
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(RowDispatcherMemoryQuota) {
     Y_UNIT_TEST(ReservationFailureAndRelease) {
@@ -58,12 +59,12 @@ Y_UNIT_TEST_SUITE(RowDispatcherMemoryQuota) {
                 first.Resize(1_MB);
                 first.Resize(0);
                 UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 2_MB);
-                UNIT_ASSERT_EXCEPTION_SATISFIES(second.Resize(1_MB + 1), NKikimr::TMemoryLimitExceededException,
-                    [](const auto& error) {
-                        UNIT_ASSERT_VALUES_EQUAL(GetMemoryLimitExceededMessage(error),
-                            "Row dispatcher memory limit exceeded: failed to reserve 1048576 bytes for test buffer (already reserved: 1048576 bytes, actually used bytes 1)");
-                        return true;
-                    });
+                UNIT_ASSERT_EXCEPTION_SATISFIES(second.Resize(1_MB + 1), NKikimr::TMemoryLimitExceededException, [](const auto& error) {
+                    UNIT_ASSERT_VALUES_EQUAL(GetMemoryLimitExceededMessage(error),
+                        "Row dispatcher memory limit exceeded: failed to reserve 1048576 bytes for test "
+                        "buffer (already reserved: 1048576 bytes, actually used bytes 1)");
+                    return true;
+                });
                 UNIT_ASSERT_VALUES_EQUAL(second.GetSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(manager->Releases, 0);
             }
@@ -125,7 +126,9 @@ Y_UNIT_TEST_SUITE(RowDispatcherMemoryQuota) {
             UNIT_ASSERT_VALUES_EQUAL(otherCounter->Val(), 1_MB);
             UNIT_ASSERT_VALUES_EQUAL(firstCounter->Val() + otherCounter->Val(), manager->GetCurrentQuota());
 
-            std::thread destroyQuota([quota = std::move(second)]() mutable { quota.reset(); });
+            std::thread destroyQuota([quota = std::move(second)]() mutable {
+                quota.reset();
+            });
             destroyQuota.join();
             UNIT_ASSERT_VALUES_EQUAL(firstCounter->Val(), 1_MB);
             UNIT_ASSERT_VALUES_EQUAL(otherCounter->Val(), 1_MB);
@@ -207,7 +210,9 @@ Y_UNIT_TEST_SUITE(RowDispatcherMemoryQuota) {
                 payload = NYql::MakeReadOnlyRope(std::move(buffer));
                 UNIT_ASSERT(packer.IsEmpty());
                 UNIT_ASSERT_VALUES_EQUAL(packer.PackedSizeEstimate(), 0);
-                std::thread destroyPayload([copy = payload]() mutable { copy.clear(); });
+                std::thread destroyPayload([copy = payload]() mutable {
+                    copy.clear();
+                });
                 destroyPayload.join();
             }
             UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 1_MB);
@@ -272,10 +277,7 @@ Y_UNIT_TEST_SUITE(RowDispatcherMemoryQuota) {
         with_lock(Alloc) {
             TMemoryLimitedDataPacker packer(manager, sizeof(ui64));
             packer.SetPackerType(type);
-            NYql::NUdf::TUnboxedValue row[] = {
-                NKikimr::NMiniKQL::MakeString(data),
-                NYql::NUdf::TUnboxedValuePod(ui64{42})
-            };
+            NYql::NUdf::TUnboxedValue row[] = { NKikimr::NMiniKQL::MakeString(data), NYql::NUdf::TUnboxedValuePod(ui64{ 42 }) };
             packer.AddWideItem(row, 2);
             UNIT_ASSERT_LT(packer.PackedSizeEstimate(), PageSize);
             auto [buffer, size] = packer.Finish();
@@ -287,4 +289,4 @@ Y_UNIT_TEST_SUITE(RowDispatcherMemoryQuota) {
     }
 }
 
-} // namespace NFq::NRowDispatcher::NTests
+}   // namespace NFq::NRowDispatcher::NTests

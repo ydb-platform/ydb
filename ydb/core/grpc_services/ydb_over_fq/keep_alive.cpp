@@ -2,16 +2,16 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
+
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
-class TKeepAliveRPC : public TRpcOperationRequestActor<
-    TKeepAliveRPC, TGrpcRequestOperationCall<Ydb::Table::KeepAliveRequest, Ydb::Table::KeepAliveResponse>> {
+class TKeepAliveRPC
+    : public TRpcOperationRequestActor<TKeepAliveRPC, TGrpcRequestOperationCall<Ydb::Table::KeepAliveRequest, Ydb::Table::KeepAliveResponse>> {
 public:
-    using TBase = TRpcOperationRequestActor<
-        TKeepAliveRPC,
-        TGrpcRequestOperationCall<Ydb::Table::KeepAliveRequest, Ydb::Table::KeepAliveResponse>>;
+    using TBase =
+        TRpcOperationRequestActor<TKeepAliveRPC, TGrpcRequestOperationCall<Ydb::Table::KeepAliveRequest, Ydb::Table::KeepAliveResponse>>;
     using TBase::TBase;
 
     void Bootstrap(const TActorContext& ctx) {
@@ -35,4 +35,4 @@ std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> Ge
         f.RegisterActor(new TKeepAliveRPC(p.release()));
     };
 }
-}
+}   // namespace NKikimr::NGRpcService::NYdbOverFq

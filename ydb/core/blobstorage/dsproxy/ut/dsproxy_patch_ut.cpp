@@ -6,9 +6,11 @@
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy_patch.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/base/blobstorage_common.h>
 
+#include <algorithm>
 #include <cstring>
 
 namespace NKikimr {
@@ -714,11 +716,13 @@ class TMirror3dcVPatchActorTest {
     }
 
 public:
-    TMirror3dcVPatchActorTest() {
+    TMirror3dcVPatchActorTest(const TVector<EMirror3dcFailRealmState>& realms = {},
+            EMirror3dcGroupState groupState = NKikimrBlobStorage::TGroupState::NORMAL) {
         Args.MakeDefault(TErasureType::ErasureMirror3dc);
         SetLogPriorities(Runtime);
         SetupRuntime(Runtime);
-        Env.Configure(Runtime, Args.GType, Args.CurrentGroupId, 0, TBlobStorageGroupInfo::EEM_NONE);
+        Env.Configure(Runtime, Args.GType, Args.CurrentGroupId, 0, TBlobStorageGroupInfo::EEM_NONE,
+            DormantTimeoutDefaultControl, false, realms, groupState);
     }
 
     TDiffEvents Start(ui32 availableMask) {
@@ -754,9 +758,41 @@ public:
     void CompleteFallback() {
         ConductFallbackPatch(Runtime, Args);
     }
+
+    void CheckNaiveFallback(bool enableVPatchForTesting) {
+        auto patch = CreatePatch(Runtime, Env, Args);
+        auto patchActor = Env.CreatePatchRequestActor(patch, true, enableVPatchForTesting);
+        PatchActorId = Runtime.Register(patchActor.release(), 0, 0, TMailboxType::Simple, 0, Env.FakeProxyActorId);
+        ConductNaivePatch(Runtime, Args, ENaivePatchCase::Ok);
+        UNIT_ASSERT(!Runtime.FindActor(PatchActorId));
+    }
 };
 
 Y_UNIT_TEST_SUITE(TVPatchMirror3dcActorTest) {
+    Y_UNIT_TEST(NonNormalRealmsUseNaiveFallback) {
+        for (int value = NKikimrBlobStorage::TGroupState::EState_MIN; value <= NKikimrBlobStorage::TGroupState::EState_MAX; ++value) {
+            const auto state = static_cast<EMirror3dcGroupState>(value);
+            if (state == NKikimrBlobStorage::TGroupState::NORMAL) {
+                continue;
+            }
+            auto realms = *GetMirror3dcRealmStates(state);
+            do {
+                // Exercise both VPatch and VMovedPatch entry paths.
+                for (const bool enableVPatchForTesting : {false, true}) {
+                    TMirror3dcVPatchActorTest test({realms.begin(), realms.end()}, state);
+                    test.CheckNaiveFallback(enableVPatchForTesting);
+                }
+            } while (std::next_permutation(realms.begin(), realms.end()));
+        }
+    }
+
+    Y_UNIT_TEST(MixedNormalRealmsKeepVPatch) {
+        TMirror3dcVPatchActorTest test({NKikimrBlobStorage::TDataCenterState::INCLUDED, NKikimrBlobStorage::TDataCenterState::INCLUDED, NKikimrBlobStorage::TDataCenterState::INCLUDED});
+        const auto events = test.Start(0b000000111);
+        UNIT_ASSERT_VALUES_EQUAL(events.SelectedMask, 0b000000111);
+        test.CompleteSuccessfully(events);
+    }
+
     Y_UNIT_TEST(SelectsOneReplicaFromEachRealm) {
         TMirror3dcVPatchActorTest test;
         const auto events = test.Start(0b000000111); // 1+1+1
@@ -943,7 +979,6 @@ EFaultToleranceCase GetFaultToleranceCaseForBlock4Plus2(const TDSProxyEnv &env, 
 EFaultToleranceCase GetFaultToleranceCaseForMirror3dc(const TDSProxyEnv &env, const TTestArgs &args) {
     UNIT_ASSERT_VALUES_EQUAL(args.PartPlacement.size(), args.ErrorVDisks.size());
     UNIT_ASSERT_VALUES_EQUAL(args.PartPlacement.size(), env.Info->Type.BlobSubgroupSize());
-    TSubgroupPartLayout layout;
     constexpr ui32 dcCnt = 3;
     ui32 replInDc[dcCnt] = {0, 0, 0};
     for (ui32 vdiskIdx = 0; vdiskIdx < env.Info->Type.BlobSubgroupSize(); ++vdiskIdx) {

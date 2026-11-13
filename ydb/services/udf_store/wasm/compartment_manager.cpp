@@ -1,5 +1,4 @@
 #include "compartment_manager.h"
-
 #include "host.h"
 #include "registry_helpers.h"
 #include "types.h"
@@ -19,14 +18,11 @@ namespace {
 thread_local TQueryCompartmentHandle* CurrentQueryCompartment = nullptr;
 
 ui64 NextCompartmentGeneration() {
-    static std::atomic<ui64> counter{0};
+    static std::atomic<ui64> counter{ 0 };
     return BridgeGenerationFromTicket(counter.fetch_add(1, std::memory_order_relaxed));
 }
 
-void BindExport(
-    TQueryCompartmentHandle& handle,
-    const TString& moduleName,
-    const TString& exportName)
+void BindExport(TQueryCompartmentHandle& handle, const TString& moduleName, const TString& exportName)
 {
     if (exportName.empty()) {
         return;
@@ -37,22 +33,18 @@ void BindExport(
     }
     auto* exportPtr = handle.Compartment->GetFunction(std::string(exportName));
     if (!exportPtr) {
-        ythrow yexception()
-            << "Missing WASM export '" << exportName
-            << "' in module '" << moduleName << "'";
+        ythrow yexception() << "Missing WASM export '" << exportName << "' in module '" << moduleName << "'";
     }
     handle.Exports.emplace(key, exportPtr);
 }
 
-} // namespace
+}   // namespace
 
 TString MakeExportKey(TStringBuf moduleName, TStringBuf functionName) {
     return TStringBuilder() << moduleName << "::" << functionName;
 }
 
-TQueryCompartmentHandlePtr TWasmCompartmentManager::Acquire(
-    const TVector<TString>& moduleNames) const
-{
+TQueryCompartmentHandlePtr TWasmCompartmentManager::Acquire(const TVector<TString>& moduleNames) const {
     EnsureUdfHostIntrinsicsRegistered();
 
     if (moduleNames.empty()) {
@@ -69,25 +61,19 @@ TQueryCompartmentHandlePtr TWasmCompartmentManager::Acquire(
         THashMap<TString, TNamedModuleBytecode> byName;
         for (const auto& library : artifact->Libraries) {
             if (library.Name.empty()) {
-                ythrow yexception()
-                    << "WASM UDF '" << artifact->ModuleName
-                    << "' has a library entry with empty name";
+                ythrow yexception() << "WASM UDF '" << artifact -> ModuleName << "' has a library entry with empty name";
             }
             if (!library.Bytecode.ObjectCode) {
-                ythrow yexception()
-                    << "WASM UDF '" << artifact->ModuleName
-                    << "' is missing object code for required library '"
-                    << library.Name << "'";
+                ythrow yexception() << "WASM UDF '" << artifact -> ModuleName << "' is missing object code for required library '"
+                                    << library.Name << "'";
             }
             byName.emplace(library.Name, library);
         }
         for (const auto& required : artifact->Manifest.RequiredLibraries) {
             const auto* library = byName.FindPtr(required);
             if (!library) {
-                ythrow yexception()
-                    << "WASM UDF '" << artifact->ModuleName
-                    << "' requires library '" << required
-                    << "' but it was not loaded into the module catalog";
+                ythrow yexception() << "WASM UDF '" << artifact -> ModuleName << "' requires library '" << required
+                                    << "' but it was not loaded into the module catalog";
             }
             if (loadedLibraries.insert(required).second) {
                 libraries.push_back(*library);
@@ -104,10 +90,7 @@ TQueryCompartmentHandlePtr TWasmCompartmentManager::Acquire(
     handle->Resident = std::make_unique<TCompartmentResidentCache>(handle->Compartment.get());
 
     for (const auto& artifact : artifacts) {
-        AddPrecompiledModule(
-            handle->Compartment.get(),
-            artifact->ModuleBytecode,
-            artifact->ModuleName);
+        AddPrecompiledModule(handle->Compartment.get(), artifact->ModuleBytecode, artifact->ModuleName);
 
         for (const auto& function : artifact->Manifest.Functions) {
             if (function.Binding == EWasmUdfBinding::TypeConfigCallable) {
@@ -141,17 +124,14 @@ TCurrentQueryCompartmentGuard::~TCurrentQueryCompartmentGuard() {
     }
 }
 
-TCurrentQueryCompartmentGuard::TCurrentQueryCompartmentGuard(
-    TCurrentQueryCompartmentGuard&& other) noexcept
+TCurrentQueryCompartmentGuard::TCurrentQueryCompartmentGuard(TCurrentQueryCompartmentGuard&& other) noexcept
     : Previous_(other.Previous_)
     , Active_(other.Active_)
 {
     other.Active_ = false;
 }
 
-TCurrentQueryCompartmentGuard& TCurrentQueryCompartmentGuard::operator=(
-    TCurrentQueryCompartmentGuard&& other) noexcept
-{
+TCurrentQueryCompartmentGuard& TCurrentQueryCompartmentGuard::operator=(TCurrentQueryCompartmentGuard&& other) noexcept {
     if (this != &other) {
         if (Active_) {
             CurrentQueryCompartment = Previous_;
@@ -167,4 +147,4 @@ TQueryCompartmentHandle* GetCurrentQueryCompartment() {
     return CurrentQueryCompartment;
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

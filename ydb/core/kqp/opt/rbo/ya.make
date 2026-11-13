@@ -5,11 +5,11 @@ SRCS(
     global_inlining.cpp
     global_pruning.cpp
     kqp_expression.cpp
+    kqp_olap_aggregate.cpp
     kqp_olap_expr_inspection.cpp
     kqp_operator.cpp
     kqp_plan_conversion_utils.cpp
     kqp_plan_props.cpp
-    kqp_plan_to_json.cpp
     kqp_rbo_compute_statistics.cpp
     kqp_rbo_context.cpp
     kqp_rbo_statistics.cpp
@@ -21,7 +21,13 @@ SRCS(
     kqp_rbo_lookup_join.cpp
     kqp_rewrite_select.cpp
     kqp_stage_graph.cpp
+    remove_redundant_sorts.cpp
     analysis/logical_liveness.cpp
+    explain/kqp_connection_explain.cpp
+    explain/kqp_expression_explain.cpp
+    explain/kqp_operator_explain.cpp
+    explain/kqp_plan_to_json.cpp
+    explain/kqp_read_ranges_explain.cpp
     logical_renames.cpp
     rebind_consumers.cpp
     traces/kqp_rbo_trace_format.cpp
@@ -41,16 +47,18 @@ PEERDIR(
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
     ydb/core/kqp/opt/rbo/html_log
-    ydb/core/kqp/opt/rbo/rules
     ydb/core/kqp/opt/rbo/physical_conversion
+    ydb/core/kqp/opt/rbo/rules
+    ydb/core/kqp/provider
+    ydb/core/kqp/query_plan
+    ydb/core/kqp/tracing
+    ydb/library/formats/arrow/protos
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
     ydb/library/yql/providers/s3/expr_nodes
     ydb/library/yql/providers/s3/statistics
     ydb/library/yql/utils/plan
-    ydb/core/kqp/provider
-    ydb/library/formats/arrow/protos
     yql/essentials/core/extract_predicate
 )
 

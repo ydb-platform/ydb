@@ -134,6 +134,25 @@ private:
 };
 
 void TColumnShard::Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    const auto txKind = record.GetTxKind();
+    if (txKind == NKikimrTxColumnShard::TX_KIND_BACKUP || txKind == NKikimrTxColumnShard::TX_KIND_RESTORE) {
+        // The completion result of a backup/restore is persisted per table (LastCompletedBackupTransaction) and the tx
+        // operator is removed when the operation finishes. So a propose for such tx is a stale duplicate: SchemeShard has
+        // already received PREPARED and planned the tx, it ignores TEvProposeTransactionResult at that stage and asks for
+        // the result with TEvNotifyTxCompletion. Registering a new operator here would never be planned again and would
+        // hide the persisted result from TEvNotifyTxCompletion, so the message is dropped.
+        if (const auto* completedTx = LastCompletedBackupTransactionsByTxId.FindPtr(record.GetTxId())) {
+            YDB_LOG_WARN("",
+                {"event", "ignore_propose_of_completed_backup_restore"},
+                {"tabletId", TabletID()},
+                {"txId", record.GetTxId()},
+                {"txKind", NKikimrTxColumnShard::ETransactionKind_Name(txKind)},
+                {"success", completedTx->GetOpResult().GetSuccess()},
+                {"explain", completedTx->GetOpResult().GetExplain()});
+            return;
+        }
+    }
     Execute(new TTxProposeTransaction(this, ev), ctx);
 }
 

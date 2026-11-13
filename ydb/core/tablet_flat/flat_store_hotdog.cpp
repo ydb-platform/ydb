@@ -4,7 +4,7 @@
 #include "flat_part_overlay.h"
 
 #include <ydb/core/base/tablet.h>
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
 #include <util/generic/xrange.h>
 

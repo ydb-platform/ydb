@@ -20,7 +20,6 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -454,10 +453,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Streaming);
     }
 
-    Y_UNIT_TEST_TWIN(CreateTopicWithSharedConsumer_MoveDeadLetterPolicy, enableRelativePaths) {
-        auto settings = TTopicSdkTestSetup::MakeServerSettings();
-        settings.FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
-        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+    Y_UNIT_TEST(CreateTopicWithSharedConsumer_MoveDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
         CreateEmptyTopic(client, "deadLetterQueue-topic");
@@ -473,7 +470,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .BeginCondition()
                         .MaxProcessingAttempts(11)
                     .EndCondition()
-                    .MoveAction("deadLetterQueue-topic")
+                    .MoveAction("/Root/deadLetterQueue-topic")
                 .EndDeadLetterPolicy()
             .EndAddConsumer();
 
@@ -493,8 +490,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(),
-            enableRelativePaths ? "/Root/deadLetterQueue-topic" : "deadLetterQueue-topic");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "/Root/deadLetterQueue-topic");
     }
 
     Y_UNIT_TEST(CreateTopicWithSharedConsumer_DeleteDeadLetterPolicy) {
@@ -614,10 +610,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
     }
 
-    Y_UNIT_TEST_TWIN(AlterTopicWithSharedConsumer_MoveDeadLetterPolicy, enableRelativePaths) {
-        auto settings = TTopicSdkTestSetup::MakeServerSettings();
-        settings.FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
-        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+    Y_UNIT_TEST(AlterTopicWithSharedConsumer_MoveDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
         CreateEmptyTopic(client, "deadLetterQueue-topic");
@@ -631,7 +625,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .KeepMessagesOrder(true)
                     .BeginDeadLetterPolicy()
                         .Enabled(true)
-                        .MoveAction("deadLetterQueue-topic")
+                        .MoveAction("/Root/deadLetterQueue-topic")
                         .BeginCondition()
                             .MaxProcessingAttempts(11)
                         .EndCondition()
@@ -651,7 +645,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .DefaultProcessingTimeout(TDuration::Seconds(13))
                     .BeginAlterDeadLetterPolicy()
                         .Enabled(true)
-                        .AlterMoveAction("deadLetterQueue-topic-new")
+                        .AlterMoveAction("/Root/deadLetterQueue-topic-new")
                         .BeginCondition()
                             .MaxProcessingAttempts(17)
                         .EndCondition()
@@ -674,14 +668,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 17);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(),
-            enableRelativePaths ? "/Root/deadLetterQueue-topic-new" : "deadLetterQueue-topic-new");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "/Root/deadLetterQueue-topic-new");
     }
 
-    Y_UNIT_TEST_TWIN(AlterTopicWithSharedConsumer_DisableDeadLetterPolicy, enableRelativePaths) {
-        auto settings = TTopicSdkTestSetup::MakeServerSettings();
-        settings.FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
-        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+    Y_UNIT_TEST(AlterTopicWithSharedConsumer_DisableDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
         CreateEmptyTopic(client, "deadLetterQueue-topic");
@@ -695,7 +686,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .KeepMessagesOrder(true)
                     .BeginDeadLetterPolicy()
                         .Enabled(true)
-                        .MoveAction("deadLetterQueue-topic")
+                        .MoveAction("/Root/deadLetterQueue-topic")
                         .BeginCondition()
                             .MaxProcessingAttempts(11)
                         .EndCondition()
@@ -736,8 +727,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), false);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(),
-            enableRelativePaths ? "/Root/deadLetterQueue-topic" : "deadLetterQueue-topic");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "/Root/deadLetterQueue-topic");
     }
 
     Y_UNIT_TEST(AlterTopicWithSharedConsumer_SetDeleteDeadLetterPolicy) {
@@ -794,10 +784,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "");
     }
 
-    Y_UNIT_TEST_TWIN(AlterTopicWithSharedConsumer_SetMoveDeadLetterPolicy, enableRelativePaths) {
-        auto settings = TTopicSdkTestSetup::MakeServerSettings();
-        settings.FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
-        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+    Y_UNIT_TEST(AlterTopicWithSharedConsumer_SetMoveDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
 
@@ -828,7 +816,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             topics.BeginAlterConsumer()
                     .ConsumerName("shared_consumer_name")
                     .BeginAlterDeadLetterPolicy()
-                        .SetMoveAction("dlq-topic")
+                        .SetMoveAction("/Root/dlq-topic")
                     .EndAlterDeadLetterPolicy()
                 .EndAlterConsumer();
             auto status = client.AlterTopic("topic_name", topics).GetValueSync();
@@ -848,14 +836,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(),
-            enableRelativePaths ? "/Root/dlq-topic" : "dlq-topic");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "/Root/dlq-topic");
     }
 
-    Y_UNIT_TEST_TWIN(AlterTopicWithSharedConsumer_AlterMoveDeadLetterPolicy, enableRelativePaths) {
-        auto settings = TTopicSdkTestSetup::MakeServerSettings();
-        settings.FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
-        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+    Y_UNIT_TEST(AlterTopicWithSharedConsumer_AlterMoveDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
         CreateEmptyTopic(client, "dlq-topic");
@@ -869,7 +854,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .KeepMessagesOrder(true)
                     .BeginDeadLetterPolicy()
                         .Enabled(true)
-                        .MoveAction("dlq-topic")
+                        .MoveAction("/Root/dlq-topic")
                         .BeginCondition()
                             .MaxProcessingAttempts(11)
                         .EndCondition()
@@ -887,7 +872,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             topics.BeginAlterConsumer()
                     .ConsumerName("shared_consumer_name")
                     .BeginAlterDeadLetterPolicy()
-                        .AlterMoveAction("dlq-topic-new")
+                        .AlterMoveAction("/Root/dlq-topic-new")
                     .EndAlterDeadLetterPolicy()
                 .EndAlterConsumer();
             auto status = client.AlterTopic("topic_name", topics).GetValueSync();
@@ -907,8 +892,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(),
-            enableRelativePaths ? "/Root/dlq-topic-new" : "dlq-topic-new");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "/Root/dlq-topic-new");
     }
 
     Y_UNIT_TEST(AlterTopicWithSharedConsumer_DeleteDeadLetterPolicy_AlterMoveDeadLetterPolicy) {

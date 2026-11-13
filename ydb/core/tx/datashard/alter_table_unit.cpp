@@ -189,7 +189,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
             NIceDb::TNiceDb db(txc.DB);
             DataShard.PersistUserTable(db, tableId.LocalPathId, *stopped);
             TDataShardLocksDb locksDb(DataShard, txc);
-            DataShard.ReplaceUserTable(tableId, stopped, locksDb);
+            DataShard.AddUserTable(tableId, stopped, &locksDb);
             DataShard.ReplicatedTables.erase(tableId);
             return EExecutionStatus::Reschedule;
         }

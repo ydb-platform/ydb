@@ -41,16 +41,9 @@ public:
             return;
         }
 
-        if (rec.GetEvictVDisks()) {
-            const auto &action = Actions.at(rec.GetAction());
-            if (!action || (*action != TAction::SHUTDOWN_HOST && *action != TAction::REBOOT_HOST)) {
-                ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "data_migration requires a host shutdown or reboot action", ctx);
-                return;
-            }
-            if (rec.HostsSize() != 1) {
-                ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "data_migration requires exactly one host", ctx);
-                return;
-            }
+        if (rec.GetEvictVDisks() && !Actions.at(rec.GetAction())) {
+            ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "data_migration is not supported for this action", ctx);
+            return;
         }
 
         ctx.Send(Cms, new TEvCms::TEvGetClusterInfoRequest);

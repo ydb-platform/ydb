@@ -65,10 +65,15 @@ struct Tiling: ICompactionUnit<TPortion> {
         this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
     }
 
+    // evicted portions are not compacted, so they are neither placed nor counted
+    static bool Skip(const typename TPortion::TConstPtr& p) {
+        return p->GetProduced() == NPortion::EVICTED;
+    }
+
     void AddLoadedPortions(const std::vector<typename TPortion::TPtr>& add) {
         std::vector<typename TPortion::TPtr> sortedPortions;
         std::copy_if(add.begin(), add.end(), std::back_inserter(sortedPortions), [](const auto& p) {
-            return p->GetProduced() != NPortion::EVICTED;
+            return !Skip(p);
         });
         if (sortedPortions.empty()) {
             return;
@@ -169,11 +174,23 @@ struct Tiling: ICompactionUnit<TPortion> {
         UpdatePriority();
     }
 
+    void AddPortion(typename TPortion::TPtr p) override {
+        if (!Skip(p)) {
+            ICompactionUnit<TPortion>::AddPortion(p);
+        }
+    }
+
+    void RemovePortion(typename TPortion::TConstPtr p) override {
+        if (!Skip(p)) {
+            ICompactionUnit<TPortion>::RemovePortion(p);
+        }
+    }
+
     void DoAddPortion(typename TPortion::TPtr p) override {
         switch (p->GetProduced()) {
             case NPortion::EVICTED:
-                // Evicted portions (e.g. tier deletion) are not tracked by the optimizer.
-                return;
+                AFL_VERIFY(false)("reason", "Unexpected portion type")("type", "EVICTED");
+                break;
             case NPortion::INACTIVE:
                 AFL_VERIFY(false)("reason", "Unexpected portion type")("type", "INACTIVE");
                 break;
@@ -247,8 +264,6 @@ struct Tiling: ICompactionUnit<TPortion> {
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
         switch (p->GetProduced()) {
             case NPortion::EVICTED:
-                // Evicted portions (e.g. tier deletion) are not tracked by the optimizer.
-                return;
             case NPortion::INACTIVE:
             case NPortion::UNSPECIFIED:
             case NPortion::COMPACTED:

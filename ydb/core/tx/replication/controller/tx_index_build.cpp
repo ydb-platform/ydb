@@ -4,6 +4,8 @@
 
 #include <ydb/core/base/path.h>
 
+#include <util/generic/algorithm.h>
+
 #include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -313,9 +315,15 @@ class TController::TTxIndexBuild: public TTxBase {
                 continue;
             }
 
-            const bool unfinished = build.GetPhase() == TBuild::FILLING || build.GetPhase() == TBuild::JOINING;
             const bool finishing = replication->GetDesiredState() == TReplication::EState::Done;
-            if (unfinished && finishing && !Self->HasActiveSchemaBarrier(key.first)) {
+            if (finishing && !IsCancelledIndexBuild(build) && !Self->HasActiveSchemaBarrier(key.first)
+                && AnyOf(Self->GetIndexBuildGroup(key), [this](const auto& peerKey) {
+                    const auto phase = Self->IndexBuilds.at(peerKey).GetPhase();
+                    // Cancel the entire index if any backing table is unfinished.
+                    // Include CANCELLING so the decision survives iteration and recovery.
+                    return phase == TBuild::FILLING || phase == TBuild::JOINING || phase == TBuild::CANCELLING;
+                }))
+            {
                 // Stop every writer before dropping its table. Persist this
                 // phase and its paused destination before starting cancellation.
                 build.SetPhase(TBuild::CANCELLING);

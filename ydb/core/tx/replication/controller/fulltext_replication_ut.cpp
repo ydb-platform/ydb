@@ -6,11 +6,13 @@
 #include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
@@ -41,16 +43,20 @@ struct TReplicationSettings {
     bool RaceDiscovery = false;
     bool SplitMerge = false;
     bool DropDuringReadiness = false;
+    bool PauseBeforeFinish = false;
+    bool FinishDuringInitialization = false;
+    bool RestartDuringCancellation = false;
 };
 
 void RunReplication(const TReplicationSettings& settings) {
     const auto& [kind, compact, global, initialIndex, jsonDocument, finish, stall, customKey,
-        dropDuringScan, prefixAndCovering, attach, raceDiscovery, splitMerge, dropDuringReadiness] = settings;
+        dropDuringScan, prefixAndCovering, attach, raceDiscovery, splitMerge, dropDuringReadiness,
+        pauseBeforeFinish, finishDuringInitialization, restartDuringCancellation] = settings;
     NTestHelpers::TFeatureFlags flags;
     flags.FeatureFlags.SetEnableFulltextIndexReplication(true);
     flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
     flags.FeatureFlags.SetEnableCompactFulltextIndex(compact);
-    NTestHelpers::TEnv env(flags, true, stall || raceDiscovery || finish || splitMerge || dropDuringReadiness
+    NTestHelpers::TEnv env(flags, true, stall || raceDiscovery || finish || splitMerge || dropDuringReadiness || finishDuringInitialization
         ? NTestHelpers::ERuntimeMode::Simulated : NTestHelpers::ERuntimeMode::RealThreads);
     auto& runtime = env.GetRuntime();
     // These integration cases run several CDC workers alongside the full
@@ -262,14 +268,29 @@ void RunReplication(const TReplicationSettings& settings) {
                 new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(importTxId));
         }
     }
-    std::atomic<bool> holdProgress{stall};
+    std::atomic<bool> holdProgress{stall || finishDuringInitialization};
     TMutex progressLock;
+    ui64 stalledTargetId = 0;
     TVector<TAutoPtr<IEventHandle>> heldProgress;
     auto observer = runtime.AddObserver<TEvService::TEvIndexBuildProgress>(
         [&](TEvService::TEvIndexBuildProgress::TPtr& ev) {
             if (holdProgress.load()) {
                 TGuard<TMutex> guard(progressLock);
                 if (holdProgress.load()) {
+                    if (finishDuringInitialization) {
+                        const auto targetId = TWorkerId::Parse(ev->Get()->Record.GetWorker()).TargetId();
+                        // The service adds the worker ID before forwarding to
+                        // the controller. Earlier hops cannot identify a target.
+                        if (!targetId) {
+                            return;
+                        }
+                        if (!stalledTargetId) {
+                            stalledTargetId = targetId;
+                        }
+                        if (targetId != stalledTargetId) {
+                            return;
+                        }
+                    }
                     heldProgress.emplace_back(ev.Release());
                 }
             }
@@ -279,7 +300,7 @@ void RunReplication(const TReplicationSettings& settings) {
     bool readinessStopped = false;
     auto readinessObserver = runtime.AddObserver(
         [&](IEventHandle::TPtr& ev) {
-            if (!dropDuringReadiness || heldReadiness
+            if ((!dropDuringReadiness && !restartDuringCancellation) || heldReadiness
                 || ev->GetTypeRewrite() != TEvPrivate::EvSchemaChangeDstAlterTxId || !ev->HasEvent())
             {
                 return;
@@ -381,6 +402,65 @@ void RunReplication(const TReplicationSettings& settings) {
     }
     if (!initialIndex && !raceDiscovery) {
         execute(TStringBuilder() << "ALTER TABLE `/Root/source` ADD " << index << ";");
+    }
+
+    if (finishDuringInitialization) {
+        const auto controllerId = env.GetDescription("/Root/replication").GetPathDescription()
+            .GetReplicationDescription().GetControllerId();
+        const auto replicationPathId = env.GetPathId("/Root/replication");
+        auto deadline = TInstant::Now() + TDuration::Seconds(90);
+        // Hold one backing table in FILLING while its peers reach MAKING_READY.
+        // The index must be cancelled as a group regardless of target order.
+        while (true) {
+            NKikimrMiniKQL::TResult result;
+            UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, controllerId, R"((
+                (let range '('('ReplicationId (Uint64 '1) (Uint64 '1))
+                    '('Id (Null) (Void))))
+                (return (AsList (SetResult 'Rows (SelectRange 'Targets range '('IndexBuild) '())))))
+            )", result), NKikimrProto::OK);
+            bool filling = false;
+            bool makingReady = false;
+            TString phases;
+            for (const auto& row : result.GetValue().GetStruct(0).GetOptional().GetStruct(0).GetList()) {
+                const auto& value = row.GetStruct(0);
+                if (value.HasOptional()) {
+                    NKikimrReplication::TIndexBuildState build;
+                    UNIT_ASSERT(build.ParseFromString(value.GetOptional().GetBytes()));
+                    filling |= build.GetPhase() == NKikimrReplication::TIndexBuildState::FILLING;
+                    makingReady |= build.GetPhase() == NKikimrReplication::TIndexBuildState::MAKING_READY;
+                    phases += build.ShortDebugString() + "; ";
+                }
+            }
+            if (filling && makingReady) {
+                break;
+            }
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "Backing tables did not reach mixed initialization phases: " << phases);
+            pause();
+        }
+        execute("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE='DONE', FAILOVER_MODE='FORCE');");
+        if (restartDuringCancellation) {
+            runtime.WaitFor("pending index cancellation", [&] { return bool(heldReadiness); }, TDuration::Seconds(60));
+            RebootTablet(runtime, controllerId, env.GetSender());
+            readinessObserver.Remove();
+            runtime.Send(heldReadiness.Release());
+        }
+        deadline = TInstant::Now() + TDuration::Seconds(90);
+        while (true) {
+            auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+            replicationPathId.ToProto(request->Record.MutablePathId());
+            const auto result = env.Send<TEvController::TEvDescribeReplicationResult>(controllerId, std::move(request));
+            UNIT_ASSERT_C(!result->Get()->Record.GetState().HasError(), result->Get()->Record.DebugString());
+            if (result->Get()->Record.GetState().HasDone()) {
+                break;
+            }
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "Forced completion stalled with mixed backing-table phases");
+            pause();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica").GetPathDescription().GetTable().TableIndexesSize(), 0);
+        execute("UPSERT INTO `/Root/replica` (key,value) VALUES (9,'cats'u);");
+        waitQuery("SELECT key FROM `/Root/replica` WHERE key=9;", "[[9u]]");
+        execute("DROP ASYNC REPLICATION `/Root/replication`;");
+        return;
     }
 
     const TString predicate = json ? "JSON_VALUE(value,'$.tag' RETURNING Utf8) = 'cats'u"
@@ -507,6 +587,24 @@ void RunReplication(const TReplicationSettings& settings) {
     }
     UNIT_ASSERT(foundIndex);
     if (finish) {
+        if (pauseBeforeFinish) {
+            execute("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE='PAUSED');");
+            const auto deadline = TInstant::Now() + TDuration::Seconds(90);
+            const auto controllerId = env.GetDescription("/Root/replication").GetPathDescription()
+                .GetReplicationDescription().GetControllerId();
+            const auto replicationPathId = env.GetPathId("/Root/replication");
+            while (true) {
+                auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+                replicationPathId.ToProto(request->Record.MutablePathId());
+                const auto result = env.Send<TEvController::TEvDescribeReplicationResult>(controllerId, std::move(request));
+                UNIT_ASSERT_C(!result->Get()->Record.GetState().HasError(), result->Get()->Record.DebugString());
+                if (result->Get()->Record.GetState().HasPaused()) {
+                    break;
+                }
+                UNIT_ASSERT_C(TInstant::Now() < deadline, "Replication did not pause before forced completion");
+                pause();
+            }
+        }
         execute("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE='DONE', FAILOVER_MODE='FORCE');");
         const auto deadline = TInstant::Now() + TDuration::Seconds(90);
         const auto controllerId = env.GetDescription("/Root/replication").GetPathDescription()
@@ -634,6 +732,19 @@ Y_UNIT_TEST_SUITE(FulltextReplication) {
     Y_UNIT_TEST_TWIN(RecoveryAndCompletion, Compact) {
         RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true, .Finish = true});
         RunReplication({.Kind = "json", .Compact = Compact, .JsonDocument = true, .Finish = true});
+    }
+
+    Y_UNIT_TEST_TWIN(CompletionFromPaused, Compact) {
+        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true,
+            .Finish = true, .PauseBeforeFinish = true});
+        RunReplication({.Kind = "json", .Compact = Compact, .JsonDocument = true,
+            .Finish = true, .CustomKey = true, .PauseBeforeFinish = true});
+    }
+
+    Y_UNIT_TEST_TWIN(CompletionWithMixedBackingTablePhases, Compact) {
+        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .FinishDuringInitialization = true});
+        RunReplication({.Kind = "fulltext_relevance", .Compact = Compact, .Global = true,
+            .FinishDuringInitialization = true, .RestartDuringCancellation = true});
     }
 
     Y_UNIT_TEST_TWIN(CustomPrimaryKey, Compact) {

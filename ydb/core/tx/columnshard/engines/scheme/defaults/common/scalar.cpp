@@ -8,9 +8,12 @@
 #include <util/generic/ylimits.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <yql/essentials/minikql/dom/json.h>
+#include <yql/essentials/minikql/dom/yson.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/utils/utf8.h>
 
 #include <cstring>
 
@@ -281,16 +284,35 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const 
                 scalar = std::make_shared<arrow::DoubleScalar>(value.double_value());
                 break;
             case Ydb::Type::UTF8:
+                if (valueCase != Ydb::Value::kTextValue) {
+                    return invalidLiteral;
+                }
+                if (!NYql::IsUtf8(value.text_value())) {
+                    return TConclusionStatus::Fail("Invalid Utf8 default");
+                }
+                scalar = std::make_shared<arrow::StringScalar>(value.text_value());
+                break;
             case Ydb::Type::JSON:
                 if (valueCase != Ydb::Value::kTextValue) {
                     return invalidLiteral;
                 }
+                if (!NYql::NDom::IsValidJson(value.text_value())) {
+                    return TConclusionStatus::Fail("Invalid Json default");
+                }
                 scalar = std::make_shared<arrow::StringScalar>(value.text_value());
                 break;
             case Ydb::Type::STRING:
+                if (valueCase != Ydb::Value::kBytesValue) {
+                    return invalidLiteral;
+                }
+                scalar = std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(value.bytes_value())));
+                break;
             case Ydb::Type::YSON:
                 if (valueCase != Ydb::Value::kBytesValue) {
                     return invalidLiteral;
+                }
+                if (!NYql::NDom::IsValidYson(value.bytes_value())) {
+                    return TConclusionStatus::Fail("Invalid Yson default");
                 }
                 scalar = std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(value.bytes_value())));
                 break;
@@ -365,7 +387,7 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromTypedValue(const 
                 return TConclusionStatus::Fail("Default value is not supported for type " + ::ToString(type.GetTypeId()) + " in column tables");
         }
     }
-    if (!IsCompatibleType(scalar->type) && Value) {
+    if (!IsCompatibleType(scalar->type)) {
         return TConclusionStatus::Fail("incompatible default literal");
     }
     const auto expected = NArrow::GetArrowType(type);

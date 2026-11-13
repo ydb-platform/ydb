@@ -414,6 +414,39 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnDefaults) {
         UNIT_ASSERT(!yson.Contains("ALTER OBJECT"));
     }
 
+    Y_UNIT_TEST(ShowCreateKeepsStringDefaultWhenFlagOff) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        ExecScheme(db, R"(
+            CREATE TABLE `/Root/CsLegacy` (
+                Key Uint32 NOT NULL,
+                Value Uint32,
+                PRIMARY KEY (Key)
+            ) WITH (STORE = COLUMN);
+        )");
+        ExecScheme(db,
+            "ALTER OBJECT `/Root/CsLegacy` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Value, `DEFAULT_VALUE`=`5`);");
+        auto result = db.GetSession().GetValueSync().GetSession().ExecuteQuery(
+            "SHOW CREATE TABLE `/Root/CsLegacy`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto yson = FormatResultSetYson(result.GetResultSet(0));
+        UNIT_ASSERT_STRING_CONTAINS(yson, "DEFAULT_VALUE");
+        UNIT_ASSERT(!yson.Contains("DEFAULT 5"));
+    }
+
+    Y_UNIT_TEST(InvalidJsonDefaultRejected) {
+        TKikimrRunner kikimr(DefaultsSettings());
+        auto db = kikimr.GetQueryClient();
+        ExpectSchemeError(db, R"(
+            CREATE TABLE `/Root/BadJson` (
+                Key Uint32 NOT NULL,
+                Doc Json DEFAULT Json('not json'),
+                PRIMARY KEY (Key)
+            ) WITH (STORE = COLUMN);
+        )", "Invalid value \"not json\" for type Json");
+    }
+
     Y_UNIT_TEST(AddColumnNotNullDefault) {
         TKikimrRunner kikimr(DefaultsSettings());
         auto db = kikimr.GetQueryClient();

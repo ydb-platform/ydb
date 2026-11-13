@@ -15,6 +15,8 @@ PEERDIR(
     ydb/public/api/protos
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
+    yql/essentials/minikql/dom
+    yql/essentials/utils
 )
 
 END()

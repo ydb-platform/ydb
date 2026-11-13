@@ -1,6 +1,7 @@
 #include "create_table_formatter.h"
 #include "formatters_common.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
@@ -37,6 +38,10 @@ using namespace NKikimrSchemeOp;
 using namespace Ydb::Table;
 using namespace NYdb;
 namespace NIndexParameters = NKikimr::NOlap::NIndexes::NIndexParameters;
+
+bool SqlColumnDefaultsEnabled() {
+    return HasAppData() && AppData()->FeatureFlags.GetEnableColumnTableDefaults();
+}
 
 namespace {
     const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
@@ -1820,7 +1825,7 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
         Stream << " NOT NULL";
     }
 
-    if (olapColumnDesc.HasDefaultValue() && olapColumnDesc.GetDefaultValue().HasScalar()) {
+    if (SqlColumnDefaultsEnabled() && olapColumnDesc.HasDefaultValue() && olapColumnDesc.GetDefaultValue().HasScalar()) {
         NOlap::TColumnDefaultScalarValue scalar;
         if (scalar.DeserializeFromProto(olapColumnDesc.GetDefaultValue()).IsFail() || !scalar.GetValue()) {
             ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported default value");
@@ -2047,6 +2052,16 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
 void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc) {
     TStringStream paramsStr;
     TString del = "";
+
+    if (!SqlColumnDefaultsEnabled() && columnDesc.HasDefaultValue()) {
+        auto defaultValue = ValueToString(columnDesc.GetDefaultValue());
+        if (defaultValue) {
+            EscapeName("DEFAULT_VALUE", paramsStr);
+            paramsStr << "=";
+            EscapeValue(defaultValue, paramsStr);
+            del = ", ";
+        }
+    }
 
     if (columnDesc.HasStorageId() && !columnDesc.GetStorageId().empty()) {
         paramsStr << del;

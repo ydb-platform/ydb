@@ -666,7 +666,6 @@ private:
                     notNullColumnsLeft.erase(col.GetName());
                 }
             }
-            defaultColumnsLeft.clear();
         }
 
         if (!notNullColumnsLeft.empty() && UpsertIfExists) {

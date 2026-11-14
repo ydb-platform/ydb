@@ -174,6 +174,25 @@ public:
                 }
             };
 
+        NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
+        const auto tableKindExtract = [](const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta) {
+            ETableKind result = (ETableKind)meta.GetTable().GetTableKind();
+            if (result == ETableKind::Unknown) {
+                // For backward compatibility
+                result = meta.GetTable().GetSysViewInfo().empty() ? ETableKind::Datashard : ETableKind::SysView;
+            }
+            return result;
+        };
+
+        ETableKind tableKind = ETableKind::Unknown;
+        if (args.Task->HasMetaId()) {
+            YQL_ENSURE(args.ComputesByStages);
+            YQL_ENSURE(args.ComputesByStages->GetMetaById(*args.Task, meta) || args.Task->GetMeta().UnpackTo(&meta), "cannot take meta on MetaId exists in tasks");
+            tableKind = tableKindExtract(meta);
+        } else if (args.Task->GetMeta().UnpackTo(&meta)) {
+            tableKind = tableKindExtract(meta);
+        }
+
         runtimeSettings.ChannelService = ChannelService;
         if (ChannelService && args.Task->GetDqChannelVersion() >= 2u) {
             runtimeSettings.TaskScheduler = ChannelService->GetTaskScheduler();
@@ -186,7 +205,10 @@ public:
                 // The initial detached-runner path supports pure channel tasks.
                 // Source/sink actors, scan contexts and WASM TLS retain the
                 // original task-bound execution envelope until adapted.
-                bool eligible = !args.Task->HasMeta() && !args.Task->GetCreateSuspended()
+                // Column-shard scans run on workers too: scan data arrives as endpoint events
+                // (handled under the lease) that request execution, see TKqpScanComputeActor.
+                const bool workerScan = tableKind == ETableKind::Olap && !runtimeSettings.RlPath;
+                bool eligible = ((tableKind == ETableKind::Unknown && !args.Task->HasMeta()) || workerScan) && !args.Task->GetCreateSuspended()
                     && (!args.UseBatchPool || AppData()->BatchPoolId == AppData()->UserPoolId)
                     && !args.Task->GetProgram().GetSettings().GetHasWatermarkGenerator()
                     && args.Task->GetTaskParams().find(TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)) == args.Task->GetTaskParams().end();
@@ -206,25 +228,6 @@ public:
                     runtimeSettings.TaskScheduler.reset();
                 }
             }
-        }
-
-        NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
-        const auto tableKindExtract = [](const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta) {
-            ETableKind result = (ETableKind)meta.GetTable().GetTableKind();
-            if (result == ETableKind::Unknown) {
-                // For backward compatibility
-                result = meta.GetTable().GetSysViewInfo().empty() ? ETableKind::Datashard : ETableKind::SysView;
-            }
-            return result;
-        };
-
-        ETableKind tableKind = ETableKind::Unknown;
-        if (args.Task->HasMetaId()) {
-            YQL_ENSURE(args.ComputesByStages);
-            YQL_ENSURE(args.ComputesByStages->GetMetaById(*args.Task, meta) || args.Task->GetMeta().UnpackTo(&meta), "cannot take meta on MetaId exists in tasks");
-            tableKind = tableKindExtract(meta);
-        } else if (args.Task->GetMeta().UnpackTo(&meta)) {
-            tableKind = tableKindExtract(meta);
         }
 
         if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {

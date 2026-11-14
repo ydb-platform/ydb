@@ -411,6 +411,11 @@ protected:
     }
 
     virtual void InitializeWorkerExecution() {}
+    // Worker execution: the slice result must go through the endpoint (e.g. to ack scan fetchers).
+    virtual bool WorkerSliceNeedsEndpoint() const { return false; }
+    // Worker execution: new input arrives as an endpoint event that itself requests execution,
+    // so a PendingInput run with no data must not re-request execution (it would spin a worker).
+    virtual bool InputArrivalWakesTask() const { return false; }
     virtual void CompleteWorkerSlice(TTaskSliceResult) { Y_ABORT("Worker execution is not supported"); }
 
     bool EnterWorkerEndpoint(TAutoPtr<NActors::IEventHandle>& ev) {
@@ -453,7 +458,7 @@ protected:
     bool CanCompleteSlicesInline() const {
         // CheckRunStatus treats PendingInput with every output finished as Finished; with an output still
         // unfinished (HasDataToSend) that branch only logs, so the slice needs nothing from the endpoint.
-        if (Terminated || State != NDqProto::COMPUTE_STATE_EXECUTING || Channels || Checkpoints
+        if (Terminated || State != NDqProto::COMPUTE_STATE_EXECUTING || Channels || Checkpoints || WorkerSliceNeedsEndpoint()
             || !AllOutputsFinishEpochBound || ProcessOutputsState.Inflight != 0 || !CheckedOutputFinishEpoch
             || !OutputChannelsSummary || !OutputChannelsSummary->ChannelsReady || !OutputChannelsSummary->HasDataToSend
             || HasEffectsOutputs || !DeferredWorkerEvents.empty() || InputChannelsMap.empty()
@@ -682,7 +687,8 @@ protected:
             // n.b. if c) is not satisfied we will also call ContinueExecute on branch
             // "status != ERunStatus::Finished -> !pollSent -> ProcessOutputsState.DataWasSent"
             // but idk what is the logic behind this
-            if (!TaskScheduling || TaskScheduling->ObserveOnly || !TaskScheduling->HasObservedWaits()) {
+            const bool scheduled = TaskScheduling && !TaskScheduling->ObserveOnly;
+            if (!scheduled || (!TaskScheduling->HasObservedWaits() && !InputArrivalWakesTask())) {
                 ContinueExecute(EResumeSource::CAPendingInput);
             }
             return;

@@ -54,6 +54,9 @@ protected:
         }
         auto guard = TBase::BindAllocator();
         TDqOperatorMemoryQuotaScope quotaScope(this->MemoryQuota ? this->MemoryQuota->GetOperatorQuota() : nullptr);
+        if (static_cast<ERunStatus>(result.Status) != ERunStatus::Finished) {
+            static_cast<TDerived*>(this)->OnWorkerSliceInputsConsumed();
+        }
         TBase::ProcessOutputsImpl(static_cast<ERunStatus>(result.Status));
         if (this->MemoryQuota) {
             this->MemoryQuota->TryShrinkMemory();
@@ -61,6 +64,10 @@ protected:
         TBase::ReportStats();
         this->MaybeAllowInlineCompletion();
     }
+
+    // Worker execution: called on the endpoint after a non-final slice, like the source polling
+    // DoExecuteImpl does after a direct run.
+    void OnWorkerSliceInputsConsumed() {}
 
     void DoExecuteImpl() override{
         auto sourcesState = static_cast<TDerived*>(this)->GetSourcesState();

@@ -225,8 +225,29 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     if (IsQuotingEnabled()) {
         AcquireRateQuota();
     } else {
+        if (WorkerExecution) {
+            // Worker execution: the task waits in the ready queue before it consumes this batch.
+            // Hand the remaining buffer space to the fetchers now instead of after the slice, so
+            // shards keep producing meanwhile (the buffer limit is respected either way).
+            AckFetchersEarly();
+        }
         DoExecute();
     }
+}
+
+void TKqpScanComputeActor::AckFetchersEarly() {
+    if (!ScanData || ScanData->IsFinished() || ScanDataInFlight || Fetchers.empty()) {
+        return;
+    }
+    const ui64 freeSpace = CalculateFreeSpace();
+    if (freeSpace < GetMemoryLimits().ChannelBufferSize / 2) {
+        return;
+    }
+    for (auto&& i : Fetchers) {
+        Send(i, new TEvScanExchange::TEvAckData(freeSpace));
+    }
+    ++AcksSent;
+    ScanDataInFlight = true;
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev) {

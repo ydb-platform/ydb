@@ -3386,15 +3386,37 @@ public:
                         return SyncError();
                     }
 
-                    // Only vector_kmeans_tree is supported for rebuild
-                    if (existingIndex->Type != NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
-                            TStringBuilder() << "REBUILD INDEX is only supported for vector_kmeans_tree indexes"));
-                        return SyncError();
+                    // Resolve the type from metadata; REBUILD does not change the index kind.
+                    switch (existingIndex->Type) {
+                        case NYql::TIndexDescription::EType::GlobalSync:
+                            add_index->mutable_global_index();
+                            break;
+                        case NYql::TIndexDescription::EType::GlobalAsync:
+                            add_index->mutable_global_async_index();
+                            break;
+                        case NYql::TIndexDescription::EType::GlobalSyncUnique:
+                            add_index->mutable_global_unique_index();
+                            break;
+                        case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                            add_index->mutable_global_vector_kmeans_tree_index();
+                            break;
+                        case NYql::TIndexDescription::EType::GlobalFulltextPlain:
+                        case NYql::TIndexDescription::EType::GlobalFulltextCompact:
+                            add_index->mutable_global_fulltext_plain_index();
+                            break;
+                        case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
+                        case NYql::TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                            add_index->mutable_global_fulltext_relevance_index();
+                            break;
+                        case NYql::TIndexDescription::EType::GlobalJson:
+                        case NYql::TIndexDescription::EType::GlobalJsonCompact:
+                            add_index->mutable_global_json_index();
+                            break;
+                        default:
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                "REBUILD INDEX is only supported for global indexes"));
+                            return SyncError();
                     }
-
-                    // Set the index type
-                    add_index->mutable_global_vector_kmeans_tree_index();
 
                     // If user didn't provide ON columns, inherit from existing index
                     if (!hasUserColumns) {
@@ -3409,9 +3431,19 @@ public:
                         }
                     }
 
-                    // Parse user-provided index settings (don't pre-populate with existing;
-                    // schemeshard will merge with existing settings in Prepare)
-                    auto* vectorSettings = add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+                    Ydb::Table::FulltextIndexSettings* fulltextSettings = nullptr;
+                    if (add_index->has_global_fulltext_plain_index()) {
+                        fulltextSettings = add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings();
+                    } else if (add_index->has_global_fulltext_relevance_index()) {
+                        fulltextSettings = add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings();
+                    }
+                    if (fulltextSettings) {
+                        // Apply partial overrides to the existing column analyzer, preserving unset options.
+                        *fulltextSettings = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(
+                            existingIndex->SpecializedIndexDescription).GetSettings();
+                    }
+
+                    // Vector settings are merged with existing settings by SchemeShard.
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
@@ -3440,10 +3472,14 @@ public:
                                     } else {
                                         error = TStringBuilder() << "Invalid " << settingName << ": " << value.StringValue();
                                     }
-                                } else {
+                                } else if (add_index->has_global_vector_kmeans_tree_index()) {
                                     NKikimr::NKMeans::FillSetting(
-                                        *vectorSettings,
+                                        *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
                                         settingName, value.StringValue(), error);
+                                } else if (fulltextSettings) {
+                                    NKikimr::NFulltext::FillSetting(*fulltextSettings, settingName, value.StringValue(), error);
+                                } else {
+                                    error = TStringBuilder() << "Unknown index setting: " << settingName;
                                 }
                                 if (error) {
                                     ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));

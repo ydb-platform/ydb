@@ -17,6 +17,7 @@ SRCS(
     kqp_constraints_ut.cpp
     kqp_generated_columns_ut.cpp
     kqp_scheme_ut.cpp
+    kqp_rebuild_index_ut.cpp
     kqp_secrets_ut.cpp
     kqp_scheme_fulltext_ut.cpp
     kqp_scheme_index_copy_ut.cpp

@@ -26,6 +26,7 @@ SRCS(
     ut_fulltext_build.cpp
     ut_index_build.cpp
     ut_json_index_build.cpp
+    ut_rebuild_index.cpp
     ut_vector_index_build.cpp
 )
 

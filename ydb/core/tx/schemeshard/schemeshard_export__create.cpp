@@ -383,6 +383,9 @@ private:
                     if (childPath.IsDeleted() || !childPath.IsTableIndex()) {
                         continue;
                     }
+                    if (IsRebuildIndexReplacement(Self, path.Base()->PathId, childName)) {
+                        continue;
+                    }
                     // An async index may lag behind the base table snapshot. Restore it by building
                     // from the exported table data instead of exporting its impl table.
                     if (childPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync)) {

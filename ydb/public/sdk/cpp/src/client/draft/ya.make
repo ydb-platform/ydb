@@ -8,6 +8,7 @@ SRCS(
     ydb_udf.cpp
     ydb_replication.cpp
     ydb_scripting.cpp
+    ydb_tablet.cpp
     ydb_view.cpp
 )
 

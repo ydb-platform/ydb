@@ -1,4 +1,5 @@
 * Added support for tablet reassignment operation IDs.
+* Added draft `TTabletClient::ReassignTablets()` and `TReassignTabletsOperation`, with progress available through `TOperationClient::Get()`.
 
 ## v3.27.0
 

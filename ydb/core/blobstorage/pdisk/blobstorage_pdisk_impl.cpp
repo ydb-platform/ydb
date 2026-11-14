@@ -1071,9 +1071,41 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter& w
     return true;
 }
 
+bool TPDisk::ChunkWritePiecePreformatted(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize) {
+    // Checked in PreprocessRequest: one page-aligned part of whole sectors with the right nonces. Pieces are cut
+    // at whole sectors (PushRequestToScheduler), so each one is page-aligned too.
+    const auto [buff, size] = (*evChunkWrite->PartsPtr)[0];
+    Y_VERIFY_S(pieceShift % Format.SectorSize == 0 && pieceSize % Format.SectorSize == 0
+        && pieceShift + pieceSize <= size, PCtx->PDiskLogPrefix << "pieceShift# " << pieceShift
+        << " pieceSize# " << pieceSize << " size# " << size);
+    const ui32 firstSectorIdx = evChunkWrite->Offset / Format.SectorPayloadSize() + pieceShift / Format.SectorSize;
+    const ui64 diskOffset = Format.Offset(evChunkWrite->ChunkIdx, firstSectorIdx);
+    *Mon.BandwidthPChunkPayload += pieceSize / Format.SectorSize * Format.SectorPayloadSize();
+
+    // the last one sent, whichever part of the buffer it holds
+    const bool last = ++evChunkWrite->PreformattedPiecesSubmitted == evChunkWrite->PreformattedPieceCount;
+    if (last) {
+        evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
+    }
+    auto traceId = evChunkWrite->Span.GetTraceId();
+    BlockDevice->PwriteAsync(static_cast<const ui8*>(buff) + pieceShift, pieceSize, diskOffset,
+        new TCompletionChunkWritePreformattedPiece(evChunkWrite), evChunkWrite->ReqId, &traceId);
+    if (last) {
+        evChunkWrite->IsReplied = true; // the reply is up to the completions now
+    }
+    return last;
+}
+
 bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize) {
     if (evChunkWrite->IsReplied) {
         return true;
+    }
+    if (AtomicGet(evChunkWrite->PieceAborted) && !evChunkWrite->PreformattedSectors) {
+        // a piece of this write was dropped: the rest is not written, the write is answered with the error
+        return true;
+    }
+    if (evChunkWrite->PreformattedSectors) {
+        return ChunkWritePiecePreformatted(evChunkWrite, pieceShift, pieceSize);
     }
     Y_VERIFY_S(evChunkWrite->BytesWritten == pieceShift, PCtx->PDiskLogPrefix);
 
@@ -1184,12 +1216,14 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
 
     Y_VERIFY_S(sectorsToRead, PCtx->PDiskLogPrefix);
 
-    ui64 firstSector;
-    ui64 lastSector;
-    ui64 sectorOffset;
-    bool isOk = ParseSectorOffset(Format, PCtx->ActorSystem, PCtx->PDiskId,
-            read->Offset, read->Size, firstSector, lastSector, sectorOffset, PCtx->PDiskLogPrefix);
-    Y_VERIFY_S(isOk, PCtx->PDiskLogPrefix);
+    ui64 firstSector = 0;
+    ui64 lastSector = 0;
+    ui64 sectorOffset = 0;
+    if (!read->RawSectors) { // a raw-sector read has raw byte positions, which this would take for payload ones
+        bool isOk = ParseSectorOffset(Format, PCtx->ActorSystem, PCtx->PDiskId,
+                read->Offset, read->Size, firstSector, lastSector, sectorOffset, PCtx->PDiskLogPrefix);
+        Y_VERIFY_S(isOk, PCtx->PDiskLogPrefix);
+    }
 
     ui64 currentSectorOffset = (ui64)read->CurrentSector * (ui64)Format.SectorSize;
     bool isTheFirstPart = read->CurrentSector == 0;
@@ -1207,6 +1241,22 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
         {"diskOffset", diskOffset},
         {"bytesToRead", bytesToRead},
         {"pieceSizeLimit", pieceSizeLimit});
+
+    if (read->RawSectors) {
+        // Whole sectors straight into the result buffer, unchecked; a piece at a time, as encrypted chunks are read,
+        // so that a long read does not hold the device for the other owners.
+        THolder<TCompletionChunkReadPart> completion(new TCompletionChunkReadPart(this, read, bytesToRead,
+                    bytesToRead, currentSectorOffset, read->FinalCompletion, isTheLastPart));
+        completion->CostNs = DriveModel.TimeForSizeNs(bytesToRead, read->ChunkIdx, TDriveModel::OP_TYPE_READ);
+        completion->Orbit = std::move(orbit);
+        read->CurrentSector += sectorsToRead;
+        read->RemainingSize -= bytesToRead;
+        AtomicAdd(InFlightChunkRead, (ui64)bytesToRead);
+        ui8 *data = read->FinalCompletion->GetCommonBuffer()->RawDataPtr(currentSectorOffset, bytesToRead);
+        BlockDevice->PreadAsync(data, bytesToRead, diskOffset + currentSectorOffset, completion.Release(),
+                read->ReqId, {});
+        return isTheLastPart ? ReadPieceResultOk : ReadPieceResultInProgress;
+    }
 
     if (!read->ChunkEncrypted) {
         Y_VERIFY(isTheFirstPart);
@@ -1633,6 +1683,12 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
     } else {
         result = MakeHolder<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
         result->ChunkIds = std::move(chunks);
+        if (!Format.IsPlainDataChunks()) {
+            result->ChunkNonces.reserve(result->ChunkIds.size());
+            for (TChunkIdx chunkIdx : result->ChunkIds) {
+                result->ChunkNonces.push_back(ChunkState[chunkIdx].Nonce);
+            }
+        }
         result->StatusFlags = GetStatusFlags(evChunkReserve.Owner, evChunkReserve.OwnerGroupType);
     }
     // Reported after the allocation, so the owner learns what it has left rather
@@ -2453,6 +2509,23 @@ void TPDisk::AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitRes
 #endif
 }
 
+void TPDisk::FillFormatContext(NPDisk::TEvYardInitResult &result) {
+    if (Format.IsPlainDataChunks()) {
+        return; // no sector footers to build or check
+    }
+    if (!FormatContextCache) {
+        // Cfg, and so the encryption flag, is fixed for the life of this TPDisk: a new config comes with a restart,
+        // a new TPDisk and new YardInits, so owners never seal differently from TChunkWriter.
+        FormatContextCache = std::make_shared<const TFormatContext>(Format,
+            Cfg->FeatureFlags.GetEnablePDiskDataEncryption());
+    }
+    result.FormatContext = FormatContextCache;
+    result.OwnedChunkNonces.reserve(result.OwnedChunks.size());
+    for (TChunkIdx chunkIdx : result.OwnedChunks) {
+        result.OwnedChunkNonces.push_back(ChunkState[chunkIdx].Nonce);
+    }
+}
+
 // A reservation that was never committed leaves no persistent trace: WriteSysLogRestorePoint
 // records an owner only for DATA_COMMITTED* chunks. An owner coming back on a new round has no
 // memory of such a chunk either, so nothing can legitimately reference it any more. Hand it back
@@ -2552,9 +2625,8 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
                 Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(owner, result->StartingPoints);
-    result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
-        delete ptr;
-    });
+    result->DiskFormat = MakeDiskFormatCopy(Format);
+    FillFormatContext(*result);
     AttachSharedUringRouter(evYardInit, *result);
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
@@ -2758,9 +2830,8 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
-    result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
-        delete ptr;
-    });
+    result->DiskFormat = MakeDiskFormatCopy(Format);
+    FillFormatContext(*result);
     AttachSharedUringRouter(evYardInit, *result);
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});
@@ -3169,6 +3240,9 @@ void TPDisk::ProcessChunkWriteQueue() {
         bool lastPart = ChunkWritePiece(piece->ChunkWrite.Get(), piece->PieceShift, piece->PieceSize);
         if (lastPart) {
             Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(HPNow()));
+        }
+        if (!piece->ChunkWrite->PreformattedSectors) { // those are counted by their completions
+            piece->ChunkWrite->PieceDone(PCtx->ActorSystem);
         }
         delete piece;
         // prevent the thread from being stuck for long
@@ -3924,6 +3998,16 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             ownerData.ReadThroughput.Increment(read->Size, PCtx->ActorSystem->Timestamp());
             request->JobKind = NSchLab::JobKindRead;
             read->ChunkEncrypted = !Format.IsPlainDataChunks();
+            read->RawSectors = read->RawSectors && read->ChunkEncrypted;
+            if (read->RawSectors) {
+                // Read the whole sectors that hold the payload exactly as a plain chunk is read: in one request,
+                // straight into the result buffer, without checking, decrypting or copying the data. The owner
+                // opens them. Offset and Size become raw byte positions in the chunk.
+                read->Offset = read->FirstSector * Format.SectorSize;
+                read->Size = (read->LastSector - read->FirstSector + 1) * Format.SectorSize;
+                read->RemainingSize = read->Size;
+                read->ChunkEncrypted = false;
+            }
             if (!read->ChunkEncrypted) {
                 read->FirstSector = read->Offset / Format.SectorSize;
                 read->LastSector = (read->Offset + read->Size + Format.SectorSize - 1) / Format.SectorSize - 1;
@@ -3979,6 +4063,13 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 delete request;
                 return false;
             }
+            if (ev.ChunkIdx == 0 && ev.PreformattedSectors) {
+                err << "Can't write preformatted sectors to a chunk allocated by the write: its nonce is unknown"
+                    << " ownerId# " << (ui32)ev.Owner;
+                SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                delete request;
+                return false;
+            }
             if (ev.ChunkIdx == 0) {
                 TString allocError;
                 // A chunk allocated by writing to it is VDisk metadata -- the sync log swapping to disk -- that every
@@ -4020,9 +4111,44 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 delete request;
                 return false;
             }
+            if (ev.PreformattedSectors) {
+                // The owner built the sectors; only metadata is checked here, the buffer is not read.
+                const ui32 sectorsInChunk = Format.ChunkSize / Format.SectorSize;
+                const ui32 firstSectorIdx = ev.Offset / Format.SectorPayloadSize();
+                const NPDisk::TEvChunkWrite::IParts::TDataRef part = ev.PartsPtr->Size() == 1
+                    ? (*ev.PartsPtr)[0] : NPDisk::TEvChunkWrite::IParts::TDataRef(nullptr, 0);
+                const char *problem = nullptr;
+                if (Format.IsPlainDataChunks()) {
+                    problem = "plain data chunks have no sector footers";
+                } else if (ev.Offset % Format.SectorPayloadSize()) {
+                    problem = "offset does not start a sector";
+                } else if (!part.first || !part.second) {
+                    problem = "expected exactly one non-empty data part";
+                } else if (part.second % Format.SectorSize) {
+                    problem = "size is not a whole number of sectors";
+                } else if (reinterpret_cast<uintptr_t>(part.first) % 4096) {
+                    problem = "buffer is not page-aligned";
+                } else if (firstSectorIdx + part.second / Format.SectorSize > sectorsInChunk) {
+                    problem = "write goes past the end of the chunk";
+                } else if (ev.FirstSectorNonce != state.Nonce + firstSectorIdx) {
+                    problem = "first sector nonce does not match the chunk";
+                }
+                if (problem) {
+                    err << "Can't write preformatted sectors to chunkIdx# " << ev.ChunkIdx
+                        << ": " << problem << " offset# " << ev.Offset << " size# " << part.second
+                        << " firstSectorNonce# " << ev.FirstSectorNonce << " ownerId# " << (ui32)ev.Owner;
+                    SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
+                    delete request;
+                    return false;
+                }
+            }
 
             ev.SetOwnerGroupType(ownerData.IsStaticGroupOwner());
-            ownerData.WriteThroughput.Increment(ev.TotalSize, PCtx->ActorSystem->Timestamp());
+            // Owner throughput counts payload, as for other writes; preformatted ones carry whole sectors.
+            const ui64 payloadSize = ev.PreformattedSectors
+                ? ev.TotalSize / Format.SectorSize * Format.SectorPayloadSize()
+                : ev.TotalSize;
+            ownerData.WriteThroughput.Increment(payloadSize, PCtx->ActorSystem->Timestamp());
             request->JobKind = NSchLab::JobKindWrite;
             ev.ChunkEncrypted = !Format.IsPlainDataChunks();
 
@@ -4325,10 +4451,18 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
     if (request->GetType() == ERequestType::RequestChunkWrite) {
         TIntrusivePtr<TChunkWrite> whole(static_cast<TChunkWrite*>(request));
 
-        const ui32 jobSizeLimit = whole->ChunkEncrypted
+        // Preformatted sectors are cut into pieces of whole raw sectors, each written straight from the owner's
+        // buffer; the write completes when the last of them has.
+        const ui32 jobSizeLimit = whole->PreformattedSectors
+            ? Max<ui32>(Format.SectorSize, ForsetiOpPieceSizeCached / Format.SectorSize * Format.SectorSize)
+            : whole->ChunkEncrypted
             ? ui64(ForsetiOpPieceSizeCached) * Format.SectorPayloadSize() / Format.SectorSize
             : whole->TotalSize;
         const ui32 jobCount = (whole->TotalSize + jobSizeLimit - 1) / jobSizeLimit;
+        if (whole->PreformattedSectors) {
+            whole->PreformattedPieceCount = jobCount;
+            AtomicSet(whole->PreformattedPiecesInFlight, jobCount);
+        }
 
         ui32 remainingSize = whole->TotalSize;
         for (ui32 idx = 0; idx < jobCount; ++idx) {
@@ -4348,11 +4482,13 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
         ui32 totalSectors = read->LastSector - read->FirstSector + 1;
 
         Y_VERIFY_DEBUG_S(ForsetiOpPieceSizeCached % Format.SectorSize == 0, PCtx->PDiskLogPrefix);
-        const ui32 jobSizeLimit = read->ChunkEncrypted
-            ? ForsetiOpPieceSizeCached / Format.SectorSize
+        // Raw sectors are read in pieces too: each piece lands at its own place in the result buffer.
+        const bool inPieces = read->ChunkEncrypted || read->RawSectors;
+        const ui32 jobSizeLimit = inPieces
+            ? Max<ui32>(1, ForsetiOpPieceSizeCached / Format.SectorSize)
             : totalSectors;
         const ui32 jobCount = (totalSectors + jobSizeLimit - 1) / jobSizeLimit;
-        Y_VERIFY(read->ChunkEncrypted || jobCount == 1);
+        Y_VERIFY(inPieces || jobCount == 1);
         for (ui32 idx = 0; idx < jobCount; ++idx) {
             bool isLast = idx == jobCount - 1;
 

@@ -698,6 +698,9 @@ message TKqpSchemeOperation {
     // NMetadata::IClassBehaviour way
     string ObjectType = 100;
 
+    // Recheck dependencies after preceding CREATE/ALTER operations, preserving any known identity.
+    NKikimrSchemeOp.TTableDescription ExpectedTableSchema = 101;
+
     oneof Operation {
         NKikimrSchemeOp.TModifyScheme CreateTable = 1;
         NKikimrSchemeOp.TModifyScheme DropTable = 2;

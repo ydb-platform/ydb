@@ -104,6 +104,9 @@ message TColumnCompression {
 
 message TDefaultExpressionColumnDescription {
     optional string ExprText = 1;
+    // KQP's ValidateGeneratedColumns infers these names for SQL CREATE/ALTER;
+    // SchemeShard copies preserve them. Low-level callers must supply names matching
+    // ExprText: SchemeShard validates the names, but does not compile the expression.
     repeated string DependencyColumnNames = 2;
     optional bool Stored = 3 [default = false];
 }

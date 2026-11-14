@@ -4,11 +4,24 @@
 namespace NKikimr::NColumnShard {
 
 TValueAggregationAgent::TValueAggregationAgent(const TString& signalName, const TCommonCountersOwner& signalsOwner)
-    : ValueSignalSum(signalsOwner.GetAggregationValue("SUM/" + signalName))
-    , ValueSignalMin(signalsOwner.GetAggregationValue("MIN/" + signalName))
-    , ValueSignalMax(signalsOwner.GetAggregationValue("MAX/" + signalName))
+    : ValueSignalSum(signalsOwner.GetLazyAggregationValue("SUM/" + signalName))
+    , ValueSignalMin(signalsOwner.GetLazyAggregationValue("MIN/" + signalName))
+    , ValueSignalMax(signalsOwner.GetLazyAggregationValue("MAX/" + signalName))
 {
 
+}
+
+bool TValueAggregationAgent::HasWrittenClientAndClean() const {
+    bool written = false;
+    for (auto it = Values.begin(); it != Values.end();) {
+        written |= (*it)->IsWritten();
+        if (it->use_count() == 1) {
+            it = Values.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return written;
 }
 
 bool TValueAggregationAgent::CalcAggregationsAndClean(i64& sum, i64& minValue, i64& maxValue) const {
@@ -58,6 +71,13 @@ std::optional<NKikimr::NColumnShard::TSignalAggregations> TValueAggregationAgent
 
 void TValueAggregationAgent::ResendStatus() const {
     TGuard<TMutex> g(Mutex);
+    // A client written and released within one period still counts: Written is read before the drop
+    if (!Exported) {
+        if (!HasWrittenClientAndClean()) {
+            return;
+        }
+        Exported = true;
+    }
     std::optional<TSignalAggregations> aggr = GetAggregations();
     if (!!aggr) {
         ValueSignalMin->Set(aggr->Min);

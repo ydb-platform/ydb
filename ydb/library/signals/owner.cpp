@@ -14,8 +14,12 @@ NMonitoring::TDynamicCounters::TCounterPtr TCommonCountersOwner::GetValue(const 
     return SubGroup->GetCounter(NormalizeSignalName("Value/" + name), false);
 }
 
-NMonitoring::TDynamicCounters::TCounterPtr TCommonCountersOwner::GetAggregationValue(const TString& name) const {
-    return SubGroup->GetCounter(NormalizeSignalName("Aggregation/" + name), false);
+std::shared_ptr<TLazyValue> TCommonCountersOwner::GetLazyValue(const TString& name) const {
+    return std::make_shared<TLazyValue>(SubGroup, NormalizeSignalName("Value/" + name));
+}
+
+std::shared_ptr<TLazyValue> TCommonCountersOwner::GetLazyAggregationValue(const TString& name) const {
+    return std::make_shared<TLazyValue>(SubGroup, NormalizeSignalName("Aggregation/" + name));
 }
 
 TString TCommonCountersOwner::NormalizeSignalName(const TString& name) const {

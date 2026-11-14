@@ -16,6 +16,7 @@ SRCS(
     datashard_locks_db.h
     datashard_outreadset.h
     datashard_pipeline.h
+    datashard_read_data.h
     datashard_read_operation.h
     datashard_trans_queue.h
     datashard_txs.h
@@ -60,6 +61,7 @@ SRCS(
     datashard_change_sending.cpp
     datashard_database_freeze.cpp
     datashard_outreadset.cpp
+    datashard_read_events.cpp
     datashard_s3_uploads.cpp
     datashard_snapshots.cpp
     truncate_unit.cpp
@@ -574,6 +576,7 @@ RECURSE_FOR_TESTS(
     ut_order
     ut_range_ops
     ut_read_committed
+    ut_read_events
     ut_read_iterator
     ut_read_table
     ut_reassign

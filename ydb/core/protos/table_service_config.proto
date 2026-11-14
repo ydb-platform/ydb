@@ -250,6 +250,12 @@ message TTableServiceConfig {
         // Per-actor memory controls for pessimistic locks issued by StreamLookupActor
         // (LOCK_AND_LOOKUP strategy under READ_COMMITTED_RW isolation).
         optional uint64 MaxInFlightLocksStreamLookup = 13 [default = 50];
+
+        // Batch boundaries for an outgoing TEvRead request (keys or ranges, not response quotas).
+        // Zero disables the corresponding boundary. The byte boundary is soft:
+        // an oversized entry or header produces a single-entry batch.
+        optional uint64 MaxReadRequestEntriesStreamLookup = 14 [default = 4096];
+        optional uint64 MaxReadRequestBytesStreamLookup = 15 [default = 1048576];
     }
 
     message TIteratorReadQuotaSettings {

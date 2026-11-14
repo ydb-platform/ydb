@@ -432,7 +432,7 @@ std::vector<TRawTypeValue> ToRawTypeValue(
 }
 
 TSerializedCellVec ExtendWithNulls(
-    const TSerializedCellVec& cells,
+    const TReadCellVecView& cells,
     size_t columnCount)
 {
     TVector<TCell> extendedCells;
@@ -536,15 +536,19 @@ public:
 
     EReadStatus ReadRange(
         TTransactionContext& txc,
-        const TSerializedTableRange& range)
+        const TReadRangeView& range)
     {
         bool fromInclusive;
         bool toInclusive;
-        TSerializedCellVec keyFromCells;
-        TSerializedCellVec keyToCells;
+        TReadCellVecView keyFromCells;
+        TReadCellVecView keyToCells;
+        TSerializedCellVec continuation;
+        if (LastProcessedKey) {
+            continuation.Parse(LastProcessedKey);
+        }
         if (LastProcessedKey) {
             if (!State.Reverse) {
-                keyFromCells = TSerializedCellVec(LastProcessedKey);
+                keyFromCells = continuation;
                 fromInclusive = LastProcessedKeyErased;
 
                 keyToCells = range.To;
@@ -554,7 +558,7 @@ public:
                 keyFromCells = range.From;
                 fromInclusive = range.FromInclusive;
 
-                keyToCells = TSerializedCellVec(LastProcessedKey);
+                keyToCells = continuation;
                 toInclusive = LastProcessedKeyErased;
             }
         } else {
@@ -609,13 +613,13 @@ public:
 
     EReadStatus ReadKey(
         TTransactionContext& txc,
-        const TSerializedCellVec& keyCells,
+        const TReadCellVecView& keyCells,
         ui64 keyIndex)
     {
         if (keyCells.GetCells().size() != TableInfo.KeyColumnCount) {
             // key prefix, treat it as range [prefix, null, null] - [prefix, +inf, +inf]
-            TSerializedTableRange range;
-            range.From = State.Keys[keyIndex];
+            TReadRangeView range;
+            range.From = State.GetKeyLowerBound(keyIndex);
             range.To = keyCells;
             range.ToInclusive = true;
             range.FromInclusive = true;
@@ -673,7 +677,7 @@ public:
 
     NTable::TPrechargeResult PrechargeKey(
         TTransactionContext& txc,
-        const TSerializedCellVec& keyCells)
+        const TReadCellVecView& keyCells)
     {
         if (keyCells.GetCells().size() != TableInfo.KeyColumnCount) {
             // key prefix, treat it as range [prefix, null, null] - [prefix, +inf, +inf]
@@ -706,11 +710,11 @@ public:
                 } else {
                     --queryIndex;
                 }
-                if (!(queryIndex < State.Request->Keys.size())) {
+                if (!(queryIndex < State.Request->GetKeysSize())) {
                     break;
                 }
 
-                const auto key = ToRawTypeValue(State.Request->Keys[queryIndex].GetCells(), TableInfo, true);
+                const auto key = ToRawTypeValue(State.Request->GetKey(queryIndex).GetCells(), TableInfo, true);
 
                 NTable::TRowState rowState;
                 rowState.Init(State.Columns.size());
@@ -748,10 +752,10 @@ public:
             } else {
                 --queryIndex;
             }
-            if (!(queryIndex < State.Request->Keys.size())) {
+            if (!(queryIndex < State.Request->GetKeysSize())) {
                 break;
             }
-            auto result = PrechargeKey(txc, State.Request->Keys[queryIndex]);
+            auto result = PrechargeKey(txc, State.Request->GetKey(queryIndex));
             if (!result.Ready) {
                 ready = false;
             }
@@ -788,7 +792,7 @@ public:
             }
 
             // This works even for the overflow from 0-- because the index is unsigned
-            if (currentRangeIndex >= State.Request->Ranges.size()) {
+            if (currentRangeIndex >= State.Request->GetRangesSize()) {
                 break;
             }
 
@@ -797,7 +801,7 @@ public:
             // NOTE: CheckRequestAndInit() already normalizes To/From fields
             //       in all ranges to make sure each key is padded correctly
             //       according to the FromInclusive and ToInclusive fields
-            const auto& range = State.Request->Ranges[currentRangeIndex];
+            const auto& range = State.Request->GetRange(currentRangeIndex);
 
             const auto prechargeResult = Precharge(
                 txc.DB,
@@ -824,7 +828,7 @@ public:
     bool ReadRanges(TTransactionContext& txc) {
         // note that FirstUnprocessedQuery is unsigned and if we do reverse iteration,
         // then it will also become less than size() when finished
-        while (FirstUnprocessedQuery < State.Request->Ranges.size()) {
+        while (FirstUnprocessedQuery < State.Request->GetRangesSize()) {
             if (ReachedTotalRowsLimit()) {
                 FirstUnprocessedQuery = -1;
                 LastProcessedKey.clear();
@@ -834,7 +838,7 @@ public:
             if (State.Sampling ? ShouldStopSampled() : ShouldStop())
                 return true;
 
-            const auto& range = State.Request->Ranges[FirstUnprocessedQuery];
+            const auto& range = State.Request->GetRange(FirstUnprocessedQuery);
             auto status = State.Sampling ? ReadRangeSampled(txc, range) : ReadRange(txc, range);
             switch (status) {
             case EReadStatus::Done:
@@ -861,7 +865,7 @@ public:
     bool ReadKeys(TTransactionContext& txc) {
         // note that FirstUnprocessedQuery is unsigned and if we do reverse iteration,
         // then it will also become less than size() when finished
-        while (FirstUnprocessedQuery < State.Request->Keys.size()) {
+        while (FirstUnprocessedQuery < State.Request->GetKeysSize()) {
             if (ReachedTotalRowsLimit()) {
                 FirstUnprocessedQuery = -1;
                 LastProcessedKey.clear();
@@ -871,7 +875,7 @@ public:
             if (ShouldStop())
                 return true;
 
-            const auto& key = State.Request->Keys[FirstUnprocessedQuery];
+            const auto& key = State.Request->GetKey(FirstUnprocessedQuery);
             auto status = ReadKey(txc, key, FirstUnprocessedQuery);
             switch (status) {
             case EReadStatus::Done:
@@ -897,7 +901,7 @@ public:
     bool Read(TTransactionContext& txc) {
         // TODO: consider trying to precharge multiple records at once in case
         // when first precharge fails?
-        if (!State.Request->Keys.empty()) {
+        if ((State.Request->GetKeysSize() != 0)) {
             return ReadKeys(txc);
         }
 
@@ -911,12 +915,12 @@ public:
     }
 
     bool HasUnreadQueries() const {
-        return FirstUnprocessedQuery < State.Request->Keys.size()
-            || FirstUnprocessedQuery < State.Request->Ranges.size();
+        return FirstUnprocessedQuery < State.Request->GetKeysSize()
+            || FirstUnprocessedQuery < State.Request->GetRangesSize();
     }
 
     size_t GetQueriesCount() const {
-        return State.Request->Keys.size() + State.Request->Ranges.size();
+        return State.Request->GetKeysSize() + State.Request->GetRangesSize();
     }
 
     void UpdateCycles() {
@@ -957,7 +961,7 @@ public:
 
         // note that in all metrics below we treat key prefix read as key read
         // and not as range read
-        const bool isKeysRequest = !State.Request->Keys.empty();
+        const bool isKeysRequest = (State.Request->GetKeysSize() != 0);
 
         if (HasUnreadQueries()) {
             if (OutOfQuota()) {
@@ -998,10 +1002,10 @@ public:
             Self->IncCounter(COUNTER_READ_ITERATOR_LIFETIME_MS, fullDelta.MilliSeconds());
 
             if (isKeysRequest) {
-                Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_ROW, State.Request->Keys.size());
-                Self->IncCounter(COUNTER_SELECT_ROWS_PER_REQUEST, State.Request->Keys.size());
+                Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_ROW, State.Request->GetKeysSize());
+                Self->IncCounter(COUNTER_SELECT_ROWS_PER_REQUEST, State.Request->GetKeysSize());
             } else {
-                Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE, State.Request->Ranges.size());
+                Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE, State.Request->GetRangesSize());
             }
 
             if (State.VectorTopK) {
@@ -1191,7 +1195,7 @@ private:
         return false;
     }
 
-    EReadStatus ReadRangeSampled(TTransactionContext& txc, const TSerializedTableRange& range) {
+    EReadStatus ReadRangeSampled(TTransactionContext& txc, const TReadRangeView& range) {
         ++SampledWorkSinceCheck;
         EnsureSampling(txc);
         const auto keyTypes = TConstArrayRef<NScheme::TTypeInfo>(TableInfo.KeyColumnTypes);
@@ -1891,11 +1895,11 @@ private:
     }
 
     EScan Seek(TLead& lead, ui64 /* seq */) final {
-        if (RangeIndex >= Request->Ranges.size() || TotalRows >= TotalRowsLimit) {
+        if (RangeIndex >= Request->GetRangesSize() || TotalRows >= TotalRowsLimit) {
             return EScan::Final;
         }
 
-        const TSerializedTableRange& range = Request->Ranges[RangeIndex];
+        const auto range = Request->GetRange(RangeIndex);
         TArrayRef<const TCell> keyFrom = range.From.GetCells();
         TArrayRef<const TCell> keyTo = range.To.GetCells();
 
@@ -1960,7 +1964,7 @@ private:
 
     EScan Exhausted() final {
         ++RangeIndex;
-        if (RangeIndex >= Request->Ranges.size()) {
+        if (RangeIndex >= Request->GetRangesSize()) {
             return EScan::Final;
         }
 
@@ -2363,7 +2367,7 @@ public:
                 // TODO: try to support it later?
                 return false;
             }
-            if (request->Keys.size() > 0 || request->Ranges.size() == 0) {
+            if (request->GetKeysSize() > 0 || request->GetRangesSize() == 0) {
                 // It's not worth scanning unless it's range queries
                 return false;
             }
@@ -2672,7 +2676,7 @@ public:
 
         state.Reverse = record.GetReverse();
         if (state.Reverse) {
-            state.FirstUnprocessedQuery = request->Keys.size() + request->Ranges.size() - 1;
+            state.FirstUnprocessedQuery = request->GetKeysSize() + request->GetRangesSize() - 1;
         }
 
         state.LockId = request->Record.GetLockTxId();
@@ -2754,6 +2758,11 @@ public:
             TableInfo = TShortTableInfo(state.PathId.LocalPathId, *schema);
         }
 
+        if (!request->PrepareReadData(TableInfo.KeyColumnCount)) {
+            SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST, "Invalid serialized read key/range data");
+            return;
+        }
+
         if (record.HasSampling()) {
             const auto& sampling = record.GetSampling();
             const double rate = sampling.GetRate();
@@ -2769,7 +2778,7 @@ public:
                 reject(Ydb::StatusIds::BAD_REQUEST, "Sampling memtable stride must be positive");
                 return;
             }
-            if (!request->Keys.empty()) {
+            if ((request->GetKeysSize() != 0)) {
                 reject(Ydb::StatusIds::BAD_REQUEST, "Sampling does not support key lookups");
                 return;
             }
@@ -2793,7 +2802,8 @@ public:
                 reject(Ydb::StatusIds::BAD_REQUEST, "Sampling is not supported for system tables");
                 return;
             }
-            for (const auto& range : request->Ranges) {
+            for (size_t rangeIndex = 0; rangeIndex < request->GetRangesSize(); ++rangeIndex) {
+                const auto range = request->GetRange(rangeIndex);
                 // These prefix forms require +inf suffix cells, which sampling
                 // boundaries cannot represent.
                 if (!range.From.GetCells().empty() && !range.FromInclusive
@@ -2821,43 +2831,47 @@ public:
             state.Sampling = &sampling;
         }
 
-        // Make ranges in the new 'any' form compatible with the old '+inf' form
-        for (size_t i = 0; i < request->Ranges.size(); ++i) {
-            auto& range = request->Ranges[i];
-            auto& keyFrom = range.From;
-            auto& keyTo = range.To;
+        if (!request->UsesCompactReadData()) {
+            // Make ranges in the new 'any' form compatible with the old '+inf' form
+            for (size_t i = 0; i < request->Ranges.size(); ++i) {
+                auto& range = request->Ranges[i];
+                auto& keyFrom = range.From;
+                auto& keyTo = range.To;
 
-            if (range.FromInclusive && keyFrom.GetCells().size() != TableInfo.KeyColumnCount) {
-                keyFrom = ExtendWithNulls(keyFrom, TableInfo.KeyColumnCount);
-            }
+                if (range.FromInclusive && keyFrom.GetCells().size() != TableInfo.KeyColumnCount) {
+                    keyFrom = ExtendWithNulls(keyFrom, TableInfo.KeyColumnCount);
+                }
 
-            if (!range.ToInclusive && keyTo.GetCells().size() != TableInfo.KeyColumnCount) {
-                keyTo = ExtendWithNulls(keyTo, TableInfo.KeyColumnCount);
+                if (!range.ToInclusive && keyTo.GetCells().size() != TableInfo.KeyColumnCount) {
+                    keyTo = ExtendWithNulls(keyTo, TableInfo.KeyColumnCount);
+                }
             }
         }
 
         if (state.PendingSelectedUnit && CompareSamplingPos(
                 SamplingStart(*state.PendingSelectedUnit),
-                SamplingRangeStart(request->Ranges.front()), TableInfo.KeyColumnTypes) > 0)
+                SamplingRangeStart(request->GetRange(0)), TableInfo.KeyColumnTypes) > 0)
         {
             SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST,
                 "Sampling continuation starts after the resume position");
             return;
         }
 
-        // Make prefixes in the new 'any' form compatible with the old '+inf' form
-        for (size_t i = 0; i < request->Keys.size(); ++i) {
-            const auto& key = request->Keys[i];
-            if (key.GetCells().size() == TableInfo.KeyColumnCount)
-                continue;
+        if (!request->UsesCompactReadData()) {
+            // Make prefixes in the new 'any' form compatible with the old '+inf' form
+            for (size_t i = 0; i < request->GetKeysSize(); ++i) {
+                const auto& key = request->GetKey(i);
+                if (key.GetCells().size() == TableInfo.KeyColumnCount)
+                    continue;
 
-            if (state.Keys.size() != request->Keys.size()) {
-                state.Keys.resize(request->Keys.size());
+                if (state.Keys.size() != request->GetKeysSize()) {
+                    state.Keys.resize(request->GetKeysSize());
+                }
+
+                // we can safely use cells referencing original request->Keys[x],
+                // because request will live until the end
+                state.Keys[i] = ExtendWithNulls(key, TableInfo.KeyColumnCount);
             }
-
-            // we can safely use cells referencing original request->Keys[x],
-            // because request will live until the end
-            state.Keys[i] = ExtendWithNulls(key, TableInfo.KeyColumnCount);
         }
 
         state.Columns.reserve(record.ColumnsSize());
@@ -3242,14 +3256,14 @@ private:
             columnOps.emplace_back(std::move(op));
         }
 
-        if (!state.Request->Keys.empty()) {
-            for (size_t i = 0; i < state.Request->Keys.size(); ++i) {
+        if ((state.Request->GetKeysSize() != 0)) {
+            for (size_t i = 0; i < state.Request->GetKeysSize(); ++i) {
                 THolder<TKeyDesc> desc;
-                const auto& key = state.Request->Keys[i];
+                const auto& key = state.Request->GetKey(i);
                 if (key.GetCells().size() != TableInfo.KeyColumnCount) {
                     // key prefix, treat it as range [prefix, 0, 0] - [prefix, +inf, +inf]
                     TTableRange range(
-                        state.Keys[i].GetCells(),
+                        state.GetKeyLowerBound(i).GetCells(),
                         true,
                         key.GetCells(),
                         true);
@@ -3283,8 +3297,8 @@ private:
             }
         } else {
             // since no keys, then we must have ranges (has been checked initially)
-            for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
-                TTableRange range = state.Request->Ranges[i].ToTableRange();
+            for (size_t i = 0; i < state.Request->GetRangesSize(); ++i) {
+                TTableRange range = state.Request->GetRange(i).ToTableRange();
 
                 auto desc = MakeHolder<TKeyDesc>(
                     tableId,
@@ -3429,13 +3443,13 @@ private:
 
         switch (state.LockMode) {
         case NKikimrDataEvents::OPTIMISTIC:
-            if (!state.Request->Keys.empty()) {
-                for (size_t i = 0; i < state.Request->Keys.size(); ++i) {
-                    const auto& key = state.Request->Keys[i];
+            if ((state.Request->GetKeysSize() != 0)) {
+                for (size_t i = 0; i < state.Request->GetKeysSize(); ++i) {
+                    const auto& key = state.Request->GetKey(i);
                     if (key.GetCells().size() != TableInfo.KeyColumnCount) {
                         // key prefix, treat it as range [prefix, 0, 0] - [prefix, +inf, +inf]
                         TTableRange lockRange(
-                            state.Keys[i].GetCells(),
+                            state.GetKeyLowerBound(i).GetCells(),
                             true,
                             key.GetCells(),
                             true);
@@ -3446,8 +3460,8 @@ private:
                 }
             } else {
                 // no keys, so we must have ranges (has been checked initially)
-                for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
-                    auto range = state.Request->Ranges[i].ToTableRange();
+                for (size_t i = 0; i < state.Request->GetRangesSize(); ++i) {
+                    auto range = state.Request->GetRange(i).ToTableRange();
                     sysLocks.SetLock(tableId, range);
                 }
             }
@@ -4410,14 +4424,14 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         return;
     }
 
-    if (!request->Keys.empty() && !request->Ranges.empty()) {
+    if ((request->GetKeysSize() != 0) && (request->GetRangesSize() != 0)) {
         replyWithError(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
             << "Both keys and ranges are forbidden"
             << " (shard# " << TabletID() << " node# " << SelfId().NodeId() << " state# " << DatashardStateName(State) << ")");
         return;
     }
 
-    if (request->Keys.empty() && request->Ranges.empty()) {
+    if ((request->GetKeysSize() == 0) && (request->GetRangesSize() == 0)) {
         replyWithError(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
             << "Neither keys nor ranges specified"
             << " (shard# " << TabletID() << " node# " << SelfId().NodeId() << " state# " << DatashardStateName(State) << ")");

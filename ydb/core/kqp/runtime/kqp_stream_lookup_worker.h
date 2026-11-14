@@ -115,11 +115,29 @@ public:
     virtual void ClearResults(NMiniKQL::TAllocState& /*allocState*/) {}
 
 protected:
+    struct TReadBatch {
+        std::vector<TOwnedTableRange> Keys;
+        size_t PayloadBytes = 0;
+    };
+
+    using TReadBatches = std::unordered_map<ui64, TReadBatch>;
+
+    void InitializeReadBatchHeader(NKikimrTxDataShard::TEvRead& record);
+    std::vector<TOwnedTableRange> AppendReadRange(TReadBatch& batch, TOwnedTableRange&& range) const;
+    void ScheduleReadBatches(ui64 shardId, std::vector<TOwnedTableRange>&& keys, ui64& readId);
+    virtual void ScheduleRead(ui64 shardId, ui64& readId, std::vector<TOwnedTableRange>&& keys) = 0;
+
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
     const TLookupSettings Settings;
 
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;
+
+private:
+    size_t GetReadEntryBytes(const TOwnedTableRange& range) const;
+    const ui64 MaxReadRequestEntries;
+    const ui64 MaxReadRequestBytes;
+    size_t ReadBatchHeaderBytes = 0;
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,

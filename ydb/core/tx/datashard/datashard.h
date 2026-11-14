@@ -1,5 +1,6 @@
 #pragma once
 
+#include "datashard_read_data.h"
 #include "datashard_s3_download.h"
 #include "datashard_s3_upload.h"
 
@@ -1044,7 +1045,21 @@ namespace TEvDataShard {
         static constexpr ui32 HINT_BATCH = NKikimrTxDataShard::TEvRead::HINT_BATCH;
         static constexpr ui32 HINT_LOW_PRIORITY = NKikimrTxDataShard::TEvRead::HINT_LOW_PRIORITY;
 
-        TEvRead() = default;
+        TEvRead();
+        ~TEvRead() override;
+
+        size_t GetKeysSize() const;
+        size_t GetRangesSize() const;
+        NDataShard::TReadCellVecView GetKey(size_t index) const;
+        NDataShard::TReadRangeView GetRange(size_t index) const;
+        NDataShard::TReadCellVecView GetKeyLowerBound(size_t index) const;
+
+        // Large remote reads decode and normalize all cell metadata in one allocation.
+        bool PrepareReadData(size_t keyColumnCount);
+
+        bool UsesCompactReadData() const {
+            return CompactReadData;
+        }
 
         TString ToString() const override;
 
@@ -1062,8 +1077,12 @@ namespace TEvDataShard {
 
     private:
         void FillRecord();
+        struct TReadData;
+        THolder<TReadData> ReadData;
+        bool CompactReadData = false;
 
     public:
+        // Producers fill these vectors; consumers use GetKey/GetRange after preparation.
         // Either one of Keys, Ranges or Record.Program is allowed
 
         // TODO: consider TOwnedCellVec depending on kqp

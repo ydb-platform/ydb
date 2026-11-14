@@ -179,9 +179,11 @@ namespace NKikimr {
                 runtime.GetAppData().FeatureFlags.SetEnableDbCounters(false);
                 runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(false);
 
-                auto serviceId = runtime.Register(CreateSysViewServiceForTests().Release());
+                NKikimrConfig::TSysViewConfig config;
+                config.SetQueryStatsIntervalSeconds(1);
+                auto serviceId = runtime.Register(CreateSysViewService(TExtCountersConfig(), true, config).Release());
                 runtime.EnableScheduleForActor(serviceId);
-                // Several five-second intervals must complete without spinning
+                // Several one-second intervals must complete without spinning
                 // on a deadline calculated from the wall clock.
                 runtime.SetScheduledLimit(100);
                 const auto until = runtime.GetCurrentTime() + TDuration::Seconds(20);

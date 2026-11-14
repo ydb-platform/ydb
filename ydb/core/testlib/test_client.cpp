@@ -607,6 +607,10 @@ namespace Tests {
             MERGE_CFG_FROM_APP_CFG(BridgeConfig);
             MERGE_CFG_FROM_SETTINGS(BridgeConfig);
             MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
+            // Preserve the short test intervals unless explicitly configured.
+            appData.SysViewConfig.SetQueryStatsIntervalSeconds(1);
+            appData.SysViewConfig.SetLabeledCountersIntervalSeconds(1);
+            MERGE_CFG_FROM_APP_CFG(SysViewConfig);
             MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
             appData.AuditConfig = Settings->AppConfig->GetAuditConfig();
 #undef MERGE_APP_CFG_FROM
@@ -1223,7 +1227,7 @@ namespace Tests {
                 TMailboxType::Revolving, appData.SystemPoolId));
         localConfig.TabletClassInfo[TTabletTypes::SysViewProcessor] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &NSysView::CreateSysViewProcessorForTests, TMailboxType::Revolving, appData.UserPoolId,
+                &NSysView::CreateSysViewProcessor, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
         localConfig.TabletClassInfo[TTabletTypes::SequenceShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
@@ -1352,7 +1356,8 @@ namespace Tests {
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
-        auto sysViewService = NSysView::CreateSysViewServiceForTests();
+        auto sysViewService = NSysView::CreateSysViewService(
+            NSysView::TExtCountersConfig(), true, appData.SysViewConfig);
         TActorId sysViewServiceId = Runtime->Register(sysViewService.Release(), nodeIdx, appData.UserPoolId);
         Runtime->RegisterService(NSysView::MakeSysViewServiceID(Runtime->GetNodeId(nodeIdx)), sysViewServiceId, nodeIdx);
 

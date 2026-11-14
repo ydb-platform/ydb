@@ -161,6 +161,7 @@ message TConfigItem {
         StatisticsConfigItem = 113;
         TliConfigItem = 120;
         ResourcePathPrefixMappingItem = 124;
+        SysViewConfigItem = 125;
 
         // synthetic kinds for audit purposes only
         DatabaseYamlConfigChangeItem = 32767;

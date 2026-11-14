@@ -3715,6 +3715,16 @@ message TPathRewriteConfig {
     repeated TRule Rules = 1;
 }
 
+message TSysViewConfig {
+    // Startup-only setting; must be identical on all nodes hosting a database.
+    // Shorter intervals change the buckets exposed by the one_minute views and
+    // their retained history. Use them only for fresh isolated test clusters;
+    // do not change this interval on databases with existing stats history.
+    // Must be a positive divisor of 60 seconds.
+    optional uint32 QueryStatsIntervalSeconds = 1 [default = 60];
+    optional uint32 LabeledCountersIntervalSeconds = 2 [default = 60];
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3839,6 +3849,7 @@ message TAppConfig {
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
     optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
     optional TPathRewriteConfig ResourcePathPrefixMapping = 124;
+    optional TSysViewConfig SysViewConfig = 125;
 }
 
 message TYdbVersion {

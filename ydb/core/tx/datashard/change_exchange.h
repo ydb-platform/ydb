@@ -1,12 +1,15 @@
 #pragma once
 
 #include "defs.h"
+#include "datashard_user_table.h"
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <util/generic/vector.h>
+
+#include <variant>
 
 namespace NKikimr::NDataShard {
 
@@ -51,12 +54,22 @@ struct TEvChangeExchange {
         CdcStream,
     };
 
+    struct TAsyncIndexSender {
+    };
+
+    struct TCdcStreamSender {
+        TUserTable::TCdcStream Stream;
+    };
+
+    using TSenderParams = std::variant<TAsyncIndexSender, TCdcStreamSender>;
+
     struct TEvAddSender: public TEventLocal<TEvAddSender, EvAddSender> {
         TTableId UserTableId;
         ESenderType Type;
         TPathId PathId;
+        TSenderParams Params;
 
-        explicit TEvAddSender(const TTableId& userTableId, ESenderType type, const TPathId& pathId);
+        explicit TEvAddSender(const TTableId& userTableId, const TPathId& pathId, TSenderParams params);
         TString ToString() const override;
     };
 
@@ -71,6 +84,8 @@ struct TEvChangeExchange {
     };
 
 }; // TEvChangeExchange
+
+TEvChangeExchange::ESenderType GetSenderType(const TEvChangeExchange::TSenderParams& params);
 
 IActor* CreateChangeSender(const TDataShard* self);
 IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards);

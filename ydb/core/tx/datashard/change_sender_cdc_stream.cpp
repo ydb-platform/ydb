@@ -1,3 +1,4 @@
+#include "cdc_aggregated_heartbeats.h"
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
 #include "change_record.h"
@@ -10,6 +11,7 @@
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/aclib/user_context.h>
@@ -20,12 +22,28 @@
 
 #include <library/cpp/json/json_writer.h>
 
+#include <optional>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
 
 namespace NKikimr::NDataShard {
 
 using namespace NPQ;
 using ESenderType = TEvChangeExchange::ESenderType;
+
+static THolder<IChangeRecordSerializer> CreateCdcStreamSerializer(const TUserTable::TCdcStream& stream, ui64 shardId) {
+    return THolder<IChangeRecordSerializer>(CreateChangeRecordSerializer({
+        .StreamFormat = stream.Format,
+        .StreamMode = stream.Mode,
+        .AwsRegion = stream.AwsRegion.GetOrElse(AppData()->AwsCompatibilityConfig.GetAwsRegion()),
+        .VirtualTimestamps = stream.VirtualTimestamps,
+        .ShardId = shardId,
+        .UserSIDs = stream.UserSIDs,
+        .TraceIds = stream.TraceIds,
+        .Compression = stream.Compression,
+        .CompressionLevel = stream.CompressionLevel,
+    }));
+}
 
 class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderPartition> {
 
@@ -98,22 +116,6 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         }
     }
 
-    class TSerializer: public NChangeExchange::TBaseVisitor {
-        IChangeRecordSerializer& Serializer;
-        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& Cmd;
-
-    public:
-        explicit TSerializer(IChangeRecordSerializer& serializer, NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd)
-            : Serializer(serializer)
-            , Cmd(cmd)
-        {
-        }
-
-        void Visit(const TChangeRecord& record) override {
-            Serializer.Serialize(Cmd, record);
-        }
-    };
-
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
@@ -131,8 +133,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             cmd.SetSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
             cmd.SetIgnoreQuotaDeadline(true);
 
-            TSerializer serializer(*Serializer, cmd);
-            record.Accept(serializer);
+            Serializer->Serialize(cmd, record);
 
             Pending.push_back(seqNo);
         }
@@ -288,17 +289,7 @@ public:
         , PartitionId(partitionId)
         , ShardId(shardId)
         , SourceId(ToString(DataShard.TabletId))
-        , Serializer(CreateChangeRecordSerializer({
-            .StreamFormat = stream.Format,
-            .StreamMode = stream.Mode,
-            .AwsRegion = stream.AwsRegion.GetOrElse(AppData()->AwsCompatibilityConfig.GetAwsRegion()),
-            .VirtualTimestamps = stream.VirtualTimestamps,
-            .ShardId = DataShard.TabletId,
-            .UserSIDs = stream.UserSIDs,
-            .TraceIds = stream.TraceIds,
-            .Compression = stream.Compression,
-            .CompressionLevel = stream.CompressionLevel,
-        }))
+        , Serializer(CreateCdcStreamSerializer(stream, DataShard.TabletId))
     {
     }
 
@@ -518,12 +509,18 @@ class TCdcChangeSenderMain
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
             YDB_LOG_DEBUG("CDC stream is planned to drop, waiting for remove sender command");
 
+            if (AggregatedHeartbeats) {
+                RemoveRecords(AggregatedHeartbeats->Clear());
+            }
             RemoveRecords();
             KillSenders();
             return Become(&TThis::StatePendingRemove);
         }
 
         Stream = TUserTable::TCdcStream(entry.CdcStreamInfo->Description);
+        if (AggregatedHeartbeats) {
+            AggregatedHeartbeats->SetAggregator(Stream.AggregatorTabletId);
+        }
 
         Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
@@ -654,18 +651,29 @@ class TCdcChangeSenderMain
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
+        if (AggregatedHeartbeats) {
+            AggregatedHeartbeats->RegisterPendingRecordIds(ev->Get()->Records);
+        }
         EnqueueRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
+        if (AggregatedHeartbeats) {
+            auto [passed, buffered] = AggregatedHeartbeats->BufferHeartbeats(std::move(ev->Get()->Records));
+            ForgetRecords(std::move(buffered));
+            return ProcessRecords(std::move(passed));
+        }
         ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
+        if (AggregatedHeartbeats) {
+            AggregatedHeartbeats->RemovePendingRecordIds(ev->Get()->Records);
+        }
         ForgetRecords(std::move(ev->Get()->Records));
     }
 
@@ -686,8 +694,23 @@ class TCdcChangeSenderMain
             {"eventDetails", ev->Get()->ToString()});
         Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
+        if (AggregatedHeartbeats) {
+            RemoveRecords(AggregatedHeartbeats->Clear());
+        }
         RemoveRecords();
         PassAway();
+    }
+
+    void OnRecordsRemoved(const TVector<ui64>& orders) override {
+        if (AggregatedHeartbeats) {
+            AggregatedHeartbeats->RemovePendingRecordIds(orders);
+        }
+    }
+
+    void HandleCdcAggregatorServiceReply(TAutoPtr<IEventHandle>& ev) {
+        if (AggregatedHeartbeats) {
+            RemoveRecords(AggregatedHeartbeats->HandleCdcAggregatorServiceReply(ev));
+        }
     }
 
     void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -710,13 +733,16 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_CDC_ACTOR_MAIN;
     }
 
-    explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId)
+    explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId, const TUserTable::TCdcStream& stream)
         : TActorBootstrapped()
         , TChangeSender(this, this, this, this, dataShard.ActorId)
         , StreamPathId(streamPathId)
         , DataShard(dataShard)
         , TopicVersion(0)
     {
+        if (stream.HeartbeatMode == NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated) {
+            AggregatedHeartbeats.emplace(CreateCdcStreamSerializer(stream, dataShard.TabletId), dataShard.TabletId);
+        }
     }
 
     TPathId GetChangeSenderIdentity() const override final {
@@ -737,6 +763,8 @@ public:
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvGone, Handle);
+            fFunc(NCdcAggregator::TEvCdcAggregatorService::TEvWriteHeartbeatResult::EventType, HandleCdcAggregatorServiceReply);
+            fFunc(TEvents::TEvUndelivered::EventType, HandleCdcAggregatorServiceReply);
             HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -763,10 +791,12 @@ private:
     THolder<NKikimr::TKeyDesc> KeyDesc;
     THashMap<ui32, ui64> PartitionToShard;
 
+    std::optional<TCdcAggregatedHeartbeats> AggregatedHeartbeats;
+
 }; // TCdcChangeSenderMain
 
-IActor* CreateCdcStreamChangeSender(const TDataShardId& dataShard, const TPathId& streamPathId) {
-    return new TCdcChangeSenderMain(dataShard, streamPathId);
+IActor* CreateCdcStreamChangeSender(const TDataShardId& dataShard, const TPathId& streamPathId, const TUserTable::TCdcStream& stream) {
+    return new TCdcChangeSenderMain(dataShard, streamPathId, stream);
 }
 
 }

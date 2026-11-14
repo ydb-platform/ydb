@@ -7,6 +7,7 @@ SRCS(
     group_mapper_ut.cpp
     layout_helpers_ut.cpp
     mv_object_map_ut.cpp
+    storage_pool_stat_ut.cpp
 )
 
 FORK_SUBTESTS()

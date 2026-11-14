@@ -399,6 +399,63 @@ namespace NKikimr {
                 GroupFailureModelChanged.erase(groupId);
             }
 
+            // the bridge proxy group the part belongs to; nullptr for groups that are not parts of existing bridged ones
+            const TGroupInfo *FindBridgeProxyGroup(const TGroupInfo& group) const {
+                return group.IsBridgePileOnly() && group.BridgeProxyGroupId
+                    ? Groups.Find(*group.BridgeProxyGroupId)
+                    : nullptr;
+            }
+
+            // the parts of the bridged group, but the inline pile, which is the group itself; none for other groups
+            static std::vector<TGroupId> GetBridgeParts(const TGroupInfo& group) {
+                std::vector<TGroupId> parts;
+                if (group.BridgeGroupInfo) {
+                    NBridge::ForEachGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                            const NKikimrBridge::TGroupState::TPile& pile) {
+                        if (const auto partId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                                partId != group.ID) {
+                            parts.push_back(partId);
+                        }
+                    });
+                }
+                return parts;
+            }
+
+            // delete the group along with its VDisks and, for a bridge proxy group, along with its parts, which nothing
+            // else refers to then; every deleted group is removed from the set of the ones to process
+            void DeleteGroupWithBridgeParts(const TGroupInfo& group, THashSet<TGroupId>& pending) {
+                for (const TGroupId partId : GetBridgeParts(group)) {
+                    // group entries are held by pointers, so deleting other groups keeps `group` valid
+                    if (const TGroupInfo *part = Groups.Find(partId)) {
+                        DeleteExistingGroupWithVSlots(*part);
+                        pending.erase(partId);
+                    }
+                }
+                pending.erase(group.ID);
+                DeleteExistingGroupWithVSlots(group);
+            }
+
+            // delete the listed groups along with the parts of the bridged ones; a part can't go without its bridge proxy
+            // group, as the proxy group would refer to a group that doesn't exist; the callbacks throw the errors of the
+            // command for a missing group and for such a part
+            template<typename TNotFound, typename TPartAlone>
+            void DeleteGroupsWithBridgeParts(const std::vector<TGroupId>& groups, TNotFound&& notFound,
+                    TPartAlone&& partAlone) {
+                THashSet<TGroupId> pending(groups.begin(), groups.end());
+                for (const TGroupId groupId : groups) {
+                    if (!pending.contains(groupId)) {
+                        continue; // deleted along with its bridge proxy group, or listed twice
+                    } else if (const TGroupInfo *group = Groups.Find(groupId); !group) {
+                        notFound(groupId);
+                    } else if (const TGroupInfo *proxy = FindBridgeProxyGroup(*group);
+                            proxy && !pending.contains(proxy->ID)) { // an existing proxy group is pending when listed
+                        partAlone(groupId, proxy->ID);
+                    } else {
+                        DeleteGroupWithBridgeParts(*group, pending);
+                    }
+                }
+            }
+
         private:
             template<typename TCommand, typename TKey, typename TValue>
             static ui64 CheckGeneration(const TCommand &cmd, const TMap<TKey, TValue> &map, const TKey &id) {

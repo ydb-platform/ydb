@@ -581,6 +581,41 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         }});
     }
 
+    // decommission cancelled before the BlobDepot starts leaves the bridged group as it was: the bridge proxy group has no
+    // VDisks of its own, but its data stays in its parts
+    Y_UNIT_TEST(CancelledDecommitKeepsProxyGroup) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+        const auto parts = GetPileGroups(env, groupId);
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *decommit = request.AddCommand()->MutableDecommitGroups();
+        decommit->AddGroupIds(groupId);
+        decommit->SetDatabase(TStringBuilder() << '/' << env.Runtime->GetDomainsInfo()->GetDomain()->Name);
+        request.AddCommand()->MutableCancelVirtualGroup()->SetGroupId(groupId);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitUntil(env, [&] {
+            const auto config = env.FetchBaseConfig(); // the proxy group stays there all along
+            return !FindGroup(config, groupId).HasVirtualGroupInfo();
+        }, "decommission cancelled");
+
+        const auto config = env.FetchBaseConfig();
+        UNIT_ASSERT(GetPileGroups(env, groupId) == parts);
+        for (const ui32 part : parts) {
+            FindGroup(config, part);
+        }
+
+        // the group works as before, and so it does after BS_CONTROLLER restarts
+        checker.CheckAll();
+        checker.Write(groupId);
+        env.RestartNode(env.Settings.ControllerNodeId);
+        env.Sim(TDuration::Seconds(30));
+        env.FetchBaseConfig();
+        checker.CheckAll();
+    }
+
     // group converted into an inline pile keeps its id, so it stays in place as the virtual group, but loses its VDisks
     Y_UNIT_TEST(DecommitInlinePile) {
         TEnvironmentSetup env(MakeUnbridgedSettings(true));

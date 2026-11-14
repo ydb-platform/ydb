@@ -286,12 +286,11 @@ namespace NKikimr::NBsController {
                 if (!prev.IsBeingDeleted() && cur.IsBeingDeleted()) {
                     // the slot has started deletion during this update
                     AddVSlotToProtobuf(vslotId, prev, TMood::Delete);
-                } else if (prev.Mood != cur.Mood) {
-                    // the slot mood has changed
+                } else if (prev.Mood != cur.Mood || prev.GroupGeneration != cur.GroupGeneration) {
+                    // the slot mood or generation has changed; the slot keeps its mood with the new generation, as on
+                    // registration of the node, so that a read-only VDisk stays read-only and the one being wiped
+                    // finishes the wipe
                     AddVSlotToProtobuf(vslotId, cur, static_cast<TMood::EValue>(cur.Mood));
-                } else if (prev.GroupGeneration != cur.GroupGeneration) {
-                    // the slot generation has changed
-                    AddVSlotToProtobuf(vslotId, cur, TMood::Normal);
                 }
             }
 
@@ -407,7 +406,10 @@ namespace NKikimr::NBsController {
             THashSet<TGroupId> updates;
             for (TGroupId groupId : state.GroupContentChanged) {
                 if (const TGroupInfo *group = state.Groups.Find(groupId)) {
-                    if (group->BridgeProxyGroupId && !state.GroupContentChanged.contains(*group->BridgeProxyGroupId)) {
+                    // earlier versions deleted the bridge proxy group on cancelled decommission, leaving its parts
+                    // referring to it
+                    if (group->BridgeProxyGroupId && !state.GroupContentChanged.contains(*group->BridgeProxyGroupId) &&
+                            state.Groups.Find(*group->BridgeProxyGroupId)) {
                         updates.insert(*group->BridgeProxyGroupId);
                     }
                 }
@@ -963,7 +965,8 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            // apply created/deleted groups
+            // apply created/deleted groups and the ones moved to another storage pool: their status and the space
+            // allocated by their remaining VDisks, donors included, go along with them
             for (const auto& [base, overlay] : state.Groups.Diff()) {
                 if (!base) { // newly created group
                     overlay->second->StatusFlags = overlay->second->GetStorageStatusFlags();
@@ -974,13 +977,42 @@ namespace NKikimr::NBsController {
                         StoragePoolStat->Update(TStoragePoolStat::ConvertId(base->second->StoragePoolId),
                             base->second->StatusFlags, std::nullopt);
                     }
+                } else if (base->second->StoragePoolId != overlay->second->StoragePoolId) { // moved group
+                    const TGroupInfo& group = *overlay->second;
+                    i64 allocatedSize = 0;
+                    for (const TVSlotInfo *vslot : group.VDisksInGroup) {
+                        allocatedSize += vslot->Metrics.GetAllocatedSize();
+                        for (const TVSlotId& donorId : vslot->Donors) {
+                            if (const TVSlotInfo *donor = state.VSlots.Find(donorId)) {
+                                allocatedSize += donor->Metrics.GetAllocatedSize();
+                            }
+                        }
+                    }
+                    if (state.StoragePools.Get().count(base->second->StoragePoolId)) {
+                        const auto origin = TStoragePoolStat::ConvertId(base->second->StoragePoolId);
+                        StoragePoolStat->Update(origin, base->second->StatusFlags, std::nullopt);
+                        StoragePoolStat->UpdateAllocatedSize(origin, -allocatedSize);
+                    }
+                    const auto target = TStoragePoolStat::ConvertId(group.StoragePoolId);
+                    StoragePoolStat->Update(target, std::nullopt, group.StatusFlags);
+                    StoragePoolStat->UpdateAllocatedSize(target, allocatedSize);
                 }
             }
 
-            // apply VDisks going for destruction
+            // apply VDisks going for destruction; their space is accounted in the pool of their group as it was before
+            // this transaction, as the moved groups take only the space of the remaining VDisks to the new one
             for (const auto& [base, overlay] : state.VSlots.Diff()) {
                 if (overlay->second && overlay->second->DeletedFromStoragePoolId && overlay->second->Metrics.GetAllocatedSize()) {
-                    StoragePoolStat->UpdateAllocatedSize(TStoragePoolStat::ConvertId(*overlay->second->DeletedFromStoragePoolId),
+                    // the committed state is still in GroupMap, along with the groups this transaction deletes
+                    TBoxStoragePoolId storagePoolId = *overlay->second->DeletedFromStoragePoolId;
+                    if (base) {
+                        const auto it = GroupMap.find(base->second->GroupId);
+                        Y_DEBUG_ABORT_UNLESS(it != GroupMap.end());
+                        if (it != GroupMap.end()) {
+                            storagePoolId = it->second->StoragePoolId;
+                        }
+                    }
+                    StoragePoolStat->UpdateAllocatedSize(TStoragePoolStat::ConvertId(storagePoolId),
                         -overlay->second->Metrics.GetAllocatedSize());
                 }
             }

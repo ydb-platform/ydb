@@ -346,13 +346,13 @@ namespace NKikimr::NBsController {
             groups.push_back(it->second);
         }
 
-        for (const TGroupId groupId : groups) {
-            if (const TGroupInfo *groupInfo = Groups.Find(groupId)) {
-                DeleteExistingGroupWithVSlots(*groupInfo);
-            } else {
-                throw TExError() << "GroupId# " << groupId << " not found";
-            }
-        }
+        // parts of bridged groups go along with their bridge proxy groups
+        DeleteGroupsWithBridgeParts(groups, [](TGroupId groupId) {
+            throw TExError() << "GroupId# " << groupId << " not found";
+        }, [](TGroupId groupId, TGroupId proxyId) {
+            throw TExError() << "GroupId# " << groupId << " is a part of bridged GroupId# " << proxyId
+                << " of another storage pool";
+        });
 
         storagePools.erase(id);
     }
@@ -800,6 +800,28 @@ namespace NKikimr::NBsController {
             }
         }
 
+        // a bridge proxy group moves along with its parts in the origin pool, and a part moves without its proxy group
+        // only to the pool of the proxy group, which joins the ones left apart by earlier versions
+        THashSet<TGroupId> listed(groups.begin(), groups.end());
+        TVector<TGroupId> parts;
+        for (const TGroupId groupId : groups) {
+            const TGroupInfo *group = Groups.Find(groupId);
+            if (!group) {
+                continue; // reported as missing in the origin pool below
+            } else if (const TGroupInfo *proxy = FindBridgeProxyGroup(*group); proxy && !listed.contains(proxy->ID) &&
+                    proxy->StoragePoolId != targetId) {
+                throw TExError() << "GroupId# " << groupId << " is a part of bridged GroupId# " << proxy->ID
+                    << ", move the bridged group instead";
+            }
+            for (const TGroupId partId : GetBridgeParts(*group)) {
+                if (storagePoolGroups.contains({originId, partId}) && listed.insert(partId).second) {
+                    parts.push_back(partId);
+                }
+            }
+        }
+        groups.insert(groups.end(), parts.begin(), parts.end());
+
+        std::map<TBridgePileId, TGroupGeometryInfo> targetGeometries;
         for (TGroupId groupId : groups) {
             // find the group belonging to the origin storage pool and remove it from the multimap
             if (!storagePoolGroups.erase({originId, groupId})) {
@@ -816,12 +838,31 @@ namespace NKikimr::NBsController {
             Y_ABORT_UNLESS(group);
             Y_ABORT_UNLESS(group->StoragePoolId == originId);
 
-            // update the pool id of the group
-            group->StoragePoolId = targetId;
+            // the layout of the VDisks is checked by the geometry of the pool the group belongs to, which is laid over
+            // the topology of the group, so the target pool must have the same erasure and geometry for the pile of the
+            // group
+            if (group->VDisksInGroup) {
+                auto [it, inserted] = targetGeometries.try_emplace(group->BridgePileId);
+                if (inserted) {
+                    const auto pool = GetStoragePoolForPile(targetId, group->BridgePileId);
+                    it->second = TGroupGeometryInfo(TBlobStorageGroupType(pool.ErasureSpecies), pool.GetGroupGeometry());
+                }
+                if (!it->second.MatchesGroup(*group)) {
+                    throw TExError() << "GroupId# " << groupId
+                        << " doesn't match the erasure and geometry of target StoragePoolId# " << targetId;
+                }
+            }
 
-            // correct the number of groups in the pools
-            --origin.NumGroups;
-            ++target.NumGroups;
+            // update the pool id of the group; the group info sent to nodes carries the name of the pool, so it goes out
+            // with a new generation, as nodes cache it by generation and don't expect other contents for the same one
+            group->StoragePoolId = targetId;
+            GroupContentChanged.insert(groupId);
+
+            // correct the number of groups in the pools; parts of bridged groups are not counted
+            if (!group->IsBridgePileOnly()) {
+                --origin.NumGroups;
+                ++target.NumGroups;
+            }
         }
     }
 
@@ -1406,13 +1447,17 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& /*status*/) {
-        for (ui32 groupId : cmd.GetGroupIds()) {
-            const TGroupInfo *groupInfo = Groups.Find(TGroupId::FromValue(groupId));
-            if (!groupInfo) {
-                throw TExGroupNotFound(groupId);
-            }
-            DeleteExistingGroupWithVSlots(*groupInfo);
+        // a bridge proxy group goes along with its parts (Hive and Console know proxy groups only)
+        std::vector<TGroupId> groups;
+        for (const ui32 groupId : cmd.GetGroupIds()) {
+            groups.push_back(TGroupId::FromValue(groupId));
         }
+        DeleteGroupsWithBridgeParts(groups, [](TGroupId groupId) {
+            throw TExGroupNotFound(groupId.GetRawId());
+        }, [](TGroupId groupId, TGroupId proxyId) {
+            throw TExError() << "GroupId# " << groupId << " is a part of bridged GroupId# " << proxyId
+                << ", delete the bridged group instead";
+        });
     }
 
 } // NKikimr::NBsController

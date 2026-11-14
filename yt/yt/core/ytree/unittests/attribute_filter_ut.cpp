@@ -36,7 +36,7 @@ std::string NormalizeYson(TYsonString yson)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TAttributeFilterTest, TestValidation)
+TEST(TAttributeFilterTest, Validation)
 {
     auto expectValidationError = [] (const TYPath& path) {
         TAttributeFilter filter({}, {path});
@@ -48,7 +48,7 @@ TEST(TAttributeFilterTest, TestValidation)
     expectValidationError("/foo/@");
 }
 
-TEST(TAttributeFilterTest, TestNormalization)
+TEST(TAttributeFilterTest, Normalization)
 {
     using TKeyToFilter = TAttributeFilter::TKeyToFilter;
     using TPathFilter = TAttributeFilter::TPathFilter;

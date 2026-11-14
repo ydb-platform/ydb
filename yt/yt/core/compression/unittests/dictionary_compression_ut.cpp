@@ -149,7 +149,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TDictionaryCompressionTest, TestMinDictionaryCompressionSize)
+TEST_F(TDictionaryCompressionTest, MinDictionaryCompressionSize)
 {
     EXPECT_TRUE(GetCompressionDictionary().IsOK());
 
@@ -165,7 +165,7 @@ TEST_F(TDictionaryCompressionTest, TestMinDictionaryCompressionSize)
     EXPECT_EQ(ZSTD_ErrorCode::ZSTD_error_dstSize_tooSmall, errorAttribute);
 }
 
-TEST_F(TDictionaryCompressionTest, TestCompressDecompressSimple)
+TEST_F(TDictionaryCompressionTest, CompressDecompressSimple)
 {
     EXPECT_TRUE(GetCompressionDictionary().IsOK());
 
@@ -181,7 +181,7 @@ TEST_F(TDictionaryCompressionTest, TestCompressDecompressSimple)
     EXPECT_EQ(TStringBuf(data.Begin(), data.Size()), TStringBuf(decompressedData, data.Size()));
 }
 
-TEST_F(TDictionaryCompressionTest, TestFrameInfo)
+TEST_F(TDictionaryCompressionTest, FrameInfo)
 {
     EXPECT_TRUE(GetCompressionDictionary().IsOK());
 
@@ -197,7 +197,7 @@ TEST_F(TDictionaryCompressionTest, TestFrameInfo)
     EXPECT_EQ(data.Size(), frameInfo.ContentSize);
 }
 
-TEST_F(TDictionaryCompressionTest, TestCompressionRatio)
+TEST_F(TDictionaryCompressionTest, CompressionRatio)
 {
     EXPECT_TRUE(GetCompressionDictionary().IsOK());
 

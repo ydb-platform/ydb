@@ -15,7 +15,7 @@ class TFairThrottlerIpcTest
     : public ::testing::TestWithParam<std::tuple<bool, bool>>
 { };
 
-TEST_P(TFairThrottlerIpcTest, Test)
+TEST_P(TFairThrottlerIpcTest, ShareBuckets)
 {
     std::string path = (GetOutputPath() / ToString(TGuid::Create())).GetPath();
 

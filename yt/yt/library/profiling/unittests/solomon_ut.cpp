@@ -793,7 +793,7 @@ TEST(TSolomonRegistryTest, CounterTagsBug)
     impl->ProcessRegistrations();
 }
 
-TEST(TSolomonRegistryTest, TestRemoteTransfer)
+TEST(TSolomonRegistryTest, RemoteTransfer)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -840,7 +840,7 @@ TEST(TSolomonRegistryTest, TestRemoteTransfer)
     ASSERT_TRUE(sensors.Counters.empty());
 }
 
-TEST(TSolomonRegistryTest, TestRemoteTransferWithDistinctTags)
+TEST(TSolomonRegistryTest, RemoteTransferWithDistinctTags)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);

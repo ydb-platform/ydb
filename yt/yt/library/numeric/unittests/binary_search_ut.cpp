@@ -13,7 +13,7 @@ class TBinarySearchTest
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TBinarySearchTest, TestDoubleToBitset)
+TEST_F(TBinarySearchTest, DoubleToBitset)
 {
     struct TTestCase
     {
@@ -72,7 +72,7 @@ TEST_F(TBinarySearchTest, TestDoubleToBitset)
     }
 }
 
-TEST_F(TBinarySearchTest, TestFloatingPointLowerBound)
+TEST_F(TBinarySearchTest, FloatingPointLowerBound)
 {
     struct TTestCase
     {
@@ -199,7 +199,7 @@ TEST_F(TBinarySearchTest, TestFloatingPointLowerBound)
     }
 }
 
-TEST_F(TBinarySearchTest, TestFloatingPointInverseLowerBound)
+TEST_F(TBinarySearchTest, FloatingPointInverseLowerBound)
 {
     struct TTestCase
     {

@@ -200,7 +200,7 @@ TEST_F(TTreeBuilderTest, SkipEntityMapChildren)
     VisitTree(root, &Mock, false, TAttributeFilter(), true);
 }
 
-TEST_F(TTreeBuilderTest, TestTreeLimitResets)
+TEST_F(TTreeBuilderTest, TreeLimitResets)
 {
     auto builder = CreateBuilderFromFactory(GetEphemeralNodeFactory(), 10);
 

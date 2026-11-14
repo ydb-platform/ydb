@@ -26,7 +26,7 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTestFairShareActionQueue
+class TFairShareActionQueueTest
     : public ::testing::Test
 {
 public:
@@ -137,7 +137,7 @@ DEFINE_ENUM(EQueues,
     ((Queue3) (2))
 );
 
-TEST_F(TTestFairShareActionQueue, TestProfiling)
+TEST_F(TFairShareActionQueueTest, Profiling)
 {
     auto registry = New<TSolomonRegistry>();
 

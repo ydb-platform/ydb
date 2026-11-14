@@ -107,7 +107,7 @@ private:
     i32 Retries = 1;
 };
 
-TEST(TYamrTableReaderTest, TestReadRetry)
+TEST(TYamrTableReaderTest, ReadRetry)
 {
     const TVector<std::tuple<TString, TString, TString>> expectedResult = {
         {"foo1", "bar1", "baz1"},
@@ -142,7 +142,7 @@ TEST(TYamrTableReaderTest, TestReadRetry)
     }
 }
 
-TEST(TYamrTableReaderTest, TestSkipRetry)
+TEST(TYamrTableReaderTest, SkipRetry)
 {
     const TVector<std::tuple<TString, TString, TString>> expectedResult = {
         {"foo1", "bar1", "baz1"},

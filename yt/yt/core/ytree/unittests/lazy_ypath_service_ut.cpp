@@ -48,7 +48,7 @@ auto FluentString()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TLazyYPathServiceTest, TestGetSelf)
+TEST(TLazyYPathServiceTest, GetSelf)
 {
     auto service = IYPathService::FromProducerLazy(BIND([] (IYsonConsumer* consumer) {
             BuildYsonFluently(consumer)

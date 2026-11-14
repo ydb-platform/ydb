@@ -174,7 +174,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TAsyncExpiringCacheTest, TestBackgroundUpdate)
+TEST(TAsyncExpiringCacheTest, BackgroundUpdate)
 {
     auto config = New<TAsyncExpiringCacheConfig>();
     config->RefreshTime = TDuration::MilliSeconds(100);
@@ -192,7 +192,7 @@ TEST(TAsyncExpiringCacheTest, TestBackgroundUpdate)
     EXPECT_LE(std::abs(expected - actual), 50);
 }
 
-TEST(TAsyncExpiringCacheTest, TestConcurrentAccess)
+TEST(TAsyncExpiringCacheTest, ConcurrentAccess)
 {
     auto config = New<TAsyncExpiringCacheConfig>();
     config->RefreshTime = TDuration::MilliSeconds(100);
@@ -242,7 +242,7 @@ TEST(TAsyncExpiringCacheTest, TestConcurrentAccess)
     EXPECT_GE(expected, actual);
 }
 
-TEST(TAsyncExpiringCacheTest, TestReconfigure)
+TEST(TAsyncExpiringCacheTest, Reconfigure)
 {
     auto config = New<TAsyncExpiringCacheConfig>();
     config->RefreshTime = TDuration::MilliSeconds(100);
@@ -264,7 +264,7 @@ TEST(TAsyncExpiringCacheTest, TestReconfigure)
     EXPECT_EQ(cache->GetConfig()->ExpireAfterFailedUpdateTime, TDuration::MilliSeconds(10));
 }
 
-TEST(TAsyncExpiringCacheTest, TestAccessTime1)
+TEST(TAsyncExpiringCacheTest, AccessTime1)
 {
     auto config = New<TAsyncExpiringCacheConfig>();
     config->RefreshTime = TDuration::MilliSeconds(200);
@@ -277,7 +277,7 @@ TEST(TAsyncExpiringCacheTest, TestAccessTime1)
     EXPECT_EQ(1, cache->GetCount());
 }
 
-TEST(TAsyncExpiringCacheTest, TestAccessTime2)
+TEST(TAsyncExpiringCacheTest, AccessTime2)
 {
     auto config = New<TAsyncExpiringCacheConfig>();
     config->ExpireAfterAccessTime = TDuration::MilliSeconds(100);
@@ -292,7 +292,7 @@ TEST(TAsyncExpiringCacheTest, TestAccessTime2)
     EXPECT_EQ(1, cache->GetCount());
 }
 
-TEST(TAsyncExpiringCacheTest, TestAccessTime3)
+TEST(TAsyncExpiringCacheTest, AccessTime3)
 {
     auto config = New<TAsyncExpiringCacheConfig>();
     config->ExpireAfterAccessTime = TDuration::MilliSeconds(50);
@@ -319,7 +319,7 @@ TEST(TAsyncExpiringCacheTest, CacheDoesntRefreshExpiredItem)
     EXPECT_EQ(1, cache->GetCount());
 }
 
-TEST(TAsyncExpiringCacheTest, TestUpdateTime1)
+TEST(TAsyncExpiringCacheTest, UpdateTime1)
 {
     auto config = New<TAsyncExpiringCacheConfig>();
     config->ExpireAfterSuccessfulUpdateTime = TDuration::MilliSeconds(50);
@@ -333,7 +333,7 @@ TEST(TAsyncExpiringCacheTest, TestUpdateTime1)
     EXPECT_EQ(10, cache->GetCount());
 }
 
-TEST(TAsyncExpiringCacheTest, TestUpdateTime2)
+TEST(TAsyncExpiringCacheTest, UpdateTime2)
 {
     auto config = New<TAsyncExpiringCacheConfig>();
     config->ExpireAfterFailedUpdateTime = TDuration::MilliSeconds(50);
@@ -396,7 +396,7 @@ TEST(TAsyncExpiringCacheTest, RefreshableErrorIsUpdatedWithoutBatching)
     EXPECT_TRUE(cache->GetPeriodicUpdateSawError());
 }
 
-TEST(TAsyncExpiringCacheTest, TestZeroCache1)
+TEST(TAsyncExpiringCacheTest, ZeroCache1)
 {
     auto config = New<TAsyncExpiringCacheConfig>();
     config->ExpireAfterAccessTime = TDuration::Zero();
@@ -417,7 +417,7 @@ TEST(TAsyncExpiringCacheTest, TestZeroCache1)
     EXPECT_EQ(10, cache->GetCount());
 }
 
-TEST(TAsyncExpiringCacheTest, TestZeroCache2)
+TEST(TAsyncExpiringCacheTest, ZeroCache2)
 {
     auto config = New<TAsyncExpiringCacheConfig>();
     config->ExpireAfterAccessTime = TDuration::Zero();
@@ -439,7 +439,7 @@ TEST(TAsyncExpiringCacheTest, TestZeroCache2)
     EXPECT_EQ(1, cache->GetCount());
 }
 
-TEST(TAsyncExpiringCacheTest, TestSetWithRefresh)
+TEST(TAsyncExpiringCacheTest, SetWithRefresh)
 {
     auto config = New<TAsyncExpiringCacheConfig>();
     config->ExpireAfterAccessTime = TDuration::Zero();
@@ -463,7 +463,7 @@ TEST(TAsyncExpiringCacheTest, TestSetWithRefresh)
     }
 }
 
-TEST(TAsyncExpiringCacheTest, TestExpirationWithoutRefresh1)
+TEST(TAsyncExpiringCacheTest, ExpirationWithoutRefresh1)
 {
     auto config = CreateSimpleAsyncExpiringCacheConfig();
     config->RefreshTime = std::nullopt;
@@ -480,7 +480,7 @@ TEST(TAsyncExpiringCacheTest, TestExpirationWithoutRefresh1)
     EXPECT_EQ(0, cache->GetSize());
 }
 
-TEST(TAsyncExpiringCacheTest, TestExpirationWithoutRefresh2)
+TEST(TAsyncExpiringCacheTest, ExpirationWithoutRefresh2)
 {
     auto config = CreateSimpleAsyncExpiringCacheConfig();
     config->RefreshTime = std::nullopt;
@@ -509,7 +509,7 @@ TEST(TAsyncExpiringCacheTest, TestExpirationWithoutRefresh2)
     EXPECT_EQ(0, cache->GetSize());
 }
 
-TEST(TAsyncExpiringCacheTest, TestExpirationAfterDisableRefresh)
+TEST(TAsyncExpiringCacheTest, ExpirationAfterDisableRefresh)
 {
     auto config = CreateSimpleAsyncExpiringCacheConfig();
 
@@ -532,7 +532,7 @@ TEST(TAsyncExpiringCacheTest, TestExpirationAfterDisableRefresh)
     EXPECT_EQ(0, cache->GetSize());
 }
 
-TEST(TAsyncExpiringCacheTest, TestEnableDisabledExpirationNoBatch)
+TEST(TAsyncExpiringCacheTest, EnableDisabledExpirationNoBatch)
 {
     auto config = CreateSimpleAsyncExpiringCacheConfig();
     config->ExpirationPeriod = std::nullopt;
@@ -557,7 +557,7 @@ TEST(TAsyncExpiringCacheTest, TestEnableDisabledExpirationNoBatch)
     EXPECT_EQ(0, cache->GetSize());
 }
 
-TEST(TAsyncExpiringCacheTest, TestEnableDisabledExpirationBatch)
+TEST(TAsyncExpiringCacheTest, EnableDisabledExpirationBatch)
 {
     auto config = CreateSimpleAsyncExpiringCacheConfig();
     config->BatchUpdate = true;

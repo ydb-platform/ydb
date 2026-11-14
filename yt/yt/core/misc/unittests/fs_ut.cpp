@@ -36,7 +36,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifdef _unix_
-TEST(TFSDeathTest, TestGetHomePathEnvironment)
+TEST(TFSDeathTest, GetHomePathEnvironment)
 {
     EXPECT_EXIT(
         {
@@ -93,7 +93,7 @@ TEST(TFSTest, SetPermissionsReportsMissingPath)
 #endif
 
 #if defined(_linux_) || defined(_darwin_)
-TEST(TFSTest, TestGetDeviceId)
+TEST(TFSTest, GetDeviceId)
 {
     auto dir = TTempDir{};
     auto path = std::string(dir.Name()) + "/file";
@@ -104,7 +104,7 @@ TEST(TFSTest, TestGetDeviceId)
     EXPECT_EQ(static_cast<dev_t>(makedev(deviceId.first, deviceId.second)), status.st_dev);
 }
 
-TEST(TFSTest, TestGetDeviceIdMatchesStat)
+TEST(TFSTest, GetDeviceIdMatchesStat)
 {
     auto dir = TTempDir{};
     struct stat status{};
@@ -113,14 +113,14 @@ TEST(TFSTest, TestGetDeviceIdMatchesStat)
     EXPECT_EQ(static_cast<dev_t>(makedev(deviceId.first, deviceId.second)), status.st_dev);
 }
 
-TEST(TFSTest, TestGetDeviceIdMissingPath)
+TEST(TFSTest, GetDeviceIdMissingPath)
 {
     auto dir = TTempDir{};
     EXPECT_THROW_WITH_SUBSTRING(GetDeviceId(std::string(dir.Name()) + "/missing"), "Failed to execute ::stat");
 }
 #endif
 
-TEST(TFSTest, TestGetRealPath)
+TEST(TFSTest, GetRealPath)
 {
     auto cwd = NFs::CurrentWorkingDirectory();
     auto rootPrefix = cwd.substr(0, cwd.find(LOCSLASH_C));
@@ -132,7 +132,7 @@ TEST(TFSTest, TestGetRealPath)
     EXPECT_EQ(GetRealPath("/a/b/c/.././../d/."), rootPrefix + NormalizePathSeparators("/a/d"));
 }
 
-TEST(TFSTest, TestGetDirectoryName)
+TEST(TFSTest, GetDirectoryName)
 {
     auto cwd = NFs::CurrentWorkingDirectory();
     EXPECT_EQ(GetDirectoryName("/a/b/c"), NormalizePathSeparators("/a/b"));
@@ -142,7 +142,7 @@ TEST(TFSTest, TestGetDirectoryName)
     EXPECT_EQ(GetDirectoryName("/a"), NormalizePathSeparators("/"));
 }
 
-TEST(TFSTest, TestIsDirEmpty)
+TEST(TFSTest, IsDirEmpty)
 {
     auto cwd = NFs::CurrentWorkingDirectory();
     auto dir = CombinePaths(cwd, "test");
@@ -153,7 +153,7 @@ TEST(TFSTest, TestIsDirEmpty)
     RemoveRecursive(dir);
 }
 
-TEST(TFSTest, TestMakeDirRecursive)
+TEST(TFSTest, MakeDirRecursive)
 {
     auto dir = CombinePaths(NFs::CurrentWorkingDirectory(), "test");
 
@@ -172,7 +172,7 @@ TEST(TFSTest, TestMakeDirRecursive)
 }
 
 #ifdef _linux_
-TEST(TFSTest, TestMakeDirRecursiveReportsRealError)
+TEST(TFSTest, MakeDirRecursiveReportsRealError)
 {
     if (::geteuid() != 0) {
         auto readOnlyDir = CombinePaths(NFs::CurrentWorkingDirectory(), "read_only");
@@ -207,7 +207,7 @@ TEST(TFSTest, TestMakeDirRecursiveReportsRealError)
 }
 #endif
 
-TEST(TFSTest, TestIsPathRelativeAndInvolvesNoTraversal)
+TEST(TFSTest, IsPathRelativeAndInvolvesNoTraversal)
 {
     EXPECT_TRUE(NFS::IsPathRelativeAndInvolvesNoTraversal(""));
     EXPECT_TRUE(NFS::IsPathRelativeAndInvolvesNoTraversal("some"));
@@ -233,7 +233,7 @@ TEST(TFSTest, TestIsPathRelativeAndInvolvesNoTraversal)
     EXPECT_FALSE(NFS::IsPathRelativeAndInvolvesNoTraversal("./.."));
 }
 
-TEST(TFSTest, TestGetRelativePath)
+TEST(TFSTest, GetRelativePath)
 {
     EXPECT_EQ(GetRelativePath("/", "/"), ".");
     EXPECT_EQ(GetRelativePath("/a", "/"), "..");

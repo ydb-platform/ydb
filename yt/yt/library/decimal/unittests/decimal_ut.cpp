@@ -22,7 +22,7 @@ std::string RoundConvertText(TStringBuf textValue, int precision, int scale)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TDecimalTest, TestTextBinaryConversion)
+TEST(TDecimalTest, TextBinaryConversion)
 {
 #define TEST_TEXT_BINARY_CONVERSION(precision, scale, text, binary) \
     do {                                                                 \
@@ -246,7 +246,7 @@ TEST(TDecimalTest, TestTextBinaryConversion)
 
 }
 
-TEST(TDecimalTest, TestPrecisionScaleLimits)
+TEST(TDecimalTest, PrecisionScaleLimits)
 {
     EXPECT_THROW_WITH_SUBSTRING(TDecimal::TextToBinary("0", -1, 0), "Invalid decimal precision");
     EXPECT_THROW_WITH_SUBSTRING(TDecimal::TextToBinary("0", 0, 0), "Invalid decimal precision");
@@ -294,7 +294,7 @@ TEST(TDecimalTest, TestPrecisionScaleLimits)
     EXPECT_EQ("-578960446186580977117854925043439539266349923328202820197287920039565648199.65", TDecimal::BinaryToText(minBinaryDecimal2, TDecimal::MaxPrecision, 2));
 }
 
-TEST(TDecimalTest, TestValidation)
+TEST(TDecimalTest, Validation)
 {
     EXPECT_NO_THROW(TDecimal::ValidateBinaryValue(HexDecode("8000013A"), 3, 2));
     EXPECT_NO_THROW(TDecimal::ValidateBinaryValue(HexDecode("80000000" "0000013A"), 10, 2));
@@ -345,7 +345,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::ValuesIn(TDecimalWithPrecisionTest::GetAllPossiblePrecisions())
 );
 
-TEST_P(TDecimalWithPrecisionTest, TestTextLimits)
+TEST_P(TDecimalWithPrecisionTest, TextLimits)
 {
     auto precision = GetParam();
 
@@ -381,7 +381,7 @@ TEST_P(TDecimalWithPrecisionTest, TestTextLimits)
         "too many digits before decimal point");
 }
 
-TEST_P(TDecimalWithPrecisionTest, TestBinaryValidation)
+TEST_P(TDecimalWithPrecisionTest, BinaryValidation)
 {
     auto precision = GetParam();
 

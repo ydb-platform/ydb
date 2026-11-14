@@ -808,7 +808,7 @@ TEST(TYsonStructTest, Save)
         << ", got: " << output.AsStringBuf();
 }
 
-TEST(TYsonStructTest, TestConfigUpdate)
+TEST(TYsonStructTest, ConfigUpdate)
 {
     auto config = New<TTestConfig>();
     {
@@ -900,7 +900,7 @@ struct TTestYsonStructWithFieldInitializer
     }
 };
 
-TEST(TYsonStructTest, TestNestedWithFieldInitializer)
+TEST(TYsonStructTest, NestedWithFieldInitializer)
 {
     using TConfig = TTestYsonStructWithFieldInitializer;
     using TPtr = TIntrusivePtr<TConfig>;
@@ -1127,7 +1127,7 @@ struct TTestConfigWithManyFieldsFinalLite
 #undef DECLARE_FIELD
 #undef REGISTER_FIELD
 
-TEST(TYsonStructTest, TestIsSetWithManyFields)
+TEST(TYsonStructTest, IsSetWithManyFields)
 {
     // Test compact bitmap with >62 fields to require allocations.
 
@@ -1147,7 +1147,7 @@ TEST(TYsonStructTest, TestIsSetWithManyFields)
     EXPECT_FALSE(config->IsSet("field76"));
 }
 
-TEST(TYsonStructTest, TestIsSetWithManyFieldsLite)
+TEST(TYsonStructTest, IsSetWithManyFieldsLite)
 {
     // Test compact bitmap with >62 fields to require allocations.
 
@@ -1276,7 +1276,7 @@ TEST(TYsonStructTest, NewLiteInitedWithDefaults)
     EXPECT_EQ(config.Subconfig->MyInt, 100);
 }
 
-TEST(TYsonStructTest, TestConvertToLite)
+TEST(TYsonStructTest, ConvertToLite)
 {
     auto deserialized = ConvertTo<TTestLiteWithDefaults>(TYsonString(TStringBuf("{}")));
     EXPECT_EQ(deserialized.MyString, "y");
@@ -1302,7 +1302,7 @@ public:
     }
 };
 
-TEST(TYsonStructTest, TestLiteFieldTracking)
+TEST(TYsonStructTest, LiteFieldTracking)
 {
     TTestConfigLiteWithFieldTracking config;
     EXPECT_FALSE(config.IsSet("my_string"));
@@ -1313,7 +1313,7 @@ TEST(TYsonStructTest, TestLiteFieldTracking)
     EXPECT_FALSE(config.IsSet("nullable_int"));
 }
 
-TEST(TYsonStructTest, TestLiteFieldTrackingCopy)
+TEST(TYsonStructTest, LiteFieldTrackingCopy)
 {
     auto config1 = ConvertTo<TTestConfigLiteWithFieldTracking>(TYsonString(TStringBuf("{my_string=foo}")));
 
@@ -1329,7 +1329,7 @@ TEST(TYsonStructTest, TestLiteFieldTrackingCopy)
     EXPECT_FALSE(config3.IsSet("nullable_int"));
 }
 
-TEST(TYsonStructTest, TestLiteFieldTrackingMove)
+TEST(TYsonStructTest, LiteFieldTrackingMove)
 {
     auto config1 = ConvertTo<TTestConfigLiteWithFieldTracking>(TYsonString(TStringBuf("{my_string=foo}")));
 
@@ -1354,7 +1354,7 @@ TEST(TYsonStructTest, TestLiteFieldTrackingMove)
     EXPECT_FALSE(config2.IsSet("nullable_int"));
 }
 
-TEST(TYsonStructTest, TestLiteLoadToMovedFrom)
+TEST(TYsonStructTest, LiteLoadToMovedFrom)
 {
     auto config1 = ConvertTo<TTestConfigLiteWithFieldTracking>(TYsonString(TStringBuf("{my_string=foo}")));
 
@@ -2155,7 +2155,7 @@ public:
     }
 };
 
-TEST(TYsonStructTest, TestCustomDefaultsOfNestedStructsAreNotDiscardedOnDeserialize)
+TEST(TYsonStructTest, CustomDefaultsOfNestedStructsAreNotDiscardedOnDeserialize)
 {
     auto deserialized = ConvertTo<TIntrusivePtr<TYsonStructWithNestedStructsAndCustomDefaults>>(TYsonString(TStringBuf("{}")));
     EXPECT_EQ(deserialized->YsonStruct->IntValue, 10);
@@ -2181,7 +2181,7 @@ public:
     }
 };
 
-TEST(TYsonStructTest, TestPreprocessorsEffectsOnNestedStructsArePreservedOnDeserialize)
+TEST(TYsonStructTest, PreprocessorsEffectsOnNestedStructsArePreservedOnDeserialize)
 {
     auto deserialized = ConvertTo<TIntrusivePtr<TYsonStructWithNestedStructsAndPreprocessors>>(TYsonString(TStringBuf("{}")));
     EXPECT_EQ(deserialized->YsonStruct->IntValue, 10);
@@ -2225,7 +2225,7 @@ public:
     }
 };
 
-TEST(TYsonStructTest, TestHierarchiesWithCustomInitializationOfBaseParameters)
+TEST(TYsonStructTest, HierarchiesWithCustomInitializationOfBaseParameters)
 {
     {
         auto deserialized = ConvertTo<TIntrusivePtr<TDerivedWithCustomConfigure>>(TYsonString(TStringBuf("{}")));
@@ -2243,7 +2243,7 @@ TEST(TYsonStructTest, TestHierarchiesWithCustomInitializationOfBaseParameters)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TYsonStructTest, TestSimpleSerialization)
+TEST(TYsonStructTest, SimpleSerialization)
 {
     TBufferStream stream;
 
@@ -2286,7 +2286,7 @@ TEST(TYsonStructTest, TestSimpleSerialization)
     EXPECT_EQ(liteConfig.NullableInt, 42);
 }
 
-TEST(TYsonStructTest, TestComplexSerialization)
+TEST(TYsonStructTest, ComplexSerialization)
 {
     struct TComplexStruct
     {
@@ -2365,7 +2365,7 @@ struct TTestOmittingConfig
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TYsonStructTest, TestOmitting)
+TEST(TYsonStructTest, Omitting)
 {
     TBufferStream stream;
 
@@ -2424,7 +2424,7 @@ public:
     }
 };
 
-TEST(TYsonStructTest, TestOptionalNoInit)
+TEST(TYsonStructTest, OptionalNoInit)
 {
     TTestOptionalNoInit x;
     EXPECT_EQ(0, x.FieldWithInit);
@@ -3371,7 +3371,7 @@ struct TPolyDerived2
     }
 };
 
-TEST(TYsonStructTest, TestSlicing1)
+TEST(TYsonStructTest, Slicing1)
 {
     TIntrusivePtr<TPolyBase> sliced = New<TPolyDerived1>();
 
@@ -3390,7 +3390,7 @@ TEST(TYsonStructTest, TestSlicing1)
     EXPECT_EQ(concrete->Field1, 123);
 }
 
-TEST(TYsonStructTest, TestSlicing2)
+TEST(TYsonStructTest, Slicing2)
 {
     TIntrusivePtr<TPolyBase> sliced = New<TPolyBase>();
 
@@ -4033,7 +4033,7 @@ struct TPolyHolder
     }
 };
 
-TEST(TYsonStructTest, TestPolymorphicYsonStructSerializeEmpty)
+TEST(TYsonStructTest, PolymorphicYsonStructSerializeEmpty)
 {
     TPolyHolder holder;
 
@@ -4043,7 +4043,7 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructSerializeEmpty)
     EXPECT_THROW(Deserialize(holder, node->AsMap()), std::exception);
 }
 
-TEST(TYsonStructTest, TestPolymorphicYsonStructAsField)
+TEST(TYsonStructTest, PolymorphicYsonStructAsField)
 {
     TPolyHolder holder;
 
@@ -4746,7 +4746,7 @@ struct TTestYsonStructVisitor
     }
 };
 
-TEST(TestYsonStruct, Visitor)
+TEST(TYsonStructTest, Visitor)
 {
     std::vector<std::pair<std::string, bool>> visited;
     auto visitor = [&](const auto& context) {
@@ -4783,7 +4783,7 @@ TEST(TestYsonStruct, Visitor)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TestYsonStruct, MetaStructType)
+TEST(TYsonStructTest, MetaStructType)
 {
     EXPECT_EQ(
         TypeName(TYsonStructRegistry::Get()->GetMeta<TTestConfig>()->GetStructType()),

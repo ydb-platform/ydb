@@ -29,7 +29,7 @@ void ValidateComplexLogicalType(TLogicalTypePtr type)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TLogicalTypeTest, TestCastToV1Type)
+TEST(TLogicalTypeTest, CastToV1Type)
 {
     EXPECT_EQ(
         CastToV1Type(Int64()),
@@ -139,7 +139,7 @@ TEST(TLogicalTypeTest, DictValidationTest)
         Optional(String()))));
 }
 
-TEST(TLogicalTypeTest, TestDetag)
+TEST(TLogicalTypeTest, Detag)
 {
     EXPECT_EQ(
         *DetagLogicalType(
@@ -250,7 +250,7 @@ const std::vector<TLogicalTypePtr> ComplexTypeExampleList = {
     AggregateState(EAggregateFunction::Max, String()),
 };
 
-TEST(TLogicalTypeTest, TestAllTypesAreInExamples)
+TEST(TLogicalTypeTest, AllTypesAreInExamples)
 {
     auto allMetatypes = TEnumTraits<ELogicalMetatype>::GetDomainValues();
     std::set<ELogicalMetatype> actualMetatypes;
@@ -262,7 +262,7 @@ TEST(TLogicalTypeTest, TestAllTypesAreInExamples)
     EXPECT_EQ(actualMetatypes, std::set<ELogicalMetatype>(allMetatypes.begin(), allMetatypes.end()));
 }
 
-TEST(TLogicalTypeTest, TestAllExamplesHaveDifferentHash)
+TEST(TLogicalTypeTest, AllExamplesHaveDifferentHash)
 {
     std::map<int, TLogicalTypePtr> hashToType;
     auto hashFunction = THash<TLogicalType>();
@@ -281,7 +281,7 @@ TEST(TLogicalTypeTest, TestAllExamplesHaveDifferentHash)
     }
 }
 
-TEST(TLogicalTypeTest, TestAllExamplesAreNotEqual)
+TEST(TLogicalTypeTest, AllExamplesAreNotEqual)
 {
     // Hopefully our example list will never be so big that n^2 complexity is a problem.
     for (const auto& lhs : ComplexTypeExampleList) {
@@ -295,7 +295,7 @@ TEST(TLogicalTypeTest, TestAllExamplesAreNotEqual)
     }
 }
 
-TEST(TLogicalTypeTest, TestBadProtobufDeserialization)
+TEST(TLogicalTypeTest, BadProtobufDeserialization)
 {
     NProto::TLogicalType proto;
 
@@ -305,7 +305,7 @@ TEST(TLogicalTypeTest, TestBadProtobufDeserialization)
         "Cannot parse unknown logical type from proto");
 }
 
-TEST(TLogicalTypeTest, TestIsComparable) {
+TEST(TLogicalTypeTest, IsComparable) {
     EXPECT_TRUE(IsComparable(Optional(Optional(Int64()))));
 
     EXPECT_TRUE(IsComparable(List(Int64())));
@@ -340,7 +340,7 @@ TString ToTypeV3(const TLogicalTypePtr& logicalType)
     return CanonizeYsonString(ysonString.ToString());
 }
 
-class TLogicalTypeYson
+class TLogicalTypeYsonTest
     : public ::testing::TestWithParam<bool>
 {
 public:
@@ -360,12 +360,12 @@ public:
 
 INSTANTIATE_TEST_SUITE_P(
     ParseFromNode,
-    TLogicalTypeYson,
+    TLogicalTypeYsonTest,
     ::testing::Values(true));
 
 INSTANTIATE_TEST_SUITE_P(
     ParseFromCursor,
-    TLogicalTypeYson,
+    TLogicalTypeYsonTest,
     ::testing::Values(false));
 
 #define CHECK_TYPE_V3(type, expectedYson) \
@@ -374,7 +374,7 @@ INSTANTIATE_TEST_SUITE_P(
         EXPECT_EQ(*type, *FromTypeV3(expectedYson)); \
 } while(0)
 
-TEST_P(TLogicalTypeYson, TestTypeV3Yson)
+TEST_P(TLogicalTypeYsonTest, TypeV3Yson)
 {
     // Ill formed.
     EXPECT_THROW_THAT(FromTypeV3("{}"), ::testing::AnyOf(
@@ -633,7 +633,7 @@ class TLogicalTypeTestExamples
     : public ::testing::TestWithParam<TLogicalTypePtr>
 { };
 
-TEST_P(TLogicalTypeTestExamples, TestProtoSerialization)
+TEST_P(TLogicalTypeTestExamples, ProtoSerialization)
 {
     auto type = GetParam();
 
@@ -646,7 +646,7 @@ TEST_P(TLogicalTypeTestExamples, TestProtoSerialization)
     EXPECT_EQ(*type, *deserializedType);
 }
 
-TEST_P(TLogicalTypeTestExamples, TestYsonSerialization)
+TEST_P(TLogicalTypeTestExamples, YsonSerialization)
 {
     auto type = GetParam();
     auto yson = ConvertToYsonString(type);
@@ -736,7 +736,7 @@ std::vector<std::pair<std::string, TCombineTypeFunc>> CombineFunctions = {
     }
 };
 
-TEST(TLogicalTypeTest, TestAllTypesInCombineFunctions)
+TEST(TLogicalTypeTest, AllTypesInCombineFunctions)
 {
     const auto allMetatypes = TEnumTraits<ELogicalMetatype>::GetDomainValues();
     std::set<ELogicalMetatype> actualMetatypes;
@@ -759,7 +759,7 @@ INSTANTIATE_TEST_SUITE_P(
     TCombineLogicalMetatypeTests,
     ::testing::ValuesIn(CombineFunctions));
 
-TEST_P(TCombineLogicalMetatypeTests, TestValidateStruct)
+TEST_P(TCombineLogicalMetatypeTests, ValidateStruct)
 {
     const auto& [combineName, combineFunc] = GetParam();
     if (combineName.starts_with("aggregate_state")) {
@@ -796,7 +796,7 @@ TEST_P(TCombineLogicalMetatypeTests, TestValidateStruct)
     }
 }
 
-TEST_P(TCombineLogicalMetatypeTests, TestValidateAny)
+TEST_P(TCombineLogicalMetatypeTests, ValidateAny)
 {
     const auto& [combineName, combineFunc] = GetParam();
     if (combineName == "optional" || combineName == "dict-key" || combineName.starts_with("aggregate_state")) {
@@ -817,7 +817,7 @@ TEST_P(TCombineLogicalMetatypeTests, TestValidateAny)
     EXPECT_NO_THROW(ValidateComplexLogicalType(combineFunc(goodType)));
 }
 
-TEST_P(TCombineLogicalMetatypeTests, TestTrivialDetag)
+TEST_P(TCombineLogicalMetatypeTests, TrivialDetag)
 {
     const auto& [combineName, combineFunc] = GetParam();
     if (combineName == "tagged" || combineName.starts_with("aggregate_state")) {
@@ -833,7 +833,7 @@ TEST_P(TCombineLogicalMetatypeTests, TestTrivialDetag)
     EXPECT_EQ(detaggedType.Get(), combinedType.Get());
 }
 
-TEST_P(TCombineLogicalMetatypeTests, TestNonTrivialDetag)
+TEST_P(TCombineLogicalMetatypeTests, NonTrivialDetag)
 {
     const auto& [combineName, combineFunc] = GetParam();
     if (combineName == "tagged" || combineName.starts_with("aggregate_state")) {
@@ -908,7 +908,7 @@ INSTANTIATE_TEST_SUITE_P(
     TStructTypesValidationTest,
     ::testing::ValuesIn({ELogicalMetatype::Struct, ELogicalMetatype::VariantStruct}));
 
-TEST_P(TStructTypesValidationTest, TestFields)
+TEST_P(TStructTypesValidationTest, Fields)
 {
     EXPECT_NO_THROW(ValidateFields({}));
 
@@ -980,7 +980,7 @@ TEST_P(TStructTypesValidationTest, TestFields)
         "exceeds type depth limit");
 }
 
-TEST(TStructsValidationTest, TestRemovedFieldNames)
+TEST(TStructsValidationTest, RemovedFieldNames)
 {
     auto validateType = [] (
         std::vector<TStructField> fields,
@@ -1066,7 +1066,7 @@ std::vector<std::vector<std::string>> ParseData(TStringBuf data, int expectedFie
     return result;
 }
 
-TEST(TTestLogicalTypesWithDataTest, GoodTypes)
+TEST(TLogicalTypesWithDataTest, GoodTypes)
 {
     auto records = ParseData(NResource::Find("/types/good"), 2);
 
@@ -1097,7 +1097,7 @@ TEST(TTestLogicalTypesWithDataTest, GoodTypes)
     }
 }
 
-TEST(TTestLogicalTypesWithDataTest, BadTypes)
+TEST(TLogicalTypesWithDataTest, BadTypes)
 {
     auto records = ParseData(NResource::Find("/types/bad"), 3);
 

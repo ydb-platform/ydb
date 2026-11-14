@@ -91,7 +91,7 @@ void DoTestZero()
     DoTest(value, 10);
 }
 
-TEST(TCompressedIntegerVectorTest, TestZero)
+TEST(TCompressedIntegerVectorTest, Zero)
 {
     DoTestZero<ui8>();
     DoTestZero<ui16>();
@@ -106,7 +106,7 @@ void DoTestMax()
     DoTest(value, 10);
 }
 
-TEST(TCompressedIntegerVectorTest, TestMax)
+TEST(TCompressedIntegerVectorTest, Max)
 {
     DoTestMax<ui8>();
     DoTestMax<ui16>();
@@ -122,7 +122,7 @@ void DoTestPowerOfTwo()
     DoTest(value, 1000);
 }
 
-TEST(TCompressedIntegerVectorTest, TestPowerOfTwo)
+TEST(TCompressedIntegerVectorTest, PowerOfTwo)
 {
     DoTestPowerOfTwo<ui8>();
     DoTestPowerOfTwo<ui16>();
@@ -138,7 +138,7 @@ void DoTestOdd()
     DoTest(value, 1000);
 }
 
-TEST(TCompressedIntegerVectorTest, TestOdd)
+TEST(TCompressedIntegerVectorTest, Odd)
 {
     DoTestOdd<ui8>();
     DoTestOdd<ui16>();

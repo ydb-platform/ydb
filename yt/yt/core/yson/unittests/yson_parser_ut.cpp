@@ -752,7 +752,7 @@ TEST(TContextTest, ReaderKeepsDataFromPrevBuffers)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TParseYsonStringNodeTypeTest, Test)
+TEST(TParseYsonStringNodeTypeTest, ParseNodeType)
 {
     auto parseType = [] (TStringBuf buffer) {
         return ParseYsonStringNodeType(buffer).first;

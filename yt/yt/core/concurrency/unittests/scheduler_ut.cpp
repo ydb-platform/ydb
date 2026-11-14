@@ -649,7 +649,7 @@ TEST_F(TSchedulerTest, FiberUnwindOrder)
     EXPECT_FALSE(WaitForFast(f2).IsOK());
 }
 
-TEST_F(TSchedulerTest, TestWaitUntilSet)
+TEST_F(TSchedulerTest, WaitUntilSet)
 {
     auto p1 = NewPromise<void>();
     auto f1 = p1.ToFuture();

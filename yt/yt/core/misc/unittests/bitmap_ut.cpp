@@ -53,7 +53,7 @@ public:
     }
 };
 
-TEST_P(TCompactBitmapTest, TestBase)
+TEST_P(TCompactBitmapTest, Base)
 {
     auto [size, data] = GetParam();
 
@@ -61,7 +61,7 @@ TEST_P(TCompactBitmapTest, TestBase)
     ExpectBitmapEqualsSet(bitmap, size, data);
 }
 
-TEST_P(TCompactBitmapTest, TestCopy)
+TEST_P(TCompactBitmapTest, Copy)
 {
     auto [size, data] = GetParam();
 
@@ -99,7 +99,7 @@ TEST_P(TCompactBitmapTest, TestCopy)
     }
 }
 
-TEST_P(TCompactBitmapTest, TestMove)
+TEST_P(TCompactBitmapTest, Move)
 {
     auto [size, data] = GetParam();
 
@@ -176,7 +176,7 @@ public:
     }
 };
 
-TEST_P(TBitmapOutputTest, TestBase)
+TEST_P(TBitmapOutputTest, Base)
 {
     auto [capacity, data] = GetParam();
 
@@ -184,7 +184,7 @@ TEST_P(TBitmapOutputTest, TestBase)
     ExpectBitmapEqualsSet(bitmap, bitmap.GetBitSize(), data);
 }
 
-TEST_P(TBitmapOutputTest, TestAppend)
+TEST_P(TBitmapOutputTest, Append)
 {
     auto [capacity, data] = GetParam();
 

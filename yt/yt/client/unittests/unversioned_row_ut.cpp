@@ -19,7 +19,7 @@ using namespace NTableClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TUnversionedValueTest, TestConversionToYsonTokenWriter)
+TEST(TUnversionedValueTest, ConversionToYsonTokenWriter)
 {
     auto convert = [] (TUnversionedValue value) {
         TStringStream stream;

@@ -42,8 +42,24 @@ struct TOwnerRecord {
     TVector<TGateRecord> Gates;
 };
 
+// Single-threaded. Registered CBS queues and state are managed by the scheduler.
 class TScheduler {
+    friend struct TSchedulerTest;
+    TIntrusivePtr<TJobPool> JobPool = new TJobPool;
     TVector<TCbs> Cbs;
+    // Sorted indices preserve EDF ties and weighted fallback iteration order.
+    TVector<ui32> NonEmptyCbs;
+    ui32 ActiveRunningCount = 0;
+
+    static bool IsActiveRunning(ECbsState state) {
+        return state == CbsStateActive || state == CbsStateRunning;
+    }
+
+    void SetCbsState(TCbs& cbs, ECbsState state) {
+        ActiveRunningCount += ui32(IsActiveRunning(state));
+        ActiveRunningCount -= ui32(IsActiveRunning(cbs.State));
+        cbs.State = state;
+    }
     TNameTable NameTable;
     ui64 TotalWeight = 0;
     ui32 FirstEmptyCbs = 0;
@@ -64,17 +80,21 @@ class TScheduler {
 public:
     TScheduler();
     void SetIsBinLogEnabled(bool is_enabled);
+    // Returned pointers are invalidated by AddCbs. Only configuration (e.g. Weight)
+    // may be changed directly; use scheduler methods to change jobs and state.
     TCbs* GetCbs(ui8 ownerIdx, ui8 gateIdx);
+    // Registers an empty, idle CBS. Jobs must be submitted through AddJob.
     void AddCbs(ui8 ownerIdx, ui8 gateIdx, TCbs newCbs, ui64 timeNs);
     TIntrusivePtr<TJob> CreateJob();
     void AddJob(TCbs *cbs, TIntrusivePtr<TJob> &job, ui8 ownerIdx, ui8 gateIdx, ui64 timeNs);
     bool AddJob(TIntrusivePtr<TJob> &job, ui8 ownerIdx, ui8 gateIdx, ui64 timeNs);
     ui64 MakeNextJobId();
     void OnJobCostChange(TCbs *cbs, TIntrusivePtr<TJob> &job, ui64 timeNs, ui64 prevCost);
-    TIntrusivePtr<TJob> SelectJob(ui64 timeNs);
+    // Borrowed until CompleteJob finishes or scheduler/queue is destroyed.
+    TJob* SelectJob(ui64 timeNs);
     void UpdateTotalWeight();
     void EvaluateNextJob(ui64 cbsIdx, ui64 timeNs, bool doLogCbsUpdate);
-    void CompleteJob(ui64 timeNs, TIntrusivePtr<TJob> &job);
+    void CompleteJob(ui64 timeNs, TJob* job);
     void AddSchLogFrame(ui64 timeNs);
     void SchLogKeyframe(ui64 timeNs);
     void SchLogCbsKeyframeRecord(const TCbs &cbs);

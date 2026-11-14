@@ -527,6 +527,7 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpAlterSolomonVolume: return TxAlterSolomonVolume;
         case NKikimrSchemeOp::ESchemeOpDropLock: return TxDropLock;
         case NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexImplTable: return TxAlterTable;
+        case NKikimrSchemeOp::ESchemeOpRepairIndexShadowData: return TxAlterTable;
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable: return TxCreateTable;
         case NKikimrSchemeOp::ESchemeOpDropIndex: return TxInvalid;
         case NKikimrSchemeOp::ESchemeOpDropTableIndexAtMainTable: return TxDropTableIndexAtMainTable;

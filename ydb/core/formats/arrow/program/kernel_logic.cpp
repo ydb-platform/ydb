@@ -69,13 +69,13 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(
     if (jsonAcc->GetType() == IChunkedArray::EType::SubColumnsArray) {
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsArray>(jsonAcc);
         auto accessorResult = accJsonArray->GetPathAccessor(path, jsonAcc->GetRecordsCount());
-        AFL_VERIFY(accessorResult.IsSuccess());
+        YDB_LOG_VERIFY(accessorResult.IsSuccess());
         accessor = accessorResult.DetachResult();
     } else {
-        AFL_VERIFY(jsonAcc->GetType() == IChunkedArray::EType::SubColumnsPartialArray);
+        YDB_LOG_VERIFY(jsonAcc->GetType() == IChunkedArray::EType::SubColumnsPartialArray);
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(jsonAcc);
         auto accessorResult = accJsonArray->GetPathAccessor(path, jsonAcc->GetRecordsCount());
-        AFL_VERIFY(accessorResult.IsSuccess());
+        YDB_LOG_VERIFY(accessorResult.IsSuccess());
         accessor = accessorResult.DetachResult();
     }
 

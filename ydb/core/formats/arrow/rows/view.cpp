@@ -24,14 +24,16 @@ std::shared_ptr<arrow::RecordBatch> TSimpleRow::ToBatch() const {
 }
 
 std::partial_ordering TSimpleRow::ComparePartNotNull(const TSimpleRow& item, const ui32 columnsCount) const {
-    AFL_VERIFY(columnsCount <= GetColumnsCount());
-    AFL_VERIFY(columnsCount <= item.GetColumnsCount());
+    YDB_LOG_VERIFY(columnsCount <= GetColumnsCount());
+    YDB_LOG_VERIFY(columnsCount <= item.GetColumnsCount());
 #ifndef NDEBUG
     for (ui32 i = 0; i < columnsCount; ++i) {
-        AFL_VERIFY(Schema->field(i)->type()->Equals(item.Schema->field(i)->type()))("self", Schema->field(i)->ToString())(
-            "item", item.Schema->field(i)->ToString());
-        AFL_VERIFY(Schema->field(i)->name() == item.Schema->field(i)->name())("self", Schema->field(i)->ToString())(
-                                                 "item", item.Schema->field(i)->ToString());
+        YDB_LOG_VERIFY(Schema->field(i)->type()->Equals(item.Schema->field(i)->type()),
+            {"self", Schema->field(i)->ToString()},
+            {"item", item.Schema->field(i)->ToString()});
+        YDB_LOG_VERIFY(Schema->field(i)->name() == item.Schema->field(i)->name(),
+            {"self", Schema->field(i)->ToString()},
+            {"item", item.Schema->field(i)->ToString()});
     }
 #endif
     return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), *Schema, columnsCount).GetResult();
@@ -39,7 +41,7 @@ std::partial_ordering TSimpleRow::ComparePartNotNull(const TSimpleRow& item, con
 
 std::partial_ordering TSimpleRow::CompareNotNull(const TSimpleRow& item) const {
     AFL_VERIFY_DEBUG(Schema->Equals(*item.Schema))("rowSchema", Schema->ToString(true))("itemSchema", item.Schema->ToString(true));
-    AFL_VERIFY(GetColumnsCount() <= item.GetColumnsCount());
+    YDB_LOG_VERIFY(GetColumnsCount() <= item.GetColumnsCount());
     return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), *Schema).GetResult();
 }
 

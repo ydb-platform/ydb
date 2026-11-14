@@ -655,6 +655,7 @@ message TNodeInfo {
     optional uint64 ReceiveThroughput = 11;
     optional uint64 SendThroughput = 12;
     optional string PileName = 13;
+    optional bool ResponseTimeout = 14; // the node was asked (directly or through a proxy) and did not answer in time, so its real state is unknown
     optional float NetworkUtilization = 20; // Avg
     optional float NetworkUtilizationMin = 21;
     optional float NetworkUtilizationMax = 22;
@@ -858,6 +859,8 @@ message TEvViewerRequest {
 
 message TEvViewerResponse {
     TNodeLocation LocationResponded = 2;
+    TNodeLocation LocationTimedOut = 3; // nodes that did not answer before the request timeout
+    uint32 AnsweredRequest = 4; // the field number of TEvViewerRequest.Request this is the answer to; set even when there is no data for Response
     oneof Response {
         NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
         NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;

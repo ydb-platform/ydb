@@ -113,6 +113,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvTabletStateResponse>> TabletStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> PeersStateResponse;
     std::unordered_map<TNodeId, std::unordered_set<TNodeId>> SystemViewerRequest;
+    std::unordered_set<TNodeId> OffloadedTimedOutNodes; // the nodes a proxy was still waiting for when it answered the request about the system state with no data at all
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> SystemViewerResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> VDiskViewerResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> PDiskViewerResponse;
@@ -229,6 +230,8 @@ class TJsonNodes : public TViewerPipeClient {
         bool Problems = false;
         NKikimrWhiteboard::TNodeStateInfo NetworkStateInfo;
         bool Disconnected = false;
+        bool ResponseTimeout = false; // the node was asked and did not answer in time, so its real state is unknown
+        bool HasSystemStateData = false; // the system state of the node was received through at least one response
         bool HasDisks = false;
         bool HasPDiskWhiteboardResponse = false;
         bool GotDatabaseFromDatabaseBoardInfo = false;
@@ -796,6 +799,8 @@ class TJsonNodes : public TViewerPipeClient {
             SystemState.MergeFrom(systemState);
             // we received valid data, so the node should not be considered disconnected
             Disconnected = false;
+            ResponseTimeout = false;
+            HasSystemStateData = true;
             Problems = false;
             Cleanup();
             CalcDatabase();
@@ -928,6 +933,7 @@ class TJsonNodes : public TViewerPipeClient {
     bool NoDC = false;
     std::vector<TString> Problems;
     TString InvalidParamError;
+    static inline const TString TimeoutError = "Timeout";
 
     void AddProblem(const TString& problem) {
         for (const auto& p : Problems) {
@@ -1489,6 +1495,12 @@ public:
         return nullptr;
     }
 
+    void AddStorageFilterNotAppliedProblem() {
+        // The nodes of a storage pool or a group are known only from BSC data. Without it the filter
+        // is dropped and the nodes are returned unfiltered, so the client has to be told about that.
+        AddProblem("filter-not-applied");
+    }
+
     void SetNodeDisconnected(TNodeId nodeId) {
         if (TNode* node = FindNode(nodeId)) {
             node->DisconnectNode();
@@ -1496,6 +1508,22 @@ public:
                 node->RemapDisks(IncludeDDisks);
             }
         }
+    }
+
+    // A node that did not answer in time is not necessarily down, so the client is told that
+    // its state is unknown. Nothing else about the node is changed here. The data of a node can
+    // arrive through another response (a retry, another proxy), and then there is nothing to report.
+    void SetNodeResponseTimeout(TNodeId nodeId) {
+        if (TNode* node = FindNode(nodeId)) {
+            if (!node->HasSystemStateData) {
+                node->ResponseTimeout = true;
+            }
+        }
+    }
+
+    template<typename TResponse>
+    static bool IsTimeoutError(const TResponse& response) {
+        return response.IsError() && response.GetError() == TimeoutError;
     }
 
     bool HasPendingFilters() const {
@@ -2464,6 +2492,9 @@ public:
                 FilterStorageStage = EFilterStorageStage::Groups;
             } else {
                 AddProblem("bsc-storage-pools-no-data");
+                if (!FilterStoragePools.empty()) {
+                    AddStorageFilterNotAppliedProblem();
+                }
                 FilterStorageStage = EFilterStorageStage::None;
             }
             StoragePoolsResponse.reset();
@@ -2481,6 +2512,7 @@ public:
                 FilterStorageStage = EFilterStorageStage::VSlots;
             } else {
                 AddProblem("bsc-storage-groups-no-data");
+                AddStorageFilterNotAppliedProblem(); // this stage is reached only with a storage pool filter
                 FilterStorageStage = EFilterStorageStage::None;
             }
         }
@@ -2513,6 +2545,9 @@ public:
                 FieldsAvailable.set(+ENodeFields::HasDisks);
             } else {
                 AddProblem("bsc-storage-slots-no-data");
+                if (!FilterGroupIds.empty()) {
+                    AddStorageFilterNotAppliedProblem();
+                }
             }
             FilterStorageStage = EFilterStorageStage::None;
             ApplyEverything();
@@ -2849,6 +2884,10 @@ public:
             TInstant now = TInstant::Now();
             bool hasMemoryDetailed = false;
             std::unordered_set<TNodeId> removeNodes;
+            // The nodes that were asked, directly or through a proxy, and did not answer before the timeout.
+            // They are marked after all the responses are merged: the data of a node can arrive through
+            // another response, and the result must not depend on the order the responses are processed in.
+            std::unordered_set<TNodeId> timedOutNodes;
             for (const auto& [responseNodeId, response] : SystemViewerResponse) {
                 if (response.IsOk()) {
                     const auto& systemResponse(response.Get()->Record.GetSystemResponse());
@@ -2873,8 +2912,21 @@ public:
                     for (auto nodeId : nodesWithoutData) {
                         SetNodeDisconnected(nodeId);
                     }
+                    for (TNodeId nodeId : response.Get()->Record.GetLocationTimedOut().GetNodeId()) {
+                        if (nodesWithoutData.count(nodeId) > 0) {
+                            timedOutNodes.insert(nodeId);
+                        }
+                    }
                 } else {
                     SetNodeDisconnected(responseNodeId);
+                    if (IsTimeoutError(response)) {
+                        // the proxy did not answer at all, so nothing is known about any node of its batch
+                        timedOutNodes.insert(responseNodeId);
+                        auto itRequest = SystemViewerRequest.find(responseNodeId);
+                        if (itRequest != SystemViewerRequest.end()) {
+                            timedOutNodes.insert(itRequest->second.begin(), itRequest->second.end());
+                        }
+                    }
                 }
             }
             for (const auto& [nodeId, response] : SystemStateResponse) {
@@ -2897,7 +2949,15 @@ public:
                     }
                 } else {
                     SetNodeDisconnected(nodeId);
+                    if (IsTimeoutError(response)) {
+                        timedOutNodes.insert(nodeId);
+                    }
                 }
+            }
+            // the nodes from the proxy replies that had no data to process above
+            timedOutNodes.insert(OffloadedTimedOutNodes.begin(), OffloadedTimedOutNodes.end());
+            for (TNodeId nodeId : timedOutNodes) {
+                SetNodeResponseTimeout(nodeId);
             }
             if (!removeNodes.empty()) {
                 NodeView.erase(std::remove_if(NodeView.begin(), NodeView.end(), [&removeNodes](const TNode* node) { return removeNodes.count(node->GetNodeId()) > 0; }), NodeView.end());
@@ -3213,67 +3273,46 @@ public:
             default:
                 break;
         }
+        // A proxy answers without any payload when none of the nodes it asked has answered. Such a reply is
+        // handled as a wrong one below and the batch is asked again when it still can be, but the nodes
+        // the proxy was still waiting for at its timeout are kept: without a retry nothing else tells about them.
+        // Only the reply to the request about the system state counts: ResponseTimeout is about that request,
+        // and the same reply to the request about tablets, disks or peers tells nothing about it.
+        if (ev->Get()->Record.GetAnsweredRequest() == static_cast<ui32>(NKikimrViewer::TEvViewerRequest::kSystemRequest)) {
+            for (TNodeId timedOutNodeId : ev->Get()->Record.GetLocationTimedOut().GetNodeId()) {
+                OffloadedTimedOutNodes.insert(timedOutNodeId);
+            }
+        }
         TString error("WrongResponse");
-        {
-            auto itSystemViewerResponse = SystemViewerResponse.find(nodeId);
-            if (itSystemViewerResponse != SystemViewerResponse.end()) {
-                if (itSystemViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
+        // A proxy answers every request with a reply of its own, and such a reply names its request. While
+        // the batch is kept, it is asked again as a whole, so every pending request to this proxy is finished
+        // with it: a later answer of the proxy would list the same tablets and disks twice. Once the batch
+        // is released by an answer with data, nothing is asked again, and only the named request is finished:
+        // the others are still to be answered, and the reply about the system state is the only one that
+        // tells which nodes the proxy did not wait for. A proxy of an older version does not name the request,
+        // and all its pending requests are finished, as before.
+        if (NodeBatches.count(nodeId) == 0) {
+            switch (ev->Get()->Record.GetAnsweredRequest()) {
+                case NKikimrViewer::TEvViewerRequest::kSystemRequest:
+                    FailViewerRequest(SystemViewerResponse, nodeId, error);
+                    return;
+                case NKikimrViewer::TEvViewerRequest::kTabletRequest:
+                    FailViewerRequest(TabletViewerResponse, nodeId, error);
+                    return;
+                case NKikimrViewer::TEvViewerRequest::kPDiskRequest:
+                    FailViewerRequest(PDiskViewerResponse, nodeId, error);
+                    return;
+                case NKikimrViewer::TEvViewerRequest::kVDiskRequest:
+                    FailViewerRequest(VDiskViewerResponse, nodeId, error);
+                    return;
+                case NKikimrViewer::TEvViewerRequest::kNodeRequest:
+                    FailViewerRequest(PeersViewerResponse, nodeId, error);
+                    return;
+                default:
+                    break;
             }
         }
-        {
-            auto itTabletViewerResponse = TabletViewerResponse.find(nodeId);
-            if (itTabletViewerResponse != TabletViewerResponse.end()) {
-                if (itTabletViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itPDiskViewerResponse = PDiskViewerResponse.find(nodeId);
-            if (itPDiskViewerResponse != PDiskViewerResponse.end()) {
-                if (itPDiskViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itVDiskViewerResponse = VDiskViewerResponse.find(nodeId);
-            if (itVDiskViewerResponse != VDiskViewerResponse.end()) {
-                if (itVDiskViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itPeersViewerResponse = PeersViewerResponse.find(nodeId);
-            if (itPeersViewerResponse != PeersViewerResponse.end()) {
-                if (itPeersViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
+        FailViewerRequestsForNode(nodeId, error);
     }
 
     void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
@@ -3304,67 +3343,27 @@ public:
         }
     }
 
+    using TViewerResponses = std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>>;
+
+    void FailViewerRequest(TViewerResponses& responses, TNodeId nodeId, const TString& error) {
+        auto itResponse = responses.find(nodeId);
+        if (itResponse != responses.end()) {
+            if (itResponse->second.Error(error)) {
+                if (NodeBatches.count(nodeId)) {
+                    SendWhiteboardRequest(NodeBatches[nodeId]);
+                    NodeBatches.erase(nodeId);
+                }
+                WhiteboardRequestDone();
+            }
+        }
+    }
+
     void FailViewerRequestsForNode(TNodeId nodeId, const TString& error) {
-        {
-            auto itSystemViewerResponse = SystemViewerResponse.find(nodeId);
-            if (itSystemViewerResponse != SystemViewerResponse.end()) {
-                if (itSystemViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itTabletViewerResponse = TabletViewerResponse.find(nodeId);
-            if (itTabletViewerResponse != TabletViewerResponse.end()) {
-                if (itTabletViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itPDiskViewerResponse = PDiskViewerResponse.find(nodeId);
-            if (itPDiskViewerResponse != PDiskViewerResponse.end()) {
-                if (itPDiskViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itVDiskViewerResponse = VDiskViewerResponse.find(nodeId);
-            if (itVDiskViewerResponse != VDiskViewerResponse.end()) {
-                if (itVDiskViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
-        {
-            auto itPeersViewerResponse = PeersViewerResponse.find(nodeId);
-            if (itPeersViewerResponse != PeersViewerResponse.end()) {
-                if (itPeersViewerResponse->second.Error(error)) {
-                    if (NodeBatches.count(nodeId)) {
-                        SendWhiteboardRequest(NodeBatches[nodeId]);
-                        NodeBatches.erase(nodeId);
-                    }
-                    WhiteboardRequestDone();
-                }
-            }
-        }
+        FailViewerRequest(SystemViewerResponse, nodeId, error);
+        FailViewerRequest(TabletViewerResponse, nodeId, error);
+        FailViewerRequest(PDiskViewerResponse, nodeId, error);
+        FailViewerRequest(VDiskViewerResponse, nodeId, error);
+        FailViewerRequest(PeersViewerResponse, nodeId, error);
     }
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
@@ -3414,28 +3413,24 @@ public:
         FailViewerRequestsForNode(nodeId, error);
     }
 
-    bool OnBscError(const TString& error) {
+    // Fails the pending BSC requests and adds the reason of the failure to Problems. The reply can be sent
+    // from inside this call (when nothing else is awaited), so the reason is added before a failed request
+    // is processed, not after the call. The requests are listed only here: one that is added to the list
+    // later can not lose the reason.
+    bool OnBscError(const TString& error, const TString& problem) {
         bool result = false;
-        if (StoragePoolsResponse && StoragePoolsResponse->Error(error)) {
-            ProcessResponses();
-            RequestDone();
-            result = true;
-        }
-        if (GroupsResponse && GroupsResponse->Error(error)) {
-            ProcessResponses();
-            RequestDone();
-            result = true;
-        }
-        if (VSlotsResponse && VSlotsResponse->Error(error)) {
-            ProcessResponses();
-            RequestDone();
-            result = true;
-        }
-        if (PDisksResponse && PDisksResponse->Error(error)) {
-            ProcessResponses();
-            RequestDone();
-            result = true;
-        }
+        auto fail = [&](auto& response) {
+            if (response && response->Error(error)) {
+                AddProblem(problem);
+                ProcessResponses();
+                RequestDone();
+                result = true;
+            }
+        };
+        fail(StoragePoolsResponse);
+        fail(GroupsResponse);
+        fail(VSlotsResponse);
+        fail(PDisksResponse);
         return result;
     }
 
@@ -3452,9 +3447,7 @@ public:
                 }
             }
             if (ev->Get()->TabletId == GetBSControllerId()) {
-                if (OnBscError(error)) {
-                    AddProblem("bsc-error");
-                }
+                OnBscError(error, "bsc-error");
             }
             FailPipeConnect(ev->Get()->TabletId);
         }
@@ -3462,7 +3455,7 @@ public:
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
         CurrentTimeoutState = static_cast<ETimeoutTag>(ev->Get()->Tag);
-        TString error = "Timeout";
+        TString error = TimeoutError;
         if (ev->Get()->Tag == TimeoutTablets) {
             if (NodesInfoResponse && NodesInfoResponse->Error(error)) {
                 ProcessResponses();
@@ -3484,8 +3477,7 @@ public:
                 ProcessResponses();
                 RequestDone();
             }
-            if (OnBscError(error)) {
-                AddProblem("bsc-timeout");
+            if (OnBscError(error, "bsc-timeout")) {
                 FailPipeConnect(GetBSControllerId());
             }
             for (auto& [hiveId, response] : HiveNodeStats) {
@@ -3600,9 +3592,33 @@ public:
         }
     }
 
+    void AddNotAppliedProblems() {
+        // An empty list can be neither unfiltered nor unsorted. It is also what is returned when the information
+        // about the database is not available (no-database-info), and "not applied" would only mislead there.
+        if (NodeView.empty()) {
+            return;
+        }
+        // a flag is still set here when the requested operation could not be applied, usually because
+        // the data it needs was not received, so the response is a page of unfiltered / ungrouped / unsorted data
+        //
+        // NeedFilter does not cover the pre-filters (the database, the role of the peers, the storage pools,
+        // groups and disks): while one of them is pending, ApplyFilter() returns before the other filters
+        // and the nodes are returned as they are
+        if (NeedFilter || !PreFilterDone() || FilterStorageStage != EFilterStorageStage::None) {
+            AddProblem("filter-not-applied");
+        }
+        if (NeedGroup) {
+            AddProblem("group-not-applied");
+        }
+        if (NeedSort) {
+            AddProblem("sort-not-applied");
+        }
+    }
+
     void ReplyAndPassAway() override {
         AddEvent("ReplyAndPassAway");
         ApplyEverything();
+        AddNotAppliedProblems();
         ApplyLimitForced(); // in case we had a problem and don't want to return too much data
         NKikimrViewer::TNodesInfo json;
         for (const auto& batch : OriginalNodeBatches) {
@@ -3664,6 +3680,9 @@ public:
                 }
                 if (node->Disconnected) {
                     jsonNode.SetDisconnected(node->Disconnected);
+                }
+                if (node->ResponseTimeout) {
+                    jsonNode.SetResponseTimeout(true);
                 }
                 if (node->CpuUsage && FieldsRequested.test(+ENodeFields::CPU)) {
                     jsonNode.SetCpuUsage(node->CpuUsage);

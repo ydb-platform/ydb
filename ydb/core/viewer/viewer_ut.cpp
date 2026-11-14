@@ -4250,6 +4250,356 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckStorageGroupsStateInfoFieldsRequired(true, true);
     }
 
+    bool HasProblem(const NJson::TJsonValue& json, TStringBuf problem) {
+        for (const auto& item : json["Problems"].GetArray()) {
+            if (item.GetString() == problem) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Two groups the way /storage/groups gets them from the whiteboard of a node when BSC is not used
+    void SetWhiteboardGroupsForTest(TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev, TNodeId nodeId) {
+        auto& record = (*ev)->Get()->Record;
+        record.ClearBSGroupStateInfo();
+        for (ui32 id : {1, 2}) {
+            auto* group = record.AddBSGroupStateInfo();
+            group->SetGroupID(id);
+            group->SetGroupGeneration(1);
+            group->SetErasureSpecies("mirror-3-dc");
+            group->SetStoragePoolName("whiteboard-pool");
+            group->AddVDiskNodeIds(nodeId);
+            for (ui32 slot = 0; slot < 5; ++slot) {
+                auto* disk = group->AddVDiskIds();
+                disk->SetGroupID(id);
+                disk->SetGroupGeneration(1);
+                disk->SetRing(slot < 3 ? 0 : (slot == 3 ? 2 : 1));
+                disk->SetDomain(slot < 3 ? slot : 0);
+                disk->SetVDisk(0);
+            }
+        }
+    }
+
+    // The disks of the groups from SetWhiteboardGroupsForTest
+    void SetWhiteboardVDisksForTest(TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev) {
+        auto& record = (*ev)->Get()->Record;
+        record.ClearVDiskStateInfo();
+        for (ui32 id : {1, 2}) {
+            for (ui32 slot = 0; slot < 5; ++slot) {
+                auto* disk = record.AddVDiskStateInfo();
+                disk->MutableVDiskId()->SetGroupID(id);
+                disk->MutableVDiskId()->SetGroupGeneration(1);
+                disk->MutableVDiskId()->SetRing(slot < 3 ? 0 : (slot == 3 ? 2 : 1));
+                disk->MutableVDiskId()->SetDomain(slot < 3 ? slot : 0);
+                disk->MutableVDiskId()->SetVDisk(0);
+                disk->SetPDiskId(id);
+                disk->SetVDiskSlotId(slot + 1);
+                disk->SetVDiskState(EVDiskState::OK);
+                disk->SetReplicated(true);
+            }
+        }
+    }
+
+    enum class EStorageGroupsDisconnect {
+        FallbackGroupsRequest, // BSC is not used, the node is lost before it reports its groups
+        FallbackDisksRequest, // BSC is not used, the node is lost before it reports its disks
+        ControllerDisksRequest, // BSC data is available, the node is lost before it reports its disks
+    };
+
+    void CheckStorageGroupsNodeDisconnect(EStorageGroupsDisconnect disconnectCase) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TNodeId nodeId = runtime.GetNodeId(0);
+        const bool fallback = disconnectCase != EStorageGroupsDisconnect::ControllerDisksRequest;
+        const bool disconnectOnGroups = disconnectCase == EStorageGroupsDisconnect::FallbackGroupsRequest;
+        ui32 disconnects = 0;
+
+        // The node "disconnects" instead of answering: its whiteboard request is lost and the handler
+        // gets the event that interconnect sends to the subscribers of a closed session.
+        auto disconnectNode = [&](TAutoPtr<IEventHandle>& ev) {
+            ++disconnects;
+            runtime.Send(new IEventHandle(
+                ev->Sender,
+                ev->Recipient,
+                new TEvInterconnect::TEvNodeDisconnected(nodeId),
+                0,
+                0));
+            return TTestActorRuntime::EEventAction::DROP;
+        };
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    record.ClearEntries();
+                    auto* group = record.AddEntries();
+                    group->MutableKey()->SetGroupId(0);
+                    group->MutableInfo()->SetGeneration(1);
+                    group->MutableInfo()->SetErasureSpeciesV2("none");
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    record.ClearEntries();
+                    for (ui32 i = 0; i < 5; ++i) {
+                        AddSysViewVDisk(x, nodeId, 1, i + 1, "READY");
+                        record.MutableEntries(i)->MutableInfo()->SetVDisk(i);
+                    }
+                    break;
+                }
+                case TEvWhiteboard::EvBSGroupStateRequest: {
+                    if (disconnectOnGroups) {
+                        return disconnectNode(ev);
+                    }
+                    break;
+                }
+                case TEvWhiteboard::EvBSGroupStateResponse: {
+                    SetWhiteboardGroupsForTest(reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev), nodeId);
+                    break;
+                }
+                case TEvWhiteboard::EvVDiskStateRequest:
+                case TEvWhiteboard::EvPDiskStateRequest: {
+                    if (!disconnectOnGroups) {
+                        return disconnectNode(ev);
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const TActorId sender = runtime.AllocateEdgeActor();
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /storage/groups?" << (fallback ? "whiteboard_only=true" : "fields_required=VDisk,Read")
+                << " HTTP/1.1\r\n\r\n", endpoint, {});
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response->Response->Body, &json, true);
+        const TString context = NJson::WriteJson(json, false);
+
+        UNIT_ASSERT_C(disconnects > 0, context);
+        // groups are requested from whiteboard only without BSC, so the groups of the lost node are missing
+        UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "wb-incomplete-groups"), disconnectOnGroups, context);
+        // with BSC data the disks of the lost node are still listed from BSC, so nothing is reported there
+        UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "wb-incomplete-disks"),
+            disconnectCase == EStorageGroupsDisconnect::FallbackDisksRequest, context);
+        if (!disconnectOnGroups) {
+            // the groups themselves were received before the node was lost
+            UNIT_ASSERT_VALUES_EQUAL_C(json["StorageGroups"].GetArray().size(), fallback ? 2 : 1, context);
+        }
+    }
+
+    Y_UNIT_TEST(StorageGroupsReportsNodeLostBeforeGroupsInWhiteboardFallback) {
+        CheckStorageGroupsNodeDisconnect(EStorageGroupsDisconnect::FallbackGroupsRequest);
+    }
+
+    Y_UNIT_TEST(StorageGroupsReportsNodeLostBeforeDisksInWhiteboardFallback) {
+        CheckStorageGroupsNodeDisconnect(EStorageGroupsDisconnect::FallbackDisksRequest);
+    }
+
+    Y_UNIT_TEST(StorageGroupsKeepsQuietAboutNodeLostWithControllerData) {
+        CheckStorageGroupsNodeDisconnect(EStorageGroupsDisconnect::ControllerDisksRequest);
+    }
+
+    void CheckStorageGroupsNotAppliedCase(TTestActorRuntime& runtime, const TString& query,
+                                          bool needFilter, bool needGroup, bool needSort) {
+        const TActorId sender = runtime.AllocateEdgeActor();
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /storage/groups?whiteboard_only=true" << query << " HTTP/1.1\r\n\r\n", endpoint, {});
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response->Response->Body, &json, true);
+        const TString context = TStringBuilder() << query << ": " << NJson::WriteJson(json, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["NeedFilter"].GetBoolean(), needFilter, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["NeedGroup"].GetBoolean(), needGroup, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["NeedSort"].GetBoolean(), needSort, context);
+        // every operation that could not be applied is also named in Problems
+        UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "filter-not-applied"), needFilter, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "group-not-applied"), needGroup, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "sort-not-applied"), needSort, context);
+    }
+
+    Y_UNIT_TEST(StorageGroupsReportsNotAppliedOperations) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TNodeId nodeId = runtime.GetNodeId(0);
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateResponse) {
+                SetWhiteboardGroupsForTest(reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev), nodeId);
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse) {
+                SetWhiteboardVDisksForTest(reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev));
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // Without BSC the groups come from whiteboard, which knows the pool name of a group
+        // but not the kind of the pool: an operation on Kind can not be applied.
+        CheckStorageGroupsNotAppliedCase(runtime, "&filter_group_by=Kind&filter_group=ssd", true, false, false);
+        CheckStorageGroupsNotAppliedCase(runtime, "&group=Kind", false, true, false);
+        CheckStorageGroupsNotAppliedCase(runtime, "&sort=Kind", false, false, true);
+        // The same operations on the fields whiteboard does provide are applied and nothing is reported.
+        CheckStorageGroupsNotAppliedCase(runtime, "&filter_group_by=PoolName&filter_group=whiteboard-pool", false, false, false);
+        CheckStorageGroupsNotAppliedCase(runtime, "&group=PoolName", false, false, false);
+        CheckStorageGroupsNotAppliedCase(runtime, "&sort=GroupId", false, false, false);
+    }
+
+    // An empty list can be neither unfiltered nor ungrouped nor unsorted. The flags of the operations stay set,
+    // but none of them is reported as not applied, the same as in /viewer/nodes.
+    Y_UNIT_TEST(StorageGroupsReportsNoNotAppliedOperationsForEmptyList) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            // the whiteboard, the only source of the groups here, knows none of them
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateResponse) {
+                auto* event = reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                (*event)->Get()->Record.ClearBSGroupStateInfo();
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse) {
+                auto* event = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                (*event)->Get()->Record.ClearVDiskStateInfo();
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // the operations on Kind can not be applied without BSC, see StorageGroupsReportsNotAppliedOperations
+        for (const TString& query : {TString("&filter_group_by=Kind&filter_group=ssd"), TString("&group=Kind"), TString("&sort=Kind")}) {
+            const TActorId sender = runtime.AllocateEdgeActor();
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /storage/groups?whiteboard_only=true" << query << " HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            const TString context = TStringBuilder() << query << ": " << response->Response->Body;
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(response->Response->Body, &json), context);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["TotalGroups"].GetUIntegerRobust(), 0, context);
+            UNIT_ASSERT_C(json["NeedFilter"].GetBoolean() || json["NeedGroup"].GetBoolean() || json["NeedSort"].GetBoolean(), context);
+            UNIT_ASSERT_C(!HasProblem(json, "filter-not-applied"), context);
+            UNIT_ASSERT_C(!HasProblem(json, "group-not-applied"), context);
+            UNIT_ASSERT_C(!HasProblem(json, "sort-not-applied"), context);
+        }
+    }
+
+    // The groups of a database are the groups of its storage pools, and the pools are known from the description
+    // of the database. Without the description the groups of the whole cluster are returned, and the reply says so.
+    Y_UNIT_TEST(StorageGroupsReportsDatabaseWithoutDescription) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TNodeId nodeId = runtime.GetNodeId(0);
+        bool descriptionAvailable = true;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateResponse) {
+                auto* event = reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                SetWhiteboardGroupsForTest(event, nodeId);
+                // the second group belongs to a pool of another database
+                (*event)->Get()->Record.MutableBSGroupStateInfo(1)->SetStoragePoolName("other-pool");
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse) {
+                SetWhiteboardVDisksForTest(reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev));
+            } else if (ev->GetTypeRewrite() == TEvStateStorage::EvBoardInfo) {
+                // A request with a database first resolves the endpoints board of the database and is
+                // rejected when the board is not available, which it is not for the root in this test.
+                // The status of the event is constant, so the event is replaced with an available one.
+                using EStatus = TEvStateStorage::TEvBoardInfo::EStatus;
+                const auto* info = ev->Get<TEvStateStorage::TEvBoardInfo>();
+                if (info->Path == "gpc+/Root" && info->Status != EStatus::Ok) {
+                    auto available = std::make_unique<TEvStateStorage::TEvBoardInfo>(EStatus::Ok, info->Path);
+                    available->InfoEntries = info->InfoEntries;
+                    ev.Reset(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender, available.release(),
+                        ev->Flags, ev->Cookie));
+                }
+            } else if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySetResult) {
+                auto* event = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                auto& resultSet = (*event)->Get()->Request->ResultSet;
+                if (!resultSet.empty() && CanonizePath(resultSet.front().Path) == "/Root") {
+                    TSchemeCacheNavigate::TEntry& entry(resultSet.front());
+                    if (descriptionAvailable) {
+                        // the database owns the pool of the first group only
+                        auto description = MakeIntrusive<TSchemeCacheNavigate::TDomainDescription>();
+                        if (entry.DomainDescription) {
+                            description->Kind = entry.DomainDescription->Kind;
+                            description->Description = entry.DomainDescription->Description;
+                        }
+                        description->Description.ClearStoragePools();
+                        description->Description.AddStoragePools()->SetName("whiteboard-pool");
+                        entry.DomainDescription = description;
+                    } else {
+                        // the database is resolved, but nothing is known about its storage pools
+                        entry.DomainDescription = TIntrusiveConstPtr<TSchemeCacheNavigate::TDomainDescription>();
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto checkRequest = [&](bool expectDatabaseInfo) {
+            const TActorId sender = runtime.AllocateEdgeActor();
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                "GET /storage/groups?whiteboard_only=true&database=/Root&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            const TString context = TStringBuilder() << (expectDatabaseInfo ? "with" : "without")
+                << " the description: " << response->Response->Body;
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(response->Response->Body, &json), context);
+            std::set<TString> groupIds;
+            for (const auto& group : json["StorageGroups"].GetArray()) {
+                groupIds.insert(group["GroupId"].GetStringRobust());
+            }
+            // with the description only the group of the pool of the database is returned,
+            // without it the group of the other pool is returned as well
+            const std::set<TString> expectedGroupIds = expectDatabaseInfo
+                ? std::set<TString>{"1"}
+                : std::set<TString>{"1", "2"};
+            UNIT_ASSERT_C(groupIds == expectedGroupIds, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["TotalGroups"].GetUIntegerRobust(), expectedGroupIds.size(), context);
+            UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "no-database-info"), !expectDatabaseInfo, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "filter-not-applied"), !expectDatabaseInfo, context);
+        };
+
+        checkRequest(true);
+        descriptionAvailable = false;
+        checkRequest(false);
+    }
+
     void CheckPDiskControllerStatuses(bool groups, bool whiteboardAvailable = true, TStringBuf pdisksSort = {}) {
         // Controller statuses are joined by NodeId/PDiskId even when GUIDs differ.
         // The response keeps the Whiteboard disk identity and the BSC statuses.
@@ -4894,7 +5244,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
     }
 
     void CheckNodesStorageFilterCase(TTestActorRuntime& runtime, size_t& vslotsResponses, bool vslotsAvailable,
-                                    const TString& query, const std::vector<TNodeId>& expectedNodeIds, bool expectVSlots) {
+                                    const TString& query, const std::vector<TNodeId>& expectedNodeIds, bool expectVSlots,
+                                    bool storageFilter = false) {
         vslotsResponses = 0;
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
@@ -4909,13 +5260,26 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const TString context = TStringBuilder() << query << ": " << result->Response->Body;
         UNIT_ASSERT_VALUES_EQUAL_C(vslotsResponses > 0, expectVSlots, context);
         bool hasVSlotsError = false;
+        bool hasBscTimeout = false;
+        bool hasFilterNotApplied = false;
+        bool hasGroupOrSortNotApplied = false;
         for (const auto& problem : json["Problems"].GetArray()) {
             hasVSlotsError |= problem.GetString() == "bsc-storage-slots-no-data";
+            hasBscTimeout |= problem.GetString() == "bsc-timeout";
+            hasFilterNotApplied |= problem.GetString() == "filter-not-applied";
+            hasGroupOrSortNotApplied |= problem.GetString() == "group-not-applied" || problem.GetString() == "sort-not-applied";
         }
         UNIT_ASSERT_VALUES_EQUAL_C(hasVSlotsError, expectVSlots && !vslotsAvailable, context);
+        // the reason is reported together with the missing data, even if the reply is sent while BSC requests are failed
+        UNIT_ASSERT_VALUES_EQUAL_C(hasBscTimeout, expectVSlots && !vslotsAvailable, context);
+        // a group or pool filter that could not be resolved to nodes must not be dropped silently
+        UNIT_ASSERT_VALUES_EQUAL_C(hasFilterNotApplied, storageFilter && !vslotsAvailable, context);
         UNIT_ASSERT_VALUES_EQUAL_C(json["TotalNodes"].GetString(), ToString(expectedNodeIds.size()), context);
         UNIT_ASSERT_VALUES_EQUAL_C(json["FoundNodes"].GetString(), ToString(expectedNodeIds.size()), context);
         UNIT_ASSERT_C(!json["NeedFilter"].GetBoolean(), context);
+        // the requested sorting is applied in every case, so it must not be reported as not applied
+        UNIT_ASSERT_C(!json["NeedSort"].GetBoolean(), context);
+        UNIT_ASSERT_C(!hasGroupOrSortNotApplied, context);
         const auto& nodes = json["Nodes"].GetArray();
         UNIT_ASSERT_VALUES_EQUAL_C(nodes.size(), expectedNodeIds.size(), context);
         for (size_t i = 0; i < nodes.size(); ++i) {
@@ -4991,10 +5355,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
             for (const TString& filter : {TString("&group_id=10"), TString("&pool=test-pool")}) {
                 // Without VSlots, keep the explicit node filter even when group membership is unavailable.
                 CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
-                    fields + filter, vslotsAvailable ? groupNodeIds : allNodeIds, true);
+                    fields + filter, vslotsAvailable ? groupNodeIds : allNodeIds, true, true);
                 CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
                     TStringBuilder() << fields << filter << "&node_id=" << firstNodeId << ',' << secondNodeId,
-                    vslotsAvailable ? groupNodeIds : selectedNodeIds, true);
+                    vslotsAvailable ? groupNodeIds : selectedNodeIds, true, true);
             }
         }
     }
@@ -5005,6 +5369,77 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(NodesPageKeepsNodeIdFilterWhenVSlotsUnavailable) {
         CheckNodesStorageFilter(false);
+    }
+
+    // type=storage keeps the nodes that have disks, and that is known only from the PDisks of BSC.
+    // Without them the filter can not be applied, and the sorting and the grouping wait for the filter.
+    void CheckNodesNotAppliedOperations(bool pdisksAvailable) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        size_t pdisksResponses = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetPDisksResponse) {
+                ++pdisksResponses;
+                if (!pdisksAvailable) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                (*x)->Get()->Record.ClearEntries();
+                AddSysViewPDisk(x, runtime.GetNodeId(0), 1);
+                AddSysViewPDisk(x, runtime.GetNodeId(1), 1);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        for (const bool group : {false, true}) {
+            pdisksResponses = 0;
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /viewer/json/nodes?type=storage&fields_required=NodeId&offload_merge=false"
+                    << "&use_cache=false&timeout=1000&limit=20&offset=0" << (group ? "&group=NodeId" : "&sort=NodeId")
+                    << " HTTP/1.1\r\n\r\n", endpoint, {});
+            const TActorId sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
+            const TString context = TStringBuilder() << (group ? "group: " : "sort: ") << NJson::WriteJson(json, false);
+
+            UNIT_ASSERT_C(pdisksResponses > 0, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["NeedFilter"].GetBoolean(), !pdisksAvailable, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["NeedGroup"].GetBoolean(), group && !pdisksAvailable, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["NeedSort"].GetBoolean(), !group && !pdisksAvailable, context);
+            // every operation that could not be applied is also named in Problems
+            UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "filter-not-applied"), !pdisksAvailable, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "group-not-applied"), group && !pdisksAvailable, context);
+            UNIT_ASSERT_VALUES_EQUAL_C(HasProblem(json, "sort-not-applied"), !group && !pdisksAvailable, context);
+            if (!group) {
+                const size_t nodes = json["Nodes"].GetArray().size();
+                if (pdisksAvailable) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(nodes, 2, context);
+                } else {
+                    // without the filter the nodes that have no disks are returned too
+                    UNIT_ASSERT_C(nodes > 2, context);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NodesPageReportsNotAppliedOperations) {
+        CheckNodesNotAppliedOperations(false);
+    }
+
+    Y_UNIT_TEST(NodesPageAppliesOperationsWithStorageData) {
+        CheckNodesNotAppliedOperations(true);
     }
 
     void TestNodesCpuSortWithMissingStats(bool offloadMerge) {
@@ -5184,6 +5619,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(json["Nodes"].GetArray().size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(json["Nodes"][1]["NodeId"].GetUInteger(), disconnectedNodeId);
             UNIT_ASSERT(json["Nodes"][1]["Disconnected"].GetBoolean());
+            // the node only failed to answer in time, so the client is told it is not a real disconnect
+            UNIT_ASSERT_C(json["Nodes"][1]["ResponseTimeout"].GetBoolean(), NJson::WriteJson(json, false));
+            UNIT_ASSERT_C(!json["Nodes"][0].Has("ResponseTimeout"), NJson::WriteJson(json, false));
+            UNIT_ASSERT_C(!json["Nodes"][2].Has("ResponseTimeout"), NJson::WriteJson(json, false));
         }
 
         const auto minimal = makeRequest("&alive=true&sort=NodeId");
@@ -5242,6 +5681,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(recovered["Nodes"].GetArray().size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(recovered["Nodes"][1]["NodeId"].GetUInteger(), disconnectedNodeId);
         UNIT_ASSERT(!recovered["Nodes"][1]["Disconnected"].GetBoolean());
+        UNIT_ASSERT(!recovered["Nodes"][1].Has("ResponseTimeout"));
 
         disconnectAll = true;
         const auto empty = makeRequest("&alive=true&group=SystemState");
@@ -5256,6 +5696,334 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(NodesPageAliveFilterOffloaded) {
         TestNodesAliveFilter(true);
+    }
+
+    // The nodes of one data center are asked through one proxy. When the whole answer of the proxy is lost,
+    // nothing is known about any node of its batch, not only about the proxy itself.
+    Y_UNIT_TEST(NodesPageReportsTimeoutOfOffloadedBatch) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        // TServer registers viewers by node index; offload requests address them by node ID.
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            runtime.RegisterService(MakeViewerID(runtime.GetNodeId(nodeIndex)), viewerId, nodeIndex);
+        }
+        bool dropOffloadedResponses = true;
+        size_t droppedResponses = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                // one data center, so all the nodes get into one batch with one proxy
+                SetNodesLocation(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev), "dc-1");
+            } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse
+                    && ev->Get<TEvViewer::TEvViewerResponse>()->Record.Response_case() == NKikimrViewer::TEvViewerResponse::ResponseCase::kSystemResponse) {
+                if (dropOffloadedResponses) {
+                    ++droppedResponses;
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto makeRequest = [&]() {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                "GET /viewer/json/nodes?type=static&fields_required=NodeId,SystemState&sort=NodeId"
+                "&offload_merge=true&offload_merge_attempts=1&timeout=1000&enums=true HTTP/1.1\r\n\r\n", endpoint, {});
+            TActorId sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
+            return json;
+        };
+
+        {
+            const auto json = makeRequest();
+            const TString context = NJson::WriteJson(json, false);
+            UNIT_ASSERT_C(droppedResponses > 0, context);
+            UNIT_ASSERT_C(HasProblem(json, "wb-incomplete"), context);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Nodes"].GetArray().size(), 3, context);
+            size_t disconnectedNodes = 0;
+            for (const auto& node : json["Nodes"].GetArray()) {
+                // no node of the batch has answered, and the client is told so about every one of them
+                UNIT_ASSERT_C(node["ResponseTimeout"].GetBoolean(), context);
+                disconnectedNodes += node["Disconnected"].GetBoolean() ? 1 : 0;
+            }
+            // the old marking is not extended: only the proxy itself is reported as disconnected
+            UNIT_ASSERT_C(disconnectedNodes <= 1, context);
+        }
+
+        dropOffloadedResponses = false;
+        {
+            const auto json = makeRequest();
+            const TString context = NJson::WriteJson(json, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Nodes"].GetArray().size(), 3, context);
+            for (const auto& node : json["Nodes"].GetArray()) {
+                UNIT_ASSERT_C(!node.Has("ResponseTimeout"), context);
+                UNIT_ASSERT_C(!node["Disconnected"].GetBoolean(), context);
+            }
+        }
+    }
+
+    // A proxy that got no answer from any node replies without a payload. Such a reply is taken for a wrong one
+    // and the batch is asked again, but only while it is still kept: an answer of the same proxy to another
+    // request (about tablets here) releases it. The nodes the proxy was waiting for are reported anyway.
+    Y_UNIT_TEST(NodesPageReportsTimeoutFromEmptyProxyReply) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        // TServer registers viewers by node index; offload requests address them by node ID.
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            runtime.RegisterService(MakeViewerID(runtime.GetNodeId(nodeIndex)), viewerId, nodeIndex);
+        }
+        size_t droppedSystemStates = 0;
+        size_t tabletProxyReplies = 0;
+        size_t emptyProxyReplies = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                // one data center, so all the nodes get into one batch with one proxy
+                SetNodesLocation(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev), "dc-1");
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvSystemStateResponse) {
+                // no node answers about its system state, so the proxy has nothing to put into its reply
+                ++droppedSystemStates;
+                return TTestActorRuntime::EEventAction::DROP;
+            } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse) {
+                switch (ev->Get<TEvViewer::TEvViewerResponse>()->Record.Response_case()) {
+                    case NKikimrViewer::TEvViewerResponse::ResponseCase::kTabletResponse:
+                        ++tabletProxyReplies;
+                        break;
+                    case NKikimrViewer::TEvViewerResponse::ResponseCase::RESPONSE_NOT_SET:
+                        ++emptyProxyReplies;
+                        break;
+                    default:
+                        break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/json/nodes?type=static&fields_required=NodeId,SystemState,Tablets&sort=NodeId"
+            "&offload_merge=true&offload_merge_attempts=1&timeout=1000&enums=true HTTP/1.1\r\n\r\n", endpoint, {});
+        TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const TString context = NJson::WriteJson(json, false);
+
+        // the scenario itself: the answer about tablets releases the batch, the answer about the system state is empty
+        UNIT_ASSERT_C(droppedSystemStates > 0, context);
+        UNIT_ASSERT_C(tabletProxyReplies > 0, context);
+        UNIT_ASSERT_C(emptyProxyReplies > 0, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["Nodes"].GetArray().size(), 3, context);
+        size_t disconnectedNodes = 0;
+        for (const auto& node : json["Nodes"].GetArray()) {
+            // no node has answered in time, and the client is told so about every one of them
+            UNIT_ASSERT_C(node["ResponseTimeout"].GetBoolean(), context);
+            disconnectedNodes += node["Disconnected"].GetBoolean() ? 1 : 0;
+        }
+        // the old marking is not extended: only the proxy itself is reported as disconnected
+        UNIT_ASSERT_C(disconnectedNodes <= 1, context);
+    }
+
+    // The same reply without a payload comes when no node has answered about its tablets. It tells nothing
+    // about the request for the system state, so it must not mark the nodes as not answered in time, even
+    // the ones that have no system state for another reason (here the proxy returns none of it).
+    Y_UNIT_TEST(NodesPageIgnoresTimeoutOfOtherProxyRequests) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        // TServer registers viewers by node index; offload requests address them by node ID.
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            runtime.RegisterService(MakeViewerID(runtime.GetNodeId(nodeIndex)), viewerId, nodeIndex);
+        }
+        size_t droppedTabletStates = 0;
+        size_t strippedSystemProxyReplies = 0;
+        size_t emptyProxyReplies = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                // one data center, so all the nodes get into one batch with one proxy
+                SetNodesLocation(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev), "dc-1");
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvTabletStateResponse) {
+                // no node answers about its tablets, so the proxy has nothing to put into its reply about them
+                ++droppedTabletStates;
+                return TTestActorRuntime::EEventAction::DROP;
+            } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse) {
+                auto& record = ev->Get<TEvViewer::TEvViewerResponse>()->Record;
+                switch (record.Response_case()) {
+                    case NKikimrViewer::TEvViewerResponse::ResponseCase::kSystemResponse:
+                        // the proxy answers in time, but without the state of any node: none of them is timed out
+                        record.MutableSystemResponse()->ClearSystemStateInfo();
+                        record.ClearLocationResponded();
+                        record.ClearLocationTimedOut();
+                        ++strippedSystemProxyReplies;
+                        break;
+                    case NKikimrViewer::TEvViewerResponse::ResponseCase::RESPONSE_NOT_SET:
+                        ++emptyProxyReplies;
+                        break;
+                    default:
+                        break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/json/nodes?type=static&fields_required=NodeId,SystemState,Tablets&sort=NodeId"
+            "&offload_merge=true&offload_merge_attempts=1&timeout=1000&enums=true HTTP/1.1\r\n\r\n", endpoint, {});
+        TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const TString context = NJson::WriteJson(json, false);
+
+        // the scenario itself: the answer about the system state has no data, the answer about tablets is empty
+        UNIT_ASSERT_C(droppedTabletStates > 0, context);
+        UNIT_ASSERT_C(strippedSystemProxyReplies > 0, context);
+        UNIT_ASSERT_C(emptyProxyReplies > 0, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["Nodes"].GetArray().size(), 3, context);
+        for (const auto& node : json["Nodes"].GetArray()) {
+            // every node was waited for only by the request about tablets
+            UNIT_ASSERT_C(!node.Has("ResponseTimeout"), context);
+        }
+    }
+
+    // The replies of a proxy to the requests about one batch come in any order. Here the proxy answers about
+    // the disks, which releases the batch, and no node answers it about the system state and about tablets,
+    // so both these replies come without a payload. Each of them finishes its own request only: the reply
+    // about tablets must not finish the request for the system state, or the response is sent before
+    // the reply that tells which nodes the proxy did not wait for.
+    void CheckNodesTimeoutFromEmptyProxyReplies(bool tabletReplyFirst) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        // TServer registers viewers by node index; offload requests address them by node ID.
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            runtime.RegisterService(MakeViewerID(runtime.GetNodeId(nodeIndex)), viewerId, nodeIndex);
+        }
+        bool holdEmptyReplies = true;
+        size_t diskProxyReplies = 0;
+        bool emptyReplyBeforeDiskReply = false;
+        TAutoPtr<IEventHandle> emptySystemReply;
+        TAutoPtr<IEventHandle> emptyTabletReply;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                // one data center, so all the nodes get into one batch with one proxy
+                SetNodesLocation(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev), "dc-1");
+            } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvSystemStateResponse
+                    || ev->GetTypeRewrite() == TEvWhiteboard::EvTabletStateResponse) {
+                // no node answers about its system state and its tablets
+                return TTestActorRuntime::EEventAction::DROP;
+            } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse) {
+                const auto& record = ev->Get<TEvViewer::TEvViewerResponse>()->Record;
+                if (record.Response_case() == NKikimrViewer::TEvViewerResponse::ResponseCase::kPDiskResponse) {
+                    ++diskProxyReplies;
+                } else if (holdEmptyReplies
+                        && record.Response_case() == NKikimrViewer::TEvViewerResponse::ResponseCase::RESPONSE_NOT_SET) {
+                    // the replies without a payload are kept to be delivered in the order under test
+                    TAutoPtr<IEventHandle>* held = nullptr;
+                    if (record.GetAnsweredRequest() == static_cast<ui32>(NKikimrViewer::TEvViewerRequest::kSystemRequest)) {
+                        held = &emptySystemReply;
+                    } else if (record.GetAnsweredRequest() == static_cast<ui32>(NKikimrViewer::TEvViewerRequest::kTabletRequest)) {
+                        held = &emptyTabletReply;
+                    }
+                    if (held && !*held) {
+                        emptyReplyBeforeDiskReply |= diskProxyReplies == 0;
+                        held->Reset(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/json/nodes?type=static&fields_required=NodeId,SystemState,Tablets,PDisks&sort=NodeId"
+            "&offload_merge=true&offload_merge_attempts=1&timeout=1000&enums=true HTTP/1.1\r\n\r\n", endpoint, {});
+        TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+
+        // the proxy gives up at half of the timeout of the request, long before the handler does
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return bool(emptySystemReply) && bool(emptyTabletReply);
+        };
+        runtime.DispatchEvents(options, TDuration::Seconds(10));
+        UNIT_ASSERT_C(emptySystemReply && emptyTabletReply, "the proxy must answer both requests without a payload");
+        // the scenario itself: the answer about the disks has already released the batch
+        UNIT_ASSERT(diskProxyReplies > 0);
+        UNIT_ASSERT(!emptyReplyBeforeDiskReply);
+
+        holdEmptyReplies = false;
+        // the handler of the request works on the node the request was sent to
+        const ui32 handlerNodeIndex = 0;
+        if (tabletReplyFirst) {
+            runtime.Send(emptyTabletReply.Release(), handlerNodeIndex, true);
+            runtime.Send(emptySystemReply.Release(), handlerNodeIndex, true);
+        } else {
+            runtime.Send(emptySystemReply.Release(), handlerNodeIndex, true);
+            runtime.Send(emptyTabletReply.Release(), handlerNodeIndex, true);
+        }
+
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const TString context = NJson::WriteJson(json, false);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(json["Nodes"].GetArray().size(), 3, context);
+        for (const auto& node : json["Nodes"].GetArray()) {
+            // no node has answered about its system state in time, whichever reply came first
+            UNIT_ASSERT_C(node["ResponseTimeout"].GetBoolean(), context);
+        }
+    }
+
+    Y_UNIT_TEST(NodesPageReportsTimeoutWhenEmptySystemProxyReplyIsFirst) {
+        CheckNodesTimeoutFromEmptyProxyReplies(false);
+    }
+
+    Y_UNIT_TEST(NodesPageReportsTimeoutWhenEmptyTabletProxyReplyIsFirst) {
+        CheckNodesTimeoutFromEmptyProxyReplies(true);
     }
 
     Y_UNIT_TEST(NodesPageKeepsPDisksForDisconnectedNode)

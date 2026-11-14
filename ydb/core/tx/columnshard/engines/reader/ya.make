@@ -19,7 +19,6 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/reader/transaction
     ydb/core/tx/columnshard/engines/scheme
     ydb/core/tx/columnshard/hooks/abstract
-    ydb/core/tx/columnshard/resources
     ydb/core/tx/program
 )
 

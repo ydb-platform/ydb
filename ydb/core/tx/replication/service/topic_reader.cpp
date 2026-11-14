@@ -253,9 +253,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
         if (!ev->Get()->Result.IsSuccess()) {
-            YDB_LOG_WARN("Handle",
-                {"ev", ev->Get()->ToString()});
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+            const auto status = ev->Get()->Result.GetStatus();
+            const TString issues = ev->Get()->Result.GetIssues().ToOneLineString();
+            return CheckAndLeave(status, issues, "Cannot commit offset", "Failed to commit offset due to fatal error");
         } else {
             YDB_LOG_DEBUG("Handle",
                 {"committedOffset", CommittedOffset},
@@ -296,19 +296,37 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             return Leave(TEvWorker::TEvGone::DATA_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         }
 
-        switch (ev->Get()->Result.GetStatus()) {
+        const auto status = ev->Get()->Result.GetStatus();
+        const TString issues = ev->Get()->Result.GetIssues().ToOneLineString();
+
+        return CheckAndLeave(status, issues, "Cannot read from topic", "Topic reader has gone due to fatal error");
+    }
+
+    void CheckAndLeave(NYdb::EStatus status, const TString& issues, const char* errorPrefix, const char* logMessage) {
+        switch (status) {
         case NYdb::EStatus::SCHEME_ERROR:
             if (Settings.RetryOnSchemeError_) {
                 // Only the base-table CDC snapshot authorizes index removal.
-                return Leave(TEvWorker::TEvGone::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
+                break;
             }
 
             [[fallthrough]];
         case NYdb::EStatus::BAD_REQUEST:
-            return Leave(TEvWorker::TEvGone::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
+        case NYdb::EStatus::UNAUTHORIZED:
+            YDB_LOG_ERROR(logMessage,
+                {"status", status},
+                {"issues", issues},
+                {"topicPath", Settings.GetBase().Topics_.at(0).Path_},
+                {"consumerName", Settings.GetBase().ConsumerName_});
+            return Leave(TEvWorker::TEvGone::SCHEME_ERROR, TStringBuilder() << errorPrefix
+                << " for topic '" << Settings.GetBase().Topics_.at(0).Path_ << "'"
+                << " with consumer '" << Settings.GetBase().ConsumerName_ << "'."
+                << " Original error: " << issues);
         default:
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
+            break;
         }
+
+        return Leave(TEvWorker::TEvGone::UNAVAILABLE, issues);
     }
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {

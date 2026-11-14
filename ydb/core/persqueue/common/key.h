@@ -105,7 +105,8 @@ public:
             case ServiceTypeTxMeta:
                 return TypeTxMeta;
         }
-        AFL_ENSURE(false)("type_char", *PtrType());
+        YDB_LOG_ENSURE(false,
+            {"typeChar", *PtrType()});
         return TypeNone;
     }
 
@@ -263,7 +264,7 @@ public:
     }
 
     void SetOffsetDelta(ui64 offsetDelta) {
-        AFL_ENSURE(offsetDelta <= Max<ui32>());
+        YDB_LOG_ENSURE(offsetDelta <= Max<ui32>());
         SetOffsetDelta(TMaybe<ui32>(static_cast<ui32>(offsetDelta)));
     }
 
@@ -350,7 +351,7 @@ private:
 
     void EnsureValidBodySize() const {
         const ui32 bodySize = GetBodySize();
-        AFL_ENSURE(bodySize == KeySize() || bodySize == KeySizeWithOffsetDelta());
+        YDB_LOG_ENSURE(bodySize == KeySize() || bodySize == KeySizeWithOffsetDelta());
     }
 
     TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix, const TMaybe<ui32> offsetDelta = Nothing())
@@ -375,11 +376,11 @@ private:
     {
         Assign(data.data(), data.size());
         const ui32 bodySize = GetBodySize();
-        AFL_ENSURE(bodySize == KeySize() || bodySize == KeySizeWithOffsetDelta());
-        AFL_ENSURE(*(PtrOffset() - 1) == '_');
-        AFL_ENSURE(*(PtrCount() - 1) == '_');
-        AFL_ENSURE(*(PtrPartNo() - 1) == '_');
-        AFL_ENSURE(*(PtrInternalPartsCount() - 1) == '_');
+        YDB_LOG_ENSURE(bodySize == KeySize() || bodySize == KeySizeWithOffsetDelta());
+        YDB_LOG_ENSURE(*(PtrOffset() - 1) == '_');
+        YDB_LOG_ENSURE(*(PtrCount() - 1) == '_');
+        YDB_LOG_ENSURE(*(PtrPartNo() - 1) == '_');
+        YDB_LOG_ENSURE(*(PtrInternalPartsCount() - 1) == '_');
 
         ParsePartition();
         ParseOffset();
@@ -388,7 +389,7 @@ private:
         ParseInternalPartsCount();
 
         if (bodySize == KeySizeWithOffsetDelta()) {
-            AFL_ENSURE(Data()[KeySize()] == '_');
+            YDB_LOG_ENSURE(Data()[KeySize()] == '_');
             OffsetDelta = FromString<ui32>(TStringBuf{PtrOffsetDelta(), 10});
         } else {
             OffsetDelta = Nothing();

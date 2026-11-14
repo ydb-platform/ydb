@@ -86,15 +86,16 @@ public:
             return new TDerived(data);
         } else {
             auto codec = codecs->GetCodec(sig);
-            AFL_ENSURE(codec)("description", "Unknown codec signature.");
+            YDB_LOG_ENSURE(codec,
+                {"description", "Unknown codec signature."});
             return codec->ReadChunk(data);
         }
     }
 
 protected:
     static inline void VerifySignature(const TDataRef& data) {
-        AFL_ENSURE(data.Size() >= sizeof(TCodecSig));
-        AFL_ENSURE(ReadUnaligned<TCodecSig>(data.Data()) == Sig());
+        YDB_LOG_ENSURE(data.Size() >= sizeof(TCodecSig));
+        YDB_LOG_ENSURE(ReadUnaligned<TCodecSig>(data.Data()) == Sig());
     }
 };
 
@@ -225,12 +226,12 @@ private:
         TDataRef Next() override {
             const char* data = Current;
             Current += Size;
-            AFL_ENSURE(Current <= End);
+            YDB_LOG_ENSURE(Current <= End);
             return MaskIter.Next() ? TDataRef(data, Size) : TDataRef();
         }
 
         TDataRef Peek() const override {
-            AFL_ENSURE(Current + Size <= End);
+            YDB_LOG_ENSURE(Current + Size <= End);
             return MaskIter.IsNotNull() ? TDataRef(Current, Size) : TDataRef();
         }
 
@@ -283,9 +284,10 @@ public:
 
     TDataRef GetValue(size_t index) const override {
         if (Mask.IsNotNull(index)) {
-            AFL_ENSURE(index < static_cast<size_t>(OffsetsEnd - Sizes))
-                ("description", "VarLen chunk: value index is out of offsets table")
-                ("index", index)("valuesCount", static_cast<size_t>(OffsetsEnd - Sizes));
+            YDB_LOG_ENSURE(index < static_cast<size_t>(OffsetsEnd - Sizes),
+                {"description", "VarLen chunk: value index is out of offsets table"},
+                {"index", index},
+                {"valuesCount", static_cast<size_t>(OffsetsEnd - Sizes)});
             ui32 begin = index ? ReadUnaligned<ui32>(Sizes + index - 1) : 0;
             ui32 endOffset = ReadUnaligned<ui32>(Sizes + index);
             AFL_ENSURE(endOffset >= begin && endOffset <= PayloadSize)
@@ -323,7 +325,7 @@ private:
 
                 const char* data = Current;
                 Current += size;
-                AFL_ENSURE(data + size <= PayloadEnd);
+                YDB_LOG_ENSURE(data + size <= PayloadEnd);
                 return TDataRef(data, size);
             }
             ++CurrentOffset;
@@ -335,9 +337,11 @@ private:
                 ("description", "VarLen chunk: value requested beyond the offsets table");
             if (MaskIter.IsNotNull()) {
                 ui32 endOffset = ReadUnaligned<ui32>(CurrentOffset);
-                AFL_ENSURE(endOffset >= LastOffset && endOffset <= PayloadSize)
-                    ("description", "VarLen chunk: invalid cumulative offset")
-                    ("endOffset", endOffset)("lastOffset", LastOffset)("dataSize", PayloadSize);
+                YDB_LOG_ENSURE(endOffset >= LastOffset && endOffset <= PayloadSize,
+                    {"description", "VarLen chunk: invalid cumulative offset"},
+                    {"endOffset", endOffset},
+                    {"lastOffset", LastOffset},
+                    {"dataSize", PayloadSize});
                 return TDataRef(Current, endOffset - LastOffset);
             }
             return TDataRef();
@@ -372,7 +376,9 @@ public:
         AFL_ENSURE(data < end)("description", "No data left in the chunk");
         i64 value;
         auto bytes = in_long(value, data);
-        AFL_ENSURE(data + bytes <= end)("description", "Value is out of chunk bounds");
+
+        YDB_LOG_ENSURE(data + bytes <= end,
+            {"description", "Value is out of chunk bounds"});
         return value;
     }
 
@@ -380,7 +386,8 @@ public:
         AFL_ENSURE(data < end)("description", "No data left in the chunk");
         i64 loaded = 0;
         auto bytes = in_long(loaded, data);
-        AFL_ENSURE(data + bytes <= end)("description", "Value is out of chunk bounds");
+        YDB_LOG_ENSURE(data + bytes <= end,
+            {"description", "Value is out of chunk bounds"});
         value = loaded;
         return bytes;
     }
@@ -396,7 +403,8 @@ public:
         AFL_ENSURE(data < end)("description", "No data left in the chunk");
         i64 value;
         auto bytes = in_long(value, data);
-        AFL_ENSURE(data + bytes <= end)("description", "Value is out of chunk bounds");
+        YDB_LOG_ENSURE(data + bytes <= end,
+            {"description", "Value is out of chunk bounds"});
         return ZigZagDecode(static_cast<TUnsigned>(value));
     }
 
@@ -404,7 +412,9 @@ public:
         AFL_ENSURE(data < end)("description", "No data left in the chunk");
         i64 loaded = 0;
         auto bytes = in_long(loaded, data);
-        AFL_ENSURE(data + bytes <= end)("description", "Value is out of chunk bounds");
+
+        YDB_LOG_ENSURE(data + bytes <= end,
+            {"description", "Value is out of chunk bounds"});
         value = ZigZagDecode(static_cast<TUnsigned>(loaded));
         return bytes;
     }

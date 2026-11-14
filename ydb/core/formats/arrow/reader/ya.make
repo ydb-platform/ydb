@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 PEERDIR(
+    ydb/core/scheme_types
     contrib/libs/apache/arrow
     ydb/core/formats/arrow/accessor/abstract
     ydb/core/formats/arrow/common

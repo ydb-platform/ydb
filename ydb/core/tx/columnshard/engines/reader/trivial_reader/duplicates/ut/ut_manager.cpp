@@ -110,7 +110,7 @@ public:
 NActors::IEventHandle* MakeFilterRequestHandle(const NActors::TActorId& recipient, const NActors::TActorId& sender, ui64 portionId,
     ui64 recordsCount, const std::shared_ptr<IFilterSubscriber>& subscriber) {
     auto dummyBatch = MakePKBatch({ 0 });
-    NArrow::TSimpleRow dummyRow(dummyBatch, 0);
+    NArrow::TSimpleRow dummyRow(dummyBatch, 0, { NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) });
     auto abortionFlag = std::make_shared<TAtomicCounter>(0);
     auto* ev = new TEvRequestFilter(
         dummyRow, dummyRow, portionId, recordsCount, TSnapshot(1, 1), subscriber, std::shared_ptr<const TAtomicCounter>(abortionFlag));

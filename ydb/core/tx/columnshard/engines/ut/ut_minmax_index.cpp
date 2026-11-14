@@ -50,8 +50,8 @@ TMinMax MakeChunk(i32 min, i32 max) {
 }
 
 bool Skip(TMinMax indexValues, i32 request, EOp op) {
-    return NOlap::NIndexes::NMinMax::TIndexMeta::Skip(
-        indexValues, std::make_shared<arrow::Int32Scalar>(request), NArrow::NSSA::TIndexCheckOperation(op, true));
+    return NOlap::NIndexes::NMinMax::TIndexMeta::Skip(indexValues, std::make_shared<arrow::Int32Scalar>(request),
+        NArrow::NSSA::TIndexCheckOperation(op, true), NScheme::TTypeInfo(NScheme::NTypeIds::Int32));
 }
 
 }   // namespace
@@ -107,6 +107,15 @@ Y_UNIT_TEST_SUITE(TMinMaxIndexSkipCorrectness) {
         UNIT_ASSERT(!Skip(indexValues, 15, EOp::GreaterOrEqual));
         UNIT_ASSERT(!Skip(indexValues, 20, EOp::GreaterOrEqual));
         UNIT_ASSERT(Skip(indexValues, 21, EOp::GreaterOrEqual));
+    }
+
+    Y_UNIT_TEST(PromotedConstantDoesNotNarrowToColumnType) {
+        const auto bounds = MakeChunk(10, 20);
+        const NScheme::TTypeInfo type(NScheme::NTypeIds::Int32);
+        const auto aboveInt32 = std::make_shared<arrow::Int64Scalar>(i64(1) << 32);
+        UNIT_ASSERT(!NOlap::NIndexes::NMinMax::TIndexMeta::Skip(bounds, aboveInt32, NArrow::NSSA::TIndexCheckOperation(EOp::Less, true), type));
+        UNIT_ASSERT(
+            NOlap::NIndexes::NMinMax::TIndexMeta::Skip(bounds, aboveInt32, NArrow::NSSA::TIndexCheckOperation(EOp::Greater, true), type));
     }
 
     Y_UNIT_TEST(NullChunk) {

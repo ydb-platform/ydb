@@ -117,18 +117,20 @@ public:
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
 
-    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchLines(const std::shared_ptr<arrow::RecordBatch>& batch);
+    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchLines(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NArrow::TComparisonType>& logicalTypes);
 
-    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchFull(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema);
-    static std::shared_ptr<TPKRangesFilter> BuildFromString(const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema);
+    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchFull(const std::shared_ptr<arrow::RecordBatch>& batch,
+        const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NArrow::TComparisonType>& logicalTypes);
+    static std::shared_ptr<TPKRangesFilter> BuildFromString(
+        const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NArrow::TComparisonType>& logicalTypes);
 
     static TPKRangesFilter BuildEmpty() {
         return TPKRangesFilter();
     }
 
     static TConclusion<TPKRangesFilter> BuildFromProto(
-        const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk);
+        const NKikimrTxDataShard::TEvKqpScan& proto, const NArrow::TComparisonSchema& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk);
 
     size_t GetMemorySize() const {
         return NArrow::GetBatchMemorySize(Data);
@@ -491,44 +493,46 @@ class TRangesBuilder {
             , RowIndex(rowIndex)
         {
         }
-
-        std::optional<TPredicate> BuildPredicate(
-            const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<arrow::RecordBatch>& batch) const {
-            if (!NumColumns) {
-                return std::nullopt;
-            }
-            auto columns = schema->field_names();
-            AFL_VERIFY(columns.size() >= NumColumns)("schema", columns.size())("predicate", NumColumns);
-            columns.resize(NumColumns);
-            return TPredicate(Operation, NArrow::NMerger::TSortableBatchPosition(batch, RowIndex, columns, {}, false));
-        }
     };
 
 private:
-    const std::vector<NScheme::TTypeInfo> YdbPK;
+    std::vector<NScheme::TTypeInfo> YdbPK;
+    const std::vector<NArrow::TComparisonType> ComparisonTypes;
     const std::shared_ptr<arrow::Schema> ArrPK;
     NArrow::TArrowBatchBuilder BatchBuilder;
     std::vector<std::pair<TPredicateInfo, TPredicateInfo>> RangesInfo;
 
 private:
-    static std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
-        std::vector<NScheme::TTypeInfo> types;
-        types.reserve(columns.size());
-        for (auto& [name, type] : columns) {
-            types.push_back(type);
+    std::optional<TPredicate> BuildPredicate(const TPredicateInfo& info, const std::shared_ptr<arrow::RecordBatch>& batch) const {
+        if (!info.GetNumColumns()) {
+            return std::nullopt;
         }
-        return types;
+
+        auto columns = ArrPK->field_names();
+        AFL_VERIFY(columns.size() >= info.GetNumColumns());
+        columns.resize(info.GetNumColumns());
+        return TPredicate(info.GetOperation(),
+            NArrow::NMerger::TSortableBatchPosition(batch, info.GetRowIndex(), columns, {}, false,
+                std::vector<NArrow::TComparisonType>(ComparisonTypes.begin(), ComparisonTypes.begin() + info.GetNumColumns())));
     }
 
     static TConclusion<TCell> MakeDefaultCell(const NScheme::TTypeInfo typeInfo);
 
 public:
-    TRangesBuilder(const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk)
-        : YdbPK(ExtractTypes(ydbPk))
+    TRangesBuilder(const NArrow::TComparisonSchema& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk)
+        : ComparisonTypes(NArrow::ColumnTypes(ydbPk))
         , ArrPK(arrPk)
     {
         AFL_VERIFY((i64)ydbPk.size() == arrPk->num_fields());
-        NArrow::TStatusValidator::Validate(BatchBuilder.Start(ydbPk, arrPk));
+        YdbPK.reserve(ydbPk.size());
+        std::vector<TNameTypeInfo> physicalSchema;
+        physicalSchema.reserve(ydbPk.size());
+        for (const auto& [name, type] : ydbPk) {
+            YdbPK.emplace_back(type.GetTypeInfo());
+            physicalSchema.emplace_back(name, type.GetTypeInfo());
+        }
+
+        NArrow::TStatusValidator::Validate(BatchBuilder.Start(physicalSchema, arrPk));
     }
 
     void AddRange(TSerializedTableRange&&);

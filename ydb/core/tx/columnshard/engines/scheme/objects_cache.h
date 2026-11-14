@@ -12,6 +12,7 @@ namespace NKikimr::NOlap {
 
 class TSchemaObjectsCache {
 private:
+    const bool EnableDecimalNumericComparison;
     THashMap<TString, std::shared_ptr<arrow::Field>> Fields;
     mutable ui64 AcceptionFieldsCount = 0;
     mutable TMutex FieldsMutex;
@@ -27,6 +28,15 @@ private:
     mutable TMutex StringsMutex;
 
 public:
+    explicit TSchemaObjectsCache(const bool enableDecimalNumericComparison = false)
+        : EnableDecimalNumericComparison(enableDecimalNumericComparison)
+    {
+    }
+
+    bool GetEnableDecimalNumericComparison() const {
+        return EnableDecimalNumericComparison;
+    }
+
     const TString& GetStringCache(const TString& original) {
         TGuard lock(StringsMutex);
         auto it = StringsCache.find(original);
@@ -97,34 +107,36 @@ private:
         TPathId Tenant;
         //Use SS path id here because two shards from different tables on a node may have the same internal path id
         NColumnShard::TSchemeShardLocalPathId Owner;
+        bool EnableDecimalNumericComparison;
 
     public:
-        TColumnOwnerId(const TPathId& tenant, const NColumnShard::TSchemeShardLocalPathId& owner)
+        TColumnOwnerId(const TPathId& tenant, const NColumnShard::TSchemeShardLocalPathId& owner, const bool enableDecimalNumericComparison)
             : Tenant(tenant)
             , Owner(owner)
+            , EnableDecimalNumericComparison(enableDecimalNumericComparison)
         {
             AFL_VERIFY(!!Owner);
         }
 
         explicit operator size_t() const {
-            return CombineHashes(Owner.GetRawValue(), Tenant.Hash());
+            return CombineHashes(CombineHashes(Owner.GetRawValue(), Tenant.Hash()), size_t(EnableDecimalNumericComparison));
         }
 
         bool operator==(const TColumnOwnerId& other) const {
-            return Tenant == other.Tenant && Owner == other.Owner;
+            return Tenant == other.Tenant && Owner == other.Owner && EnableDecimalNumericComparison == other.EnableDecimalNumericComparison;
         }
     };
 
     THashMap<TColumnOwnerId, std::shared_ptr<TSchemaObjectsCache>> CacheByTableOwner;
     TMutex Mutex;
 
-    std::shared_ptr<TSchemaObjectsCache> GetCacheImpl(const TColumnOwnerId& owner) {
+    std::shared_ptr<TSchemaObjectsCache> GetCacheImpl(const TColumnOwnerId& owner, const bool enableDecimalNumericComparison) {
         TGuard lock(Mutex);
         auto findCache = CacheByTableOwner.FindPtr(owner);
         if (findCache) {
             return *findCache;
         }
-        return CacheByTableOwner.emplace(owner, std::make_shared<TSchemaObjectsCache>()).first->second;
+        return CacheByTableOwner.emplace(owner, std::make_shared<TSchemaObjectsCache>(enableDecimalNumericComparison)).first->second;
     }
 
     void DropCachesImpl() {
@@ -138,8 +150,10 @@ private:
     }
 
 public:
-    static std::shared_ptr<TSchemaObjectsCache> GetCache(const NColumnShard::TSchemeShardLocalPathId& ownerPathId, const TPathId& tenantPathId) {
-        return Singleton<TSchemaCachesManager>()->GetCacheImpl(TColumnOwnerId(tenantPathId, ownerPathId));
+    static std::shared_ptr<TSchemaObjectsCache> GetCache(const NColumnShard::TSchemeShardLocalPathId& ownerPathId, const TPathId& tenantPathId,
+        const bool enableDecimalNumericComparison = false) {
+        return Singleton<TSchemaCachesManager>()->GetCacheImpl(
+            TColumnOwnerId(tenantPathId, ownerPathId, enableDecimalNumericComparison), enableDecimalNumericComparison);
     }
 
     static size_t GetCachedOwnersCount() {

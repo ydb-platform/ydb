@@ -411,6 +411,7 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
 std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const ui64 presetId, const NKikimrSchemeOp::TColumnTableSchema& schema,
     const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache) {
     TIndexInfo result(presetId);
+    result.EnableDecimalNumericComparison = cache->GetEnableDecimalNumericComparison();
     if (!result.DeserializeFromProto(schema, operators, cache)) {
         return std::nullopt;
     }
@@ -624,20 +625,22 @@ std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnF
     const NTable::TColumn& column, const std::shared_ptr<IStoragesManager>& operators) const {
     AFL_VERIFY(!IsSpecialColumn(column.Id));
     return std::make_shared<TColumnFeatures>(column.Id, GetColumnFieldVerified(column.Id), DefaultSerializer, operators->GetDefaultOperator(),
-        NArrow::IsPrimitiveYqlType(column.PType), column.Id == GetPKFirstColumnId(), false, nullptr, column.GetCorrectKeyOrder(), column.PType);
+        NArrow::IsPrimitiveYqlType(column.PType), column.Id == GetPKFirstColumnId(), false, nullptr, column.GetCorrectKeyOrder(),
+        NArrow::TComparisonType(column.PType, EnableDecimalNumericComparison));
 }
 
 std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnFeatures(
     const ui32 columnId, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<IStoragesManager>& operators) const {
     if (IsSpecialColumn(columnId)) {
         return std::make_shared<TColumnFeatures>(columnId, GetColumnFieldVerified(columnId), DefaultSerializer, operators->GetDefaultOperator(),
-            false, false, false, IIndexInfo::DefaultColumnValue(columnId), std::nullopt);
+            false, false, false, IIndexInfo::DefaultColumnValue(columnId), std::nullopt,
+            NScheme::TTypeInfo(columnId == (ui32)ESpecialColumn::DELETE_FLAG ? NScheme::NTypeIds::Bool : NScheme::NTypeIds::Uint64));
     } else {
         auto itC = columns.find(columnId);
         AFL_VERIFY(itC != columns.end());
         return std::make_shared<TColumnFeatures>(columnId, GetColumnFieldVerified(columnId), DefaultSerializer, operators->GetDefaultOperator(),
             NArrow::IsPrimitiveYqlType(itC->second.PType), columnId == GetPKFirstColumnId(), false, nullptr, itC->second.GetCorrectKeyOrder(),
-            itC->second.PType);
+            NArrow::TComparisonType(itC->second.PType, EnableDecimalNumericComparison));
     }
 }
 
@@ -655,11 +658,13 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
     , ColumnFeatures(original.ColumnFeatures)
     , Indexes(original.Indexes)
     , PresetId(original.PresetId)
+    , EnableDecimalNumericComparison(original.EnableDecimalNumericComparison)
     , SchemaColumnIdsWithSpecials(original.SchemaColumnIdsWithSpecials)
     , SchemaWithSpecials(original.SchemaWithSpecials)
     , PrimaryKey(original.PrimaryKey)
     , DefaultSerializer(original.DefaultSerializer)
 {
+    AFL_VERIFY(EnableDecimalNumericComparison == cache->GetEnableDecimalNumericComparison());
     // before the columns: a new column without a serializer of its own takes the default
     if (diff.GetCompressionOptions()) {
         DeserializeDefaultCompressionFromProto(*diff.GetCompressionOptions());

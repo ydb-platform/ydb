@@ -3146,6 +3146,9 @@ message TColumnShardConfig {
     }
 
     optional TBackupSettings BackupSettings = 79;
+    // Changes the ordering of persisted Decimal keys; configure before writing data.
+    // Once enabled, the mode is saved in each ColumnShard and cannot be disabled by configuration.
+    optional bool EnableDecimalNumericComparison = 80 [default = false];
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

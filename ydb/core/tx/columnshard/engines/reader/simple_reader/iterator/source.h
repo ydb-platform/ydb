@@ -586,12 +586,12 @@ public:
 
     virtual NArrow::TSimpleRow GetFirstPK() const override {
         AFL_VERIFY(false);
-        return NArrow::TSimpleRow(nullptr, 0);
+        return NArrow::TSimpleRow(nullptr, 0, {});
     }
 
     virtual NArrow::TSimpleRow GetLastPK() const override {
         AFL_VERIFY(false)("error", "GetLastPK not implemented");
-        return NArrow::TSimpleRow(nullptr, 0);
+        return NArrow::TSimpleRow(nullptr, 0, {});
     }
 
     virtual bool DoAddTxConflict() override {

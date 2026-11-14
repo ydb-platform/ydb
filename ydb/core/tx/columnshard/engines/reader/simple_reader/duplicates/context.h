@@ -177,7 +177,6 @@ private:
     TSnapshot MaxVersion;
     TPortionIndex RequiredPortions;
     YDB_READONLY_DEF(TFieldByColumn, Columns);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, SnapshotSchema);
     YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
@@ -188,8 +187,8 @@ private:
 
 public:
     TBuildFilterContext(const TActorId owner, const std::shared_ptr<const TAtomicCounter>& abortionFlag, const TSnapshot& maxVersion,
-        TPortionIndex&& portions, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
-        const std::shared_ptr<ISnapshotSchema>& snapshotSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
+        TPortionIndex&& portions, const TFieldByColumn& columns, const std::shared_ptr<ISnapshotSchema>& snapshotSchema,
+        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NColumnShard::TSimpleDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory)
@@ -198,7 +197,6 @@ public:
         , MaxVersion(maxVersion)
         , RequiredPortions(std::move(portions))
         , Columns(columns)
-        , PKSchema(pkSchema)
         , SnapshotSchema(snapshotSchema)
         , ColumnDataManager(columnDataManager)
         , DataAccessorsManager(dataAccessorsManager)
@@ -210,7 +208,6 @@ public:
         AFL_VERIFY(Owner);
         AFL_VERIFY(RequiredPortions.size());
         AFL_VERIFY(Columns.size());
-        AFL_VERIFY(PKSchema);
         AFL_VERIFY(SnapshotSchema);
         AFL_VERIFY(ColumnDataManager);
         AFL_VERIFY(DataAccessorsManager);

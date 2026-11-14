@@ -63,7 +63,8 @@ public:
 
     void AppendPointTo(std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders) const {
         AFL_VERIFY(Object);
-        Object->Batch.BuildSortingCursor().AppendPositionTo(builders, nullptr);
+        AFL_VERIFY(builders.size() >= NumColumns());
+        Object->Batch.BuildSortingCursor().AppendPositionTo({ builders.data(), NumColumns() }, nullptr);
     }
 
     bool IsAll() const {

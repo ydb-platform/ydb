@@ -238,6 +238,37 @@ void CheckMergedDiffBuildsSchema(const TSchemaHistory& history) {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
+    Y_UNIT_TEST(PrimaryKeyTypesComeFromLogicalSchema) {
+        auto storages = TTestStoragesManager::GetInstance();
+        const NScheme::TTypeInfo decimal(NScheme::TDecimalType(22, 9));
+        TSchemaHistory history;
+        history.NextVersion().DropColumn(3).AddColumn(4, "added", NScheme::NTypeIds::Uint64);
+        auto schemaV1 = history.GetVersions().front();
+        auto schemaV2 = history.GetVersions().back();
+        for (auto* schema : { &schemaV1, &schemaV2 }) {
+            *schema->MutableColumns(0) = NArrow::NTest::TTestColumn("timestamp", decimal).SetNullable(false).CreateColumn(KeyColumnId);
+        }
+
+        *schemaV2.MutableColumns(2) = NArrow::NTest::TTestColumn("added", decimal).CreateColumn(4);
+        for (const bool numeric : { false, true }) {
+            auto cache = std::make_shared<TSchemaObjectsCache>(numeric);
+            auto original = TIndexInfo::BuildFromProto(PresetId, schemaV1, storages, cache);
+            UNIT_ASSERT(original);
+            auto updated = TIndexInfo::BuildFromProto(TSchemaDiffView::MakeSchemasDiff(schemaV1, schemaV2), *original, storages, cache);
+            UNIT_ASSERT(updated);
+            const NArrow::TComparisonType expected(decimal, numeric);
+            for (const auto* indexInfo : { &*original, &*updated }) {
+                const auto types = indexInfo->GetPrimaryKeyTypes();
+                UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+                UNIT_ASSERT(types.front().GetTypeInfo() == indexInfo->GetPrimaryKeyColumns().front().second);
+                UNIT_ASSERT(types.front() == expected);
+                UNIT_ASSERT(indexInfo->GetColumnFeaturesVerified(KeyColumnId).GetComparisonType() == expected);
+            }
+
+            UNIT_ASSERT(updated->GetColumnFeaturesVerified(4).GetComparisonType() == expected);
+        }
+    }
+
     Y_UNIT_TEST(AddColumn) {
         TSchemaHistory history;
         history.NextVersion().AddColumn(4, "added", NScheme::NTypeIds::Uint64);

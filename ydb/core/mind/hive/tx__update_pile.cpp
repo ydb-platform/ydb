@@ -87,6 +87,10 @@ public:
                 tablet->InitiateBoot();
             }
         }
+
+        // a pile may have stopped being synchronized, or BridgeTabletPlacement may have been switched back to
+        // PRIMARY_PILE_ONLY: the tablets that are not allowed in their pile anymore are moved away by the pile drain
+        Self->MarkPilesWithMisplacedTablets(db);
         return true;
     }
 
@@ -97,6 +101,19 @@ public:
     }
 
 };
+
+void THive::MarkPilesWithMisplacedTablets(NIceDb::TNiceDb& db) {
+    for (auto& [pileId, pileInfo] : BridgePiles) {
+        if (pileInfo.Drain || !NBridge::PileStateTraits(pileInfo.State).AllowsConnection || !HasTabletsToDrain(pileId)) {
+            continue;
+        }
+        YDB_LOG_NOTICE("Pile has tablets its placement does not allow, draining",
+            {"logPrefix", GetLogPrefix()},
+            {"pileId", pileId});
+        pileInfo.Drain = true;
+        db.Table<Schema::BridgePile>().Key(pileInfo.GetId()).Update<Schema::BridgePile::Drain>(true);
+    }
+}
 
 ITransaction* THive::CreateUpdatePiles() {
     return new TTxUpdatePiles(this);

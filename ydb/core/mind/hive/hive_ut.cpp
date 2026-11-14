@@ -12614,14 +12614,19 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 HiveTablet = MakeDefaultHiveID();
         const ui64 OwnerTablet = MakeTabletID(false, 1);
         TActorId Sender;
+        NKikimrConfig::THiveConfig HiveConfig;
 
-        explicit TBridgeDrainTest(ui32 nodes = 2)
+        explicit TBridgeDrainTest(ui32 nodes = 2, std::function<void(NKikimrConfig::THiveConfig&)> configure = {})
             : Runtime(nodes, false)
             , Bridge(Runtime)
         {
-            Setup(Runtime, true, 2, [](TAppPrepare& app) {
+            Setup(Runtime, true, 2, [&](TAppPrepare& app) {
                 app.HiveConfig.SetDrainInflight(1);
                 app.HiveConfig.SetEnableFastTabletMove(true);
+                if (configure) {
+                    configure(app.HiveConfig);
+                }
+                HiveConfig = app.HiveConfig;
             });
             Sender = Runtime.AllocateEdgeActor(0);
             CreateTestBootstrapper(Runtime, CreateTestTabletInfo(HiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
@@ -12666,6 +12671,15 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             return info.GetNodeID() && (info.GetNodeID() - Runtime.GetNodeId(0)) % 2 == pile &&
                 info.GetVolatileState() == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING;
         }
+
+        // nodes with odd indexes are in pile 1: keeping pile 0 down makes hive use pile 1 when the placement allows it
+        ui64 CreateTabletInPile1(ui64 index = 0) {
+            SetDown(0, true);
+            const ui64 tabletId = CreateTablet(index);
+            SetDown(0, false);
+            UNIT_ASSERT(IsRunningInPile(tabletId, 1));
+            return tabletId;
+        }
     };
 
     NActorsProto::TRemoteHttpInfo MakeMoveTabletRequest(ui64 tabletId, ui32 nodeId) {
@@ -12681,6 +12695,81 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             param->SetValue(value);
         }
         return request;
+    }
+
+    void SetAllSynchronizedPiles(NKikimrConfig::THiveConfig& config) {
+        config.SetBridgeTabletPlacement(NKikimrConfig::THiveConfig::ALL_SYNCHRONIZED_PILES);
+    }
+
+    Y_UNIT_TEST(TestBridgeAllSynchronizedPilesPlacement) {
+        TBridgeDrainTest test(2, SetAllSynchronizedPiles);
+        const ui64 tabletId = test.CreateTabletInPile1();
+        test.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(test.IsRunningInPile(tabletId, 1), "tablet was moved away from a synchronized pile");
+        UNIT_ASSERT(!IsPileDrainPersisted(test.Runtime, test.HiveTablet, test.Sender, 1));
+    }
+
+    Y_UNIT_TEST(TestBridgePrimaryPileOnlyPlacement) {
+        TBridgeDrainTest test;
+        test.SetDown(0, true);
+        const ui64 tabletId = test.CreateTablet(0, false);
+        test.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(!test.IsRunningInPile(tabletId, 1), "tablet started outside of the primary pile");
+        test.SetDown(0, false);
+        UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] { return test.IsRunningInPile(tabletId, 0); }),
+            "tablet did not start in the primary pile");
+    }
+
+    Y_UNIT_TEST(TestBridgeAllSynchronizedPilesLeavesNonSynchronizedPile) {
+        TBridgeDrainTest test(2, SetAllSynchronizedPiles);
+        const ui64 tabletId = test.CreateTabletInPile1();
+        test.Bridge.SetPileState(1, NKikimrBridge::TClusterState::SUSPENDED);
+        UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] {
+            return test.IsRunningInPile(tabletId, 0) && !IsPileDrainPersisted(test.Runtime, test.HiveTablet, test.Sender, 1);
+        }), "tablet was not moved away from the pile that stopped being synchronized");
+    }
+
+    Y_UNIT_TEST(TestBridgeSwitchBackToPrimaryPileOnly) {
+        TBridgeDrainTest test(2, SetAllSynchronizedPiles);
+        const ui64 tabletId = test.CreateTabletInPile1();
+        auto config = test.HiveConfig;
+        config.SetBridgeTabletPlacement(NKikimrConfig::THiveConfig::PRIMARY_PILE_ONLY);
+        ApplyHiveConfig(test.Runtime, test.HiveTablet, test.Sender, config);
+        UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] {
+            return test.IsRunningInPile(tabletId, 0) && !IsPileDrainPersisted(test.Runtime, test.HiveTablet, test.Sender, 1);
+        }), "tablet was not moved to the primary pile after switching back to PRIMARY_PILE_ONLY");
+    }
+
+    Y_UNIT_TEST(TestBridgeSwitchBackToPrimaryPileOnlyViaUi) {
+        TBridgeDrainTest test(2, SetAllSynchronizedPiles);
+        const ui64 tabletId = test.CreateTabletInPile1();
+        NActorsProto::TRemoteHttpInfo request;
+        request.SetMethod(HTTP_METHOD_POST);
+        request.SetPath("/app");
+        auto addParam = [&](const TString& key, const TString& value) {
+            auto* param = request.AddQueryParams();
+            param->SetKey(key);
+            param->SetValue(value);
+        };
+        addParam("page", "Settings");
+        addParam("BridgeTabletPlacement", ToString(static_cast<int>(NKikimrConfig::THiveConfig::PRIMARY_PILE_ONLY)));
+        test.Runtime.SendToPipe(test.HiveTablet, test.Sender, new NMon::TEvRemoteHttpInfo(std::move(request)), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        test.Runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+        UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] {
+            return test.IsRunningInPile(tabletId, 0) && !IsPileDrainPersisted(test.Runtime, test.HiveTablet, test.Sender, 1);
+        }), "tablet was not moved to the primary pile after switching back to PRIMARY_PILE_ONLY in the UI");
+    }
+
+    Y_UNIT_TEST(TestBridgePromotionWithAllSynchronizedPiles) {
+        TBridgeDrainTest test(2, SetAllSynchronizedPiles);
+        const ui64 tabletId = test.CreateTablet();
+        UNIT_ASSERT(test.IsRunningInPile(tabletId, 0) || test.IsRunningInPile(tabletId, 1));
+        const ui32 pile = test.IsRunningInPile(tabletId, 0) ? 0 : 1;
+        test.Bridge.Promote(1);
+        test.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(test.IsRunningInPile(tabletId, pile), "tablet was moved although both piles are synchronized");
+        UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] { return !test.DrainPending(); }), "old primary pile drain did not finish");
     }
 
     Y_UNIT_TEST(TestMoveAfterLateStartingStatus) {

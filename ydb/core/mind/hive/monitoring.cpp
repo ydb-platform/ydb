@@ -833,6 +833,7 @@ public:
     bool ChangeRequest = false;
     std::optional<TString> Status;
     TStringBuilder Changes; // applied changes in "Name: from -> to" form, for the operations log
+    std::optional<NKikimrConfig::THiveConfig::EBridgeTabletPlacement> PreviousBridgeTabletPlacement;
 
     TTxMonEvent_Settings(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
         : TBase(hive)
@@ -1011,6 +1012,7 @@ public:
         UpdateConfig(db, "DataCenterChangeReactionPeriod", configUpdates);
         UpdateConfig(db, "TabletEventHistorySize", configUpdates);
         UpdateConfig(db, "NodeEventHistorySize", configUpdates);
+        UpdateConfig(db, "BridgeTabletPlacement", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1082,6 +1084,7 @@ public:
 
         if (ChangeRequest && !Status) {
             Self->BuildCurrentConfig();
+            PreviousBridgeTabletPlacement = previousConfig.GetBridgeTabletPlacement();
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
             Self->ProcessWaitQueue();
             const google::protobuf::Descriptor* descriptor = NKikimrConfig::THiveConfig::GetDescriptor();
@@ -1183,6 +1186,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
+        if (PreviousBridgeTabletPlacement) {
+            Self->OnBridgeTabletPlacementChanged(*PreviousBridgeTabletPlacement);
+        }
         if (ChangeRequest) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"" << Status.value_or("ok") << "\"}"));
         } else {
@@ -1463,6 +1469,7 @@ public:
         ShowConfig(out, "DataCenterChangeReactionPeriod");
         ShowConfig(out, "TabletEventHistorySize");
         ShowConfig(out, "NodeEventHistorySize");
+        ShowConfig(out, "BridgeTabletPlacement");
 
         out << "<div class='row' style='margin-top:40px'>";
         bool allowedMetricsLocalOverridden = !Self->TabletTypeAllowedMetrics.empty();

@@ -1,3 +1,4 @@
+* Added `ydb tools validate s3` and `ydb tools validate nfs` commands to check byte-level integrity of exported schema objects without restoring them. Added `ydb tools list-objects` to generate the list of the objects which are expected to be included in the backup.
 * `ydb scheme rmdir --recursive` now removes objects in parallel. Added `--in-flight` option to set the maximum number of objects removed at the same time (default: 16).
 * Workload imports with `--file-output-path` now skip database post-import actions such as index building and statistics collection.
 * Fixed a crash when searching documentation in interactive AI mode.

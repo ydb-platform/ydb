@@ -6,6 +6,7 @@ PEERDIR(
 )
 
 SRCS(
+    aws_ut.cpp
     build_info_ut.cpp
     cert_format_converter_ut.cpp
     config_ut.cpp

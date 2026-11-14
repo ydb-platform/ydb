@@ -6,6 +6,8 @@
 #include <util/generic/maybe.h>
 #include <util/system/env.h>
 
+#include <functional>
+
 namespace NYdb::inline Dev::NImport {
     struct TImportFromS3Settings;
 }
@@ -71,6 +73,10 @@ struct TListS3Result {
 class IS3ClientWrapper {
 public:
     virtual TListS3Result ListObjectKeys(const TString& prefix, const std::optional<TString>& token) = 0;
+    // False when the object is absent. Other failures throw.
+    virtual bool ObjectExists(const TString& key) = 0;
+    // Delivers object bytes as they arrive. A chunk is valid only during the call.
+    virtual void GetObject(const TString& key, const std::function<void(TStringBuf)>& onChunk) = 0;
     virtual ~IS3ClientWrapper() = default;
 };
 
@@ -78,5 +84,22 @@ std::unique_ptr<IS3ClientWrapper> CreateS3ClientWrapper(const NImport::TImportFr
 
 void InitAwsAPI();
 void ShutdownAwsAPI();
+
+// Aws::ShutdownAPI drops the CRT allocator. S3 clients allocate a CRT endpoint
+// rule engine, and releasing it afterwards aborts in aws_mem_release. Declare
+// this guard first so those clients are destroyed while the allocator is alive.
+class TAwsApiGuard {
+public:
+    TAwsApiGuard() {
+        InitAwsAPI();
+    }
+
+    ~TAwsApiGuard() {
+        ShutdownAwsAPI();
+    }
+
+    TAwsApiGuard(const TAwsApiGuard&) = delete;
+    TAwsApiGuard& operator=(const TAwsApiGuard&) = delete;
+};
 
 }

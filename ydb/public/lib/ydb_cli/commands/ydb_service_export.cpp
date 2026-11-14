@@ -5,9 +5,9 @@
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_objects.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
-#include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
 #include <library/cpp/getopt/small/completer.h>
 #include <util/string/builder.h>
@@ -29,46 +29,6 @@ namespace {
         return entry.Type == NScheme::ESchemeEntryType::Table;
     }
 
-    bool FilterAllSupportedSchemeObjects(const NScheme::TSchemeEntry& entry) {
-        return IsIn({
-            NScheme::ESchemeEntryType::Table,
-            NScheme::ESchemeEntryType::ColumnTable,
-            NScheme::ESchemeEntryType::View,
-            NScheme::ESchemeEntryType::Topic,
-        }, entry.Type);
-    }
-
-    // The legacy replica-table rule is independent of __omit_backup.
-    TStatus FilterNotExportableTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
-        auto isNotExportable = [&session](const NScheme::TSchemeEntry& entry) {
-            if (entry.Type != NScheme::ESchemeEntryType::Table
-                && entry.Type != NScheme::ESchemeEntryType::ColumnTable)
-            {
-                // Other objects are filtered by the export service, which can
-                // read their scheme attributes without extending the public API.
-                return false;
-            }
-            auto describeResult = session.DescribeTable(entry.Name).ExtractValueSync();
-            NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
-
-            const auto& attributes = describeResult.GetTableDescription().GetAttributes();
-            for (const auto* name : {"__async_replica", "__omit_backup"}) {
-                auto it = attributes.find(name);
-                if (it != attributes.end() && it->second == "true") {
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        try {
-            std::erase_if(entries, isNotExportable);
-        } catch (NStatusHelpers::TYdbErrorException& e) {
-            return e.ExtractStatus();
-        }
-        return TStatus(EStatus::SUCCESS, {});
-    }
-
     TVector<std::pair<TString, TString>> ExpandItem(
         NScheme::TSchemeClient& schemeClient,
         NTable::TTableClient tableClient,
@@ -84,7 +44,7 @@ namespace {
         NStatusHelpers::ThrowOnErrorOrPrintIssues(ret.Status);
 
         const auto status = tableClient.RetryOperationSync([&ret](NTable::TSession session) {
-            return FilterNotExportableTables(session, ret.Entries);
+            return RemoveNotExportableTables(session, ret.Entries);
         });
         NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
 
@@ -458,7 +418,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     TTableClient tableClient(driver);
 
     if (expandItems) {
-        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
+        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, IsExportableSchemeObject);
         if (settings.Item_.empty()) {
             if (!ExclusionPatterns.empty()) {
                 Cerr << "No items to export after applying exclude filters" << Endl;

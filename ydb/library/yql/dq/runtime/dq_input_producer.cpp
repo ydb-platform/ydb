@@ -619,6 +619,18 @@ private:
             ++CurrBlockIndex_;
         }
 
+        void Advance(ui64 count) {
+            Y_DEBUG_ABORT_UNLESS(CurrBlockIndex_ + count <= BlockLen_);
+            CurrBlockIndex_ += count;
+        }
+
+        const arrow::ArrayData& GetColumnArray(ui32 columnIndex) const {
+            Y_DEBUG_ABORT_UNLESS(columnIndex < CurrentRow_.size());
+            const arrow::Datum& datum = CurrentRow_[columnIndex];
+            YQL_ENSURE(datum.is_array());
+            return *datum.array();
+        }
+
         NUdf::EFetchStatus FetchNext() {
             if (IsFinished_) {
                 return NUdf::EFetchStatus::Finish;
@@ -777,6 +789,49 @@ private:
         return NUdf::EFetchStatus::Ok;
     }
 
+    // True when (input, blockIndex) must be produced after `earlier` in merge order.
+    // Same ordering as TDqInputBatchIterator::operator<, which implements a max-heap.
+    bool ComesAfter(const TDqInputBatch& input, size_t inputIndex, ui64 blockIndex, const TDqInputBatchIterator& earlier) const {
+        ui32 comparatorIndex = 0;
+        for (const auto& sortCol : SortCols_) {
+            const TBlockItem lhs = input.GetColumnItem(sortCol.Index, blockIndex);
+            const TBlockItem rhs = earlier.GetItem(sortCol.Index);
+            i64 compare = Comparators_[comparatorIndex++]->Compare(lhs, rhs);
+            if (!sortCol.Ascending) {
+                compare = -compare;
+            }
+            if (compare) {
+                return compare > 0;
+            }
+        }
+        return std::tuple(inputIndex, blockIndex) > std::tuple(earlier.InputIndex(), earlier.BlockIndex());
+    }
+
+    // How many leading rows of this sorted input are still ahead of the heap top.
+    // The row at `begin` is already the current minimum and is always included.
+    ui64 TakeRun(const TDqInputBatch& input, size_t inputIndex, ui64 begin, ui64 room) const {
+        const ui64 avail = input.BlockLen() - begin;
+        ui64 count = 1;
+        if (room <= 1 || avail <= 1) {
+            return count;
+        }
+        const ui64 maxCount = std::min(room, avail);
+        if (InputRows_.empty() || !ComesAfter(input, inputIndex, begin + maxCount - 1, InputRows_.front())) {
+            return maxCount;
+        }
+        ui64 good = begin;
+        ui64 bad = begin + maxCount - 1;
+        while (good + 1 < bad) {
+            const ui64 mid = good + (bad - good) / 2;
+            if (ComesAfter(input, inputIndex, mid, InputRows_.front())) {
+                bad = mid;
+            } else {
+                good = mid;
+            }
+        }
+        return good - begin + 1;
+    }
+
     NUdf::EFetchStatus FetchInput(size_t index) {
         YQL_ENSURE(InputData_[index].IsEmpty());
         auto status = InputData_[index].FetchNext();
@@ -784,11 +839,8 @@ private:
             if (!FirstSeenInputIndex_.Defined()) {
                 FirstSeenInputIndex_ = index;
             }
-            ui64 idx = InputData_[index].CurrentIndex();
-            ui64 len = InputData_[index].BlockLen();
-            while (idx < len) {
-                InputRows_.emplace_back(index, &InputData_[index], idx++);
-            }
+            // One cursor per input. Rows inside the block stay in order, so the heap only needs the head.
+            InputRows_.emplace_back(index, &InputData_[index], InputData_[index].CurrentIndex());
         }
         return status;
     }
@@ -812,28 +864,31 @@ private:
                 return status;
             }
             if (status == NUdf::EFetchStatus::Ok) {
-                std::make_heap(InputRows_.begin(), InputRows_.end());
+                std::push_heap(InputRows_.begin(), InputRows_.end());
             }
             StartInputIndex_ = InputData_.size();
         }
 
         while (OutputBlockLen_ < MaxOutputBlockLen_ && !InputRows_.empty()) {
             std::pop_heap(InputRows_.begin(), InputRows_.end());
-            auto& smallest = InputRows_.back();
+            const TDqInputBatchIterator smallest = InputRows_.back();
+            InputRows_.pop_back();
 
             TDqInputBatch& input = smallest.Input();
             const auto inputIndex = smallest.InputIndex();
             YQL_ENSURE(!input.IsEmpty());
             YQL_ENSURE(smallest.BlockIndex() == input.CurrentIndex(), "Sort order violation on input #" << inputIndex);
 
+            const ui64 begin = input.CurrentIndex();
+            const ui64 count = TakeRun(input, inputIndex, begin, MaxOutputBlockLen_ - OutputBlockLen_);
             for (size_t i = 0; i < Builders_.size(); ++i) {
                 if (Builders_[i]) {
-                    Builders_[i]->Add(smallest.GetItem(i));
+                    const IArrayBuilder::TArrayDataItem item{.Data = &input.GetColumnArray(static_cast<ui32>(i)), .StartOffset = 0};
+                    Builders_[i]->AddMany(&item, 1, begin, static_cast<size_t>(count));
                 }
             }
-            OutputBlockLen_++;
-            input.NextRow();
-            InputRows_.pop_back();
+            OutputBlockLen_ += count;
+            input.Advance(count);
             if (input.IsEmpty()) {
                 auto status = FetchInput(inputIndex);
                 if (status == NUdf::EFetchStatus::Yield) {
@@ -841,8 +896,11 @@ private:
                     return status;
                 }
                 if (status == NUdf::EFetchStatus::Ok) {
-                    std::make_heap(InputRows_.begin(), InputRows_.end());
+                    std::push_heap(InputRows_.begin(), InputRows_.end());
                 }
+            } else {
+                InputRows_.emplace_back(inputIndex, &input, input.CurrentIndex());
+                std::push_heap(InputRows_.begin(), InputRows_.end());
             }
         }
 

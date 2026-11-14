@@ -208,7 +208,6 @@ ydb/tests/functional/nbs/F1_user_scenarios F1_09_write_across_stripe.py.TestF1_0
 ydb/tests/functional/nbs/F1_user_scenarios F1_12_never_written_reads_zero.py.TestF1_12NeverWrittenReadsZero.test_never_written_reads_zero
 ydb/tests/functional/nbs/F1_user_scenarios F1_17_noisy_neighbour.py.TestF1_17NoisyNeighbour.test_noisy_neighbour
 ydb/tests/functional/nbs/F1_user_scenarios F1_25_max_disk_size.py.TestF1_25MaxDiskSize.test_max_disk_size[4096]
-ydb/tests/functional/tpc/large py3test.[test_tpcds.py */*] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[18]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]

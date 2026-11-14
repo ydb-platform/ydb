@@ -40,6 +40,20 @@ static std::string JsonTypeToString(const simdjson::builtin::ondemand::json_type
     const simdjson::error_code error = value; \
     if (Y_UNLIKELY(error))
 
+static simdjson::error_code ExtractJsonKey(simdjson::simdjson_result<simdjson::builtin::ondemand::field>& item, std::string_view& name) {
+    {
+        CHECK_JSON_ERROR(item.escaped_key().get(name)) {
+            return error;
+        }
+    }
+    if (name.find('\\') != std::string::npos) {
+        CHECK_JSON_ERROR(item.unescaped_key().get(name)) {
+            return error;
+        }
+    }
+    return simdjson::error_code::SUCCESS;
+}
+
 template <typename T>
 using TParserVector = TVector<T, NKikimr::NMiniKQL::TMKQLAllocator<T>>;
 using TParserString = std::basic_string<char, std::char_traits<char>, NKikimr::NMiniKQL::TMKQLAllocator<char>>;
@@ -288,9 +302,9 @@ public:
                 NYql::NUdf::TUnboxedValue* resultValues;
                 resultValue = HolderFactory->CreateDirectArrayHolder(membersCount, resultValues);
                 for (auto elt : jsonValue.get_object()) {
-                    std::string_view name;
+                    std::string_view name;   // fragile; don't use after any other simdjson call
                     {
-                        CHECK_JSON_ERROR(elt.escaped_key().get(name)) {
+                        CHECK_JSON_ERROR(ExtractJsonKey(elt, name)) {
                             SetParsingError(error, jsonValue, "parse as object", status);
                             return false;
                         }
@@ -356,13 +370,14 @@ public:
                 status = TStatus::Success();
                 resultValue = HolderFactory->CreateDirectHashedDictHolder([&, this](auto& map) {
                     for (auto elt : jsonObject) {
-                        std::string_view name;
+                        std::string_view name;   // fragile; don't use after any other simdjson call
                         {
-                            CHECK_JSON_ERROR(elt.escaped_key().get(name)) {
+                            CHECK_JSON_ERROR(ExtractJsonKey(elt, name)) {
                                 SetParsingError(error, jsonValue, "parse as object", status);
                                 return;
                             }
                         }
+                        NYql::NUdf::TUnboxedValue key = NKikimr::NMiniKQL::ValueFromString(*keyDataSlot, name);   // returns non-owning TUVPod
                         simdjson::builtin::ondemand::value eltValue;
                         CHECK_JSON_ERROR(elt.value().get(eltValue)) {
                             SetParsingError(error, jsonValue, "parse as object", status);
@@ -372,7 +387,7 @@ public:
                         if (!ParseNestedValue(std::move(eltValue), payload, status, payloadType, false)) {
                             return;
                         }
-                        map.emplace(NKikimr::NMiniKQL::ValueFromString(*keyDataSlot, name), std::move(payload));
+                        map.emplace(std::move(key), std::move(payload));
                     }
                 }, keyTypes, false, true, nullptr, nullptr, nullptr);
                 return status.IsSuccess();
@@ -1158,10 +1173,11 @@ private:
             return false;
         }
         for (auto item : document.get_object()) {
-            CHECK_JSON_ERROR(item.error()) {
+            std::string_view name;   // fragile; don't use after any other simdjson call
+            CHECK_JSON_ERROR(ExtractJsonKey(item, name)) {
                 return false;
             }
-            const auto it = ColumnsIndex.find(item.escaped_key().value());
+            const auto it = ColumnsIndex.find(name);
             if (it == ColumnsIndex.end()) {
                 continue;
             }
@@ -1267,7 +1283,8 @@ private:
 
             ui16 parsedNonOptional = 0;
             for (auto item : document.get_object()) {
-                CHECK_JSON_ERROR(item.error()) {
+                std::string_view name;   // fragile; don't use after any other simdjson call
+                CHECK_JSON_ERROR(ExtractJsonKey(item, name)) {
                     auto status = TStatus::Fail(EStatusId::BAD_REQUEST,
                         TStringBuilder() << "Failed to parse json message for offset " << offset
                                          << ", json item was corrupted: " << simdjson::error_message(error)
@@ -1275,8 +1292,7 @@ private:
                                          << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
                     return TryToParseOneJson(state, status);
                 }
-
-                const auto it = ColumnsIndex.find(item.escaped_key().value());
+                const auto it = ColumnsIndex.find(name);
                 if (it == ColumnsIndex.end()) {
                     continue;
                 }

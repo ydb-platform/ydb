@@ -54,6 +54,80 @@ namespace {
 
 Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
+    Y_UNIT_TEST(TotalCpuLimitScalesExistingGuaranteesInSnapshot) {
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
+        scheduler.SetTotalCpuLimit(8);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler.GetTotalCpuLimit(), 8);
+
+        scheduler.AddOrUpdatePool("db", "a", {.Weight = 2, .CpuLimit = 4, .CpuGuarantee = 4, .MemoryLimit = 1024});
+        scheduler.AddOrUpdatePool("db", "b", {.CpuLimit = 4, .CpuGuarantee = 4});
+        auto a = scheduler.AddOrUpdateQuery("db", "a", 1, {});
+        auto b = scheduler.AddOrUpdateQuery("db", "b", 2, {});
+        auto tasksA = CreateDemandTasks(a, 8);
+        auto tasksB = CreateDemandTasks(b, 8);
+
+        // Configured absolute guarantees stay intact; the tree scales their actual fair-shares.
+        for (ui64 cores : {8, 4, 2, 8}) {
+            scheduler.SetTotalCpuLimit(cores);
+            scheduler.UpdateFairShare();
+            UNIT_ASSERT_VALUES_EQUAL(scheduler.GetTotalCpuLimit(), cores);
+            for (const auto& query : {a, b}) {
+                auto* pool = query->GetSnapshot()->GetParent();
+                // The snapshot caps the configured limit and the resulting demand by the total CPU.
+                UNIT_ASSERT_VALUES_EQUAL(pool->GetCpuLimit(), Min<ui64>(4, cores));
+                UNIT_ASSERT_VALUES_EQUAL(pool->GetCpuGuarantee(), Min<ui64>(4, cores));
+                UNIT_ASSERT_VALUES_EQUAL(pool->CpuFairShare, cores / 2);
+                UNIT_ASSERT_VALUES_EQUAL(query->GetParent()->GetCpuGuarantee(), 4);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(a->GetParent()->GetMemoryLimit(), 1024);
+            UNIT_ASSERT_VALUES_EQUAL(a->GetParent()->GetWeight(), 2);
+        }
+
+        // Normalization uses the CPU total from the published snapshot, not a newer live total.
+        scheduler.SetTotalCpuLimit(4);
+        const auto shares = scheduler.GetLeafPoolFairShares();
+        UNIT_ASSERT_DOUBLES_EQUAL(shares.at(NHdrf::TFullPoolId{"db", "a"}), 0.5, 1e-9);
+
+        scheduler.SetTotalCpuLimit(3);
+        scheduler.UpdateFairShare();
+        UNIT_ASSERT_VALUES_EQUAL(scheduler.GetTotalCpuLimit(), 3);
+        scheduler.SetTotalCpuLimit(1);
+        scheduler.UpdateFairShare();
+        UNIT_ASSERT_VALUES_EQUAL(scheduler.GetTotalCpuLimit(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(a->GetParent()->GetCpuLimit(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(a->GetParent()->GetCpuGuarantee(), 4);
+    }
+
+    Y_UNIT_TEST(CpuResizeRecalculatesDatabaseGuarantees) {
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
+        scheduler.SetTotalCpuLimit(8);
+        scheduler.AddOrUpdateDatabase("limited", {.CpuLimit = 6});
+        auto implicitDb = scheduler.GetOrCreateMemoryPool("implicit", "pool")->GetParent();
+        auto limitedDb = scheduler.GetOrCreateMemoryPool("limited", "pool")->GetParent();
+        UNIT_ASSERT_VALUES_EQUAL(implicitDb->GetCpuGuarantee(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(limitedDb->GetCpuGuarantee(), 6);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase("limited", {.CpuGuarantee = 7}), TCpuGuaranteeError);
+
+        // The default guarantee follows the total limit and never exceeds the database's own limit.
+        scheduler.SetTotalCpuLimit(4);
+        UNIT_ASSERT_VALUES_EQUAL(implicitDb->GetCpuGuarantee(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(limitedDb->GetCpuGuarantee(), 4);
+
+        scheduler.SetTotalCpuLimit(2);
+        UNIT_ASSERT_VALUES_EQUAL(implicitDb->GetCpuGuarantee(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(limitedDb->GetCpuGuarantee(), 2);
+
+        scheduler.SetTotalCpuLimit(16);
+        UNIT_ASSERT_VALUES_EQUAL(implicitDb->GetCpuGuarantee(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(limitedDb->GetCpuGuarantee(), 6);
+
+        // An update without an explicit guarantee falls back to the default one.
+        scheduler.AddOrUpdateDatabase("limited", {.Weight = 2});
+        UNIT_ASSERT_VALUES_EQUAL(limitedDb->GetCpuGuarantee(), 6);
+    }
+
     Y_UNIT_TEST(RegistrationsKeepCanonicalQueryUntilLastRelease) {
         /* Scenario:
             - Register query ID 0 several times; reuse the same pointer.

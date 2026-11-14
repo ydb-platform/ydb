@@ -15,11 +15,13 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/core/subsystems/stats.h>
 
 #include <algorithm>
+#include <cmath>
+#include <optional>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE_SCHEDULER
 
@@ -31,6 +33,21 @@ using namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic;
 namespace {
 
 using TDynamicElement = NHdrf::TTreeElementBase<NHdrf::ETreeType::DYNAMIC>;
+
+// Rounded absolute limits cannot be scaled back losslessly. The service keeps their configuration.
+struct TPoolCpuConfig {
+    std::optional<double> LimitPercent;
+    double GuaranteePercent = 0;
+};
+
+void ApplyCpuConfig(const TPoolCpuConfig& config, ui64 totalCpuLimit, NHdrf::TStaticAttributes& attrs) {
+    if (config.LimitPercent) {
+        const double percent = *config.LimitPercent;
+        attrs.CpuLimit = percent == 0 ? 0 : std::max<ui64>(1, percent * totalCpuLimit / 100);
+        attrs.ReadLimit = TDuration::MilliSeconds(percent * 10);
+    }
+    attrs.CpuGuarantee = static_cast<ui64>(config.GuaranteePercent * totalCpuLimit / 100);
+}
 
 // Validates the final (merged) configuration which is about to be applied to a tree element.
 // `element` is the element itself when it already exists, `parent` is its parent-to-be - passing
@@ -94,7 +111,15 @@ public:
             YDB_LOG_INFO("Disabled on start");
         }
 
-        Scheduler->SetTotalCpuLimit(CalculateTotalCpuLimit()); // TODO: take total cpu limit from outside
+        // Resolve the User pool once. Subsequent samples only read the pool's atomic counters.
+        // Stub executor pools used in tests are not basic pools and retain the one-core fallback.
+        for (auto* pool : NActors::TActivationContext::ActorSystem()->GetBasicExecutorPools()) {
+            if (pool->PoolId == AppData()->UserPoolId) {
+                UserPool = pool;
+                break;
+            }
+        }
+        UpdateTotalCpuLimit(ReadUserPoolCpuLimit());
 
         // The node's own database is known before the scheduler may be used by anyone - the state is
         // not entered yet, so no event can be handled before it is registered. The other databases
@@ -185,7 +210,7 @@ public:
 
         Y_ASSERT(!poolId.empty());
 
-        SetCpuAttributes(ev->Get()->Params, attrs);
+        const auto cpuConfig = SetCpuAttributes(ev->Get()->Params, attrs);
         SetMemoryAttributes({databaseId, poolId}, ev->Get()->Params, attrs);
 
         YDB_LOG_DEBUG("Add",
@@ -194,7 +219,7 @@ public:
             {"attrs", attrs});
 
         if (PoolSubscribtions.emplace(NHdrf::TFullPoolId{.DatabaseId=databaseId, .PoolId=poolId}, false).second) {
-            ApplyPoolConfig(databaseId, poolId, attrs);
+            ApplyPoolConfig(databaseId, poolId, attrs, cpuConfig);
             Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
         }
     }
@@ -220,9 +245,9 @@ public:
                 .ReadLimit = TDuration::Seconds(1), // see TSchedulableRead
             };
             PoolMemoryLimitPercents.erase(poolIt->first);
-            SetCpuAttributes(*ev->Get()->Config, attrs);
+            const auto cpuConfig = SetCpuAttributes(*ev->Get()->Config, attrs);
             SetMemoryAttributes(poolIt->first, *ev->Get()->Config, attrs);
-            ApplyPoolConfig(databaseId, poolId, attrs);
+            ApplyPoolConfig(databaseId, poolId, attrs, cpuConfig);
 
             YDB_LOG_DEBUG("Update",
                 {"pool", databaseId},
@@ -236,6 +261,7 @@ public:
             } else {
                 // The second removal - the pool was really removed.
                 PoolMemoryLimitPercents.erase(poolIt->first);
+                PoolCpuConfigs.erase(poolIt->first);
                 PoolSubscribtions.erase(poolIt);
                 // TODO: Scheduler->RemovePool(…);
                 // TODO: Scheduler->UpdatePool(…);
@@ -282,6 +308,7 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+        UpdateTotalCpuLimit(ReadUserPoolCpuLimit());
         Scheduler->UpdateFairShare();
         if (Scheduler->IsMemoryEnabled()) {
             ReportMemoryConsumption();
@@ -325,30 +352,63 @@ public:
     }
 
 private:
-    ui64 CalculateTotalCpuLimit() {
-        auto poolId = SelfId().PoolID();
-        NActors::TExecutorPoolStats poolStats;
-        TVector<NActors::TExecutorThreadStats> threadsStats;
-        NActors::GetActorSystemStats().GetPoolStats(poolId, poolStats, threadsStats);
-        return Max<ui64>(poolStats.MaxThreadCount, 1);
+    ui64 ReadUserPoolCpuLimit() const {
+        // The scheduler accounts CPU in whole cores; a shared-only pool still gets one core.
+        const float cpu = UserPool ? std::max(0.0f, UserPool->GetThreadCount()) : 1.0f;
+        return std::max<ui64>(1, static_cast<ui64>(std::ceil(cpu)));
+    }
+
+    void UpdateTotalCpuLimit(ui64 cpu) {
+        const ui64 previous = Scheduler->GetTotalCpuLimit();
+        if (cpu == previous) {
+            return;
+        }
+
+        // Grow the parents before increasing reservations. When shrinking, release reservations
+        // first, while the old parent guarantees still cover the not-yet-updated siblings.
+        if (cpu > previous) {
+            Scheduler->SetTotalCpuLimit(cpu);
+        }
+        for (const auto& [fullPoolId, config] : PoolCpuConfigs) {
+            NHdrf::TStaticAttributes attrs;
+            ApplyCpuConfig(config, cpu, attrs);
+            try {
+                Scheduler->AddOrUpdatePool(fullPoolId.DatabaseId, fullPoolId.PoolId, attrs);
+                continue;
+            } catch (const TCpuGuaranteeError& e) {
+                // A fixed parent/child reservation or rounding may prevent the new guarantee.
+                // Unlike a rejected new configuration, a capacity change must not erase it.
+                YDB_LOG_WARN("Preserving guarantee during CPU resize",
+                    {"database", fullPoolId.DatabaseId}, {"poolId", fullPoolId.PoolId},
+                    {"error", TString(e.what())});
+            }
+
+            attrs.CpuGuarantee.reset();
+            try {
+                Scheduler->AddOrUpdatePool(fullPoolId.DatabaseId, fullPoolId.PoolId, attrs);
+            } catch (const TCpuGuaranteeError& e) {
+                // Even the new limit may conflict with the retained reservation. Keep the old
+                // attributes; the snapshot still caps the fair-share by the available total CPU.
+                YDB_LOG_WARN("Preserving pool limits during CPU resize",
+                    {"database", fullPoolId.DatabaseId}, {"poolId", fullPoolId.PoolId},
+                    {"error", TString(e.what())});
+            }
+        }
+        if (cpu < previous) {
+            Scheduler->SetTotalCpuLimit(cpu);
+        }
     }
 
     // The limit and the guarantee are set together, since a lower limit has to lower the guarantee as well.
     // A limit of -1 is not set (TEvUpdatePoolInfo removes it beforehand), a guarantee of -1 releases the reservation.
-    void SetCpuAttributes(const NResourcePool::TPoolSettings& config, NHdrf::TStaticAttributes& attrs) const {
-        const auto totalCpuLimit = Scheduler->GetTotalCpuLimit();
-
-        if (const auto& cpuLimitPercent = config.TotalCpuLimitPercentPerNode; cpuLimitPercent >= 0) {
-            if (cpuLimitPercent == 0) {
-                attrs.CpuLimit = 0;
-                attrs.ReadLimit = TDuration::Zero();
-            } else {
-                attrs.CpuLimit = std::max<ui64>(1, cpuLimitPercent * totalCpuLimit / 100);
-                attrs.ReadLimit = TDuration::MilliSeconds(cpuLimitPercent * 10);
-            }
+    TPoolCpuConfig SetCpuAttributes(const NResourcePool::TPoolSettings& config, NHdrf::TStaticAttributes& attrs) const {
+        TPoolCpuConfig cpuConfig;
+        if (config.TotalCpuLimitPercentPerNode >= 0) {
+            cpuConfig.LimitPercent = config.TotalCpuLimitPercentPerNode;
         }
-
-        attrs.CpuGuarantee = static_cast<ui64>(std::max(config.TotalCpuGuaranteePercentPerNode, 0.0) * totalCpuLimit / 100);
+        cpuConfig.GuaranteePercent = std::max(config.TotalCpuGuaranteePercentPerNode, 0.0);
+        ApplyCpuConfig(cpuConfig, Scheduler->GetTotalCpuLimit(), attrs);
+        return cpuConfig;
     }
 
     // As SetCpuAttributes. The percent is remembered, since the limit follows the total memory limit.
@@ -398,9 +458,10 @@ private:
     //       valid DDL queries may be delivered here in the reverse order. The pool that arrives
     //       first is then rejected against the stale guarantee of its sibling and stays without
     //       any guarantee until its own configuration changes again.
-    void ApplyPoolConfig(const TString& databaseId, const TString& poolId, NHdrf::TStaticAttributes attrs) {
+    void ApplyPoolConfig(const TString& databaseId, const TString& poolId, NHdrf::TStaticAttributes attrs, TPoolCpuConfig cpuConfig) {
         try {
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
+            PoolCpuConfigs[NHdrf::TFullPoolId{databaseId, poolId}] = cpuConfig;
             return;
         } catch (const TCpuGuaranteeError& e) {
             YDB_LOG_ERROR("Rejected guarantee",
@@ -411,15 +472,19 @@ private:
         }
 
         attrs.CpuGuarantee = 0;
+        cpuConfig.GuaranteePercent = 0;
         Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
+        PoolCpuConfigs[NHdrf::TFullPoolId{databaseId, poolId}] = cpuConfig;
     }
 
 private:
     TComputeSchedulerPtr Scheduler;
+    NActors::IExecutorPool* UserPool = nullptr; // owned by the actor system, valid while the service runs
     TIntrusivePtr<NKikimr::NMemory::IMemoryConsumer> MemoryConsumer;
     const TDuration UpdateFairSharePeriod;
     THashMap<NHdrf::TFullPoolId, bool /* IsFirstRemoval */> PoolSubscribtions;
     THashMap<NHdrf::TFullPoolId, double> PoolMemoryLimitPercents;
+    THashMap<NHdrf::TFullPoolId, TPoolCpuConfig> PoolCpuConfigs;
     ui64 PublishedMemoryLimit = 0;
     ui64 PublishedMemoryUsage = 0;
 };
@@ -441,12 +506,19 @@ TComputeScheduler::TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters
     Counters.UpdateFairShare = group->GetCounter("scheduler/UpdateFairShare", true);
 }
 
-// TODO: recalculate the guarantees of the whole tree here once the total limit becomes changeable.
-//       A guarantee is converted from percents to cores when the configuration arrives and is kept
-//       as an absolute value afterwards, so a changed total limit makes every one of them stale.
 void TComputeScheduler::SetTotalCpuLimit(ui64 cpu) {
-    Root->TotalCpuLimit = cpu;
+    TWriteGuard lock(Mutex);
     Root->CpuGuarantee = cpu;
+    if (cpu == Root->TotalCpuLimit) {
+        return;
+    }
+    Root->TotalCpuLimit = cpu;
+
+    // A database is guaranteed everything it may use; the node-wide sum is not validated, so the
+    // databases share the capacity proportionally in the snapshot.
+    Root->ForEachChild<TDatabase>([&](TDatabase* database, size_t) {
+        database->CpuGuarantee = Min<ui64>(cpu, database->GetCpuLimit());
+    });
 }
 
 ui64 TComputeScheduler::GetTotalCpuLimit() const {
@@ -526,7 +598,11 @@ void TComputeScheduler::AddOrUpdateDatabase(const TString& databaseId, const NHd
 
     auto database = Root->GetDatabase(databaseId);
     auto merged = database ? database->MergedWith(attrs) : attrs;
-    SetDefaultDatabaseGuarantee(merged);
+    if (!attrs.CpuGuarantee) {
+        // No DDL sets a database guarantee: it follows the total CPU limit and is refreshed there.
+        merged.CpuGuarantee.reset();
+        SetDefaultDatabaseGuarantee(merged);
+    }
 
     // Databases are intentionally not validated against the root's guarantee.
     ValidateAttributes(merged, database.get(), nullptr);
@@ -637,14 +713,11 @@ bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId, const bool i
 
 THashMap<NHdrf::TFullPoolId, double> TComputeScheduler::GetLeafPoolFairShares() const {
     THashMap<NHdrf::TFullPoolId, double> result;
-    const auto totalCpu = GetTotalCpuLimit();
-    if (!totalCpu) {
-        return result;
-    }
     auto snapshot = Root->GetSnapshot();
-    if (!snapshot) {
+    if (!snapshot || !snapshot->TotalCpuLimit) {
         return result;
     }
+    const auto totalCpu = snapshot->TotalCpuLimit;
 
     // The pools created only to account the memory (see GetOrCreateMemoryPool) are not scheduled by CPU.
     TReadGuard lock(Mutex);

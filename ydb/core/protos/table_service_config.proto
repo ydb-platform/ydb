@@ -639,4 +639,8 @@ message TTableServiceConfig {
     optional bool EnableLookupJoinPointPrefixes = 154 [default = true, (InvalidateCompileCache) = true];
 
     optional bool UseScalarHashJoin = 155 [default = false, (InvalidateCompileCache) = true];
+
+    // Enable ANY semantics in block and scalar hash joins in the legacy optimizer.
+    // Keep disabled until all execution nodes support the extended settings tuple.
+    optional bool UseHashJoinForAny = 156 [default = false, (InvalidateCompileCache) = true];
 };

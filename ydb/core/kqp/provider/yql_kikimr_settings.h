@@ -73,6 +73,7 @@ public:
     NCommon::TConfSetting<bool, Static> EnableBlockHashJoinEqualNulls;
     NCommon::TConfSetting<bool, Static> UseScalarHashJoin;
     NCommon::TConfSetting<bool, Static> UseScalarHashJoinForMap;
+    NCommon::TConfSetting<bool, Static> UseHashJoinForAny;
     NCommon::TConfSetting<bool, Static> EnableLookupJoinPointPrefixes;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
@@ -278,6 +279,7 @@ struct TKikimrConfiguration : public NCommon::TDispatcherAndSettings<TKikimrSett
     bool GetEnableBlockHashJoinEqualNulls() const;
     bool GetUseScalarHashJoin() const;
     bool GetUseScalarHashJoinForMap() const;
+    bool GetUseHashJoinForAny() const;
     bool GetEnableLookupJoinPointPrefixes() const;
     bool GetEnableNewRBOPhysicalStagePeephole() const;
     bool GetUseKqpTasksGraphV2() const;

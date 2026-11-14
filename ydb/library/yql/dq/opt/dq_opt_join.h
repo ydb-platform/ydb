@@ -50,7 +50,8 @@ NNodes::TExprBase DqBuildJoin(
     bool buildCollectStage=true,
     bool blockHashJoinBuildSideLeft = false,
     bool useScalarHashJoin = false,
-    bool useScalarHashJoinForMap = false
+    bool useScalarHashJoinForMap = false,
+    bool useHashJoinForAny = false
 );
 
 NNodes::TExprBase DqBuildHashJoin(
@@ -63,7 +64,8 @@ NNodes::TExprBase DqBuildHashJoin(
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin = false,
     bool blockHashJoinBuildSideLeft = false,
-    bool useScalarHashJoin = false);
+    bool useScalarHashJoin = false,
+    bool useHashJoinForAny = false);
 
 TVector<NNodes::TCoNameValueTuple> BuildBlockHashJoinSettings(
     TPositionHandle pos,

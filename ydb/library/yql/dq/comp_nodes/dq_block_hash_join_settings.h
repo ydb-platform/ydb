@@ -21,6 +21,8 @@ struct TBlockHashJoinSettings {
     // equality, so a NULL on either side does not match. Rows with NULL in
     // these keys are valid join keys.
     TVector<ui32> EqualNullsKeys;
+    bool LeftAny = false;
+    bool RightAny = false;
 
     bool LeftIsBuild() const { return BuildSide == EBuildSide::Left; }
 };

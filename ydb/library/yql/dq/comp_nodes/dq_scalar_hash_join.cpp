@@ -239,7 +239,9 @@ private:
                                   Meta_->ColumnPermutation.Probe}},
                     ctx, "ScalarHashJoinPacked",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
-                                                              .Probe = Converters_.Probe->GetTupleLayout()})
+                                                              .Probe = Converters_.Probe->GetTupleLayout()},
+                    TSides<bool>{.Build = meta->Settings.LeftIsBuild() ? meta->Settings.LeftAny : meta->Settings.RightAny,
+                                 .Probe = meta->Settings.LeftIsBuild() ? meta->Settings.RightAny : meta->Settings.LeftAny})
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
             , PairFilter_(std::move(pairFilter))
             , OutputRows_(MakeJoinOutputRowsCounter(ctx))

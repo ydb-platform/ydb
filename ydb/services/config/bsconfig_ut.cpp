@@ -1212,6 +1212,107 @@ config:
         UNIT_ASSERT_C(mainConfig->Contains("replacement-a"), *mainConfig);
     }
 
+    // With the dedicated storage YAML, the storage YAML alone is replaced: there is no main YAML for Console to
+    // validate. The replacement must still go on in BSC and apply, and the next one must not be refused as ongoing.
+    Y_UNIT_TEST(StorageOnlyReplacementApplies) {
+        TRaceServer server;
+        auto& runtime = *server.GetRuntime();
+        const TString pdiskPath = runtime.GetTempDir() + "pdisk_1.dat";
+        auto makeStorageYaml = [&](ui32 version, ui32 extraDrives) {
+            return Sprintf(R"(
+metadata:
+  kind: StorageConfig
+  cluster: ""
+  version: %u
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: %s
+      type: ROT
+%s  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)", version, pdiskPath.c_str(), ExtraDrives(extraDrives).c_str());
+        };
+        auto makeMainYaml = [&](ui32 version, const char *name) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  log_config:
+    cluster_name: %s
+)", version, name) + HostsYaml(runtime);
+        };
+        auto replace = [&](std::optional<TString> mainConfig, std::optional<TString> storageConfig,
+                std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode) {
+            Ydb::Config::ReplaceConfigResponse response;
+            Dispatched(runtime, [&] {
+                ReplaceConfig(server.GetChannel(), mainConfig, storageConfig, switchDedicatedStorageSection,
+                    dedicatedConfigMode, false, [&](const auto& resp) { response = resp; });
+            });
+            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+        };
+        auto fetchMain = [&] {
+            const auto edge = runtime.AllocateEdgeActor();
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerFetchConfigRequest>();
+            request->Record.SetDedicatedClusterSection(true);
+            runtime.SendToPipe(MakeBSControllerID(), edge, request.release());
+            const auto response = runtime.GrabEdgeEvent<TEvBlobStorage::TEvControllerFetchConfigResponse>(edge);
+            const auto& record = response->Get()->Record;
+            UNIT_ASSERT_C(!record.HasErrorReason(), record.GetErrorReason());
+            UNIT_ASSERT(record.HasClusterYaml());
+            return record.GetClusterYaml();
+        };
+        // BSC turns configuration v2 on with the first replacement, which can't switch the dedicated storage mode too
+        replace(makeMainYaml(1, "single"), std::nullopt, std::nullopt, false);
+        replace(makeMainYaml(2, "storage-only"), makeStorageYaml(0, 0),
+            /*switchDedicatedStorageSection=*/ true, false);
+        const auto mainBefore = fetchMain();
+        for (ui32 version : {1, 2}) {
+            replace(std::nullopt, makeStorageYaml(version, version), std::nullopt, /*dedicatedConfigMode=*/ true);
+            UNIT_ASSERT_VALUES_EQUAL(fetchMain(), mainBefore);
+        }
+        // version 2 is accepted only if version 1 has applied and the replacement isn't seen as ongoing any more
+
+        TActorId controller;
+        bool reconnected = false;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerValidateConfigResponse) {
+                controller = ev->GetRecipientRewrite();
+            }
+            if (controller && ev->GetRecipientRewrite() == controller
+                    && ev->GetTypeRewrite() == TEvBlobStorage::EvControllerProposeConfigResponse) {
+                const auto status = ev->Get<TEvBlobStorage::TEvControllerProposeConfigResponse>()->Record.GetStatus();
+                UNIT_ASSERT_C(status == NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNotNeeded,
+                    NKikimrBlobStorage::TEvControllerProposeConfigResponse::EStatus_Name(status));
+                reconnected = true;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        // Storage-only commits must leave Console expecting main version 3, just as BSC does.
+        replace(makeMainYaml(3, "main-after-storage"), std::nullopt, std::nullopt, /*dedicatedConfigMode=*/ true);
+        UNIT_ASSERT(controller);
+        const auto mainAfter = fetchMain();
+        UNIT_ASSERT_C(mainAfter.Contains("main-after-storage"), mainAfter);
+
+        // BSC schedules GetBlock before it reconnects; the simulated runtime otherwise drops this event.
+        runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& ev, TDuration delay,
+                TInstant& deadline) {
+            return ev->GetTypeRewrite() != TEvBlobStorage::EvGetBlock
+                && TTestActorRuntime::DefaultScheduledFilterFunc(r, ev, delay, deadline);
+        });
+        RebootTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor());
+        WaitFor(runtime, [&] { return reconnected; });
+        runtime.SetObserverFunc(prevObserver);
+        replace(makeMainYaml(4, "main-after-reconnect"), std::nullopt, std::nullopt, /*dedicatedConfigMode=*/ true);
+        const auto mainAfterReconnect = fetchMain();
+        UNIT_ASSERT_C(mainAfterReconnect.Contains("main-after-reconnect"), mainAfterReconnect);
+    }
+
 }
 
 } // NKikimr::NGRpcService

@@ -20,7 +20,7 @@ namespace NKikimr::NBsController {
 
         TConsoleInteraction(TBlobStorageController& controller);
         void Start();
-        void OnConfigCommit();
+        void OnConfigCommit(bool mainConfigChanged);
         void Stop();
         void ProcessDryRunResponse(bool success, TString errorReason = {});
 
@@ -68,6 +68,7 @@ namespace NKikimr::NBsController {
         void MakeCommitToConsole(TString& config, ui32 configVersion);
         void MakeGetBlock();
         void MaybeDisableConfigV2();
+        void OnConsoleCommit();
 
         void CommitConfig();
         void IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus status,

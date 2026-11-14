@@ -106,6 +106,7 @@ namespace NKikimr {
             Y_VERIFY_S(Phase == EStart || Phase == EWaitRemote,
                 Ctx->SyncerCtx->VCtx->VDiskLogPrefix << Sublog.Get());
             Phase = EStart;
+            SyncTarget.reset();
             Type = EFullRecover;
             Current.LastSyncStatus = TSyncStatusVal::FullRecover;
             Current.SyncState = syncState;
@@ -133,6 +134,15 @@ namespace NKikimr {
             }
         }
 
+        bool TSyncerJobTask::HasReachedSyncTarget(const TSyncState& syncState) const {
+            if (!SyncTarget) {
+                return false;
+            }
+            const bool matchingGuid = syncState.Guid == SyncTarget->Guid;
+            const bool reachedTargetLsn = syncState.SyncedLsn >= SyncTarget->SyncedLsn;
+            return matchingGuid && reachedTargetLsn;
+        }
+
         TSjOutcome TSyncerJobTask::ReplyAndDie(ESyncStatus status) {
             // Phase
             Phase = EFinished;
@@ -141,6 +151,11 @@ namespace NKikimr {
             Y_VERIFY_S(status != TSyncStatusVal::Running,
                 Ctx->SyncerCtx->VCtx->VDiskLogPrefix << Sublog.Get());
             auto now = TAppData::TimeProvider->Now();
+            const bool successfulSync = NSyncer::TPeerSyncState::Good(status);
+            const bool syncTargetNotReached = RequireSyncTarget && !HasReachedSyncTarget(Current.SyncState);
+            if (successfulSync && syncTargetNotReached) {
+                status = TSyncStatusVal::NotReady;
+            }
             Current.LastSyncStatus = status;
             Current.LastTry = now;
             if (NSyncer::TPeerSyncState::Good(status))
@@ -189,6 +204,9 @@ namespace NKikimr {
                 return TSjOutcome::Event(ServiceId, std::move(msg), full);
             } else {
                 auto msg = std::make_unique<TEvBlobStorage::TEvVSync>(Current.SyncState, Ctx->SelfVDiskId, VDiskId);
+                if (RequireSyncTarget && !SyncTarget) {
+                    msg->Record.SetRequestTargetLsn(true);
+                }
                 Ctx->SyncerCtx->MonGroup.SyncerVSyncBytesSent() += msg->GetCachedByteSize();
                 ++Ctx->SyncerCtx->MonGroup.SyncerVSyncMessagesSent();
                 return TSjOutcome::Event(ServiceId, std::move(msg));
@@ -208,7 +226,8 @@ namespace NKikimr {
 
             const TSyncState oldSyncState = GetCurrent().SyncState;
             SetSyncState(newSyncState);
-            EndOfStream = record.GetFinished();
+            const bool reachedSyncTarget = RequireSyncTarget && HasReachedSyncTarget(newSyncState);
+            EndOfStream = record.GetFinished() || reachedSyncTarget;
 
             if (!data.empty()) {
                 Phase = EWaitLocal;
@@ -247,6 +266,7 @@ namespace NKikimr {
         }
 
         TSjOutcome TSyncerJobTask::HandleRestart(const TSyncState &newSyncState) {
+            SyncTarget.reset();
             SetSyncState(newSyncState);
             EndOfStream = false;
             Phase = EStart;
@@ -288,6 +308,18 @@ namespace NKikimr {
             }
 
             TSyncState newSyncState = SyncStateFromSyncState(record.GetNewSyncState());
+            const bool successfulReply = record.GetStatus() == NKikimrProto::OK || record.GetStatus() == NKikimrProto::ALREADY;
+            if (RequireSyncTarget && successfulReply) {
+                if (!SyncTarget) {
+                    if (!record.HasTargetLsn()) {
+                        return ReplyAndDie(TSyncStatusVal::NotReady);
+                    }
+                    SyncTarget.emplace(newSyncState.Guid, record.GetTargetLsn());
+                } else if (newSyncState.Guid != SyncTarget->Guid) {
+                    return ReplyAndDie(TSyncStatusVal::Race);
+                }
+            }
+
             Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_DEBUG, BS_SYNCER,
                     VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,
                         "SYNCER_VSYNCRES: fromVDisk# %s newSyncState# %s",

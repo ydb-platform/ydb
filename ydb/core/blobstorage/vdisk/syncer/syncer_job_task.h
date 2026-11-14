@@ -14,6 +14,8 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 
+#include <optional>
+
 namespace NKikimr {
 
     class TSyncerContext;
@@ -88,6 +90,8 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TSyncerJobTask {
         public:
+            bool RequireSyncTarget = false;
+
             // from protobuf
             using ESyncStatus = NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus;
             using TSyncStatusVal = NKikimrVDiskData::TSyncerVDiskEntry;
@@ -172,6 +176,7 @@ namespace NKikimr {
             ////////////////////////////////////////////////////////////////////////
             void HandleStatusFlags(const NKikimrBlobStorage::TEvVSyncResult &record);
             bool CheckFragmentFormat(const TString &data);
+            bool HasReachedSyncTarget(const TSyncState& syncState) const;
             void PrepareToFullRecovery(const TSyncState &syncState);
             TSjOutcome ContinueInFullRecoveryMode();
             TSjOutcome ReplyAndDie(ESyncStatus status);
@@ -211,6 +216,7 @@ namespace NKikimr {
             ui64 RedirCounter = 0;
             // when server returned 'finished' (i.e. 'end of stream')
             bool EndOfStream = false;
+            std::optional<TSyncState> SyncTarget;
             // if performing FullRecovery, we save state here
             TMaybe<TFullRecoverInfo> FullRecoverInfo;
             // context passed to us from outside

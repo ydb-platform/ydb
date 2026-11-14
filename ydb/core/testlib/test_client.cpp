@@ -18,8 +18,9 @@
 #include <ydb/core/cms/console/feature_flags_configurator.h>
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
 #include <ydb/core/cms/console/jaeger_tracing_configurator.h>
-#include <ydb/core/driver_lib/run/auto_config_initializer.h>
-#include <ydb/core/driver_lib/run/config_helpers.h>
+#include <ydb/core/driver_lib/actor_system_config/auto_config_initializer.h>
+#include <ydb/core/driver_lib/actor_system_config/config_helpers.h>
+#include <ydb/core/driver_lib/run_config/resource_broker_config.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
@@ -124,7 +125,6 @@
 #include <ydb/services/auth/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
-#include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/fq/grpc_service.h>
 #include <ydb/services/fq/private_grpc.h>

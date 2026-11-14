@@ -1,4 +1,4 @@
-#include "auto_config_initializer.h"
+#include <ydb/core/driver_lib/actor_system_config/auto_config_initializer.h>
 #include "run.h"
 #include "grpc_servers_manager.h"
 #include "service_initializer.h"

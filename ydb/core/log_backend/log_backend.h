@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/driver_lib/run/config.h>
+#include <ydb/core/driver_lib/run_config/config.h>
 
 #include <library/cpp/logger/backend.h>
 

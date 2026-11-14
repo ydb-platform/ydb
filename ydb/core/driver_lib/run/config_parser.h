@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config.h"
+#include <ydb/core/driver_lib/run_config/config.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
 

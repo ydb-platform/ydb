@@ -2297,6 +2297,210 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         UNIT_ASSERT_VALUES_EQUAL(actualPhantomFlags, expectedPhantomFlags);
     }
 
+    // The phantom flag storage builder reads the sync log snapshot from its LogStartLsn, the first record that the
+    // slowest neighbour still needs. A DoNotKeep flag written exactly at LogStartLsn must get into the storage as well.
+    Y_UNIT_TEST(PhantomFlagBuilderReadsRecordAtLogStart) {
+        TTestActorRuntime runtime(1, false);
+        TRealPDiskTestConfig testConfig;
+        testConfig.ChunkSize = 512_KB;
+        testConfig.SyncLogAdvisedIndexedBlockSize = 1_MB;
+        testConfig.SyncLogMaxMemAmount = 64_MB;
+        testConfig.SyncLogMaxDiskAmount = 1_GB + 256_MB;
+        testConfig.EnablePhantomFlagStorage = true;
+        testConfig.AdvanceEntryPointTimeout = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterFirstDuration = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
+        testConfig.PDiskPathSuffix = "synclog_real_phantom_builder_log_start.dat";
+
+        TRealStorage storage = SetupRealPDiskAndRealVDisk(runtime,
+            TBlobStorageGroupType::ErasureMirror3of4, testConfig);
+        const TVDiskID targetVDisk = storage.Info->GetVDiskId(0);
+        const TVDiskID sourceVDisk = storage.Info->GetVDiskId(1);
+        const TActorId targetVDiskId = storage.Info->GetActorId(0);
+        const TActorId edge = storage.Edge;
+        const TActorId putQueue = storage.PutQueue;
+
+        TActorId syncLogId;
+        TActorId syncLogKeeperId;
+        NPDisk::TOwner owner = 0;
+        NPDisk::TOwnerRound ownerRound = 0;
+        ui64 lastObservedGcLsn = 0;
+        ui64 lastReportedSyncLogFirstLsnToKeep = 0;
+        bool phantomFlagBuilderFinished = false;
+        TString lastPDiskErrorReason;
+
+        auto observePDiskLog = [&](const NPDisk::TEvLog& msg) {
+            if (msg.Signature.GetUnmasked() == TLogSignature::SignatureGC) {
+                owner = msg.Owner;
+                ownerRound = msg.OwnerRound;
+                lastObservedGcLsn = Max(lastObservedGcLsn, msg.Lsn);
+            }
+        };
+
+        TTestActorRuntime::TEventObserver previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!ev) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvSyncLogPut:
+                    if (!syncLogId) {
+                        syncLogId = ev->Recipient;
+                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
+                        syncLogKeeperId = ev->Recipient;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        observePDiskLog(*ev->Get<NPDisk::TEvLog>());
+                    }
+                    break;
+
+                case TEvBlobStorage::EvMultiLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        for (const NPDisk::TEvMultiLog::TItem& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
+                            observePDiskLog(*item.Event);
+                        }
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLogResult: {
+                    const NPDisk::TEvLogResult *msg = ev->Get<NPDisk::TEvLogResult>();
+                    if (msg->Status != NKikimrProto::OK) {
+                        lastPDiskErrorReason = msg->ErrorReason;
+                    }
+                    break;
+                }
+
+                case TEvBlobStorage::EvPhantomFlagStorageFinishBuilder:
+                    if (ev->Recipient == syncLogKeeperId) {
+                        phantomFlagBuilderFinished = true;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvVDiskCutLog: {
+                    const TEvVDiskCutLog *msg = ev->Get<TEvVDiskCutLog>();
+                    if (ev->Sender == syncLogKeeperId && msg->Component == TEvVDiskCutLog::SyncLog) {
+                        lastReportedSyncLogFirstLsnToKeep =
+                            Max(lastReportedSyncLogFirstLsnToKeep, msg->LastKeepLsn);
+                    }
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        TTestActorRuntime::TEventFilter previousEventFilter = runtime.SetEventFilter(
+            [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+                return false;
+            });
+        TTestRuntimeCallbackGuard runtimeCallbackGuard(runtime,
+            std::move(previousObserver), std::move(previousEventFilter));
+
+        UNIT_ASSERT_C(WaitVDiskReady(runtime, targetVDiskId, targetVDisk, edge),
+            "target VDisk did not become ready");
+
+        ui32 nextStep = 1;
+        ui64 nextCookie = 1;
+        ui32 nextCollectCounter = 1;
+        auto collectDoNotKeep = [&] {
+            TLogoBlobID blobId;
+            do {
+                blobId = TLogoBlobID(TLogoBlobID(123, 1, nextStep++, 0, 1, nextCookie++), 0);
+            } while (!storage.Info->BelongsToSubgroup(targetVDisk, blobId.Hash()) ||
+                    !storage.Info->BelongsToSubgroup(sourceVDisk, blobId.Hash()));
+
+            for (ui32 attempt = 0; attempt < 100; ++attempt) {
+                TVector<TLogoBlobID> doNotKeep{blobId};
+                std::unique_ptr<TEvBlobStorage::TEvVCollectGarbage> collect =
+                    std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(123, 1,
+                    nextCollectCounter, 0, false, 0, 0, false, nullptr, &doNotKeep,
+                    targetVDisk, TInstant::Max());
+                runtime.Send(new IEventHandle(putQueue, edge, collect.release()), NodeIndex);
+                TEvBlobStorage::TEvVCollectGarbageResult::TPtr result =
+                    runtime.GrabEdgeEvent<TEvBlobStorage::TEvVCollectGarbageResult>(edge,
+                    TDuration::Seconds(120));
+                UNIT_ASSERT_C(result, "no collect result; blobId# " << blobId
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                const NKikimrProto::EReplyStatus status = result->Get()->Record.GetStatus();
+                if (status == NKikimrProto::NOTREADY || status == NKikimrProto::TRYLATER) {
+                    DispatchFor(runtime, TDuration::MilliSeconds(10));
+                    continue;
+                }
+                UNIT_ASSERT_C(status == NKikimrProto::OK, "collect status# "
+                    << NKikimrProto::EReplyStatus_Name(status) << " blobId# " << blobId
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                ++nextCollectCounter;
+                return blobId;
+            }
+            UNIT_FAIL("collect request did not become ready; blobId# " << blobId);
+            return blobId;
+        };
+
+        // DoNotKeep flags, each in its own record; a CutLog after each one moves the sync log to disk, so that the
+        // BaldSyncLog below has chunks to drop and starts the builder
+        constexpr ui32 flagCount = 4;
+        TVector<TLogoBlobID> flags;
+        TVector<ui64> lsns;
+        for (ui32 i = 0; i < flagCount; ++i) {
+            const ui64 previousGcLsn = lastObservedGcLsn;
+            flags.push_back(collectDoNotKeep());
+            UNIT_ASSERT_C(lastObservedGcLsn > previousGcLsn, "DoNotKeep write did not advance the recovery log");
+            lsns.push_back(lastObservedGcLsn);
+
+            UNIT_ASSERT_C(syncLogId && syncLogKeeperId && owner && ownerRound,
+                "failed to discover SyncLog actors or target PDisk owner");
+            const ui64 freeUpToLsn = lastObservedGcLsn + 1;
+            runtime.Send(new IEventHandle(syncLogId, edge,
+                new NPDisk::TEvCutLog(owner, ownerRound, freeUpToLsn, 0, 0, 0, 0)), NodeIndex);
+            UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+                return lastReportedSyncLogFirstLsnToKeep >= freeUpToLsn;
+            }, 1000, TDuration::MilliSeconds(10)), "CutLog commit did not settle; flag# " << i);
+        }
+
+        // the neighbours have confirmed everything before the second flag, so it is at LogStartLsn
+        runtime.Send(new IEventHandle(syncLogKeeperId, edge, new NSyncLog::TEvSyncLogTrim(lsns[1] - 1)), NodeIndex);
+        ui64 logStartLsn = 0;
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+            runtime.Send(new IEventHandle(syncLogKeeperId, edge, new NSyncLog::TEvSyncLogSnapshot()), NodeIndex);
+            NSyncLog::TEvSyncLogSnapshotResult::TPtr result =
+                runtime.GrabEdgeEvent<NSyncLog::TEvSyncLogSnapshotResult>(edge, TDuration::Seconds(5));
+            UNIT_ASSERT(result);
+            logStartLsn = result->Get()->SnapshotPtr->LogStartLsn;
+            return logStartLsn == lsns[1];
+        }, 100, TDuration::MilliSeconds(10)),
+            "setup: the second flag must be at LogStartLsn; LogStartLsn# " << logStartLsn << " flagLsn# " << lsns[1]);
+
+        runtime.Send(new IEventHandle(targetVDiskId, edge,
+            new TEvBlobStorage::TEvVBaldSyncLog(targetVDisk, true)), NodeIndex);
+        TEvBlobStorage::TEvVBaldSyncLogResult::TPtr baldResult =
+            runtime.GrabEdgeEvent<TEvBlobStorage::TEvVBaldSyncLogResult>(edge,
+            TDuration::Seconds(120));
+        UNIT_ASSERT_C(baldResult, "no BaldSyncLog result");
+        UNIT_ASSERT_VALUES_EQUAL(baldResult->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+            return phantomFlagBuilderFinished;
+        }, 1000, TDuration::MilliSeconds(10)), "setup: the phantom flag storage builder must run");
+
+        runtime.Send(new IEventHandle(syncLogKeeperId, edge,
+            new NSyncLog::TEvPhantomFlagStorageGetSnapshot()), NodeIndex);
+        NSyncLog::TEvPhantomFlagStorageGetSnapshotResult::TPtr phantomSnapshot =
+            runtime.GrabEdgeEvent<NSyncLog::TEvPhantomFlagStorageGetSnapshotResult>(edge,
+            TDuration::Seconds(120));
+        UNIT_ASSERT_C(phantomSnapshot, "no Phantom Flag Storage snapshot result");
+
+        TVector<TLogoBlobID> expectedFlags(flags.begin() + 1, flags.end());
+        TVector<TLogoBlobID> actualFlags;
+        for (const NSyncLog::TLogoBlobRec& flag : phantomSnapshot->Get()->Flags) {
+            actualFlags.push_back(flag.LogoBlobID());
+        }
+        Sort(expectedFlags);
+        Sort(actualFlags);
+        UNIT_ASSERT_VALUES_EQUAL_C(actualFlags, expectedFlags,
+            "the flags from LogStartLsn on must be in the storage; LogStartLsn# " << lsns[1]);
+    }
+
     Y_UNIT_TEST(SyncLogMemOverflowSwapsDoNotFragmentDiskIndex) {
         /*
          * Reproduces a production incident: a group loses one VDisk (node is down), so SyncLog gets

@@ -70,13 +70,21 @@ public:
                     directoryPath = p->GetDirectoryPath();
                 }
 
+                // A target that attaches to an existing table may meet the deduplication offsets
+                // of an earlier stream, so its workers qualify the source id with the stream name.
+                // The choice is persisted with the target and never revisited: a target created
+                // before this column keeps the bare partition index its offsets were written under.
+                const bool qualifiedSourceId = !Replication->GetConfig().GetInitialScan();
+                Replication->FindTarget(tid)->SetSourceIdQualified(qualifiedSourceId);
+
                 db.Table<Schema::Targets>().Key(rid, tid).Update(
                     NIceDb::TUpdate<Schema::Targets::Kind>(target.Kind),
                     NIceDb::TUpdate<Schema::Targets::SrcPath>(target.Config->GetSrcPath()),
                     NIceDb::TUpdate<Schema::Targets::DstPath>(target.Config->GetDstPath()),
                     NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda),
                     NIceDb::TUpdate<Schema::Targets::RunAsUser>(runAsUser),
-                    NIceDb::TUpdate<Schema::Targets::DirectoryPath>(directoryPath)
+                    NIceDb::TUpdate<Schema::Targets::DirectoryPath>(directoryPath),
+                    NIceDb::TUpdate<Schema::Targets::QualifiedSourceId>(qualifiedSourceId)
                 );
 
                 YDB_LOG_NOTICE_CTX(ctx, "Add target",

@@ -960,6 +960,106 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         UNIT_ASSERT_VALUES_EQUAL(StripString(ReadShardedTable(server, tablePath)), expected);
     }
 
+    Y_UNIT_TEST(SourceIdChangeRestartsOffsets) {
+        // The shard keeps the highest applied offset per source name. A new stream named like the
+        // old one is deduplicated against the old offsets; a differently named source starts afresh.
+        // The replication service qualifies the source with the changefeed name for attach-mode
+        // replications (TRemoteTopicReaderSettings.SourceIdPrefix) because of this.
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row)
+        );
+
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+
+        ApplyChanges(server, shard, tableId, "0", {
+            TChange{.Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 11},
+            TChange{.Offset = 1, .WriteTxId = 0, .Key = 1, .Value = 22},
+            TChange{.Offset = 2, .WriteTxId = 0, .Key = 1, .Value = 33},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 33\n");
+
+        // The same source name at an old offset is a duplicate and is skipped.
+        ApplyChanges(server, shard, tableId, "0", {
+            TChange{.Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 44},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 33\n");
+
+        // A qualified source name is a new stream: its offset 0 is applied.
+        ApplyChanges(server, shard, tableId, "feed-b/0", {
+            TChange{.Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 55},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 55\n");
+    }
+
+    Y_UNIT_TEST(GlobalSourceIdChangeReappliesUnderCommittedTx) {
+        // With global consistency every record is staged under a write transaction id and becomes
+        // visible when that id is committed. The per-source deduplication offset is what keeps an
+        // already applied record from being applied a second time. A renamed source has no offsets
+        // of its own, so it re-applies: a record whose write transaction id is already committed
+        // becomes visible at once, at that transaction's version, rather than being staged. A
+        // re-delivered record carries the value it had the first time, so the replica converges --
+        // but the naming is still decided once, when the target is created, so that a target whose
+        // offsets are already recorded never re-applies anything at all.
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(settings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Global)
+        );
+
+        const auto shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+
+        ApplyChanges(server, shard, tableId, "0", {
+            TChange{.Offset = 0, .WriteTxId = 111, .Key = 1, .Value = 11},
+        });
+        CommitWrites(server, {"/Root/table-1"}, 111);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 11\n");
+
+        // The same source name at an applied offset is a duplicate: skipped before it can reach
+        // the committed transaction.
+        ApplyChanges(server, shard, tableId, "0", {
+            TChange{.Offset = 0, .WriteTxId = 111, .Key = 1, .Value = 99},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 11\n");
+
+        // The renamed source has no offsets, so the same offset is applied again. Its write
+        // transaction id is already committed, so the row is visible immediately instead of
+        // waiting for a commit that will never come again.
+        ApplyChanges(server, shard, tableId, "feed-b/0", {
+            TChange{.Offset = 0, .WriteTxId = 111, .Key = 1, .Value = 99},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 99\n");
+
+        // A write transaction id the controller has not committed yet still waits for its commit.
+        ApplyChanges(server, shard, tableId, "feed-b/0", {
+            TChange{.Offset = 1, .WriteTxId = 222, .Key = 2, .Value = 22},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 99\n");
+        CommitWrites(server, {"/Root/table-1"}, 222);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"),
+            "key = 1, value = 99\n"
+            "key = 2, value = 22\n");
+    }
+
     Y_UNIT_TEST(AsyncIndexFromRowConsistentBase) {
         TPortManager pm;
         TServerSettings settings(pm.GetPort(2134));

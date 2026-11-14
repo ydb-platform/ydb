@@ -85,6 +85,9 @@ public:
         virtual ETargetKind GetKind() const = 0;
         virtual bool IsIndexBuild() const = 0;
         virtual void SetIndexBuild(bool value) = 0;
+        // Whether this target's workers qualify the deduplication source id with the stream name.
+        virtual bool IsSourceIdQualified() const = 0;
+        virtual void SetSourceIdQualified(bool value) = 0;
 
         virtual const IConfig::TPtr& GetConfig() const = 0;
         virtual const TString& GetSrcPath() const = 0;

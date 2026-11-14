@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     compacted_blob_constructor.cpp
-    indexed_blob_constructor.cpp
     blob_constructor.cpp
     put_status.cpp
     write_controller.cpp

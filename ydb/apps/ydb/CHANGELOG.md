@@ -9,6 +9,7 @@
 * Added `ydb admin cluster bridge destroy-pile` command to destroy a DISCONNECTED pile along with all its data.
 * Added `ydb admin cluster bridge provision-pile` command to provision a pile listed in the bridge config in a running bridged cluster.
 * Renamed `ydb admin cluster bridge rejoin` to `ydb admin cluster bridge join-pile`; `rejoin` remains available as an alias.
+* Fixed `ydb admin cluster bridge takedown --new-primary` for the primary pile: the new pile is promoted first and the old one is suspended after the new one has become the primary.
 
 ## 2.35.0 ##
 

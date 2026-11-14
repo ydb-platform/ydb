@@ -9,6 +9,7 @@
 #include <ydb/library/signals/object_counter.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
+#include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
 
@@ -433,5 +434,18 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     };
     Y_UNIT_TEST(TestUniformDistribution) {
         TTestingExecutorUniformDistribution().Execute();
+    }
+
+    Y_UNIT_TEST(HistogramsAppearOnFirstCollect) {
+        auto root = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        TCounters counters("TEST", root);
+        auto pool = counters.GetWorkersPoolSignals("WP");
+        pool->GetCategorySignals(ESpecialTaskCategory::Scan);
+        UNIT_ASSERT(!NMonitoring::ToJson(*root).Contains("Histogram/"));
+
+        pool->PackExecuteHistogram.Collect(1);
+        const auto json = NMonitoring::ToJson(*root);
+        UNIT_ASSERT(json.Contains("Histogram/PackExecute/Duration/Us"));
+        UNIT_ASSERT(!json.Contains("Histogram/SendBack/Duration/Us"));
     }
 }

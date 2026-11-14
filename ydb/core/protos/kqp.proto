@@ -410,6 +410,8 @@ message TSessionInfo {
     optional int64 WmEnterTime = 19;
     optional int64 WmExitTime = 20;
     optional string TraceId = 21;
+    // Description of how the query was classified into WmPoolId
+    optional string WmClassifiedBy = 22;
 }
 
 message TEvListSessionsRequest {
@@ -990,6 +992,13 @@ message TKqpFullTextSourceSettings {
             optional bytes Value = 2;
         }
         repeated TPrefixColumn PrefixColumns = 4;
+
+        message TPatternQuery {
+            optional bytes Pattern = 1;
+            optional bytes Escape = 2;
+            optional NKqpProto.TKqpFullTextSource.TKqpQuerySettings.TPatternQuery.EMatchMode Mode = 3;
+        }
+        repeated TPatternQuery PatternQueries = 5;
     }
 
     message TIndexTable {
@@ -1034,6 +1043,7 @@ message TKqpFullTextSourceSettings {
     optional uint32 LockNodeId = 21;
     optional NKikimrDataEvents.ELockMode LockMode = 22;
     optional uint64 QuerySpanId = 23;
+    optional bool MainTableCovered = 24;
 };
 
 message TKqpSysViewSourceSettings {

@@ -93,23 +93,20 @@ public:
             }});
 
             insert({TSchema::WmPoolId::ColumnId, [] (const TNodeInfo& info, ui32) {   // 17
-                return TCell(info.GetWmPoolId().data(), info.GetWmPoolId().size());
+                return info.HasWmPoolId() ? TCell(info.GetWmPoolId().data(), info.GetWmPoolId().size()) : TCell();
             }});
 
-            insert({TSchema::WmState::ColumnId, [] (const TNodeInfo& info, ui32) {   // 18
-                return TCell(info.GetWmState().data(), info.GetWmState().size());
-            }});
-
-            insert({TSchema::WmEnterTime::ColumnId, [] (const TNodeInfo& info, ui32) {  // 19
-                return info.GetWmEnterTime() ? TCell::Make<ui64>(info.GetWmEnterTime()) : TCell();
-            }});
-
-            insert({TSchema::WmExitTime::ColumnId, [] (const TNodeInfo& info, ui32) {  // 20
-                return info.GetWmExitTime() ? TCell::Make<ui64>(info.GetWmExitTime()) : TCell();
-            }});
+            // Columns 18/19/20 are deprecated and always NULL, reserved for a future removal.
+            insert({TSchema::WmState::ColumnId,     [] (const TNodeInfo&, ui32) { return TCell(); }});  // 18
+            insert({TSchema::WmEnterTime::ColumnId, [] (const TNodeInfo&, ui32) { return TCell(); }});  // 19
+            insert({TSchema::WmExitTime::ColumnId,  [] (const TNodeInfo&, ui32) { return TCell(); }});  // 20
 
             insert({TSchema::TraceId::ColumnId, [] (const TNodeInfo& info, ui32) {  // 21
                 return info.HasTraceId() ? TCell(info.GetTraceId().data(), info.GetTraceId().size()) : TCell();
+            }});
+
+            insert({TSchema::WmClassifiedBy::ColumnId, [] (const TNodeInfo& info, ui32) {  // 22
+                return info.HasWmClassifiedBy() ? TCell(info.GetWmClassifiedBy().data(), info.GetWmClassifiedBy().size()) : TCell();
             }});
         }
     };

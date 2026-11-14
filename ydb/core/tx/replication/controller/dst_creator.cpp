@@ -18,6 +18,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -27,6 +28,23 @@ using namespace NConsole;
 using namespace NSchemeShard;
 
 namespace {
+
+bool AreLiteralDefaultsEqual(
+        const NKikimrSchemeOp::TColumnDescription& expected,
+        const NKikimrSchemeOp::TColumnDescription& actual)
+{
+    if (expected.HasDefaultFromLiteral() != actual.HasDefaultFromLiteral()) {
+        return false;
+    }
+
+    if (!expected.HasDefaultFromLiteral()) {
+        return true;
+    }
+
+    const auto& expectedDefault = expected.GetDefaultFromLiteral();
+    const auto& actualDefault = actual.GetDefaultFromLiteral();
+    return expectedDefault.SerializeAsString() == actualDefault.SerializeAsString();
+}
 
 bool IsImported(const NKikimrSchemeOp::TTableDescription& table) {
     return table.GetReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED;
@@ -206,7 +224,22 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
 
         Ydb::Table::CreateTableRequest scheme;
-        result.GetTableDescription().SerializeTo(scheme);
+        const auto description = result.GetTableDescription();
+        description.SerializeTo(scheme);
+
+        // SDK table descriptions do not retain literal defaults when serialized.
+        const auto& source = NYdb::TProtoAccessor::GetProto(description);
+        THashMap<TStringBuf, const Ydb::TypedValue*> literalDefaults;
+        for (const auto& column : source.columns()) {
+            if (column.has_from_literal()) {
+                literalDefaults.emplace(column.name(), &column.from_literal());
+            }
+        }
+        for (auto& column : *scheme.mutable_columns()) {
+            if (const auto it = literalDefaults.find(column.name()); it != literalDefaults.end()) {
+                column.mutable_from_literal()->CopyFrom(*it->second);
+            }
+        }
 
         // filter out unsupported index types
         auto& indexes = *scheme.mutable_indexes();
@@ -554,9 +587,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
 
         // check columns
-        THashMap<TStringBuf, TStringBuf> columns;
+        THashMap<TStringBuf, const NKikimrSchemeOp::TColumnDescription*> columns;
         for (const auto& column : got.GetColumns()) {
-            columns.emplace(column.GetName(), column.GetType());
+            columns.emplace(column.GetName(), &column);
         }
 
         if (tableDesc->ColumnsSize() != columns.size()) {
@@ -574,11 +607,17 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return false;
             }
 
-            if (column.GetType() != it->second) {
+            if (column.GetType() != it->second->GetType()) {
                 error = TStringBuilder() << "Column type mismatch"
                     << ": name: " << column.GetName()
                     << ", expected: " << column.GetType()
-                    << ", got: " << it->second;
+                    << ", got: " << it->second->GetType();
+                return false;
+            }
+
+            if (!AreLiteralDefaultsEqual(column, *it->second)) {
+                error = TStringBuilder() << "Column literal default mismatch"
+                    << ": name: " << column.GetName();
                 return false;
             }
         }

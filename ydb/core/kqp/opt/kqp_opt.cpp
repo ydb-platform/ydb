@@ -4,6 +4,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -95,8 +97,8 @@ bool TKqpOptimizeContext::IsGenericQuery() const {
     return QueryCtx->Type == NYql::EKikimrQueryType::Query || QueryCtx->Type == NYql::EKikimrQueryType::Script;
 }
 
-bool IsKqpPureLambda(const TCoLambda& lambda) {
-    return !FindNode(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) {
+bool IsKqpPureExpr(const TExprBase& expr, bool checkDqSources, bool checkIndexReads) {
+    return !FindNode(expr.Ptr(), [checkDqSources, checkIndexReads](const TExprNode::TPtr& node) {
         if (TMaybeNode<TKqlReadTableBase>(node)) {
             return true;
         }
@@ -113,8 +115,28 @@ bool IsKqpPureLambda(const TCoLambda& lambda) {
             return true;
         }
 
+        if (checkDqSources && (TCoDataSource::Match(node.Get()) || TDqSource::Match(node.Get())
+            || TDqReadWrapBase::Match(node.Get()))) {
+            return true;
+        }
+
+        if (checkIndexReads && (TKqlReadTableFullTextIndex::Match(node.Get())
+            || TKqpReadTableFullTextIndex::Match(node.Get()))) {
+            return true;
+        }
+
         return false;
     });
+}
+
+bool IsKqpPureLambda(const TCoLambda& lambda) {
+    return IsKqpPureExpr(lambda.Body());
+}
+
+bool IsKqpCompletePureExpr(const TExprBase& expr) {
+    return NYql::NDq::IsDqCompletePureExpr(expr, /* isPrecomputePure */ false)
+        && IsPureIsolatedLambda(expr.Ref())
+        && IsKqpPureExpr(expr, /* checkDqSources */ true, /* checkIndexReads */ true);
 }
 
 bool IsKqpPureInputs(const TExprList& inputs) {

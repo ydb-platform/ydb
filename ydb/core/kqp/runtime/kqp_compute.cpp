@@ -16,7 +16,12 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* computeCtx) {
-    return NYql::NDq::GetDqBaseComputeFactory(computeCtx);
+    return [baseFactory = NYql::NDq::GetDqBaseComputeFactory(computeCtx)](TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+        if (callable.GetType()->GetName() == "FulltextAnalyze") {
+            return WrapFulltextAnalyze(callable, ctx);
+        }
+        return baseFactory(callable, ctx);
+    };
 }
 
 namespace {

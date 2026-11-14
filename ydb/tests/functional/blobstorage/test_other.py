@@ -129,14 +129,13 @@ class TestOther(object):
         blob = self.create_blob()
         data = self.get_blob(blob)
         subgroup = self.check_integrity(blob)
-        for index, (vdisk, parts) in enumerate(subgroup.items()):
+        for index, vdisk in enumerate(subgroup):
             for part in (1, 2, 3):
                 if index < 3 and part != index + 1:
                     assert self.restore_part(blob, vdisk, part) == "ERROR"
                 else:
-                    expected = {"ALREADY"} if part in parts else {"OK", "ALREADY"}
-                    assert self.restore_part(blob, vdisk, part) in expected
-                    assert self.restore_part(blob, vdisk, part) == "ALREADY"
+                    assert self.restore_part(blob, vdisk, part) == "OK"
+                    assert self.restore_part(blob, vdisk, part) == "OK"
         assert self.check_integrity(blob) == {
             vdisk: {index + 1} if index < 3 else {1, 2, 3} for index, vdisk in enumerate(subgroup)
         }

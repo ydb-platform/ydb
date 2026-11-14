@@ -33,4 +33,5 @@ message TImportSessionLogic {
 
 message TImportSessionState {
     optional string Status = 1;
+    optional string ErrorMessage = 2;
 }

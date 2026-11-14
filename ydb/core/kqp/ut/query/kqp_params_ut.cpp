@@ -57,19 +57,21 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             auto params = makeParams(value);
             auto usedResult = session.ExecuteDataQuery("SELECT $value;", txControl, params).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(usedResult.GetStatus(), EStatus::BAD_REQUEST, value << ": " << usedResult.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(usedResult.GetIssues().ToString(), "Unsupported protobuf type");
+            UNIT_ASSERT_STRING_CONTAINS(usedResult.GetIssues().ToString(), "PostgreSQL types are not supported");
+
+            auto pgResult = kikimr.GetQueryClient().ExecuteQuery(
+                "SELECT $value;", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(pgResult.GetStatus(), EStatus::BAD_REQUEST, value << ": " << pgResult.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(pgResult.GetIssues().ToString(), "PostgreSQL types are not supported");
 
             auto result = session.ExecuteDataQuery("SELECT 1;", txControl, params).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, value << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "PostgreSQL types are not supported");
 
             auto cachedResult = query.Execute(txControl, params).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(cachedResult.GetStatus(), EStatus::BAD_REQUEST, value << ": " << cachedResult.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(cachedResult.GetIssues().ToString(), "PostgreSQL types are not supported");
         }
-        auto pgResult = kikimr.GetQueryClient().ExecuteQuery(
-            "SELECT $value;", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), makeParams(pgValues.front())).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(pgResult.GetStatus(), EStatus::BAD_REQUEST, pgResult.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(pgResult.GetIssues().ToString(), "Unsupported protobuf type");
         checkNative();
 
         auto structParams = makeParams(R"(

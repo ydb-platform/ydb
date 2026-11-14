@@ -14,8 +14,6 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
-#include <algorithm>
-
 namespace NKikimr::NKqp {
 
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
@@ -186,12 +184,6 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         }
 
         auto settings = settingsBuilder.Build(ctx);
-        const auto issues = ctx.IssueManager.GetIssues();
-        if (std::any_of(issues.begin(), issues.end(), [](const NYql::TIssue& issue) {
-            return issue.GetSeverity() <= NYql::TSeverityIds::S_ERROR;
-        })) {
-            return MakeRejectedSyntaxResult(issues.ToOneLineString());
-        }
         NYql::TStmtParseInfo stmtParseInfo;
 
         NSQLTranslationV1::TLexers lexers;
@@ -227,8 +219,8 @@ TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>&
         return TQueryAst(std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult(PgSyntaxNotSupportedMessage)), {}, {}, false, {});
     }
 
-    bool deprecatedSQL = false;
-    bool keepInCache = false;
+    bool deprecatedSQL;
+    bool keepInCache;
     TMaybe<TString> commandTagName;
     TMaybe<ui16> sqlVersion;
 
@@ -259,12 +251,6 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         }
 
         auto settings = settingsBuilder.Build(ctx);
-        const auto issues = ctx.IssueManager.GetIssues();
-        if (std::any_of(issues.begin(), issues.end(), [](const NYql::TIssue& issue) {
-            return issue.GetSeverity() <= NYql::TSeverityIds::S_ERROR;
-        })) {
-            return {{std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult(issues.ToOneLineString())), {}, {}, false, {}}};
-        }
         auto parsedSettings = settings;
         NYql::TIssues settingsIssues;
         if (!ParseTranslationSettings(queryText, parsedSettings, settingsIssues)) {

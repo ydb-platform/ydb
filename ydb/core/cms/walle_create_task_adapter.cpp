@@ -41,6 +41,11 @@ public:
             return;
         }
 
+        if (rec.GetEvictVDisks() && !Actions.at(rec.GetAction())) {
+            ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "data_migration is not supported for this action", ctx);
+            return;
+        }
+
         ctx.Send(Cms, new TEvCms::TEvGetClusterInfoRequest);
 
         Become(&TThis::StateWork);
@@ -123,6 +128,7 @@ private:
         request->Record.SetUser(WALLE_CMS_USER);
         request->Record.SetSchedule(true);
         request->Record.SetDryRun(task.GetDryRun());
+        request->Record.SetEvictVDisks(task.GetEvictVDisks());
         const auto &action = task.GetAction();
         if (action == "temporary-unreachable") {
             request->Record.SetPriority(WALLE_SOFT_MAINTENANCE_PRIORITY);

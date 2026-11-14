@@ -369,6 +369,8 @@ message TWalleCreateTaskRequest {
   optional string Action = 4;
   repeated string Hosts = 5;
   optional bool   DryRun = 6;
+  // Evict VDisks before granting permission; set by data_migration: "full" in the Walle HTTP API.
+  optional bool   EvictVDisks = 7 [default = false];
 }
 
 message TWalleCreateTaskResponse {

@@ -79,6 +79,14 @@ private:
         request->Record.SetIssuer(map["issuer"].GetString());
         request->Record.SetAction(map["action"].GetString());
 
+        if (auto it = map.find("data_migration"); it != map.end()) {
+            if (!it->second.IsString() || it->second.GetString() != "full") {
+                ReplyWithError("HTTP/1.1 400 Bad Request\r\n\r\ndata_migration must be \"full\"", ctx);
+                return;
+            }
+            request->Record.SetEvictVDisks(true);
+        }
+
         auto &hosts = map["hosts"].GetArray();
         for (auto &host : hosts)
             *request->Record.AddHosts() = host.GetString();

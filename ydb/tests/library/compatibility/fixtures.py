@@ -165,6 +165,79 @@ class RestartToAnotherVersionFixture:
         self.stop_driver()
         self.cluster.stop()
 
+    def _new_readiness_table_name(self):
+        self._readiness_seq = getattr(self, "_readiness_seq", 0) + 1
+        return "test_readiness_%d" % self._readiness_seq
+
+    def _execute_scheme_query(self, query, settings):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(
+                query,
+                retry_settings=ydb.RetrySettings(max_retries=1),
+                settings=settings,
+            )
+
+    def _drop_readiness_table(self, table_name, settings):
+        query = "DROP TABLE IF EXISTS `%s`" % table_name
+        deadline = time.time() + 30
+        while True:
+            try:
+                self._execute_scheme_query(query, settings)
+                return
+            except Exception as e:
+                if time.time() >= deadline:
+                    logger.warning("Failed to drop readiness table %s: %r", table_name, e)
+                    return
+                logger.warning("Drop readiness table %s failed, retrying: %r", table_name, e)
+                time.sleep(2)
+
+    def _wait_for_readiness(self):
+        timeout = 120  # seconds
+        interval = 2  # seconds
+        request_timeout = 30  # seconds
+        settings = (
+            ydb.BaseRequestSettings()
+            .with_timeout(request_timeout)
+            .with_operation_timeout(request_timeout)
+            .with_cancel_after(request_timeout)
+        )
+
+        start_time = time.time()
+        deadline = start_time + timeout
+        last_exception = None
+        attempt = 0
+        table_name = self._new_readiness_table_name()
+        while time.time() < deadline:
+            attempt += 1
+            query = """
+            CREATE TABLE `%s` (
+                id Int64 NOT NULL,
+                PRIMARY KEY (id)
+            ) """ % table_name
+            try:
+                logger.info("Readiness check attempt %d on %s", attempt, table_name)
+                self._execute_scheme_query(query, settings)
+                self._drop_readiness_table(table_name, settings)
+                return
+            except Exception as e:
+                message = str(e)
+                if "path exist" in message and "creating right now" not in message:
+                    logger.info("Readiness table %s already exists", table_name)
+                    self._drop_readiness_table(table_name, settings)
+                    return
+                last_exception = e
+                logger.warning(
+                    "Readiness check attempt %d failed after %.1fs: %r",
+                    attempt,
+                    time.time() - start_time,
+                    e,
+                )
+                if "creating right now" in message:
+                    table_name = self._new_readiness_table_name()
+                time.sleep(interval)
+
+        raise last_exception or RuntimeError("readiness check timed out")
+
     def change_cluster_version(self):
         self.current_binary_paths_index = (self.current_binary_paths_index + 1) % len(self.all_binary_paths)
         new_binary_paths = self.all_binary_paths[self.current_binary_paths_index]
@@ -174,11 +247,8 @@ class RestartToAnotherVersionFixture:
         self.cluster.update_configurator_and_restart(self.config)
         self.driver = self.create_driver()
 
-        # TODO: remove sleep
-        # without sleep there are errors like
-        # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
         logger.info("Waiting for cluster initialization")
-        time.sleep(60)
+        self._wait_for_readiness()
 
 
 all_binary_combinations_mixed = [

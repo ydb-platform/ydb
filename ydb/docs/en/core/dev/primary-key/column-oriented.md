@@ -12,6 +12,8 @@ Column-oriented tables do not support automatic repartitioning at the moment. Th
 
 The primary key determines how the data will be stored inside the partition. That's why, when selecting a primary key, you need to keep in mind both the effectiveness of reading data from the partition and the effectiveness of inserting data into the partition. The optimum insert use case is to write data to the beginning or end of the table, making rare local updates of previously inserted data. For example, an effective use case would be to store application logs by timestamps, adding records to the end of the partition using the current time in the primary key.
 
+If you use a `Uuid` primary key, prefer [`Uuid::newV8ColumnKey`](../../yql/reference/udf/list/uuid.md#newv8columnkey): it produces time-ordered keys in {{ ydb-short-name }}'s internal byte layout. Standard [UUIDv7](../../yql/reference/udf/list/uuid.md#rfc-v7) does not preserve chronological order under {{ ydb-short-name }}'s mixed-endian storage. See also [UUID as a primary key](row-oriented.md#uuid-primary-key).
+
 ## Example
 
 When your data stream is 1 GB per second, an analytical table with 1,000 partitions is an optimal choice. Nevertheless, it is not advisable to create tables with an excessive number of partitions: this could raise resource consumption in the cluster and negatively impact the query rate.

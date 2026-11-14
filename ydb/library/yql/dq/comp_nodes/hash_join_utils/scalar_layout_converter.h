@@ -38,6 +38,7 @@ public:
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
 
     virtual void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) = 0;
+    virtual const TVector<ui32>& GetInnerColumns(ui32 inputColumn) const = 0;
 };
 
 IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(

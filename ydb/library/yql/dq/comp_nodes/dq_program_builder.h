@@ -56,6 +56,8 @@ class TDqProgramBuilder : public TProgramBuilder {
   protected:
     TRuntimeNode::TList MakeRowArgs(TRuntimeNode input, bool forceOptional);
 
+    TRuntimeNode MakeHashJoinSettings(const TBlockHashJoinSettings& settings);
+
     void AddJoinFilters(TCallableBuilder& callableBuilder, TRuntimeNode leftInput, TRuntimeNode rightInput,
                         EJoinKind joinKind, const TJoinFilterLambda& leftFilter,
                         const TJoinFilterLambda& rightFilter, const TJoinCommonFilterLambda& commonFilter);

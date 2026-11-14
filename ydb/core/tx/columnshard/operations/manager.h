@@ -2,6 +2,7 @@
 #include "write.h"
 
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/engines/portions/meta.h>
 #include <ydb/core/tx/columnshard/transactions/locks/abstract.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 
@@ -238,6 +239,7 @@ public:
     }
 
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
+    std::vector<NOlap::TPortionAddress> GetUncommittedPortionAddresses() const;
 
     std::vector<ui64> GetLockIdsOfNotProposedTransactions() const;
     bool HasWriteOperations(const TInternalPathId pathId) const;

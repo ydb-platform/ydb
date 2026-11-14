@@ -407,10 +407,13 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
     vIndex.AddIndex(snapshot, SchemaObjectsCache->GetOrInsertIndexInfo(std::move(*indexInfoOptional)));
 }
 
-std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) {
+std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(
+    const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, std::vector<TPortionAddress>&& uncommittedPortions) {
     auto result = std::make_shared<TTxCompositeReader>("column_engines");
     result->AddChildren(std::make_shared<NEngineLoading::TEngineCountersReader>("counters", this, dsGroupSelector));
     result->AddChildren(std::make_shared<NEngineLoading::TEngineShardingInfoReader>("sharding_info", this, dsGroupSelector));
+    result->AddChildren(std::make_shared<NEngineLoading::TEngineUncommittedPortionsReader>(
+        "uncommitted_portions", this, dsGroupSelector, std::move(uncommittedPortions)));
     if (GranulesStorage->GetTables().size()) {
         auto granules = std::make_shared<TTxCompositeReader>("granules");
         for (auto&& i : GranulesStorage->GetTables()) {
@@ -431,10 +434,21 @@ bool TColumnEngineForLogs::FinishLoading() {
             }
         }
         spg->SetLoadedKeyRanges(TLoadedKeyRanges::BuildEverything());
+
+        for (const auto& [_, portion] : spg->GetPortions()) {
+            if (portion->GetPortionType() == EPortionType::Written) {
+                LastInsertWriteId =
+                    std::max(LastInsertWriteId, (ui64)std::static_pointer_cast<TWrittenPortionInfo>(portion)->GetInsertWriteId());
+            }
+        }
+        for (const auto& [insertWriteId, _] : spg->GetInsertedPortions()) {
+            LastInsertWriteId = std::max(LastInsertWriteId, (ui64)insertWriteId);
+        }
     }
 
     Y_ABORT_UNLESS(!(LastPortion >> 63), "near to int overflow");
     Y_ABORT_UNLESS(!(LastGranule >> 63), "near to int overflow");
+    Y_ABORT_UNLESS(!(LastInsertWriteId >> 63), "near to int overflow");
     return true;
 }
 
@@ -919,6 +933,9 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
                 break;
             case LAST_TX_ID:
                 LastSnapshot = TSnapshot(LastSnapshot.GetPlanStep(), value);
+                break;
+            case LAST_INSERT_WRITE_ID:
+                LastInsertWriteId = value;
                 break;
         }
     };

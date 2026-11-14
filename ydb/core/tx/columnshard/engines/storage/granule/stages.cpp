@@ -10,6 +10,13 @@ bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionCont
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     std::vector<TPortionInfo::TPtr> portions;
     if (!db.LoadPortions([&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+            if (portion->GetType() == EPortionType::Written) {
+                const auto& written = static_cast<const TWrittenPortionInfoConstructor&>(*portion);
+                // the uncommitted_portions stage has already loaded them from the operations
+                if (!written.HasCommitSnapshot() && Self->HasInsertedPortion(written.GetPortionIdVerified())) {
+                    return true;
+                }
+            }
             const TIndexInfo& indexInfo = portion->GetSchema(*VersionedIndex)->GetIndexInfo();
             AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
             portions.emplace_back(portion->Build());

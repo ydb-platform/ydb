@@ -153,7 +153,8 @@ private:
     void OnConnect(
         TPlainStatus&& st,
         IDirectReadProcessor::TPtr&& processor,
-        const NYdbGrpc::IQueueClientContextPtr& connectContext
+        const NYdbGrpc::IQueueClientContextPtr& connectContext,
+        TDeferredActions<false>& deferred
     );
 
     void OnConnectTimeout(
@@ -167,7 +168,7 @@ private:
 
     void DeletePartitionSessionImpl(TPartitionSessionId);
 
-    void AbortImpl(TPlainStatus&&);
+    void AbortImpl(TPlainStatus&&, TDeferredActions<false>&);
 
     TStringBuilder GetLogPrefix() const;
 

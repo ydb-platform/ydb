@@ -30,7 +30,7 @@ TKey TKey::ForBody(EType type,
                    const ui16 partNo,
                    const ui32 count,
                    const ui16 internalPartsCount,
-                   const TMaybe<ui32>& offsetDelta)
+                   const TMaybe<ui64>& offsetDelta)
 {
     return {type, partition, offset, partNo, count, internalPartsCount, Nothing(), offsetDelta};
 }
@@ -41,7 +41,7 @@ TKey TKey::ForHead(EType type,
                    const ui16 partNo,
                    const ui32 count,
                    const ui16 internalPartsCount,
-                   const TMaybe<ui32>& offsetDelta)
+                   const TMaybe<ui64>& offsetDelta)
 {
     return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::Head, offsetDelta};
 }
@@ -52,9 +52,34 @@ TKey TKey::ForFastWrite(EType type,
                         const ui16 partNo,
                         const ui32 count,
                         const ui16 internalPartsCount,
-                        const TMaybe<ui32>& offsetDelta)
+                        const TMaybe<ui64>& offsetDelta)
 {
     return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::FastWrite, offsetDelta};
+}
+
+void TKey::SetOffsetDelta(const TMaybe<ui64>& offsetDelta)
+{
+    EnsureValidBodySize();
+    if (offsetDelta.Defined()) {
+        // Preserve the existing on-disk range and 10-digit representation.
+        AFL_ENSURE(*offsetDelta <= Max<ui32>())("offsetDelta", *offsetDelta);
+    }
+    OffsetDelta = offsetDelta;
+    const TMaybe<char> suffix = GetSuffix();
+    const ui32 bodySize = offsetDelta.Defined() ? KeySizeWithOffsetDelta() : KeySize();
+    Resize(bodySize + suffix.Defined());
+    if (offsetDelta.Defined()) {
+        Data()[KeySize()] = '_';
+        memcpy(PtrOffsetDelta(), Sprintf("%.10" PRIu64, *offsetDelta).data(), 10);
+    }
+    if (suffix.Defined()) {
+        Data()[bodySize] = *suffix;
+    }
+}
+
+void TKey::SetOffsetDelta(ui64 offsetDelta)
+{
+    SetOffsetDelta(TMaybe<ui64>(offsetDelta));
 }
 
 bool TKey::IsFastWrite() const

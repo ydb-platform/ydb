@@ -71,7 +71,7 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
             return;
         }
 
-        CompleteAndPassAway(NKqp::TEvDescribeSecretsResponse::TDescription(secretValues));
+        CompleteAndPassAway(NKqp::TEvDescribeSecretsResponse::TDescription(std::move(secretValues)));
     }
 
     void CompleteAndPassAway(const NKqp::TEvDescribeSecretsResponse::TDescription& response) {
@@ -351,6 +351,7 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(
     VersionedSecrets[secretName] = TVersionedSecret{
         .SecretVersion = secretVersion,
         .PathId = rec.GetPathId(),
+        .PathOwnerId = rec.GetPathOwnerId(),
         .Name = secretName,
         .Value = secretValue,
     };
@@ -648,6 +649,7 @@ void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId
 
     std::vector<TString> secretValues;
     secretValues.resize(responseCtx.Secrets.size());
+    std::vector<NKqp::TSecretRevision> revisions(responseCtx.Secrets.size());
     for (const auto& secret : responseCtx.Secrets) {
         const auto& secretPath = secret.first;
         auto it = VersionedSecrets.find(secret.first);
@@ -668,8 +670,9 @@ void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId
 
         Y_ENSURE(secret.second < secretValues.size());
         secretValues[secret.second] = it->second.Value;
+        revisions[secret.second] = {it->second.PathOwnerId, it->second.PathId, it->second.SecretVersion};
     }
-    FillResponse(requestId, NKqp::TEvDescribeSecretsResponse::TDescription(secretValues));
+    FillResponse(requestId, NKqp::TEvDescribeSecretsResponse::TDescription(std::move(secretValues), std::move(revisions)));
 }
 
 void TDescribeSchemaSecretsService::HandleNotifyUpdate(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {

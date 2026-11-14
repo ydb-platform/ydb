@@ -271,13 +271,23 @@ public:
             } else {
                 return ProgressTargets(ctx);
             }
-        case EState::Done:
         case EState::Error:
+            if (!SecretRefresh && !AuthenticationErrorRevision.empty() && DesiredState == EState::Ready) {
+                TVector<TString> topics;
+                for (const auto& [_, target] : Targets) {
+                    topics.push_back(target->GetStreamPath());
+                }
+                SecretRefresh = ctx.Register(CreateSecretRefresh(ctx.SelfID, ReplicationId, PathId,
+                    Database, Config.GetSrcConnectionParams(), AuthenticationErrorRevision, std::move(topics)));
+            }
+            return;
+        case EState::Done:
             return;
         }
     }
 
     void Shutdown(const TActorContext& ctx) {
+        CancelSecretRefresh();
         StopTargetDescribers(ctx);
         for (auto& [_, target] : Targets) {
             target->Shutdown(ctx);
@@ -290,7 +300,15 @@ public:
         }
     }
 
+    void CancelSecretRefresh() {
+        if (SecretRefresh) {
+            TActivationContext::AsActorContext().Send(std::exchange(SecretRefresh, {}), new TEvents::TEvPoison());
+        }
+    }
+
     void SetState(EState state, TString issue = {}) {
+        AuthenticationErrorRevision.clear();
+        CancelSecretRefresh();
         State = state;
         Issue = TruncatedIssue(issue);
     }
@@ -323,6 +341,8 @@ public:
     }
 
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
+        AuthenticationErrorRevision.clear();
+        CancelSecretRefresh();
         KeepResourceId(Config, config);
         config.SetInitialScan(Config.GetInitialScan());
         if (Config.GetSrcConnectionParams().SerializeAsString() != config.GetSrcConnectionParams().SerializeAsString()) {
@@ -343,6 +363,7 @@ public:
     }
 
     void ResetCredentials(const TActorContext& ctx) {
+        CancelSecretRefresh();
         ++CredentialsRevision;
         TargetDiscoveryComplete = false;
         StopTargetDescribers(ctx);
@@ -392,6 +413,9 @@ private:
     ui64 NextTargetId = 1;
     THashMap<ui64, TTarget> Targets;
     THashSet<ui64> PendingAlterTargets;
+    TActorId SecretRefresh;
+    TString SecretRevision;
+    TString AuthenticationErrorRevision;
     TActorId SecretResolver;
     ui64 SecretResolverCookie = 0;
     ui64 CredentialsRevision = 0;
@@ -565,6 +589,10 @@ TReplication::EState TReplication::GetDesiredState() const {
 }
 
 void TReplication::SetDesiredState(EState state) {
+    if (state != EState::Ready) {
+        Impl->AuthenticationErrorRevision.clear();
+        Impl->CancelSecretRefresh();
+    }
     if (state == EState::Done && Impl->DesiredState != state) {
         // Even a deferred DONE retires source lookups immediately. A subsequent
         // DROP may need fresh lookups before the deferred reset has run.
@@ -599,8 +627,10 @@ bool TReplication::IsCredentialsReady() const {
     }
 }
 
-void TReplication::UpdateSecret(const TString& secretValue) {
+void TReplication::UpdateSecret(const TString& secretValue, const TString& revision, const TString& generation) {
+    Impl->SecretRevision = revision;
     auto& params = *Impl->Config.MutableSrcConnectionParams();
+    params.SetCredentialGeneration(generation);
     switch (params.GetCredentialsCase()) {
     case NKikimrReplication::TConnectionParams::kStaticCredentials:
         params.MutableStaticCredentials()->SetPassword(secretValue);
@@ -614,6 +644,23 @@ void TReplication::UpdateSecret(const TString& secretValue) {
     default:
         Y_ABORT("unreachable");
     }
+}
+
+const TString& TReplication::GetSecretRevision() const { return Impl->SecretRevision; }
+const TString& TReplication::GetAuthenticationErrorRevision() const { return Impl->AuthenticationErrorRevision; }
+void TReplication::SetAuthenticationErrorRevision(const TString& revision) { Impl->AuthenticationErrorRevision = revision; }
+
+bool TReplication::CanRecoverAuthenticationError() const {
+    const auto& params = Impl->Config.GetSrcConnectionParams();
+    return Impl->DesiredState == EState::Ready
+        && params.HasStaticCredentials() && !params.GetStaticCredentials().GetPasswordSecretName().empty()
+        && !Impl->SecretRevision.empty()
+        && (Impl->State == EState::Ready || !Impl->AuthenticationErrorRevision.empty());
+}
+
+bool TReplication::IsExpectedSecretRefresh(const TActorId& actorId) const {
+    return actorId && actorId == Impl->SecretRefresh && Impl->State == EState::Error
+        && Impl->DesiredState == EState::Ready && !Impl->AuthenticationErrorRevision.empty();
 }
 
 bool TReplication::IsExpectedSecretResolver(const TActorId& actorId, ui64 cookie) const {

@@ -91,6 +91,7 @@ private:
     struct TVersionedSecret {
         ui64 SecretVersion = 0;
         ui64 PathId = 0;
+        ui64 PathOwnerId = 0;
         TString Name;
         TString Value;
     };

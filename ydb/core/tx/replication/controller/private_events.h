@@ -48,11 +48,34 @@ struct TEvPrivate {
         EvCancelCreateStream,
         EvCancelDropStream,
         EvExpireWorkerLag,
+        EvWorkerRegistrationError,
+        EvRefreshCredentials,
 
         EvEnd,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+
+    struct TEvWorkerRegistrationError: public TEventLocal<TEvWorkerRegistrationError, EvWorkerRegistrationError> {
+        const ui64 ReplicationId;
+        const ui64 TargetId;
+        const NYdb::EStatus Status;
+
+        TEvWorkerRegistrationError(ui64 rid, ui64 tid, NYdb::EStatus status)
+            : ReplicationId(rid)
+            , TargetId(tid)
+            , Status(status)
+        {}
+
+        TString GetIssue() const {
+            return TStringBuilder() << "Source authentication failed during worker registration (" << Status << ")";
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " { ReplicationId: " << ReplicationId
+                << " TargetId: " << TargetId << " Status: " << Status << " }";
+        }
+    };
 
     struct TEvDiscoveryTargetsResult: public TEventLocal<TEvDiscoveryTargetsResult, EvDiscoveryTargetsResult> {
         struct TAddEntry {
@@ -229,7 +252,16 @@ struct TEvPrivate {
         , public TResolveValueResult
     {
         using TResolveValueResult::TResolveValueResult;
+        TString Revision;
         TString ToString() const override;
+    };
+
+    struct TEvRefreshCredentials: public TEventLocal<TEvRefreshCredentials, EvRefreshCredentials> {
+        const ui64 ReplicationId;
+        const TString Value;
+        const TString Revision;
+        TEvRefreshCredentials(ui64 rid, TString value, TString revision)
+            : ReplicationId(rid), Value(std::move(value)), Revision(std::move(revision)) {}
     };
 
     struct TEvResolveResourceIdResult

@@ -119,6 +119,10 @@ bool TTargetBase::IsExpectedDstAlterer(const TActorId& actorId) const {
     return DstAlterer && DstAlterer == actorId;
 }
 
+bool TTargetBase::IsExpectedWorkerRegistar(const TActorId& actorId) const {
+    return WorkerRegistar && WorkerRegistar == actorId;
+}
+
 void TTargetBase::SetDstPathId(const TPathId& value) {
     DstPathId = value;
 }

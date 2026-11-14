@@ -13,6 +13,8 @@
 #include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/transfer/transfer_writer.h>
+#include <ydb/library/actors/async/async.h>
+#include <ydb/library/actors/async/sleep.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -43,6 +45,7 @@ class TSessionInfo {
 
     public:
         const TActorId ActorId;
+        TString CredentialGeneration;
         const TMetricsConfig::EMetricsLevel MetricsLevel;
         TRowVersion Heartbeat = TRowVersion::Min();
 
@@ -260,14 +263,15 @@ public:
     }
 
     TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId,
-        const NKikimrReplication::TReplicationLocationConfig& replicationLocation, TMetricsConfig::EMetricsLevel metricsLevel)
+        const NKikimrReplication::TReplicationLocationConfig& replicationLocation, TMetricsConfig::EMetricsLevel metricsLevel, const TString& credentialGeneration)
     {
         auto res = Workers.emplace(id, TWorkerInfo{
             ops->Register(actor, TMailboxType::HTSwap, poolId),
             replicationLocation, metricsLevel, id.WorkerId(), AppData()->Counters
         });
 
-        const auto& worker = res.first->second;
+        auto& worker = res.first->second;
+        worker.CredentialGeneration = credentialGeneration;
         if (metricsLevel == TMetricsConfig::LEVEL_DETAILED && !worker.Location.GetPath().empty()) {
             PendingStatsValues[id];
         }
@@ -327,7 +331,11 @@ public:
 
     template <typename... Args>
     void SendWorkerStatus(IActorOps* ops, const TWorkerId& id, Args&&... args) {
-        ops->Send(ActorId, new TEvService::TEvWorkerStatus(id, std::forward<Args>(args)...));
+        auto event = MakeHolder<TEvService::TEvWorkerStatus>(id, std::forward<Args>(args)...);
+        if (const auto it = Workers.find(id); it != Workers.end()) {
+            event->Record.SetCredentialGeneration(it->second.CredentialGeneration);
+        }
+        ops->Send(ActorId, event.Release());
     }
 
     void ApplyWorkerStats(const TWorkerId& id, const std::unique_ptr<TWorkerDetailedStats>& stats) {
@@ -603,15 +611,15 @@ struct TIamCredentialsKey {
 
 using TCredentialsKey = std::variant<TStaticCredentialsKey, TOAuthCredentialsKey, TIamCredentialsKey>;
 
-struct TConnectionParams: std::tuple<TString, TString, bool, TString, TCredentialsKey> {
+struct TConnectionParams: std::tuple<TString, TString, bool, TString, TCredentialsKey, TString> {
     explicit TConnectionParams(
             const TString& endpoint,
             const TString& database,
             bool ssl,
             const TString& caCert,
-            TCredentialsKey credentials)
-        : std::tuple<TString, TString, bool, TString, TCredentialsKey>(
-            endpoint, database, ssl, caCert, std::move(credentials))
+            TCredentialsKey credentials, const TString& generation)
+        : std::tuple<TString, TString, bool, TString, TCredentialsKey, TString>(
+            endpoint, database, ssl, caCert, std::move(credentials), generation)
     {
     }
 
@@ -633,7 +641,7 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TCredentia
 
     size_t Hash() const {
         const auto& credentials = std::get<4>(*this);
-        return MultiHash(Endpoint(), Database(), EnableSsl(), CaCert(), credentials.index(),
+        return MultiHash(Endpoint(), Database(), EnableSsl(), CaCert(), std::get<5>(*this), credentials.index(),
             std::visit([](const auto& key) { return key.Hash(); }, credentials));
     }
 
@@ -651,13 +659,13 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TCredentia
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
             return TConnectionParams(endpoint, database, ssl, caCert, TStaticCredentialsKey{
-                params.GetStaticCredentials().GetUser(), FingerprintCredential(params.GetStaticCredentials().GetPassword())});
+                params.GetStaticCredentials().GetUser(), FingerprintCredential(params.GetStaticCredentials().GetPassword())}, params.GetCredentialGeneration());
         case NKikimrReplication::TConnectionParams::kOAuthToken:
             return TConnectionParams(endpoint, database, ssl, caCert, TOAuthCredentialsKey{
-                FingerprintCredential(params.GetOAuthToken().GetToken())});
+                FingerprintCredential(params.GetOAuthToken().GetToken())}, params.GetCredentialGeneration());
         case NKikimrReplication::TConnectionParams::kIamCredentials:
             return TConnectionParams(endpoint, database, ssl, caCert, TIamCredentialsKey{
-                params.GetIamCredentials().GetServiceAccountId(), params.GetIamCredentials().GetResourceId()});
+                params.GetIamCredentials().GetServiceAccountId(), params.GetIamCredentials().GetResourceId()}, params.GetCredentialGeneration());
         default:
             Y_ABORT("Unexpected credentials");
         }
@@ -723,15 +731,35 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         session.Handle(this, ev);
     }
 
+    void CleanupYdbProxies() {
+        for (;;) {
+            co_await NActors::AsyncSleepFor(TDuration::Seconds(30));
+            if (CurrentStateFunc() != &TThis::StateWork) {
+                co_return;
+            }
+
+            for (auto it = YdbProxies.begin(); it != YdbProxies.end();) {
+                // Factories and pending/stopping readers are independent users.
+                // Local database-only proxies retain their existing lifetime.
+                if (std::holds_alternative<TConnectionParams>(it->first) && it->second.use_count() == 1) {
+                    Send(*it->second, new TEvents::TEvPoison());
+                    YdbProxies.erase(it++);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
+
     template <typename... Args>
-    const TActorId& GetOrCreateYdbProxy(const TString& database, TConnectionParams&& params, Args&&... args) {
+    std::shared_ptr<const TActorId> GetOrCreateYdbProxy(const TString& database, TConnectionParams&& params, Args&&... args) {
         auto key = params.Endpoint().empty() ? TYdbProxyKey{database} : TYdbProxyKey{params};
         auto it = YdbProxies.find(key);
         if (it == YdbProxies.end()) {
             auto* actor = params.Endpoint().empty()
                 ? CreateLocalYdbProxy(database)
                 : CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), params.CaCert(), std::forward<Args>(args)...);
-            auto ydbProxy = Register(actor);
+            auto ydbProxy = std::make_shared<const TActorId>(Register(actor));
             auto res = YdbProxies.emplace(std::move(key), std::move(ydbProxy));
             Y_ABORT_UNLESS(res.second);
             it = res.first;
@@ -743,11 +771,15 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     std::function<IActor*(void)> ReaderFn(const TString& database, const NKikimrReplication::TRemoteTopicReaderSettings& settings,
         bool autoCommit, bool reportStats, bool failOnDataLoss
     ) {
-        TActorId ydbProxy;
+        std::shared_ptr<const TActorId> ydbProxy;
+        auto authFailurePolicy = EAuthFailurePolicy::SourceRejectionOnly;
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
             ydbProxy = GetOrCreateYdbProxy(database, TConnectionParams::FromProto(params), params.GetStaticCredentials());
+            if (!params.GetEndpoint().empty()) {
+                authFailurePolicy = EAuthFailurePolicy::StaticLoginInitialization;
+            }
             break;
         case NKikimrReplication::TConnectionParams::kOAuthToken:
             ydbProxy = GetOrCreateYdbProxy(database, TConnectionParams::FromProto(params), params.GetOAuthToken().GetToken());
@@ -776,8 +808,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             topicReaderSettings.Decompress(false);
         }
 
-        return [ydbProxy, settings = std::move(topicReaderSettings)]() {
-            return CreateRemoteTopicReader(ydbProxy, settings);
+        return [ydbProxy, settings = std::move(topicReaderSettings), authFailurePolicy]() {
+            return CreateRemoteTopicReader(ydbProxy, settings, authFailurePolicy);
         };
     }
 
@@ -891,7 +923,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                 cmd.HasProcessedSourceOffset() ? TMaybe<ui64>(cmd.GetProcessedSourceOffset()) : Nothing()),
             poolId,
             cmd.GetReplicationLocation(),
-            cmd.GetMetricsLevel()
+            cmd.GetMetricsLevel(),
+            readerSettings.GetConnectionParams().GetCredentialGeneration()
         );
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
@@ -1124,7 +1157,10 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         YDB_LOG_INFO("Worker has gone",
             {"worker", ev->Sender});
         WorkerActorIdToSession.erase(ev->Sender);
-        session->StopWorker(this, ev->Sender, ToReason(ev->Get()->Status), ev->Get()->ErrorDescription);
+        session->StopWorker(this, ev->Sender, ToReason(ev->Get()->Status), ev->Get()->ErrorDescription, Nothing(),
+            ev->Get()->Status == TEvWorker::TEvGone::AUTH_ERROR
+                ? NKikimrReplication::TEvWorkerStatus::ERROR_KIND_SOURCE_AUTHENTICATION
+                : NKikimrReplication::TEvWorkerStatus::ERROR_KIND_UNSPECIFIED);
     }
 
     void Handle(TEvWorker::TEvStatus::TPtr& ev) {
@@ -1171,6 +1207,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         case TEvWorker::TEvGone::SCHEME_ERROR:
         case TEvWorker::TEvGone::DATA_ERROR:
         case TEvWorker::TEvGone::DATA_LOSS:
+        case TEvWorker::TEvGone::AUTH_ERROR:
             return NKikimrReplication::TEvWorkerStatus::REASON_ERROR;
         default:
             return NKikimrReplication::TEvWorkerStatus::REASON_UNSPECIFIED;
@@ -1179,6 +1216,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void PassAway() override {
         YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
+        Become(&TThis::StateDying);
         if (auto actorId = std::exchange(BoardPublisher, {})) {
             Send(actorId, new TEvents::TEvPoison());
         }
@@ -1188,7 +1226,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         for (const auto& [_, actorId] : YdbProxies) {
-            Send(actorId, new TEvents::TEvPoison());
+            Send(*actorId, new TEvents::TEvPoison());
         }
 
         if (CompilationService) {
@@ -1206,6 +1244,7 @@ public:
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         Become(&TThis::StateWork);
+        CleanupYdbProxies();
         RunBoardPublisher();
     }
 
@@ -1232,6 +1271,10 @@ public:
         }
     }
 
+    STATEFN(StateDying) {
+        Y_UNUSED(ev);
+    }
+
 private:
     TActorId BoardPublisher;
     THashMap<ui64, TSessionInfo> Sessions;
@@ -1251,7 +1294,7 @@ private:
         }
     };
 
-    THashMap<TYdbProxyKey, TActorId, TYdbProxyKeyHash> YdbProxies;
+    THashMap<TYdbProxyKey, std::shared_ptr<const TActorId>, TYdbProxyKeyHash> YdbProxies;
     THashMap<TActorId, ui64> WorkerActorIdToSession;
 
     mutable TMaybe<TActorId> CompilationService;

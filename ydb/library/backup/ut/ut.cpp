@@ -34,6 +34,10 @@ Y_UNIT_TEST(FirstReadHasNoCondition) {
     const auto [query, params] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", Nothing());
     UNIT_ASSERT_VALUES_EQUAL(query, "SELECT `a`, `b`, `v` FROM `/Root/t` ORDER BY `a`, `b`;");
     UNIT_ASSERT(params.GetValues().empty());
+
+    const auto [sortedQuery, sortedParams] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", Nothing(), true);
+    UNIT_ASSERT_VALUES_EQUAL(sortedQuery, TString(NBackup::OlapSortedReadPragmaSql) + query);
+    UNIT_ASSERT(sortedParams.GetValues().empty());
 }
 
 Y_UNIT_TEST(ResumeConditionDependsOnNullCellsOfSavedKey) {
@@ -46,6 +50,9 @@ Y_UNIT_TEST(ResumeConditionDependsOnNullCellsOfSavedKey) {
 
     const auto conditionFor = [&](const TValue& lastPK) {
         const auto [query, params] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", lastPK);
+        const auto [sortedQuery, sortedParams] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", lastPK, true);
+        UNIT_ASSERT_VALUES_EQUAL(sortedQuery, TString(NBackup::OlapSortedReadPragmaSql) + query);
+        UNIT_ASSERT(sortedParams.GetValue("$pk").has_value());
         UNIT_ASSERT_C(query.StartsWith("DECLARE $pk AS Tuple<"), query);
         UNIT_ASSERT(params.GetValue("$pk").has_value());
         const TString prefix = "SELECT `a`, `b`, `v` FROM `/Root/t` WHERE ";
@@ -84,6 +91,9 @@ Y_UNIT_TEST(ResumeConditionForSingleColumnKey) {
     const auto conditionFor = [&](std::optional<i64> a) {
         const auto lastPK = TValueBuilder().BeginTuple().AddElement().OptionalInt64(a).EndTuple().Build();
         const auto [query, params] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", lastPK);
+        const auto [sortedQuery, sortedParams] = NBackup::BuildSelectQueryAndParams(desc, "/Root/t", lastPK, true);
+        UNIT_ASSERT_VALUES_EQUAL(sortedQuery, TString(NBackup::OlapSortedReadPragmaSql) + query);
+        UNIT_ASSERT(sortedParams.GetValue("$pk").has_value());
         const TString prefix = "SELECT `a`, `v` FROM `/Root/t` WHERE ";
         const TString suffix = " ORDER BY `a`;";
         const size_t from = query.find(prefix);
@@ -805,6 +815,18 @@ Y_UNIT_TEST(PathParseTest) {
     UNIT_CHECK_GENERATED_EXCEPTION(RelPathFromAbsolute("/ru/my_db", "/ru"), yexception);
     UNIT_CHECK_GENERATED_EXCEPTION(RelPathFromAbsolute("/ru/my_db", "/"), yexception);
     UNIT_CHECK_GENERATED_EXCEPTION(RelPathFromAbsolute("/ru/my_db", ""), yexception);
+}
+
+Y_UNIT_TEST(UnknownOlapSortedReadPragma) {
+    UNIT_ASSERT(NBackup::IsUnknownOlapSortedReadPragma(
+        "Unknown setting name 'OptEnableOlapSortedRead'"));
+    UNIT_ASSERT(NBackup::IsUnknownOlapSortedReadPragma(
+        "error: UNKNOWN SETTING name \"optenableolapsortedread\""));
+    UNIT_ASSERT(!NBackup::IsUnknownOlapSortedReadPragma(
+        "Unknown setting name 'OptEnableOlapPushdown'"));
+    UNIT_ASSERT(!NBackup::IsUnknownOlapSortedReadPragma(
+        "OptEnableOlapSortedRead is disabled"));
+    UNIT_ASSERT(!NBackup::IsUnknownOlapSortedReadPragma(""));
 }
 
 Y_UNIT_TEST(UnknownFieldsHidden) {

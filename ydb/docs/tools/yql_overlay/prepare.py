@@ -1,4 +1,4 @@
-"""Prepare the opt-in WITH documentation overlay in a separate checkout-free tree."""
+"""Prepare the WITH documentation overlay for the existing documentation CI."""
 
 import argparse
 import shutil

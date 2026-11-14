@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - 'ydb/docs/**'
+      - 'yql/essentials/docs/**'
       - 'ydb/**/*.proto'
       - 'yql/**/*.proto'
       - 'library/**/*.proto'

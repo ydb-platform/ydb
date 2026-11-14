@@ -343,6 +343,50 @@ Y_UNIT_TEST_TWIN(MultipleSearchExpressions, Compact) {
     fixture.ExpectIds(query, {5});
     fixture.ExpectIds(query, {1, 5}, fixture.Parameters("alpha", "beta", true, 1, 1));
     fixture.ExpectIds(query, {}, fixture.Parameters("absent", "beta", true, 20, 2));
+
+    const TString mixedEmpty = fixture.Declarations() + R"sql(
+        $first = IF($choose, "", $q);
+        SELECT Id FROM `/Root/Docs` VIEW fulltext_idx
+        WHERE Scope = $scope AND FulltextMatch(Text, $first) AND FulltextMatch(Text, $other)
+        ORDER BY Id;
+    )sql";
+    fixture.ExpectError(mixedEmpty, "Expected non-empty query");
+}
+
+Y_UNIT_TEST_TWIN(DependentSearchExpressionsSharePrecompute, Compact) {
+    TExpressionFixture fixture({.Compact = Compact, .Prefixed = true});
+    const TString setup = R"sql(
+        $search = IF(Random(true) < 0.5, "alpha", "beta");
+    )sql";
+    const TVector<TString> predicates = {
+        "FulltextMatch(Text, $search) AND FulltextMatch(Text, $search || \" beta\")",
+        "FulltextMatch(Text, $search || \" beta\") AND FulltextMatch(Text, $search)",
+    };
+    for (const auto& predicate : predicates) {
+        const TString query = fixture.Declarations() + setup
+            + "SELECT Id, $search AS Search FROM `/Root/Docs` VIEW fulltext_idx "
+              "WHERE Scope = $scope AND " + predicate + " ORDER BY Id;";
+        for (ui32 iteration = 0; iteration < 32; ++iteration) {
+            const auto result = fixture.Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                fixture.Parameters()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            TVector<ui64> ids;
+            TString search;
+            while (parser.TryNextRow()) {
+                ids.push_back(parser.ColumnParser("Id").GetUint64());
+                const TString current(parser.ColumnParser("Search").GetString());
+                if (search.empty()) {
+                    search = current;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(current, search);
+            }
+            UNIT_ASSERT_C(search == "alpha" || search == "beta", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+            const TVector<ui64> expected = search == "alpha" ? TVector<ui64>{5} : TVector<ui64>{2, 5};
+            UNIT_ASSERT_VALUES_EQUAL_C(ids, expected, query << "\n" << NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
 }
 
 Y_UNIT_TEST_QUAD(WildcardPostfilter, Compact, Utf8) {

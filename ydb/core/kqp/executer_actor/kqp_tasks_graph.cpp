@@ -2894,11 +2894,18 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
 
     {
         TStringBuilder queryBuilder;
+        // Logical planning interleaves explicit query values with literal separators.
+        bool explicitQuery = true;
         for (const auto& query : fullTextSource.GetQuerySettings().GetQueryValue()) {
             auto value = ExtractPhyValue(
                 stageInfo, query,
                 TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-            queryBuilder << TString(value.AsStringRef());
+            TString resolved(value.AsStringRef());
+            if (explicitQuery) {
+                settings->MutableQuerySettings()->AddQueries(resolved);
+            }
+            queryBuilder << resolved;
+            explicitQuery = !explicitQuery;
         }
 
         settings->MutableQuerySettings()->SetQuery(TString(queryBuilder));

@@ -2193,7 +2193,7 @@ TExprNode::TPtr BuildFulltextQueryPrecompute(const TExprNode::TPtr& original,
         return existing->second;
     }
 
-    auto value = TExprBase(original);
+    auto value = TExprBase(ctx.ReplaceNodes(TExprNode::TPtr(original), replacements));
     if (value.Maybe<TCoJust>()) {
         value = value.Cast<TCoJust>().Input();
     }
@@ -2209,9 +2209,36 @@ TExprNode::TPtr BuildFulltextQueryPrecompute(const TExprNode::TPtr& original,
     return value.Ptr();
 }
 
+void BuildFulltextQueryPrecomputes(const TExprNode::TListType& queries,
+    TNodeOnNodeOwnedMap& replacements, TExprContext& ctx)
+{
+    TNodeSet queryRoots;
+    for (const auto& query : queries) {
+        queryRoots.insert(query.Get());
+    }
+
+    // Postorder makes a dependent query consume the shared precompute of every nested
+    // query root, regardless of predicate or hybrid-branch order.
+    for (const auto& query : queries) {
+        VisitExpr(query, [](const TExprNode::TPtr&) { return true; }, [&](const TExprNode::TPtr& node) {
+            if (queryRoots.contains(node.Get())) {
+                BuildFulltextQueryPrecompute(node, replacements, ctx);
+            }
+            return true;
+        });
+    }
+}
+
 void BuildFulltextPredicateReplacements(TFullTextApplyParseResult& result, TExprContext& ctx,
     TPositionHandle pos)
 {
+    TExprNode::TListType queryRoots;
+    queryRoots.reserve(result.Queries.size());
+    for (const auto& query : result.Queries) {
+        queryRoots.push_back(query.Query);
+    }
+    BuildFulltextQueryPrecomputes(queryRoots, result.Replaces, ctx);
+
     for (auto& query : result.Queries) {
         const auto original = query.Query;
         query.Query = BuildFulltextQueryPrecompute(original, result.Replaces, ctx);
@@ -3210,8 +3237,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             }
 
             b.ScoredColumn = ftColumnMember.Cast().Name().StringValue();
-            b.FulltextQuery = BuildFulltextQueryPrecompute(
-                parsedFulltext.Query, fulltextQueryReplacements, ctx);
+            b.FulltextQuery = parsedFulltext.Query;
             b.FulltextNamedOptions = parsedFulltext.NamedOptions;
 
             // A fixed text value gives every surviving row the same relevance score.
@@ -3391,6 +3417,20 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         }
 
         branches.push_back(std::move(b));
+    }
+
+    TExprNode::TListType fulltextQueries;
+    for (const auto& branch : branches) {
+        if (branch.FulltextQuery) {
+            fulltextQueries.push_back(branch.FulltextQuery);
+        }
+    }
+    BuildFulltextQueryPrecomputes(fulltextQueries, fulltextQueryReplacements, ctx);
+    for (auto& branch : branches) {
+        if (branch.FulltextQuery) {
+            branch.FulltextQuery = BuildFulltextQueryPrecompute(
+                branch.FulltextQuery, fulltextQueryReplacements, ctx);
+        }
     }
 
     if (origPred) {

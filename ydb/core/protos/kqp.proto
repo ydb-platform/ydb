@@ -1101,6 +1101,8 @@ message TKqpFullTextSourceSettings {
             optional NKqpProto.TKqpFullTextSource.TKqpQuerySettings.TPatternQuery.EMatchMode Mode = 3;
         }
         repeated TPatternQuery PatternQueries = 5;
+        // Resolved explicit fulltext query arguments, kept separate for validation.
+        repeated bytes Queries = 6;
     }
 
     message TIndexTable {

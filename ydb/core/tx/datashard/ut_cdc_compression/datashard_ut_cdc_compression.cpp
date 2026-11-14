@@ -4,7 +4,9 @@
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>

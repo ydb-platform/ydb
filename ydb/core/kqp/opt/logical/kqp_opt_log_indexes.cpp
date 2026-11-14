@@ -1593,20 +1593,17 @@ bool StringOrAtomOrParameter(const TExprBase& exprBase) {
     return type && (type->GetSlot() == EDataSlot::String || type->GetSlot() == EDataSlot::Utf8);
 }
 
-bool FulltextQueryExpression(const TExprBase& exprBase) {
-    auto expr = exprBase.Maybe<TCoJust>() ? exprBase.Cast<TCoJust>().Input() : exprBase;
+bool IsFulltextQueryExpression(const TExprBase& exprBase) {
+    const auto expr = exprBase.Maybe<TCoJust>() ? exprBase.Cast<TCoJust>().Input() : exprBase;
+    if (!expr.Ref().IsComplete()) {
+        return false;
+    }
     const auto type = expr.Ref().GetTypeAnn();
     if (!type || type->GetKind() != ETypeAnnotationKind::Data) {
         return false;
     }
-
     const auto slot = type->Cast<TDataExprType>()->GetSlot();
-    return (slot == EDataSlot::String || slot == EDataSlot::Utf8)
-        && !expr.Ref().HasSideEffects()
-        && IsKqpCompletePureExpr(expr)
-        && !FindNode(expr.Ptr(), [](const auto& node) {
-            return TCoNonDeterministicBase::Match(node.Get()) && !IsQueryBoundNonDeterministic(*node);
-        });
+    return slot == EDataSlot::String || slot == EDataSlot::Utf8;
 }
 
 bool FloatingPointOrParameter(const TExprBase& exprBase) {
@@ -1691,6 +1688,10 @@ struct TFulltextQuery {
         return Node->Content() == "FulltextMatch";
     }
 
+    bool IsExplicit() const {
+        return Node && (IsMatchQuery() || IsScoreQuery());
+    }
+
     ui32 Priority() const {
         if (!IsMatchQuery() && !IsScoreQuery()) {
             return 0;
@@ -1716,8 +1717,8 @@ struct TFulltextQuery {
         return TString();
     }
 
-    bool IsValid(const TFulltextMatchContext* matchContext = nullptr) const {
-        if (!Node || !Column || !Query || !FulltextQueryExpression(TExprBase(Query))) {
+    bool IsValid(const TFulltextMatchContext* matchContext = nullptr, TString* error = nullptr) const {
+        if (!Node || !Column || !Query) {
             return false;
         }
 
@@ -1732,6 +1733,25 @@ struct TFulltextQuery {
             return false;
         }
 
+        auto invalid = [&](const TString& message) {
+            // An implicit string predicate may remain a residual filter. Only explicit
+            // fulltext builtins require a usable index search for every occurrence.
+            if (error && IsExplicit()) {
+                *error = message;
+            }
+            return false;
+        };
+
+        if (!Query->IsComplete()) {
+            return invalid("Fulltext search expression must not depend on the table row.");
+        }
+        if (Query->HasSideEffects()) {
+            return invalid("Fulltext search expression must not have side effects.");
+        }
+        if (!IsFulltextQueryExpression(TExprBase(Query))) {
+            return invalid("Fulltext search expression must have String or Utf8 type.");
+        }
+
         if (!NamedOptions) {
             return true;
         }
@@ -1740,21 +1760,49 @@ struct TFulltextQuery {
             auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
             TExprBase value = TExprBase(nameValueTuple.Value().Cast().Ptr());
             TString name = nameValueTuple.Name().StringValue();
-            if (name == TKqpReadTableFullTextIndexSettings::BFactorSettingName && !FloatingPointOrParameter(value)) {
-                return false;
+            if (IsScoreQuery() && name == TKqpReadTableFullTextIndexSettings::BFactorSettingName) {
+                if (!FloatingPointOrParameter(value)) {
+                    return invalid("FullTextScore named argument 'B' must be a Float or Double literal or parameter.");
+                }
+                continue;
             }
 
-            if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName  && !FloatingPointOrParameter(value)) {
-                return false;
+            if (IsScoreQuery() && name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName) {
+                if (!FloatingPointOrParameter(value)) {
+                    return invalid("FullTextScore named argument 'K1' must be a Float or Double literal or parameter.");
+                }
+                continue;
             }
 
-            if (name == TKqpReadTableFullTextIndexSettings::DefaultOperatorSettingName && !StringOrAtomOrParameter(value)) {
-                return false;
+            if (name == TKqpReadTableFullTextIndexSettings::DefaultOperatorSettingName) {
+                if (!StringOrAtomOrParameter(value)) {
+                    return invalid("Fulltext DefaultOperator must be a String or Utf8 literal or parameter.");
+                }
+                continue;
             }
 
-            if (name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName && !StringOrAtomOrParameter(value)) {
-                return false;
+            if (name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName) {
+                if (!StringOrAtomOrParameter(value)) {
+                    return invalid("Fulltext MinimumShouldMatch must be a String or Utf8 literal or parameter.");
+                }
+                continue;
             }
+
+            if (IsMatchQuery() && name == TKqpReadTableFullTextIndexSettings::ModeSettingName) {
+                if (!value.Maybe<TCoString>()) {
+                    return invalid("Fulltext Mode must be a String literal.");
+                }
+                auto mode = value.Cast<TCoString>().Literal().StringValue();
+                mode.to_lower();
+                if (mode != "keywords" && mode != "wildcard") {
+                    return invalid("Fulltext Mode must be 'Keywords' or 'Wildcard'.");
+                }
+                continue;
+            }
+
+            return invalid(TStringBuilder() << "unsupported "
+                << (IsScoreQuery() ? "FullTextScore" : "FullTextMatch")
+                << " named argument '" << name << "'");
         }
 
         return true;
@@ -1801,7 +1849,7 @@ struct TFulltextQuery {
         {
             auto mode = query.GetModeIfAny();
             if (!mode) {
-                return {};
+                return query;
             }
             mode->to_lower();
             if (*mode == "wildcard") {
@@ -2020,12 +2068,13 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
     };
 
     TNodeSet visitedNodes;
+    TString validationError;
     THashMap<const TExprNode*, TFulltextQuery> matchedQueries;
     auto matchQuery = [&](const TExprNode::TPtr& expr) -> const TFulltextQuery* {
         auto [it, inserted] = matchedQueries.try_emplace(expr.Get());
         if (inserted) {
             auto match = TFulltextQuery::Match(expr, ctx, &matchContext);
-            if (match.IsValid(&matchContext)) {
+            if (match.IsValid(&matchContext, &validationError)) {
                 it->second = std::move(match);
             }
         }
@@ -2046,25 +2095,7 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         TryExtractPrefixValues(expr, prefixColumnsSet, result.PrefixColumns, matchContext.Row);
 
         if (const auto* match = matchQuery(expr)) {
-            if (match->IsScoreQuery()) {
-                auto newMember = Build<TCoMember>(ctx, match->Query->Pos())
-                    .Name().Build(NTableIndex::NFulltext::FullTextRelevanceColumn)
-                        .Struct(TExprBase(match->Column).Cast<TCoMember>().Struct())
-                    .Done();
-                result.Replaces.emplace(match->Node.Get(), newMember.Ptr());
-                result.IsScoreApply = true;
-            }
-
-            if (match->IsMatchQuery()) {
-                if (!match->PatternMode.empty()) {
-                    auto postfilter = BuildPostfiltersForMatch(ctx, node.Pos(), match->Query, match->Column);
-                    result.Replaces.emplace(match->Node.Get(), postfilter);
-                } else {
-                    auto newMember = Build<TCoBool>(ctx, node.Pos()).Literal().Build("true").Done();
-                    result.Replaces.emplace(match->Node.Get(), newMember.Ptr());
-                }
-            }
-
+            result.IsScoreApply |= match->IsScoreQuery();
             result.Queries.push_back(*match);
             return false;
         }
@@ -2094,11 +2125,6 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         scoreRestrictionFound = true;
     }
 
-    if (result.ScoreRestriction) {
-        auto newMember = Build<TCoBool>(ctx, node.Pos()).Literal().Build("true").Done().Ptr();
-        result.Replaces.emplace(result.ScoreRestriction.Get(), newMember);
-    }
-
     ui64 ordinaryMatches = 0;
     bool hasNamedMatchOptions = false;
     for (const auto& query : result.Queries) {
@@ -2109,7 +2135,10 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
     }
 
     TString explain = "";
-    if (result.FulltextScore >= 1 && result.FulltextMatch >= 1) {
+    if (!validationError.empty()) {
+        result.HasErrors = true;
+        explain = std::move(validationError);
+    } else if (result.FulltextScore >= 1 && result.FulltextMatch >= 1) {
         result.HasErrors = true;
         explain = " Multiple fulltext predicates in a single read are not supported.";
     } else if (result.FulltextScore > 1) {
@@ -2160,6 +2189,82 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
     }
 
     return result;
+}
+
+TExprNode::TPtr BuildFulltextQueryPrecompute(const TExprNode::TPtr& original,
+    TNodeOnNodeOwnedMap& replacements, TExprContext& ctx)
+{
+    if (const auto existing = replacements.find(original.Get()); existing != replacements.end()) {
+        return existing->second;
+    }
+
+    auto value = TExprBase(ctx.ReplaceNodes(TExprNode::TPtr(original), replacements));
+    if (value.Maybe<TCoJust>()) {
+        value = value.Cast<TCoJust>().Input();
+    }
+    if (!value.Maybe<TCoDataCtor>() && !value.Maybe<TCoParameter>() && !value.Maybe<TDqPrecompute>()) {
+        // The fulltext source accepts only literals and parameters, so even a cheap
+        // deterministic expression needs materialization. Share that required precompute
+        // with residual predicates and projections to also evaluate volatile queries once.
+        value = Build<TDqPrecompute>(ctx, value.Pos()).Input(value).Done();
+    }
+    if (value.Raw() != original.Get()) {
+        replacements.emplace(original.Get(), value.Ptr());
+    }
+    return value.Ptr();
+}
+
+void BuildFulltextQueryPrecomputes(const TExprNode::TListType& queries,
+    TNodeOnNodeOwnedMap& replacements, TExprContext& ctx)
+{
+    TNodeSet queryRoots;
+    for (const auto& query : queries) {
+        queryRoots.insert(query.Get());
+    }
+
+    // Postorder makes a dependent query consume the shared precompute of every nested
+    // query root, regardless of predicate or hybrid-branch order.
+    for (const auto& query : queries) {
+        VisitExpr(query, [](const TExprNode::TPtr&) { return true; }, [&](const TExprNode::TPtr& node) {
+            if (queryRoots.contains(node.Get())) {
+                BuildFulltextQueryPrecompute(node, replacements, ctx);
+            }
+            return true;
+        });
+    }
+}
+
+void BuildFulltextPredicateReplacements(TFullTextApplyParseResult& result, TExprContext& ctx,
+    TPositionHandle pos)
+{
+    TExprNode::TListType queryRoots;
+    queryRoots.reserve(result.Queries.size());
+    for (const auto& query : result.Queries) {
+        queryRoots.push_back(query.Query);
+    }
+    BuildFulltextQueryPrecomputes(queryRoots, result.Replaces, ctx);
+
+    for (auto& query : result.Queries) {
+        const auto original = query.Query;
+        query.Query = BuildFulltextQueryPrecompute(original, result.Replaces, ctx);
+
+        if (query.IsScoreQuery()) {
+            result.Replaces.emplace(query.Node.Get(), Build<TCoMember>(ctx, pos)
+                .Struct(TExprBase(query.Column).Cast<TCoMember>().Struct())
+                .Name().Build(NTableIndex::NFulltext::FullTextRelevanceColumn)
+                .Done().Ptr());
+        } else if (query.IsMatchQuery()) {
+            auto replacement = !query.PatternMode.empty()
+                ? BuildPostfiltersForMatch(ctx, pos, query.Query, query.Column)
+                : Build<TCoBool>(ctx, pos).Literal().Build("true").Done().Ptr();
+            result.Replaces.emplace(query.Node.Get(), std::move(replacement));
+        }
+    }
+
+    if (result.ScoreRestriction) {
+        result.Replaces.emplace(result.ScoreRestriction.Get(),
+            Build<TCoBool>(ctx, pos).Literal().Build("true").Done().Ptr());
+    }
 }
 
 TMaybeNode<TExprBase> KqpPushLimitOverFullText(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx)
@@ -2244,8 +2349,8 @@ TVector<std::pair<TString, TExprNode::TPtr>> ExtractSeedPrefix(TReadMatch& read,
 
 TExprBase BuildFulltextFallbackScan(const TCoFlatMap& flatMap, const TReadMatch& read,
     const TVector<TString>& prefixColumns, const TVector<std::pair<TString, TExprNode::TPtr>>& prefixBindings,
-    const TExprNode::TPtr& noSearchTerms, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    TTypeAnnotationContext& typesCtx)
+    const TExprNode::TPtr& noSearchTerms, const TNodeOnNodeOwnedMap& replacements,
+    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, TTypeAnnotationContext& typesCtx)
 {
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
     TExprNode::TPtr prefixFilter;
@@ -2307,6 +2412,9 @@ TExprBase BuildFulltextFallbackScan(const TCoFlatMap& flatMap, const TReadMatch&
             }
         }
     }
+    // Extraction needs the original typed lambda. Substitute its resulting bounds
+    // so they use the same materialized search value as the guard and residual filter.
+    fullRange = ctx.ReplaceNodes(std::move(fullRange), replacements);
     auto ranges = ctx.NewCallable(flatMap.Pos(), "RangeFinalize", {
         ctx.NewCallable(flatMap.Pos(), "If", {noSearchTerms, fullRange, ctx.NewCallable(flatMap.Pos(), "RangeEmpty", {})})});
 
@@ -2376,6 +2484,8 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     }
 
     YQL_ENSURE(result.Queries.size() >= 1);
+    BuildFulltextPredicateReplacements(result, ctx, node.Pos());
+
     // Keep the driving query first so its named options are used.
     const auto driver = MaxElementBy(result.Queries, [](const auto& query) { return query.Priority(); });
     const auto priority = driver->Priority();
@@ -2460,7 +2570,7 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
             : ctx.NewCallable(node.Pos(), "And", std::move(emptyPatterns));
 
         auto scanInput = BuildFulltextFallbackScan(flatMap, read, matchContext.PrefixColumns, result.PrefixColumns,
-            noSearchTerms, ctx, kqpCtx, typesCtx);
+            noSearchTerms, result.Replaces, ctx, kqpCtx, typesCtx);
         // The guards select the access path, not Extend: the index returns no rows without terms,
         // and the scan has empty ranges with terms. Both use the same query and analyzer.
         input = Build<TCoExtend>(ctx, node.Pos()).Add(indexRead).Add(scanInput).Done();
@@ -3080,6 +3190,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
 
     TVector<TBranch> branches;
     branches.reserve(scoringArgs.size());
+    TNodeOnNodeOwnedMap fulltextQueryReplacements;
     for (size_t i = 0; i < scoringArgs.size(); ++i) {
         const auto& arg = scoringArgs[i];
         const auto ftScore = findFulltextScore(arg);
@@ -3105,34 +3216,11 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             b.IsSimilarity = true;
 
             auto parsedFulltext = TFulltextQuery::Match(ftScore, ctx);
-            if (parsedFulltext.NamedOptions) {
-                for (const auto& arg : parsedFulltext.NamedOptions->Children()) {
-                    const auto option = TExprBase(arg).Cast<TCoNameValueTuple>();
-                    const TString name = option.Name().StringValue();
-                    const TExprBase value = option.Value().Cast();
-
-                    if (name == TKqpReadTableFullTextIndexSettings::BFactorSettingName
-                        || name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName)
-                    {
-                        if (!FloatingPointOrParameter(value)) {
-                            return addError(TStringBuilder() << "FullTextScore named argument '" << name << "' (" << branchId
-                                << ") must be a Float or Double literal or parameter");
-                        }
-                    } else if (name == TKqpReadTableFullTextIndexSettings::DefaultOperatorSettingName
-                        || name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName)
-                    {
-                        if (!StringOrAtomOrParameter(value)) {
-                            return addError(TStringBuilder() << "FullTextScore named argument '" << name << "' (" << branchId
-                                << ") must be a string literal or parameter");
-                        }
-                    } else {
-                        return addError(TStringBuilder() << "unsupported FullTextScore named argument '" << name << "' (" << branchId
-                            << "); supported arguments are DefaultOperator, MinimumShouldMatch, K1, and B");
-                    }
+            TString fulltextError;
+            if (!parsedFulltext.IsValid(nullptr, &fulltextError)) {
+                if (!fulltextError.empty()) {
+                    return addError(fulltextError);
                 }
-            }
-
-            if (!parsedFulltext.IsValid()) {
                 return addError(TStringBuilder() << "the first argument of FullTextScore (" << branchId << ") must reference a table column");
             }
 
@@ -3322,6 +3410,27 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         }
 
         branches.push_back(std::move(b));
+    }
+
+    TExprNode::TListType fulltextQueries;
+    for (const auto& branch : branches) {
+        if (branch.FulltextQuery) {
+            fulltextQueries.push_back(branch.FulltextQuery);
+        }
+    }
+    BuildFulltextQueryPrecomputes(fulltextQueries, fulltextQueryReplacements, ctx);
+    for (auto& branch : branches) {
+        if (branch.FulltextQuery) {
+            branch.FulltextQuery = BuildFulltextQueryPrecompute(
+                branch.FulltextQuery, fulltextQueryReplacements, ctx);
+        }
+    }
+
+    if (origPred) {
+        origPred = ctx.ReplaceNodes(std::move(origPred), fulltextQueryReplacements);
+    }
+    if (origProj) {
+        origProj = ctx.ReplaceNodes(std::move(origProj), fulltextQueryReplacements);
     }
 
     // ---------------------------------------------------------------------------------------------

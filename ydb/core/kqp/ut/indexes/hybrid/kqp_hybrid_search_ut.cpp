@@ -270,6 +270,23 @@ void SetupDocs(TQueryClient& db) {
     AddVectorIndex(db);
 }
 
+void SetupSearchTerms(TQueryClient& db) {
+    ExecOk(db, R"sql(
+        CREATE TABLE `/Root/SearchTerms` (
+            Key Uint64,
+            Term Utf8,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+    ExecOk(db, R"sql(
+        UPSERT INTO `/Root/SearchTerms` (Key, Term) VALUES
+            (1u, "cats"u),
+            (2u, "dogs"u),
+            (3u, ""u),
+            (4u, NULL);
+    )sql");
+}
+
 void SetupLargeDocs(TQueryClient& db, ui32 count) {
     ExecOk(db, R"sql(
         CREATE TABLE `/Root/LargeDocs` (
@@ -526,15 +543,32 @@ std::vector<ui64> RunUint64Column(TQueryClient& db, const TString& sql, const TS
     return values;
 }
 
-std::vector<ui64> RunKeys(TQueryClient& db, const TString& sql, const TParams& params) {
-    auto result = db.ExecuteQuery(sql, TTxControl::NoTx(), params).ExtractValueSync();
+std::vector<ui64> RunKeys(TQueryClient& db, const TString& sql, const TParams& params,
+        std::optional<bool> fromCache = std::nullopt) {
+    TExecuteQuerySettings settings;
+    if (fromCache) {
+        settings.StatsMode(EStatsMode::Basic);
+    }
+    auto result = db.ExecuteQuery(sql, TTxControl::NoTx(), params, settings).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    if (fromCache) {
+        UNIT_ASSERT(result.GetStats());
+        const auto compilation = result.GetStats()->GetCompilation();
+        UNIT_ASSERT(compilation);
+        UNIT_ASSERT_VALUES_EQUAL_C(compilation->IsFromCache(), *fromCache, sql);
+    }
     std::vector<ui64> keys;
     TResultSetParser parser(result.GetResultSet(0));
     while (parser.TryNextRow()) {
         keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
     }
     return keys;
+}
+
+void AssertKeySet(const std::vector<ui64>& keys, const std::set<ui64>& expected) {
+    const std::set<ui64> actual(keys.begin(), keys.end());
+    UNIT_ASSERT_VALUES_EQUAL_C(keys.size(), expected.size(), "hybrid keys must occur exactly once");
+    UNIT_ASSERT_C(actual == expected, "unexpected hybrid key set");
 }
 
 TString RunFailIssues(TQueryClient& db, const TString& sql) {
@@ -751,6 +785,477 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), keys);
     }
 
+    Y_UNIT_TEST_TWIN(ComputedFulltextQueries, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        SetupSearchTerms(db);
+
+        const TString ifQuery = TargetDeclWith(R"sql(
+            DECLARE $choose AS Bool;
+            DECLARE $query AS Utf8;
+        )sql") + R"sql(
+            $search = IF($choose, $query, "dogs"u);
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, $search),
+                Knn::CosineDistance(Embedding, $target),
+                (4, 1) AS Limits)
+            LIMIT 4;
+        )sql";
+        const auto cats = TParamsBuilder()
+            .AddParam("$choose").Bool(true).Build()
+            .AddParam("$query").Utf8("cats").Build()
+            .Build();
+        const auto dogs = TParamsBuilder()
+            .AddParam("$choose").Bool(false).Build()
+            .AddParam("$query").Utf8("cats").Build()
+            .Build();
+        AssertKeySet(RunKeys(db, ifQuery, cats), {1u, 2u, 3u});
+        AssertKeySet(RunKeys(db, ifQuery, dogs), {2u});
+
+        const TString subquery = TargetDeclWith(R"sql(
+            DECLARE $termKey AS Uint64;
+        )sql") + R"sql(
+            $search = COALESCE(
+                (SELECT Term FROM `/Root/SearchTerms` WHERE Key = $termKey),
+                "dogs"u);
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, $search),
+                Knn::CosineDistance(Embedding, $target),
+                (4, 1) AS Limits)
+            LIMIT 4;
+        )sql";
+        const auto term = [](ui64 key) {
+            return TParamsBuilder().AddParam("$termKey").Uint64(key).Build().Build();
+        };
+        AssertKeySet(RunKeys(db, subquery, term(1)), {1u, 2u, 3u});
+        AssertKeySet(RunKeys(db, subquery, term(2)), {2u});
+    }
+
+    Y_UNIT_TEST_TWIN(VolatileFulltextQueryIsShared, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const TString query = TargetDecl + R"sql(
+            $search = IF(Random(true) < 0.5, "cats"u, "dogs"u);
+            SELECT Key, $search AS Search FROM `/Root/Docs`
+            WHERE Text LIKE ("%"u || $search || "%"u)
+            ORDER BY HybridRank(
+                FullTextScore(Text, $search),
+                Knn::CosineDistance(Embedding, $target),
+                (4, 1) AS Limits)
+            LIMIT 4;
+        )sql";
+
+        for (ui32 iteration = 0; iteration < 32; ++iteration) {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            std::vector<ui64> keys;
+            TString search;
+            TResultSetParser parser(result.GetResultSet(0));
+            while (parser.TryNextRow()) {
+                keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
+                const TString rowSearch(parser.ColumnParser("Search").GetUtf8());
+                if (search.empty()) {
+                    search = rowSearch;
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(rowSearch, search, NYdb::FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            UNIT_ASSERT_C(search == "cats" || search == "dogs", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+            if (search == "cats") {
+                UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u}), keys);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{2u}), keys);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TwoFulltextBranchesShareComputedQueries, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const TVector<std::pair<TString, TString>> arguments = {
+            {"$search", "$search"},
+            {"$search", "$search || \" cats\"u"},
+            {"$search || \" cats\"u", "$search || \" dogs\"u"},
+        };
+        const auto params = [](const TString& query, bool choose) {
+            return TParamsBuilder()
+                .AddParam("$query").Utf8(query).Build()
+                .AddParam("$choose").Bool(choose).Build()
+                .Build();
+        };
+        for (const auto& [first, second] : arguments) {
+            for (bool reverse : {false, true}) {
+                const TString query = SearchPragma + R"sql(
+                    DECLARE $query AS Utf8;
+                    DECLARE $choose AS Bool;
+                    $search = IF($choose, $query, "dogs"u);
+                    SELECT Key FROM `/Root/Docs`
+                    ORDER BY HybridRank(
+                )sql" + "FullTextScore(Text, " + (reverse ? second : first) + "), "
+                    + "FullTextScore(Text, " + (reverse ? first : second) + "), (4, 4) AS Limits) LIMIT 4;";
+                AssertKeySet(RunKeys(db, query, params("cats", true)), {1u, 3u});
+                AssertKeySet(RunKeys(db, query, params("cats", false)), {2u});
+                AssertKeySet(RunKeys(db, query, params("absent", true)), {});
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TwoFulltextBranchesShareReadQueries, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        SetupSearchTerms(db);
+
+        const auto queryFor = [](const TString& first, const TString& second, bool reverse) {
+            return SearchPragma + R"sql(
+                DECLARE $termKey AS Uint64;
+                DECLARE $fallback AS Utf8;
+                DECLARE $resultLimit AS Uint64;
+                $search = COALESCE(
+                    (SELECT Term FROM `/Root/SearchTerms` WHERE Key = $termKey),
+                    $fallback);
+                SELECT Key FROM `/Root/Docs`
+                ORDER BY HybridRank(
+            )sql" + "FullTextScore(Text, " + (reverse ? second : first) + "), "
+                + "FullTextScore(Text, " + (reverse ? first : second) + "), (4, 4) AS Limits) LIMIT $resultLimit;";
+        };
+        const auto params = [](ui64 key, const TString& fallback, ui64 resultLimit = 4) {
+            return TParamsBuilder()
+                .AddParam("$termKey").Uint64(key).Build()
+                .AddParam("$fallback").Utf8(fallback).Build()
+                .AddParam("$resultLimit").Uint64(resultLimit).Build()
+                .Build();
+        };
+        struct TCase {
+            TString First;
+            TString Second;
+            std::set<ui64> Dogs;
+            std::optional<ui64> CatTop = std::nullopt;
+        };
+        const TVector<TCase> cases = {
+            {"$search", "$search", {2u}},
+            {"$search", "$search || \" love\"u", {2u}, 1u},
+            {"$search", "$search || \" sleep\"u", {2u}, 3u},
+            {"$search || \" love\"u", "$search || \" sleep\"u", {}},
+        };
+        for (const auto& test : cases) {
+            for (bool reverse : {false, true}) {
+                const TString query = queryFor(test.First, test.Second, reverse);
+                // cats/love and cats/sleep select keys 1 and 3 respectively. Neither
+                // derived dogs query matches, while an unmodified dogs query selects key 2.
+                const bool reused = reverse && test.First == test.Second;
+                AssertKeySet(RunKeys(db, query, params(1, "absent"), reused), {1u, 3u});
+                if (test.CatTop) {
+                    // The winner belongs to both branches; the other cat document only to the root branch.
+                    UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{*test.CatTop}),
+                        RunKeys(db, query, params(1, "absent", 1), true));
+                }
+                AssertKeySet(RunKeys(db, query, params(2, "absent"), true), test.Dogs);
+                AssertKeySet(RunKeys(db, query, params(99, "cats"), true), {1u, 3u});
+                AssertKeySet(RunKeys(db, query, params(4, "dogs"), true), test.Dogs);
+                AssertKeySet(RunKeys(db, query, params(99, "absent"), true), {});
+            }
+        }
+
+        const TString cachedQuery = queryFor("$search", "$search || \" love\"u", false);
+        ExecOk(db, R"sql(UPSERT INTO `/Root/SearchTerms` (Key, Term) VALUES (1u, "dogs"u);)sql");
+        AssertKeySet(RunKeys(db, cachedQuery, params(1, "absent"), true), {2u});
+        ExecOk(db, R"sql(DELETE FROM `/Root/SearchTerms` WHERE Key = 1u;)sql");
+        AssertKeySet(RunKeys(db, cachedQuery, params(1, "cats"), true), {1u, 3u});
+        AssertKeySet(RunKeys(db, cachedQuery, params(1, "absent"), true), {});
+        ExecOk(db, R"sql(UPSERT INTO `/Root/SearchTerms` (Key, Term) VALUES (1u, "cats"u);)sql");
+        AssertKeySet(RunKeys(db, cachedQuery, params(1, "absent"), true), {1u, 3u});
+
+        for (bool reverse : {false, true}) {
+            // The other fulltext branch must not hide an empty read-backed argument.
+            const TString query = queryFor("$search", "\"cats\"u", reverse);
+            const auto issues = RunBadRequestIssues(db, query, params(3, "dogs"));
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Expected non-empty query");
+            AssertKeySet(RunKeys(db, query, params(2, "absent"), true), {1u, 2u, 3u});
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DependentVolatileFulltextQueriesAreShared, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        for (bool reverse : {false, true}) {
+            const TString first = reverse ? "$extended" : "$search";
+            const TString second = reverse ? "$search" : "$extended";
+            const TString query = SearchPragma + R"sql(
+                $search = IF(Random(true) < 0.5, "cats"u, "dogs"u);
+                $extended = $search || " love"u;
+                SELECT Key, $search AS Search, $extended AS Extended FROM `/Root/Docs`
+                WHERE Text LIKE ("%"u || $search || "%"u)
+                ORDER BY HybridRank(
+            )sql" + "FullTextScore(Text, " + first + "), FullTextScore(Text, " + second
+                + "), (4, 4) AS Limits) LIMIT 4;";
+
+            for (ui32 iteration = 0; iteration < 16; ++iteration) {
+                const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                TResultSetParser parser(result.GetResultSet(0));
+                std::vector<ui64> keys;
+                TString search;
+                while (parser.TryNextRow()) {
+                    keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
+                    const TString current(parser.ColumnParser("Search").GetUtf8());
+                    if (search.empty()) {
+                        search = current;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(current, search);
+                    UNIT_ASSERT_VALUES_EQUAL(TString(parser.ColumnParser("Extended").GetUtf8()), search + " love");
+                }
+                UNIT_ASSERT_C(search == "cats" || search == "dogs", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+                // The cats branch supplies 1 and 3, and cats/love supplies only 1.
+                // The dogs branch supplies 2, and dogs/love supplies no candidates.
+                if (search == "cats") {
+                    AssertKeySet(keys, {1u, 3u});
+                } else {
+                    AssertKeySet(keys, {2u});
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ReadBackedFulltextQueryPreservesPrefixedResiduals) {
+        auto kikimr = MakeRunnerWithCompact(/*compact=*/true, /*enableFulltextPrefix=*/true);
+        auto db = kikimr.GetQueryClient();
+        CreateDocs(db);
+        UpsertDocs(db);
+        AddPrefixedFulltextIndex(db);
+        AddPrefixedVectorIndex(db);
+        SetupSearchTerms(db);
+
+        const TString query = TargetDeclWith(R"sql(
+            DECLARE $termKey AS Uint64;
+            DECLARE $category AS Utf8;
+            DECLARE $minKey AS Uint64;
+        )sql") + R"sql(
+            $search = COALESCE((SELECT Term FROM `/Root/SearchTerms` WHERE Key = $termKey), "cats"u);
+            SELECT Key FROM `/Root/Docs`
+            WHERE Category = $category AND Key >= $minKey
+                AND Text LIKE ("%"u || $search || "%"u)
+            ORDER BY HybridRank(
+                FullTextScore(Text, $search), Knn::CosineDistance(Embedding, $target),
+                ("ft_idx", "vp_idx") AS Indexes, (4, 4) AS Limits)
+            LIMIT 4;
+        )sql";
+        const auto params = [](ui64 key, const TString& category, ui64 minKey = 0) {
+            return TParamsBuilder()
+                .AddParam("$termKey").Uint64(key).Build()
+                .AddParam("$category").Utf8(category).Build()
+                .AddParam("$minKey").Uint64(minKey).Build()
+                .Build();
+        };
+        AssertKeySet(RunKeys(db, query, params(1, "a"), false), {1u});
+        AssertKeySet(RunKeys(db, query, params(1, "b"), true), {3u});
+        AssertKeySet(RunKeys(db, query, params(2, "a"), true), {2u});
+        AssertKeySet(RunKeys(db, query, params(2, "b"), true), {});
+        AssertKeySet(RunKeys(db, query, params(1, "a", 2), true), {});
+        AssertKeySet(RunKeys(db, query, params(1, "missing"), true), {});
+        AssertKeySet(RunKeys(db, query, params(4, "a"), true), {1u});
+    }
+
+    Y_UNIT_TEST_TWIN(ReadBackedFulltextQueriesWithDynamicPagination, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        SetupSearchTerms(db);
+
+        for (bool readPage : {false, true}) {
+            const TString query = TargetDeclWith(R"sql(
+                DECLARE $termKey AS Uint64;
+                DECLARE $limit AS Uint64;
+                DECLARE $offset AS Uint64;
+            )sql") + (readPage ? R"sql(
+                $pageLimit = (SELECT COUNT(*) FROM `/Root/SearchTerms` WHERE Key <= $limit);
+                $pageOffset = (SELECT COUNT(*) FROM `/Root/SearchTerms` WHERE Key <= $offset);
+            )sql" : R"sql(
+                $pageLimit = $limit;
+                $pageOffset = $offset;
+            )sql") + R"sql(
+                $search = COALESCE((SELECT Term FROM `/Root/SearchTerms` WHERE Key = $termKey), "absent"u);
+                SELECT Key FROM `/Root/Docs`
+                ORDER BY HybridRank(
+                    FullTextScore(Text, $search), Knn::CosineDistance(Embedding, $target),
+                    (4, 4) AS Limits)
+                LIMIT $pageLimit OFFSET $pageOffset;
+            )sql";
+            const auto params = [](ui64 key, ui64 limit, ui64 offset) {
+                return TParamsBuilder()
+                    .AddParam("$termKey").Uint64(key).Build()
+                    .AddParam("$limit").Uint64(limit).Build()
+                    .AddParam("$offset").Uint64(offset).Build()
+                    .Build();
+            };
+            UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}),
+                RunKeys(db, query, params(1, 4, 0), false));
+            UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{3u, 2u}), RunKeys(db, query, params(1, 2, 1), true));
+            UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 4u}), RunKeys(db, query, params(2, 2, 1), true));
+            UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{2u}), RunKeys(db, query, params(99, 1, 0), true));
+            UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{}), RunKeys(db, query, params(1, 0, 0), true));
+            UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{}), RunKeys(db, query, params(1, 2, 4), true));
+        }
+    }
+
+    Y_UNIT_TEST(ReadBackedRowsetsFeedLinearFusion) {
+        auto kikimr = MakeRunnerWithCompact(/*compact=*/true);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        SetupSearchTerms(db);
+
+        const TString query = TargetDeclWith(R"sql(
+            DECLARE $lo AS Uint64;
+            DECLARE $hi AS Uint64;
+        )sql") + R"sql(
+            $terms = SELECT Term FROM `/Root/SearchTerms` WHERE Key >= $lo AND Key < $hi ORDER BY Key;
+            $values = (SELECT AGGREGATE_LIST(CAST(Term AS String)) FROM $terms);
+            $joined = COALESCE(String::JoinFromList($values, " "), "");
+            $search = IF(LENGTH($joined) > 0, $joined, "cats");
+            SELECT Key, $search AS Search FROM `/Root/Docs`
+            WHERE Key >= ListLength($values)
+            ORDER BY HybridRank(
+                FullTextScore(Text, $search, "or" AS DefaultOperator, "1" AS MinimumShouldMatch),
+                Knn::CosineDistance(Embedding, $target), "linear" AS Mode, (4, 1) AS Limits)
+            LIMIT 4;
+        )sql";
+        const auto params = [](ui64 lo, ui64 hi) {
+            return TParamsBuilder()
+                .AddParam("$lo").Uint64(lo).Build()
+                .AddParam("$hi").Uint64(hi).Build()
+                .Build();
+        };
+        AssertKeySet(RunKeys(db, query, params(1, 2)), {1u, 2u, 3u});
+        AssertKeySet(RunKeys(db, query, params(2, 3)), {2u});
+        // The shared two-item rowset yields cats/dogs candidates 1,2,3, then the
+        // residual lower bound removes key 1. Linear fusion materializes its branch too.
+        AssertKeySet(RunKeys(db, query, params(1, 3)), {2u, 3u});
+        AssertKeySet(RunKeys(db, query, params(3, 4)), {1u, 2u, 3u});
+        AssertKeySet(RunKeys(db, query, params(4, 5)), {1u, 2u, 3u});
+        AssertKeySet(RunKeys(db, query, params(2, 1)), {1u, 2u, 3u});
+    }
+
+    Y_UNIT_TEST_TWIN(RejectsInvalidFulltextQueryExpression, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto issues = RunFailIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, IF(Key = 1u, "cats"u, "dogs"u)),
+                Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Fulltext search expression must not depend on the table row");
+        UNIT_ASSERT_C(!issues.Contains("first argument of FullTextScore"), issues);
+
+        issues = RunFailIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, Key),
+                Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Search string must be String or Utf8");
+        UNIT_ASSERT_C(!issues.Contains("first argument of FullTextScore"), issues);
+
+        const TString declarations = TargetDeclWith(R"sql(
+            DECLARE $query AS Utf8;
+            DECLARE $choose AS Bool;
+        )sql");
+        const auto params = TParamsBuilder()
+            .AddParam("$query").Utf8("cats").Build()
+            .AddParam("$choose").Bool(true).Build()
+            .Build();
+        const TString sideEffects = declarations + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, WithSideEffectsMode(IF($choose, $query, "dogs"u), 'General')),
+                Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql";
+        UNIT_ASSERT_STRING_CONTAINS(RunBadRequestIssues(db, sideEffects, params),
+            "Fulltext search expression must not have side effects");
+
+        // A read-backed optional value needs an explicit fallback just like a parameter.
+        SetupSearchTerms(db);
+        const TString optionalQuery = TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, (SELECT Term FROM `/Root/SearchTerms` WHERE Key = 1u)),
+                Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql";
+        const auto result = db.ExecuteQuery(optionalQuery, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Search string must be String or Utf8");
+    }
+
+    Y_UNIT_TEST_TWIN(RejectsEmptyComputedFulltextQuery, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const TString query = TargetDeclWith(R"sql(
+            DECLARE $empty AS Bool;
+        )sql") + R"sql(
+            $search = IF($empty, ""u, "cats"u);
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, $search),
+                Knn::CosineDistance(Embedding, $target),
+                (4, 1) AS Limits)
+            LIMIT 4;
+        )sql";
+        const auto params = [](bool empty) {
+            return TParamsBuilder().AddParam("$empty").Bool(empty).Build().Build();
+        };
+        const auto issues = RunBadRequestIssues(db, query, params(true));
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Expected non-empty query");
+        AssertKeySet(RunKeys(db, query, params(false)), {1u, 2u, 3u});
+    }
+
+    Y_UNIT_TEST_TWIN(CachedFulltextQueryObservesParameters, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const TString query = TargetDeclWith(R"sql(
+            DECLARE $query AS Utf8;
+            DECLARE $fallback AS Utf8;
+            DECLARE $choose AS Bool;
+        )sql") + R"sql(
+            $search = IF($choose, $query, $fallback);
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, $search),
+                Knn::CosineDistance(Embedding, $target),
+                (4, 1) AS Limits)
+            LIMIT 4;
+        )sql";
+        const auto params = [](const TString& query, const TString& fallback, bool choose) {
+            return TParamsBuilder()
+                .AddParam("$query").Utf8(query).Build()
+                .AddParam("$fallback").Utf8(fallback).Build()
+                .AddParam("$choose").Bool(choose).Build()
+                .Build();
+        };
+        AssertKeySet(RunKeys(db, query, params("cats", "dogs", true), false), {1u, 2u, 3u});
+        AssertKeySet(RunKeys(db, query, params("cats", "dogs", false), true), {2u});
+        AssertKeySet(RunKeys(db, query, params("cats", "dogs", true), true), {1u, 2u, 3u});
+    }
+
     Y_UNIT_TEST(RejectSampling) {
         auto kikimr = MakeRunner();
         auto db = kikimr.GetQueryClient();
@@ -854,40 +1359,45 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         auto kikimr = MakeRunner();
         auto db = kikimr.GetQueryClient();
         SetupDocs(db);
+        SetupSearchTerms(db);
 
-        const TString query = TargetDeclWith(R"sql(
+        const TString declarations = TargetDeclWith(R"sql(
+            DECLARE $termKey AS Uint64;
             DECLARE $defaultOperator AS String;
             DECLARE $minimumShouldMatch AS String;
             DECLARE $k1 AS Double;
             DECLARE $b AS Double;
-        )sql") + R"sql(
-            SELECT Key FROM `/Root/Docs`
-            ORDER BY HybridRank(
-                FullTextScore(Text, "cats love dogs",
-                    $defaultOperator AS DefaultOperator,
-                    $minimumShouldMatch AS MinimumShouldMatch,
-                    $k1 AS K1,
-                    $b AS B),
-                Knn::CosineDistance(Embedding, $target),
-                (4, 1) AS Limits)
-            LIMIT 4;
-        )sql";
-        const auto params = TParamsBuilder()
-            .AddParam("$defaultOperator").String("or").Build()
-            .AddParam("$minimumShouldMatch").String("2").Build()
-            .AddParam("$k1").Double(1.2).Build()
-            .AddParam("$b").Double(0.75).Build()
-            .Build();
-
-        auto result = db.ExecuteQuery(query, TTxControl::NoTx(), params).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        std::vector<ui64> keys;
-        TResultSetParser parser(result.GetResultSet(0));
-        while (parser.TryNextRow()) {
-            keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
+        )sql");
+        const auto params = [](const TString& minimum, const TString& op = "or") {
+            return TParamsBuilder()
+                .AddParam("$termKey").Uint64(1).Build()
+                .AddParam("$defaultOperator").String(op).Build()
+                .AddParam("$minimumShouldMatch").String(minimum).Build()
+                .AddParam("$k1").Double(1.2).Build()
+                .AddParam("$b").Double(0.75).Build()
+                .Build();
+        };
+        for (const TString& search : {TString("\"cats love dogs\"u"),
+                TString("COALESCE((SELECT Term FROM `/Root/SearchTerms` WHERE Key = $termKey), \"absent\"u) || \" love dogs\"u")}) {
+            const TString query = declarations + "$search = " + search + ";" + R"sql(
+                SELECT Key FROM `/Root/Docs`
+                ORDER BY HybridRank(
+                    FullTextScore(Text, $search,
+                        $defaultOperator AS DefaultOperator,
+                        $minimumShouldMatch AS MinimumShouldMatch,
+                        $k1 AS K1,
+                        $b AS B),
+                    Knn::CosineDistance(Embedding, $target),
+                    (4, 1) AS Limits)
+                LIMIT 4;
+            )sql";
+            AssertKeySet(RunKeys(db, query, params("2"), false), {1u, 2u});
+            AssertKeySet(RunKeys(db, query, params("1"), true), {1u, 2u, 3u});
+            AssertKeySet(RunKeys(db, query, params("", "and"), true), {2u});
+            UNIT_ASSERT_STRING_CONTAINS(RunBadRequestIssues(db, query, params("1", "invalid")),
+                "Unsupported default operator: `invalid`");
+            AssertKeySet(RunKeys(db, query, params("2"), true), {1u, 2u});
         }
-        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
-        UNIT_ASSERT((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u}));
     }
 
     Y_UNIT_TEST(RejectsUnsupportedFulltextNamedOption) {
@@ -2037,6 +2547,20 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
     }
 
     // HybridRank needs both a fulltext relevance index and a vector index; missing either is an error.
+    Y_UNIT_TEST(RejectsFulltextMode) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        const auto issues = RunBadRequestIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "%cats%", "Wildcard" AS Mode),
+                Knn::CosineDistance(Embedding, $target))
+            LIMIT 3;
+        )sql");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "unsupported FullTextScore named argument 'Mode'");
+    }
+
     Y_UNIT_TEST(RejectsWhenIndexMissing) {
         const TString query = TargetDecl + R"sql(
             SELECT Key FROM `/Root/Docs`

@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -41,7 +42,16 @@ TExprBase KqpApplyLimitToFullTextIndex(TExprBase node, TExprContext& ctx, const 
         return node; // already set?
     }
 
-    settings.SetItemsLimit(take.Count().Ptr());
+    auto limit = take.Count();
+    if (!NYql::NDq::IsDqCompletePureExpr(limit)) {
+        return node;
+    }
+    if (!limit.Maybe<TCoUint64>() && !limit.Maybe<TCoParameter>() &&
+        !limit.Maybe<TDqPhyPrecompute>() && !limit.Maybe<TKqpTxResultBinding>())
+    {
+        limit = KqpPrecomputeParameter(limit, ctx);
+    }
+    settings.SetItemsLimit(limit.Ptr());
 
     auto newSettings = settings.BuildNode(ctx, input.Pos());
 

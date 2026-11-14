@@ -422,7 +422,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchEmpty) {
         WHERE FulltextMatch(Text, "");
     )sql", NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-    UNIT_ASSERT(result.GetIssues().ToString().find("No search terms were extracted from the query") != std::string::npos);
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Expected non-empty query");
 }
 
 // Regression: a cached fulltext query plan pins the index impl-table schema version at
@@ -1965,7 +1965,6 @@ void DoSelectWithFulltextLike(bool relevance, bool utf8, TConstArrayRef<TFulltex
             "Coalesce(Text, '') || '%'",
             "Coalesce(Text, '')",
             "If(Key = 0u, $pattern, 'abcXdef')",
-            "If(Random(1) < 0.5, $pattern, 'abcXdef')",
             "WithSideEffectsMode($pattern, 'General')"}) {
         const auto query = Sprintf(R"sql(
             DECLARE $pattern AS String;
@@ -1984,7 +1983,7 @@ void DoSelectWithFulltextLike(bool relevance, bool utf8, TConstArrayRef<TFulltex
             WHERE FulltextScore(Text, Coalesce(Text, '')) > 0;
         )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported predicate is used to access index");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Fulltext search expression must not depend on the table row");
     }
 }
 
@@ -2039,6 +2038,8 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextLikeExpressions, RELEVANCE, UTF8) {
         {"$pattern", "%stone%", "[[[16u]];[[17u]]]", "ILIKE"},
         {"$pattern", "%ſtone%", "[[[15u]]]", "ILIKE"},
         {"$pattern", "мор%кот", "[[[18u]];[[19u]]]", "ILIKE"},
+        {"If(Random(1) < 1.0, $pattern, 'abcXdef')",
+            "abc%def", "[[[0u]];[[1u]];[[2u]];[[3u]];[[8u]]]"},
         {"If(CurrentUtcTimestamp() >= Timestamp('1970-01-01T00:00:00Z'), $pattern, 'abcXdef')",
             "abc%def", "[[[0u]];[[1u]];[[2u]];[[3u]];[[8u]]]"},
     };
@@ -4369,9 +4370,9 @@ Y_UNIT_TEST(ExplainHybridFulltextVectorQuery) {
         $FtTop = (
             SELECT
                 id,
-                FullTextScore(body, $QueryText, "And" as Mode) AS bm25
+                FullTextScore(body, $QueryText, "And" as DefaultOperator) AS bm25
             FROM `/Root/test_table` VIEW ft_idx
-            WHERE FullTextScore(body, $QueryText, "And" as Mode) > 0
+            WHERE FullTextScore(body, $QueryText, "And" as DefaultOperator) > 0
             ORDER BY bm25 DESC
             LIMIT $KFt
         );

@@ -2609,6 +2609,14 @@ private:
 
             const auto& queries = Settings->GetQuerySettings();
             const auto& expr = queries.GetQuery();
+            if (AnyOf(queries.GetQueries(), [](const auto& query) { return query.empty(); })) {
+                RuntimeError("Expected non-empty query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+                return false;
+            }
+            if (expr.empty() && queries.GetPatternQueries().empty()) {
+                RuntimeError("Expected non-empty query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+                return false;
+            }
             YQL_ENSURE(expr.empty() || queries.GetPatternQueries().empty(), "String predicates must remain residual filters beside fulltext queries");
             const auto& settings = Settings->GetIndexDescription().GetSettings();
             YQL_ENSURE(settings.columns_size() == 1);

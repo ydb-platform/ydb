@@ -1,5 +1,6 @@
 #include <ydb/core/tx/datashard/change_record.h>
 #include <ydb/core/tx/datashard/change_record_cdc_serializer.h>
+#include <ydb/library/aclib/user_context.h>
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>

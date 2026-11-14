@@ -4,6 +4,7 @@ SIZE(SMALL)
 
 PEERDIR(
     contrib/libs/zstd
+    ydb/library/aclib
     yql/essentials/public/udf/service/exception_policy
 )
 

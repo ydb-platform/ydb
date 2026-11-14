@@ -9,4 +9,6 @@ message TCommonLatencyHistBounds {
 
 message TMetricsConfig {
     optional TCommonLatencyHistBounds CommonLatencyHistBounds = 1;
+    // Tablet executor/app counters publication period; values below 1 are clamped to 1.
+    optional uint32 TabletCountersUpdateIntervalSeconds = 2 [default = 15];
 }

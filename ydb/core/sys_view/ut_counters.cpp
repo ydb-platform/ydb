@@ -223,10 +223,10 @@ void KillTablet(TTestEnv& env, ui64 tabletId) {
 Y_UNIT_TEST_SUITE(DbCounters) {
 
     Y_UNIT_TEST(TabletsSimple) {
-        TTestEnv env(1, 2, {.EnableSVP = true});
+        TTestEnv env(1, 2, {.EnableSVP = true, .TabletCountersUpdateIntervalSeconds = 1});
         CreateDatabasesAndTables(env);
 
-        for (size_t iter = 0; iter < 30; ++iter) {
+        for (size_t iter = 0; iter < 150; ++iter) {
             Cerr << "iteration " << iter << Endl;
 
             auto checkTabletCounters = [] (::NMonitoring::TDynamicCounterPtr databaseGroup,
@@ -318,7 +318,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
                 return;
             }
 
-            Sleep(TDuration::Seconds(5));
+            Sleep(TDuration::Seconds(1));
         }
 
         UNIT_ASSERT_C(false, "out of iterations");
@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
     // monitoring_project_id=<value> comes from the DB user attribute of the
     // same name (ATTR_MONITORING_PROJECT_ID) and is absent when unset.
     Y_UNIT_TEST(DetailedTables) {
-        TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true});
+        TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true, .TabletCountersUpdateIntervalSeconds = 1});
 
         CreateDetailedDatabase(env, "Database1");
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
         const TString relativeTablePath = "Table1";
         const TString projectId = "proj1";
 
-        for (size_t iter = 0; iter < 30; ++iter) {
+        for (size_t iter = 0; iter < 150; ++iter) {
             Cerr << "iteration " << iter << Endl;
 
             bool isGood = false;
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
                 return;
             }
 
-            Sleep(TDuration::Seconds(5));
+            Sleep(TDuration::Seconds(1));
         }
 
         UNIT_ASSERT_C(false, "out of iterations");
@@ -410,7 +410,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
     // in one bucket; ProcessorRestartRestoresIdleTabletsFromNextReports in
     // ydb/core/tablet/detailed_metrics covers the same case deterministically.
     Y_UNIT_TEST(DetailedTablesUsedCorePercentsSurvivesProcessorRestart) {
-        TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true});
+        TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true, .TabletCountersUpdateIntervalSeconds = 1});
 
         CreateDetailedDatabase(env, "Database1");
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
@@ -422,14 +422,14 @@ Y_UNIT_TEST_SUITE(DbCounters) {
         const TString relativeTablePath = "Table1";
 
         auto waitForHistogram = [&](const char* stage, const ::NMonitoring::TDynamicCounterPtr& skippedGroup) {
-            for (size_t iter = 0; iter < 30; ++iter) {
+            for (size_t iter = 0; iter < 150; ++iter) {
                 Cerr << stage << ", iteration " << iter << Endl;
                 auto [tableGroup, total] = FindUsedCorePercents(env, databasePath, relativeTablePath, skippedGroup);
                 // The table has a single tablet, neither lost nor counted twice
                 if (tableGroup && total == 1) {
                     return tableGroup;
                 }
-                Sleep(TDuration::Seconds(5));
+                Sleep(TDuration::Seconds(1));
             }
             UNIT_ASSERT_C(false, TStringBuilder()
                 << "used_core_percents histogram does not hold the table's tablet " << stage << ", out of iterations");
@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
     // per-database tree under the new value and leaves nothing behind under
     // the old one.
     Y_UNIT_TEST(DetailedTablesMonitoringProjectIdChange) {
-        TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true});
+        TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true, .TabletCountersUpdateIntervalSeconds = 1});
 
         CreateDetailedDatabase(env, "Database1");
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
@@ -467,7 +467,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
         // Wait until the tree is visible under proj1, remembering which node
         // (the one hosting Database1's SysView Processor) it showed up on
         ui32 foundNodeId = Max<ui32>();
-        for (size_t iter = 0; iter < 30 && foundNodeId == Max<ui32>(); ++iter) {
+        for (size_t iter = 0; iter < 150 && foundNodeId == Max<ui32>(); ++iter) {
             Cerr << "iteration " << iter << " (waiting for proj1)" << Endl;
 
             for (ui32 nodeId = 0; nodeId < env.GetServer().GetRuntime()->GetNodeCount(); ++nodeId) {
@@ -482,7 +482,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
             }
 
             if (foundNodeId == Max<ui32>()) {
-                Sleep(TDuration::Seconds(5));
+                Sleep(TDuration::Seconds(1));
             }
         }
         UNIT_ASSERT_C(foundNodeId != Max<ui32>(), "out of iterations waiting for proj1");
@@ -491,7 +491,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
             env.GetClient().AlterUserAttributes("/Root", "Database1",
                 {{"monitoring_project_id", "proj2"}}));
 
-        for (size_t iter = 0; iter < 30; ++iter) {
+        for (size_t iter = 0; iter < 150; ++iter) {
             Cerr << "iteration " << iter << " (waiting for the move to proj2)" << Endl;
 
             auto counters = env.GetServer().GetRuntime()->GetAppData(foundNodeId).Counters;
@@ -518,7 +518,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
                 return;
             }
 
-            Sleep(TDuration::Seconds(5));
+            Sleep(TDuration::Seconds(1));
         }
 
         UNIT_ASSERT_C(false, "out of iterations");

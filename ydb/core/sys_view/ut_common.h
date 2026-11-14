@@ -41,6 +41,7 @@ struct TTestEnvSettings {
     bool EnableDetailedMetrics = false;
     NKikimrProto::TAuthConfig AuthConfig = {};
     TMaybe<ui32> DataShardStatsReportIntervalSeconds;
+    TMaybe<ui32> TabletCountersUpdateIntervalSeconds;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
 };
 

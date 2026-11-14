@@ -617,14 +617,17 @@ void ReadColumnTable(TDriver driver, const NTable::TTableDescription& desc, cons
             << READ_TABLE_RETRIES << " retries");
 }
 
-NTable::TTableDescription DescribeTable(TDriver driver, const TString& fullTablePath) {
+NTable::TTableDescription DescribeTable(TDriver driver, const TString& fullTablePath, bool forDump = false) {
     LOG_D("Describe table " << fullTablePath.Quote());
 
     TMaybe<NTable::TTableDescription> desc;
 
     NTable::TTableClient client(driver);
-    TStatus status = client.RetryOperationSync([fullTablePath, &desc](NTable::TSession session) {
+    TStatus status = client.RetryOperationSync([fullTablePath, &desc, forDump](NTable::TSession session) {
         auto settings = NTable::TDescribeTableSettings().WithKeyShardBoundary(true).WithSetVal(true);
+        if (forDump) {
+            settings.RequestType("dump");
+        }
         auto result = session.DescribeTable(fullTablePath, settings).GetValueSync();
 
         VerifyStatus(result);
@@ -843,7 +846,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     Y_ENSURE(path.back() != '/', path.Quote() << " path contains / in the end");
 
     const auto originalTablePath = JoinDatabasePath(dbPrefix, path);
-    const auto originalTableDesc = DescribeTable(driver, originalTablePath);
+    const auto originalTableDesc = DescribeTable(driver, originalTablePath, /* forDump */ true);
     if (auto replicaAttribute = originalTableDesc.GetAttributes().find(ATTR_ASYNC_REPLICA);
         (replicaAttribute != originalTableDesc.GetAttributes().end() && replicaAttribute->second == "true")
         || IsOmittedFromBackup(originalTableDesc.GetAttributes())
@@ -862,7 +865,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     const auto copyTablePath = JoinDatabasePath(backupPrefix, path);
     TMaybe<NTable::TTableDescription> copyTableDesc;
     if (!schemaOnly) {
-        copyTableDesc = DescribeTable(driver, copyTablePath);
+        copyTableDesc = DescribeTable(driver, copyTablePath, /* forDump */ true);
     }
 
     const auto& fullPath = schemaOnly ? originalTablePath : copyTablePath;
@@ -1219,6 +1222,9 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 LOG_D("Skip " << dbIt.GetFullPath().Quote());
                 dbIt.Next();
                 continue;
+            }
+            if (dbIt.IsTable()) {
+                DescribeTable(driver, dbIt.GetFullPath(), /* forDump */ true);
             }
             seenItems.insert(dbIt.GetFullPath());
 

@@ -388,6 +388,107 @@ class BaseTestBackupInFiles(BaseCliTestWithDatabase):
         self.create_user("eve")
 
 
+class TestDumpGeneratedColumns(BaseCliTestWithDatabase):
+    @classmethod
+    def get_cluster_configurator(cls):
+        return KikimrConfigGenerator(extra_feature_flags=["enable_generated_stored", "enable_generated_virtual"])
+
+    @pytest.mark.parametrize(
+        "generated_kinds",
+        [("STORED",), ("VIRTUAL",), ("STORED", "VIRTUAL")],
+        ids=["stored", "virtual", "stored_and_virtual"],
+    )
+    @pytest.mark.parametrize(
+        "dump_options",
+        [[], ["--consistency-level", "table"], ["--avoid-copy"], ["--scheme-only"]],
+        ids=["database_copy", "table_copy", "avoid_copy", "scheme_only"],
+    )
+    def test_dump_rejects_generated_columns(self, generated_kinds, dump_options):
+        table_name = "_".join(("generated_columns", *generated_kinds, *dump_options)).replace("-", "_").lower()
+        generated_columns = ",\n".join(
+            f"generated_{kind.lower()} Int32 GENERATED ALWAYS AS (value + 1) {kind}"
+            for kind in generated_kinds
+        )
+        self.execute_ydb_cli_command(["sql", "-s", f"""
+            CREATE TABLE `{table_name}` (
+                key Uint32 NOT NULL,
+                value Int32,
+                {generated_columns},
+                PRIMARY KEY (key)
+            );
+        """])
+        self.execute_ydb_cli_command([
+            "sql", "-s", f"UPSERT INTO `{table_name}` (key, value) VALUES (1, 42);",
+        ])
+        self.execute_ydb_cli_command(["scheme", "describe", f"/Root/{table_name}"])
+
+        backup_files_dir = yatest.common.output_path(table_name + "_dump")
+        result = self.execute_ydb_cli_command([
+            "tools", "dump", "--path", f"/Root/{table_name}", "--output", backup_files_dir,
+        ] + dump_options, check_exit_code=False)
+
+        assert result.exit_code != 0, result.stdout
+        assert "UNSUPPORTED" in result.stderr, result.stderr
+        assert "exporting tables with generated columns is not supported" in result.stderr, result.stderr
+        assert f"/Root/{table_name}" in result.stderr, result.stderr
+        assert not os.path.exists(backup_files_dir)
+
+    @pytest.mark.parametrize("generated_kind", ["STORED", "VIRTUAL"])
+    @pytest.mark.parametrize(
+        "dump_options",
+        [[], ["--consistency-level", "table"], ["--avoid-copy"], ["--scheme-only"]],
+        ids=["database_copy", "table_copy", "avoid_copy", "scheme_only"],
+    )
+    def test_dump_skips_omitted_generated_columns(self, generated_kind, dump_options):
+        folder_name = "_".join(("omitted_generated", generated_kind, *dump_options)).replace("-", "_").lower()
+        folder_path = f"/Root/{folder_name}"
+        self.driver.scheme_client.make_directory(folder_path)
+        self.execute_ydb_cli_command(["sql", "-s", f"""
+            CREATE TABLE `{folder_path}/omitted` (
+                key Uint32 NOT NULL,
+                value Int32,
+                generated Int32 GENERATED ALWAYS AS (value + 1) {generated_kind},
+                PRIMARY KEY (key)
+            );
+        """])
+        session = self.driver.table_client.session().create()
+        session.alter_table(f"{folder_path}/omitted", alter_attributes={"__omit_backup": "true"})
+        create_table_with_data(session, f"{folder_name}/included")
+
+        backup_files_dir = yatest.common.output_path(folder_name + "_dump")
+        self.execute_ydb_cli_command([
+            "tools", "dump", "--path", folder_path, "--output", backup_files_dir,
+        ] + dump_options)
+
+        assert os.listdir(backup_files_dir) == ["included"]
+        assert os.path.isfile(os.path.join(backup_files_dir, "included", "scheme.pb"))
+        if "--scheme-only" not in dump_options:
+            assert os.path.isfile(os.path.join(backup_files_dir, "included", "data_00.csv"))
+
+    @pytest.mark.parametrize("generated_kind", ["STORED", "VIRTUAL"])
+    def test_dump_changefeed_of_generated_table(self, generated_kind):
+        table_path = f"/Root/generated_changefeed_{generated_kind.lower()}"
+        self.execute_ydb_cli_command(["sql", "-s", f"""
+            CREATE TABLE `{table_path}` (
+                key Uint32 NOT NULL,
+                value Int32,
+                generated Int32 GENERATED ALWAYS AS (value + 1) {generated_kind},
+                PRIMARY KEY (key)
+            );
+        """])
+        self.execute_ydb_cli_command(["sql", "-s", f"""
+            ALTER TABLE `{table_path}` ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'JSON');
+        """])
+
+        backup_files_dir = yatest.common.output_path(f"changefeed_{generated_kind.lower()}_dump")
+        self.execute_ydb_cli_command([
+            "tools", "dump", "--path", f"{table_path}/feed", "--output", backup_files_dir,
+        ])
+
+        assert os.listdir(backup_files_dir) == ["feed"]
+        assert sorted(os.listdir(os.path.join(backup_files_dir, "feed"))) == ["create_topic.pb", "permissions.pb"]
+
+
 class TestBackupSingle(BaseTestBackupInFiles):
     def test_single_table_backup(self):
         session = self.driver.table_client.session().create()

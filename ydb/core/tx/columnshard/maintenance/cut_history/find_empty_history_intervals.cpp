@@ -72,7 +72,13 @@ class TFindEmptyHistoryIntervalsActor: public TActorBootstrapped<TFindEmptyHisto
     NKikimrConfig::TColumnShardConfig::TCutHistoryConfig Config;
     std::vector<TFindEmptyHistoryIntervalsContext::TPortion> Portions;
     NFindEmptyHistoryIntervals::THistoryIntervals HistoryIntervals;
-    THashMap<TAddress, NOlap::ISnapshotSchema::TPtr> BatchPortionSchemas;
+
+    struct TBatchPortion {
+        NOlap::ISnapshotSchema::TPtr Schema;
+        NOlap::TPortionInfo::TConstPtr Info;
+    };
+
+    THashMap<TAddress, TBatchPortion> BatchPortions;
     std::shared_ptr<TAtomicCounter> Aborted = std::make_shared<TAtomicCounter>(0);
     size_t Position = 0;
     TInstant Started;
@@ -99,34 +105,35 @@ class TFindEmptyHistoryIntervalsActor: public TActorBootstrapped<TFindEmptyHisto
         }
         ui64 memory = 0;
         size_t end = Position + Min<size_t>(Max<ui32>(1, Config.GetScanBatchSize()), Portions.size() - Position);
-        while (Position < end && (BatchPortionSchemas.empty() || memory < Max<ui64>(1, Config.GetScanMemoryLimitBytes()))) {
+        while (Position < end && (BatchPortions.empty() || memory < Max<ui64>(1, Config.GetScanMemoryLimitBytes()))) {
             auto& portion = Portions[Position++];
             memory += portion.AccessorMemory;
-            AFL_VERIFY(BatchPortionSchemas.emplace(TAddress(Owner, NOlap::TPortionAddress(portion.PathId, portion.PortionId)), std::move(portion.Schema)).second);
+            AFL_VERIFY(BatchPortions.emplace(TAddress(Owner, NOlap::TPortionAddress(portion.PathId, portion.PortionId)),
+                TBatchPortion{std::move(portion.Schema), std::move(portion.Info)}).second);
         }
         THashSet<TAddress> addresses;
-        addresses.reserve(BatchPortionSchemas.size());
-        for (const auto& [address, _] : BatchPortionSchemas) {
+        addresses.reserve(BatchPortions.size());
+        for (const auto& [address, _] : BatchPortions) {
             addresses.emplace(address);
         }
         TCache::AskObjects(TCachePolicy::EConsumer::SCAN, std::move(addresses), std::make_shared<TMetadataCallback>(SelfId(), Aborted));
     }
 
     void Handle(TEvAccessorsReady::TPtr& ev) {
-        if (ev->Get()->Failed || ev->Get()->Accessors.size() != BatchPortionSchemas.size() || !IsCutHistoryEnabled()) {
+        if (ev->Get()->Failed || ev->Get()->Accessors.size() != BatchPortions.size() || !IsCutHistoryEnabled()) {
             Finish(true);
             return;
         }
-        for (const auto& [address, accessor] : ev->Get()->Accessors) {
-            const auto* schema = BatchPortionSchemas.FindPtr(address);
-            AFL_VERIFY(schema);
-            NFindEmptyHistoryIntervals::ExcludePortionBlobs(*accessor, (*schema)->GetIndexInfo(), [this](const auto& blob) {
+        for (const auto& [address, chunks] : ev->Get()->Accessors) {
+            const auto* batch = BatchPortions.FindPtr(address);
+            AFL_VERIFY(batch);
+            NFindEmptyHistoryIntervals::ExcludePortionBlobs(*batch->Info, *chunks, batch->Schema->GetIndexInfo(), [this](const auto& blob) {
                 HistoryIntervals.Exclude(blob.GetLogoBlobId(), blob.GetDsGroup(), [this] {
                     Counters.OnCutHistoryBlobGroupMismatch();
                 });
             });
         }
-        BatchPortionSchemas.clear();
+        BatchPortions.clear();
         if (HistoryIntervals.Empty() || Position == Portions.size()) {
             Finish();
         } else {
@@ -291,7 +298,8 @@ TFindEmptyHistoryIntervalsContext BuildFindEmptyHistoryIntervalsContext(const TT
     const auto add = [&](const auto& portion) {
         const auto schema = portion->GetSchema(index->GetVersionedIndex());
         if (portion->HasBlobsInBlobStorage(schema->GetIndexInfo())) {
-            result.Portions.push_back({ portion->GetPathId(), portion->GetPortionId(), schema, portion->PredictAccessorsMemory(schema) });
+            result.Portions.push_back(
+                { portion->GetPathId(), portion->GetPortionId(), portion, schema, portion->PredictAccessorsMemory(schema) });
         }
     };
     for (const auto& [_, granule] : index->GetTables()) {

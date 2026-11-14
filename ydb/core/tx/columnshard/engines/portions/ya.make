@@ -13,6 +13,7 @@ SRCS(
     meta.cpp
     common.cpp
     index_chunk.cpp
+    portion_chunks.cpp
     data_accessor.cpp
     compacted.cpp
     written.cpp

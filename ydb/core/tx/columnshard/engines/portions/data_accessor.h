@@ -1,4 +1,5 @@
 #pragma once
+#include "portion_chunks.h"
 #include "portion_info.h"
 
 #include <ydb/core/formats/arrow/accessor/common/additional_data.h>
@@ -221,35 +222,13 @@ public:
 
 }   // namespace NAssembling
 
-class TPortionDataAccessor: public TPortionMetaBase {
+class TPortionDataAccessor {
 private:
-    using TBase = TPortionMetaBase;
     TPortionInfo::TConstPtr PortionInfo;
-    std::optional<std::vector<TColumnRecord>> Records;
-    std::optional<std::vector<TIndexChunk>> Indexes;
-    std::optional<std::vector<ui32>> SliceBorderOffsets;
+    std::shared_ptr<const TPortionChunks> Chunks;
 
-    template <class TChunkInfo>
-    static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
-        ui32 entityId = 0;
-        ui32 chunkIdx = 0;
-        for (auto&& i : chunks) {
-            if (entityId != i.GetEntityId()) {
-                AFL_VERIFY(entityId < i.GetEntityId());
-                AFL_VERIFY(i.GetChunkIdx() == 0);
-                entityId = i.GetEntityId();
-                chunkIdx = 0;
-            } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunk", i.GetChunkIdx())("idx", chunkIdx);
-                chunkIdx = i.GetChunkIdx();
-            }
-        }
-    }
-
-    void FullValidation() const;
     TPortionDataAccessor() = default;
 
-private:
     THashMap<TChunkAddress, TString> DecodeBlobAddressesImpl(
         NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
@@ -258,162 +237,83 @@ public:
     using TAssembleBlobInfo = NAssembling::TAssembleBlobInfo;
     using TPreparedColumn = NAssembling::TPreparedColumn;
     using TPreparedBatchData = NAssembling::TPreparedBatchData;
+    using TExtractContext = TPortionChunks::TExtractContext;
+    using TPage = TPortionChunks::TPage;
 
-    ui64 GetMetadataSize() const {
-        return (Records ? (Records->size() * sizeof(TColumnRecord)) : 0) + (Indexes ? (Indexes->size() * sizeof(TIndexChunk)) : 0) +
-               sizeof(TPortionInfo::TConstPtr) + TBase::GetMetadataMemorySize();
+    const TPortionChunks& GetChunks() const {
+        AFL_VERIFY(Chunks);
+        return *Chunks;
     }
 
-    class TExtractContext {
-    private:
-        YDB_ACCESSOR_DEF(std::optional<std::set<ui32>>, ColumnIds);
-        YDB_ACCESSOR_DEF(std::optional<std::set<ui32>>, IndexIds);
+    const std::shared_ptr<const TPortionChunks>& GetChunksPtr() const {
+        return Chunks;
+    }
 
-    public:
-        TExtractContext() = default;
-    };
+    ui64 GetMetadataSize() const {
+        return (Chunks ? Chunks->GetMetadataSize() : 0) + sizeof(TPortionInfo::TConstPtr);
+    }
 
     TPortionDataAccessor Extract(const std::optional<std::set<ui32>>& columnIds, const std::optional<std::set<ui32>>& indexIds) const {
         return Extract(TExtractContext().SetColumnIds(columnIds).SetIndexIds(indexIds));
     }
 
     TPortionDataAccessor Extract(const TExtractContext& context) const {
-        AFL_VERIFY(Records);
-        std::vector<TColumnRecord> extractedRecords;
-        if (context.GetColumnIds()) {
-            auto itRec = Records->begin();
-            auto itExt = context.GetColumnIds()->begin();
-            while (itRec != Records->end() && itExt != context.GetColumnIds()->end()) {
-                if (itRec->GetEntityId() == *itExt) {
-                    extractedRecords.emplace_back(*itRec);
-                    ++itRec;
-                } else if (itRec->GetEntityId() < *itExt) {
-                    ++itRec;
-                } else {
-                    ++itExt;
-                }
-            }
-        } else {
-            extractedRecords = *Records;
-        }
-
-        AFL_VERIFY(Indexes);
-        std::vector<TIndexChunk> extractedIndexes;
-        if (context.GetIndexIds()) {
-            auto itIdx = Indexes->begin();
-            auto itExt = context.GetIndexIds()->begin();
-            while (itIdx != Indexes->end() && itExt != context.GetIndexIds()->end()) {
-                if (itIdx->GetEntityId() == *itExt) {
-                    extractedIndexes.emplace_back(*itIdx);
-                    ++itIdx;
-                } else if (itIdx->GetEntityId() < *itExt) {
-                    ++itIdx;
-                } else {
-                    ++itExt;
-                }
-            }
-        } else {
-            extractedIndexes = *Indexes;
-        }
-
-        std::vector<TUnifiedBlobId> blobIds = BlobIds;
-        return TPortionDataAccessor(PortionInfo, std::move(blobIds), std::move(extractedRecords), std::move(extractedIndexes), false);
+        AFL_VERIFY(Chunks);
+        return TPortionDataAccessor(PortionInfo, GetChunks().Extract(context));
     }
 
     const std::vector<TColumnRecord>& TestGetRecords() const {
-        AFL_VERIFY(Records);
-        return std::move(*Records);
+        return GetRecordsVerified();
     }
 
     std::vector<TColumnRecord> ExtractRecords() {
-        AFL_VERIFY(Records);
-        return std::move(*Records);
+        AFL_VERIFY(Chunks);
+        if (Chunks.use_count() == 1) {
+            return std::const_pointer_cast<TPortionChunks>(Chunks)->ExtractRecords();
+        }
+        return GetRecordsVerified();
     }
 
     std::vector<TIndexChunk> ExtractIndexes() {
-        AFL_VERIFY(Indexes);
-        return std::move(*Indexes);
+        AFL_VERIFY(Chunks);
+        if (Chunks.use_count() == 1) {
+            return std::const_pointer_cast<TPortionChunks>(Chunks)->ExtractIndexes();
+        }
+        return GetIndexesVerified();
+    }
+
+    std::vector<TUnifiedBlobId> ExtractBlobIds() {
+        AFL_VERIFY(Chunks);
+        if (Chunks.use_count() == 1) {
+            return std::const_pointer_cast<TPortionChunks>(Chunks)->ExtractBlobIds();
+        }
+        return GetBlobIds();
     }
 
     TPortionDataAccessor SwitchPortionInfo(std::shared_ptr<TPortionInfo>&& newPortion) const {
-        return TPortionDataAccessor(newPortion, BlobIds, GetRecordsVerified(), GetIndexesVerified(), true);
-    }
-
-    template <class TAggregator, class TChunkInfo>
-    static void AggregateIndexChunksData(
-        const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::set<ui32>* columnIds, const bool validation) {
-        if (columnIds) {
-            auto itColumn = columnIds->begin();
-            auto itRecord = chunks.begin();
-            ui32 recordsInEntityCount = 0;
-            while (itRecord != chunks.end() && itColumn != columnIds->end()) {
-                if (itRecord->GetEntityId() < *itColumn) {
-                    ++itRecord;
-                } else if (*itColumn < itRecord->GetEntityId()) {
-                    AFL_VERIFY(!validation || recordsInEntityCount)("problem", "validation")("reason", "no_chunks_for_column")(
-                        "column_id", *itColumn);
-                    ++itColumn;
-                    recordsInEntityCount = 0;
-                } else {
-                    ++recordsInEntityCount;
-                    aggr(*itRecord);
-                    ++itRecord;
-                }
-            }
-        } else {
-            for (auto&& i : chunks) {
-                aggr(i);
-            }
-        }
+        TPortionDataAccessor result(std::move(newPortion), Chunks);
+        result.FullValidation();
+        return result;
     }
 
     explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo, std::vector<TUnifiedBlobId>&& blobIds,
-        std::vector<TColumnRecord>&& records, std::vector<TIndexChunk>&& indexes, const bool validate)
-        : TBase(std::move(blobIds))
-        , PortionInfo(portionInfo)
-        , Records(std::move(records))
-        , Indexes(std::move(indexes))
-    {
-        AFL_VERIFY(BlobIds.size());
-        if (validate) {
-            FullValidation();
-        }
-    }
-
+        std::vector<TColumnRecord>&& records, std::vector<TIndexChunk>&& indexes, const bool validate);
     explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo, const std::vector<TUnifiedBlobId>& blobIds,
-        const std::vector<TColumnRecord>& records, const std::vector<TIndexChunk>& indexes, const bool validate)
-        : TBase(blobIds)
-        , PortionInfo(portionInfo)
-        , Records(records)
-        , Indexes(indexes)
-    {
-        if (validate) {
-            FullValidation();
-        }
-    }
+        const std::vector<TColumnRecord>& records, const std::vector<TIndexChunk>& indexes, const bool validate);
+    TPortionDataAccessor(TPortionInfo::TConstPtr portion, std::shared_ptr<const TPortionChunks> chunks);
 
     static TConclusion<std::shared_ptr<TPortionDataAccessor>> BuildFromProto(
         const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector);
 
     std::vector<TString> GetIndexInplaceDataOptional(const ui32 indexId) const {
-        if (!Indexes) {
+        if (!Chunks) {
             return {};
         }
-        std::vector<TString> result;
-        for (auto&& i : *Indexes) {
-            if (i.GetEntityId() == indexId) {
-                result.emplace_back(i.GetBlobDataVerified());
-            }
-        }
-        return result;
+        return Chunks->GetIndexInplaceDataOptional(indexId);
     }
 
     std::set<ui32> GetColumnIds() const {
-        std::set<ui32> result;
-        for (auto&& i : GetRecordsVerified()) {
-            result.emplace(i.GetColumnId());
-        }
-        return result;
+        return GetChunks().GetColumnIds();
     }
 
     const TPortionInfo& GetPortionInfo() const {
@@ -471,15 +371,55 @@ public:
     }
 
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
-
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
-    ui64 GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
-    ui64 GetColumnBlobBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
-    ui64 GetIndexRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
-    ui64 GetIndexBlobBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
-    ui64 GetIndexBlobBytes(const bool validation = true) const;
-    ui64 GetIndexRawBytes(const bool validation = true) const;
+    ui64 GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const {
+        return GetChunks().GetColumnRawBytes(entityIds, validation);
+    }
+
+    ui64 GetColumnBlobBytes(const std::set<ui32>& entityIds, const bool validation = true) const {
+        return GetChunks().GetColumnBlobBytes(entityIds, validation);
+    }
+
+    ui64 GetIndexRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const {
+        return GetChunks().GetIndexRawBytes(entityIds, validation);
+    }
+
+    ui64 GetIndexBlobBytes(const std::set<ui32>& entityIds, const bool validation = true) const {
+        return GetChunks().GetIndexBlobBytes(entityIds, validation);
+    }
+
+    ui64 GetIndexBlobBytes(const bool validation = true) const {
+        return GetChunks().GetIndexBlobBytes(validation);
+    }
+
+    ui64 GetIndexRawBytes(const bool validation = true) const {
+        return GetChunks().GetIndexRawBytes(validation);
+    }
+
+    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
+        return GetChunks().GetBlobId(linkId);
+    }
+
+    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
+        return GetChunks().GetBlobIds();
+    }
+
+    ui32 GetBlobIdsCount() const {
+        return GetChunks().GetBlobIdsCount();
+    }
+
+    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
+        return GetChunks().RestoreBlobRange(linkRange);
+    }
+
+    ui64 GetMetadataMemorySize() const {
+        return GetChunks().GetMetadataMemorySize();
+    }
+
+    ui64 GetMetadataDataSize() const {
+        return GetChunks().GetMetadataDataSize();
+    }
 
     void FillBlobRangesByStorage(
         THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo, const std::set<ui32>* entityIds = nullptr) const;
@@ -494,8 +434,13 @@ public:
     THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> RestoreEntityChunks(
         NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
-    std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
-    std::vector<const TIndexChunk*> GetIndexChunksPointers(const ui32 indexId) const;
+    std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const {
+        return GetChunks().GetColumnChunksPointers(columnId);
+    }
+
+    std::vector<const TIndexChunk*> GetIndexChunksPointers(const ui32 indexId) const {
+        return GetChunks().GetIndexChunksPointers(indexId);
+    }
 
     THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
     static std::vector<THashMap<TChunkAddress, TString>> DecodeBlobAddresses(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors,
@@ -511,9 +456,13 @@ public:
         return TPortionDataAccessor();
     }
 
-    const TColumnRecord* GetRecordPointer(const TChunkAddress& address) const;
+    const TColumnRecord* GetRecordPointer(const TChunkAddress& address) const {
+        return GetChunks().GetRecordPointer(address);
+    }
 
-    bool HasEntityAddress(const TChunkAddress& address) const;
+    bool HasEntityAddress(const TChunkAddress& address) const {
+        return GetChunks().HasEntityAddress(address);
+    }
 
     bool HasIndexes(const std::set<ui32>& ids) const {
         auto idsCopy = ids;
@@ -526,7 +475,9 @@ public:
         return false;
     }
 
-    TString DebugString() const;
+    TString DebugString() const {
+        return GetChunks().DebugString();
+    }
 
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
         THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt,
@@ -535,37 +486,25 @@ public:
         THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt,
         const bool restoreAbsent = true) const;
 
-    class TPage {
-    private:
-        YDB_READONLY_DEF(std::vector<const TColumnRecord*>, Records);
-        YDB_READONLY_DEF(std::vector<const TIndexChunk*>, Indexes);
-        YDB_READONLY(ui32, RecordsCount, 0);
-
-    public:
-        TPage(std::vector<const TColumnRecord*>&& records, std::vector<const TIndexChunk*>&& indexes, const ui32 recordsCount)
-            : Records(std::move(records))
-            , Indexes(std::move(indexes))
-            , RecordsCount(recordsCount)
-        {
-        }
-    };
-
     const std::vector<TColumnRecord>& GetRecordsVerified() const {
-        AFL_VERIFY(Records);
-        return *Records;
+        return GetChunks().GetRecordsVerified();
     }
 
     const std::vector<TIndexChunk>& GetIndexesVerified() const {
-        AFL_VERIFY(Indexes);
-        return *Indexes;
+        return GetChunks().GetIndexesVerified();
     }
 
     bool HasIndexes() const {
-        return !!Indexes;
+        return !!Chunks;
     }
 
-    std::vector<TPage> BuildPages() const;
-    ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
+    std::vector<TPage> BuildPages() const {
+        return GetChunks().BuildPages();
+    }
+
+    ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const {
+        return GetChunks().GetMinMemoryForReadColumns(columnIds);
+    }
 
     class TReadPage {
     private:
@@ -586,10 +525,11 @@ public:
     std::vector<TReadPage> BuildReadPages(const ui64 memoryLimit, const std::set<ui32>& entityIds) const;
 
     ui32 GetSliceOffsetRows(const ui32 sliceBorderIdx) const {
-        AFL_VERIFY(SliceBorderOffsets);
-        AFL_VERIFY(sliceBorderIdx < SliceBorderOffsets->size())("idx", sliceBorderIdx)("size", SliceBorderOffsets->size());
-        return (*SliceBorderOffsets)[sliceBorderIdx];
+        return GetChunks().GetSliceOffsetRows(sliceBorderIdx);
     }
+
+private:
+    void FullValidation() const;
 };
 
 }   // namespace NKikimr::NOlap

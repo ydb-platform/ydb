@@ -253,6 +253,10 @@ public:
         AFL_VERIFY(Portions.emplace(portion->GetPortionId(), portion).second);
     }
 
+    const THashMap<ui64, TPortionInfo::TConstPtr>& GetPortions() const {
+        return Portions;
+    }
+
     TString GetTaskId() const {
         return TStringBuilder() << "data-accessor-request-" << RequestId;
     }

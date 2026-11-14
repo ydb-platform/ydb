@@ -1,10 +1,14 @@
 #include "create_table_formatter.h"
 #include "formatters_common.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
@@ -34,6 +38,10 @@ using namespace NKikimrSchemeOp;
 using namespace Ydb::Table;
 using namespace NYdb;
 namespace NIndexParameters = NKikimr::NOlap::NIndexes::NIndexParameters;
+
+bool SqlColumnDefaultsEnabled() {
+    return HasAppData() && AppData()->FeatureFlags.GetEnableCsDefaultValues();
+}
 
 namespace {
     const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
@@ -260,6 +268,12 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         case NYdb::EPrimitiveType::DyNumber: {
             Stream << "DyNumber(";
             EscapeString(TString(parser.GetDyNumber()), Stream);
+            Stream << ")";
+            break;
+        }
+        case NYdb::EPrimitiveType::JsonDocument: {
+            Stream << "JsonDocument(";
+            EscapeString(TString(parser.GetJsonDocument()), Stream);
             Stream << ")";
             break;
         }
@@ -1811,6 +1825,25 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
         Stream << " NOT NULL";
     }
 
+    if (SqlColumnDefaultsEnabled() && olapColumnDesc.HasDefaultValue() && olapColumnDesc.GetDefaultValue().HasScalar()) {
+        NOlap::TColumnDefaultScalarValue scalar;
+        if (scalar.DeserializeFromProto(olapColumnDesc.GetDefaultValue()).IsFail() || !scalar.GetValue()) {
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported default value");
+        }
+        const auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(olapColumnDesc.GetTypeId(),
+            olapColumnDesc.HasTypeInfo() ? &olapColumnDesc.GetTypeInfo() : nullptr);
+        const auto arrowType = NArrow::GetArrowType(typeInfoMod.TypeInfo);
+        if (arrowType.ok()) {
+            scalar.AlignToColumnType(*arrowType);
+        }
+        auto typed = scalar.SerializeToTypedValue(typeInfoMod.TypeInfo);
+        if (typed.IsFail()) {
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, typed.GetErrorMessage());
+        }
+        Stream << " DEFAULT ";
+        Format(typed.GetResult());
+    }
+
     if (olapColumnDesc.HasStorageId() && !olapColumnDesc.GetStorageId().empty()) {
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: STORAGE_ID");
     }
@@ -2020,7 +2053,7 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
     TStringStream paramsStr;
     TString del = "";
 
-    if (columnDesc.HasDefaultValue()) {
+    if (!SqlColumnDefaultsEnabled() && columnDesc.HasDefaultValue()) {
         auto defaultValue = ValueToString(columnDesc.GetDefaultValue());
         if (defaultValue) {
             EscapeName("DEFAULT_VALUE", paramsStr);

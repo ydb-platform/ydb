@@ -1977,6 +1977,9 @@ private:
     // Collects DEFAULT columns that are processed locally (shards DefaultColumnsCount feature).
     TLocalDefaultColumns CollectLocalDefaultColumns(const TKqpTableSinkSettings& settings, const TKikimrTableMetadataPtr& tableMeta) {
         TLocalDefaultColumns result;
+        if (tableMeta->Kind == EKikimrTableKind::Olap) {
+            return result;
+        }
         for (const auto& columnNameAtom : settings.DefaultColumns()) {
             const auto columnName = TStringBuf(columnNameAtom);
             const auto columnMeta = tableMeta->Columns.FindPtr(columnName);

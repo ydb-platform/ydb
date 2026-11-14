@@ -1,6 +1,8 @@
 #include "index_info.h"
 #include "schema_diff.h"
 
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.pb.h>
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
@@ -296,6 +298,17 @@ bool TSchemaDiffView::IsCorrectToIgnorePreviouse(const TIndexInfo& indexInfo) co
         }
         if (i.second->GetNotNull()) {
             return false;
+        }
+        if (i.second->HasCreatedDefaultValue()) {
+            // A column added without a DEFAULT stores an empty CreatedDefaultValue and no DefaultValue.
+            // Both fills are NULL, so schema GC may still drop this version.
+            NKikimrColumnShardColumnDefaults::TColumnDefault writeDefault;
+            if (i.second->HasDefaultValue()) {
+                writeDefault = i.second->GetDefaultValue();
+            }
+            if (i.second->GetCreatedDefaultValue().SerializeAsString() != writeDefault.SerializeAsString()) {
+                return false;
+            }
         }
     }
     if (SchemaOptions) {

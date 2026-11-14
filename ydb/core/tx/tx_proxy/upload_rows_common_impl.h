@@ -379,6 +379,14 @@ private:
             allColumnsLeft.erase(name);
         }
 
+        if (HasAppData() && AppDataVerified().FeatureFlags.GetEnableCsDefaultValues() && entry.ColumnTableInfo) {
+            for (const auto& col : entry.ColumnTableInfo->Description.GetSchema().GetColumns()) {
+                if (col.HasDefaultValue()) {
+                    allColumnsLeft.erase(col.GetName());
+                }
+            }
+        }
+
         if (!allColumnsLeft.empty()) {
             return TConclusionStatus::Fail(Sprintf("All columns are required during BulkUpsert for column table. Missing columns: %s", JoinSeq(", ", allColumnsLeft).c_str()));
         }
@@ -649,6 +657,15 @@ private:
 
         if (!keyColumnsLeft.empty()) {
             return TConclusionStatus::Fail(Sprintf("Missing key columns: %s", JoinSeq(", ", keyColumnsLeft).c_str()));
+        }
+
+        if (isColumnTable && HasAppData() && AppDataVerified().FeatureFlags.GetEnableCsDefaultValues() && entry.ColumnTableInfo) {
+            for (const auto& col : entry.ColumnTableInfo->Description.GetSchema().GetColumns()) {
+                if (col.HasDefaultValue()) {
+                    defaultColumnsLeft.erase(col.GetName());
+                    notNullColumnsLeft.erase(col.GetName());
+                }
+            }
         }
 
         if (!notNullColumnsLeft.empty() && UpsertIfExists) {

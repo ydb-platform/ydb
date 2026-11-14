@@ -4,10 +4,13 @@
 #include "plain/logic.h"
 #include "sparsed/logic.h"
 
+#include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/library/formats/arrow/splitter/stats.h>
@@ -246,6 +249,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
     const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
     const TInternalPathId pathId, const std::optional<ui64> shardingActualVersion) {
     AFL_VERIFY(Batches.size() == Filters.size());
+    AFL_VERIFY(Batches.size() == PortionSchemas.size());
     TSplitTopology splitInfo(stats, resultFiltered);
     {
         arrow::FieldVector indexFields;
@@ -302,8 +306,36 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             ++batchIdx;
         }
     }
+    if (PortionSchemas.size() == Batches.size()) {
+        for (auto&& columnId : resultFiltered->GetIndexInfo().GetColumnIds(false)) {
+            if (!resultFiltered->HasColumnId(columnId) || columnsData.contains(columnId)) {
+                continue;
+            }
+            bool differs = false;
+            std::optional<std::shared_ptr<arrow::Scalar>> firstFill;
+            for (const auto& portionSchema : PortionSchemas) {
+                if (!portionSchema) {
+                    continue;
+                }
+                const auto fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchema, *resultFiltered, columnId);
+                if (!firstFill) {
+                    firstFill = fill;
+                } else if (NArrow::ScalarCompareNullable(fill, *firstFill) != 0) {
+                    differs = true;
+                    break;
+                }
+            }
+            const auto resultFill = ISnapshotSchema::GetAbsentColumnFill(*resultFiltered, *resultFiltered, columnId);
+            if (firstFill && NArrow::ScalarCompareNullable(*firstFill, resultFill) != 0) {
+                differs = true;
+            }
+            if (differs) {
+                columnsData.emplace(columnId, TColumnData(Batches.size()));
+            }
+        }
+    }
 
-    TMergingContext mergingContext(Batches);
+    TMergingContext mergingContext(Batches, PortionSchemas);
 
     for (auto&& [columnId, columnData] : columnsData) {
         if (columnId == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID &&
@@ -328,6 +360,28 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             IColumnMerger::TFactory::MakeHolder(commonContext.GetLoader()->GetAccessorConstructor().GetClassName(), commonContext);
         AFL_VERIFY(!!merger)("problem", "cannot create merger")(
             "class_name", commonContext.GetLoader()->GetAccessorConstructor().GetClassName());
+        for (ui32 batchIdx = 0; batchIdx < columnData.size(); ++batchIdx) {
+            if (columnData[batchIdx] || batchIdx >= PortionSchemas.size() || !PortionSchemas[batchIdx]) {
+                continue;
+            }
+            const auto fill = ISnapshotSchema::GetAbsentColumnFill(*PortionSchemas[batchIdx], *resultFiltered, columnId);
+            const auto resultFill = ISnapshotSchema::GetAbsentColumnFill(*resultFiltered, *resultFiltered, columnId);
+            // Plain and sparsed mergers fill an empty input themselves. Dictionary and sub-columns
+            // mergers write NULL for an empty input, so a non-null fill has to be passed as data.
+            const TString& mergerClass = commonContext.GetLoader()->GetAccessorConstructor().GetClassName();
+            const bool mergerFillsEmptyInput = mergerClass == NArrow::NAccessor::TGlobalConst::PlainDataAccessorName ||
+                                               mergerClass == NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
+            if (NArrow::ScalarCompareNullable(fill, resultFill) == 0 && (mergerFillsEmptyInput || !fill)) {
+                continue;
+            }
+            const ui32 rows = Batches[batchIdx]->num_rows();
+            if (!rows) {
+                continue;
+            }
+            auto array =
+                NArrow::TThreadSimpleArraysCache::Get(resultFiltered->GetIndexInfo().GetColumnFieldVerified(columnId)->type(), fill, rows);
+            columnData[batchIdx] = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);
+        }
         merger->Start(std::move(columnData), mergingContext);
 
         for (auto&& batchResult : splitInfo.MutableSplittedBatches()) {

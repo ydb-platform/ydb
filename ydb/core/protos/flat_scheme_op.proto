@@ -461,6 +461,8 @@ message TOlapColumnDiff {
     optional string StorageId = 6;
     optional string DefaultValue = 7;
     optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
+    optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultScalar = 11;
+    optional bool DropDefault = 12;
     optional string ColumnFamilyName = 9 [deprecated = true];
     optional bool NotNull = 10;
 }
@@ -482,6 +484,7 @@ message TOlapColumnDescription {
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
+    optional NKikimrColumnShardColumnDefaults.TColumnDefault CreatedDefaultValue = 16;
     optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
     optional uint32 ColumnFamilyId = 14 [deprecated = true];
     optional string ColumnFamilyName = 15 [deprecated = true];

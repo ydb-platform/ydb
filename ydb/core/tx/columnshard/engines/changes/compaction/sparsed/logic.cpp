@@ -1,18 +1,37 @@
 #include "logic.h"
 
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NCompaction {
 
-void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& /*mergingContext*/) {
+void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergingContext) {
+    Inputs = input;
     ui32 idx = 0;
-    for (auto&& p : input) {
+    for (auto&& p : Inputs) {
+        if (!p) {
+            std::shared_ptr<arrow::Scalar> fill = Context.GetDefaultValue();
+            const auto& portionSchemas = mergingContext.GetPortionSchemas();
+            if (idx < portionSchemas.size() && portionSchemas[idx] && Context.GetSchemaInfo()) {
+                fill = ISnapshotSchema::GetAbsentColumnFill(*portionSchemas[idx], *Context.GetSchemaInfo(), Context.GetColumnId());
+            }
+            if (NArrow::ScalarCompareNullable(fill, Context.GetDefaultValue()) != 0) {
+                const auto& containers = mergingContext.GetInputContainers();
+                const ui32 rows = idx < containers.size() && containers[idx] ? containers[idx]->num_rows() : 0;
+                if (rows) {
+                    auto array = NArrow::TThreadSimpleArraysCache::Get(Context.GetResultField()->type(), fill, rows);
+                    p = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);
+                }
+            }
+        }
         Cursors.emplace_back(TSparsedChunkCursor(p, Context.GetLoader(), idx++));
     }
-    Inputs = input;
 }
 
 TColumnPortionResult TSparsedMerger::DoExecute(const TChunkMergeContext& chunkContext, TMergingContext& /*mergeContext*/) {

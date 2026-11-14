@@ -1,8 +1,12 @@
 #include "meta.h"
 
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
+
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -21,8 +25,26 @@ TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByC
                 {"columnId", i},
                 {"indexName", GetIndexName()},
                 {"indexId", GetIndexId()});
-            // Possible situation during a merge operation when a column is added to the table in the new schema
-            // indexData can't be empty in this case, because merger saves it, so set it to 0 (skip all values)
+            const auto fill = indexInfo.GetColumnExternalDefaultValueVerified(i);
+            if (fill) {
+                // A portion written without this column reads it as the schema default. Index the same
+                // constant: an all-zero index would skip rows that are equal to the default.
+                const auto loader = indexInfo.GetColumnLoaderVerified(i);
+                const auto& features = indexInfo.GetColumnFeaturesVerified(i);
+                auto array = NArrow::TThreadSimpleArraysCache::Get(features.GetArrowField()->type(), fill, recordsCount);
+                auto trivial = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);
+                const auto loadContext = loader->BuildAccessorContext(recordsCount);
+                auto constructed = loader->GetAccessorConstructor()->Construct(trivial, loadContext);
+                if (constructed.IsFail()) {
+                    return TConclusionStatus::Fail(constructed.GetErrorMessage());
+                }
+                auto blobAndMeta = loader->GetAccessorConstructor()->SerializeToBlobAndMeta(*constructed, loadContext);
+                std::vector<std::shared_ptr<IPortionDataChunk>> constChunks = { std::make_shared<NChunks::TChunkPreparation>(
+                    std::move(blobAndMeta.Blob), *constructed, TChunkAddress(i, 0), features, std::move(blobAndMeta.Meta)) };
+                columnReaders.emplace_back(constChunks, loader);
+                continue;
+            }
+            // Absent column with an empty fill is read as NULL. An all-zero index skips every value.
             TString indexData(1, '\0');
             return std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>(
                 { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) });

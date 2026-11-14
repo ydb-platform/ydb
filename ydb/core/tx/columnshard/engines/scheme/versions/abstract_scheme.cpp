@@ -71,9 +71,11 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
             }
         }
         if (restoreColumnIds.contains(columnId)) {
-            AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId))("column_name",
-                                                                        GetIndexInfo().GetColumnName(columnId, false))("id", columnId);
-            result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
+            const auto fill = GetAbsentColumnFill(dataSchema, *this, columnId);
+            AFL_VERIFY(!!fill || GetIndexInfo().IsNullableVerified(columnId))("column_name", GetIndexInfo().GetColumnName(columnId, false))(
+                                   "id", columnId);
+            auto array = NArrow::TThreadSimpleArraysCache::Get(resultField->type(), fill, batch->num_rows());
+            result->AddField(resultField, std::make_shared<NArrow::NAccessor::TTrivialArray>(array)).Validate();
         }
     }
     return result;
@@ -266,6 +268,18 @@ std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(
     return GetIndexInfo().GetColumnExternalDefaultValueVerified(columnId);
 }
 
+std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetAbsentColumnFill(
+    const ISnapshotSchema& portionSchema, const ISnapshotSchema& resultSchema, const ui32 columnId) {
+    if (portionSchema.HasColumnId(columnId)) {
+        return portionSchema.GetIndexInfo().GetColumnFeaturesVerified(columnId).GetDefaultValue().GetValue();
+    }
+    const auto& created = resultSchema.GetIndexInfo().GetColumnFeaturesVerified(columnId).GetCreatedDefaultValue();
+    if (!created) {
+        return nullptr;
+    }
+    return created->GetValue();
+}
+
 bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {
     return GetIndexInfo().IsSpecialColumn(columnId);
 }
@@ -273,31 +287,17 @@ bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {
 std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
     const THashMap<ui64, ISnapshotSchema::TPtr>& schemas, const ISnapshotSchema::TPtr& targetSchema) {
     std::set<ui32> result;
-    if (schemas.size() <= 1) {
-        return {};
+    if (!targetSchema) {
+        return result;
     }
-    std::map<ui32, std::shared_ptr<arrow::Scalar>> defaults;
-    for (auto& [_, blobSchema] : schemas) {
-        for (auto&& columnId : blobSchema->GetIndexInfo().GetColumnIds(true)) {
-            if (result.contains(columnId)) {
-                continue;
-            }
-            if (targetSchema && !targetSchema->HasColumnId(columnId)) {
-                continue;
-            }
-            auto def = blobSchema->GetIndexInfo().GetColumnExternalDefaultValueVerified(columnId);
-            if (!blobSchema->GetIndexInfo().IsNullableVerified(columnId) && !def) {
-                continue;
-            }
-            auto it = defaults.find(columnId);
-            if (it == defaults.end()) {
-                defaults.emplace(columnId, def);
-            } else if (NArrow::ScalarCompareNullable(def, it->second) != 0) {
+    for (auto&& columnId : targetSchema->GetIndexInfo().GetColumnIds(false)) {
+        const auto resultFill = GetAbsentColumnFill(*targetSchema, *targetSchema, columnId);
+        for (auto& [_, blobSchema] : schemas) {
+            const auto inputFill = GetAbsentColumnFill(*blobSchema, *targetSchema, columnId);
+            if (NArrow::ScalarCompareNullable(inputFill, resultFill) != 0) {
                 result.emplace(columnId);
+                break;
             }
-        }
-        if (targetSchema && result.size() == targetSchema->GetIndexInfo().GetColumnIds(true).size()) {
-            break;
         }
     }
     return result;

@@ -8,6 +8,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/formats/arrow
+    ydb/core/formats/arrow/accessor/plain
+    ydb/library/formats/arrow
     ydb/library/formats/arrow/protos
     ydb/core/tx/columnshard/engines/storage/chunks
     ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor

@@ -157,6 +157,8 @@ public:
                     AFL_VERIFY(i.GetColumnIndexes().size() < indexes.size());
                     for (auto itAllIndexes = indexes.begin(); itAllIndexes != indexes.end(); ++itAllIndexes) {
                         if (itBatchIndexes == i.GetColumnIndexes().end() || *itAllIndexes < *itBatchIndexes) {
+                            // The union schema includes this column because another batch has it.
+                            // Materialize the missing field so the merge does not see a hole.
                             auto defaultColumn = indexInfo.BuildDefaultColumn(*itAllIndexes, i->num_rows(), false);
                             if (defaultColumn.IsFail()) {
                                 YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",

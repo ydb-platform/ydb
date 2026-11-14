@@ -2695,7 +2695,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
 }
 
 void CheckAlterColumnShowCreate(double dictionaryUniqueFraction, bool enableNativeColumns) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableCsDictionaryEncoding = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableCsDefaultValues = true, .EnableOlapCompression = true, .EnableCsDictionaryEncoding = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2731,7 +2731,7 @@ void CheckAlterColumnShowCreate(double dictionaryUniqueFraction, bool enableNati
             CREATE TABLE `test_show_create` (
                 `Col1` Uint64 NOT NULL,
                 `Col2` JsonDocument COMPRESSION (algorithm = zstd, level = 4),
-                `Col3` Uint32 ENCODING (DICT),
+                `Col3` Uint32 DEFAULT 5 ENCODING (DICT),
                 `Col4` Uint32,
                 `Col5` Uint32 ENCODING (OFF),
                 PRIMARY KEY (`Col1`)
@@ -2743,8 +2743,6 @@ void CheckAlterColumnShowCreate(double dictionaryUniqueFraction, bool enableNati
             );
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DICTIONARY_UNIQUE_FRACTION` = `%s`, `ENABLE_NATIVE_COLUMNS` = `%s`, `DENSE_ENCODING_VERSION` = `1`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
-
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
         )", fractionStr.c_str(), nativeColumnsStr.c_str());
 
     checker.CheckShowCreateTable(query.c_str(), "test_show_create", expected);
@@ -2931,7 +2929,7 @@ Y_UNIT_TEST(TableColumnUpsertIndex) {
 }
 
 Y_UNIT_TEST(TableColumnAlterObject) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableLocalIndexAsSchemeObject = false});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableCsDefaultValues = true, .EnableOlapCompression = true, .EnableLocalIndexAsSchemeObject = false});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2971,7 +2969,7 @@ Y_UNIT_TEST(TableColumnAlterObject) {
         R"(
             CREATE TABLE `test_show_create` (
                 `Col1` Uint64 NOT NULL,
-                `Col2` Uint32 NOT NULL,
+                `Col2` Uint32 NOT NULL DEFAULT 100,
                 `Col3` JsonDocument,
                 PRIMARY KEY (`Col1`)
             )
@@ -2980,8 +2978,6 @@ Y_UNIT_TEST(TableColumnAlterObject) {
                 STORE = COLUMN,
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
-
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DEFAULT_VALUE` = `100`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
 

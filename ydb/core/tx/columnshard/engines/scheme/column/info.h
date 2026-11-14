@@ -32,6 +32,7 @@ private:
     YDB_READONLY(bool, IsSorted, false);
     YDB_READONLY(bool, IsNullable, false);
     YDB_READONLY_DEF(TColumnDefaultScalarValue, DefaultValue);
+    YDB_READONLY_DEF(std::optional<TColumnDefaultScalarValue>, CreatedDefaultValue);
     bool OwnSerializer = false;
     std::shared_ptr<TColumnLoader> Loader;
 

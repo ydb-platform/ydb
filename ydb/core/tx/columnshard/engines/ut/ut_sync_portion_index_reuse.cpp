@@ -1,4 +1,5 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
@@ -209,6 +210,89 @@ bool IsMemoryTierAvailable() {
     return TTestStoragesManager::GetInstance()->GetOperatorOptional(IStoragesManager::MemoryStorageId) != nullptr;
 }
 
+ISnapshotSchema::TPtr MakeSchemaWithExtraColumn(
+    const ui64 version, const std::optional<ui64> writeDefault, const std::optional<ui64> createdDefault) {
+    auto storages = TTestStoragesManager::GetInstance();
+    auto cache = std::make_shared<TSchemaObjectsCache>();
+    NKikimrSchemeOp::TColumnTableSchema proto;
+    FillDefaultSchemaProto(proto, version);
+    auto* extra = proto.AddColumns();
+    *extra = NArrow::NTest::TTestColumn("extra", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(3);
+    if (writeDefault) {
+        extra->MutableDefaultValue()->MutableScalar()->SetUint64(*writeDefault);
+    }
+    if (createdDefault) {
+        extra->MutableCreatedDefaultValue()->MutableScalar()->SetUint64(*createdDefault);
+    }
+    auto indexInfoOpt = TIndexInfo::BuildFromProto(version, proto, storages, cache);
+    UNIT_ASSERT(indexInfoOpt);
+    return std::make_shared<TSnapshotSchema>(cache->GetOrInsertIndexInfo(std::move(*indexInfoOpt)), TSnapshot(1, 1));
+}
+
+bool PortionHasColumn(const TWritePortionInfoWithBlobsResult& portion, const ui32 columnId) {
+    for (const auto& record : portion.GetPortionResult().GetRecordsVerified()) {
+        if (record.GetColumnId() == columnId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// nullopt means the column is not stored. An engaged nullopt-inside means a stored NULL.
+std::optional<std::vector<std::optional<ui64>>> ReadStoredUint64Column(
+    TWritePortionInfoWithBlobsResult& portion, const ISnapshotSchema::TPtr& schema, const ui32 columnId) {
+    if (!PortionHasColumn(portion, columnId)) {
+        return std::nullopt;
+    }
+    NBlobOperations::NRead::TCompositeReadBlobs blobs;
+    FillReadBlobs(portion, blobs);
+    auto readPortion = TReadPortionInfoWithBlobs::RestorePortion(portion.GetPortionResult(), blobs, schema->GetIndexInfo());
+    const auto chunks = readPortion.GetEntityChunks(columnId);
+    UNIT_ASSERT(!chunks.empty());
+    auto loader = schema->GetColumnLoaderVerified(columnId);
+    std::vector<std::optional<ui64>> values;
+    for (const auto& chunk : chunks) {
+        auto array =
+            loader->ApplyVerified(chunk->GetData(), chunk->GetRecordsCountVerified(), std::nullopt, chunk->GetAdditionalAccessorDataOptional());
+        for (ui32 i = 0; i < array->GetRecordsCount(); ++i) {
+            const auto scalar = array->GetScalar(i);
+            if (!scalar || !scalar->is_valid) {
+                values.emplace_back(std::nullopt);
+            } else {
+                values.emplace_back(std::static_pointer_cast<arrow::UInt64Scalar>(scalar)->value);
+            }
+        }
+    }
+    return values;
+}
+
+std::shared_ptr<arrow::RecordBatch> MakeBatchWithExtra(const std::vector<std::optional<ui64>>& extra) {
+    arrow::UInt64Builder pkBuilder;
+    arrow::Int32Builder valueBuilder;
+    arrow::UInt64Builder extraBuilder;
+    for (ui32 i = 0; i < extra.size(); ++i) {
+        UNIT_ASSERT(pkBuilder.Append(i + 1).ok());
+        UNIT_ASSERT(valueBuilder.Append(static_cast<i32>(10 * (i + 1))).ok());
+        if (extra[i]) {
+            UNIT_ASSERT(extraBuilder.Append(*extra[i]).ok());
+        } else {
+            UNIT_ASSERT(extraBuilder.AppendNull().ok());
+        }
+    }
+    auto schema =
+        arrow::schema({ arrow::field("pk", arrow::uint64()), arrow::field("value", arrow::int32()), arrow::field("extra", arrow::uint64()) });
+    return arrow::RecordBatch::Make(
+        schema, extra.size(), { pkBuilder.Finish().ValueOrDie(), valueBuilder.Finish().ValueOrDie(), extraBuilder.Finish().ValueOrDie() });
+}
+
+TWritePortionInfoWithBlobsResult SyncChecked(
+    TWritePortionInfoWithBlobsResult& source, const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to) {
+    auto synced = RunSyncPortion(source, from, to, IStoragesManager::DefaultStorageId, MakeSplitterCounters());
+    UNIT_ASSERT(synced);
+    FinalizeWritePortion(*synced);
+    return std::move(*synced);
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TReuseIndexChunksTests) {
@@ -349,6 +433,128 @@ Y_UNIT_TEST_SUITE(TSyncPortionIndexReuseTests) {
         UNIT_ASSERT_VALUES_UNEQUAL(maxIndexData, MaxIndexMarker);
         UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(schemaTo, maxIndexData), ExpectedMaxColumnValue);
         UNIT_ASSERT_VALUES_EQUAL(GetInplaceIndexData(*syncResult, BloomIndexId), BloomIndexMarker);
+    }
+
+    // A column missing from the portion is written only when its historical fill differs from the target fill.
+    Y_UNIT_TEST(AbsentColumnMaterializedOnlyWhenFillDiffers) {
+        const auto source = MakeTestSchema(1, {});
+        const auto sameFill = MakeSchemaWithExtraColumn(2, 5, 5);
+        const auto changedFill = MakeSchemaWithExtraColumn(3, 9, 5);
+        const auto batch = MakeTestBatch();
+        const auto splitterCounters = MakeSplitterCounters();
+        auto writePortion = BuildTestPortion(source, batch, {}, splitterCounters);
+        FinalizeWritePortion(writePortion);
+
+        auto same = RunSyncPortion(writePortion, source, sameFill, IStoragesManager::DefaultStorageId, splitterCounters);
+        UNIT_ASSERT(same);
+        FinalizeWritePortion(*same);
+        UNIT_ASSERT(!PortionHasColumn(*same, 3));
+
+        auto changed = RunSyncPortion(writePortion, source, changedFill, IStoragesManager::DefaultStorageId, splitterCounters);
+        UNIT_ASSERT(changed);
+        FinalizeWritePortion(*changed);
+        UNIT_ASSERT(PortionHasColumn(*changed, 3));
+        const auto stored = ReadStoredUint64Column(*changed, changedFill, 3);
+        UNIT_ASSERT(stored);
+        UNIT_ASSERT_VALUES_EQUAL(stored->size(), 3u);
+        for (const auto& value : *stored) {
+            UNIT_ASSERT(value);
+            UNIT_ASSERT_VALUES_EQUAL(*value, 5u);
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TDefaultPortionActualization) {
+    Y_UNIT_TEST(SameFillStaysAbsent) {
+        const auto from = MakeSchemaWithExtraColumn(1, 5, 5);
+        const auto to = MakeSchemaWithExtraColumn(2, 5, 5);
+        auto portion = BuildTestPortion(from, MakeTestBatch(), {}, MakeSplitterCounters());
+        FinalizeWritePortion(portion);
+        auto synced = SyncChecked(portion, from, to);
+        UNIT_ASSERT(!ReadStoredUint64Column(synced, to, 3));
+    }
+
+    Y_UNIT_TEST(PortionDefaultIsMaterializedNotTargetDefault) {
+        const auto from = MakeSchemaWithExtraColumn(1, 5, 5);
+        const auto to = MakeSchemaWithExtraColumn(2, 9, 5);
+        auto portion = BuildTestPortion(from, MakeTestBatch(), {}, MakeSplitterCounters());
+        FinalizeWritePortion(portion);
+        auto synced = SyncChecked(portion, from, to);
+        const auto stored = ReadStoredUint64Column(synced, to, 3);
+        UNIT_ASSERT(stored);
+        for (const auto& value : *stored) {
+            UNIT_ASSERT_VALUES_EQUAL(*value, 5u);
+        }
+    }
+
+    Y_UNIT_TEST(CreatedDefaultIsMaterializedWhenPortionPredatesColumn) {
+        const auto from = MakeTestSchema(1, {});
+        const auto to = MakeSchemaWithExtraColumn(2, 9, 5);
+        auto portion = BuildTestPortion(from, MakeTestBatch(), {}, MakeSplitterCounters());
+        FinalizeWritePortion(portion);
+        auto synced = SyncChecked(portion, from, to);
+        const auto stored = ReadStoredUint64Column(synced, to, 3);
+        UNIT_ASSERT(stored);
+        for (const auto& value : *stored) {
+            UNIT_ASSERT_VALUES_EQUAL(*value, 5u);
+        }
+    }
+
+    Y_UNIT_TEST(EqualCreatedDefaultStaysAbsent) {
+        const auto from = MakeTestSchema(1, {});
+        const auto to = MakeSchemaWithExtraColumn(2, 5, 5);
+        auto portion = BuildTestPortion(from, MakeTestBatch(), {}, MakeSplitterCounters());
+        FinalizeWritePortion(portion);
+        auto synced = SyncChecked(portion, from, to);
+        UNIT_ASSERT(!ReadStoredUint64Column(synced, to, 3));
+    }
+
+    Y_UNIT_TEST(AddedColumnWithoutDefaultStaysAbsent) {
+        const auto from = MakeTestSchema(1, {});
+        const auto to = MakeSchemaWithExtraColumn(2, std::nullopt, std::nullopt);
+        auto portion = BuildTestPortion(from, MakeTestBatch(), {}, MakeSplitterCounters());
+        FinalizeWritePortion(portion);
+        auto synced = SyncChecked(portion, from, to);
+        UNIT_ASSERT(!ReadStoredUint64Column(synced, to, 3));
+    }
+
+    Y_UNIT_TEST(DropDefaultMaterializesOldFill) {
+        const auto from = MakeSchemaWithExtraColumn(1, 5, 5);
+        const auto to = MakeSchemaWithExtraColumn(2, std::nullopt, 5);
+        auto portion = BuildTestPortion(from, MakeTestBatch(), {}, MakeSplitterCounters());
+        FinalizeWritePortion(portion);
+        auto synced = SyncChecked(portion, from, to);
+        const auto stored = ReadStoredUint64Column(synced, to, 3);
+        UNIT_ASSERT(stored);
+        for (const auto& value : *stored) {
+            UNIT_ASSERT_VALUES_EQUAL(*value, 5u);
+        }
+    }
+
+    Y_UNIT_TEST(ExplicitValueSurvivesTargetDefaultChange) {
+        const auto from = MakeSchemaWithExtraColumn(1, 5, 5);
+        const auto to = MakeSchemaWithExtraColumn(2, 99, 5);
+        auto portion = BuildTestPortion(from, MakeBatchWithExtra({ 11, 22, 33 }), {}, MakeSplitterCounters());
+        FinalizeWritePortion(portion);
+        auto synced = SyncChecked(portion, from, to);
+        const auto stored = ReadStoredUint64Column(synced, to, 3);
+        UNIT_ASSERT(stored);
+        UNIT_ASSERT_VALUES_EQUAL(*(*stored)[0], 11u);
+        UNIT_ASSERT_VALUES_EQUAL(*(*stored)[1], 22u);
+        UNIT_ASSERT_VALUES_EQUAL(*(*stored)[2], 33u);
+    }
+
+    Y_UNIT_TEST(ExplicitNullSurvivesTargetDefaultChange) {
+        const auto from = MakeSchemaWithExtraColumn(1, 5, 5);
+        const auto to = MakeSchemaWithExtraColumn(2, 7, 5);
+        auto portion = BuildTestPortion(from, MakeBatchWithExtra({ std::nullopt, std::nullopt, std::nullopt }), {}, MakeSplitterCounters());
+        FinalizeWritePortion(portion);
+        auto synced = SyncChecked(portion, from, to);
+        const auto stored = ReadStoredUint64Column(synced, to, 3);
+        UNIT_ASSERT(stored);
+        for (const auto& value : *stored) {
+            UNIT_ASSERT(!value);
+        }
     }
 }
 

@@ -74,9 +74,12 @@ protected:
     }
 
     bool CheckTargetSchema(const TOlapSchema& targetSchema) {
+        // String DefaultValue belongs to the sparsed-column feature. SQL defaults use a separate flag
+        // and are rejected in ApplyDiff when that flag is off.
         if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
             for (auto& [_, column] : targetSchema.GetColumns().GetColumns()) {
-                if (column.GetDefaultValue().GetValue() || (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
+                const bool sparsed = column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName;
+                if (sparsed || (column.GetDefaultValue().GetValue() && !AppData()->FeatureFlags.GetEnableCsDefaultValues())) {
                     return false;
                 }
             }

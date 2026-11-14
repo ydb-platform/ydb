@@ -11,6 +11,7 @@
 #include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
@@ -22,6 +23,7 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
@@ -1222,6 +1224,30 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
             }
         }
 
+        if (column.HasDefaultValue() && column.GetDefaultValue().HasScalar()) {
+            NOlap::TColumnDefaultScalarValue scalar;
+            if (scalar.DeserializeFromProto(column.GetDefaultValue()).IsSuccess()) {
+                NScheme::TTypeInfo typeInfo;
+                if (column.GetTypeId()) {
+                    typeInfo = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
+                        column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr).TypeInfo;
+                } else {
+                    NYql::NProto::TypeIds protoType;
+                    if (NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
+                        typeInfo = NScheme::TTypeInfo(static_cast<NScheme::TTypeId>(protoType));
+                    }
+                }
+                const auto arrowType = NArrow::GetArrowType(typeInfo);
+                if (arrowType.ok()) {
+                    scalar.AlignToColumnType(*arrowType);
+                }
+                auto typed = scalar.SerializeToTypedValue(typeInfo);
+                if (typed.IsSuccess()) {
+                    *newColumn->mutable_from_literal() = typed.DetachResult();
+                }
+            }
+        }
+
         if (column.HasDataAccessorConstructor()) {
             switch (column.GetDataAccessorConstructor().Implementation_case()) {
                 case NKikimrArrowAccessorProto::TConstructor::ImplementationCase::kDictionary:
@@ -1692,9 +1718,19 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
         }
 
         if (column.has_from_literal() && !column.from_literal().value().has_null_flag_value()) {
-            status = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Default values are not supported in column tables";
-            return false;
+            if (!AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Default values are not supported in column tables";
+                return false;
+            }
+            NOlap::TColumnDefaultScalarValue scalar;
+            auto conclusion = scalar.ParseFromTypedValue(column.from_literal(), typeInfo);
+            if (conclusion.IsFail()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = conclusion.GetErrorMessage();
+                return false;
+            }
+            *columnDesc->MutableDefaultValue() = scalar.SerializeToProto();
         }
 
         if (column.has_from_sequence()) {
@@ -1871,11 +1907,39 @@ static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto
         }
     }
     using TColumn = NKikimrKqp::TKqpColumnMetadataProto;
+    const auto typeInfo = NScheme::TypeInfoModFromProtoColumnType(
+        column.GetTypeId(), column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr).TypeInfo;
     switch (column.GetDefaultKind()) {
-        case TColumn::DEFAULT_KIND_LITERAL:
-            status = Ydb::StatusIds::BAD_REQUEST;
-            error = "Default values are not supported in column tables";
-            return false;
+        case TColumn::DEFAULT_KIND_LITERAL: {
+            if (!AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "Default values are not supported in column tables";
+                return false;
+            }
+            NOlap::TColumnDefaultScalarValue scalar;
+            auto conclusion = scalar.ParseFromTypedValue(column.GetDefaultFromLiteral(), typeInfo);
+            if (conclusion.IsFail()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = conclusion.GetErrorMessage();
+                return false;
+            }
+            if constexpr (std::is_same_v<TColumnDesc, NKikimrSchemeOp::TOlapColumnDiff>) {
+                *description->MutableDefaultScalar() = scalar.SerializeToProto();
+            } else {
+                *description->MutableDefaultValue() = scalar.SerializeToProto();
+            }
+            break;
+        }
+        case TColumn::DEFAULT_KIND_NULL:
+            if constexpr (std::is_same_v<TColumnDesc, NKikimrSchemeOp::TOlapColumnDiff>) {
+                if (!AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    error = "Default values are not supported in column tables";
+                    return false;
+                }
+                description->SetDropDefault(true);
+            }
+            break;
         case TColumn::DEFAULT_KIND_SEQUENCE:
             status = Ydb::StatusIds::BAD_REQUEST;
             error = "Default sequences are not supported in column tables";
@@ -1885,7 +1949,6 @@ static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto
             error = "Generated columns are not supported in column tables";
             return false;
         case TColumn::DEFAULT_KIND_UNSPECIFIED:
-        case TColumn::DEFAULT_KIND_NULL:
             break;
     }
     if (column.EncodingSize()) {

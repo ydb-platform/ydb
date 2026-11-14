@@ -2149,9 +2149,19 @@ public:
                                     }
 
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                            "Default values are not supported in column tables"));
-                                        return SyncError();
+                                        if (!NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
+                                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                                "Default values are not supported in column tables"));
+                                            return SyncError();
+                                        }
+                                        auto err = FillLiteralProto(constraint.Value().Cast(), actualType, *add_column->MutableDefaultFromLiteral());
+                                        if (err) {
+                                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), err.value()));
+                                            return SyncError();
+                                        }
+                                        add_column->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
+                                        hasDefaultValue = true;
+                                        continue;
                                     }
 
                                     if (columnBuild == nullptr) {
@@ -2168,12 +2178,17 @@ public:
                                     hasDefaultValue = true;
 
                                 } else if (constraint.Name().Value() == "not_null") {
+                                    hasNotNull = true;
+                                    if (table.Metadata->IsOlap()) {
+                                        // Column tables fill the new column from its creation default.
+                                        // A DataShard column-build scan is not used.
+                                        continue;
+                                    }
                                     if (columnBuild == nullptr) {
                                         columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
                                     }
 
                                     columnBuild->SetNotNull(true);
-                                    hasNotNull = true;
                                 }
                             }
                         }
@@ -2210,10 +2225,15 @@ public:
                             return SyncError();
                         }
 
-                        if (hasNotNull && hasDefaultValue && columnBuild->default_from_literal().value().has_null_flag_value()) {
-                            ctx.AddError(YqlIssue(ctx.GetPosition(columnTuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
-                                "Cannot add not null column with NULL default value"));
-                            return SyncError();
+                        if (hasNotNull && hasDefaultValue) {
+                            const Ydb::TypedValue& literal = columnBuild
+                                ? columnBuild->default_from_literal()
+                                : add_column->GetDefaultFromLiteral();
+                            if (literal.value().has_null_flag_value()) {
+                                ctx.AddError(YqlIssue(ctx.GetPosition(columnTuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                                    "Cannot add not null column with NULL default value"));
+                                return SyncError();
+                            }
                         }
 
                         for (size_t itemIdx = 3; itemIdx < columnTuple.Size(); ++itemIdx) {
@@ -2393,10 +2413,20 @@ public:
                                 return SyncError();
                             }
                         } else if (alterColumnAction == "setDefaultValue") {
-                            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                     "Default values are not supported in column tables"));
                                 return SyncError();
+                            }
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                if (const auto* column = table.Metadata->Columns.FindPtr(TString(columnName))) {
+                                    alter_columns->SetType(column->Type);
+                                    auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(column->TypeInfo, column->TypeMod);
+                                    alter_columns->SetTypeId(columnType.TypeId);
+                                    if (columnType.TypeInfo) {
+                                        *alter_columns->MutableTypeInfo() = *columnType.TypeInfo;
+                                    }
+                                }
                             }
 
                             auto defaultExpr = TExprBase(alterColumnList.Item(1));
@@ -2417,7 +2447,7 @@ public:
                                 }
                             }
                         } else if (alterColumnAction == "dropDefault") {
-                            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                            if (table.Metadata->Kind == EKikimrTableKind::Olap && !NKikimr::AppData()->FeatureFlags.GetEnableCsDefaultValues()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                     "Default values are not supported in column tables"));
                                 return SyncError();

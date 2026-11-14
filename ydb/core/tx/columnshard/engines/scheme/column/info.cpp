@@ -19,6 +19,15 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
     OwnSerializer = HasOwnSerializer(columnInfo);
     if (columnInfo.HasDefaultValue()) {
         DefaultValue.DeserializeFromProto(columnInfo.GetDefaultValue()).Validate();
+        DefaultValue.AlignToColumnType(ArrowField ? ArrowField->type() : nullptr);
+    }
+    if (columnInfo.HasCreatedDefaultValue()) {
+        TColumnDefaultScalarValue created;
+        created.DeserializeFromProto(columnInfo.GetCreatedDefaultValue()).Validate();
+        created.AlignToColumnType(ArrowField ? ArrowField->type() : nullptr);
+        CreatedDefaultValue = std::move(created);
+    } else if (DefaultValue.GetValue()) {
+        CreatedDefaultValue = DefaultValue;
     }
     if (columnInfo.HasDataAccessorConstructor()) {
         AFL_VERIFY(DataAccessorConstructor.DeserializeFromProto(columnInfo.GetDataAccessorConstructor()));

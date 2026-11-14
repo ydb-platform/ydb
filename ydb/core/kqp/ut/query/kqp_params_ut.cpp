@@ -55,6 +55,10 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         };
         for (const auto& value : pgValues) {
             auto params = makeParams(value);
+            auto usedResult = session.ExecuteDataQuery("SELECT $value;", txControl, params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(usedResult.GetStatus(), EStatus::BAD_REQUEST, value << ": " << usedResult.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(usedResult.GetIssues().ToString(), "Unsupported protobuf type");
+
             auto result = session.ExecuteDataQuery("SELECT 1;", txControl, params).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, value << ": " << result.GetIssues().ToString());
 
@@ -62,9 +66,10 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             UNIT_ASSERT_VALUES_EQUAL_C(cachedResult.GetStatus(), EStatus::BAD_REQUEST, value << ": " << cachedResult.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(cachedResult.GetIssues().ToString(), "PostgreSQL types are not supported");
         }
-        auto pgParams = makeParams(pgValues.front());
-        auto pgResult = session.ExecuteDataQuery("SELECT $value;", txControl, pgParams).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(pgResult.GetStatus(), EStatus::GENERIC_ERROR, pgResult.GetIssues().ToString());
+        auto pgResult = kikimr.GetQueryClient().ExecuteQuery(
+            "SELECT $value;", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), makeParams(pgValues.front())).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(pgResult.GetStatus(), EStatus::BAD_REQUEST, pgResult.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(pgResult.GetIssues().ToString(), "Unsupported protobuf type");
         checkNative();
 
         auto structParams = makeParams(R"(

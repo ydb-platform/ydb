@@ -19,9 +19,10 @@ NYql::TExprNode::TPtr Compile(TStringBuf expression, NYql::TExprContext& ctx) {
     return expr;
 }
 
-NYql::TExprNode::TPtr Annotate(TStringBuf expression, NYql::TExprContext& ctx, bool forKqp) {
+NYql::TExprNode::TPtr Annotate(TStringBuf expression, NYql::TExprContext& ctx, bool forKqp, bool windowNewPipeline = true) {
     auto expr = Compile(expression, ctx);
     auto types = MakeIntrusive<NYql::TTypeAnnotationContext>();
+    types->WindowNewPipeline = windowNewPipeline;
     NYql::TTypeAnnCallableFactory factory;
     if (forKqp) {
         factory = CreateKqpTypeAnnCallableFactory(*types);
@@ -88,6 +89,29 @@ Y_UNIT_TEST(KqpPolicyRejectsParsedPgType) {
 
 Y_UNIT_TEST(KqpPolicyRejectsParsedNestedPgType) {
     CheckRejected("(ParseType '\"List<pgint4>\")");
+}
+
+Y_UNIT_TEST(KqpPolicyRejectsPgTypeFromQueueResource) {
+    for (bool forKqp : {false, true}) {
+        NYql::TExprContext ctx;
+        auto expr = Annotate("(QueuePeek (InstanceOf (ResourceType 'TResourceQueue:pgint4)) (Uint64 '0))", ctx, forKqp, false);
+        if (forKqp) {
+            UNIT_ASSERT(!expr);
+            UNIT_ASSERT_STRING_CONTAINS(ctx.IssueManager.GetIssues().ToString(), "PostgreSQL types are not supported");
+        } else {
+            UNIT_ASSERT_C(expr, ctx.IssueManager.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(expr->GetTypeAnn()->GetKind(), NYql::ETypeAnnotationKind::Optional);
+            UNIT_ASSERT_VALUES_EQUAL(expr->GetTypeAnn()->Cast<NYql::TOptionalExprType>()->GetItemType()->GetKind(), NYql::ETypeAnnotationKind::Pg);
+        }
+    }
+}
+
+Y_UNIT_TEST(KqpPolicySupportsNativeTypeFromQueueResource) {
+    NYql::TExprContext ctx;
+    auto expr = Annotate("(QueuePeek (InstanceOf (ResourceType 'TResourceQueue:Int32)) (Uint64 '0))", ctx, true, false);
+    UNIT_ASSERT_C(expr, ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(expr->GetTypeAnn()->GetKind(), NYql::ETypeAnnotationKind::Optional);
+    UNIT_ASSERT_VALUES_EQUAL(expr->GetTypeAnn()->Cast<NYql::TOptionalExprType>()->GetItemType()->GetKind(), NYql::ETypeAnnotationKind::Data);
 }
 
 Y_UNIT_TEST(KqpPolicySupportsParsedNativeTypes) {

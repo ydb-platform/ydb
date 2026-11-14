@@ -3,11 +3,6 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-# Keep this executable's debug sections below the DWARF32 relocation limit.
-IF (OS_LINUX)
-    LDFLAGS(-Wl,--strip-debug)
-ENDIF()
-
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
     REQUIREMENTS(cpu:4)

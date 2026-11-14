@@ -639,7 +639,8 @@ private:
                 implSettings = {{NTableIndex::ImplTable, &index.global_json_index().settings()}};
                 break;
             default:
-                Y_UNREACHABLE(); // Unsupported index types were rejected above.
+                explain = "REBUILD INDEX is not supported for this index type";
+                return false;
             }
             for (size_t position = 0; position < buildInfo.ImplTableDescriptions.size(); ++position) {
                 const auto& [name, requested] = implSettings.at(position);

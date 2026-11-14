@@ -7,11 +7,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-IF (OS_LINUX)
-    # Keep the test binary's DWARF sections below the 32-bit relocation limit.
-    LDFLAGS(-Wl,--strip-debug)
-ENDIF()
-
 PEERDIR(
     ydb/core/protos
     ydb/core/tx/replication/service

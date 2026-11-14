@@ -10,6 +10,8 @@ Primary key design anti-patterns (monotonic keys, hot spots) are covered in [{#T
 
 ## Defaults without explicit settings {#default-no-settings}
 
+For default auto-sharding limits and typical failure modes, see [{#T}](../../../concepts/datamodel/table.md#default_auto_sharding_limits).
+
 If you **do not set** `AUTO_PARTITIONING_*` explicitly when creating a row table, model defaults apply (see [{#T}](../../../concepts/datamodel/table.md#partitioning_row_table)).
 
 By default `AUTO_PARTITIONING_BY_LOAD = DISABLED` and `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1` — see the full default list in [{#T}](../../../concepts/datamodel/table.md#partitioning_row_table).

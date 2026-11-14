@@ -377,7 +377,7 @@ public:
                                 return;
                             }
                         }
-                        auto key = NKikimr::NMiniKQL::ValueFromString(*keyDataSlot, name);
+                        NYql::NUdf::TUnboxedValue key = NKikimr::NMiniKQL::ValueFromString(*keyDataSlot, name);   // returns non-owning TUVPod
                         simdjson::builtin::ondemand::value eltValue;
                         CHECK_JSON_ERROR(elt.value().get(eltValue)) {
                             SetParsingError(error, jsonValue, "parse as object", status);

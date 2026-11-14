@@ -29,6 +29,12 @@ using EHeldKind = TDDiskStubState::EHeldKind;
         .Lsn = lsn};
 }
 
+// One zero per 4 KiB, the count a checksum-enabled DDisk returns.
+[[nodiscard]] std::vector<ui64> ZeroReadChecksums(ui32 sizeInBytes)
+{
+    return std::vector<ui64>(sizeInBytes / NKikimr::NDDisk::MinSectorSize, 0);
+}
+
 [[nodiscard]] TVector<NKikimrBlobStorage::NDDisk::TDDiskId>
 ExtractPersistentBufferIds(
     const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffers& record)
@@ -134,28 +140,36 @@ void TDDiskStubActor::ReplyRead(
     TActorId sender,
     ui64 cookie,
     const TPayloadKey& key,
+    ui32 sizeInBytes,
     bool pbuffer)
 {
     TRope data = LoadPayload(key);
+    const std::vector<ui64> checksums = ZeroReadChecksums(sizeInBytes);
     if (pbuffer) {
-        ctx.Send(
-            sender,
-            new NDDisk::TEvReadPersistentBufferResult(
-                TReplyStatus::OK,
-                std::nullopt,
-                key.VChunkIndex,
-                key.OffsetInBytes,
-                data.size(),
-                std::move(data)),
-            0,
-            cookie);
+        const ui32 dataSize = data.size();
+        auto* result = new NDDisk::TEvReadPersistentBufferResult(
+            TReplyStatus::OK,
+            std::nullopt,
+            key.VChunkIndex,
+            key.OffsetInBytes,
+            dataSize,
+            std::move(data),
+            checksums);
+        // The event constructor drops checksums when the payload is empty.
+        if (result->Record.ChecksumsSize() == 0) {
+            for (const ui64 checksum: checksums) {
+                result->Record.AddChecksums(checksum);
+            }
+        }
+        ctx.Send(sender, result, 0, cookie);
     } else {
         ctx.Send(
             sender,
             new NDDisk::TEvReadResult(
                 TReplyStatus::OK,
                 std::nullopt,
-                std::move(data)),
+                std::move(data),
+                checksums),
             0,
             cookie);
     }
@@ -231,7 +245,8 @@ void TDDiskStubActor::HandleRead(
     const NDDisk::TEvRead::TPtr& ev,
     const TActorContext& ctx)
 {
-    const auto key = MakeKey(ev->Get()->Record.GetSelector(), /*lsn=*/0);
+    const auto& selector = ev->Get()->Record.GetSelector();
+    const auto key = MakeKey(selector, /*lsn=*/0);
     {
         auto guard = Guard(State->Lock);
         if (State->PendingRead) {
@@ -240,11 +255,18 @@ void TDDiskStubActor::HandleRead(
                 .Sender = ev->Sender,
                 .Cookie = ev->Cookie,
                 .Key = key,
+                .SizeInBytes = selector.GetSize(),
             });
             return;
         }
     }
-    ReplyRead(ctx, ev->Sender, ev->Cookie, key, /*pbuffer=*/false);
+    ReplyRead(
+        ctx,
+        ev->Sender,
+        ev->Cookie,
+        key,
+        selector.GetSize(),
+        /*pbuffer=*/false);
 }
 
 void TDDiskStubActor::HandleWrite(
@@ -334,11 +356,18 @@ void TDDiskStubActor::HandleReadPersistentBuffer(
                 .Sender = ev->Sender,
                 .Cookie = ev->Cookie,
                 .Key = key,
+                .SizeInBytes = record.GetSelector().GetSize(),
             });
             return;
         }
     }
-    ReplyRead(ctx, ev->Sender, ev->Cookie, key, /*pbuffer=*/true);
+    ReplyRead(
+        ctx,
+        ev->Sender,
+        ev->Cookie,
+        key,
+        record.GetSelector().GetSize(),
+        /*pbuffer=*/true);
 }
 
 void TDDiskStubActor::HandleBatchErasePersistentBuffer(
@@ -557,7 +586,8 @@ void ReleaseHeldRequests(
                     new NDDisk::TEvReadResult(
                         TReplyStatus::OK,
                         std::nullopt,
-                        std::move(data)),
+                        std::move(data),
+                        ZeroReadChecksums(request.SizeInBytes)),
                     0,
                     request.Cookie));
                 break;
@@ -572,16 +602,26 @@ void ReleaseHeldRequests(
                         data = *payload;
                     }
                 }
+                const std::vector<ui64> checksums =
+                    ZeroReadChecksums(request.SizeInBytes);
+                const ui32 dataSize = data.size();
+                auto* result = new NDDisk::TEvReadPersistentBufferResult(
+                    TReplyStatus::OK,
+                    std::nullopt,
+                    request.Key.VChunkIndex,
+                    request.Key.OffsetInBytes,
+                    dataSize,
+                    std::move(data),
+                    checksums);
+                if (result->Record.ChecksumsSize() == 0) {
+                    for (const ui64 checksum: checksums) {
+                        result->Record.AddChecksums(checksum);
+                    }
+                }
                 actorSystem->Send(new IEventHandle(
                     request.Sender,
                     TActorId(),
-                    new NDDisk::TEvReadPersistentBufferResult(
-                        TReplyStatus::OK,
-                        std::nullopt,
-                        request.Key.VChunkIndex,
-                        request.Key.OffsetInBytes,
-                        data.size(),
-                        std::move(data)),
+                    result,
                     0,
                     request.Cookie));
                 break;

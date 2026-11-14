@@ -1,6 +1,39 @@
 #include "storage_transport_mock.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_checksums.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
+
+namespace {
+
+// Attaches checksums to a successful read. A set override is copied as-is,
+// so a test can return a wrong count. Otherwise the result gets one zero
+// per ChecksumUnitSize bytes of the selector.
+template <typename TResult>
+void AttachReadChecksums(
+    TResult& result,
+    ui32 sizeBytes,
+    const std::optional<TVector<ui64>>& overrideChecksums)
+{
+    using NKikimrBlobStorage::NDDisk::TReplyStatus;
+    if (result.GetStatus() != TReplyStatus::OK) {
+        return;
+    }
+
+    if (overrideChecksums) {
+        for (const ui64 checksum: *overrideChecksums) {
+            result.AddChecksums(checksum);
+        }
+        return;
+    }
+
+    const ui32 count = sizeBytes / NYdb::NBS::NBlockStore::ChecksumUnitSize;
+    for (ui32 i = 0; i < count; ++i) {
+        result.AddChecksums(0);
+    }
+}
+
+}   // namespace
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
@@ -166,10 +199,11 @@ TStorageTransportMock::ReadFromPBuffer(
     const TGuardedSgList& data,
     NWilson::TSpan* span)
 {
-    Y_UNUSED(connection, selector, pBufferKey, instruction, data, span);
+    Y_UNUSED(connection, pBufferKey, instruction, data, span);
 
     TEvReadPersistentBufferResult result;
     result.SetStatus(ReadFromPBufferStatus);
+    AttachReadChecksums(result, selector.Size, ReadChecksums);
     return NThreading::MakeFuture(std::move(result));
 }
 
@@ -180,7 +214,7 @@ NThreading::TFuture<TEvReadResult> TStorageTransportMock::ReadFromDDisk(
     const TGuardedSgList& data,
     NWilson::TSpan* span)
 {
-    Y_UNUSED(selector, instruction, data, span);
+    Y_UNUSED(instruction, span);
 
     const auto key = MakeKey(connection);
     if (auto it = PendingReadsFromDDisk.find(key);
@@ -194,6 +228,7 @@ NThreading::TFuture<TEvReadResult> TStorageTransportMock::ReadFromDDisk(
         SetCantAcquireStatus(result);
     } else {
         result.SetStatus(ReadFromDDiskStatus);
+        AttachReadChecksums(result, selector.Size, ReadChecksums);
     }
     return NThreading::MakeFuture(std::move(result));
 }

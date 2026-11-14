@@ -23,6 +23,8 @@ message TDataShardConfig {
     optional uint32 CdcInitialScanTaskPriority = 18 [default = 10];
     optional uint64 CdcInitialScanReadAheadLo = 22 [default = 524288];
     optional uint64 CdcInitialScanReadAheadHi = 23 [default = 1048576];
+    // CDC payloads smaller than this stay uncompressed. Zero compresses every payload.
+    optional uint64 CdcZstdMinPayloadBytes = 34 [default = 200];
     optional bool DisabledOnSchemeShard = 19 [default = false];
     optional uint64 IncrementalRestoreReadAheadLo = 20 [default = 524288];
     optional uint64 IncrementalRestoreReadAheadHi = 21 [default = 1048576];

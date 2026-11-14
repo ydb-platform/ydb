@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     appdata.cpp
     helpers.cpp
-    runtime.cpp
     services.cpp
 )
 
@@ -21,19 +20,18 @@ PEERDIR(
     ydb/core/client/server
     ydb/core/control
     ydb/core/formats
-    ydb/core/mind
     ydb/core/node_whiteboard
     ydb/core/quoter
     ydb/core/statistics/service
     ydb/core/tablet_flat
     ydb/core/testlib/actors
     ydb/core/testlib/basics/core
+    ydb/core/testlib/basics/runtime
     ydb/core/tx/columnshard
     ydb/core/tx/general_cache
     ydb/core/tx/scheme_board
     ydb/core/tx/schemeshard
     ydb/core/util
-    ydb/library/actors/dnsresolver
     ydb/library/keys
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery
@@ -58,4 +56,5 @@ RECURSE(
     core
     default
     pg
+    runtime
 )

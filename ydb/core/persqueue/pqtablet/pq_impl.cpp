@@ -33,6 +33,7 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/json/json_writer.h>
 
@@ -2669,11 +2670,26 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     }
 
     if (IsTopicMutateDisabled(ctx)
-        && (req.CmdWriteSize() > 0 || req.HasCmdSetClientOffset()))
+        && req.CmdWriteSize() > 0)
     {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
                    "Topic mutations are temporarily disabled");
         return;
+    }
+
+    if (IsTopicMutateDisabled(ctx)
+        && req.HasCmdSetClientOffset())
+    {
+        const auto& allowedClientIds = AppData(ctx)->PQConfig.GetClientIdsAllowCommitWhenTopicMutateDisabled();
+        const auto& clientId = req.GetCmdSetClientOffset().GetClientId();
+        const bool allowCommit = AnyOf(allowedClientIds, [&](const auto& allowedClientId) {
+            return NPersQueue::ConvertNewConsumerName(allowedClientId, ctx) == clientId;
+        });
+        if (!allowCommit) {
+            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+                       "Topic mutations are temporarily disabled");
+            return;
+        }
     }
 
     if (req.HasWriteId()) {

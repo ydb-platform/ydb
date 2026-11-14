@@ -1023,6 +1023,27 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         fixture.Check("SELECT id, g FROM TestTable ORDER BY id;", "[[1;[10]];[2;[20]]]");
     }
 
+    Y_UNIT_TEST(DescribeGeneratedTableWithSetVal) {
+        auto appConfig = GeneratedColumnsAppConfig();
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto querySession = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+        auto create = querySession.ExecuteQuery(R"(
+            CREATE TABLE TestTable (
+                id Serial,
+                stored Int32 GENERATED ALWAYS AS (id + 1) STORED,
+                virtual Int32 GENERATED ALWAYS AS (id + 2) VIRTUAL,
+                PRIMARY KEY (id)
+            );
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        auto tableSession = kikimr.GetTableClient().CreateSession().ExtractValueSync().GetSession();
+        auto describe = tableSession.DescribeTable("/Root/TestTable",
+            NYdb::NTable::TDescribeTableSettings().WithSetVal(true)).ExtractValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTableDescription().GetTableColumns().size(), 3);
+    }
+
     Y_UNIT_TEST(NotNull) {
         TTestFixture fixture(R"(
             CREATE TABLE TestTable (

@@ -624,7 +624,8 @@ NTable::TTableDescription DescribeTable(TDriver driver, const TString& fullTable
 
     NTable::TTableClient client(driver);
     TStatus status = client.RetryOperationSync([fullTablePath, &desc](NTable::TSession session) {
-        auto settings = NTable::TDescribeTableSettings().WithKeyShardBoundary(true).WithSetVal(true);
+        auto settings = NTable::TDescribeTableSettings()
+            .WithKeyShardBoundary(true).WithSetVal(true).RequestType("dump");
         auto result = session.DescribeTable(fullTablePath, settings).GetValueSync();
 
         VerifyStatus(result);

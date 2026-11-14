@@ -13,6 +13,8 @@
 
 #include <util/string/cast.h>
 
+#include <optional>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
@@ -138,9 +140,10 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
 void TWriteRequestExecutor::OnIndirectWriteResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
-    THostMask completedWritesOfCurrentResponse;
+    THostMask fullyAnsweredHosts;
     for (const auto& pbufferResponse: response.Responses) {
         const auto host = pbufferResponse.HostIndex;
+        AnsweredIndirectWrites.Set(host);
 
         if (!HasError(pbufferResponse.Error)) {
             LOG_DEBUG(
@@ -150,7 +153,7 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
                 LogTitle.GetWithTime().c_str(),
                 PrintHostAndNode(host).c_str());
 
-            completedWritesOfCurrentResponse.Set(host);
+            CompletedWrites.Set(host);
         } else {
             LOG_WARN(
                 *ActorSystem,
@@ -161,13 +164,14 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
                 FormatError(pbufferResponse.Error).Quote().c_str());
 
             FailedWrites.Set(host);
-            // The error will be set and replied below.
+        }
+
+        if (GetFullyAnsweredHosts().Get(host)) {
+            fullyAnsweredHosts.Set(host);
         }
     }
 
-    CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
-
-    MaybeReplyOrNotifyBelated(completedWritesOfCurrentResponse);
+    MaybeReplyOrNotifyBelated(fullyAnsweredHosts);
     MaybeSendAdditionalDirectWrites();
 }
 
@@ -313,21 +317,26 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
         PrintHostAndNode(host).c_str(),
         FormatError(response.Error).Quote().c_str());
 
+    AnsweredDirectWrites.Set(host);
+    const auto fullyAnsweredHosts =
+        GetFullyAnsweredHosts().LogicalAnd(THostMask::MakeOne(host));
+
+    std::optional<TEndSpanWithError> ender;
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
-        MaybeReplyOrNotifyBelated(THostMask::MakeOne(host));
-        return;
+    } else {
+        FailedWrites.Set(host);
+        ender.emplace(std::move(span), response.Error);
     }
 
-    FailedWrites.Set(host);
-    auto ender = TEndSpanWithError(std::move(span), response.Error);
+    MaybeReplyOrNotifyBelated(fullyAnsweredHosts);
     MaybeSendReplacementDirectWrite(response.Error);
 }
 
 void TWriteRequestExecutor::MaybeSendReplacementDirectWrite(
     const NProto::TError& error)
 {
-    if (IsReplied) {
+    if (!HasError(error) || IsReplied) {
         return;
     }
 
@@ -365,12 +374,10 @@ void TWriteRequestExecutor::MaybeSendReplacementDirectWrite(
 }
 
 void TWriteRequestExecutor::MaybeReplyOrNotifyBelated(
-    THostMask completedOnCurrentResponse)
+    THostMask fullyAnsweredHosts)
 {
     if (IsReplied) {
-        // A write completed after the reply is belated: its copy is on the
-        // PBuffer and has to be erased from there.
-        NotifyBelated(completedOnCurrentResponse);
+        NotifyBelated(fullyAnsweredHosts);
         return;
     }
 
@@ -419,24 +426,32 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
     Bundle->Reply(
         std::move(error),
         RequestedDirectWrites.Include(RequestedIndirectWrites),
-        CompletedWrites);
+        CompletedWrites,
+        GetFullyAnsweredHosts());
 }
 
-void TWriteRequestExecutor::NotifyBelated(THostMask completedOnCurrentResponse)
+void TWriteRequestExecutor::NotifyBelated(THostMask fullyAnsweredHosts)
 {
-    if (completedOnCurrentResponse.Empty()) {
+    // Hosts that closed in this response. GetFullyAnsweredHosts() also
+    // contains hosts already reported with the client reply.
+    if (fullyAnsweredHosts.Empty()) {
         return;
     }
+
+    const auto completed = fullyAnsweredHosts.LogicalAnd(CompletedWrites);
+    // An error does not confirm the host: the restore barrier finishes it.
+    const auto failed = fullyAnsweredHosts.Exclude(CompletedWrites);
 
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s NotifyBelated %s %s",
+        "%s NotifyBelated %s ok:%s failed:%s",
         LogTitle.GetWithTime().c_str(),
         ExtendedDebugState().c_str(),
-        completedOnCurrentResponse.Print().c_str());
+        completed.Print().c_str(),
+        failed.Print().c_str());
 
-    Bundle->NotifyBelated(completedOnCurrentResponse);
+    Bundle->NotifyBelated(completed, failed);
 }
 
 void TWriteRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
@@ -553,6 +568,15 @@ size_t TWriteRequestExecutor::GetQuorumDeficit() const
 THostMask TWriteRequestExecutor::GetRunningDirectWrites() const
 {
     return RequestedDirectWrites.Exclude(CompletedWrites).Exclude(FailedWrites);
+}
+
+THostMask TWriteRequestExecutor::GetFullyAnsweredHosts() const
+{
+    const auto inFlight =
+        RequestedDirectWrites.Exclude(AnsweredDirectWrites)
+            .Include(RequestedIndirectWrites.Exclude(AnsweredIndirectWrites));
+    return RequestedDirectWrites.Include(RequestedIndirectWrites)
+        .Exclude(inFlight);
 }
 
 TString TWriteRequestExecutor::ExtendedDebugState() const

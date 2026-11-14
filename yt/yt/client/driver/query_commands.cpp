@@ -222,17 +222,10 @@ void TGetQueryCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::vector<std::string>>(
-        "progress_parts",
+    registrar.ParameterWithUniversalAccessor<IMapNodePtr>(
+        "progress_options",
         [] (TThis* command) -> auto& {
-            return command->Options.ProgressParts;
-        })
-        .Optional(/*init*/ false);
-
-    registrar.ParameterWithUniversalAccessor<std::optional<ui32>>(
-        "min_progress_revision",
-        [] (TThis* command) -> auto& {
-            return command->Options.MinProgressRevision;
+            return command->Options.ProgressOptions;
         })
         .Optional(/*init*/ false);
 }

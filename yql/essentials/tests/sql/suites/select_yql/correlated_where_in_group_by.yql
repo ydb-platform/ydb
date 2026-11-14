@@ -1,8 +1,5 @@
-/* custom error: Error: Member not found: _yql_join_sublink_0__alias_y.b */
 PRAGMA YqlSelect = 'force';
 
--- FIXME(YQL-20436): bad test,
---   syntax_pg fails too.
 SELECT
     a,
     b

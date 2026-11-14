@@ -1,5 +1,6 @@
 --!syntax_pg
 --TPC-H Q20
+-- ignore runonopt plan diff
 
 
 select 

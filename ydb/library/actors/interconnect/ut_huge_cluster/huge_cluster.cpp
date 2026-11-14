@@ -60,14 +60,14 @@ Y_UNIT_TEST_SUITE(HugeCluster) {
         void Bootstrap(const TActorContext& ctx) {
             Become(&TThis::StateFunc);
             for (ui32 i = 0; i < Pollers.size(); ++i) {
-                ctx.Send(Pollers[i], new TEvTestStartPolling(), IEventHandle::FlagTrackDelivery, i);
+                ctx.Send(Pollers[i], new TEvTestStartPolling(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered, i);
             }
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr ev, const TActorContext& ctx) {
             const ui32 cookie = ev->Cookie;
             // Cerr << "TEvUndelivered start poller message to node# " << cookie + 1 << Endl;
-            ctx.Send(Pollers[cookie], new TEvTestStartPolling(), IEventHandle::FlagTrackDelivery, cookie);
+            ctx.Send(Pollers[cookie], new TEvTestStartPolling(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered, cookie);
         }
 
         void Handle(TEvents::TEvPoisonPill::TPtr& /*ev*/, const TActorContext& ctx) {

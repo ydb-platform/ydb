@@ -142,7 +142,7 @@ TExprNode::TPtr GetLiteralBoundValue(const TExprNode::TPtr& value, const TTypeAn
         return nullptr;
     }
 
-    if (TCoDataCtor::Match(value.Get()) || TCoPgConst::Match(value.Get()) || TCoNothing::Match(value.Get())
+    if (TCoDataCtor::Match(value.Get()) || TCoNothing::Match(value.Get())
         || TCoParameter::Match(value.Get())) {
         return value;
     }

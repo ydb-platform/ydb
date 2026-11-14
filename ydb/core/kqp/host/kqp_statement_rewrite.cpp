@@ -1,4 +1,5 @@
 #include "kqp_statement_rewrite.h"
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
 
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
@@ -160,7 +161,7 @@ TPrepareRewriteInfo PrepareCreateTableAs(
 
     sessionCtx->SetInternalTypeAnnTransformer(NOpt::CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), sessionCtx->ConfigPtr()));
 
-    auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
+    auto typeTransformer = NYql::TTransformationPipeline(&typeCtx, CreateKqpTypeAnnCallableFactory(typeCtx))
         .AddServiceTransformers()
         .AddExpressionEvaluation(funcRegistry)
         .AddPreTypeAnnotation()

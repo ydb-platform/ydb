@@ -152,10 +152,6 @@ public:
                         .NotResolved();
                 }
 
-                if (settings.pg_mode()) {
-                    checks.IsNameUniqGrandParentLevel();
-                }
-
                 checks
                     .IsValidLeafName(/*userToken*/ nullptr)
                     .DirChildrenLimit();
@@ -315,10 +311,10 @@ public:
                             return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
                                 << "Cannot add not null column '" << colInfo.GetColumnName() << "' with NULL default value");
                         }
-                        if (!literal.type().has_optional_type() && !literal.type().has_pg_type()) {
+                        if (!literal.type().has_optional_type()) {
                             return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
                                 << "NULL default value for column '" << colInfo.GetColumnName()
-                                << "' requires an optional or PostgreSQL type");
+                                << "' requires an optional type");
                         }
                     }
                     buildInfo->BuildColumns.push_back(

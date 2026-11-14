@@ -1901,19 +1901,12 @@ private:
                     auto* meta = res.add_columns();
                     meta->set_name(col.Name);
 
-                    if (col.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                        auto typeDesc = col.PType.GetPgTypeDesc();
-                        auto* pg = meta->mutable_type()->mutable_pg_type();
-                        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-                        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
+                    auto xType = notNullResp ? meta->mutable_type() : meta->mutable_type()->mutable_optional_type()->mutable_item();
+                    auto id = static_cast<NYql::NProto::TypeIds>(col.PType.GetTypeId());
+                    if (id == NYql::NProto::Decimal) {
+                        NScheme::ProtoFromDecimalType(col.PType.GetDecimalType(), *xType->mutable_decimal_type());
                     } else {
-                        auto xType = notNullResp ? meta->mutable_type() : meta->mutable_type()->mutable_optional_type()->mutable_item();
-                        auto id = static_cast<NYql::NProto::TypeIds>(col.PType.GetTypeId());
-                        if (id == NYql::NProto::Decimal) {
-                            NScheme::ProtoFromDecimalType(col.PType.GetDecimalType(), *xType->mutable_decimal_type());
-                        } else {
-                            xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
-                        }
+                        xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
                     }
                 }
                 bool ok = res.SerializeToString(&data);

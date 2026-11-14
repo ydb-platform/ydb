@@ -28,7 +28,6 @@ bool IsPathKey(TStringBuf tag) {
         "databasePath",
         "secret",
         "objectId",
-        "pgObject",
     };
     return IsIn(pathTags, tag);
 }

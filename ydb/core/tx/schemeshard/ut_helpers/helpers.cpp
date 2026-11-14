@@ -3224,21 +3224,6 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
 
-    void UpdateRowPg(TTestActorRuntime& runtime, const TString& table, const ui32 key, ui32 value, ui64 tabletId) {
-        NKikimrMiniKQL::TResult result;
-        TString error;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
-            (
-                (let key '( '('key (Utf8 '%d) ) ) )
-                (let row '( '('value (PgConst '%u (PgType 'int4)) ) ) )
-                (return (AsList (UpdateRow '__user__%s key row) ))
-            )
-        )", key, value, table.c_str()), result, error);
-
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
-    }
-
     void UploadRow(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values)
     {
         UploadRow(runtime, DescribePath(runtime, tablePath, true, true), partitionIdx, keyTags, valueTags, keys, values);

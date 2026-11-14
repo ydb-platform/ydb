@@ -48,10 +48,6 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
         column.Id = phyColumn.GetId().GetId();
 
         switch (phyColumn.GetTypeId()) {
-        case NScheme::NTypeIds::Pg: {
-            column.Type = NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName(phyColumn.GetTypeParam().GetPgTypeName()));
-            break;
-        }
         case NScheme::NTypeIds::Decimal: {
             const auto& decimalProto = phyColumn.GetTypeParam().GetDecimal();
             NScheme::TDecimalType decimal(decimalProto.precision(), decimalProto.scale());

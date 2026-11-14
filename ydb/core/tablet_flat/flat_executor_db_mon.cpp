@@ -362,11 +362,6 @@ public:
                                             tuple.Types[i].GetDecimalType().CellValueToStream(tuple.Columns[i].AsValue<std::pair<ui64, i64>>(), row);
                                             break;
                                         }
-                                        case NScheme::NTypeIds::Pg: {
-                                            auto convert = NPg::PgNativeTextFromNativeBinary(tuple.Columns[i].AsBuf(), tuple.Types[i].GetPgTypeDesc());
-                                            row << EncodeHtmlPcdata(!convert.Error ? convert.Str : *convert.Error);
-                                            break;
-                                        }
                                         default:
                                             row << "<i>unknown type " << NScheme::TypeName(tuple.Types[i]) << "</i>";
                                             break;

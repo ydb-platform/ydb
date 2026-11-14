@@ -20,12 +20,25 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <library/cpp/protobuf/util/walk.h>
 
 namespace NKikimr::NKqp {
 
 using namespace NKikimr::NMiniKQL;
 using namespace NYql;
 using namespace NYql::NUdf;
+
+void TQueryData::ValidateParameterType(const google::protobuf::Message& type) {
+    NProtoBuf::WalkReflection(type, [](const NProtoBuf::Message& message, const NProtoBuf::FieldDescriptor* field) {
+        const bool hasPg = (field->containing_type() == Ydb::Type::descriptor() &&
+            field->number() == Ydb::Type::kPgTypeFieldNumber && message.GetReflection()->HasField(message, field)) ||
+            (field->containing_type() == NKikimrMiniKQL::TType::descriptor() &&
+            field->number() == NKikimrMiniKQL::TType::kKindFieldNumber &&
+            message.GetReflection()->GetEnumValue(message, field) == NKikimrMiniKQL::Pg);
+        Y_ENSURE(!hasPg, "PostgreSQL types are not supported");
+        return true;
+    });
+}
 
 TTypedUnboxedValue TKqpExecuterTxResult::GetUV(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -313,6 +326,7 @@ bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type,
 }
 
 bool TQueryData::AddTypedValueParam(const TString& name, const Ydb::TypedValue& param) {
+    ValidateParameterType(param.type());
     auto guard = TypeEnv().BindAllocator();
     const TBindTerminator bind(this);
     auto [typeFromProto, value] = ImportValueFromProto(
@@ -321,6 +335,7 @@ bool TQueryData::AddTypedValueParam(const TString& name, const Ydb::TypedValue& 
 }
 
 bool TQueryData::AddMkqlParam(const TString& name, const NKikimrMiniKQL::TType& t, const NKikimrMiniKQL::TValue& v) {
+    ValidateParameterType(t);
     auto guard = TypeEnv().BindAllocator();
     auto [typeFromProto, value] = ImportValueFromProto(t, v, TypeEnv(), AllocState->HolderFactory);
     return AddUVParam(name, typeFromProto, value);

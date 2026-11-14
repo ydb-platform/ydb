@@ -321,7 +321,7 @@ TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrK
             column.GetName(),
             column.GetId(),
             std::move(typeInfo),
-            column.GetTypeInfo().GetPgTypeMod(),
+            TString{},
             number++
         );
     }

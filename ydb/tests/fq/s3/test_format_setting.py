@@ -921,14 +921,13 @@ Pear;15;33'''
         query = client.execute(sql)
         query.check()
 
-    @pytest.mark.parametrize("pg_types", [False, True], ids=["yql_types", "pg_types"])
-    def test_precompute_with_pg_binding(self, kikimr, s3, client, pg_types, unique_prefix):
-        test_suffix = "_{}".format(1 if pg_types else 0)
+    def test_precompute_with_binding(self, kikimr, s3, client, unique_prefix):
+        test_suffix = "_0"
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
-        bucket_name = "precompute_with_pg_binding" + test_suffix
+        bucket_name = "precompute_with_binding" + test_suffix
         bucket = resource.Bucket(bucket_name)
         bucket.create(ACL='public-read')
 
@@ -936,18 +935,14 @@ Pear;15;33'''
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
-        if pg_types:
-            idType = ydb.Column(name="id", type=ydb.Type(pg_type=ydb.PgType(oid=23)))
-            nameType = ydb.Column(name="name", type=ydb.Type(pg_type=ydb.PgType(oid=25)))
-        else:
-            idType = ydb.Column(name="id", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
-            nameType = ydb.Column(name="name", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
+        idType = ydb.Column(name="id", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
+        nameType = ydb.Column(name="name", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
 
         ids_data = R'''{"id": 42}'''
 
         s3_client.put_object(Body=ids_data, Bucket=bucket_name, Key='ids.json', ContentType='text/json')
         connection_response = client.create_external_data_source(
-            unique_prefix + "precompute_with_pg" + test_suffix, bucket_name
+            unique_prefix + "precompute_with_binding" + test_suffix, bucket_name
         )
 
         binding_for_ids_name = unique_prefix + "binding_for_ids" + test_suffix
@@ -992,16 +987,10 @@ Pear;15;33'''
         logging.debug(str(result_set))
         assert len(result_set.columns) == 2
         assert len(result_set.rows) == 1
-        if pg_types:
-            assert result_set.columns[0].type.pg_type.oid == 23
-            assert result_set.columns[1].type.pg_type.oid == 25
-            assert result_set.rows[0][0] == "42"
-            assert result_set.rows[0][1] == "hello"
-        else:
-            assert result_set.columns[0].type.type_id == ydb.Type.INT32
-            assert result_set.columns[1].type.type_id == ydb.Type.STRING
-            assert result_set.rows[0][0] == 42
-            assert result_set.rows[0][1] == b"hello"
+        assert result_set.columns[0].type.type_id == ydb.Type.INT32
+        assert result_set.columns[1].type.type_id == ydb.Type.STRING
+        assert result_set.rows[0][0] == 42
+        assert result_set.rows[0][1] == b"hello"
 
     @pytest.mark.parametrize("filename, type_format", [("timestamp/completeness_iso/test.csv", "csv_with_names")])
     def test_timestamp_completeness_iso(self, kikimr, s3, client, filename, type_format, unique_prefix):

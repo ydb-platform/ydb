@@ -116,7 +116,7 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
         nextColumnId = colId + 1 > nextColumnId ? colId + 1 : nextColumnId;
 
         TTableInfo::TColumn& column = externalTableInfo->Columns[colId];
-        column = TTableInfo::TColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
+        column = TTableInfo::TColumn(colName, colId, typeInfo, {}, col.GetNotNull());
 
         auto& schemaColumn= *schema.add_column();
         schemaColumn.set_name(colName);

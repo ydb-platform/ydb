@@ -74,6 +74,7 @@ RECURSE(
     compilation
     compile_cache
     events
+    pg_policy
     result_set_format
     simple
     ut

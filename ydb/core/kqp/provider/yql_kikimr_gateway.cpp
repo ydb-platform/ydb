@@ -7,7 +7,6 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -591,23 +590,6 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
 
 bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type& protoType, TString& error) {
     switch (typeNode->GetKind()) {
-    case ETypeAnnotationKind::Pg: {
-        const auto* pgTypeNode = typeNode->Cast<TPgExprType>();
-        const auto& typeId = pgTypeNode->GetId();
-        const auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(typeId);
-        if (typeDesc) {
-            Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
-            auto* pg = protoType.mutable_pg_type();
-            pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
-            pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
-            pg->set_typlen(0);
-            pg->set_typmod(0);
-            return true;
-        } else {
-            error = TStringBuilder() << "Unknown pg type: " << FormatType(pgTypeNode);
-            return false;
-        }
-    }
     case ETypeAnnotationKind::Data: {
         const auto dataTypeNode = typeNode->Cast<TDataExprType>();
         const TStringBuf typeName = dataTypeNode->GetName();

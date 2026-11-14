@@ -66,10 +66,7 @@ private:
     virtual TStatus HandleDataQueryBlocks(NNodes::TKiDataQueryBlocks node, TExprContext& ctx) = 0;
     virtual TStatus HandleDataQueryBlock(NNodes::TKiDataQueryBlock node, TExprContext& ctx) = 0;
     virtual TStatus HandleEffects(NNodes::TKiEffects node, TExprContext& ctx) = 0;
-    virtual TStatus HandlePgDropObject(NNodes::TPgDropObject node, TExprContext& ctx) = 0;
 
-    virtual TStatus HandleCreateSequence(NNodes::TKiCreateSequence node, TExprContext& ctx) = 0;
-    virtual TStatus HandleDropSequence(NNodes::TKiDropSequence node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterSequence(NNodes::TKiAlterSequence node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext& ctx) = 0;
@@ -102,7 +99,6 @@ public:
         Object,
         Topic,
         Permission,
-        PGObject,
         Replication,
         BackupCollection,
         Sequence,
@@ -198,19 +194,6 @@ public:
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Permission);
         return Target;
-    }
-
-    const TString& GetPGObjectId() const {
-        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
-        Y_DEBUG_ABORT_UNLESS(KeyType == Type::PGObject);
-        return Target;
-    }
-
-    const TString& GetPGObjectType() const {
-        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
-        Y_DEBUG_ABORT_UNLESS(ObjectType.Defined());
-        Y_DEBUG_ABORT_UNLESS(KeyType == Type::PGObject);
-        return *ObjectType;
     }
 
     TBackupCollectionDescription GetBackupCollectionPath() const {
@@ -351,11 +334,9 @@ Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::str
 Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity);
 Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);
 
-bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
 bool IsYqlNullExprNode(const NNodes::TExprBase& literal);
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto);
-void FillLiteralProto(const NNodes::TCoPgConst& literal, Ydb::TypedValue& proto);
 
 // Optimizer rules
 TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,

@@ -1008,22 +1008,6 @@ public:
         }
     }
 
-    TFuture<TGenericResult> CreateSequence(const TString& cluster,
-            const NYql::TCreateSequenceSettings& settings, bool existingOk) override {
-        Y_UNUSED(cluster);
-        Y_UNUSED(settings);
-        Y_UNUSED(existingOk);
-        return NotImplemented<TGenericResult>();
-    }
-
-    TFuture<TGenericResult> DropSequence(const TString& cluster,
-            const NYql::TDropSequenceSettings& settings, bool missingOk) override {
-        Y_UNUSED(cluster);
-        Y_UNUSED(settings);
-        Y_UNUSED(missingOk);
-        return NotImplemented<TGenericResult>();
-    }
-
     TFuture<TGenericResult> AlterSequence(const TString& cluster,
             const NYql::TAlterSequenceSettings& settings, bool missingOk) override {
         Y_UNUSED(cluster);

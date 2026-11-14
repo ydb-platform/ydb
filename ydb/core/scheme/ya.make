@@ -21,7 +21,6 @@ PEERDIR(
     ydb/core/scheme/protos
     ydb/core/scheme_types
     ydb/library/aclib
-    yql/essentials/parser/pg_wrapper/interface/type_desc
     ydb/public/lib/scheme_types
     # temporary.
     library/cpp/lwtrace/mon
@@ -32,5 +31,4 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
-    ut_pg
 )

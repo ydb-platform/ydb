@@ -4490,48 +4490,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         createAndCheck(999, 99);
     }
 
-    Y_UNIT_TEST(CreateTableWithPgColumn) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto createAndCheck = [&](const TString& typeName) {
-            TString tableName = TStringBuilder() << "/Root/TableWithPgColumn_" << typeName;
-            auto createQuery = TStringBuilder() << Sprintf(R"(
-            CREATE TABLE `%s` (
-                Key Uint64,
-                Value %s,
-                PRIMARY KEY (Key)
-            );)", tableName.c_str(), typeName.c_str());
-            auto createResult = session.ExecuteSchemeQuery(createQuery).GetValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::SUCCESS, createResult.GetIssues().ToString());
-
-            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
-            auto tableDesc = describe.GetTableDescription();
-            std::vector<TTableColumn> columns = tableDesc.GetTableColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
-            TType valueType = columns[1].Type;
-            TTypeParser parser(valueType);
-            auto kind = parser.GetKind();
-            UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Pg);
-            const auto& pgType = parser.GetPg();
-            UNIT_ASSERT_VALUES_EQUAL(pgType.TypeName, typeName);
-        };
-
-        createAndCheck("pgbool");
-        createAndCheck("pgint2");
-        createAndCheck("pgint4");
-        createAndCheck("pgint8");
-        createAndCheck("pgnumeric");
-        createAndCheck("pgfloat4");
-        createAndCheck("pgfloat8");
-        createAndCheck("pgtext");
-        createAndCheck("pgjson");
-        createAndCheck("pgtimestamp");
-        createAndCheck("pgvarchar");
-    }
 
     void AlterTableAddIndex(EIndexTypeSql type) {
         NKikimrConfig::TFeatureFlags featureFlags;
@@ -7010,71 +6968,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         checkColumn(6, 22, 20);
     }
 
-    Y_UNIT_TEST(AlterTableWithPgColumn) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithPgColumn";
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        auto addColumn = [&] (const TString& typeName) {
-            TString columnName = TStringBuilder() << "Column_" << typeName;
-            auto query = TStringBuilder() << Sprintf(R"(
-            ALTER TABLE `%s`
-                 ADD COLUMN %s %s
-            )", tableName.c_str(), columnName.c_str(), typeName.c_str());
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        };
-
-        addColumn("pgbool");
-        addColumn("pgint2");
-        addColumn("pgint4");
-        addColumn("pgint8");
-        addColumn("pgnumeric");
-        addColumn("pgfloat4");
-        addColumn("pgfloat8");
-        addColumn("pgtext");
-        addColumn("pgjson");
-        addColumn("pgtimestamp");
-        addColumn("pgvarchar");
-
-        TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-        UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
-        auto tableDesc = describe.GetTableDescription();
-        std::vector<TTableColumn> columns = tableDesc.GetTableColumns();
-        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 13);
-
-        auto checkColumn = [&] (ui64 columnIdx, const TString& typeName) {
-            TType valueType = columns[columnIdx].Type;
-            TTypeParser parser(valueType);
-            auto kind = parser.GetKind();
-            UNIT_ASSERT_VALUES_EQUAL(kind, TTypeParser::ETypeKind::Pg);
-            const auto& pgType = parser.GetPg();
-            UNIT_ASSERT_VALUES_EQUAL(pgType.TypeName, typeName);
-        };
-
-        checkColumn(2, "pgbool");
-        checkColumn(3, "pgint2");
-        checkColumn(4, "pgint4");
-        checkColumn(5, "pgint8");
-        checkColumn(6, "pgnumeric");
-        checkColumn(7, "pgfloat4");
-        checkColumn(8, "pgfloat8");
-        checkColumn(9, "pgtext");
-        checkColumn(10, "pgjson");
-        checkColumn(11, "pgtimestamp");
-        checkColumn(12, "pgvarchar");
-    }
 
     struct ExpectedPermissions {
         TString Path;
@@ -16787,7 +16680,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(alterResult.GetIssues().ToString(),
-                "Type 'pgfloat4' specified for column 'new_column' is not supported for column tables");
+                "Type 'pgfloat4' specified for column 'new_column' is not supported by storage");
         }
 
         {
@@ -17791,17 +17684,14 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName(typeName)})
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        auto result = testHelper.GetSession().ExecuteSchemeQuery(testTable.BuildQuery()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-            TStringBuilder() << "Type '" << typeName << "' specified for column 'val' is not supported for column tables");
+        TTableBuilder tableBuilder;
+        tableBuilder.SetStoreType(EStoreType::Column)
+            .AddNonNullableColumn("id", EPrimitiveType::Int32)
+            .AddNullableColumn("val", TPgType(typeName))
+            .SetPrimaryKeyColumn("id");
+        auto result = testHelper.GetSession().CreateTable("/Root/ColumnTableTest", tableBuilder.Build()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported column type for column: val");
     }
 
     Y_UNIT_TEST(PgInt2Column) {
@@ -17829,20 +17719,19 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("i2").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint2")}),
-            TTestHelper::TColumnSchema().SetName("i4").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint4")}),
-            TTestHelper::TColumnSchema().SetName("i8").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint8")}),
-            TTestHelper::TColumnSchema().SetName("f4").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgfloat4")}),
-            TTestHelper::TColumnSchema().SetName("f8").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgfloat8")})
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        auto result = testHelper.GetSession().ExecuteSchemeQuery(testTable.BuildQuery()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "is not supported for column tables");
+        auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/ColumnTableTest` (
+                id Int32 NOT NULL,
+                i2 pgint2,
+                i4 pgint4,
+                i8 pgint8,
+                f4 pgfloat4,
+                f8 pgfloat8,
+                PRIMARY KEY (id)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "PostgreSQL types are not supported");
     }
 
     Y_UNIT_TEST(BackupReturnsOperationId) {

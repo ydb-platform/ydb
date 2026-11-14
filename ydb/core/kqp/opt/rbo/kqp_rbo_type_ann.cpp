@@ -186,14 +186,10 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, const TU
                 subplanType = ctx.ExprCtx.MakeType<TOptionalExprType>(subplanType);
             }
         } else {
-            if (!props.PgSyntax) {
-                subplanType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Bool);
-                // A projection returns the IN result, so it keeps the type the query gave it.
-                if (subplanEntry.OptionalResult) {
-                    subplanType = ctx.ExprCtx.MakeType<TOptionalExprType>(subplanType);
-                }
-            } else {
-                subplanType = ctx.ExprCtx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId);
+            subplanType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Bool);
+            // A projection returns the IN result, so it keeps the type the query gave it.
+            if (subplanEntry.OptionalResult) {
+                subplanType = ctx.ExprCtx.MakeType<TOptionalExprType>(subplanType);
             }
         }
         auto newType = ctx.ExprCtx.MakeType<TItemExprType>(ctx.ExprCtx.GetIndexAsString(iu), subplanType);

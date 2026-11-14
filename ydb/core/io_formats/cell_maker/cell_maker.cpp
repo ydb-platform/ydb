@@ -127,23 +127,6 @@ namespace {
         return true;
     }
 
-    template<>
-    bool TryParse<NPg::TConvertResult>(TStringBuf value, NPg::TConvertResult& result, TString& err, const NScheme::TTypeInfo& typeInfo) {
-        TString unescaped;
-        if (!CheckedUnescape(value, unescaped)) {
-            err = MakeError<NPg::TConvertResult>();
-            return false;
-        }
-
-        result = NPg::PgNativeBinaryFromNativeText(unescaped, typeInfo.GetPgTypeDesc());
-        if (result.Error) {
-            err = *result.Error;
-            return false;
-        }
-
-        return true;
-    }
-
     struct TUuidHolder {
         union {
             ui16 Array[8];
@@ -191,11 +174,6 @@ namespace {
     TStringBuf DyNumberToStringBuf(const TMaybe<TString>& v) {
         Y_ABORT_UNLESS(v.Defined());
         return TStringBuf(*v);
-    }
-
-    TStringBuf PgToStringBuf(const NPg::TConvertResult& v) {
-        Y_ABORT_UNLESS(!v.Error);
-        return v.Str;
     }
 
     TStringBuf UuidToStringBuf(const TUuidHolder& uuid) {
@@ -342,7 +320,6 @@ void AddTwoCells(TCell& result, const TCell& cell1, const TCell& cell2, const NS
     case NScheme::NTypeIds::JsonDocument:
     case NScheme::NTypeIds::DyNumber:
     case NScheme::NTypeIds::Decimal:
-    case NScheme::NTypeIds::Pg:
     case NScheme::NTypeIds::Uuid:
         Y_ENSURE(false);
     default:
@@ -405,8 +382,6 @@ bool MakeCell(TCell& cell, TStringBuf value, const NScheme::TTypeInfo& typeInfo,
         return TCellMaker<TMaybe<TString>, TStringBuf>::Make(cell, value, pool, err, &DyNumberToStringBuf);
     case NScheme::NTypeIds::Decimal:
         return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value, pool, err, &Int128ToPair, typeInfo);
-    case NScheme::NTypeIds::Pg:
-        return TCellMaker<NPg::TConvertResult, TStringBuf>::Make(cell, value, pool, err, &PgToStringBuf, typeInfo);
     case NScheme::NTypeIds::Uuid:
         return TCellMaker<TUuidHolder, TStringBuf>::Make(cell, value, pool, err, &UuidToStringBuf);
     default:
@@ -477,13 +452,6 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, const NScheme::TTypeI
             return TCellMaker<TMaybe<TString>, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &DyNumberToStringBuf);
         case NScheme::NTypeIds::Decimal:
             return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value.GetStringSafe(), pool, err, &Int128ToPair, typeInfo);
-        case NScheme::NTypeIds::Pg:
-            if (auto result = NPg::PgNativeBinaryFromNativeText(value.GetStringSafe(), typeInfo.GetPgTypeDesc()); result.Error) {
-                err = *result.Error;
-                return false;
-            } else {
-                return TCellMaker<NPg::TConvertResult, TStringBuf>::MakeDirect(cell, result, pool, err, &PgToStringBuf);
-            }
         case NScheme::NTypeIds::Uuid:
             return TCellMaker<TUuidHolder, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &UuidToStringBuf);
         default:
@@ -516,7 +484,6 @@ bool CheckCellValue(const TCell& cell, const NScheme::TTypeInfo& typeInfo) {
     case NScheme::NTypeIds::String2m:
     case NScheme::NTypeIds::JsonDocument: // checked at parsing time
     case NScheme::NTypeIds::DyNumber: // checked at parsing time
-    case NScheme::NTypeIds::Pg:       // checked at parsing time
     case NScheme::NTypeIds::Uuid:       // checked at parsing time
         return true;
     case NScheme::NTypeIds::Date:

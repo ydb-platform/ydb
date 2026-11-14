@@ -17,7 +17,8 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
-    ydb/core/testlib/pg
+    ydb/core/testlib
+    yql/essentials/sql/pg_dummy
     ydb/core/tx
     yql/essentials/public/udf/service/exception_policy
     ydb/public/lib/yson_value

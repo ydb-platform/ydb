@@ -32,7 +32,6 @@ SRCS(
     oidc_options.cpp
     oidc_token_cache.cpp
     parameter_stream.cpp
-    pg_dump_parser.cpp
     pretty_table.cpp
     print_operation.cpp
     print_utils.cpp

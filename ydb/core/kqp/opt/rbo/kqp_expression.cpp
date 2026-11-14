@@ -557,7 +557,7 @@ TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TE
     return TExpression(nullExpr, ctx);
 }
 
-TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
+TExpression MakeConjunction(const TVector<TExpression>& vec) {
     Y_ENSURE(vec.size());
 
     // Fetch context and plan properties from one of the conjuncts
@@ -593,10 +593,6 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
     auto conjunction = Build<TCoAnd>(*ctx, pos)
         .Add(conjuncts)
         .Done().Ptr();
-
-    if (pgSyntax) {
-        conjunction = ctx->Builder(pos).Callable("ToPg").Add(0, conjunction).Seal().Build();
-    }
 
     auto lambda = Build<TCoLambda>(*ctx, pos)
         .Args({lambda_arg})

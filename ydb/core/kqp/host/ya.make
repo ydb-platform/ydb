@@ -15,6 +15,7 @@ PEERDIR(
     ydb/library/yql/providers/ydb_external/common
     ydb/core/base
     ydb/core/kqp/common
+    ydb/core/kqp/common/pg_policy
     ydb/core/kqp/query_data
     ydb/core/kqp/federated_query
     ydb/core/kqp/gateway/utils
@@ -37,11 +38,9 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/services
     yql/essentials/minikql/invoke_builtins
-    yql/essentials/parser/pg_wrapper/interface
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/udf_resolve
     yql/essentials/providers/config
-    yql/essentials/providers/pg/provider
     yql/essentials/providers/result/provider
     yql/essentials/sql
     yql/essentials/sql/v1/translation

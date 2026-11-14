@@ -1,17 +1,11 @@
 #include "kqp_types.h"
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NKikimr::NScheme {
 
 void ProtoMiniKQLTypeFromTypeInfo(NKikimrMiniKQL::TType* type, const TTypeInfo typeInfo) {
     switch (typeInfo.GetTypeId()) {
-    case NTypeIds::Pg: {
-        type->SetKind(NKikimrMiniKQL::Pg);
-        type->MutablePg()->Setoid(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()));
-        break;
-    }
     case NTypeIds::Decimal: {
         const TDecimalType& decimal = typeInfo.GetDecimalType();
         type->SetKind(NKikimrMiniKQL::Data);
@@ -40,17 +34,12 @@ TTypeInfo TypeInfoFromProtoMiniKQLType(const NKikimrMiniKQL::TType& type) {
             return TTypeInfo(typeId);
         }
     }
-    case NKikimrMiniKQL::Pg:
-        return TTypeInfo(NPg::TypeDescFromPgTypeId(type.GetPg().Getoid()));
     default:
-        Y_ENSURE(false, "not a data or pg type");
+        Y_ENSURE(false, "not a data type");
     }
 }
 
 TTypeInfo TypeInfoFromMiniKQLType(const NMiniKQL::TType* type) {
-    if (type->GetKind() == NMiniKQL::TType::EKind::Pg)
-        return TTypeInfo(NPg::TypeDescFromPgTypeId(AS_TYPE(NMiniKQL::TPgType, type)->GetTypeId()));
-
     const NMiniKQL::TDataType* dataType = type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional ?
         AS_TYPE(NMiniKQL::TDataType, static_cast<const NKikimr::NMiniKQL::TOptionalType*>(type)->GetItemType()) :
         AS_TYPE(NMiniKQL::TDataType, type);

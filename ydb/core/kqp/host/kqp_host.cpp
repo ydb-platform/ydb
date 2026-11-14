@@ -1,5 +1,6 @@
 #include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "kqp_host_impl.h"
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
 #include <ydb/core/kqp/tracing/kqp_compile_trace_transformer.h>
 #include "kqp_statement_rewrite.h"
 
@@ -38,7 +39,6 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/config/yql_config_provider.h>
-#include <yql/essentials/providers/pg/provider/yql_pg_provider_impl.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
 
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
@@ -1946,7 +1946,7 @@ private:
             return nullptr;
         }
 
-        auto transformer = TTransformationPipeline(TypesCtx)
+        auto transformer = TTransformationPipeline(TypesCtx, CreateKqpTypeAnnCallableFactory(*TypesCtx))
             .AddServiceTransformers()
             .AddPreTypeAnnotation()
             .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
@@ -2090,14 +2090,6 @@ private:
         });
     }
 
-    void InitPgProvider() {
-        auto state = MakeIntrusive<NYql::TPgState>();
-        state->Types = TypesCtx.Get();
-
-        TypesCtx->AddDataSource(NYql::PgProviderName, NYql::CreatePgDataSource(state));
-        TypesCtx->AddDataSink(NYql::PgProviderName, NYql::CreatePgDataSink(state));
-    }
-
     void InitSolomonProvider() {
         if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::SolomonProviderName))) {
             return;
@@ -2239,8 +2231,6 @@ private:
             TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
         }
 
-        InitPgProvider();
-
         TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
         TypesCtx->TimeProvider = TAppData::TimeProvider;
         TypesCtx->RandomProvider = TAppData::RandomProvider;
@@ -2305,7 +2295,7 @@ private:
             return CreateCompileTraceEnd(getTrace, name, &passes);
         };
 
-        YqlTransformer = TTransformationPipeline(TypesCtx)
+        YqlTransformer = TTransformationPipeline(TypesCtx, CreateKqpTypeAnnCallableFactory(*TypesCtx))
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
@@ -2376,7 +2366,7 @@ private:
                 false
             );
 
-        YqlTransformerNewRBO = TTransformationPipeline(TypesCtx)
+        YqlTransformerNewRBO = TTransformationPipeline(TypesCtx, CreateKqpTypeAnnCallableFactory(*TypesCtx))
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("YqlTransformerNewRBO", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransformNewRBO")
@@ -2404,7 +2394,7 @@ private:
             .Add(endTrace("Prepare physical query"), "TraceEndPreparePhysicalQuery")
             .Build();
 
-        DataQueryAstTransformer = TTransformationPipeline(TypesCtx)
+        DataQueryAstTransformer = TTransformationPipeline(TypesCtx, CreateKqpTypeAnnCallableFactory(*TypesCtx))
             .AddServiceTransformers()
             .AddIntentDeterminationTransformer()
             .AddTableMetadataLoaderTransformer()

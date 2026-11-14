@@ -194,8 +194,6 @@ protected:
             return StringToJson(NBinaryJson::SerializeToJson(cell.AsBuf()));
         case NScheme::NTypeIds::Yson:
             return YsonToJson(cell.AsBuf());
-        case NScheme::NTypeIds::Pg:
-            return NJson::TJsonValue(PgToString(cell.AsBuf(), type));
         case NScheme::NTypeIds::Uuid:
             return UuidToJson(cell);
         default:

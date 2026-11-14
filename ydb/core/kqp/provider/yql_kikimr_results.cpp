@@ -4,7 +4,6 @@
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <yql/essentials/core/yql_type_annotation.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/result_format/yql_codec_results.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -121,24 +120,6 @@ void WriteValueToYson(const TStringStream& stream, NResult::TYsonResultWriter& w
                 writer.OnStringScalar(value.GetText());
             }
 
-            return;
-        }
-
-        case NKikimrMiniKQL::ETypeKind::Pg:
-        {
-            if (value.GetValueValueCase() == NKikimrMiniKQL::TValue::kNullFlagValue) {
-                writer.OnEntity();
-            } else if (value.HasBytes()) {
-                auto convert = NKikimr::NPg::PgNativeTextFromNativeBinary(
-                    value.GetBytes(), NKikimr::NPg::TypeDescFromPgTypeId(type.GetPg().Getoid())
-                );
-                YQL_ENSURE(!convert.Error, "Failed to convert pg value to text: " << *convert.Error);
-                writer.OnStringScalar(convert.Str);
-            } else if (value.HasText()) {
-                writer.OnStringScalar(value.GetText());
-            } else {
-                YQL_ENSURE(false, "malformed pg value");
-            }
             return;
         }
 
@@ -353,15 +334,6 @@ const TTypeAnnotationNode* ParseTypeFromYdbType(const Ydb::Type& type, TExprCont
             }
 
             return ctx.MakeType<TDictExprType>(keyType, payloadType);
-        }
-
-        case Ydb::Type::kPgType: {
-            if (!type.pg_type().type_name().empty()) {
-                const auto& typeName = type.pg_type().type_name();
-                auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
-                return ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
-            }
-            return ctx.MakeType<TPgExprType>(type.pg_type().Getoid());
         }
 
         case Ydb::Type::kNullType:

@@ -1,6 +1,5 @@
 import math
 from datetime import datetime, timedelta
-from binascii import hexlify
 
 from ydb.tests.sql.lib.test_query import Query
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_ttl_sql_request
@@ -128,7 +127,7 @@ class DMLOperations():
             count_assert += 1
 
         for type_name in all_types.keys():
-            if type_name not in ("Json", "Yson", "JsonDocument", "pgjson", "pgjsonb"):
+            if type_name not in ("Json", "Yson", "JsonDocument"):
                 rows = self.query(
                     f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](count_assert), type_name)}")
                 assert len(
@@ -187,7 +186,7 @@ class DMLOperations():
         for count in range(number_of_columns + 1, 2*number_of_columns + 1):
             create_all_type = []
             for type_name in all_types.keys():
-                if type_name not in ("Json", "Yson", "JsonDocument", "pgjson", "pgjsonb") and ((type_name != "Date" and type_name != "Datetime") or count < 106):
+                if type_name not in ("Json", "Yson", "JsonDocument") and ((type_name != "Date" and type_name != "Datetime") or count < 106):
                     create_all_type.append(
                         f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](count), type_name)}")
             create_pk = []
@@ -250,9 +249,6 @@ class DMLOperations():
             if type_name == "Bool":
                 self.create_delete(
                     number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name)
-            elif type_name == "pgbool":
-                self.create_delete(
-                    number_of_columns, "pk_", "pgint8", pk_types["pgint8"], table_name)
             else:
                 self.create_delete(
                     number_of_columns, "pk_", type_name, pk_types[type_name], table_name)
@@ -262,9 +258,6 @@ class DMLOperations():
             if type_name in ("Bool", "Json", "Yson", "JsonDocument"):
                 self.create_delete(
                     number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name)
-            elif type_name in ("pgbool", "pgjson", "pgjsonb"):
-                self.create_delete(
-                    number_of_columns, "pk_", "pgint8", pk_types["pgint8"], table_name)
             else:
                 self.create_delete(
                     number_of_columns, "col_", type_name, all_types[type_name], table_name)
@@ -274,9 +267,6 @@ class DMLOperations():
             if type_name == "Bool":
                 self.create_delete(
                     number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name)
-            elif type_name in ("pgbool", "pgjson", "pgjsonb"):
-                self.create_delete(
-                    number_of_columns, "pk_", "pgint8", pk_types["pgint8"], table_name)
             else:
                 self.create_delete(
                     number_of_columns, "col_index_", type_name, index[type_name], table_name)
@@ -359,9 +349,6 @@ class DMLOperations():
         elif data_type == "Json" or data_type == "JsonDocument":
             assert str(values_from_rows).replace(
                 "'", "\"") == str(key[data_type](values)), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows}"
-        elif data_type == "pgbytea":
-            assert str(values_from_rows) == "\\x" + hexlify(key[data_type](values).encode()).decode(), \
-                f"{data_type}, expected {key[data_type](values)}, received {values_from_rows}"
         else:
             assert str(values_from_rows) == str(
                 key[data_type](values)), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows}"
@@ -369,7 +356,7 @@ class DMLOperations():
     def create_select_sql_request(self, table_name, all_types, all_types_value, pk_types, pk_types_value, index, index_value, ttl, ttl_value):
         create_all_type = []
         for type_name in all_types.keys():
-            if type_name not in ("Json", "Yson", "JsonDocument", "pgjson", "pgjsonb"):
+            if type_name not in ("Json", "Yson", "JsonDocument"):
                 create_all_type.append(
                     f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](all_types_value), type_name)}")
         sql_select = f"""

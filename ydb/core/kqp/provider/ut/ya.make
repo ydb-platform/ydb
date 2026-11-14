@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/gmock_in_unittest
+    ydb/core/kqp/host
     ydb/core/kqp/opt
     ydb/core/kqp/query_compiler
     ydb/core/kqp/ut/common

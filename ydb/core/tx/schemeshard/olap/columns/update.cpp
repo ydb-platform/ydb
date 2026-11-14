@@ -126,7 +126,7 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         return false;
     }
 
-    if (Type.GetTypeId() == NScheme::NTypeIds::Pg || !IsAllowedType(Type.GetTypeId())) {
+    if (!IsAllowedType(Type.GetTypeId())) {
         errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported for column tables");
         return false;
     }

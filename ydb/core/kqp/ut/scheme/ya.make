@@ -39,8 +39,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/arrow
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/topic
-    yql/essentials/sql/pg
-    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg_dummy
     yql/essentials/public/udf
 )
 

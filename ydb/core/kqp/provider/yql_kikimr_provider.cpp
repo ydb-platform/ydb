@@ -13,7 +13,6 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
@@ -84,10 +83,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiDataQueryBlocks::CallableName());
         DataSinkNames.insert(TKiExecDataQuery::CallableName());
         DataSinkNames.insert(TKiEffects::CallableName());
-        DataSinkNames.insert(TPgDropObject::CallableName());
         DataSinkNames.insert(TKiReturningList::CallableName());
-        DataSinkNames.insert(TKiCreateSequence::CallableName());
-        DataSinkNames.insert(TKiDropSequence::CallableName());
         DataSinkNames.insert(TKiAlterSequence::CallableName());
         DataSinkNames.insert(TKiAnalyzeTable::CallableName());
         DataSinkNames.insert(TKiCreateBackupCollection::CallableName());
@@ -333,10 +329,6 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
         auto& column = pair.second;
         const TTypeAnnotationNode *type;
         switch (column.TypeInfo.GetTypeId()) {
-        case NKikimr::NScheme::NTypeIds::Pg: {
-            type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()));
-            break;
-        }
         case NKikimr::NScheme::NTypeIds::Decimal: {
             const NKikimr::NScheme::TDecimalType& decimal = column.TypeInfo.GetDecimalType();
             type = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, ToString(decimal.GetPrecision()), ToString(decimal.GetScale()));
@@ -549,10 +541,6 @@ bool TKikimrKey::Extract(const TExprNode& key) {
     } else if (tagName == "sequence") {
         KeyType = Type::Sequence;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
-    } else if (tagName == "pgObject") {
-        KeyType = Type::PGObject;
-        Target = key.Child(0)->Child(1)->Child(0)->Content();
-        ObjectType = key.Child(0)->Child(2)->Child(0)->Content();
     } else if (tagName == "backupCollection" || tagName == "backup" || tagName == "restore") {
         KeyType = Type::BackupCollection;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
@@ -687,29 +675,6 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TKiOperationList& o
     return protoOps;
 }
 
-void FillLiteralProto(const NNodes::TCoPgConst& pgLiteral, Ydb::TypedValue& proto) {
-    auto type = pgLiteral.Ref().GetTypeAnn();
-    auto actualPgType = type->Cast<TPgExprType>();
-    auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
-
-    auto& protoType = *proto.mutable_type();
-    auto& protoValue = *proto.mutable_value();
-
-    protoType.mutable_pg_type()->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
-    protoType.mutable_pg_type()->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
-
-    TString content = TString(pgLiteral.Value().Value());
-    auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
-
-    protoValue.set_bytes_value(parseResult.Str.data(), parseResult.Str.size());
-}
-
-bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
-    return maybeLiteral.Ptr()->IsCallable() &&
-        maybeLiteral.Ptr()->Content() == "PgCast" && maybeLiteral.Ptr()->ChildrenSize() >= 1 &&
-        maybeLiteral.Ptr()->Child(0)->IsCallable() && maybeLiteral.Ptr()->Child(0)->Content() == "Null";
-}
-
 bool IsYqlNullExprNode(const NNodes::TExprBase& literal) {
     return literal.Maybe<TCoNull>().IsValid() || literal.Maybe<TCoNothing>().IsValid();
 }
@@ -734,38 +699,6 @@ std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TT
 
     if (auto literal = maybeLiteral.Maybe<TCoDataCtor>()) {
         FillLiteralProto(literal.Cast(), proto);
-        return std::nullopt;
-    }
-
-    const bool isPgNull = IsPgNullExprNode(maybeLiteral);
-    if (maybeLiteral.Maybe<TCoPgConst>() || isPgNull) {
-        YQL_ENSURE(valueType);
-        auto actualPgType = valueType->Cast<TPgExprType>();
-        YQL_ENSURE(actualPgType);
-
-        auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
-        if (!typeDesc) {
-            return TStringBuilder() << "Failed to parse default expr typename " << actualPgType->GetName();
-        }
-
-        if (isPgNull) {
-            proto.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
-        } else {
-            YQL_ENSURE(maybeLiteral.Maybe<TCoPgConst>());
-            auto pgConst = maybeLiteral.Cast<TCoPgConst>();
-            TString content = TString(pgConst.Value().Value());
-            auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
-            if (parseResult.Error) {
-                return TStringBuilder() << "Failed to parse default expr for typename " << actualPgType->GetName()
-                    << ", error reason: " << *parseResult.Error;
-            }
-
-            proto.mutable_value()->set_bytes_value(parseResult.Str);
-        }
-
-        auto* pg = proto.mutable_type()->mutable_pg_type();
-        pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
         return std::nullopt;
     }
 
@@ -1113,7 +1046,6 @@ void Serialize(const TTranslationSettings& settings, NYql::NProto::TTranslationS
     serializedSettings.SetPathPrefix(settings.PathPrefix);
     serializedSettings.SetSyntaxVersion(settings.SyntaxVersion);
     serializedSettings.SetAnsiLexer(settings.AnsiLexer);
-    serializedSettings.SetPgParser(settings.PgParser);
 
     auto* pragmas = serializedSettings.MutablePragmas();
     pragmas->Clear();

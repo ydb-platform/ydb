@@ -14,7 +14,6 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -3637,8 +3636,6 @@ bool IsStreamingAggregationOutputTableKeyType(const TTypeAnnotationNode& type) {
 
 bool IsStreamingAggregationOutputTableStateType(const TTypeAnnotationNode& type) {
     switch (type.GetKind()) {
-        case ETypeAnnotationKind::Pg:
-            return NKikimr::NPg::TypeDescFromPgTypeId(type.Cast<TPgExprType>()->GetId()) != nullptr;
         case ETypeAnnotationKind::Optional:
             return IsStreamingAggregationOutputTableStateType(*type.Cast<TOptionalExprType>()->GetItemType());
         case ETypeAnnotationKind::List:

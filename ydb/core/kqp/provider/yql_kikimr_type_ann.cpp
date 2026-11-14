@@ -1,8 +1,8 @@
 #include "generated_column.h"
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_settings.h"
-#include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/kqp/common/pg_policy/pg_policy.h>
 #include <ydb/core/base/fulltext.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/base/kmeans_clusters.h>
@@ -21,7 +21,6 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
@@ -213,7 +212,7 @@ IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& la
     if (!UpdateLambdaAllArgumentsTypes(probe, {rowType}, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
-    if (!InstantAnnotateTypes(probe, ctx, /* wholeProgram */ false, typeCtx) || !probe->GetTypeAnn()) {
+    if (!NKikimr::NKqp::InstantAnnotateKqpTypes(probe, ctx, typeCtx) || !probe->GetTypeAnn()) {
         ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
             << "Failed to infer the type of generated column " << columnName));
         return IGraphTransformer::TStatus::Error;
@@ -404,10 +403,6 @@ private:
             {
                 return TStatus::Ok;
             }
-            case TKikimrKey::Type::PGObject:
-            {
-                return TStatus::Ok;
-            }
             case TKikimrKey::Type::Replication:
             {
                 return TStatus::Ok;
@@ -478,10 +473,7 @@ namespace {
     }
 
     NKikimr::NScheme::TTypeInfo GetColumnTypeInfo(const TTypeAnnotationNode* type) {
-        if (type->GetKind() == ETypeAnnotationKind::Pg) {
-            auto pgTypeId = type->Cast<TPgExprType>()->GetId();
-            return NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId));
-        } else if (type->Cast<TDataExprType>()->GetSlot() == EDataSlot::Decimal) {
+        if (type->Cast<TDataExprType>()->GetSlot() == EDataSlot::Decimal) {
             if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(type)) {
                 ui32 precision = FromString<ui32>(dataExprParamsType->GetParamOne());
                 ui32 scale = FromString<ui32>(dataExprParamsType->GetParamTwo());
@@ -496,10 +488,6 @@ namespace {
     const TTypeAnnotationNode* GetColumnTypeFromMetadata(const TKikimrColumnMetadata& column, TExprContext& ctx) {
         const TTypeAnnotationNode* type;
         switch (column.TypeInfo.GetTypeId()) {
-            case NKikimr::NScheme::NTypeIds::Pg: {
-                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()));
-                break;
-            }
             case NKikimr::NScheme::NTypeIds::Decimal: {
                 const NKikimr::NScheme::TDecimalType& decimal = column.TypeInfo.GetDecimalType();
                 type = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, ToString(decimal.GetPrecision()), ToString(decimal.GetScale()));
@@ -525,7 +513,7 @@ namespace {
             return std::nullopt;
         }
 
-        if (!IsYqlNullExprNode(defaultExpr) && (defaultType->HasNull() || IsPgNullExprNode(defaultExpr))) {
+        if (!IsYqlNullExprNode(defaultExpr) && defaultType->HasNull()) {
             if (columnNotNull) {
                 if (table) {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
@@ -565,16 +553,8 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        bool skipAnnotationValidation = false;
-        if (defaultTypeUnwrapped->GetKind() == ETypeAnnotationKind::Pg) {
-            auto defaultPgType = defaultTypeUnwrapped->Cast<TPgExprType>();
-            if (defaultPgType->GetName() == "unknown") {
-                skipAnnotationValidation = true;
-            }
-        }
-
         auto defaultExprPtr = defaultExpr.Ptr();
-        if (!skipAnnotationValidation && !IsSameAnnotation(*defaultTypeUnwrapped, *type)) {
+        if (!IsSameAnnotation(*defaultTypeUnwrapped, *type)) {
             auto status = TryConvertTo(defaultExprPtr, *columnType, ctx, typesCtx);
             if (status == IGraphTransformer::TStatus::Error) {
                 ctx.AddError(TIssue(ctx.GetPosition(pos), typeMismatchMessage()));
@@ -667,7 +647,7 @@ namespace {
             }
         }
 
-        if (columnType.GetKind() != ETypeAnnotationKind::Pg && !columnType.IsOptionalOrNull() && exprType->IsOptionalOrNull()) {
+        if (!columnType.IsOptionalOrNull() && exprType->IsOptionalOrNull()) {
             ctx.AddError(TIssue(ctx.GetPosition(lambda.Pos()),
                 TStringBuilder() << "Generated column " << columnName << " is declared NOT NULL, but its expression can evaluate to NULL"
                                  << " (type " << *exprType << "). Make the expression non-nullable, for example with COALESCE,"
@@ -711,7 +691,7 @@ namespace {
 
             const auto* columnType = columnTuple.Item(1).Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             const auto* columnMeta = meta.Columns.FindPtr(name);
-            if (columnMeta && columnMeta->NotNull && columnType->GetKind() != ETypeAnnotationKind::Pg) {
+            if (columnMeta && columnMeta->NotNull) {
                 columnType = &RemoveOptionality(*columnType);
             }
 
@@ -792,7 +772,7 @@ namespace {
             }
 
             // Type the expression body
-            if (!InstantAnnotateTypes(lambda, ctx, /* wholeProgram */ false, typeCtx)) {
+            if (!NKikimr::NKqp::InstantAnnotateKqpTypes(lambda, ctx, typeCtx)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -1038,18 +1018,6 @@ private:
             }
         }
 
-        if (NPgTypeAnn::IsPgInsert(node, op)) {
-            TExprNode::TPtr newInput;
-            auto ok = NCommon::RenamePgSelectColumns(node.Input().Cast<TCoPgSelect>(), newInput, TColumnOrder(table->Metadata->ColumnOrder), ctx, Types);
-            if (!ok) {
-                return TStatus::Error;
-            }
-            if (newInput != node.Input().Ptr()) {
-                node.Ptr()->ChildRef(TKiWriteTable::idx_Input) = newInput;
-                return TStatus::Repeat;
-            }
-        }
-
         if (!rowType) {
             ctx.AddError(TIssue(pos, TStringBuilder()
                 << "Expected list or stream of structs as input, but got: " << *inputType));
@@ -1136,10 +1104,6 @@ private:
                     }
 
                     const auto* itemType = rowType->FindItemType(name);
-                    if (itemType && itemType->GetKind() == ETypeAnnotationKind::Pg) {
-                        //no type-level notnull check for pg types.
-                        continue;
-                    }
 
                     if (itemType && itemType->HasOptionalOrNull()) {
                         if (meta.SetNotNullInProgress) {
@@ -1156,26 +1120,19 @@ private:
                 }
             }
         } else if (op == TYdbOperation::UpdateOn) {
-            if (TCoPgSelect::Match(node.Input().Ptr().Get())) {
-                if (!NPgTypeAnn::ValidatePgUpdateKeys(node, table, ctx)) {
-                    return TStatus::Error;
-                }
-            }
             for (const auto& item : rowType->GetItems()) {
                 auto column = table->Metadata->Columns.FindPtr(TString(item->GetName()));
                 YQL_ENSURE(column);
-                if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Pg) {
-                    if ((column->NotNull || column->SetNotNullInProgress) && item->HasOptionalOrNull()) {
-                        if (column->SetNotNullInProgress) {
-                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                                << "Can't set NULL or optional value to column: " << column->Name
-                                << ". `SET NOT NULL` operation is currently in progress for this column"));
-                        } else {
-                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                                << "Can't set NULL or optional value to not null column: " << column->Name));
-                        }
-                        return TStatus::Error;
+                if ((column->NotNull || column->SetNotNullInProgress) && item->HasOptionalOrNull()) {
+                    if (column->SetNotNullInProgress) {
+                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                            << "Can't set NULL or optional value to column: " << column->Name
+                            << ". `SET NOT NULL` operation is currently in progress for this column"));
+                    } else {
+                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                            << "Can't set NULL or optional value to not null column: " << column->Name));
                     }
+                    return TStatus::Error;
                 }
             }
         }
@@ -1368,10 +1325,6 @@ private:
             }
 
             if ((column->NotNull || column->SetNotNullInProgress) && item->HasOptionalOrNull()) {
-                if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Pg) {
-                    //no type-level notnull check for pg types.
-                    continue;
-                }
                 if (column->SetNotNullInProgress) {
                     ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                         << "Can't set NULL or optional value to column: " << column->Name
@@ -1556,19 +1509,13 @@ private:
             YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
 
             auto actualType = &RemoveOptionality(*columnType->Cast<TTypeExprType>()->GetType());
-            if (actualType->GetKind() != ETypeAnnotationKind::Data
-                && actualType->GetKind() != ETypeAnnotationKind::Pg
-            ) {
-                columnTypeError(typeNode.Pos(), columnName, "Only YQL data types and PG types are currently supported");
+            if (actualType->GetKind() != ETypeAnnotationKind::Data) {
+                columnTypeError(typeNode.Pos(), columnName, "Only YQL data types are currently supported");
                 return TStatus::Error;
             }
 
-            if (actualType->GetKind() == ETypeAnnotationKind::Data) {
-                if (!ValidateColumnDataType(actualType->Cast<TDataExprType>(), typeNode, columnName, ctx)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-            } else {
-                //TODO: Validate pg modifiers
+            if (!ValidateColumnDataType(actualType->Cast<TDataExprType>(), typeNode, columnName, ctx)) {
+                return IGraphTransformer::TStatus::Error;
             }
 
             TKikimrColumnMetadata columnMeta;
@@ -2108,10 +2055,6 @@ private:
                         if (columnName == key) {
                             auto typeNode = columnTuple.Item(1);
                             auto keyType = typeNode.Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                            YQL_ENSURE(
-                                keyType->GetKind() != ETypeAnnotationKind::Pg,
-                                "pg types are not supported for partition at keys"
-                            );
                             if (keyType->HasOptional()) {
                                 keyType = keyType->Cast<TOptionalExprType>()->GetItemType();
                             }
@@ -2305,19 +2248,14 @@ private:
                     YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
                     auto actualType = &RemoveOptionality(*columnType->Cast<TTypeExprType>()->GetType());
 
-                    if (actualType->GetKind() != ETypeAnnotationKind::Data
-                        && actualType->GetKind() != ETypeAnnotationKind::Pg)
+                    if (actualType->GetKind() != ETypeAnnotationKind::Data)
                     {
-                        columnTypeError(typeNode.Pos(), name, "Only YQL data types and PG types are currently supported");
+                        columnTypeError(typeNode.Pos(), name, "Only YQL data types are currently supported");
                         return TStatus::Error;
                     }
 
-                    if (actualType->GetKind() == ETypeAnnotationKind::Data) {
-                        if (!ValidateColumnDataType(actualType->Cast<TDataExprType>(), typeNode, name, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-                    } else {
-                        // TODO: Validate pg modifiers
+                    if (!ValidateColumnDataType(actualType->Cast<TDataExprType>(), typeNode, name, ctx)) {
+                        return IGraphTransformer::TStatus::Error;
                     }
 
                     TKikimrColumnMetadata columnMeta;
@@ -2779,46 +2717,6 @@ private:
                 return TStatus::Error;
             }
         }
-        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
-        return TStatus::Ok;
-    }
-
-    virtual TStatus HandleCreateSequence(TKiCreateSequence node, TExprContext& ctx) override {
-        if(!CheckSequenceSettings(node.SequenceSettings(), ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!node.Settings().Empty()) {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "Unsupported sequence settings"));
-            return TStatus::Error;
-        }
-
-        if (TString(node.Temporary()) == "true") {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "Temporary sequences are currently not supported"));
-            return TStatus::Error;
-        }
-
-        TString valueType = TString(node.ValueType());
-        if (valueType != "int8" && valueType != "int4" && valueType != "int2") {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "Unsupported value type for sequence: " << valueType));
-            return TStatus::Error;
-        }
-
-        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
-        return TStatus::Ok;
-    }
-
-    virtual TStatus HandleDropSequence(TKiDropSequence node, TExprContext& ctx) override {
-        for (const auto& setting : node.Settings()) {
-            auto name = setting.Name().Value();
-            ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                TStringBuilder() << "Unknown drop sequence setting: " << name));
-            return TStatus::Error;
-        }
-
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
@@ -3364,11 +3262,6 @@ private:
             return TStatus::Error;
         }
 
-        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
-        return TStatus::Ok;
-    }
-
-    virtual TStatus HandlePgDropObject(TPgDropObject node, TExprContext& /*ctx*/) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

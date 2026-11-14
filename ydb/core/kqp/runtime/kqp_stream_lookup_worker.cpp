@@ -1367,7 +1367,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
                 keyColumn.GetName(),
                 keyColumn.GetId(),
                 typeInfo,
-                keyColumn.GetTypeInfo().GetPgTypeMod(),
+                TString{},
                 keyOrder++
             }
         );
@@ -1381,7 +1381,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
             inputColumn.GetName(),
             inputColumn.GetId(),
             typeInfo,
-            inputColumn.GetTypeInfo().GetPgTypeMod(),
+            TString{},
             itKey == std::end(preparedSettings.KeyColumns) ? -1 : itKey->second.KeyOrder
         });
 
@@ -1407,7 +1407,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
             column.GetName(),
             column.GetId(),
             typeInfo,
-            column.GetTypeInfo().GetPgTypeMod()
+            TString{}
         });
     }
 

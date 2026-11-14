@@ -35,8 +35,6 @@
 
 Команда `admin database restore` восстанавливает базу данных из резервной копии на файловой системы, ранее выгруженную туда командой `admin database dump`, или подготовленную вручную в соответствии с правилами, описанными в статье [{#T}](../file-structure.md):
 
-{% include [limitation](./limitation-restore-column-tables.md) %}
-
 {% include [limitation](./limitation-restore-secrets.md) %}
 
 ```bash
@@ -67,8 +65,6 @@
 ## Объекты схемы данных {#schema-objects}
 
 Команда `tools restore` создает в базе данных объекты схемы данных и загружает в них данные из файловой системы, ранее выгруженные туда командой `tools dump`, или подготовленные вручную в соответствии с правилами, описанными в статье [Файловая структура](../file-structure.md):
-
-{% include [limitation](./limitation-restore-column-tables.md) %}
 
 {% include [limitation](./limitation-restore-secrets.md) %}
 

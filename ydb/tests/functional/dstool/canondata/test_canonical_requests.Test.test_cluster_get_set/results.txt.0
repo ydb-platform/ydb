@@ -12,7 +12,7 @@ Exit Status: 0
     "GroupReservePartPPM": 0,
     "MaxScrubbedDisksAtOnce": 4294967295,
     "EnableGroupLayoutSanitizer": true,
-    "PDiskSpaceColorBorder": "GREEN",
+    "PDiskSpaceColorBorder": "CYAN",
     "DatabaseSpaceBlockColor": "YELLOW",
     "DatabaseSpaceUnblockColor": "LIGHT_YELLOW",
     "BridgeSyncTotalRateBytesPerSecond": 0,

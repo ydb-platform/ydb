@@ -1,6 +1,7 @@
 #include "kqp_executer_stats.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/federated_query/streaming_helper.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
 namespace NKikimr::NKqp {

@@ -1,7 +1,6 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_planner.h"
-#include "kqp_streaming_helper.h"
 #include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
@@ -16,6 +15,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
+#include <ydb/core/kqp/federated_query/streaming_helper.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>

@@ -1,4 +1,4 @@
-#include "kqp_streaming_helper.h"
+#include "streaming_helper.h"
 
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
@@ -6,12 +6,13 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-class TStreamingQueryCounters : public IStreamingQueryCounters {
+class TStreamingQueryCounters: public IStreamingQueryCounters {
 public:
     TStreamingQueryCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& path)
         : Path(path)
         , Counters(counters)
-    {}
+    {
+    }
 
     ~TStreamingQueryCounters() {
         if (!HostGroup) {
@@ -58,13 +59,12 @@ private:
     const ::NMonitoring::TDynamicCounterPtr Counters;
 };
 
-} // namespace
+}   // namespace
 
 // Collect PQ sources only from the transactions of the current executer.
 // Topics whose partition list was already fixed at compile time by a
 // __ydb_partition_id predicate are skipped — their ReadRanges are authoritative.
-TVector<TPqTopicResolverSource> CollectPqSources(
-    const TVector<IKqpGateway::TPhysicalTxData>& transactions, const TString& database) {
+TVector<TPqTopicResolverSource> CollectPqSources(const TVector<IKqpGateway::TPhysicalTxData>& transactions, const TString& database) {
     TVector<TPqTopicResolverSource> result;
     for (const auto& tx : transactions) {
         for (const auto& stage : tx.Body->GetStages()) {
@@ -110,4 +110,4 @@ TIntrusivePtr<IStreamingQueryCounters> MakeStreamingQueryCounters(const ::NMonit
     return MakeIntrusive<TStreamingQueryCounters>(counters, path);
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

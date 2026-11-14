@@ -46,10 +46,10 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 // BlockStoreVolume mock for testing schemeshard
-class TFakeBlockStoreVolume : public TActor<TFakeBlockStoreVolume>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TFakeBlockStoreVolume : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TFakeBlockStoreVolume>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     TFakeBlockStoreVolume(const TActorId& tablet, TTabletStorageInfo* info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
     {}
 
@@ -96,10 +96,10 @@ private:
 };
 
 // BlockStorePartitionDirect mock for testing schemeshard
-class TFakeBlockStorePartitionDirect : public TActor<TFakeBlockStorePartitionDirect>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TFakeBlockStorePartitionDirect : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TFakeBlockStorePartitionDirect>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     TFakeBlockStorePartitionDirect(const TActorId& tablet, TTabletStorageInfo* info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
     {}
 
@@ -130,10 +130,10 @@ public:
     }
 };
 
-class TFakeFileStore : public TActor<TFakeFileStore>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TFakeFileStore : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TFakeFileStore>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     TFakeFileStore(const TActorId& tablet, TTabletStorageInfo* info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
     {}
 

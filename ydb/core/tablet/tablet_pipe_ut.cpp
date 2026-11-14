@@ -56,10 +56,10 @@ namespace NKikimr {
         struct TEvReject : public TEventLocal<TEvReject, EvReject> {};
     };
 
-    class TProducerTablet : public TActor<TProducerTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    class TProducerTablet : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TProducerTablet>>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         TProducerTablet(const TActorId &tablet, TTabletStorageInfo *info)
-            : TActor(&TThis::StateInit)
+            : TTabletActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , HasData(false)
             , IsOpened(false)
@@ -206,10 +206,10 @@ namespace NKikimr {
         };
     };
 
-    class TConsumerTablet : public TActor<TConsumerTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    class TConsumerTablet : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TConsumerTablet>>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         TConsumerTablet(const TActorId &tablet, TTabletStorageInfo *info)
-            : TActor(&TThis::StateInit)
+            : TTabletActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , PipeConnectAcceptor(NTabletPipe::CreateConnectAcceptor(TabletID()))
             , RejectAll(false)
@@ -332,10 +332,10 @@ namespace NKikimr {
         ui32 ServerPipesClosed;
     };
 
-    class TConsumerTabletWithoutAcceptor : public TActor<TConsumerTabletWithoutAcceptor>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    class TConsumerTabletWithoutAcceptor : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TConsumerTabletWithoutAcceptor>>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         TConsumerTabletWithoutAcceptor(const TActorId &tablet, TTabletStorageInfo *info)
-            : TActor(&TThis::StateInit)
+            : TTabletActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
         {
         }
@@ -1055,10 +1055,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         UNIT_ASSERT_C(handle->GetRecipientRewrite() == edge1, "Event rewrite recipient " << handle->GetRecipientRewrite() << " != " << edge1);
     }
 
-    class TEchoTablet : public TActor<TEchoTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    class TEchoTablet : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TEchoTablet>>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         TEchoTablet(const TActorId &tablet, TTabletStorageInfo *info)
-            : TActor(&TThis::StateInit)
+            : TTabletActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
         {
         }
@@ -1154,12 +1154,12 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
     }
 
     class TTabletWithVersionInfo
-        : public TActor<TTabletWithVersionInfo>
+        : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TTabletWithVersionInfo>>
         , public NTabletFlatExecutor::TTabletExecutedFlat
     {
     public:
         TTabletWithVersionInfo(const TActorId &tablet, TTabletStorageInfo *info)
-            : TActor(&TThis::StateInit)
+            : TTabletActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
         {}
 
@@ -1596,12 +1596,12 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
 
     class TTabletStuckOnStop
-        : public TActor<TTabletStuckOnStop>
+        : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TTabletStuckOnStop>>
         , public NTabletFlatExecutor::TTabletExecutedFlat
     {
     public:
         TTabletStuckOnStop(const TActorId& tablet, TTabletStorageInfo* info)
-            : TActor(&TThis::StateInit)
+            : TTabletActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
         {}
 

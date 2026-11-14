@@ -3958,7 +3958,7 @@ std::optional<TActorId> THive::GetPipeToTenantHive(const TNodeInfo* nodeInfo) {
 }
 
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
-    : TActor(&TThis::StateInit)
+    : TTabletActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , RootHiveId()
     , HiveId(Max<ui64>())

@@ -14,9 +14,9 @@ TOperationServiceSettings::TOperationServiceSettings(TString endpoint, TStringBu
     UserAgentPrefix = BuildUserAgentPrefix(userAgentHint);
 }
 
-class TOperationService : public NActors::TActor<TOperationService>, public NActors::IActorExceptionHandler, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::iam::v1::OperationService> {
+class TOperationService : public NActors::TActorWithExceptionHandler<NActors::TActor<TOperationService>>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::iam::v1::OperationService> {
     using TThis = TOperationService;
-    using TBase = NActors::TActor<TOperationService>;
+    using TBase = NActors::TActorWithExceptionHandler<NActors::TActor<TOperationService>>;
 
     struct TGetOperationRequest : TGrpcRequest {
         static constexpr auto Request = &yandex::cloud::priv::iam::v1::OperationService::Stub::AsyncGet;

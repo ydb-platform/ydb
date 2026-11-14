@@ -103,8 +103,8 @@ The basic turn is:
     serialization.
 
 11. **Exceptions must end at a deliberate boundary.** Synchronous exceptions
-    escape Receive unless an IActorExceptionHandler accepts them. An uncaught
-    top-level coroutine exception takes the same handler path and otherwise
+    escape Receive unless a handler on TActorWithExceptionHandler accepts them.
+    An uncaught top-level coroutine exception takes the same handler path and otherwise
     terminates. Catch expected failures inside the protocol.
 
 12. **Cross-node messages are not durable or exactly-once.** A session failure

@@ -80,7 +80,7 @@ struct TLeaderElectionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChanged;
 };
 
-class TLocalLeaderElection: public TActorBootstrapped<TLocalLeaderElection>, public IActorExceptionHandler {
+class TLocalLeaderElection: public NActors::TActorWithExceptionHandler<TActorBootstrapped<TLocalLeaderElection>> {
     enum class EState {
         Init,
         WaitNodeCreated,

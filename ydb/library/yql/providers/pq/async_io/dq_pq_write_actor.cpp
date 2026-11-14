@@ -95,12 +95,12 @@ struct TEvPrivate {
     using TEvDeferredPublicationCanceled = TEvApiResult<NYdb::NTopic::TCancelPublicationResult, EvDeferredPublicationCanceled>;
 };
 
-class TDqPqWriteActor final: public TActor<TDqPqWriteActor>, public IActorExceptionHandler, public IDqComputeActorAsyncOutput,
+class TDqPqWriteActor final: public NActors::TActorWithExceptionHandler<TActor<TDqPqWriteActor>>, public IDqComputeActorAsyncOutput,
                              TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     static constexpr ui32 STATE_VERSION = 1;
     static constexpr TDuration SLOW_CHECKPOINT_DURATION = TDuration::Minutes(1);
 
-    using TBase = TActor<TDqPqWriteActor>;
+    using TBase = NActors::TActorWithExceptionHandler<TActor<TDqPqWriteActor>>;
 
     struct TMetrics {
         TMetrics(const TTxId& txId, const ui64 taskId, NMonitoring::TDynamicCounterPtr counters, const bool enableStreamingQueriesCounters,
@@ -733,7 +733,7 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory, IDqComputeActorAsyncOutput::ICallbacks* const callbacks,
         ::NMonitoring::TDynamicCounterPtr counters, const i64 freeSpace, const i64 currentExecutionGeneration, IPqStaticGateway::TPtr pqGateway,
         const bool enableStreamingQueriesCounters, const bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag, const bool hasCheckpoints)
-        : TActor<TDqPqWriteActor>(&TDqPqWriteActor::StateFunc)
+        : TActorWithExceptionHandler(&TDqPqWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TaskId(taskId)
         , TxId(std::move(txId))
@@ -785,7 +785,7 @@ private:
         TBase::PassAway();
     }
 
-    // IActorExceptionHandler
+    // Actor exception handler
 
     bool OnUnhandledException(const std::exception& e) final {
         Fail(NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected exception: " << e.what());

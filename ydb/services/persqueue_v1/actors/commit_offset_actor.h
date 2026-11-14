@@ -16,10 +16,9 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimr::NGRpcService;
 
-class TCommitOffsetActor : public TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>
-                         , public NActors::IActorExceptionHandler
+class TCommitOffsetActor : public NActors::TActorWithExceptionHandler<TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>>
                          , public NPQ::TLogPrefix {
-    using TBase = TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>;
+    using TBase = NActors::TActorWithExceptionHandler<TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>>;
 
     using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
     using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;

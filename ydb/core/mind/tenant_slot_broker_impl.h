@@ -179,9 +179,9 @@ using NTabletFlatExecutor::TTransactionContext;
 using ::NMonitoring::TDynamicCounterPtr;
 using ::NMonitoring::TDynamicCounters;
 
-class TTenantSlotBroker : public TActor<TTenantSlotBroker>, public TTabletExecutedFlat {
+class TTenantSlotBroker : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TTenantSlotBroker>>, public TTabletExecutedFlat {
 private:
-    using TActorBase = TActor<TTenantSlotBroker>;
+    using TActorBase = NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TTenantSlotBroker>>;
 
     static const ui32 ConfigKey_Config;
 
@@ -1131,7 +1131,7 @@ private:
 
 public:
     TTenantSlotBroker(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , PendingAssignFreeSlots(false)
         , ConfigSubscriptionId(0)

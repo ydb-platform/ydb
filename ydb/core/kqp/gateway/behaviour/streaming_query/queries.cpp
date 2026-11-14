@@ -327,8 +327,8 @@ private:
 };
 
 template <typename TDerived>
-class TActionActorBase: public TActorBootstrapped<TDerived>, public IActorExceptionHandler {
-    using TBase = TActorBootstrapped<TDerived>;
+class TActionActorBase: public NActors::TActorWithExceptionHandler<TActorBootstrapped<TDerived>> {
+    using TBase = NActors::TActorWithExceptionHandler<TActorBootstrapped<TDerived>>;
 
 public:
     TActionActorBase(const TString& operationName, const TString& queryPath)
@@ -654,7 +654,7 @@ private:
 // 4. Wait for acceptance and completion/publication.
 // 5. Check the published path and owner; start a local tracker if the operation is still current, then reply.
 // Reconnect only before submission; fail on disconnect after submission or forwarding.
-class TStartStreamingQuerySchemeActor final: public TActorBootstrapped<TStartStreamingQuerySchemeActor>, public IActorExceptionHandler {
+class TStartStreamingQuerySchemeActor final: public NActors::TActorWithExceptionHandler<TActorBootstrapped<TStartStreamingQuerySchemeActor>> {
     static constexpr ui64 MAX_REDIRECTS = 3;
 
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;

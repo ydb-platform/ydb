@@ -84,12 +84,12 @@ namespace NKikimr::NMediatorTimeCastTest {
         }
 
         class TTargetTablet
-            : public TActor<TTargetTablet>
+            : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TTargetTablet>>
             , public NTabletFlatExecutor::TTabletExecutedFlat
         {
         public:
             TTargetTablet(const TActorId& tablet, TTabletStorageInfo* info)
-                : TActor(&TThis::StateInit)
+                : TTabletActor(&TThis::StateInit)
                 , TTabletExecutedFlat(info, tablet, nullptr)
             {}
 

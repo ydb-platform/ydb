@@ -68,7 +68,7 @@ using namespace NKikimr::NFulltext;
  *     each of the resulting segments doesn't exceed MaxSegmentDocuments and inserted into PostingTable.
  */
 
-class TBuildFulltextDictScan: public TActor<TBuildFulltextDictScan>, public IActorExceptionHandler, public NTable::IScan {
+class TBuildFulltextDictScan: public NActors::TActorWithExceptionHandler<TActor<TBuildFulltextDictScan>>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -139,7 +139,7 @@ public:
     TBuildFulltextDictScan(ui64 tabletId, const TUserTable& table,
         const NKikimrTxDataShard::TEvBuildFulltextDictRequest& request,
         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvBuildFulltextDictResponse>&& response)
-        : TActor(&TThis::StateWork)
+        : TActorWithExceptionHandler(&TThis::StateWork)
         , TabletId(tabletId)
         , BuildId(request.GetId())
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())

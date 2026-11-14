@@ -2417,14 +2417,14 @@ public:
  *   - TEvDeliveryProblem (pipe broken): schedule shard-level retry.
  *   - TEvReadResult with error status: per-status retry or abort.
  *   - Retries use exponential backoff with a per-shard retry counter.
- *   - Unhandled exceptions are caught by IActorExceptionHandler and reported
+ *   - Unhandled exceptions are caught by TActorWithExceptionHandler and reported
  *     as INTERNAL_ERROR to the compute actor.
  */
 template <typename TDocId>
-class TFullTextSource : public TActorBootstrapped<TFullTextSource<TDocId>>, public NYql::NDq::IDqComputeActorAsyncInput, public NActors::IActorExceptionHandler {
+class TFullTextSource : public NActors::TActorWithExceptionHandler<TActorBootstrapped<TFullTextSource<TDocId>>>, public NYql::NDq::IDqComputeActorAsyncInput {
 private:
     using TThis = TFullTextSource<TDocId>;
-    using TBase = TActorBootstrapped<TThis>;
+    using TBase = NActors::TActorWithExceptionHandler<TActorBootstrapped<TThis>>;
     using TDocInfo = TDocumentInfo<TDocId>;
     using TDocInfoPtr = typename TDocInfo::TPtr;
     using TWordState = TWordReadState<TDocId>;

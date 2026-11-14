@@ -161,7 +161,7 @@ void TPQTabletMock::TrySendResponses(const TActorContext& ctx, TCommandReplies& 
 }
 
 TPQTabletMock::TPQTabletMock(const TActorId& tablet, TTabletStorageInfo* info) :
-    TActor(&TThis::StateBoot),
+    TTabletActor(&TThis::StateBoot),
     TTabletExecutedFlat(info, tablet, nullptr)
 {
 }

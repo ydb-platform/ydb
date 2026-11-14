@@ -16,7 +16,7 @@ namespace NGraph {
 
 class TTxMonitoring;
 
-class TGraphShard : public TActor<TGraphShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TGraphShard : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TGraphShard>>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     TGraphShard(TTabletStorageInfo* info, const TActorId& tablet);
     TString GetLogPrefix() const;

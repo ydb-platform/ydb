@@ -81,10 +81,10 @@ struct TDbMonRowsModel {
     }
 };
 
-class TDbMonTablet : public TActor<TDbMonTablet>, public TTabletExecutedFlat {
+class TDbMonTablet : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TDbMonTablet>>, public TTabletExecutedFlat {
 public:
     TDbMonTablet(const TActorId& sender, const TActorId& tablet, TTabletStorageInfo* info)
-        : TActor(&TThis::StateInit)
+        : TTabletActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
         , Sender(sender)
     {}

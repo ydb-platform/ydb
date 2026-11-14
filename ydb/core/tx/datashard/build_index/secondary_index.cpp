@@ -107,9 +107,9 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
 }
 
 template <NKikimrServices::TActivity::EType Activity>
-class TBuildScanUpload: public TActor<TBuildScanUpload<Activity>>, public IActorExceptionHandler, public NTable::IScan {
+class TBuildScanUpload: public NActors::TActorWithExceptionHandler<TActor<TBuildScanUpload<Activity>>>, public NTable::IScan {
     using TThis = TBuildScanUpload<Activity>;
-    using TBase = TActor<TThis>;
+    using TBase = NActors::TActorWithExceptionHandler<TActor<TThis>>;
 
 protected:
     const TIndexBuildScanSettings ScanSettings;

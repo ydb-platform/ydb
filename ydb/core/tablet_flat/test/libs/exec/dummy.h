@@ -16,7 +16,7 @@ namespace NFake {
         virtual NFake::TEvExecute* OnFinished() = 0;
     };
 
-    class TDummy : public TActor<TDummy>, public TExecuted {
+    class TDummy : public NKikimr::NTabletFlatExecutor::TTabletActor<TActor<TDummy>>, public TExecuted {
         enum EState {
             Boot    = 1,
             Work    = 2,
@@ -37,7 +37,7 @@ namespace NFake {
 
         TDummy(const TActorId &tablet, TInfo *info, const TActorId& owner,
                 ui32 flags = 0 /* ORed EFlg enum */)
-            : TActor(&TDummy::Inbox, NKikimrServices::TActivity::FAKE_ENV_A)
+            : TTabletActor(&TDummy::Inbox, NKikimrServices::TActivity::FAKE_ENV_A)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , Owner(owner)
             , Flags(flags)

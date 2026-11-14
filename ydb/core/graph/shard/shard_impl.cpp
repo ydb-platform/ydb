@@ -11,7 +11,7 @@ namespace NKikimr {
 namespace NGraph {
 
 TGraphShard::TGraphShard(TTabletStorageInfo* info, const TActorId& tablet)
-    : TActor(&TThis::StateWork)
+    : TTabletActor(&TThis::StateWork)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {
 

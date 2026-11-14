@@ -63,7 +63,7 @@ static TTransactionProposal MakeTransactionProposal(TEvTxProxy::TEvProposeTransa
 }
 
 TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
-    : TActor(&TThis::StateInit)
+    : TTabletActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , EnableLeaderLeases(1, 0, 1)
     , MinLeaderLeaseDurationUs(250000, 1000, 5000000)

@@ -36,7 +36,7 @@ using namespace NThreading;
 using namespace NYdb::NTopic;
 
 template <typename TDerived>
-class TPqCheckpointActorBase: public TActorBootstrapped<TDerived>, public IActorExceptionHandler {
+class TPqCheckpointActorBase: public NActors::TActorWithExceptionHandler<TActorBootstrapped<TDerived>> {
 protected:
     explicit TPqCheckpointActorBase(TPromise<TIssues> promise)
         : Promise(std::move(promise))

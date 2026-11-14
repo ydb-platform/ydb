@@ -2080,6 +2080,10 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
             auto completionObserver = runtime.AddObserver<TEvController::TEvDropReplicationResult>([&](auto& ev) {
                 controllerCompletion.Reset(ev.Release());
             });
+            THashMap<ui64, THashSet<TActorId>> completionSubscribers;
+            auto subscriptionObserver = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered>([&](const auto& ev) {
+                completionSubscribers[ev->Get()->Record.GetTxId()].insert(ev->Recipient);
+            });
             NKikimrReplication::TEvDropReplication ordinaryRequest;
             auto admissionObserver = runtime.AddObserver<TEvController::TEvDropReplication>([&](auto& ev) {
                 if (ev->Get()->Record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP) {
@@ -2169,7 +2173,10 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                 UNIT_ASSERT(!drop.HasValue());
                 repeatedForce = repeatedSession.ExecuteSchemeQuery(query,
                                                                    NYdb::NTable::TExecSchemeQuerySettings().ClientTimeout(TDuration::Seconds(15)));
-                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+                // The ordinary DROP and both FORCE callers must subscribe before deletion can finish.
+                runtime.WaitFor("all DROP callers subscribed to the original transaction", [&] {
+                    return completionSubscribers[ordinaryRequest.GetOperationId().GetTxId()].size() == 3;
+                }, TDuration::Seconds(30));
                 UNIT_ASSERT(!repeatedForce.HasValue());
                 if (!replay) {
                     holdRequest = false;
@@ -2239,6 +2246,7 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                 UNIT_ASSERT(!repeatedForce.HasValue());
             }
             completionObserver.Remove();
+            const auto dropTxId = controllerCompletion->Get<TEvController::TEvDropReplicationResult>()->Record.GetOperationId().GetTxId();
             runtime.Send(controllerCompletion.Release());
             const auto dropped = env.RunCall([&] { return drop.GetValueSync(); });
             UNIT_ASSERT_C(dropped.IsSuccess() || (replay
@@ -2252,10 +2260,12 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                                   result.GetIssues().ToString());
                 }
             }
-            UNIT_ASSERT_C(WaitFor([&] {
-                runtime.SimulateSleep(TDuration::MilliSeconds(100));
-                return env.GetDescription("/Root/replication").GetSchemeStatus() == NKikimrScheme::StatusPathDoesNotExist;
-            }, 150, TDuration::Zero()), "FORCE DROP did not commit, recovery=" << ui32(recovery));
+            // A replay can lose client pipes before the original DROP has committed.
+            env.SendAsync(info.PathId.OwnerId, new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(dropTxId));
+            const auto completion = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(
+                env.GetSender(), TDuration::Seconds(30));
+            UNIT_ASSERT_C(completion, "FORCE DROP did not commit, recovery=" << ui32(recovery));
+            UNIT_ASSERT_VALUES_EQUAL(completion->Get()->Record.GetTxId(), dropTxId);
             UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replication").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);
             if (destinationMode == EForceDropDestination::Cascade) {
                 UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist);

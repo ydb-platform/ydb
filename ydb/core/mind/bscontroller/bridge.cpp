@@ -924,18 +924,34 @@ public:
     }
 
 private:
-    // the group of bridged pool stops relying on the single part when it has its synced part in every pile, and every
-    // such pile is synchronized
+    // the group of bridged pool stops relying on the single part when it has its synced part in every pile of the data
+    // quorum, and every such pile is synchronized; a pile out of the data quorum gets no requests, and its part gets
+    // synced when the pile is back, as for any bridged group, so the pile doesn't keep the group relying on the single
+    // part once another part holds everything too; the pile of the part relied upon has to be synchronized all the
+    // same, as that part is not reset while the group relies on it (see TTxCheckUnsynced), so it would keep its SYNCED
+    // stage after missing writes otherwise
     void UpdateBridgedGroup(const TGroupInfo& group) {
         const auto& state = group.BridgeGroupInfo->GetBridgeGroupState();
+        const auto authorityPileId = TBridgePileId::FromProto(&state, &NKikimrBridge::TGroupState::GetAuthorityPileId);
+        bool pileOut = false; // some pile is out of the data quorum
+        bool redundant = false; // another part holds everything too
         for (const auto& pile : State->BridgeInfo->Piles) {
             if (pile.State == NKikimrBridge::TClusterState::INACTIVE) {
                 continue;
-            } else if (const auto *part = NBridge::GetGroupPile(state, pile.BridgePileId); !part ||
-                    part->GetStage() != NKikimrBridge::TGroupState::SYNCED ||
+            } else if (const auto *part = NBridge::GetGroupPile(state, pile.BridgePileId); !part) {
+                return;
+            } else if (pile.BridgePileId != authorityPileId &&
+                    !NBridge::PileStateTraits(pile.State).RequiresDataQuorum) {
+                pileOut = true;
+            } else if (part->GetStage() != NKikimrBridge::TGroupState::SYNCED ||
                     pile.State != NKikimrBridge::TClusterState::SYNCHRONIZED) {
                 return;
+            } else if (pile.BridgePileId != authorityPileId) {
+                redundant = true;
             }
+        }
+        if (pileOut && !redundant) {
+            return; // the single part is the only one holding everything until the piles out get synced
         }
         State->Groups.FindForUpdate(group.ID)->BridgeGroupInfo->MutableBridgeGroupState()->ClearAuthorityPileId();
         State->GroupContentChanged.insert(group.ID);

@@ -1248,6 +1248,142 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         }
     }
 
+    // the group keeps relying on its original part while the pile of that part is out, even when its other part gets
+    // synced meanwhile: the original part is not reset while the group relies on it, so the group gets no writes the
+    // part would miss
+    Y_UNIT_TEST(OtherPartSyncedWhileOriginalPileOut) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        CreateOrdinaryPool(env, 2, 1, 1);
+        const auto groups = GetLogicalPoolGroups(env, 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        auto describe = [&] { return TString(GetGroupInfo(env, groupId).ShortDebugString()); };
+
+        // the new part is synced up to the stage when it gets every write, and the report of the last step is held
+        NKikimrBlobStorage::TGroupInfo latestInfo; // as distributed by BSC
+        bool hold = true;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> held;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                for (const auto& group : record.GetServiceSet().GetGroups()) {
+                    if (group.GetGroupID() == groupId &&
+                            latestInfo.GetGroupGeneration() <= group.GetGroupGeneration()) {
+                        latestInfo.CopyFrom(group);
+                    }
+                }
+            }
+            if (hold && ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                if (msg->BridgeProxyGroupId.GetRawId() == groupId) {
+                    const auto *pile = NBridge::FindGroupPileByGroupId(latestInfo.GetBridgeGroupState(),
+                        msg->TargetGroupId);
+                    if (pile && pile->GetStage() == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA) {
+                        held.emplace_back(nodeId, std::move(ev));
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        MakeLocatedPoolBridged(env, 2, groups);
+        WaitUntil(env, [&] { return !held.empty(); }, "new part synced up to data stage", TDuration::Seconds(1), 120);
+        checker.Write(groupId);
+        checker.CheckAll();
+
+        // the pile of the original part goes out, then the new part gets synced
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        WaitForLocalPileState(env, 1, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        hold = false;
+        for (auto& [nodeId, ev] : held) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        WaitUntil(env, [&] {
+            const auto *part = NBridge::GetGroupPile(GetGroupInfo(env, groupId).GetBridgeGroupState(),
+                TBridgePileId::FromPileIndex(0));
+            return part && part->GetStage() == NKikimrBridge::TGroupState::SYNCED;
+        }, "new part synced while the original pile is out", TDuration::Seconds(1), 60, describe);
+        env.Sim(TDuration::Seconds(10));
+        {
+            const auto info = GetGroupInfo(env, groupId);
+            const auto& state = info.GetBridgeGroupState();
+            UNIT_ASSERT_C(TBridgePileId::FromProto(&state, &NKikimrBridge::TGroupState::GetAuthorityPileId) ==
+                TBridgePileId::FromPileIndex(1), info.ShortDebugString());
+        }
+        const TString data = "data written while the original part is out";
+        const TLogoBlobID id(100501, 1, 1, 0, data.size(), 0);
+        UNIT_ASSERT_UNEQUAL(TryPut(env, groupId, 1, id, data), NKikimrProto::OK);
+
+        // the pile gets back with its part still synced, and the group stops relying on it
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        WaitUntil(env, [&] { return IsFullyBridged(GetGroupInfo(env, groupId)); }, "group fully bridged", describe);
+        checker.Write(groupId);
+        checker.CheckAll();
+        for (ui32 pileIndex : {0, 1}) {
+            CheckPileData(env, checker, pileIndex, FirstNodeOfPile[pileIndex]);
+        }
+    }
+
+    // the group being made bridged one stops relying on its original part once its parts in every pile taking part in
+    // the data quorum are synced, even while another pile is out; the part in that pile gets synced when the pile is
+    // back, as it is for any bridged group, and the original pile can go out meanwhile
+    Y_UNIT_TEST(OtherPileOutWhileMakingBridged) {
+        TEnvironmentSetup env(MakePileSettings(3));
+        constexpr ui32 firstNodeOfPile[] = {1, 10, 19};
+        env.CreatePool();
+        CreateOrdinaryPool(env, 2, 1, 1);
+        const auto groups = GetLogicalPoolGroups(env, 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+        TDataChecker checker(env);
+        checker.Write(groupId);
+
+        auto describe = [&] { return TString(GetGroupInfo(env, groupId).ShortDebugString()); };
+        auto isSynced = [&](const NKikimrBridge::TGroupState& state, ui32 pileIndex) {
+            const auto *part = NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(pileIndex));
+            return part && part->GetStage() == NKikimrBridge::TGroupState::SYNCED;
+        };
+
+        // the third pile goes out before the pool is made bridged
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
+        WaitForLocalPileState(env, firstNodeOfPile[0], 2, NKikimrBridge::TClusterState::DISCONNECTED);
+
+        MakeLocatedPoolBridged(env, 2, groups);
+        WaitUntil(env, [&] { return isSynced(GetGroupInfo(env, groupId).GetBridgeGroupState(), 0); },
+            "part in the primary pile synced", describe);
+        WaitUntil(env, [&] { return !GetGroupInfo(env, groupId).GetBridgeGroupState().GetAuthorityPileId(); },
+            "group relying on none of its parts while the third pile is out", TDuration::Seconds(1), 60, describe);
+        checker.Write(groupId);
+        checker.CheckAll();
+
+        // the pile of the original part goes out, and its part in the primary pile serves the group
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        WaitForLocalPileState(env, firstNodeOfPile[0], 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        checker.Write(groupId);
+        checker.CheckAll();
+
+        // both piles get back, and their parts get synced
+        for (ui32 pileIndex : {1, 2}) {
+            SwitchBridgePileState(env, pileIndex, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+            WaitForPileState(env, pileIndex, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        }
+        WaitUntil(env, [&] {
+            const auto info = GetGroupInfo(env, groupId);
+            const auto& state = info.GetBridgeGroupState();
+            return !state.GetAuthorityPileId() && isSynced(state, 0) && isSynced(state, 1) && isSynced(state, 2);
+        }, "group fully bridged", describe);
+        checker.Write(groupId);
+        checker.CheckAll();
+        for (ui32 pileIndex : {0, 1, 2}) {
+            CheckPileData(env, checker, pileIndex, firstNodeOfPile[pileIndex]);
+        }
+    }
+
     // bridged groups keep their ids and their parts in the primary pile, other parts are deleted while the groups are
     // written to; new groups are ordinary ones; then the pool is made bridged again
     Y_UNIT_TEST(MakeOrdinaryAndBack) {

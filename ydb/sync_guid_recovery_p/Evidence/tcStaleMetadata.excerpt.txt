@@ -1,0 +1,60 @@
+Selected lines from the PChecker trace; not a full trace.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(5)' announced event 'eGuidVerdict' with payload <Owner:1, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 1.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(13)' announced event 'eGuidVerdict' with payload <Owner:2, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 2.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(21)' announced event 'eGuidVerdict' with payload <Owner:3, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 3.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(29)' announced event 'eGuidVerdict' with payload <Owner:4, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 4.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(37)' announced event 'eGuidVerdict' with payload <Owner:5, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 5.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(45)' announced event 'eGuidVerdict' with payload <Owner:6, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 6.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(53)' announced event 'eGuidVerdict' with payload <Owner:7, Decision:2, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eCallOsiris' with payload 7.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eGuidRecoveryStarted' with payload <Owner:0, Local:<State:3, Guid:1, DbBirthLsn:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(61)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:1, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(61)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:2, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(61)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:0, Info:<State:2, Guid:1, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:2, Guid:1, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(61)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:3, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(61)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:5, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<DequeueLog> 'TVDiskGuidRecoveryActor(61)' dequeued event 'TEvVDiskGuidObtained with payload (<VDiskId:4, Info:<State:0, Guid:0, >, >)' in state 'Survey'.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eSurveyVote' with payload <Owner:0, Info:<State:0, Guid:0, >, >.
+<AnnounceLog> 'TVDiskGuidRecoveryActor(61)' announced event 'eGuidVerdict' with payload <Owner:0, Decision:1, >.
+<SendLog> 'TVDiskGuidRecoveryActor(61)' in state 'WritingFinal' sent event 'TEvVDiskGuidRecovered with payload (<Owner:0, Outcome:<Decision:1, Guid:1, Step:2, >, >)' to 'TRecoveryStorage(4)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:1, SyncState:<Guid:10, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(70)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:1, SyncState:<Guid:12, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(72)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:1, SyncState:<Guid:11, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(71)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:1, SyncState:<Guid:14, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(74)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:1, SyncState:<Guid:13, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(73)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:1, SyncState:<Guid:15, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(75)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:1, SyncState:<Guid:16, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(76)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:2, SyncState:<Guid:10, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(70)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:2, SyncState:<Guid:11, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(71)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:2, SyncState:<Guid:14, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(74)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:2, SyncState:<Guid:12, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(72)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:2, SyncState:<Guid:15, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(75)'.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:2, SyncState:<Guid:13, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(73)'.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eSyncPeerDone' with payload <Owner:0, Peer:1, Status:1, >.
+<SendLog> 'TRecoveryStorage(4)' in state 'Serving' sent event 'TEvVSyncResult with payload (<Status:2, SyncState:<Guid:16, SyncedLsn:1, >, Block:0, >)' to 'TSyncerJobTask(76)'.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eSyncPeerDone' with payload <Owner:0, Peer:2, Status:1, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eSyncPeerDone' with payload <Owner:0, Peer:5, Status:1, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eSyncPeerDone' with payload <Owner:0, Peer:3, Status:1, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eSyncPeerDone' with payload <Owner:0, Peer:4, Status:1, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eSyncPeerDone' with payload <Owner:0, Peer:6, Status:1, >.
+<AnnounceLog> 'TRecoveryStorage(4)' announced event 'eSyncPeerDone' with payload <Owner:0, Peer:7, Status:1, >.
+<ErrorLog> Assertion Failed: sync_guid_recovery_p/PSpec/Invariants.p:76:7 All 7 peers synced, but Hull Block generation 0 misses committed 42
+<StrategyLog> Found bug using 'random' strategy.
+<StrategyLog> Checking statistics:
+<StrategyLog> Found 1 bug.
+<StrategyLog> Scheduling statistics:
+<StrategyLog> Explored 1 schedule
+<StrategyLog> Explored 1 timeline
+<StrategyLog> Found 100.00% buggy schedules.
+<StrategyLog> Number of scheduling points in terminating schedules: 629 (min), 629 (avg), 629 (max).

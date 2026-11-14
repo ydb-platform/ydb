@@ -117,6 +117,7 @@ ydb/tests/fq/streaming_optimize test_sql_negative.py.test[watermarks-bad_type-de
 ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopExprKey-default.txt]
 ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopListKey-default.txt]
 ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopPercentile-default.txt]
+ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_big_text_query_size
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 py3test.sole chunk
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_gs_simp-]
 ydb/tests/fq/yt/kqp_yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_ru_join-]

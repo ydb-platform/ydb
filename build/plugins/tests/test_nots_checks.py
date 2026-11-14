@@ -133,10 +133,13 @@ def test_library_configure_preserves_regular_build_script_behavior(
 
 
 @pytest.mark.parametrize("hermetic", [False, True])
-def test_ts_check_preserves_docker_images_and_runs_user_recipes_after_setup(monkeypatch, hermetic):
+@pytest.mark.parametrize("check_type", ["lint", "test"])
+def test_ts_check_preserves_data_and_runs_user_recipes_after_setup(monkeypatch, hermetic, check_type):
     image = "docker://registry.yandex.net/test@sha256:" + "a" * 64 + "=test:latest"
+    policy = "arcadia/devtools/frontend_build_platform/nots/constants/src/tier0-settings.yaml"
     values = {
-        "_TS_CHECK_LIST": "~~~nots:test test no",
+        "_TS_CHECK_LIST": f"~~~nots:check {check_type} no",
+        "TEST_DATA_VALUE": "arcadia/app/fixture.json",
         "_TS_CHECK_SEPARATOR": "~~~",
         "TEST_RECIPES_VALUE": "podman-compose",
         "DOCKER_IMAGES_VALUE": image,
@@ -144,6 +147,8 @@ def test_ts_check_preserves_docker_images_and_runs_user_recipes_after_setup(monk
 
     def append_recipe(name):
         values["TEST_RECIPES_VALUE"] += " " + name
+        if name == "install-node-modules":
+            values["TEST_DATA_VALUE"] += " " + policy
 
     records = []
     unit = SimpleNamespace(
@@ -169,23 +174,26 @@ def test_ts_check_preserves_docker_images_and_runs_user_recipes_after_setup(monk
 
     create_dart_record = nots.create_dart_record
 
-    def recipe_and_image_record(fields, unit, flat_args, spec_args):
+    def recipe_data_and_image_record(fields, unit, flat_args, spec_args):
         # Keep real field selection and serialization, without unrelated toolchain metadata.
         return create_dart_record(
-            [field for field in fields if field.__self__ in (nots.df.TestRecipes, nots.df.DockerImage)],
+            [field for field in fields if field.__self__ in (nots.df.TestRecipes, nots.df.TestData, nots.df.DockerImage)],
             unit,
             flat_args,
             spec_args,
         )
 
-    monkeypatch.setattr(nots, "create_dart_record", recipe_and_image_record)
+    monkeypatch.setattr(nots, "create_dart_record", recipe_data_and_image_record)
     monkeypatch.setattr(nots.ytest, "dump_test", lambda _, record: record)
 
     nots._TS_CHECK_CONFIGURE(unit, "TS_TEST_FOR")
 
     assert len(records) == 1
     record = records[0][1]
-    assert nots.df.deserialize_list(record[nots.df.DockerImage.KEY]) == [image]
+    if check_type == "test":
+        assert nots.df.deserialize_list(record[nots.df.DockerImage.KEY]) == [image]
+    expected_data = ["arcadia/app/fixture.json"] + ([] if hermetic else [policy])
+    assert nots.df.deserialize_list(record[nots.df.TestData.KEY]) == expected_data
     setup = "extract-node-modules-layer" if hermetic else "install-node-modules"
     assert base64.b64decode(record[nots.df.TestRecipes.KEY]).decode().split() == [
         setup,

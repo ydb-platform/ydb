@@ -28,6 +28,7 @@ TS_LINT_DART_FIELDS = (
     df.SourceFolderPath.normalized,  # required
     df.TestName.name_from_macro_args,  # required, we use it to pass script name to runner
     df.TestRecipes.value,  # from macro USE_RECIPE()
+    df.TestData.from_unit,  # from macro DATA(), including recipe runtime inputs
     df.Size.from_macro_args_and_unit,
     df.CustomDependencies.test_depends_only,  # from macro DEPENDS()
     df.NodejsRootVarName.value,
@@ -40,7 +41,6 @@ TS_LINT_DART_FIELDS = (
 
 TS_TEST_DART_FIELDS = TS_LINT_DART_FIELDS + (
     df.TestEnv.value,  # from macro ENV()
-    df.TestData.from_unit,  # from macro DATA()
     df.TestTimeout.from_unit,  # from macro TIMEOUT()
     df.Tag.from_unit,  # from macro TAG()
     df.TsTestForPath.value,

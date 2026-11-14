@@ -214,10 +214,6 @@ public:
         }
     }
 
-    void InitReadyInstant(const TMonotonic instant);
-    void InitStartSending(const TMonotonic instant);
-    void InitReplyReceived(const TMonotonic instant);
-
     std::vector<TWritingBlob> GroupIntoBlobs();
 };
 
@@ -227,7 +223,6 @@ private:
     TWritingBuffer Buffer;
     TActorId DstActor;
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override;
-    virtual void DoOnStartSending() override;
 
 public:
     TIndexedWriteController(const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action,

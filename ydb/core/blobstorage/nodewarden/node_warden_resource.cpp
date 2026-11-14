@@ -352,6 +352,22 @@ void TNodeWarden::ApplyStateStorageConfig() {
     FETCH_CONFIG(board, StateStorageBoard)
     FETCH_CONFIG(schemeBoard, SchemeBoard)
 
+    // Previously committed SUSPENDED configurations can still describe these rings as SYNCHRONIZED.
+    // Apply the current pile state to the runtime infos without changing the persisted config or its fingerprint.
+    const auto excludeSuspendedPiles = [this](TStateStorageInfo& info) {
+        if (BridgeInfo) {
+            for (auto& group : info.RingGroups) {
+                const auto* pile = BridgeInfo->FindPile(group.BridgePileId);
+                if (pile && pile->State == NKikimrBridge::TClusterState::SUSPENDED) {
+                    group.State = ERingGroupState::DISCONNECTED;
+                }
+            }
+        }
+    };
+    excludeSuspendedPiles(*stateStorageInfo);
+    excludeSuspendedPiles(*boardInfo);
+    excludeSuspendedPiles(*schemeBoardInfo);
+
     YDB_LOG_DEBUG("ApplyStateStorageConfig",
         {"marker", "NW55"},
         {"stateStorageConfig", StorageConfig->GetStateStorageConfig()},

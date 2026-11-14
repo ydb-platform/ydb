@@ -403,6 +403,9 @@ namespace NKikimr::NStorage {
                             switch (clusterState.GetPerPileState(pileId.GetPileIndex())) {
                                 case NKikimrBridge::TClusterState::DISCONNECTED:
                                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
+                                case NKikimrBridge::TClusterState::SUSPENDED:
+                                    // A suspended pile has left the data quorum. Its metadata replicas must not
+                                    // prevent CMS and the other tablets from booting to finish the takedown.
                                     state = T::DISCONNECTED;
                                     break;
 
@@ -411,7 +414,6 @@ namespace NKikimr::NStorage {
                                     break;
 
                                 case NKikimrBridge::TClusterState::SYNCHRONIZED:
-                                case NKikimrBridge::TClusterState::SUSPENDED:
                                     state = T::SYNCHRONIZED;
                                     break;
 

@@ -20,7 +20,6 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskContext> VCtx;
         TVDiskIdShort TargetVDiskIdShort;
         TVDiskID TargetVDiskId;
-        TVDiskID SelfVDiskId;
         TActiveActors ActiveActors;
         TActorId CliId; // backpressure client id
         std::unique_ptr<IActor> Actor; // backpressure client actor
@@ -38,6 +37,7 @@ namespace NKikimr {
             using TEvVGet = TEvBlobStorage::TEvVGet;
 
             Y_VERIFY_S(RequestFrom == TActorId(), VCtx->VDiskLogPrefix);
+            RequestFrom = ev->Sender;
             const auto eclass = NKikimrBlobStorage::EGetHandleClass::AsyncRead;
             auto msg = TEvVGet::CreateExtremeIndexQuery(TargetVDiskId, TInstant::Max(), eclass);
             msg->Record.SetSuppressBarrierCheck(true);
@@ -55,7 +55,7 @@ namespace NKikimr {
             // check for RACE and update status if required
             NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
             NKikimrProto::EReplyStatus status = record.GetStatus();
-            if (status == NKikimrProto::OK && !SelfVDiskId.SameDisk(record.GetVDiskID())) {
+            if (status == NKikimrProto::OK && !TargetVDiskId.SameDisk(record.GetVDiskID())) {
                 record.SetStatus(NKikimrProto::RACE);
             }
             if (status == NKikimrProto::NOTREADY) {
@@ -67,6 +67,12 @@ namespace NKikimr {
             RequestFrom = TActorId();
         }
 
+        void Handle(TEvProxyQueueState::TPtr &ev, const TActorContext &ctx) {
+            Y_UNUSED(ev, ctx);
+            // the backpressure client reports its connection state to us as its parent; it answers a request in
+            // flight itself, with an error if the connection is lost, so there is nothing to do here
+        }
+
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
             ActiveActors.KillAndClear(ctx);
@@ -76,6 +82,7 @@ namespace NKikimr {
         STRICT_STFUNC(StateFunc,
                       HFunc(TEvAnubisVGet, Handle)
                       HFunc(TEvBlobStorage::TEvVGetResult, Handle)
+                      HFunc(TEvProxyQueueState, Handle)
                       HFunc(TEvents::TEvPoisonPill, HandlePoison)
                       )
 
@@ -92,7 +99,6 @@ namespace NKikimr {
             , VCtx(vctx)
             , TargetVDiskIdShort(vd)
             , TargetVDiskId(ginfo->GetVDiskId(vd))
-            , SelfVDiskId(ginfo->GetVDiskId(VCtx->ShortSelfVDisk))
         {
             using namespace NBackpressure;
             auto queueId = NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead;

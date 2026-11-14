@@ -77,6 +77,44 @@ public:
     }
 
 private:
+    void CheckRunStatus() override {
+        // Standalone DQ readers may yield without an input actor to wake us.
+        // Keep this retry out of TDqSyncComputeActorBase: KQP scan actors receive
+        // data from their own fetchers and must wait for their notifications.
+        // Retry an empty drain only when every output channel can accept data;
+        // otherwise wait for the consumer's acknowledgement instead of busy-polling.
+        auto& outputs = this->ProcessOutputsState;
+        outputs.LastPopReturnedNoData = outputs.ChannelsReady && !outputs.DataWasSent;
+        if (outputs.LastPopReturnedNoData) {
+            for (const auto& [channelId, channel] : this->OutputChannelsMap) {
+                if (channel.Finished) {
+                    continue;
+                }
+                const bool canAcceptData = this->Channels
+                    ? this->Channels->CanSendChannelData(channelId)
+                        && this->Channels->HasFreeMemoryInChannel(channelId)
+                    : channel.Channel->GetFillLevel() == EDqFillLevel::NoLimit;
+                if (!canAcceptData) {
+                    outputs.LastPopReturnedNoData = false;
+                    break;
+                }
+            }
+        }
+        const i64 allowedOvercommit = TBase::AllowedChannelsOvercommit();
+        const auto canDrainAsyncOutputs = [allowedOvercommit](const auto& asyncOutputs) {
+            for (const auto& [_, output] : asyncOutputs) {
+                if (!output.Finished && output.AsyncOutput->GetFreeSpace() + allowedOvercommit <= 0) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        outputs.LastPopReturnedNoData = outputs.LastPopReturnedNoData
+            && canDrainAsyncOutputs(this->SinksMap)
+            && canDrainAsyncOutputs(this->OutputTransformsMap);
+        TBase::CheckRunStatus();
+    }
+
     const TTaskRunnerFactory TaskRunnerFactory;
 };
 

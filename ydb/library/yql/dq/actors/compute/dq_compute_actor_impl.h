@@ -472,6 +472,7 @@ protected:
                             << ", EarlyFinish=" << outputChannel.EarlyFinish
                         );
                     }
+                    ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
                 }
             } else {
                 CA_LOG_T("Do not drain channelId: " << channelId << ", finished");

@@ -29,6 +29,11 @@ namespace NBloom {
             }
         }
 
+        size_t Size() const noexcept
+        {
+            return Offsets.size();
+        }
+
         inline TStringBuf Get(ui32 len) const
         {
             Y_ENSURE(len > 0 && len <= Offsets.size());

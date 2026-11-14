@@ -77,7 +77,7 @@ private:
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto database = CanonizePath(Settings.Database);
-        auto topicName = CanonizePath(Settings.Strategy->GetTopicName());
+        const auto& topicName = Settings.Strategy->GetTopicName();
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
@@ -87,7 +87,12 @@ private:
             proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
         }
 
-        auto path = NormalizePath(database, topicName);
+        const bool relativePaths = Settings.EnableRelativePaths
+            && AppData()->FeatureFlags.GetEnableRelativePaths()
+            && AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
+        auto path = relativePaths
+            ? CanonizePath(topicName.empty() ? database : PrependDomainIfNeeded(database, topicName))
+            : NormalizePath(database, CanonizePath(topicName));
         auto [workingDir, name] = GetWorkingDirAndName(path);
         if (workingDir.empty()) {
             return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");

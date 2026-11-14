@@ -526,6 +526,42 @@ void TReadSessionActor<Protocol>::ProcessDirectReads(TPartitionsMap::iterator it
 
         ctx.Send(it->second.Actor, new TEvPQProxy::TEvDirectReadAck(assignId, directReadId));
     }
+
+    // All in-flight direct reads are acked: flush the deferred window-exhausted
+    // end_partition_session (if any) so the client stops the partition session
+    // only after it has received every data batch.
+    SendWindowExhaustedIfNeeded(it, ctx);
+}
+
+template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::SendWindowExhaustedIfNeeded(TPartitionsMap::iterator it, const TActorContext& ctx) {
+    auto& partitionInfo = it->second;
+    if (!partitionInfo.WindowExhausted || !partitionInfo.DirectReads.empty()) {
+        return;
+    }
+
+    partitionInfo.WindowExhausted = false;
+
+    if (partitionInfo.Releasing || partitionInfo.ReleaseSent) {
+        // The partition is already being released: a stop_partition_session
+        // request is on its way to the client (or the partition was never
+        // announced to it). The stop is the authoritative teardown signal,
+        // so a separate end_partition_session would be redundant and could
+        // arrive out of order with it.
+        return;
+    }
+
+    if constexpr (Protocol == EProtocol::Topic) {
+        TServerMessage result;
+        result.set_status(Ydb::StatusIds::SUCCESS);
+        auto* r = result.mutable_end_partition_session();
+        r->set_partition_session_id(partitionInfo.Partition.AssignId);
+
+        LOG_I("Sending to client end partition stream event (max_offset reached, direct reads drained)");
+        SendControlMessage(partitionInfo.Partition, std::move(result), ctx);
+    }
+
+    partitionInfo.WindowExhaustedSent = true;
 }
 
 template <EProtocol Protocol>
@@ -2515,6 +2551,10 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev
 
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx) {
+    if (!ActualPartitionActors.contains(ev->Sender)) {
+        return;
+    }
+
     auto* msg = ev->Get();
 
     auto it = Topics.find(msg->Topic);
@@ -2523,8 +2563,11 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
 
+    // Match the partition by the sender actor: it uniquely identifies the
+    // partition instance within this session, so the event cannot be
+    // attributed to a partition of another topic that happens to have the
+    // same partition id.
     TPartitionActorInfo* partitionInfo = nullptr;
     for (auto& [_, p] : Partitions) {
         if (p.Actor == ev->Sender) {
@@ -2534,9 +2577,23 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
     }
 
     if (!partitionInfo) {
-        return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
-            << "Inconsistent state #04", ctx);
+        // Stale/late event: the partition may have already been released or the
+        // session is shutting down. Ignore it instead of tearing down the whole
+        // session, matching the other stale-event paths in this actor. Do not
+        // notify the balancer either: it must not learn about a partition this
+        // session no longer holds.
+        return;
     }
+
+    // Cross-check the identity claimed by the event: a mismatch means a
+    // stale/inconsistent event - drop it before notifying the balancer,
+    // mirroring the check in Handle(TEvReadWindowExhausted).
+    if (partitionInfo->Topic->GetInternalName() != msg->Topic
+            || partitionInfo->Partition.Partition != msg->PartitionId) {
+        return;
+    }
+
+    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, partitionInfo->Partition.Partition, AutoPartitioningSupport, msg->FirstMessage));
 
     partitionInfo->EndOffset = msg->EndOffset;
     partitionInfo->ReadingFinished = true;
@@ -2562,11 +2619,89 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
                 }
             }
 
-            LOG_I("Sending to client end partition stream event");
-            SendControlMessage(partitionInfo->Partition, std::move(result), ctx);
+            if (partitionInfo->WindowExhaustedSent) {
+                // The client already received end_partition_session for this
+                // partition session when its max_offset window was exhausted.
+                // A second one (even with child partition ids after a split)
+                // would be a duplicate for the same partition session id.
+                LOG_I("Suppressing duplicate end partition stream event (max_offset exhaustion already reported)",
+                    {"partition", partitionInfo->Partition});
+            } else {
+                LOG_I("Sending to client end partition stream event");
+                SendControlMessage(partitionInfo->Partition, std::move(result), ctx);
+            }
+
+            // A real finish supersedes a deferred exhaustion EOF: drop the
+            // latch so a later flush in SendWindowExhaustedIfNeeded cannot
+            // emit a duplicate empty end_partition_session.
+            partitionInfo->WindowExhausted = false;
         }
     }
 
+}
+
+template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadWindowExhausted::TPtr& ev, const TActorContext& ctx) {
+    if (!ActualPartitionActors.contains(ev->Sender)) {
+        return;
+    }
+
+    auto* msg = ev->Get();
+
+    auto it = Topics.find(msg->Topic);
+    if (it == Topics.end()) {
+        return;
+    }
+
+    // Look up by AssignId: Partitions is a flat map shared by all topics of the
+    // session, so matching on PartitionId alone could attribute the event to a
+    // partition of a different topic that happens to have the same id.
+    auto partitionIt = Partitions.find(msg->AssignId);
+    if (partitionIt == Partitions.end()) {
+        // Stale/late event: the partition may have already been released or the
+        // session is shutting down. Ignore it instead of tearing down the whole
+        // session, matching the other stale-event paths in this actor.
+        return;
+    }
+    auto& partitionInfo = partitionIt->second;
+
+    // Cross-check the identity of the partition found by AssignId: the AssignId is
+    // session-unique, so a mismatch means a stale/inconsistent event - drop it.
+    if (partitionInfo.Topic->GetInternalName() != msg->Topic
+            || partitionInfo.Partition.Partition != msg->PartitionId) {
+        return;
+    }
+
+    // Do NOT update EndOffset and do NOT mark the partition as ReadingFinished.
+
+    // The partition is still alive: the client's read window (max_offset) is
+    // exhausted, not the partition itself. The read balancer is deliberately
+    // NOT notified - it treats Finish as a closed-by-split/merge partition.
+    // The partition stays locked to this session until the session is closed;
+    // the balancer releases it on session disconnect.
+
+    if constexpr (Protocol == EProtocol::Topic) {
+        // Unlike TEvReadingFinished (auto-partitioning close), this EOF signal is
+        // sent unconditionally: it reflects the client's own max_offset window and
+        // is independent of auto-partitioning support, so it must reach every
+        // Topic-protocol client that set max_offset.
+        //
+        // For direct read the last data batch goes to StreamDirectRead while
+        // this EOF goes to the control StreamRead, so the client could receive
+        // the EOF first, stop the partition session and drop the batch. Defer
+        // the EOF until all in-flight direct reads are acked.
+        partitionInfo.WindowExhausted = true;
+        // A formed read response for this partition may still be in flight
+        // (e.g. parked in the quota queue under METERING_MODE_REQUEST_UNITS)
+        // and not yet counted in DirectReads. In that case only latch the
+        // flag and leave the sending to ProcessDirectReads, which runs after
+        // ProcessAnswer inserts the read into DirectReads and once more on
+        // every direct_read_ack. Regular (non-direct) reads never reach
+        // ProcessDirectReads, so for them the EOF must be sent right away.
+        if (!DirectRead || PartitionToReadResponse.find(ev->Sender) == PartitionToReadResponse.end()) {
+            SendWindowExhaustedIfNeeded(partitionIt, ctx);
+        }
+    }
 }
 
 

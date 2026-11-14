@@ -111,6 +111,10 @@ struct TestReadSessionSettings {
     std::vector<std::string> Topics = {TEST_TOPIC};
     std::optional<TDuration> ReadLag;
     bool WithoutConsumer = false;
+    // Inclusive max_offset for the read window (Topic protocol only; PQv1
+    // cannot set max_offset). When set, the partition session is terminated
+    // once the read offset reaches max_offset + 1.
+    std::optional<ui64> MaxOffset = std::nullopt;
 };
 
 struct ITestReadSession {

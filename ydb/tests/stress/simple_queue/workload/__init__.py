@@ -357,15 +357,7 @@ class YdbQueue(object):
         return val
 
     def read_table(self):
-        it = self.send_query("SELECT `key` FROM `{}`".format(self.table_name), None, EventKind.READ_TABLE)
-        try:
-            while it is not None:
-                self.update_stats(EventKind.READ_TABLE)
-                it = next(it)
-        except ydb.Error as e:
-            self.stats.save_event(EventKind.READ_TABLE, e.status)
-        except StopIteration:
-            return
+        self.send_query("SELECT `key` FROM `{}`".format(self.table_name), None, EventKind.READ_TABLE)
 
     def remove_outdated(self):
         try:
@@ -389,7 +381,7 @@ class YdbQueue(object):
 
     def update_outdated_keys(self, resp):
         if resp is not None:
-            self.outdated_keys.append(resp.rows)
+            self.outdated_keys.append(resp[0].rows)
 
     def find_outdated(self):
         # ensure queue is not large enough
@@ -509,14 +501,7 @@ class YdbQueue(object):
                 continue
 
             duplicates.add(candidate)
-            session = self.pool.acquire()
-            try:
-                session.drop_table(candidate, settings=self.ops)
-                self.update_stats(EventKind.DROP_TABLE)
-            except ydb.Error as e:
-                self.stats.save_event(EventKind.DROP_TABLE, e.status)
-            finally:
-                self.pool.release(session)
+            self.send_query("DROP TABLE `{}`".format(candidate), None, EventKind.DROP_TABLE)
 
     def batch_update(self):
         blob = next(self.blobs_iter)

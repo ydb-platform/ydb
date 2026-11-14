@@ -16,6 +16,7 @@ ALTER DATABASE path SET (key = value, ...)
   * `MAX_SHARDS` — [максимальное количество таблеток](../../../../concepts/limits-ydb.md#schema-object) в базе данных.
   * `MAX_CHILDREN_IN_DIR` — [максимальное количество объектов в директории](../../../../concepts/limits-ydb.md#schema-object).
   * `MAX_SHARDS_IN_PATH` — [максимальное количество таблеток, ассоциированных с одним объектом схемы](../../../../concepts/limits-ydb.md#schema-object). Например, максимальное количество партиций одной таблицы.
+  * `MAX_ACL_BYTES_SIZE` — [максимальный размер ACL](../../../../concepts/limits-ydb.md#schema-object) одного объекта схемы, в байтах.
 * `value` — значение изменяемой настройки.
 
 ## Примеры

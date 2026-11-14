@@ -13,4 +13,5 @@ items:
   items:
     - name: Overloaded shard
       href: examples/schemas/overloaded-shard-simple-case.md
-
+- name: Clock skew between client hosts and the cluster
+  href: client-clock-skew.md

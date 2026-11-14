@@ -193,6 +193,7 @@ protected:
                         const TString& ydbDatabaseRootOverride,
                         const TMaybe<TString>& clientsideNameOverride = {});
 public:
+    using TDiscoveryConverter::GetDatabase;
 
     static TTopicConverterPtr ForFirstClass(const NKikimrPQ::TPQTabletConfig& pqTabletConfig);
 

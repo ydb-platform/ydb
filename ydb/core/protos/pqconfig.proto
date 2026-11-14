@@ -249,11 +249,16 @@ message TMirrorPartitionConfig {
         message IamCredentials {
             optional string Endpoint = 1;
             optional string ServiceAccountKey = 2 [(Ydb.sensitive) = true];
+            optional string ServiceAccountKeySecretName = 3;
         }
         oneof Credentials {
             string OauthToken = 1 [(Ydb.sensitive) = true];
             string JwtParams = 2 [(Ydb.sensitive) = true];
             IamCredentials Iam = 3;
+            // Secret references require upgraded mirror readers. Mixed-version and
+            // rollback use is unsupported until control-plane admission is available.
+            string OauthTokenSecretName = 4;
+            string JwtParamsSecretName = 5;
         }
     }
 

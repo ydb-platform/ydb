@@ -46,6 +46,8 @@ TTaskWorkPool::TTaskWorkPool(ui32 maxQueryConcurrency, TWakeup wakeup, NMonitori
         QuotaRejected = group->GetCounter("QuotaRejected", true);
         LeaseRetries = group->GetCounter("LeaseRetries", true);
         InlineCompletions = group->GetCounter("InlineCompletions", true);
+        Wakeups = group->GetCounter("Wakeups", true);
+        EmptyTakes = group->GetCounter("EmptyTakes", true);
         SelectionsCount = group->GetCounter("Selections", true);
         SelectionCpuUs = group->GetCounter("SelectionCpuUs", true);
         SelectionLockWaitUs = group->GetCounter("SelectionLockWaitUs", true);
@@ -61,30 +63,47 @@ void TTaskWorkPool::Wake(TVector<NActors::TActorId> workers) {
     }
 }
 
-bool TTaskWorkPool::HasWorkLocked() const {
+ui32 TTaskWorkPool::CountWorkLocked(ui32 limit) const {
+    // Claimable tasks, capped by `limit` and by each query's free concurrency.
+    ui32 count = 0;
     const auto now = TMonotonic::Now();
     for (auto id : ReadyQueries) {
         const auto& query = Queries.at(id);
         if (query.Running >= MaxQueryConcurrency || query.NotBefore > now) {
             continue;
         }
+        ui32 queryCount = 0;
+        const ui32 queryLimit = MaxQueryConcurrency - query.Running;
         for (auto actor : query.ReadyTasks) {
             const auto& task = query.Tasks.at(actor);
-            if (task.Ready) {
-                if (task.Available && task.Available->load(std::memory_order_acquire) && !task.Execution.expired()) {
-                    return true;
+            if (task.Ready && task.Available && task.Available->load(std::memory_order_acquire) && !task.Execution.expired()) {
+                if (++queryCount >= queryLimit) {
+                    break;
                 }
             }
         }
+        count += queryCount;
+        if (count >= limit) {
+            return limit;
+        }
     }
-    return false;
+    return count;
 }
 
 TVector<NActors::TActorId> TTaskWorkPool::WakeLocked() {
+    // Wake one idle worker per claimable task instead of all of them: the rest
+    // would only contend for the lock, find nothing and park again.
     TVector<NActors::TActorId> workers;
-    if (HasWorkLocked()) {
-        workers.assign(IdleWorkers.begin(), IdleWorkers.end());
-        IdleWorkers.clear();
+    if (IdleWorkers.empty()) {
+        return workers;
+    }
+    const ui32 count = CountWorkLocked(IdleWorkers.size());
+    for (auto it = IdleWorkers.begin(); workers.size() < count;) {
+        workers.push_back(*it);
+        IdleWorkers.erase(it++);
+    }
+    if (Wakeups) {
+        *Wakeups += workers.size();
     }
     return workers;
 }
@@ -258,6 +277,9 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
         }
     }
     if (!selectedTask) {
+        if (EmptyTakes) {
+            ++*EmptyTakes;
+        }
         if (worker) {
             IdleWorkers.insert(worker);
         }

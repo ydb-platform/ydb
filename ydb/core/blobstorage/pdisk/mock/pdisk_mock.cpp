@@ -437,8 +437,10 @@ TString& TPDiskMockState::GetStateErrorReason() {
 
 ui32 TPDiskMockState::GetNumActiveSlots() const {
     size_t sum = 0;
-    for (auto& [ownerId, owner] : Impl->Owners) {
-        sum += owner.Weight;
+    for (const auto& [ownerId, owner] : Impl->Owners) {
+        if (!owner.Slain) { // a slain owner keeps its entry until its slot is given to another VDisk
+            sum += owner.Weight;
+        }
     }
     return sum;
 }

@@ -300,6 +300,9 @@ public:
 
     // Serialized compatibility info record
     std::optional<TString> SerializedCompatibilityInfo;
+    // Added to the length of the group size in units info written to the sys log; tests use it to make a record
+    // whose last section runs past the end of the record or has an odd length
+    i32 GroupSizeInUnitsInfoSizeDeltaForTest = 0;
 
     // Debug
     std::function<TString()> DebugInfoGenerator;
@@ -364,6 +367,8 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // SysLog writing
     void WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NWilson::TTraceId *traceId);
+    // (owner, group size in units) pairs of the owners with a VDisk, as the sys log record stores them
+    std::vector<std::pair<TOwner, ui8>> GetOwnersSizeInUnitsInfo() const;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Common log writing
     // firstLsnToKeep, when nonzero, asks for the RED exception only if the record really

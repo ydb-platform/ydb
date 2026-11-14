@@ -222,6 +222,10 @@ namespace NKikimr::NBsController {
         storagePool.NumGroups = cmd.GetNumGroups();
         storagePool.EncryptionMode = cmd.GetEncryptionMode();
         storagePool.RandomizeGroupMapping = cmd.GetRandomizeGroupMapping();
+        if (cmd.GetDefaultGroupSizeInUnits() > TPDiskConfig::MaxGroupSizeInUnits) {
+            throw TExError() << "DefaultGroupSizeInUnits# " << cmd.GetDefaultGroupSizeInUnits()
+                << " is greater than the maximum# " << TPDiskConfig::MaxGroupSizeInUnits;
+        }
         storagePool.DefaultGroupSizeInUnits = cmd.GetDefaultGroupSizeInUnits();
 
         for (const auto &userId : cmd.GetUserId()) {
@@ -874,6 +878,10 @@ namespace NKikimr::NBsController {
         if (auto it = storagePools.find(poolId); it != storagePools.end()) {
             if (it->second.DDisk) {
                 throw TExError() << "can't invoke ChangeGroupSizeInUnits against DDisk pool";
+            }
+            if (cmd.GetSizeInUnits() > TPDiskConfig::MaxGroupSizeInUnits) {
+                throw TExError() << "SizeInUnits# " << cmd.GetSizeInUnits()
+                    << " is greater than the maximum# " << TPDiskConfig::MaxGroupSizeInUnits;
             }
             const ui64 nextGen = CheckGeneration(cmd, storagePools, poolId);
             it->second.Generation = nextGen;

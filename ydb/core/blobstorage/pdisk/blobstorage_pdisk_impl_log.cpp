@@ -281,6 +281,24 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
     }
     TSysLogRecord *sysLogRecord = (TSysLogRecord*)(lastSysLogRecord.data());
 
+    // A section of the record that runs past its end makes the whole record unusable, so the PDisk fails to start
+    // with an error instead of terminating the process
+    const auto checkRecordSize = [&](ui64 minSize, TStringBuf section) {
+        if (lastSysLogRecord.size() >= minSize) {
+            return true;
+        }
+        errorReason = TStringBuilder() << "Error while parsing sys log at booting state: SysLogRecord is too small"
+            << " for " << section
+            << ", minSize# " << minSize
+            << " size# " << lastSysLogRecord.size()
+            << " version# " << sysLogRecord->Version
+            << " writePosition# " << writePosition
+            << " lastLsn# " << lastLsn;
+        YDB_LOG_P_LOG(PRI_ERROR, errorReason,
+            {"marker", "BPD01"});
+        return false;
+    };
+
     if (sysLogRecord->Version < PDISK_SYS_LOG_RECORD_INCOMPATIBLE_VERSION_1000) {
         YDB_LOG_P_LOG(PRI_DEBUG, "Reading sys log",
             {"marker", "BPD49"},
@@ -461,8 +479,9 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
             SysLogFirstNoncesToKeep.Clear();
         } else {
             ui64 minSize = noneSize + sizeof(TSysLogFirstNoncesToKeep);
-            Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
-                    << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+            if (!checkRecordSize(minSize, "first nonces to keep")) {
+                return false;
+            }
             memcpy(&SysLogFirstNoncesToKeep, (const ui8*)firstNoncesToKeep, sizeof(TSysLogFirstNoncesToKeep));
         }
     }
@@ -472,14 +491,16 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         Y_VERIFY_S(firstNoncesToKeep, PCtx->PDiskLogPrefix);
         ui64 *trimInfoBytesPtr = (ui64*)(firstNoncesToKeep + 1);
         ui64 minSize = (ui64)((char*)(trimInfoBytesPtr + 1) - (char*)sysLogRecord);
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
-                << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+        if (!checkRecordSize(minSize, "chunk trim info size")) {
+            return false;
+        }
         ui64 trimInfoBytes = ReadUnaligned<ui64>(trimInfoBytesPtr);
         TChunkTrimInfo *trimState = (TChunkTrimInfo*)(trimInfoBytesPtr + 1);
         trimStateEnd = trimState + trimInfoBytes / sizeof(TChunkTrimInfo);
         minSize = (ui64)((char*)trimStateEnd - (char*)sysLogRecord);
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
-                << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+        if (!checkRecordSize(minSize, "chunk trim info")) {
+            return false;
+        }
         Y_VERIFY_S(trimInfoBytes == 0 || trimInfoBytes == TChunkTrimInfo::SizeForChunkCount(chunkCount),
                 PCtx->PDiskLogPrefix << "SysLogRecord's ChunkTrimInfo has size# " << trimInfoBytes
                 << " different from expeceted #" << TChunkTrimInfo::SizeForChunkCount(chunkCount));
@@ -499,8 +520,9 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         ui32 *firstChunk = reinterpret_cast<ui32*>(trimStateEnd);
         firstChunkEnd = firstChunk + 1;
         ui64 minSize = (ui64)((char*)firstChunkEnd - (char*)sysLogRecord);
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
-                << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+        if (!checkRecordSize(minSize, "first log chunk to parse commits")) {
+            return false;
+        }
         FirstLogChunkToParseCommits = ReadUnaligned<ui32>(firstChunk);
     }
 
@@ -513,8 +535,9 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         ui32 *protoSizePtrEnd = protoSizePtr + 1;
 
         ui64 minSize = (ui64)((char*)protoSizePtrEnd - (char*)sysLogRecord);
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
-                << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+        if (!checkRecordSize(minSize, "compatibility info size")) {
+            return false;
+        }
 
         ui32 protoSize = ReadUnaligned<ui32>(protoSizePtr);
         Y_VERIFY_S(protoSize > 0, PCtx->PDiskLogPrefix);
@@ -523,8 +546,9 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         compatibilityInfoEnd = compatibilityInfo + protoSize;
 
         minSize += protoSize;
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
-                << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+        if (!checkRecordSize(minSize, "compatibility info")) {
+            return false;
+        }
 
         if (!suppressCompatibilityCheck) {
             auto storedCompatibilityInfo = NKikimrConfig::TStoredCompatibilityInfo();
@@ -563,8 +587,9 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         ui32 *protoSizePtrEnd = protoSizePtr + 1;
 
         ui64 minSize = (ui64)((char*)protoSizePtrEnd - (char*)sysLogRecord);
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
-                << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+        if (!checkRecordSize(minSize, "group size in units info size")) {
+            return false;
+        }
 
         ui32 protoSize = ReadUnaligned<ui32>(protoSizePtr);
 
@@ -572,8 +597,19 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         ownersSizeInUnitsInfoEnd = ownersSizeInUnitsInfo + protoSize;
 
         minSize += protoSize;
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
-            << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+        if (!checkRecordSize(minSize, "group size in units info")) {
+            return false;
+        }
+        if (protoSize % 2 != 0) {
+            errorReason = TStringBuilder() << "Error while parsing sys log at booting state:"
+                << " odd size of group size in units info, size# " << protoSize
+                << " version# " << sysLogRecord->Version
+                << " writePosition# " << writePosition
+                << " lastLsn# " << lastLsn;
+            YDB_LOG_P_LOG(PRI_ERROR, errorReason,
+                {"marker", "BPD01"});
+            return false;
+        }
 
         for (ui32 i = 0; i < protoSize/2; ++i) {
             TOwner owner = ownersSizeInUnitsInfo[i*2 + 0];
@@ -774,6 +810,17 @@ void TPDisk::ProcessLogReadQueue() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SysLog writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+std::vector<std::pair<TOwner, ui8>> TPDisk::GetOwnersSizeInUnitsInfo() const {
+    std::vector<std::pair<TOwner, ui8>> ownersSizeInUnitsInfo;
+    ownersSizeInUnitsInfo.reserve(AtomicGet(TotalOwners));
+    for (ui32 owner = 0; owner < OwnerData.size(); ++owner) {
+        if (OwnerData[owner].VDiskId != TVDiskID::InvalidId) {
+            ownersSizeInUnitsInfo.push_back(std::make_pair(owner, OwnerData[owner].GroupSizeInUnits));
+        }
+    }
+    return ownersSizeInUnitsInfo;
+}
+
 void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NWilson::TTraceId *traceId) {
     TGuard<TMutex> guard(StateMutex);
     LoggedNonces = SysLogRecord.Nonces;
@@ -834,13 +881,7 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
         Y_VERIFY_S(success, PCtx->PDiskLogPrefix);
     }
     ui32 compatibilityInfoSize = SerializedCompatibilityInfo->size();
-    std::vector<std::pair<TOwner, ui8>> ownersSizeInUnitsInfo(AtomicGet(TotalOwners));
-
-    for (ui32 owner = 0; owner < OwnerData.size(); ++owner) {
-        if (OwnerData[owner].VDiskId != TVDiskID::InvalidId) {
-            ownersSizeInUnitsInfo.push_back(std::make_pair(owner, OwnerData[owner].GroupSizeInUnits));
-        }
-    }
+    const std::vector<std::pair<TOwner, ui8>> ownersSizeInUnitsInfo = GetOwnersSizeInUnitsInfo();
 
     ui32 ownersSizeInUnitsInfoSize = sizeof(ownersSizeInUnitsInfo[0]) * ownersSizeInUnitsInfo.size();
     static_assert(sizeof(ownersSizeInUnitsInfo[0]) == 2);
@@ -861,7 +902,8 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
     SysLogger->LogDataPart(&FirstLogChunkToParseCommits, sizeof(FirstLogChunkToParseCommits), reqId, traceId);
     SysLogger->LogDataPart(&compatibilityInfoSize, sizeof(compatibilityInfoSize), reqId, traceId);
     SysLogger->LogDataPart(SerializedCompatibilityInfo->data(), compatibilityInfoSize, reqId, traceId);
-    SysLogger->LogDataPart(&ownersSizeInUnitsInfoSize, sizeof(ownersSizeInUnitsInfoSize), reqId, traceId);
+    const ui32 writtenOwnersSizeInUnitsInfoSize = ownersSizeInUnitsInfoSize + GroupSizeInUnitsInfoSizeDeltaForTest;
+    SysLogger->LogDataPart(&writtenOwnersSizeInUnitsInfoSize, sizeof(writtenOwnersSizeInUnitsInfoSize), reqId, traceId);
     if (ownersSizeInUnitsInfoSize > 0) {
         SysLogger->LogDataPart(&ownersSizeInUnitsInfo[0], ownersSizeInUnitsInfoSize, reqId, traceId);
     }

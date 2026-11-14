@@ -35,7 +35,6 @@ public:
 class TCSUploadCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
     NMonitoring::THistogramPtr CSReplyDuration;
     NMonitoring::THistogramPtr SucceedFullReplyDuration;
     NMonitoring::THistogramPtr FailedFullReplyDuration;
@@ -55,7 +54,6 @@ private:
 public:
     TCSUploadCounters()
         : TBase("CSUpload")
-        , RequestsCount(TBase::GetDeriviative("Requests"))
         , CSReplyDuration(TBase::GetHistogram("Replies/Shard/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
         , SucceedFullReplyDuration(TBase::GetHistogram("Replies/Success/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
         , FailedFullReplyDuration(TBase::GetHistogram("Replies/Failed/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))

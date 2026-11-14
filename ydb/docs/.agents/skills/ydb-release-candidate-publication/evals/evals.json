@@ -1,0 +1,47 @@
+{
+  "skill_name": "ydb-release-candidate-publication",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Выпусти YDB Server 26.3 RC для существующего тега 26.3.1.16. Release notes смержены в main и stable-26-3, versioned docs и все артефакты проверены.",
+      "expected_output": "Создаёт GitHub pre-release и не выполняет шаги финального релиза.",
+      "files": ["fixtures/ready-release-candidate.json"],
+      "expectations": [
+        "Использует exact tag 26.3.1.16 and title 26.3.1.16 RC",
+        "Использует prerelease=true, draft=false and latest=false",
+        "Использует body Release notes: https://ydb.tech/docs/en/changelog-server?version=v26.3#26-3-rc",
+        "Не запускает docs_release",
+        "Не меняет ydb/docs/default-branch.txt",
+        "Не создаёт Club YDB draft or post",
+        "Reads the GitHub Release back after mutation",
+        "Accepts failed delivery PR #53647 only through green focused remediation PR #53648",
+        "Checks GET /repos/ydb-platform/ydb/releases/latest and confirms tag_name differs"
+      ],
+      "covers": "Ready release candidate uses only the RC publication path"
+    },
+    {
+      "id": 2,
+      "prompt": "Выпусти YDB Server 26.3 RC. На опубликованных RU и EN страницах дата всё ещё TBD, но тег, архив и Docker image готовы.",
+      "expected_output": "Возвращает BLOCKED и не создаёт GitHub Release.",
+      "files": ["fixtures/blocked-release-candidate.json"],
+      "expectations": [
+        "Names both published changelog date placeholders as blockers",
+        "Does not create a GitHub Release",
+        "Allows a focused correction PR but waits for merge and publication",
+        "Does not run docs_release, change default-branch.txt, or draft an announcement"
+      ],
+      "covers": "Published placeholders block an RC even when artifacts exist"
+    },
+    {
+      "id": 3,
+      "prompt": "Опубликуй финальный YDB Server 26.3.1.20 и переключи основную stable-документацию.",
+      "expected_output": "Routes to ydb-release-publication instead of applying the RC workflow.",
+      "files": ["fixtures/final-release-request.json"],
+      "expectations": [
+        "Does not use the release-candidate workflow for a final release",
+        "Routes to ydb-release-publication"
+      ],
+      "covers": "Final release requests do not trigger the RC skill"
+    }
+  ]
+}

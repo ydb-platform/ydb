@@ -152,16 +152,28 @@ struct TExpressionFixture {
         UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, query);
     }
 
-    TString ExpectIds(const TString& query, const TVector<ui64>& expected, const NYdb::TParams& params) {
-        const auto result = Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+    TString ExpectIds(const TString& query, const TVector<ui64>& expected, const NYdb::TParams& params,
+        std::optional<bool> fromCache = std::nullopt)
+    {
+        NYdb::NQuery::TExecuteQuerySettings settings;
+        if (fromCache) {
+            settings.StatsMode(NYdb::NQuery::EStatsMode::Basic);
+        }
+        const auto result = Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params, settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, query << "\n" << result.GetIssues().ToString());
+        if (fromCache) {
+            UNIT_ASSERT(result.GetStats());
+            const auto compilation = result.GetStats()->GetCompilation();
+            UNIT_ASSERT(compilation);
+            UNIT_ASSERT_VALUES_EQUAL_C(compilation->IsFromCache(), *fromCache, query);
+        }
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 1, query);
         CheckIds(result.GetResultSet(0), expected, query);
         return NYdb::FormatResultSetYson(result.GetResultSet(0));
     }
 
-    TString ExpectIds(const TString& query, const TVector<ui64>& expected) {
-        return ExpectIds(query, expected, Parameters());
+    TString ExpectIds(const TString& query, const TVector<ui64>& expected, std::optional<bool> fromCache = std::nullopt) {
+        return ExpectIds(query, expected, Parameters(), fromCache);
     }
 
     NYdb::EStatus ExpectError(const TString& query, const TString& message, const NYdb::TParams& params,
@@ -561,20 +573,20 @@ Y_UNIT_TEST_QUAD(CachedQueriesObserveParametersAndReads, Compact, Score) {
     const TString query = fixture.Query("COALESCE($search, $other)", R"sql(
         $search = (SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo);
     )sql", Score);
-    fixture.ExpectIds(query, {1, 5});
-    fixture.ExpectIds(query, {2, 5}, fixture.Parameters("alpha", "beta", true, 2));
-    fixture.ExpectIds(query, {1, 5});
+    fixture.ExpectIds(query, {1, 5}, false);
+    fixture.ExpectIds(query, {2, 5}, fixture.Parameters("alpha", "beta", true, 2), true);
+    fixture.ExpectIds(query, {1, 5}, true);
     fixture.Execute(R"sql(UPSERT INTO `/Root/Patterns` (Id, Pattern) VALUES (1ul, "beta");)sql");
-    fixture.ExpectIds(query, {2, 5});
+    fixture.ExpectIds(query, {2, 5}, true);
     fixture.Execute(R"sql(DELETE FROM `/Root/Patterns` WHERE Id = 1ul;)sql");
-    fixture.ExpectIds(query, {}, fixture.Parameters("alpha", "absent"));
-    fixture.ExpectIds(query, {1, 5}, fixture.Parameters("beta", "alpha"));
+    fixture.ExpectIds(query, {}, fixture.Parameters("alpha", "absent"), true);
+    fixture.ExpectIds(query, {1, 5}, fixture.Parameters("beta", "alpha"), true);
 
     const TString pureQuery = fixture.Query("IF($choose, $q, $other)", "", Score);
-    fixture.ExpectIds(pureQuery, {1, 5});
-    fixture.ExpectIds(pureQuery, {2, 5}, fixture.Parameters("alpha", "beta", false));
-    fixture.ExpectIds(pureQuery, {}, fixture.Parameters("absent"));
-    fixture.ExpectIds(pureQuery, {1, 5});
+    fixture.ExpectIds(pureQuery, {1, 5}, false);
+    fixture.ExpectIds(pureQuery, {2, 5}, fixture.Parameters("alpha", "beta", false), true);
+    fixture.ExpectIds(pureQuery, {}, fixture.Parameters("absent"), true);
+    fixture.ExpectIds(pureQuery, {1, 5}, true);
 }
 
 Y_UNIT_TEST_QUAD(SharedReadAndMultipleResults, Compact, Score) {

@@ -41,6 +41,8 @@
 
 #include <contrib/libs/zstd/include/zstd.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
 
 #include <util/generic/serialized_enum.h>
@@ -8921,6 +8923,172 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         ).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resolved timestamps interval must be at least 1 second");
+    }
+
+    Y_UNIT_TEST(ChangefeedCompressionApi) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        auto result = session.CreateTable("/Root/table", TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint64)
+            .AddNullableColumn("Value", EPrimitiveType::String)
+            .SetPrimaryKeyColumn("Key")
+            .Build()
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const auto explicitLevel = TChangefeedDescription(
+            "explicit", EChangefeedMode::Updates, EChangefeedFormat::Json)
+            .WithCompression(EChangefeedCompression::Zstd, 7);
+        result = session.AlterTable("/Root/table", TAlterTableSettings()
+            .AppendAddChangefeeds(explicitLevel)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const auto defaultLevel = TChangefeedDescription(
+            "default", EChangefeedMode::Updates, EChangefeedFormat::Json)
+            .WithCompression(EChangefeedCompression::Zstd);
+        result = session.AlterTable("/Root/table", TAlterTableSettings()
+            .AppendAddChangefeeds(defaultLevel)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describeResult = session.DescribeTable("/Root/table").ExtractValueSync();
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+        const auto& changefeeds = describeResult.GetTableDescription().GetChangefeedDescriptions();
+        UNIT_ASSERT_VALUES_EQUAL(changefeeds.size(), 2);
+        for (const auto& changefeed : changefeeds) {
+            UNIT_ASSERT_VALUES_EQUAL(changefeed.GetCompression(), EChangefeedCompression::Zstd);
+            UNIT_ASSERT(changefeed.GetCompressionLevel());
+            if (changefeed.GetName() == "explicit") {
+                UNIT_ASSERT_VALUES_EQUAL(*changefeed.GetCompressionLevel(), 7);
+            } else if (changefeed.GetName() == "default") {
+                UNIT_ASSERT_VALUES_EQUAL(*changefeed.GetCompressionLevel(), 3);
+            } else {
+                UNIT_FAIL(TStringBuilder() << "Unexpected changefeed: " << changefeed.GetName());
+            }
+        }
+
+        const auto noneWithLevel = TChangefeedDescription(
+            "none_with_level", EChangefeedMode::Updates, EChangefeedFormat::Json)
+            .WithCompression(EChangefeedCompression::None, 3);
+        result = session.AlterTable("/Root/table", TAlterTableSettings()
+            .AppendAddChangefeeds(noneWithLevel)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "compression level requires ZSTD");
+
+        for (const i32 level : {0, 23}) {
+            const auto invalidLevel = TChangefeedDescription(
+                TStringBuilder() << "invalid_" << level, EChangefeedMode::Updates, EChangefeedFormat::Json)
+                .WithCompression(EChangefeedCompression::Zstd, level);
+            result = session.AlterTable("/Root/table", TAlterTableSettings()
+                .AppendAddChangefeeds(invalidLevel)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "level's value is not [1; 22]");
+        }
+    }
+
+    Y_UNIT_TEST(ChangefeedCompressionEndToEndApi) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto topicClient = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+
+        auto result = session.CreateTable("/Root/table", TTableBuilder()
+            .AddNullableColumn("key", EPrimitiveType::Uint64)
+            .AddNullableColumn("value", EPrimitiveType::String)
+            .SetPrimaryKeyColumn("key")
+            .Build()
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const auto changefeed = TChangefeedDescription(
+            "feed", EChangefeedMode::Updates, EChangefeedFormat::Json)
+            .WithCompression(EChangefeedCompression::Zstd, 7);
+        result = session.AlterTable("/Root/table", TAlterTableSettings()
+            .AppendAddChangefeeds(changefeed)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        for (const std::string consumer : {"compressed", "decompressed"}) {
+            auto alterResult = topicClient.AlterTopic("/Root/table/feed", TAlterTopicSettings()
+                .BeginAddConsumer(consumer).EndAddConsumer()).ExtractValueSync();
+            UNIT_ASSERT_C(alterResult.IsSuccess(), alterResult.GetIssues().ToString());
+        }
+
+        TString binary;
+        binary.reserve(256_KB);
+        for (ui32 repeat = 0; repeat < 1024; ++repeat) {
+            for (ui32 value = 0; value < 256; ++value) {
+                binary.push_back(static_cast<char>(value));
+            }
+        }
+
+        TValueBuilder rows;
+        rows.BeginList()
+            .AddListItem()
+                .BeginStruct()
+                    .AddMember("key").Uint64(1)
+                    .AddMember("value").String(binary)
+                .EndStruct()
+            .EndList();
+        auto upsertResult = tableClient.BulkUpsert("/Root/table", rows.Build()).ExtractValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto readOne = [&](const std::string& consumer, bool decompress, auto&& callback) {
+            auto reader = topicClient.CreateReadSession(TReadSessionSettings()
+                .AppendTopics(std::string{"/Root/table/feed"})
+                .ConsumerName(consumer)
+                .Decompress(decompress));
+
+            while (true) {
+                auto event = reader->GetEvent(true);
+                UNIT_ASSERT(event);
+
+                if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    callback(*data);
+                    break;
+                } else if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    start->Confirm();
+                } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    stop->Confirm();
+                } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                    UNIT_FAIL("Topic read session closed before receiving the CDC message");
+                }
+            }
+
+            reader->Close(TDuration::Zero());
+        };
+
+        size_t compressedSize = 0;
+        readOne("compressed", false, [&](const auto& event) {
+            const auto& messages = event.GetCompressedMessages();
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(messages[0].GetCodec(), ECodec::ZSTD);
+            compressedSize = messages[0].GetData().size();
+        });
+
+        TString decompressed;
+        readOne("decompressed", true, [&](const auto& event) {
+            const auto& messages = event.GetMessages();
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+            decompressed = messages[0].GetData();
+        });
+
+        constexpr size_t MinCompressionRatio = 4;
+        UNIT_ASSERT_GT(compressedSize, 0);
+        UNIT_ASSERT_C(compressedSize * MinCompressionRatio <= decompressed.size(), TStringBuilder()
+            << "Expected at least " << MinCompressionRatio << ":1 compression ratio"
+            << ", compressed size: " << compressedSize
+            << ", uncompressed size: " << decompressed.size());
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(decompressed, &json));
+        UNIT_ASSERT_VALUES_EQUAL(json["key"][0].GetUInteger(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Base64Decode(json["update"]["value"].GetString()), binary);
     }
 
     Y_UNIT_TEST(ChangefeedAwsRegion) {

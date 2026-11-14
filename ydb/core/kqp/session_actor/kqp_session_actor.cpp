@@ -611,6 +611,14 @@ public:
                 return AddOffsetsToTransaction();
         }
 
+        try {
+            for (const auto& [name, param] : QueryState->GetYdbParameters()) {
+                TQueryData::ValidateParameterType(param.type());
+            }
+        } catch (const yexception& ex) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+        }
+
         QueryState->UpdateTempTablesState(TempTablesState);
 
         QueryClassifier = TryCreateQueryClassifier();

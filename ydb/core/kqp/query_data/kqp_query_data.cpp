@@ -28,9 +28,7 @@ using namespace NKikimr::NMiniKQL;
 using namespace NYql;
 using namespace NYql::NUdf;
 
-namespace {
-
-void ValidateParameterType(const NProtoBuf::Message& type) {
+void TQueryData::ValidateParameterType(const google::protobuf::Message& type) {
     NProtoBuf::WalkReflection(type, [](const NProtoBuf::Message& message, const NProtoBuf::FieldDescriptor* field) {
         const bool hasPg = (field->containing_type() == Ydb::Type::descriptor() &&
             field->number() == Ydb::Type::kPgTypeFieldNumber && message.GetReflection()->HasField(message, field)) ||
@@ -41,8 +39,6 @@ void ValidateParameterType(const NProtoBuf::Message& type) {
         return true;
     });
 }
-
-} // namespace
 
 TTypedUnboxedValue TKqpExecuterTxResult::GetUV(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,

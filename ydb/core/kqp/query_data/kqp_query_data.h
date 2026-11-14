@@ -247,6 +247,7 @@ public:
         BuiltResultIndexes.insert(resultIndex);
     }
 
+    static void ValidateParameterType(const google::protobuf::Message& type);
     void ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type, NMiniKQL::TTypeEnvironment& txTypeEnv);
     void PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx, const TPreparedQueryHolder::TConstPtr& preparedQuery,
         NMiniKQL::TTypeEnvironment& txTypeEnv);

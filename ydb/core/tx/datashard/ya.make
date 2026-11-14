@@ -1,6 +1,8 @@
 YQL_LIBRARY()
 
 SRCS(
+    hnsw_index/hnsw_index_build_unit.cpp
+    hnsw_index/hnsw_index_build_unit.h
     datashard.h
     datashard__engine_host.h
     datashard__lock_rows.h

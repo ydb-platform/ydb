@@ -11,6 +11,7 @@ ENDIF()
 
 SRCS(
     hnsw_index_build_actor_ut.cpp
+    hnsw_index_build_unit_ut.cpp
 )
 
 PEERDIR(

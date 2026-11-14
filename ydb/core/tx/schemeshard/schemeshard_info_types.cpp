@@ -1060,6 +1060,15 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->MutableIncrementalBackupConfig()->CopyFrom(cfg);
     }
 
+    // Carried only by the alter that publishes a vector index posting table, so
+    // that FillAlterTableTxBody can forward it to the shard, which needs it to
+    // build an in-memory HNSW index (see FinalizeIndexImplTable).
+    for (const auto& index : op.GetTableIndexes()) {
+        if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            *alterData->TableDescriptionFull->AddTableIndexes() = index;
+        }
+    }
+
     alterData->IsBackup = op.GetIsBackup();
     alterData->IsRestore = op.GetIsRestore();
 

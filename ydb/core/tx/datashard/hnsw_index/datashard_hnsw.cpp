@@ -177,7 +177,7 @@ namespace NKikimr::NDataShard {
     }
 
     void TDataShard::StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table,
-                                           TRowVersion base, TTransactionContext& txc, THnswSnapshotScanCallback finish, TPathId indexId) {
+                                           TRowVersion base, TTransactionContext& txc, THnswSnapshotScanCallback finish, TPathId indexId, std::shared_ptr<THnswSnapshotScanControl> control) {
         indexId = ResolveHnswIndexId(localTid, indexId);
         const ui64 token = GetHnswBuildToken(localTid, indexId);
         if (!finish) {
@@ -206,7 +206,7 @@ namespace NKikimr::NDataShard {
             (*completion)(THnswSnapshotScanResult{});
         });
         txc.DB.OnCommit([this, localTid, indexId, table = std::move(table), base, token,
-                         completion]() mutable {
+                         completion, control = std::move(control)]() mutable {
             // QueueScan may flush memtables and emit redo. Starting it inside
             // DB.Commit would nest those records in the unfinished transaction.
             auto event = MakeHolder<TEvPrivate::TEvStartHnswSnapshotScan>();
@@ -216,13 +216,14 @@ namespace NKikimr::NDataShard {
             event->BaseVersion = base;
             event->BuildToken = token;
             event->Finish = std::move(*completion);
+            event->Control = std::move(control);
             Send(SelfId(), event.Release());
         });
     }
 
     void TDataShard::Handle(TEvPrivate::TEvStartHnswSnapshotScan::TPtr& ev, const TActorContext&) {
         auto& request = *ev->Get();
-        if (IsFollower() || !IsHnswBuildCurrent(request.LocalTid, request.BuildToken, request.IndexId) || !AppData()->FeatureFlags.GetEnableHnswIndex() || IsStopping() || State != TShardState::Ready) {
+        if ((request.Control && request.Control->Cancelled) || IsFollower() || !IsHnswBuildCurrent(request.LocalTid, request.BuildToken, request.IndexId) || !AppData()->FeatureFlags.GetEnableHnswIndex() || IsStopping() || State != TShardState::Ready) {
             request.Finish(THnswSnapshotScanResult{});
             return;
         }
@@ -230,6 +231,7 @@ namespace NKikimr::NDataShard {
         auto* scan = new THnswSnapshotScan(*request.Table, entry.VectorColumnTag, entry.Settings,
                                            HnswCacheMemoryTracker, entry.MemoryOwner, bool(entry.Index), entry.CancelBuild, std::move(request.Finish));
         entry.ScanId = Executor()->QueueScan(request.LocalTid, scan, 0, NTabletFlatExecutor::TScanOptions().SetReadPrio(NTabletFlatExecutor::TScanOptions::EReadPrio::Low).SetReadAhead(0, 512_KB).SetSnapshotRowVersion(request.BaseVersion));
+        if (request.Control) { request.Control->ScanId = entry.ScanId; }
     }
 
     class TDataShard::TTxRebuildHnswIndex: public NTabletFlatExecutor::TTransactionBase<TDataShard> {

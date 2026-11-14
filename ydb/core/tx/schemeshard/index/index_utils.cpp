@@ -25,7 +25,8 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
             const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
             res.IndexTableCount = (prefixVectorIndex ? 3 : 2);
             res.SequenceCount = (prefixVectorIndex ? 1 : 0);
@@ -1071,7 +1072,8 @@ TVector<NKikimrSchemeOp::TTableDescription> CalcIndexImplTables(
         impl.push_back(CalcImplTableDesc(baseTable, implTableColumns, userIndexDesc, uniqueKeySize));
         break;
     }
-    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+    case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
         const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
         NKikimrSchemeOp::TTableDescription levelTableDesc, postingTableDesc, prefixTableDesc;
         if (static_cast<int>(indexDesc.IndexImplTableDescriptionsSize()) == 2 + static_cast<int>(prefixVectorIndex)) {
@@ -1081,8 +1083,13 @@ TVector<NKikimrSchemeOp::TTableDescription> CalcIndexImplTables(
                 prefixTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition);
             }
         }
+        auto postingDataColumns = indexDataColumns;
+        if (indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            Y_ENSURE(!indexColumns.KeyColumns.empty());
+            postingDataColumns.insert(indexColumns.KeyColumns.back());
+        }
         impl.push_back(CalcVectorKmeansTreeLevelImplTableDesc(basePartitionConfig, levelTableDesc));
-        impl.push_back(CalcVectorKmeansTreePostingImplTableDesc(baseTable, basePartitionConfig, indexDataColumns, postingTableDesc));
+        impl.push_back(CalcVectorKmeansTreePostingImplTableDesc(baseTable, basePartitionConfig, postingDataColumns, postingTableDesc));
         if (prefixVectorIndex) {
             const THashSet<TString> prefixKeys{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
             const auto implTableColumns = CalcTableImplDescription(indexType, baseTableColumns, indexColumns);
@@ -1141,7 +1148,6 @@ TVector<NKikimrSchemeOp::TTableDescription> CalcIndexImplTables(
         }
         break;
     }
-    case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
     case NKikimrSchemeOp::EIndexTypeInvalid:
     case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
     case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:

@@ -5959,6 +5959,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
     EnableOnlineAddUniqueIndex = appData->FeatureFlags.GetEnableOnlineAddUniqueIndex();
+    EnableHnswIndex = appData->FeatureFlags.GetEnableHnswIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
     EnableCompactFulltextIndex = appData->FeatureFlags.GetEnableCompactFulltextIndex();
     EnableJsonIndex = appData->FeatureFlags.GetEnableJsonIndex();
@@ -8487,6 +8488,16 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
         proto->MutableDetailedMetricsSettings()->MutableConfigured()->CopyFrom(tableInfo->GetDetailedMetricsSettings());
     }
 
+    // Forwarded only for the alter that publishes a vector index posting table,
+    // so the shard can build its in-memory HNSW index (see FinalizeIndexImplTable).
+    if (alterData->TableDescriptionFull.Defined()) {
+        for (const auto& index : alterData->TableDescriptionFull->GetTableIndexes()) {
+            if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                *proto->AddTableIndexes() = index;
+            }
+        }
+    }
+
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
     return txBody;
@@ -8577,6 +8588,37 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
         tinfo->TableDescription.SetPath(PathToString(pinfo));
     }
     tableDescr->CopyFrom(tinfo->TableDescription);
+
+    // Creation, copying and splitting use SchemeShard metadata rather than
+    // a source tablet's schema. Recover posting-table settings from the owning
+    // index; new tables need the pending index version before publication.
+    if (pinfo->Name == NTableIndex::NKMeans::PostingTable) {
+        const auto indexIt = Indexes.find(pinfo->ParentPathId);
+        const auto indexInfo = indexIt != Indexes.end()
+            ? (newTable && indexIt->second->AlterData ? indexIt->second->AlterData : indexIt->second)
+            : TTableIndexInfo::TPtr{};
+        if (indexInfo && indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                && indexInfo->State == NKikimrSchemeOp::EIndexStateReady
+                && !indexInfo->IndexKeys.empty()) {
+            const auto& index = *indexInfo;
+            const auto& embedding = index.IndexKeys.back();
+            for (const auto& [columnId, column] : tinfo->Columns) {
+                if (column.Name != embedding || column.IsDropped()) {
+                    continue;
+                }
+                auto* description = tableDescr->AddTableIndexes();
+                description->SetName(PathsById.at(pinfo->ParentPathId)->Name);
+                description->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+                description->SetPathOwnerId(pinfo->ParentPathId.OwnerId);
+                description->SetLocalPathId(pinfo->ParentPathId.LocalPathId);
+                description->SetSchemaVersion(index.AlterVersion);
+                auto* hnsw = description->MutableHnswIndexDescription();
+                *hnsw = std::get<NKikimrSchemeOp::THnswIndexDescription>(index.SpecializedIndexDescription);
+                hnsw->SetEmbeddingColumnId(columnId);
+                break;
+            }
+        }
+    }
 
     if (rangeBegin.empty()) {
         // First partition starts with <NULL, NULL, ..., NULL> key
@@ -9055,6 +9097,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
     EnableInitialUniqueIndex = featureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = featureFlags.GetEnableAddUniqueIndex();
+    EnableHnswIndex = featureFlags.GetEnableHnswIndex();
     EnableFulltextIndex = featureFlags.GetEnableFulltextIndex();
     EnableCompactFulltextIndex = featureFlags.GetEnableCompactFulltextIndex();
     EnableJsonIndex = featureFlags.GetEnableJsonIndex();

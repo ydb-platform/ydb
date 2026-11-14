@@ -3,11 +3,13 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/metering/metering.h>
 
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -96,10 +98,11 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
-    Y_UNIT_TEST_TWIN(HnswApiRemainsUnavailable, FlagEnabled) {
+    Y_UNIT_TEST_TWIN(HnswCreationRejectedUntilSqlSupport, Enabled) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableHnswIndex(FlagEnabled);
+        runtime.GetAppData().FeatureFlags.SetEnableHnswIndex(Enabled);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         ui64 txId = 100;
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -138,10 +141,72 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             CreateBuildIndexRequest(++txId, "/MyRoot", "/MyRoot/HnswApiTable", index));
         const auto response = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(), "HNSW index implementation is not available yet");
+        UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(),
+            Enabled ? "not available yet" : "EnableHnswIndex");
         TestDescribeResult(DescribePath(runtime, "/MyRoot/HnswApiTable"), {NLs::IndexesCount(0)});
     }
 
+    Y_UNIT_TEST(VectorPrimaryKeyEmbeddingClusteredBuild) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "KeyVectors"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "payload" Type: "String" }
+            KeyColumnNames: ["key", "embedding"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TVector<TString> vectors;
+        TVector<TCell> cells;
+        vectors.reserve(64);
+        for (ui32 key = 0; key < 64; ++key) {
+            const float vector[] = {float(key + 1), float(64 - key)};
+            vectors.emplace_back(reinterpret_cast<const char*>(vector), sizeof(vector));
+            vectors.back().push_back(char(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT));
+            cells.push_back(TCell::Make(key));
+            cells.emplace_back(vectors.back().data(), vectors.back().size());
+            cells.emplace_back("payload", 7);
+        }
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/KeyVectors", 0,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2, 3}, TSerializedCellMatrix(cells, 64, 3), true);
+        Ydb::Table::TableIndex index;
+        index.set_name("idx");
+        index.add_index_columns("embedding");
+        index.add_data_columns("payload");
+        auto* tree = index.mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+        // Exercise both MAIN_TO_BUILD and BUILD_TO_BUILD before posting upload.
+        tree->set_clusters(2);
+        tree->set_levels(3);
+        auto* settings = tree->mutable_settings();
+        settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings->set_vector_dimension(2);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/KeyVectors", index);
+        env.TestWaitNotification(runtime, txId);
+        const auto status = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+            status.DebugString());
+        const TString path = "/MyRoot/KeyVectors/idx/indexImplPostingTable";
+        const auto posting = DescribePath(runtime, path, true, true, true);
+        const auto& keys = posting.GetPathDescription().GetTable().GetKeyColumnNames();
+        ui32 rows = 0;
+        for (ui64 tablet : GetTableShards(runtime, TTestTxConfig::SchemeShard, path)) {
+            const auto result = ReadTable(runtime, tablet, "indexImplPostingTable",
+                {keys.begin(), keys.end()}, {"key", "embedding", "payload"});
+            const auto list = NClient::TValue::Create(result)["Result"]["List"];
+            for (size_t i = 0; i < list.Size(); ++i) {
+                const ui32 key = list[i]["key"];
+                UNIT_ASSERT(key < vectors.size());
+                UNIT_ASSERT_VALUES_EQUAL(TString(list[i]["embedding"]), vectors[key]);
+                UNIT_ASSERT_VALUES_EQUAL(TString(list[i]["payload"]), "payload");
+                ++rows;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rows, 64u);
+    }
 
     Y_UNIT_TEST(CreateAndDrop) {
         TTestBasicRuntime runtime;
@@ -682,7 +747,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     }
 
     Y_UNIT_TEST(RebuildNonVectorIndex) {
-        // REBUILD INDEX is only supported for vector_kmeans_tree indexes; rebuilding a
+        // REBUILD INDEX is only supported for vector indexes; rebuilding a
         // plain secondary index must be rejected on the schemeshard side too.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -737,7 +802,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_UNEQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
             "rebuild of a non-vector index must fail");
         UNIT_ASSERT_STRING_CONTAINS((TStringBuilder() << event->Record.GetIssues()),
-            "only supported for vector_kmeans_tree");
+            "only supported for vector indexes");
     }
 
     Y_UNIT_TEST(VectorIndexAutodetect) {

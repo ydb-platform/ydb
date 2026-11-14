@@ -2073,8 +2073,19 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
         indexDesc.SetLocalPathId(newPathId.LocalPathId);
 
         auto node = newTableInfo->Indexes.extract(prevPathId);
-        node.key() = newPathId;
-        newTableInfo->Indexes.insert(std::move(node));
+        if (!node.empty()) {
+            node.key() = newPathId;
+            newTableInfo->Indexes.insert(std::move(node));
+        } else {
+            // Local HNSW annotations added by an alter are stored separately
+            // from secondary-index maintenance metadata.
+            Y_ENSURE(indexDesc.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+        }
+        auto hnswNode = newTableInfo->HnswIndexes.extract(prevPathId);
+        if (!hnswNode.empty()) {
+            hnswNode.key() = newPathId;
+            newTableInfo->HnswIndexes.insert(std::move(hnswNode));
+        }
     }
     newTableInfo->SetSchema(schema);
 

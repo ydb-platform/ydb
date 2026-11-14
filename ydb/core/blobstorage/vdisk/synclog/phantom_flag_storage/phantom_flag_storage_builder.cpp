@@ -32,9 +32,10 @@ public:
             return;
         }
 
-        LastLsn = SyncLogSnapshot->LogStartLsn;
+        // LogStartLsn is the first record still needed, so it is processed too
+        LastLsn = SyncLogSnapshot->LogStartLsn ? SyncLogSnapshot->LogStartLsn - 1 : 0;
         DiskIt = TDiskRecLogSnapshot::TIndexRecIterator(SyncLogSnapshot->DiskSnapPtr);
-        DiskIt.Seek(LastLsn);
+        DiskIt.Seek(SyncLogSnapshot->LogStartLsn);
         if (BuildThresholds) {
             Send(SlCtx->SkeletonId, new TEvTakeHullSnapshot(false));
             Become(&TThis::StateWaitHullSnapshot);

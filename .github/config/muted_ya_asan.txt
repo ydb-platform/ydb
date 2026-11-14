@@ -13,20 +13,15 @@ ydb/core/kqp/ut/rbo KqpRboYql.AggregationShuffleEliminationSettingDoesNotEnableT
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_14
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
-ydb/core/kqp/ut/scheme GeneratedStored.MultipleDmlStatementsCommitAndAbortAtomically
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnFromMultiUseNamedExpression
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnThroughSecondaryIndex
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
-ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnDefaultNullIsNotAllowed
-ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnWithDefaultRejection
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultUndeterministicExpression
-ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalSyncUniqueIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.AddAndAlterChangefeedYqlTopicSettings+UseQueryService
-ydb/core/kqp/ut/scheme KqpScheme.ParallelAlterStreamingQuery
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationOnlineRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationReadCommittedRW
@@ -41,10 +36,8 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashI
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootMultipleAccounts
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
-ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
 ydb/core/tx/replication/controller/ut_schema_change IndexBuild.DoneCancelsSyncIndexAfterLateWorkerError
 ydb/core/tx/replication/controller/ut_schema_change ReplicationCreation.InitialScanDisabledDoesNotTouchMissingDestination
-ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithSchemaChangesEnabledAfterCreationReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithoutSchemaChangesReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropSyncIndexWithGlobalConsistency
 ydb/core/tx/replication/controller/ut_schema_change unittest.[*/*] chunk
@@ -59,7 +52,6 @@ ydb/library/nmslib/test/run_test_integr exectest.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
-ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/0
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
@@ -69,7 +61,6 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[64]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[65]
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk

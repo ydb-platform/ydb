@@ -583,7 +583,7 @@ Y_UNIT_TEST_SUITE(TMemOnlyCountersTest) {
 
         auto encode = [](const TDynamicCounters& tree) {
             TStringStream out;
-            auto encoder = NMemOnlyShim::CreateEncoder(&out, EFormat::JSON);
+            auto encoder = CreateEncoder(&out, EFormat::JSON);
             tree.Accept(TString(), TString(), *encoder);
             return out.Str();
         };
@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(TMemOnlyCountersTest) {
 
         // A plain metric accepted without its group encodes without memOnly.
         TStringStream bare;
-        otherName->Accept("name", "count", *NMemOnlyShim::CreateEncoder(&bare, EFormat::JSON));
+        otherName->Accept("name", "count", *CreateEncoder(&bare, EFormat::JSON));
         NJson::TJsonValue bareJson;
         UNIT_ASSERT(NJson::ReadJsonTree(bare.Str(), &bareJson));
         UNIT_ASSERT(!bareJson.Has("memOnly"));

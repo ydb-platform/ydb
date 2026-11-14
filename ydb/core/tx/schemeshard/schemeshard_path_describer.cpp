@@ -1038,6 +1038,13 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
         entry->MutableDomainState()->SetSmallBlobsQuotaExceeded(true);
     }
 
+    // Quotas of an external subdomain are enforced by its tenant schemeshard,
+    // the parent schemeshard only keeps a stub without the actual usage and state.
+    const auto tenantSchemeShardId = subDomainInfo->GetTenantSchemeShardID();
+    if (tenantSchemeShardId == InvalidTabletId || tenantSchemeShardId == Self->SelfTabletId()) {
+        subDomainInfo->FillDiskSpaceQuotaUsage(*entry->MutableDiskSpaceQuotaUsage());
+    }
+
     if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
         entry->MutableAuditSettings()->CopyFrom(*auditSettings);
     }

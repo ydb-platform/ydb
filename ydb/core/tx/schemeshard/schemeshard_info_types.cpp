@@ -247,6 +247,48 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
     return false;
 }
 
+void TSubDomainInfo::FillDiskSpaceQuotaUsage(NKikimrSubDomains::TDiskSpaceQuotaUsage& out) const {
+    using TQuotaUsage = NKikimrSubDomains::TDiskSpaceQuotaUsage;
+
+    out.Clear();
+    out.SetQuotaExceeded(DiskQuotaExceeded);
+
+    const auto quotas = GetDiskSpaceQuotas();
+
+    // must stay in sync with the branches of CheckDiskSpaceQuotas()
+    if (!AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()) {
+        out.SetMode(TQuotaUsage::MODE_DATABASE);
+        auto* entry = out.AddEntries();
+        entry->SetPoolKind("");
+        entry->SetUsage(TotalDiskSpaceUsage());
+        entry->SetSoftQuota(quotas.SoftQuota);
+        entry->SetHardQuota(quotas.HardQuota);
+        return;
+    }
+
+    out.SetMode(TQuotaUsage::MODE_STORAGE_POOL_KINDS);
+    struct TPoolKindEntry {
+        ui64 Usage = 0;
+        TQuotasPair Quotas{.HardQuota = 0, .SoftQuota = 0};
+    };
+    // sorted by pool kind to keep the output stable
+    TMap<TString, TPoolKindEntry> entries;
+    for (const auto& [poolKind, usage] : DiskSpaceUsage.StoragePoolsUsage) {
+        entries[poolKind].Usage = usage.DataSize + usage.IndexSize;
+    }
+    for (const auto& [poolKind, quota] : quotas.StoragePoolsQuotas) {
+        entries[poolKind].Quotas = quota;
+    }
+    for (const auto& [poolKind, e] : entries) {
+        // zeros are set explicitly, so that clients can tell them from missing values
+        auto* entry = out.AddEntries();
+        entry->SetPoolKind(poolKind);
+        entry->SetUsage(e.Usage);
+        entry->SetSoftQuota(e.Quotas.SoftQuota);
+        entry->SetHardQuota(e.Quotas.HardQuota);
+    }
+}
+
 bool TSubDomainInfo::CheckSmallBlobsQuotas(IQuotaCounters* counters) {
     const auto metricStatus = [](ui64 usage, ui64 hardQuota, ui64 softQuota) -> EQuotaUsageStatus {
         if (hardQuota && usage > hardQuota) {

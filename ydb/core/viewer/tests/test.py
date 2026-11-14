@@ -605,6 +605,7 @@ class TestViewer(object):
 
         replace_with_values.update({'CpuUsage',
                                     'DiskSpaceUsage',
+                                    'DiskSpaceQuotaUsage',
                                     'Address',
                                     'Port',
                                     'port',

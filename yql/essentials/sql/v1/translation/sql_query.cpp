@@ -108,6 +108,7 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         "consistency_level",
         "commit_interval",
         "initial_scan",
+        "adopt_existing",
         "availability_period",
     };
 
@@ -148,7 +149,7 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
             ctx.Context().Error() << "Literal of Interval type is expected for " << key.Name;
             return false;
         }
-    } else if (keyName == "initial_scan") {
+    } else if (keyName == "initial_scan" || keyName == "adopt_existing") {
         if (!value->IsLiteral() || value->GetLiteralType() != "Bool") {
             ctx.Context().Error() << "Literal of Bool type is expected for " << key.Name;
             return false;

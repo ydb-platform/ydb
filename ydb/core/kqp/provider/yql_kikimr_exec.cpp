@@ -1232,6 +1232,8 @@ namespace {
             } else if (name == "initial_scan") {
                 YQL_ENSURE(setting.Value().Maybe<TCoBool>());
                 dstSettings.InitialScan = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());
+            } else if (name == "adopt_existing") {
+                dstSettings.AdoptExisting = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());
             }
         }
 

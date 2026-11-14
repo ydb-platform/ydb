@@ -747,7 +747,7 @@ void TReadSessionActor<UseMigrationProtocol>::NotifyChildren(const TPartitionAct
         if (!directChildren.empty()) {
             for (auto& [_, actorInfo]: Partitions) {
                 for (auto& child: directChildren) {
-                    if (actorInfo.Partition.Partition == child->Id) {
+                    if (actorInfo.Partition.Partition == child->Id && actorInfo.Topic->GetInternalName() == topicName) {
                         ctx.Send(actorInfo.Actor, new TEvPQProxy::TEvParentCommitedToFinish(partition.Partition.Partition));
                     }
                 }
@@ -1366,7 +1366,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     std::unordered_set<ui64> notCommitedToFinishParents;
     for (auto& parent: partitionNode->DirectParents) {
         for (auto& [_, actorInfo]: Partitions) { // TODO: map
-            if (actorInfo.Partition.Partition == parent->Id && !actorInfo.IsLastOffsetCommitted()) {
+            if (actorInfo.Partition.Partition == parent->Id && actorInfo.Topic->GetInternalName() == name && !actorInfo.IsLastOffsetCommitted()) {
                 notCommitedToFinishParents.emplace(actorInfo.Partition.Partition);
             }
         }
@@ -1508,7 +1508,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
 
     YDB_LOG_DEBUG_CTX(ctx, "Sending to client partition status",
         {"PQLOGPREFIX", PQ_LOG_PREFIX});
-    SendControlMessage(it->second.Partition, std::move(result), ctx, false);
+    // A status read_offset must not overtake the data already read at that offset.
+    SendControlMessage(it->second.Partition, std::move(result), ctx);
 }
 
 template <bool UseMigrationProtocol>
@@ -2536,7 +2537,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
 
     TPartitionActorInfo* partitionInfo = nullptr;
     for (auto& [_, p] : Partitions) {
-        if (p.Partition.Partition == msg->PartitionId) {
+        if (p.Actor == ev->Sender) {
             partitionInfo = &p;
             break;
         }

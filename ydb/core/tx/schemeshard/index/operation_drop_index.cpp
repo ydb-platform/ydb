@@ -286,9 +286,12 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
-                .NotAsyncReplicaTable()
                 .NotUnderOperation()
                 .IsCommonSensePath();
+
+            if (!Transaction.GetInternal()) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -420,10 +423,13 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
             .IsResolved()
             .NotDeleted()
             .IsTable()
-            .NotAsyncReplicaTable()
             .NotUnderDeleting()
             .NotUnderOperation()
             .IsCommonSensePath();
+
+        if (!tx.GetInternal()) {
+            checks.NotAsyncReplicaTable();
+        }
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
@@ -535,6 +541,7 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
         result.push_back(CreateAlterTable(NextPartId(nextId, result), mainTableAltering));
     } else {
         auto mainTableIndexDropping = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndexAtMainTable);
+        mainTableIndexDropping.SetInternal(tx.GetInternal());
         auto operation = mainTableIndexDropping.MutableDropIndex();
         operation->SetTableName(mainTablePath.LeafName());
         operation->SetIndexName(indexPath.LeafName());

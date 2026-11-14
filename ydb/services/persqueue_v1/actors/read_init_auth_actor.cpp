@@ -165,6 +165,7 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
             // primary path used to re-describe
             it->second.DiscoveryConverter->SetPrimaryPath(JoinPath(ChildPath(entry.Path, topic.Name)));
             it->second.CdcStreamPath = CanonizePath(entry.Path);
+            it->second.IsAsyncReplication = entry.Attributes.contains("__async_replication");
 
 //            Topics[it->second.DiscoveryConverter->GetInternalName()] = it->second;
 //            Topics.erase(it);
@@ -303,7 +304,8 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
             holder.FolderId,
             holder.MeteringMode,
             holder.Partitions,
-            holder.GetPartitionGraph()
+            holder.GetPartitionGraph(),
+            holder.IsAsyncReplication
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

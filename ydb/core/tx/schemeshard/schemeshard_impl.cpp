@@ -1797,13 +1797,13 @@ bool TSchemeShard::CheckLocks(const TPathId pathId, const TTxId lockTxId, TStrin
     return true;
 }
 
-bool TSchemeShard::CheckInFlightLimit(TTxState::ETxType txType, TString& errStr) const {
+bool TSchemeShard::CheckInFlightLimit(TTxState::ETxType txType, TString& errStr, ui64 count) const {
     auto it = InFlightLimits.find(txType);
     if (it == InFlightLimits.end()) {
         return true;
     }
 
-    if (it->second != 0 && TabletCounters->Simple()[TxTypeInFlightCounter(txType)].Get() >= it->second) {
+    if (it->second != 0 && TabletCounters->Simple()[TxTypeInFlightCounter(txType)].Get() + count > it->second) {
         errStr = TStringBuilder() << "the limit of operations with type " << TTxState::TypeName(txType)
             << " has been exceeded"
             << ", limit: " << it->second;
@@ -7751,7 +7751,8 @@ void TSchemeShard::RestartPipeTx(TTabletId tabletId, const TActorContext& ctx) {
                             << ", msg cookie: " << msgCookie
                             << ", at schemeshardId: " << TabletID());
 
-            PipeClientCache->Send(ctx, ui64(tabletId),  msg.Type, msg.Data, msgCookie.second);
+            // msg.Materialize() is idempotent
+            PipeClientCache->Send(ctx, ui64(tabletId),  msg.Type, msg.Materialize(), msgCookie.second);
         }
     }
 }
@@ -8174,6 +8175,9 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             descr->SetFamily(colInfo.Family);
             descr->SetNotNull(colInfo.NotNull);
             descr->SetSetNotNullInProgress(colInfo.SetNotNullInProgress);
+            if (colInfo.DefaultKind == ETableColumnDefaultKind::FromSequence) {
+                descr->SetDefaultFromSequence(colInfo.DefaultValue);
+            }
         }
     }
 

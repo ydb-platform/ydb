@@ -5,8 +5,6 @@
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 
-#include <unordered_set>
-
 namespace NYql {
 
 struct TTypeAnnotationContext;
@@ -22,7 +20,7 @@ class TExprBase;
 
 namespace NKikimr::NKqp::NOpt {
 
-std::unordered_set<std::string_view> GetNonDeterministicFunctions();
+struct TKqpOptimizeContext;
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpTxPeepholeTransformer(
     NYql::TTypeAnnotationContext& typesCtx, 

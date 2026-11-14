@@ -815,8 +815,12 @@ NKikimrSchemeOp::TPartitioningPolicy TMultiTableCreator::AutoPartitioningByLoadP
 }
 
 TMultiTableCreator::TMultiTableCreator(std::vector<NActors::IActor*> tableCreators)
-    : TableCreators(std::move(tableCreators))
-{}
+{
+    TableCreators.reserve(tableCreators.size());
+    for (auto* creator : tableCreators) {
+        TableCreators.emplace_back(creator);
+    }
+}
 
 void TMultiTableCreator::Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) {
     TBase::Registered(sys, owner);
@@ -827,8 +831,8 @@ void TMultiTableCreator::Bootstrap() {
     Become(&TMultiTableCreator::StateFunc);
 
     TablesCreating = TableCreators.size();
-    for (const auto creator : TableCreators) {
-        Register(creator);
+    for (auto& creator : TableCreators) {
+        Register(creator.Release());
     }
 }
 

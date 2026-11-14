@@ -2404,6 +2404,29 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
     WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
 }
 
+Y_UNIT_TEST_F(ExpiredHasDataDeadlineIsAnsweredImmediately, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const ui64 end = 10;
+    const ui64 hasDataCookie = 42;
+
+    CreatePartition({.Partition=partition, .Begin=0, .End=end});
+
+    auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+    event->Record.SetPartition(partition.InternalPartitionId);
+    event->Record.SetOffset(end);
+    event->Record.SetDeadline(0);
+    event->Record.SetCookie(hasDataCookie);
+    ActorIdToProto(Ctx->Edge, event->Record.MutableSender());
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(TDuration::Seconds(2));
+    UNIT_ASSERT_C(response, "Expired HasData deadline must not wait for the periodic partition wakeup");
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), hasDataCookie);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetEndOffset(), end);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSizeLag(), 0);
+}
+
 Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
 {
     const TPartitionId partition{3};

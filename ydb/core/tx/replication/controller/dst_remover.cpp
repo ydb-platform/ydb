@@ -37,24 +37,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        if (PendingDstPathId) {
-            DetachDst();
-        } else {
-            DropDst();
-        }
-    }
-
-    void DetachDst() {
-        auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
-        auto& tx = *ev->Record.AddTransaction();
-        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-        tx.SetInternal(true);
-        PendingDstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
-        tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
-            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
-
-        Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
-        Become(&TThis::StateDropDst);
+        DropDst();
     }
 
     void DropDst() {
@@ -97,9 +80,6 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
             Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
             return SubscribeTx(record.GetTxId());
         case NKikimrScheme::StatusMultipleModifications:
-            if (PendingDstPathId) {
-                return Retry();
-            }
             if (record.HasPathDropTxId()) {
                 return SubscribeTx(record.GetPathDropTxId());
             } else {
@@ -108,48 +88,9 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
             break;
         case NKikimrScheme::StatusPathDoesNotExist:
             return Success();
-        case NKikimrScheme::StatusNameConflict:
-            if (PendingDstPathId) {
-                // ALTER reports a collected path id as a name conflict.
-                // Confirm that the pending destination is absent before detaching.
-                DetachError = record.GetReason();
-                Send(
-                    PipeCache,
-                    new TEvPipeCache::TEvForward(
-                        new TEvSchemeShard::TEvDescribeScheme(PendingDstPathId),
-                        SchemeShardId));
-                return Become(&TThis::StateCheckDst);
-            }
-            return Error(record.GetStatus(), record.GetReason());
         default:
-            if (PendingDstPathId) {
-                YDB_LOG_WARN("Retry detach dst", {"status", record.GetStatus()}, {"reason", record.GetReason()});
-                return Retry();
-            }
             return Error(record.GetStatus(), record.GetReason());
         }
-    }
-
-    STATEFN(StateCheckDst) {
-        YDB_LOG_CREATE_CONTEXT(LogPrefix,
-            {"actorState", "StateCheckDst"});
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            sFunc(TEvents::TEvWakeup, AllocateTxId);
-        default:
-            return StateBase(ev);
-        }
-    }
-
-    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        YDB_LOG_TRACE("Handle",
-            {"ev", ev->Get()->ToString()});
-
-        if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
-            return Success();
-        }
-
-        return Error(NKikimrScheme::StatusNameConflict, DetachError);
     }
 
     void SubscribeTx(ui64 txId) {
@@ -214,8 +155,7 @@ public:
             ui64 rid,
             ui64 tid,
             TReplication::ETargetKind kind,
-            const TPathId& dstPathId,
-            const TPathId& pendingDstPathId)
+            const TPathId& dstPathId)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -223,16 +163,12 @@ public:
         , TargetId(tid)
         , Kind(kind)
         , DstPathId(dstPathId)
-        , PendingDstPathId(pendingDstPathId)
         , LogPrefix(CreateActorLogPrefix("DstRemover", ReplicationId, TargetId))
     {
     }
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
-        if (PendingDstPathId) {
-            return AllocateTxId();
-        }
         if (!DstPathId) {
             Success();
         } else {
@@ -266,12 +202,10 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
-    const TPathId PendingDstPathId;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
     TActorId PipeCache;
-    TString DetachError;
 
 }; // TDstRemover
 
@@ -279,15 +213,13 @@ IActor* CreateDstRemover(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateDstRemover(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(),
-        target->GetPendingDstPathId());
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId());
 }
 
 IActor* CreateDstRemover(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
-        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId,
-        const TPathId& pendingDstPathId)
+        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId)
 {
-    return new TDstRemover(parent, schemeShardId, proxy, rid, tid, kind, dstPathId, pendingDstPathId);
+    return new TDstRemover(parent, schemeShardId, proxy, rid, tid, kind, dstPathId);
 }
 
 }

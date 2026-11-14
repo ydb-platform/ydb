@@ -64,6 +64,13 @@ namespace NSequenceProxy {
                 case NKikimrTxSequenceShard::TEvAllocateSequenceResult::SUCCESS:
                     break;
 
+                case NKikimrTxSequenceShard::TEvAllocateSequenceResult::PIPE_OUTDATED:
+                    return ReplyAndDie(Ydb::StatusIds::UNAVAILABLE,
+                        NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE,
+                        TStringBuilder()
+                            << "pipe to sequence shard " << TabletId
+                            << " is outdated");
+
                 case NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_NOT_FOUND:
                     return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR,
                         NKikimrIssues::TIssuesIds::PATH_NOT_EXIST,
@@ -80,6 +87,7 @@ namespace NSequenceProxy {
                 case NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_MOVED:
                     // Switch to a different tablet and retry transparently
                     TabletId = msg->Record.GetMovedTo();
+                    Moved = true;
                     return Bootstrap();
 
                 case NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_OVERFLOW:
@@ -103,6 +111,7 @@ namespace NSequenceProxy {
             res->Start = msg->Record.GetAllocationStart();
             res->Increment = msg->Record.GetAllocationIncrement();
             res->Count = msg->Record.GetAllocationCount();
+            res->Moved = Moved;
             Send(Owner, res.Release(), 0, Cookie);
             PassAway();
         }
@@ -128,6 +137,7 @@ namespace NSequenceProxy {
         ui64 TabletId;
         TPathId PathId;
         ui64 Cache;
+        bool Moved = false;
         NYql::TIssueManager IssueManager;
     };
 

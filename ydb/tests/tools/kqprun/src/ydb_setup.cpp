@@ -11,6 +11,8 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/aws_init/aws.h>
 
+#include <ydb/services/keyvalue/grpc_service_v1.h>
+#include <ydb/services/keyvalue/grpc_service_v2.h>
 #include <ydb/services/persqueue_v1/grpc_pq_schema.h>
 #include <ydb/services/persqueue_v1/services_initializer.h>
 
@@ -382,6 +384,10 @@ private:
             .SetDataCenterCount(Settings_.DcCount)
             .SetPqGateway(Settings_.PqGateway)
             .SetDataShardExportFactory(Settings_.DataShardExportFactory);
+
+        serverSettings
+            .RegisterGrpcService<NKikimr::NGRpcService::TKeyValueGRpcServiceV1>("keyvalue")
+            .RegisterGrpcService<NKikimr::NGRpcService::TKeyValueGRpcServiceV2>("keyvalue");
 
         serverSettings.StoragePoolTypes.clear();
         serverSettings.AddStoragePool("test", TStringBuilder() << NKikimr::CanonizePath(Settings_.DomainName) << ":test", Settings_.StorageGroupCount);

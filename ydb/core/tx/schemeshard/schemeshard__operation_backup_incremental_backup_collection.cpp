@@ -4,6 +4,8 @@
 #include "schemeshard__operation_states.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/backup/common/omit_backup.h>
+
 #define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -198,7 +200,14 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 return result;
             }
         }
-        
+
+        if (::NKikimr::NBackup::IsOmittedFromBackup(tablePath.Base()->UserAttrs->Attrs)) {
+            result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+                << "Table " << item.GetPath() << " is marked with " << ::NKikimr::NBackup::OMIT_BACKUP_ATTRIBUTE
+                << " and cannot be backed up")};
+            return result;
+        }
+
         std::pair<TString, TString> paths;
         TString err;
         if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {

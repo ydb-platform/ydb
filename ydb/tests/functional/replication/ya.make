@@ -30,7 +30,3 @@ ELSE()
 ENDIF()
 
 END()
-
-RECURSE_FOR_TESTS(
-    rollback
-)

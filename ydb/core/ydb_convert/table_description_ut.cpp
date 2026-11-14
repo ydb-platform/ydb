@@ -1,5 +1,7 @@
 #include "table_description.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+
 #include <google/protobuf/text_format.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -394,6 +396,31 @@ indexes {
     case_sensitive: true
   }
 })");
+    }
+
+    Y_UNIT_TEST(BloomFilterAlterTableReportsInvalidPath) {
+        Ydb::Table::AlterTableRequest request;
+        request.set_path("/Root/Table/");
+        NKikimrSchemeOp::TModifyScheme result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+
+        UNIT_ASSERT(!BuildAlterTableBloomFilterModifyScheme(&request, &result, status, error));
+        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(error, "wrong path format '/Root/Table/'");
+    }
+
+    Y_UNIT_TEST(ColumnTableAlterReportsInvalidPath) {
+        Ydb::Table::AlterTableRequest request;
+        request.set_path("/Root/Table/");
+        request.add_add_columns();
+        NKikimrSchemeOp::TModifyScheme result;
+        auto status = Ydb::StatusIds::SUCCESS;
+        TString error;
+
+        UNIT_ASSERT(!BuildAlterColumnTableModifyScheme(&request, &result, NYql::TKikimrTableMetadataPtr{}, status, error));
+        UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(error, "wrong path format '/Root/Table/'");
     }
 
 } // ConvertTableDescription

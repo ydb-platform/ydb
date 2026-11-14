@@ -1,8 +1,11 @@
 #pragma once
 
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <yql/essentials/core/extract_predicate/extract_predicate.h>
 
 namespace NKikimr::NKqp::NOpt {
+
+NYql::TPredicateExtractorSettings MakeKqpExtractorSettings(const TKqpOptimizeContext& kqpCtx);
 
 struct TKqpMatchReadResult {
     NYql::NNodes::TExprBase Read;

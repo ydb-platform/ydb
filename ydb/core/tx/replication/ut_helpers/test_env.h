@@ -231,6 +231,11 @@ public:
     }
 
     template <typename... Args>
+    auto CreateIndexedTable(Args&&... args) {
+        return RunCall([&] { return Client.CreateIndexedTable(std::forward<Args>(args)...); });
+    }
+
+    template <typename... Args>
     auto CreateTableWithIndex(Args&&... args) {
         return Client.CreateTableWithUniformShardedIndex(std::forward<Args>(args)...);
     }

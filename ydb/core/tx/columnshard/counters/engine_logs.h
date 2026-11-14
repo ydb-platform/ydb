@@ -94,46 +94,17 @@ public:
     }
 };
 
-class TIntervalMemoryCounters {
-public:
-    const std::shared_ptr<TValueAggregationClient> MinReadBytes;
-
-    TIntervalMemoryCounters(const std::shared_ptr<TValueAggregationClient>& minReadBytes)
-        : MinReadBytes(minReadBytes)
-    {
-    }
-};
-
-class TPortionsIndexCounters {
-public:
-    const TIntervalMemoryCounters RawBytes;
-    const TIntervalMemoryCounters BlobBytes;
-
-    TPortionsIndexCounters(TIntervalMemoryCounters&& rawBytes, TIntervalMemoryCounters&& blobBytes)
-        : RawBytes(std::move(rawBytes))
-        , BlobBytes(std::move(blobBytes))
-    {
-    }
-};
-
 class TGranuleDataCounters {
 private:
     const TDataClassCounters InsertedData;
     const TDataClassCounters CompactedData;
     const TDataClassCounters FullData;
-    const TPortionsIndexCounters PortionsIndexCounters;
 
 public:
-    const TPortionsIndexCounters& GetPortionsIndexCounters() const {
-        return PortionsIndexCounters;
-    }
-
-    TGranuleDataCounters(const TDataClassCounters& insertedData, const TDataClassCounters& compactedData, const TDataClassCounters& fullData,
-        TPortionsIndexCounters&& portionsIndexCounters)
+    TGranuleDataCounters(const TDataClassCounters& insertedData, const TDataClassCounters& compactedData, const TDataClassCounters& fullData)
         : InsertedData(insertedData)
         , CompactedData(compactedData)
         , FullData(fullData)
-        , PortionsIndexCounters(std::move(portionsIndexCounters))
     {
     }
 
@@ -144,61 +115,22 @@ public:
     }
 };
 
-class TIntervalMemoryAgentCounters: public TCommonCountersOwner {
-private:
-    using TBase = TCommonCountersOwner;
-    const std::shared_ptr<TValueAggregationAgent> ReadBytes;
-
-public:
-    TIntervalMemoryAgentCounters(const TCommonCountersOwner& base, const TString& memoryType)
-        : TBase(base, "memory", memoryType)
-        , ReadBytes(TBase::GetValueAutoAggregations("Bytes"))
-    {
-    }
-
-    TIntervalMemoryCounters GetClient() const {
-        return TIntervalMemoryCounters(ReadBytes->GetClient());
-    }
-};
-
-class TPortionsIndexAgentsCounters: public TCommonCountersOwner {
-private:
-    using TBase = TCommonCountersOwner;
-    TIntervalMemoryAgentCounters ReadRawBytes;
-    TIntervalMemoryAgentCounters ReadBlobBytes;
-
-public:
-    TPortionsIndexAgentsCounters(const TString& baseName)
-        : TBase(baseName)
-        , ReadRawBytes(TBase::CreateSubGroup("control", "read_memory"), "raw")
-        , ReadBlobBytes(TBase::CreateSubGroup("control", "read_memory"), "blob")
-    {
-    }
-
-    TPortionsIndexCounters BuildCounters() const {
-        return TPortionsIndexCounters(ReadRawBytes.GetClient(), ReadBlobBytes.GetClient());
-    }
-};
-
 class TAgentGranuleDataCounters {
 private:
     TAgentDataClassCounters InsertedData;
     TAgentDataClassCounters CompactedData;
     TAgentDataClassCounters FullData;
-    TPortionsIndexAgentsCounters PortionsIndex;
 
 public:
     TAgentGranuleDataCounters(const TString& ownerId)
         : InsertedData(ownerId, "ByGranule/Inserted")
         , CompactedData(ownerId, "ByGranule/Compacted")
         , FullData(ownerId, "ByGranule/Full")
-        , PortionsIndex("ByGranule/PortionsIndex")
     {
     }
 
     TGranuleDataCounters RegisterClient() const {
-        return TGranuleDataCounters(
-            InsertedData.RegisterClient(), CompactedData.RegisterClient(), FullData.RegisterClient(), PortionsIndex.BuildCounters());
+        return TGranuleDataCounters(InsertedData.RegisterClient(), CompactedData.RegisterClient(), FullData.RegisterClient());
     }
 };
 
@@ -220,20 +152,6 @@ private:
     NMonitoring::THistogramPtr ActualizationTaskSizeRemove;
     NMonitoring::THistogramPtr ActualizationTaskSizeEvict;
 
-    NMonitoring::TDynamicCounters::TCounterPtr ActualizationSkipRWProgressCount;
-    NMonitoring::THistogramPtr ActualizationSkipTooFreshPortion;
-
-    NMonitoring::TDynamicCounters::TCounterPtr PortionNoTtlColumnCount;
-    NMonitoring::TDynamicCounters::TCounterPtr PortionNoTtlColumnBytes;
-
-    NMonitoring::TDynamicCounters::TCounterPtr StatUsageForTTLCount;
-    NMonitoring::TDynamicCounters::TCounterPtr ChunkUsageForTTLCount;
-
-    NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderCount;
-    NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderBytes;
-
-    NMonitoring::TDynamicCounters::TCounterPtr GranuleOptimizerLocked;
-
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataUsageBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr BadPortionsCount;
@@ -244,7 +162,6 @@ private:
     NMonitoring::THistogramPtr HistogramAddPortionDurationMs;
 
     TAgentGranuleDataCounters GranuleDataAgent;
-    std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionRecordsDistribution;
 
@@ -253,21 +170,16 @@ public:
 
     class TPortionsInfoGuard {
     private:
-        std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> BlobGuards;
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> PortionRecordCountGuards;
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> PortionSizeGuards;
         TValueGuard BadPortionsCount;
 
     public:
-        TPortionsInfoGuard(const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrBlobs,
-            const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrPortionSize,
+        TPortionsInfoGuard(const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrPortionSize,
             const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrRecordsCount,
             NMonitoring::TDynamicCounters::TCounterPtr badPortionsCount)
             : BadPortionsCount(badPortionsCount)
         {
-            for (auto&& i : distrBlobs) {
-                BlobGuards.emplace_back(i->BuildGuard());
-            }
             for (auto&& i : distrPortionSize) {
                 PortionSizeGuards.emplace_back(i->BuildGuard());
             }
@@ -283,19 +195,11 @@ public:
     void OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const;
 
     TPortionsInfoGuard BuildPortionBlobsGuard() const {
-        return TPortionsInfoGuard(BlobSizeDistribution, PortionSizeDistribution, PortionRecordsDistribution, BadPortionsCount);
+        return TPortionsInfoGuard(PortionSizeDistribution, PortionRecordsDistribution, BadPortionsCount);
     }
 
     TGranuleDataCounters RegisterGranuleDataCounters() const {
         return GranuleDataAgent.RegisterClient();
-    }
-
-    void OnActualizationSkipRWProgress() const {
-        ActualizationSkipRWProgressCount->Add(1);
-    }
-
-    void OnActualizationSkipTooFreshPortion(const TDuration dWait) const {
-        ActualizationSkipTooFreshPortion->Collect(dWait.Seconds());
     }
 
     void OnSkipDeleteWithProcessMemory(const TDuration lag) const {
@@ -326,30 +230,8 @@ public:
         PortionToDropLag->Collect(lag.Seconds());
     }
 
-    void OnPortionNoTtlColumn(const ui64 size) const {
-        PortionNoTtlColumnCount->Add(1);
-        PortionNoTtlColumnBytes->Add(size);
-    }
-
-    void OnChunkUsageForTTL() const {
-        ChunkUsageForTTLCount->Add(1);
-    }
-
-    void OnStatUsageForTTL() const {
-        StatUsageForTTLCount->Add(1);
-    }
-
-    void OnPortionNoBorder(const ui64 size) const {
-        PortionNoBorderCount->Add(1);
-        PortionNoBorderBytes->Add(size);
-    }
-
     void OnIndexMetadataUsageBytes(const ui64 size) const {
         IndexMetadataUsageBytes->Set(size);
-    }
-
-    void OnGranuleOptimizerLocked() const {
-        GranuleOptimizerLocked->Add(1);
     }
 
     void OnCleanupPortionSkippedByLock(ui32 count) const {

@@ -8,8 +8,6 @@
 
 namespace NKikimr::NColumnShard {
 struct THistorgamBorders {
-    static const std::map<i64, TString> BlobSizeBorders;
-
     static const std::map<i64, TString> BytesBorders;
 
     static const std::map<i64, TString> TimeBordersMicroseconds;

@@ -158,7 +158,7 @@ TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage&
     , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
     , Stats(owner.GetStats())
     , StoragesManager(owner.GetStoragesManager())
-    , PortionsIndex(*this, Counters.GetPortionsIndexCounters())
+    , PortionsIndex(*this)
 {
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
         PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey(), owner.GetOptimizerRuntimeSettings());

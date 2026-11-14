@@ -25,22 +25,16 @@ TEngineLogsCounters::TEngineLogsCounters()
     , GranuleDataAgent("EngineLogs")
 {
     for (auto&& i : GetEnumNames<NOlap::NPortion::EProduced>()) {
-        if (BlobSizeDistribution.size() <= (ui32)i.first) {
-            BlobSizeDistribution.resize((ui32)i.first + 1);
+        if (PortionSizeDistribution.size() <= (ui32)i.first) {
             PortionSizeDistribution.resize((ui32)i.first + 1);
             PortionRecordsDistribution.resize((ui32)i.first + 1);
         }
-        if (PortionSizeDistribution.size() <= (ui32)i.first) {
-            PortionSizeDistribution.resize((ui32)i.first + 1);
-        }
-        BlobSizeDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>(
-            "EngineLogs", "BlobSizeDistribution", i.second, NColumnShard::THistorgamBorders::BlobSizeBorders);
         PortionSizeDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>(
             "EngineLogs", "PortionSizeDistribution", i.second, NColumnShard::THistorgamBorders::BytesBorders);
         PortionRecordsDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>(
             "EngineLogs", "PortionRecordsDistribution", i.second, NColumnShard::THistorgamBorders::PortionRecordBorders);
     }
-    for (auto&& i : BlobSizeDistribution) {
+    for (auto&& i : PortionSizeDistribution) {
         Y_ABORT_UNLESS(i);
     }
 
@@ -61,21 +55,7 @@ TEngineLogsCounters::TEngineLogsCounters()
     ActualizationTaskSizeRemove = TBase::GetHistogram("Actualization/RemoveTasks/Size", NMonitoring::ExponentialHistogram(18, 2));
     ActualizationTaskSizeEvict = TBase::GetHistogram("Actualization/EvictTasks/Size", NMonitoring::ExponentialHistogram(18, 2));
 
-    ActualizationSkipRWProgressCount = TBase::GetDeriviative("Actualization/Skip/RWProgress/Count");
-    ActualizationSkipTooFreshPortion = TBase::GetHistogram("Actualization//Skip/TooFresh/Duration", NMonitoring::LinearHistogram(12, 0, 360));
-
-    PortionNoTtlColumnCount = TBase::GetDeriviative("Ttl/PortionNoTtlColumn/Count");
-    PortionNoTtlColumnBytes = TBase::GetDeriviative("Ttl/PortionNoTtlColumn/Bytes");
-
-    PortionNoBorderCount = TBase::GetDeriviative("Ttl/PortionNoBorder/Count");
-    PortionNoBorderBytes = TBase::GetDeriviative("Ttl/PortionNoBorder/Bytes");
-
-    GranuleOptimizerLocked = TBase::GetDeriviative("Optimizer/Granules/Locked");
-
     IndexMetadataUsageBytes = TBase::GetValue("IndexMetadata/Usage/Bytes");
-
-    StatUsageForTTLCount = TBase::GetDeriviative("Ttl/StatUsageForTTLCount/Count");
-    ChunkUsageForTTLCount = TBase::GetDeriviative("Ttl/ChunkUsageForTTLCount/Count");
 
     BadPortionsCount = TBase::GetValue("BadPortions/Count");
 
@@ -107,7 +87,6 @@ void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr
 
 void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) {
     const ui32 producedId = (ui32)portion->GetProduced();
-    THashSet<NOlap::TUnifiedBlobId> blobIds;
     PortionRecordCountGuards[producedId]->Sub(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Sub(portion->GetTotalBlobBytes(), 1);
 

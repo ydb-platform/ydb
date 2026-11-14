@@ -30,7 +30,7 @@ public:
         TStatus status = TStatus::Ok;
         if (!unsupported) {
             status = Inner_->Transform(input, output, ctx);
-            if (status == TStatus::Ok && input->IsCallable("ParseType")) {
+            if (status == TStatus::Ok && output && output->GetTypeAnn()) {
                 TPgTypeVisitor visitor;
                 output->GetTypeAnn()->Accept(visitor);
                 unsupported = visitor.HasPg;

@@ -266,7 +266,7 @@ TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx,
 
     // Scalar subqueries are lowered by the shared precompute rules.
     // Wait until all logical dependencies have been materialized before building the read.
-    if (!IsDqPureExpr(read.Query())) {
+    if (!IsDqPureExpr(read.Query()) || !IsDqPureExpr(read.Settings())) {
         return node;
     }
 
@@ -296,6 +296,20 @@ TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx,
     }
     phyRead = ctx.ChangeChild(*phyRead, TKqpReadTableFullTextIndex::idx_Query,
         Build<TExprList>(ctx, read.Query().Pos()).Add(query).Done().Ptr());
+
+    auto settings = TKqpReadTableFullTextIndexSettings::Parse(read.Settings());
+    if (settings.ItemsLimit) {
+        auto limit = TExprBase(settings.ItemsLimit);
+        if (!limit.Maybe<TCoUint64>() && !limit.Maybe<TCoParameter>() &&
+            !limit.Maybe<TDqPhyPrecompute>() && !limit.Maybe<TKqpTxResultBinding>())
+        {
+            // LIMIT + OFFSET may produce a computed count. The source accepts
+            // only literals and parameters, just as for the query value above.
+            settings.SetItemsLimit(KqpPrecomputeParameter(limit, ctx).Ptr());
+            phyRead = ctx.ChangeChild(*phyRead, TKqpReadTableFullTextIndex::idx_Settings,
+                settings.BuildNode(ctx, read.Settings().Pos()).Ptr());
+        }
+    }
 
     auto stage = Build<TDqStage>(ctx, read.Pos())
         .Inputs()

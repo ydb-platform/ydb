@@ -12,6 +12,8 @@
 #include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
+
 #include <util/generic/ptr.h>
 #include <util/stream/str.h>
 
@@ -59,6 +61,27 @@ TString MakeLargeValueBytes() {
         TCell(alpha.data(), alpha.size()),
     };
     return SerializeCells(cells);
+}
+
+TString MakeShortValueBytes() {
+    const TString zeta("z");
+    const TString alpha("a");
+    const TCell cells[] = {
+        TCell(zeta.data(), zeta.size()),
+        TCell(alpha.data(), alpha.size()),
+    };
+    return SerializeCells(cells);
+}
+
+TString ReferenceCompress(TStringBuf payload, int level) {
+    const size_t bound = ZSTD_compressBound(payload.size());
+    UNIT_ASSERT(!ZSTD_isError(bound));
+    TString compressed = TString::Uninitialized(bound);
+    const size_t written = ZSTD_compress(
+        compressed.begin(), compressed.size(), payload.data(), payload.size(), level);
+    UNIT_ASSERT(!ZSTD_isError(written));
+    compressed.resize(written);
+    return compressed;
 }
 
 NKikimrChangeExchange::TDataChange MakeUpsert(const TString& valueBytes, ui32 firstTag, ui32 secondTag) {
@@ -220,10 +243,20 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         const auto smallValue = MakeValueBytes();
         const auto small = MakeRecord(
             TChangeRecord::EKind::CdcDataChange, table, MakeUpsert(smallValue, 3, 7).SerializeAsString());
+        TCmdWrite smallPlainCmd;
+        std::unique_ptr<IChangeRecordSerializer> smallPlain(CreateChangeRecordSerializer(BinaryOpts(
+            NKikimrSchemeOp::ECdcStreamCompressionNone)));
+        smallPlain->Serialize(smallPlainCmd, *small);
+        const auto smallPlain = ParseChunk(smallPlainCmd.GetData()).GetData();
         TCmdWrite smallCmd;
         binary->Serialize(smallCmd, *small);
         const auto smallChunk = ParseChunk(smallCmd.GetData());
-        UNIT_ASSERT_VALUES_EQUAL(smallChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
+        if (smallPlain.size() < CdcZstdMinPayloadBytes) {
+            UNIT_ASSERT_VALUES_EQUAL(smallChunk.GetCodec(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(smallChunk.GetData(), smallPlain);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(smallChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
+        }
         NKikimrChangeExchange::TChangeRecord smallProto;
         UNIT_ASSERT(smallProto.ParseFromString(MaybeDecompress(smallChunk)));
         ExpectRewrittenUpsert(smallProto.GetCdcDataChange(), smallValue, false);
@@ -247,6 +280,66 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         const auto plainChunk = ParseChunk(plainCmd.GetData());
         UNIT_ASSERT_VALUES_EQUAL(plainChunk.GetCodec(), 0);
         UNIT_ASSERT(plainChunk.GetData().StartsWith("{"));
+    }
+
+    Y_UNIT_TEST(SkipsShortPayloadsAndReusesFastContext) {
+        const auto table = MakeTable();
+        const auto shortRecord = MakeRecord(
+            TChangeRecord::EKind::CdcDataChange, table,
+            MakeUpsert(MakeShortValueBytes(), 3, 7).SerializeAsString());
+        const auto longRecord = MakeRecord(
+            TChangeRecord::EKind::CdcDataChange, table,
+            MakeUpsert(MakeLargeValueBytes(), 3, 7).SerializeAsString());
+
+        auto rawOf = [&](const TChangeRecord& record) {
+            std::unique_ptr<IChangeRecordSerializer> plain(CreateChangeRecordSerializer(BinaryOpts(
+                NKikimrSchemeOp::ECdcStreamCompressionNone)));
+            TCmdWrite cmd;
+            plain->Serialize(cmd, record);
+            return ParseChunk(cmd.GetData()).GetData();
+        };
+        const auto shortRaw = rawOf(*shortRecord);
+        const auto longRaw = rawOf(*longRecord);
+        UNIT_ASSERT_LT(shortRaw.size(), CdcZstdMinPayloadBytes);
+        UNIT_ASSERT_GE(longRaw.size(), CdcZstdMinPayloadBytes);
+
+        // One serializer for every record: the zstd context has to survive the first call.
+        std::unique_ptr<IChangeRecordSerializer> serializer(CreateChangeRecordSerializer(BinaryOpts(
+            NKikimrSchemeOp::ECdcStreamCompressionZstd)));
+
+        TCmdWrite firstShort;
+        serializer->Serialize(firstShort, *shortRecord);
+        const auto firstShortChunk = ParseChunk(firstShort.GetData());
+        UNIT_ASSERT_VALUES_EQUAL(firstShortChunk.GetCodec(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(firstShortChunk.GetData(), shortRaw);
+
+        TCmdWrite firstLong;
+        serializer->Serialize(firstLong, *longRecord);
+        const auto firstLongChunk = ParseChunk(firstLong.GetData());
+        UNIT_ASSERT_VALUES_EQUAL(firstLongChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
+        UNIT_ASSERT_VALUES_EQUAL(
+            firstLongChunk.GetData(), ReferenceCompress(longRaw, DefaultCdcZstdCompressionLevel));
+        UNIT_ASSERT_LT(firstLongChunk.GetData().size(), longRaw.size());
+
+        TCmdWrite secondLong;
+        serializer->Serialize(secondLong, *longRecord);
+        UNIT_ASSERT_VALUES_EQUAL(ParseChunk(secondLong.GetData()).GetData(), firstLongChunk.GetData());
+
+        TCmdWrite secondShort;
+        serializer->Serialize(secondShort, *shortRecord);
+        const auto secondShortChunk = ParseChunk(secondShort.GetData());
+        UNIT_ASSERT_VALUES_EQUAL(secondShortChunk.GetCodec(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(secondShortChunk.GetData(), shortRaw);
+
+        auto level3 = BinaryOpts(NKikimrSchemeOp::ECdcStreamCompressionZstd);
+        level3.CompressionLevel = 3;
+        std::unique_ptr<IChangeRecordSerializer> slower(CreateChangeRecordSerializer(level3));
+        TCmdWrite level3Cmd;
+        slower->Serialize(level3Cmd, *longRecord);
+        const auto level3Chunk = ParseChunk(level3Cmd.GetData());
+        UNIT_ASSERT_VALUES_EQUAL(level3Chunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
+        UNIT_ASSERT_VALUES_EQUAL(level3Chunk.GetData(), ReferenceCompress(longRaw, 3));
+        UNIT_ASSERT(level3Chunk.GetData() != firstLongChunk.GetData());
     }
 
     Y_UNIT_TEST(RejectsKeyAndTagMismatch) {

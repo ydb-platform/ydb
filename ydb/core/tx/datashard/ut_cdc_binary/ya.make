@@ -5,6 +5,7 @@ SIZE(SMALL)
 YQL_LAST_ABI_VERSION()
 
 PEERDIR(
+    contrib/libs/zstd
     library/cpp/digest/md5
     library/cpp/streams/zstd
     library/cpp/testing/unittest

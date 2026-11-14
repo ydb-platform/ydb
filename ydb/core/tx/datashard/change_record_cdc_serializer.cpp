@@ -20,12 +20,14 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/streams/zstd/zstd.h>
+
+#include <contrib/libs/zstd/include/zstd.h>
 
 #include <util/charset/utf8.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/ptr.h>
 #include <util/stream/str.h>
 #include <util/string/printf.h>
 
@@ -33,9 +35,13 @@
 
 namespace NKikimr::NDataShard {
 
-constexpr int DEFAULT_ZSTD_COMPRESSION_LEVEL = 3;
-
 class TBaseSerializer: public IChangeRecordSerializer {
+    struct TFreeZstdContext {
+        static void Destroy(ZSTD_CCtx* context) noexcept {
+            ZSTD_freeCCtx(context);
+        }
+    };
+
     static NKikimrPQClient::TDataChunk MakeDataChunk() {
         NKikimrPQClient::TDataChunk data;
         data.SetCodec(0 /* CODEC_RAW */);
@@ -68,20 +74,47 @@ class TBaseSerializer: public IChangeRecordSerializer {
         heartbeat.SetData(data.SerializeAsString());
     }
 
+    int ResolvedCompressionLevel() const {
+        return Opts.CompressionLevel ? Opts.CompressionLevel : DefaultCdcZstdCompressionLevel;
+    }
+
 protected:
-    // Same codec path as JSON changefeeds: zstd at CompressionLevel, or 3 when
-    // the level is unset. Heartbeats stay raw and never call this.
+    // One zstd context per serializer. Creating a context detects CPU features,
+    // which dominates when a changefeed compresses a record at a time.
+    // Heartbeats never call this. Payloads under CdcZstdMinPayloadBytes stay raw,
+    // and so does anything zstd does not make shorter.
     void SetCompressedPayload(NKikimrPQClient::TDataChunk& data, TString payload) const {
         switch (Opts.Compression) {
         case NKikimrSchemeOp::ECdcStreamCompressionNone:
             data.SetData(std::move(payload));
             break;
         case NKikimrSchemeOp::ECdcStreamCompressionZstd: {
-            TString compressed;
-            TStringOutput output(compressed);
-            TZstdCompress compressor(&output, Opts.CompressionLevel ? Opts.CompressionLevel : DEFAULT_ZSTD_COMPRESSION_LEVEL);
-            compressor.Write(payload.data(), payload.size());
-            compressor.Finish();
+            if (payload.size() < CdcZstdMinPayloadBytes) {
+                data.SetData(std::move(payload));
+                break;
+            }
+
+            if (!CompressionContext) {
+                CompressionContext.Reset(ZSTD_createCCtx());
+                Y_ENSURE(CompressionContext, "Failed to allocate ZSTD compression context");
+            }
+
+            const size_t bound = ZSTD_compressBound(payload.size());
+            Y_ENSURE(!ZSTD_isError(bound), "ZSTD_compressBound failed: " << ZSTD_getErrorName(bound));
+            TString compressed = TString::Uninitialized(bound);
+            const size_t written = ZSTD_compressCCtx(
+                CompressionContext.Get(),
+                compressed.begin(),
+                compressed.size(),
+                payload.data(),
+                payload.size(),
+                ResolvedCompressionLevel());
+            Y_ENSURE(!ZSTD_isError(written), "ZSTD_compressCCtx failed: " << ZSTD_getErrorName(written));
+            if (written >= payload.size()) {
+                data.SetData(std::move(payload));
+                break;
+            }
+            compressed.resize(written);
             data.SetCodec(NPersQueueCommon::ZSTD);
             data.SetData(std::move(compressed));
             break;
@@ -119,6 +152,8 @@ public:
 
 protected:
     const TChangeRecordSerializerOpts Opts;
+    // The partition sender owns one serializer and calls it from a single actor.
+    mutable THolder<ZSTD_CCtx, TFreeZstdContext> CompressionContext;
 
 }; // TBaseSerializer
 

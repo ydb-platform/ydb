@@ -31,6 +31,7 @@ private:
     std::set<NActors::TActorId> Fetchers;
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
     bool ScanDataInFlight = false;
+    ui64 WorkerSlicePrevFreeSpace = 0;
     ui64 SendDataReceived = 0;
     ui64 AcksSent = 0;
 
@@ -86,6 +87,19 @@ public:
     ~TKqpScanComputeActor();
 
     STFUNC(StateFunc) {
+        // In worker execution the runner may run on a worker thread: every event touching the
+        // task (scan data, fetcher control, channels) is handled under the endpoint lease.
+        const auto workerExecution = WorkerExecution;
+        if (workerExecution && !EnterWorkerEndpoint(ev)) {
+            return;
+        }
+        Y_DEFER {
+            if (workerExecution) {
+                // the free space the next worker slice starts from, see OnWorkerSliceInputsConsumed
+                WorkerSlicePrevFreeSpace = GetSourcesState();
+                LeaveWorkerEndpoint(workerExecution);
+            }
+        };
         std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
         if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
             wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
@@ -144,6 +158,29 @@ public:
     }
 
     void PollSources(ui64 prevFreeSpace);
+    void AckFetchersEarly();
+
+    // Worker execution: after a slice consumed scan data, ack the fetchers like DoExecuteImpl does.
+    void OnWorkerSliceInputsConsumed() {
+        PollSources(WorkerSlicePrevFreeSpace);
+    }
+
+    bool WorkerSliceNeedsEndpoint() const override {
+        // PollSources is a no-op while an ack is in flight or the scan is over; the TEvSendData
+        // answering that ack enters the endpoint and re-evaluates this.
+        return ScanData && !ScanData->IsFinished() && !ScanDataInFlight;
+    }
+
+    bool InputArrivalWakesTask() const override {
+        // TEvSendData / TEvFetcherFinished call DoExecute, which requests execution. With no
+        // buffered scan data a PendingInput run has nothing to poll for.
+        return ScanData && !ScanData->IsFinished() && ScanData->GetStoredBytes() == 0;
+    }
+
+    void PassAway() override {
+        TBase::RetireWorkerExecution();
+        TBase::PassAway();
+    }
 
     void DoTerminateImpl() override {
         FreeComputeCtxData();

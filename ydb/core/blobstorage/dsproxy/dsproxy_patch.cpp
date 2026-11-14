@@ -965,6 +965,12 @@ public:
             UseVPatch &= Info->GetMirror3dcState().State == NKikimrBlobStorage::TGroupState::NORMAL;
         }
 
+        if (Info->GetBridgeProxyGroupId()) {
+            // VPatch and moved patch write the patched blob on the VDisks without ForceGroupGeneration, which a part
+            // of a bridged group requires, so such a part keeps to the naive path
+            UseVPatch = false;
+        }
+
         IsGoodPatchedBlobId = result;
         IsAllowedErasure = Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
                 || Info->Type.GetErasure() == TErasureType::ErasureNone

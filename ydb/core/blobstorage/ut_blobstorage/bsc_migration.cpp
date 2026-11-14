@@ -1,3 +1,4 @@
+#include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
@@ -22,6 +23,16 @@ Y_UNIT_TEST_SUITE(BSCMigration) {
         UNIT_ASSERT_VALUES_EQUAL(settings.DatabaseSpaceUnblockColorSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(settings.GetDatabaseSpaceBlockColor(0), block);
         UNIT_ASSERT_VALUES_EQUAL(settings.GetDatabaseSpaceUnblockColor(0), unblock);
+    }
+
+    NKikimrBlobStorage::TEvControllerDistconfResponse ValidateBridgeConversion(TEnvironmentSetup& env) {
+        const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerDistconfRequest>();
+        request->Record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateBridgeConversion);
+        env.Runtime->SendToPipe(env.TabletId, sender, request.release(), 0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        const auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerDistconfResponse>(sender);
+        return response->Get()->Record;
     }
 
     Y_UNIT_TEST(DatabaseSpaceThresholdsForNewCluster) {
@@ -61,6 +72,43 @@ Y_UNIT_TEST_SUITE(BSCMigration) {
 
         env.RebootTablet(env.TabletId, TDuration::Seconds(5));
         AssertDatabaseSpaceThresholds(env, TColor::GREEN, TColor::GREEN);
+    }
+
+    Y_UNIT_TEST(BridgeConversionRejectsLegacyRecommissioning) {
+        // Local MiniKQL needs a function registry, which TTestActorSystem does not provide; it must outlive env.
+        const auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
+        TEnvironmentSetup env{{.NodeCount = 1}};
+        env.Runtime->GetNode(env.Settings.ControllerNodeId)->AppData->FunctionRegistry = functionRegistry.Get();
+        env.CreateBoxAndPool(1, 1);
+
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+
+        {
+            const auto response = ValidateBridgeConversion(env);
+            UNIT_ASSERT_C(response.GetStatus() ==
+                NKikimrBlobStorage::TEvControllerDistconfResponse::OK, response.DebugString());
+        }
+
+        const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
+        request->Record.MutableProgram()->MutableProgram()->SetText(TStringBuilder()
+            << "((return (AsList (UpdateRow 'Group "
+            << "'('('ID (Uint32 '" << groupId << "))) "
+            << "'('('DecommitStatus (Uint32 '4)))))))");
+        env.Runtime->SendToPipe(env.TabletId, sender, request.release(), 0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+        const auto updateResponse = env.WaitForEdgeActorEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(updateResponse->Get()->Record.GetStatus(), NKikimrProto::OK,
+            updateResponse->Get()->Record.DebugString());
+
+        env.RestartNode(env.Settings.ControllerNodeId);
+        env.Sim(TDuration::Seconds(5));
+        const auto response = ValidateBridgeConversion(env);
+        UNIT_ASSERT_C(response.GetStatus() ==
+            NKikimrBlobStorage::TEvControllerDistconfResponse::Error, response.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorReason(), TStringBuilder() << "GroupId# " << groupId);
     }
 
     Y_UNIT_TEST(DatabaseSpaceThresholdsPreserveExplicitSettings) {

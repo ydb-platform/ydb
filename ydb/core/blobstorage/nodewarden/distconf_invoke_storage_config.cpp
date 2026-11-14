@@ -804,6 +804,9 @@ namespace NKikimr::NStorage {
             case EControllerOp::BRIDGE_ROLLBACK:
                 return TBridgePileControllerOp(BSC_INTERFACE_BRIDGE_ROLLBACK, T::ValidateBridgeRollback,
                     "roll the bridged cluster back");
+            case EControllerOp::BRIDGE_CONVERSION:
+                return TBridgePileControllerOp(BSC_INTERFACE_BRIDGE_CONVERSION, T::ValidateBridgeConversion,
+                    "convert the cluster to bridge mode");
             case EControllerOp::UNSET:
             case EControllerOp::ENABLE_DISTCONF:
             case EControllerOp::DISABLE_DISTCONF:
@@ -832,7 +835,9 @@ namespace NKikimr::NStorage {
                 throw TExError() << "BS_CONTROLLER is way too old to " << what;
             }
             record.SetOperation(operation);
-            BridgePileOpPileId.CopyToProto(&record, &NKikimrBlobStorage::TEvControllerDistconfRequest::SetBridgePileId);
+            if (ControllerOp != EControllerOp::BRIDGE_CONVERSION) {
+                BridgePileOpPileId.CopyToProto(&record, &NKikimrBlobStorage::TEvControllerDistconfRequest::SetBridgePileId);
+            }
             if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE) {
                 record.MutableStorageConfig()->PackFrom(ProposedStorageConfig); // with static VDisks in the pile
             }
@@ -887,6 +892,7 @@ namespace NKikimr::NStorage {
             case EControllerOp::ADD_BRIDGE_PILE:
             case EControllerOp::REMOVE_BRIDGE_PILE:
             case EControllerOp::BRIDGE_ROLLBACK:
+            case EControllerOp::BRIDGE_CONVERSION:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }
@@ -928,7 +934,9 @@ namespace NKikimr::NStorage {
                     ? "Can't add pile to the cluster: BSC can't add parts of its groups to the pile: "
                     : ControllerOp == EControllerOp::REMOVE_BRIDGE_PILE
                     ? "Can't remove pile from the cluster: BSC can't delete parts of its groups in the pile: "
-                    : "Can't roll the bridged cluster back: BSC can't make its groups ordinary ones: ")
+                    : ControllerOp == EControllerOp::BRIDGE_ROLLBACK
+                    ? "Can't roll the bridged cluster back: BSC can't make its groups ordinary ones: "
+                    : "Can't convert the cluster to bridge mode: BSC has an incompatible group state: ")
                     << record.GetErrorReason();
             }
             NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId); // BSC is not needed anymore
@@ -968,6 +976,7 @@ namespace NKikimr::NStorage {
             case EControllerOp::ADD_BRIDGE_PILE:
             case EControllerOp::REMOVE_BRIDGE_PILE:
             case EControllerOp::BRIDGE_ROLLBACK:
+            case EControllerOp::BRIDGE_CONVERSION:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }

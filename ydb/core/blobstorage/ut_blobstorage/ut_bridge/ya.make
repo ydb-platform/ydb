@@ -25,8 +25,10 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         bridge_piles.cpp
         bridge_pile_connectivity.cpp
         bridge_pool_mode.cpp
+        bridge_put_result.cpp
         bridge_remove_pile.cpp
         bridge_restart.cpp
+        bridge_restore.cpp
         bridge_rollback.cpp
         bridge_routing.cpp
         bridge_stale_parts.cpp

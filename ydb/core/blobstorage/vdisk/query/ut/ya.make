@@ -9,6 +9,7 @@ PEERDIR(
 )
 
 SRCS(
+    query_readbatch_checksum_ut.cpp
     query_spacetracker_ut.cpp
     query_spacereport_scan_ut.cpp
     query_statdb_stream_ut.cpp

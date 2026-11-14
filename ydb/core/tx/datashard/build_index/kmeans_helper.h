@@ -13,6 +13,7 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/random/fast.h>
+#include <algorithm>
 
 namespace NKikimr::NDataShard::NKMeans {
 
@@ -22,6 +23,128 @@ using namespace NTableIndex::NKMeans;
 TTableRange CreateRangeFrom(const TUserTable& table, TClusterId parent, TCell& from, TCell& to);
 
 NTable::TLead CreateLeadFrom(const TTableRange& range);
+
+inline bool PrepareLocalKMeansLead(const TUserTable& table,
+    const NKikimrTxDataShard::TEvLocalKMeansRequest& request, NTable::TLead* lead, TString& error)
+{
+    const auto fromParent = request.GetParentFrom();
+    const auto toParent = request.GetParentTo();
+    TCell from = TCell::Make(fromParent - 1);
+    TCell to = TCell::Make(toParent);
+    TTableRange parent{{&from, 1}, false, {&to, 1}, true};
+    if (!fromParent) {
+        if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD ||
+            request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING) {
+            error = "Wrong upload for zero parent";
+            return false;
+        }
+        parent = table.Range.ToTableRange();
+    } else {
+        if (fromParent > toParent) {
+            error = TStringBuilder() << "Parent from " << fromParent << " should be less or equal to parent to " << toParent;
+            return false;
+        }
+        if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD ||
+            request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING) {
+            error = "Wrong upload for non-zero parent";
+            return false;
+        }
+        const auto range = Intersect(table.KeyColumnTypes, parent, table.Range.ToTableRange());
+        if (range.IsEmptyRange(table.KeyColumnTypes)) {
+            error = TStringBuilder() << "Requested range doesn't intersect with table range:"
+                << " requestedRange: " << DebugPrintRange(table.KeyColumnTypes, parent, *AppData()->TypeRegistry)
+                << " tableRange: " << DebugPrintRange(table.KeyColumnTypes, table.Range.ToTableRange(), *AppData()->TypeRegistry)
+                << " scanRange: " << DebugPrintRange(table.KeyColumnTypes, range, *AppData()->TypeRegistry);
+            return false;
+        }
+    }
+    if (request.HasKeyRange()) {
+        TSerializedTableRange resume;
+        resume.Load(request.GetKeyRange());
+        const auto range = Intersect(table.KeyColumnTypes, resume.ToTableRange(),
+            Intersect(table.KeyColumnTypes, parent, table.Range.ToTableRange()));
+        if (lead) {
+            *lead = CreateLeadFrom(range);
+        }
+    } else if (lead) {
+        if (!fromParent) {
+            lead->To({}, NTable::ESeek::Lower);
+        } else {
+            lead->To(parent.From, NTable::ESeek::Upper);
+            lead->Until(parent.To, true);
+        }
+    }
+    return true;
+}
+
+template<class TRequest>
+bool PrepareParentKMeansLead(const TUserTable& table, const TRequest& request, NTable::TLead* lead, TString& error) {
+    if constexpr (requires { request.GetUpload(); }) {
+        const bool main = request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD ||
+            request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING;
+        const bool build = request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD ||
+            request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING;
+        if ((main && request.GetParent()) || (build && !request.GetParent())) {
+            error = main ? "Wrong upload for non-zero parent" : "Wrong upload for zero parent";
+            return false;
+        }
+    }
+    TCell from, to;
+    const auto parent = CreateRangeFrom(table, request.GetParent(), from, to);
+    if (request.GetParent() && parent.IsEmptyRange(table.KeyColumnTypes)) {
+        error = " requested range doesn't intersect with table range";
+        return false;
+    }
+    if constexpr (requires { request.HasKeyRange(); }) {
+        if (request.HasKeyRange()) {
+            TSerializedTableRange resume;
+            resume.Load(request.GetKeyRange());
+            const auto range = Intersect(table.KeyColumnTypes, resume.ToTableRange(), parent);
+            if (lead) {
+                *lead = CreateLeadFrom(range);
+            }
+            return true;
+        }
+    }
+    if (lead) {
+        if (!request.GetParent()) {
+            lead->To({}, NTable::ESeek::Lower);
+        } else {
+            *lead = CreateLeadFrom(parent);
+        }
+    }
+    return true;
+}
+
+template<class TRequest>
+std::unique_ptr<IClusters> PrepareKMeansClusters(const TRequest& request,
+    NKikimr::NKMeans::EClustersMode mode, bool load, TString& error)
+{
+    ui32 rounds = 0;
+    if constexpr (requires { request.GetNeedsRounds(); }) {
+        rounds = request.GetNeedsRounds();
+    }
+    auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), rounds, error, mode);
+    if constexpr (requires { request.ClustersSize(); }) {
+        if (clusters) {
+            if (request.ClustersSize() < 1) {
+                error = "Should be requested for at least one cluster";
+                return {};
+            }
+            if (!std::all_of(request.GetClusters().begin(), request.GetClusters().end(), [&](const auto& value) {
+                return clusters->IsExpectedFormat({value.data(), value.size()});
+            })) {
+                error = "Clusters have invalid format";
+                return {};
+            }
+            if (load && !clusters->SetClusters(TVector<TString>{request.GetClusters().begin(), request.GetClusters().end()})) {
+                error = "Invalid clusters";
+                return {};
+            }
+        }
+    }
+    return clusters;
+}
 
 void AddRowToLevel(TBufferData& buffer, TClusterId parent, TClusterId child, const TString& embedding, bool isPostingLevel);
 

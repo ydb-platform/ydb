@@ -193,7 +193,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
 {
     Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_EXECUTOR);
     Broker = new TBroker(this, Emitter, Owner->TabletID(), FollowerId);
-    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId, FollowerId);
+    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId, SelfId(), sys, FollowerId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
     auto& icb = *AppData()->Icb;
@@ -3667,6 +3667,26 @@ void TExecutor::Handle(TEvResourceBroker::TEvResourceAllocated::TPtr &ev) {
     }
 }
 
+void TExecutor::Handle(TEvResourceBroker::TEvTaskOperationError::TPtr& ev) {
+    if (Scans) {
+        ReleaseScanLocks(Scans->Rejected(*ev->Get()).Snapshot);
+    }
+}
+
+void TExecutor::Handle(NOps::TEvAdmissionTimeout::TPtr& ev) {
+    if (Scans) {
+        ReleaseScanLocks(Scans->AdmissionTimedOut(ev->Get()->Serial, ev->Get()->Generation).Snapshot);
+    }
+}
+
+void TExecutor::Handle(NOps::TEvResumeScan::TPtr& ev) {
+    if (Scans) {
+        if (const auto acquired = Scans->Resume(ev->Get()->Serial)) {
+            StartScan(acquired.Serial, acquired.Table);
+        }
+    }
+}
+
 void TExecutor::StartSeat(ui64 task, TResource *cookie_)
 {
     auto *cookie = CheckedCast<TMemory::TCookie*>(cookie_);
@@ -3735,8 +3755,41 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
 
 void TExecutor::StartScan(ui64 serial, ui32 table)
 {
-    Y_UNUSED(table);
-    Scans->Start(serial);
+    if (!Scans->GetOptions(serial).Factory) {
+        // Legacy scan failures must still propagate to their caller.
+        try {
+            Scans->Start(serial);
+        } catch (...) {
+            CancelScan(table, serial);
+            throw;
+        }
+        return;
+    }
+    try {
+        const auto readiness = Scans->AwaitReadiness(serial);
+        if (readiness != TScans::EReadiness::Ready) {
+            if (readiness == TScans::EReadiness::TimedOut || readiness == TScans::EReadiness::RetryLimitExceeded) {
+                const char* reason = readiness == TScans::EReadiness::TimedOut
+                    ? "Timed out waiting for scan readiness" : "Scan readiness retry limit exceeded";
+                ReleaseScanLocks(Scans->AdmissionFailed(serial, reason).Snapshot);
+            }
+            return;
+        }
+        if (!Scans->Initialize(serial)) {
+            ReleaseScanLocks(Scans->AdmissionFailed(serial, "Deferred scan factory returned no scan").Snapshot);
+            return;
+        }
+        if (Scans->NeedsSnapshot(serial)) {
+            const auto& options = Scans->GetOptions(serial);
+            const auto* byVersion = std::get_if<TScanOptions::TSnapshotByRowVersion>(&options.Snapshot);
+            Scans->SetSnapshot(serial, PrepareScanSnapshot(table, nullptr,
+                byVersion ? byVersion->RowVersion : TRowVersion::Max()));
+        }
+        Scans->Start(serial);
+    } catch (const std::exception& exc) {
+        ReleaseScanLocks(Scans->AdmissionFailed(serial,
+            TStringBuilder() << "Cannot initialize admitted scan: " << exc.what()).Snapshot);
+    }
 }
 
 void TExecutor::StartScan(ui64 task, TResource *cookie)
@@ -3922,6 +3975,13 @@ void TExecutor::ReleaseScanLocks(TIntrusivePtr<TBarrier> barrier, const NTable::
     Y_UNUSED(subset);
 
     CheckCollectionBarrier(barrier);
+}
+
+void TExecutor::ReleaseScanLocks(THolder<TScanSnapshot> snapshot)
+{
+    if (snapshot) {
+        ReleaseScanLocks(std::move(snapshot->Barrier), *snapshot->Subset);
+    }
 }
 
 void TExecutor::Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx) {
@@ -4566,7 +4626,7 @@ ui64 TExecutor::QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cooki
                 << " with unknown snapshot " << snapshotId);
         snapshot = std::move(it->second);
         ScanSnapshots.erase(it);
-    } else {
+    } else if (!options.Factory) {
         TRowVersion rowVersion;
         if (const auto* byVersion = std::get_if<TScanOptions::TSnapshotByRowVersion>(&options.Snapshot)) {
             rowVersion = byVersion->RowVersion;
@@ -4687,6 +4747,9 @@ STFUNC(TExecutor::StateBoot) {
         HFunc(TEvPrivate::TEvBrokenTransaction, Handle);
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
+        hFunc(TEvResourceBroker::TEvTaskOperationError, Handle);
+        hFunc(NOps::TEvAdmissionTimeout, Handle);
+        hFunc(NOps::TEvResumeScan, Handle);
     default:
         return TranscriptBootOpResult(BootLogic->Receive(*ev), this->ActorContext());
     }
@@ -4719,6 +4782,9 @@ STFUNC(TExecutor::StateWork) {
         hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
         HFunc(TEvBlobStorage::TEvGetResult, Handle);
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
+        hFunc(TEvResourceBroker::TEvTaskOperationError, Handle);
+        hFunc(NOps::TEvAdmissionTimeout, Handle);
+        hFunc(NOps::TEvResumeScan, Handle);
         HFunc(NOps::TEvScanStat, Handle);
         hFunc(NOps::TEvResult, Handle);
         HFunc(NBlockIO::TEvStat, Handle);
@@ -4750,6 +4816,9 @@ STFUNC(TExecutor::StateFollower) {
         hFunc(NSharedCache::TEvStickyCollectionPages, Handle);
         HFunc(TEvBlobStorage::TEvGetResult, Handle);
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
+        hFunc(TEvResourceBroker::TEvTaskOperationError, Handle);
+        hFunc(NOps::TEvAdmissionTimeout, Handle);
+        hFunc(NOps::TEvResumeScan, Handle);
         HFunc(NOps::TEvScanStat, Handle);
         hFunc(NOps::TEvResult, Handle);
         HFunc(NBlockIO::TEvStat, Handle);
@@ -4769,6 +4838,9 @@ STFUNC(TExecutor::StateFollowerBoot) {
         HFunc(TEvPrivate::TEvBrokenTransaction, Handle);
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
+        hFunc(TEvResourceBroker::TEvTaskOperationError, Handle);
+        hFunc(NOps::TEvAdmissionTimeout, Handle);
+        hFunc(NOps::TEvResumeScan, Handle);
     default:
         return TranscriptFollowerBootOpResult(BootLogic->Receive(*ev), this->ActorContext());
     }

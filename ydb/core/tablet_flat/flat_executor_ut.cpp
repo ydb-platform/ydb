@@ -1,12 +1,15 @@
 #include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
 #include "flat_redo_observer.h"
+#include "flat_scan_actor.h"
 #include "util_fmt_abort.h"
 #include "shared_cache_counters.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
+#include <ydb/library/testlib/helpers.h>
+#include <util/generic/scope.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -1180,6 +1183,477 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         env.SendSync(new TEvTestFlatTablet::TEvQueueScan(111, true, true, NTable::EStatus::Term));
         env.SendSync(new TEvTestFlatTablet::TEvCancelScan);
 //        env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
+    }
+
+    class TThrowingDescriptionScan : public NTable::IScan {
+    public:
+        explicit TThrowingDescriptionScan(bool& destroyed)
+            : Destroyed(destroyed)
+        {}
+
+        ~TThrowingDescriptionScan() override {
+            Destroyed = true;
+        }
+
+        void Describe(IOutputStream&) const override {
+            ythrow yexception() << "Cannot describe test scan";
+        }
+
+        TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) override {
+            return {EScan::Final, {}};
+        }
+
+        EScan Seek(TLead&, ui64) override { return EScan::Final; }
+        EScan Feed(TArrayRef<const TCell>, const TRow&) override { return EScan::Final; }
+
+        TAutoPtr<IDestructable> Finish(EStatus) override {
+            delete this;
+            return nullptr;
+        }
+
+    private:
+        bool& Destroyed;
+    };
+
+    Y_UNIT_TEST(ScanDriverAcceptsMovedSnapshot) {
+        bool destroyed = false;
+        TAutoPtr<NTable::IScan> scan = new TThrowingDescriptionScan(destroyed);
+        TAutoPtr<NTable::TSubset> subset = new NTable::TSubset(NTable::TEpoch::Zero(), nullptr);
+        auto snapshot = THolder<TScanSnapshot>(new TScanSnapshot{TRowsModel::TableId, {}, subset, TRowVersion::Max()});
+        {
+            auto driver = MakeHolder<NOps::TDriver>(1, scan, NOps::TConf{}, std::move(snapshot));
+            UNIT_ASSERT(!scan);
+            UNIT_ASSERT(!snapshot);
+        }
+        UNIT_ASSERT(destroyed);
+    }
+
+    struct TRetainedScanPayloads {
+        std::shared_ptr<void> Upload;
+        std::shared_ptr<void> CompletedUpload;
+        std::shared_ptr<void> Response;
+        bool Finished = false;
+    };
+
+    class TRetainedPayloadOverrunScan : public NTable::IScan {
+    public:
+        explicit TRetainedPayloadOverrunScan(TRetainedScanPayloads& payloads)
+            : Payloads(payloads)
+        {}
+
+        void Describe(IOutputStream& out) const override {
+            out << "retained payload overrun";
+        }
+
+        TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) override {
+            Payloads.Upload = RetainResourceReservation(3_KB);
+            Payloads.CompletedUpload = RetainResourceReservation(3_KB);
+            // While running, charge the overrun and restore the original
+            // reservation when this temporary payload is released.
+            auto temporary = RetainResourceReservation(4_KB);
+            temporary.reset();
+            return {EScan::Final, {}};
+        }
+
+        EScan Seek(TLead&, ui64) override { return EScan::Final; }
+        EScan Feed(TArrayRef<const TCell>, const TRow&) override { return EScan::Final; }
+
+        TAutoPtr<IDestructable> Finish(EStatus status) override {
+            UNIT_ASSERT_VALUES_EQUAL(status, EStatus::Done);
+            // A response can overlap both uploads during teardown. Exceeding
+            // the estimate here must not escape from IScan::Finish().
+            Payloads.Response = RetainResourceReservation(4_KB);
+            Payloads.Finished = true;
+            delete this;
+            return nullptr;
+        }
+
+    private:
+        TRetainedScanPayloads& Payloads;
+    };
+
+    Y_UNIT_TEST(RetainedPayloadOverrunIsChargedDuringFinish) {
+        TMyEnvScans env;
+        TRetainedScanPayloads payloads;
+        TVector<TResourceValues> updates;
+        TActorId client;
+        ui64 taskId = 0;
+        bool finished = false;
+        struct TOverrunWarning {
+            NActors::NLog::EPrio Priority;
+            TMaybe<NActors::NStructuredLog::TStructuredMessage> Fields;
+        };
+        TVector<TOverrunWarning> overrunWarnings;
+        TTestActorRuntimeBase::TEventFilter previousFilter;
+        previousFilter = env->SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NActors::NLog::TEvLog::EventType) {
+                const auto* log = event->Get<NActors::NLog::TEvLog>();
+                if (log->Component == NKikimrServices::TABLET_OPS_HOST &&
+                    log->Line == "Retained scan payload exceeds admitted memory reservation") {
+                    overrunWarnings.push_back({log->Level.ToPrio(), log->StructuredMessage});
+                }
+            }
+            return previousFilter(runtime, event);
+        });
+        Y_DEFER { env->SetEventFilter(previousFilter); };
+        auto submissions = env->AddObserver<TEvResourceBroker::TEvSubmitTask>([&](auto& event) {
+            if (event->Get()->Task.Type == "build_index") {
+                client = event->Sender;
+                taskId = event->Get()->Task.TaskId;
+            }
+        });
+        auto updateObserver = env->AddObserver<TEvResourceBroker::TEvUpdateTask>([&](auto& event) {
+            if (event->Sender == client && event->Get()->TaskId == taskId) {
+                updates.push_back(event->Get()->RequiredResources);
+            }
+        });
+        auto finishes = env->AddObserver<TEvResourceBroker::TEvFinishTask>([&](auto& event) {
+            if (event->Sender == client && event->Get()->TaskId == taskId) {
+                finished = true;
+            }
+        });
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, 8_KB);
+            options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                return new TRetainedPayloadOverrunScan(payloads);
+            };
+            executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
+        }));
+        env->WaitFor("finished scan retains its full payload charge without CPU", [&] { return updates.size() >= 4; });
+        UNIT_ASSERT(payloads.Finished);
+        UNIT_ASSERT_VALUES_EQUAL(updates[0][CPU], 1);
+        UNIT_ASSERT_VALUES_EQUAL(updates[0][MEMORY], 10_KB);
+        UNIT_ASSERT_VALUES_EQUAL(updates[1][CPU], 1);
+        UNIT_ASSERT_VALUES_EQUAL(updates[1][MEMORY], 8_KB);
+        UNIT_ASSERT_VALUES_EQUAL(updates[2][CPU], 1);
+        UNIT_ASSERT_VALUES_EQUAL(updates[2][MEMORY], 10_KB);
+        UNIT_ASSERT_VALUES_EQUAL(updates[3][CPU], 0);
+        UNIT_ASSERT_VALUES_EQUAL(updates[3][MEMORY], 10_KB);
+        UNIT_ASSERT(!finished);
+        payloads.Response.reset();
+        env->WaitFor("response memory released", [&] { return updates.size() >= 5; });
+        UNIT_ASSERT_VALUES_EQUAL(updates[4][CPU], 0);
+        UNIT_ASSERT_VALUES_EQUAL(updates[4][MEMORY], 6_KB);
+        payloads.CompletedUpload.reset();
+        env->WaitFor("completed upload memory released", [&] { return updates.size() >= 6; });
+        UNIT_ASSERT_VALUES_EQUAL(updates[5][MEMORY], 3_KB);
+        payloads.Upload.reset();
+        env->WaitFor("last payload finishes the broker task", [&] { return finished; });
+        // Prepare() and Finish() both exceed the estimate, but only the first
+        // occurrence should warn, and payload cleanup must not repeat it.
+        UNIT_ASSERT_VALUES_EQUAL(overrunWarnings.size(), 1);
+        UNIT_ASSERT(overrunWarnings[0].Priority == NActors::NLog::EPrio::Warn);
+        UNIT_ASSERT(overrunWarnings[0].Fields);
+        const auto& fields = *overrunWarnings[0].Fields;
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("scanType").value_or(""), "build_index");
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("taskId").value_or(""), ToString(taskId));
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("admittedBytes").value_or(""), ToString(8_KB));
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("retainedBytes").value_or(""), ToString(10_KB));
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("overrunBytes").value_or(""), ToString(2_KB));
+    }
+
+    class TAdmissionReadyScan : public NTable::IScan {
+    public:
+        explicit TAdmissionReadyScan(bool& finished)
+            : Finished(finished)
+        {}
+        void Describe(IOutputStream& out) const override { out << "deferred readiness scan"; }
+        TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) override { return {EScan::Final, {}}; }
+        EScan Seek(TLead&, ui64) override { return EScan::Final; }
+        EScan Feed(TArrayRef<const TCell>, const TRow&) override { return EScan::Final; }
+        TAutoPtr<IDestructable> Finish(EStatus status) override {
+            Finished = status == EStatus::Done;
+            delete this;
+            return nullptr;
+        }
+    private:
+        bool& Finished;
+    };
+
+    Y_UNIT_TEST_TWIN(CancelledInitialSubmissionIgnoresLateBrokerErrors, Timeout) {
+        for (const bool beforeSubmit : {false, true}) {
+            TMyEnvScans env;
+            auto configure = [&](ui64 memory) {
+                auto event = MakeHolder<TEvResourceBroker::TEvConfigure>();
+                event->Merge = true;
+                auto* queue = event->Record.AddQueues();
+                queue->SetName("queue_build_index");
+                queue->SetWeight(1);
+                queue->SetStrictMemoryLimit(true);
+                queue->MutableLimit()->SetMemory(memory);
+                auto* task = event->Record.AddTasks();
+                task->SetName("build_index");
+                task->SetQueueName("queue_build_index");
+                task->SetDefaultDuration(TDuration::Seconds(1).GetValue());
+                env.SendEv(MakeResourceBrokerID(), event.Release());
+                UNIT_ASSERT(env->GrabEdgeEventRethrow<TEvResourceBroker::TEvConfigureResult>(env.Edge)->Get()->Record.GetSuccess());
+            };
+            configure(0);
+            TActorId client;
+            ui64 taskId = 0;
+            ui64 serial = 0;
+            ui32 finishes = 0;
+            ui32 unknownErrors = 0;
+            ui32 failures = 0;
+            ui32 constructed = 0;
+            bool finished = false;
+            auto submitted = env->AddObserver<TEvResourceBroker::TEvSubmitTask>([&](auto& event) {
+                if (event->Get()->Task.Type == "build_index") {
+                    client = event->Sender;
+                    taskId = event->Get()->Task.TaskId;
+                }
+            });
+            auto cleanup = env->AddObserver<TEvResourceBroker::TEvFinishTask>([&](auto& event) {
+                if (event->Sender == client && event->Get()->TaskId == taskId) {
+                    ++finishes;
+                }
+            });
+            auto errors = env->AddObserver<TEvResourceBroker::TEvTaskOperationError>([&](auto& event) {
+                if (event->Recipient == client && event->Get()->TaskId == taskId &&
+                    event->Get()->Status.Code == TEvResourceBroker::TStatus::UNKNOWN_TASK) {
+                    ++unknownErrors;
+                }
+            });
+            TBlockEvents<TEvResourceBroker::TEvSubmitTask> submissions(env.Env, [&](const auto& event) {
+                return beforeSubmit && event->Get()->Task.Type == "build_index";
+            });
+            TBlockEvents<TEvResourceBroker::TEvTaskOperationError> rejections(env.Env, [&](const auto& event) {
+                return !beforeSubmit && event->Recipient == client && event->Get()->TaskId == taskId &&
+                    event->Get()->Status.Code == TEvResourceBroker::TStatus::MEMORY_LIMIT_EXCEEDED;
+            });
+            auto queueScan = [&] {
+                env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+                    TScanOptions options;
+                    options.SetResourceBroker("build_index", 10, 1_MB);
+                    options.QueueTimeout = TDuration::MilliSeconds(100);
+                    options.OnAdmissionFailure = [&](const TString& reason, bool retry) {
+                        UNIT_ASSERT(Timeout);
+                        UNIT_ASSERT(retry);
+                        UNIT_ASSERT_VALUES_EQUAL(reason, "Timed out waiting for scan admission");
+                        ++failures;
+                    };
+                    options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                        ++constructed;
+                        return new TAdmissionReadyScan(finished);
+                    };
+                    serial = executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
+                }));
+            };
+            queueScan();
+            env->WaitFor("initial submit or its rejection held", [&] {
+                return beforeSubmit ? !submissions.empty() : !rejections.empty();
+            });
+            if constexpr (Timeout) {
+                env->WaitFor("admission timeout erases the scan before rejection", [&] { return failures == 1; });
+            } else {
+                env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto& ctx) {
+                    UNIT_ASSERT(executor->CancelScan(TRowsModel::TableId, serial));
+                    ctx.Send(env.Edge, new TEvents::TEvWakeup);
+                }));
+                env.WaitForWakeUp();
+            }
+            env->WaitFor("erased scan sends cancellation", [&] { return finishes == 1; });
+            env->SimulateSleep(TDuration::MilliSeconds(10));
+            // Cancellation racing with a rejected or delayed submit retains
+            // the broker's UNKNOWN_TASK diagnostic; the erased scan ignores it.
+            UNIT_ASSERT_VALUES_EQUAL(unknownErrors, 1);
+            if (beforeSubmit) {
+                // This is the production expired-owner state: the executor
+                // has really released the lease while the submit is delayed.
+                UNIT_ASSERT(submissions.front()->Get()->Task.OwnerLease);
+                UNIT_ASSERT(submissions.front()->Get()->Task.OwnerLease->expired());
+            }
+            submissions.Stop().Unblock();
+            rejections.Stop().Unblock();
+            env->SimulateSleep(TDuration::MilliSeconds(100));
+            UNIT_ASSERT_VALUES_EQUAL(unknownErrors, beforeSubmit ? 2 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(finishes, 1);
+            UNIT_ASSERT_VALUES_EQUAL(failures, Timeout ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(constructed, 0);
+            UNIT_ASSERT(!finished);
+            configure(2_MB);
+            queueScan();
+            env->WaitFor("new scan succeeds after delayed rejection", [&] { return finished; });
+            UNIT_ASSERT_VALUES_EQUAL(constructed, 1);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DeferredReadinessResumesOnlyLiveScans, Cancel) {
+        TMyEnvScans env;
+        bool ready = false;
+        bool finished = false;
+        ui32 constructed = 0;
+        ui64 serial = 0;
+        std::unique_ptr<IEventHandle> resume;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            options.OnAdmissionReady = [&](TScanOptions&, std::unique_ptr<IEventHandle> event) {
+                if (!ready) {
+                    resume = std::move(event);
+                    return false;
+                }
+                return true;
+            };
+            options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                ++constructed;
+                return new TAdmissionReadyScan(finished);
+            };
+            serial = executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
+        }));
+        env->WaitFor("scan awaits readiness without construction", [&] { return bool(resume); });
+        UNIT_ASSERT_VALUES_EQUAL(constructed, 0);
+        if (Cancel) {
+            env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto& ctx) {
+                executor->CancelScan(TRowsModel::TableId, serial);
+                ctx.Send(env.Edge, new TEvents::TEvWakeup);
+            }));
+            env.WaitForWakeUp();
+        }
+        ready = true;
+        env->Send(resume.release());
+        if (Cancel) {
+            env->SimulateSleep(TDuration::MilliSeconds(100));
+            UNIT_ASSERT_VALUES_EQUAL(constructed, 0);
+            UNIT_ASSERT(!finished);
+        } else {
+            env->WaitFor("ready scan completes", [&] { return finished; });
+            UNIT_ASSERT_VALUES_EQUAL(constructed, 1);
+        }
+    }
+
+    Y_UNIT_TEST(RepeatedReadinessCyclesYieldRetry) {
+        TMyEnvScans env;
+        bool ready = false;
+        bool failed = false;
+        bool finished = false;
+        ui32 suspended = 0;
+        ui32 constructed = 0;
+        std::unique_ptr<IEventHandle> resume;
+        TBlockEvents<TEvResourceBroker::TEvResourceAllocated> grants(env.Env, [](const auto& event) {
+            const auto* resource = dynamic_cast<TResource*>(event->Get()->Cookie.Get());
+            return resource && resource->Source == TResource::ESource::Scan;
+        });
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            TScanOptions options;
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            options.QueueTimeout = TDuration::Hours(1);
+            options.OnAdmissionTimeout = [] { return true; };
+            options.OnAdmissionReady = [&](TScanOptions&, std::unique_ptr<IEventHandle> event) {
+                if (ready) {
+                    return true;
+                }
+                ++suspended;
+                resume = std::move(event);
+                return false;
+            };
+            options.OnAdmissionFailure = [&](const TString& reason, bool retry) {
+                UNIT_ASSERT(retry);
+                UNIT_ASSERT_VALUES_EQUAL(reason, "Scan readiness retry limit exceeded");
+                failed = true;
+            };
+            options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                ++constructed;
+                return new TAdmissionReadyScan(finished);
+            };
+            executor->QueueScan(TRowsModel::TableId, {}, 12345, options);
+        }));
+        env->WaitFor("initial readiness grant", [&] { return !grants.empty(); });
+        grants.Unblock(1);
+        for (ui32 attempt = 0; attempt < 32 && !failed; ++attempt) {
+            env->WaitFor("readiness wait or retry", [&] { return bool(resume) || failed; });
+            if (failed) {
+                break;
+            }
+            ready = true;
+            env->Send(resume.release());
+            env->WaitFor("readmission queues without constructing a scan", [&] { return !grants.empty() || failed; });
+            ready = false;
+            grants.Unblock(1);
+        }
+        env->WaitFor("bounded readiness retry", [&] { return failed; });
+        UNIT_ASSERT_GT(suspended, 1);
+        UNIT_ASSERT_LT(suspended, 32);
+        UNIT_ASSERT_VALUES_EQUAL(constructed, 0);
+        UNIT_ASSERT(!finished);
+        if (resume) {
+            env->Send(resume.release());
+        }
+        env->SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(constructed, 0);
+    }
+
+    Y_UNIT_TEST_TWIN(ScanStartFailureReleasesPreparedSnapshot, Deferred) {
+        TMyEnvScans env;
+        env.SendSync(env.Rows.MakeRows(1));
+        bool failed = false;
+        bool destroyed = false;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto& ctx) {
+            TScanOptions options;
+            options.SetSnapshotId(executor->MakeScanSnapshot(TRowsModel::TableId));
+            if (Deferred) {
+                options.SetResourceBroker("build_index", 10, 1_MB);
+                options.Factory = [&](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                    return new TThrowingDescriptionScan(destroyed);
+                };
+                options.OnAdmissionFailure = [&](const TString& reason, bool retry) {
+                    UNIT_ASSERT(retry);
+                    UNIT_ASSERT_STRING_CONTAINS(reason, "Cannot describe test scan");
+                    failed = true;
+                    TActivationContext::Send(new IEventHandle(env.Edge, {}, new TEvents::TEvWakeup));
+                };
+                executor->QueueScan(TRowsModel::TableId, {}, 0, options);
+            } else {
+                options.DisableResourceBroker();
+                try {
+                    executor->QueueScan(TRowsModel::TableId, new TThrowingDescriptionScan(destroyed), 0, options);
+                } catch (const std::exception& exc) {
+                    UNIT_ASSERT_STRING_CONTAINS(exc.what(), "Cannot describe test scan");
+                    failed = true;
+                    ctx.Send(env.Edge, new TEvents::TEvWakeup);
+                }
+            }
+        }));
+        env.WaitForWakeUp();
+        UNIT_ASSERT(failed);
+        UNIT_ASSERT(destroyed);
+        env.SendAsync(new NFake::TEvExecute([](auto* executor, const auto&) {
+            executor->StartVacuum(123ull);
+        }));
+        env.WaitFor<NFake::TEvDataCleaned>();
+    }
+
+    Y_UNIT_TEST_TWIN(DeferredScanFailureReleasesPreparedSnapshot, ThrowFactory) {
+        TMyEnvScans env;
+        env.SendSync(env.Rows.MakeRows(1));
+        bool failed = false;
+        env.SendAsync(new NFake::TEvExecute([&](auto* executor, const auto&) {
+            const ui64 snapshot = executor->MakeScanSnapshot(TRowsModel::TableId);
+            TScanOptions options;
+            options.SetSnapshotId(snapshot);
+            options.SetResourceBroker("build_index", 10, 1_MB);
+            options.Factory = [](TScanOptions&) -> TAutoPtr<NTable::IScan> {
+                if (ThrowFactory) {
+                    ythrow yexception() << "Cannot construct test scan";
+                }
+                return {};
+            };
+            options.OnAdmissionFailure = [&](const TString&, bool retry) {
+                UNIT_ASSERT(retry);
+                failed = true;
+                TActivationContext::Send(new IEventHandle(env.Edge, {}, new TEvents::TEvWakeup));
+            };
+            executor->QueueScan(TRowsModel::TableId, {}, 0, options);
+        }));
+        env.WaitForWakeUp();
+        UNIT_ASSERT(failed);
+        // A missing ReleaseScanLocks leaves the prepared snapshot's GC barrier
+        // behind even after its pointers die, and vacuum cannot complete.
+        env.SendAsync(new NFake::TEvExecute([](auto* executor, const auto&) {
+            executor->StartVacuum(123ull);
+        }));
+        env.WaitFor<NFake::TEvDataCleaned>();
     }
 
     Y_UNIT_TEST(TestPostponedScanSnapshotMVCC) {

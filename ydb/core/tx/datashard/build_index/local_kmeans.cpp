@@ -48,7 +48,7 @@ using namespace NKMeans;
  *     - Output: rows annotated with cluster IDs and optional data columns
  */
 
-class TLocalKMeansScan: public TActor<TLocalKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TLocalKMeansScan: public TActor<TLocalKMeansScan>, public IActorExceptionHandler, public TVectorIndexScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -188,6 +188,7 @@ public:
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
+        Uploader.SetResourceReservation(GetResourceReservation(), GetResourceRetainer());
 
         return {EScan::Feed, {}};
     }
@@ -227,6 +228,10 @@ public:
             YDB_LOG_ERROR("Scan failed",
                 {"debug", Debug()},
                 {"responseRecord", Response->Record.ShortDebugString()});
+        }
+        if (GetResourceReservation()) {
+            Response->MemoryReservation = RetainResourceReservation(
+                Response->Record.SpaceUsedLong() + Response->Record.ByteSizeLong() + 4_KB);
         }
         Send(ResponseActorId, Response.Release());
 
@@ -275,6 +280,10 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
+        if (!CheckRowBytes(Response->Record, key, *row)) {
+            return EScan::Final;
+        }
+
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
@@ -681,6 +690,7 @@ void TDataShard::Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TAc
 
 void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
+    const auto sender = ev->Sender;
     auto& request = ev->Get()->Record;
     const ui64 id = request.GetId();
     auto rowVersion = request.HasSnapshotStep() || request.HasSnapshotTxId()
@@ -760,49 +770,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             badRequest("Should be requested partition on at least two rows");
         }
 
-        const auto parentFrom = request.GetParentFrom();
-        const auto parentTo = request.GetParentTo();
-        NTable::TLead lead;
-        if (parentFrom == 0) {
-            if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
-                || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
-            {
-                badRequest("Wrong upload for zero parent");
-            }
-            if (request.HasKeyRange()) {
-                TSerializedTableRange resumeRange;
-                resumeRange.Load(request.GetKeyRange());
-                auto scanRange = Intersect(userTable.KeyColumnTypes, resumeRange.ToTableRange(), userTable.Range.ToTableRange());
-                lead = CreateLeadFrom(scanRange);
-            } else {
-                lead.To({}, NTable::ESeek::Lower);
-            }
-        } else if (parentFrom > parentTo) {
-            badRequest(TStringBuilder() << "Parent from " << parentFrom << " should be less or equal to parent to " << parentTo);
-        } else if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
-            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING)
-        {
-            badRequest("Wrong upload for non-zero parent");
-        } else {
-            TCell from = TCell::Make(parentFrom - 1);
-            TCell to = TCell::Make(parentTo);
-            TTableRange parentRange{{&from, 1}, false, {&to, 1}, true};
-            auto scanRange = Intersect(userTable.KeyColumnTypes, parentRange, userTable.Range.ToTableRange());
-            if (scanRange.IsEmptyRange(userTable.KeyColumnTypes)) {
-                badRequest(TStringBuilder() << "Requested range doesn't intersect with table range:"
-                    << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, parentRange, *AppData()->TypeRegistry)
-                    << " tableRange: " << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
-                    << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
-            }
-            if (request.HasKeyRange()) {
-                TSerializedTableRange resumeRange;
-                resumeRange.Load(request.GetKeyRange());
-                auto resumeScanRange = Intersect(userTable.KeyColumnTypes, resumeRange.ToTableRange(), scanRange);
-                lead = CreateLeadFrom(resumeScanRange);
-            } else {
-                lead.To(parentRange.From, NTable::ESeek::Upper);
-                lead.Until(parentRange.To, true);
-            }
+        TString rangeError;
+        if (!PrepareLocalKMeansLead(userTable, request, nullptr, rangeError)) {
+            badRequest(rangeError);
         }
 
         if (!request.GetLevelName()) {
@@ -828,21 +798,25 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), request.GetNeedsRounds(), error);
-        if (!clusters && !NKikimr::NKMeans::ValidateSettingsPartial(request.GetSettings(), error)) {
+        if (!NKikimr::NKMeans::ValidateSettings(request.GetSettings(), error) &&
+            !NKikimr::NKMeans::ValidateSettingsPartial(request.GetSettings(), error)) {
             badRequest(error);
             auto sent = trySendBadRequest();
             Y_ENSURE(sent);
             return;
         }
-        TAutoPtr<NTable::IScan> scan = new TLocalKMeansScan(
-            TabletID(), userTable, request, ev->Sender, std::move(response),
-            std::move(lead), std::move(clusters)
-        );
-
-        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+        StartDeferredBuildIndexScan<TEvDataShard::TEvLocalKMeansRequest, TEvDataShard::TEvLocalKMeansResponse>(
+            this, ev, std::move(response), rowVersion, userTable.LocalTid,
+            [tabletId = TabletID()](const TUserTable& table, const auto& req, TActorId sender, auto reply) -> TAutoPtr<NTable::IScan> {
+                NTable::TLead lead;
+                TString error;
+                Y_ENSURE(PrepareLocalKMeansLead(table, req, &lead, error), error);
+                auto clusters = PrepareKMeansClusters(req, NKikimr::NKMeans::EClustersMode::Accumulate, true, error);
+                Y_ENSURE(clusters || NKikimr::NKMeans::ValidateSettingsPartial(req.GetSettings(), error), error);
+                return new TLocalKMeansScan(tabletId, table, req, sender, std::move(reply), std::move(lead), std::move(clusters));
+            });
     } catch (const std::exception& exc) {
-        FailScan<TEvDataShard::TEvLocalKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TLocalKMeansScan");
+        FailScan<TEvDataShard::TEvLocalKMeansResponse>(id, TabletID(), sender, seqNo, exc, "TLocalKMeansScan");
     }
 }
 

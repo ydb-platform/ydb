@@ -10,6 +10,8 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <array>
+#include <optional>
+#include <memory>
 
 namespace NKikimr {
 namespace NResourceBroker {
@@ -76,6 +78,10 @@ struct TEvResourceBroker {
          */
         ui64 TabletId = 0;
         ui32 FollowerId = 0;
+        // A shared allocation lease will finish this task after the submitting
+        // actor dies. Used for buffers still owned by asynchronous children.
+        bool KeepOnClientDeath = false;
+        std::optional<std::weak_ptr<void>> OwnerLease = std::nullopt;
     };
 
     struct TEvSubmitTask : public TEventLocal<TEvSubmitTask, EvSubmitTask> {
@@ -123,11 +129,13 @@ struct TEvResourceBroker {
             // Cannot remove task in-fly.
             TASK_IN_FLY,
             // Cannot finish task which is still in queue.
-            TASK_IN_QUEUE
+            TASK_IN_QUEUE,
+            MEMORY_LIMIT_EXCEEDED
         };
 
         ECode Code;
         TString Message;
+        std::optional<ui64> MemoryLimit = std::nullopt;
     };
 
     struct TEvTaskOperationError : public TEventLocal<TEvTaskOperationError, EvTaskOperationError> {

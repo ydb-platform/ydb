@@ -66,6 +66,7 @@ namespace TEvPrivate {
         EvKesusResourcesDescribeResult,
         EvKesusSemaphoresDescribeResult,
         EvImportKesusResult,
+        EvIndexBuildRetry,
         EvEnd
     };
 
@@ -112,6 +113,14 @@ namespace TEvPrivate {
         explicit TEvFlushConditionalEraseBatch(const TInstant& batchStartTime)
             : BatchStartTime(batchStartTime)
         { }
+    };
+
+    struct TEvIndexBuildRetry: public TEventLocal<TEvIndexBuildRetry, EvIndexBuildRetry> {
+        const ui64 BuildId;
+        const TInstant Deadline;
+        TEvIndexBuildRetry(ui64 buildId, TInstant deadline)
+            : BuildId(buildId), Deadline(deadline)
+        {}
     };
 
     struct TEvIndexBuildingMakeABill: public TEventLocal<TEvIndexBuildingMakeABill, EvIndexBuildBilling> {

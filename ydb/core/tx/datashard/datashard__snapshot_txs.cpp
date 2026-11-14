@@ -5,6 +5,46 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
+namespace {
+class TTxReleaseIndexScanSnapshot final : public TTransactionBase<TDataShard> {
+    const TSnapshotKey Key;
+public:
+    TTxReleaseIndexScanSnapshot(TDataShard* self, const TSnapshotKey& key)
+        : TTransactionBase<TDataShard>(self), Key(key)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_READ_COLUMNS; }
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        Self->GetSnapshotManager().ReleaseReference(Key, txc.DB, ctx.Now());
+        return true;
+    }
+    void Complete(const TActorContext&) override {}
+};
+}
+
+std::shared_ptr<void> TDataShard::AcquireIndexScanSnapshot(const TSnapshotKey& key) {
+    struct TReference {
+        TSnapshotKey Key;
+        bool Armed = false;
+    };
+    auto reference = std::shared_ptr<TReference>(new TReference{key},
+        [system = TActivationContext::ActorSystem(), owner = SelfId()](TReference* reference) {
+            if (reference->Armed) {
+                system->Send(new IEventHandle(owner, {}, new TEvPrivate::TEvReleaseIndexScanSnapshot(reference->Key)));
+            }
+            delete reference;
+        });
+    if (!SnapshotManager.AcquireReference(key)) {
+        return {};
+    }
+    reference->Armed = true;
+    return reference;
+}
+
+void TDataShard::Handle(TEvPrivate::TEvReleaseIndexScanSnapshot::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxReleaseIndexScanSnapshot(this, ev->Get()->Key), ctx);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TDataShard::TTxRefreshVolatileSnapshot::TTxRefreshVolatileSnapshot(

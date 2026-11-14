@@ -54,7 +54,7 @@ using namespace NKMeans;
  *     - Prefix: records the (prefix key, parent cluster ID) mapping
  */
 
-class TPrefixKMeansScan: public TActor<TPrefixKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TPrefixKMeansScan: public TActor<TPrefixKMeansScan>, public IActorExceptionHandler, public TVectorIndexScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -229,6 +229,7 @@ public:
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
+        Uploader.SetResourceReservation(GetResourceReservation(), GetResourceRetainer());
 
         return {EScan::Feed, {}};
     }
@@ -267,6 +268,10 @@ public:
             YDB_LOG_ERROR("Scan failed",
                 {"debug", Debug()},
                 {"responseRecord", Response->Record.ShortDebugString()});
+        }
+        if (GetResourceReservation()) {
+            Response->MemoryReservation = RetainResourceReservation(
+                Response->Record.SpaceUsedLong() + Response->Record.ByteSizeLong() + 4_KB);
         }
         Send(ResponseActorId, Response.Release());
 
@@ -315,6 +320,10 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
+        if (!CheckRowBytes(Response->Record, key, *row)) {
+            return EScan::Final;
+        }
+
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
@@ -690,6 +699,7 @@ void TDataShard::Handle(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TA
 
 void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
+    const auto sender = ev->Sender;
     auto& request = ev->Get()->Record;
     const ui64 id = request.GetId();
     TRowVersion rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
@@ -797,20 +807,23 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), request.GetNeedsRounds(), error);
-        if (!clusters && !NKikimr::NKMeans::ValidateSettingsPartial(request.GetSettings(), error)) {
+        if (!NKikimr::NKMeans::ValidateSettings(request.GetSettings(), error) &&
+            !NKikimr::NKMeans::ValidateSettingsPartial(request.GetSettings(), error)) {
             badRequest(error);
             auto sent = trySendBadRequest();
             Y_ENSURE(sent);
             return;
         }
-        TAutoPtr<NTable::IScan> scan = new TPrefixKMeansScan(
-            TabletID(), userTable, request, ev->Sender, std::move(response), std::move(clusters)
-        );
-
-        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+        StartDeferredBuildIndexScan<TEvDataShard::TEvPrefixKMeansRequest, TEvDataShard::TEvPrefixKMeansResponse>(
+            this, ev, std::move(response), rowVersion, userTable.LocalTid,
+            [tabletId = TabletID()](const TUserTable& table, const auto& req, TActorId sender, auto reply) -> TAutoPtr<NTable::IScan> {
+                TString error;
+                auto clusters = PrepareKMeansClusters(req, NKikimr::NKMeans::EClustersMode::Accumulate, true, error);
+                Y_ENSURE(clusters || NKikimr::NKMeans::ValidateSettingsPartial(req.GetSettings(), error), error);
+                return new TPrefixKMeansScan(tabletId, table, req, sender, std::move(reply), std::move(clusters));
+            });
     } catch (const std::exception& exc) {
-        FailScan<TEvDataShard::TEvPrefixKMeansResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TPrefixKMeansScan");
+        FailScan<TEvDataShard::TEvPrefixKMeansResponse>(id, TabletID(), sender, seqNo, exc, "TPrefixKMeansScan");
     }
 }
 

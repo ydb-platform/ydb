@@ -18,6 +18,8 @@ message TQueueConfig {
     optional string Name = 1;
     optional uint32 Weight = 2;
     optional TResources Limit = 3;
+    // Disable the idle-queue memory overcommit exception for this queue.
+    optional bool StrictMemoryLimit = 4 [default = false];
 };
 
 message TTaskConfig {

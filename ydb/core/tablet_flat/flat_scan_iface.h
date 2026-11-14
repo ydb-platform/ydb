@@ -5,6 +5,8 @@
 #include "flat_row_scheme.h"
 #include "util_basics.h"
 #include "util_fmt_abort.h"
+#include <memory>
+#include <functional>
 
 namespace NKikimr {
 namespace NTable {
@@ -87,7 +89,29 @@ namespace NTable {
 
 
     class IScan : public IDestructable {
+        // Declared in the base so derived scan data is destroyed before the
+        // reservation. Upload children may retain their own shared reference.
+        std::shared_ptr<void> ResourceReservation;
+        std::function<std::shared_ptr<void>(ui64)> RetainResource;
     public:
+        void HoldResourceReservation(std::shared_ptr<void> reservation,
+            std::function<std::shared_ptr<void>(ui64)> retain = {}) {
+            ResourceReservation = std::move(reservation);
+            RetainResource = std::move(retain);
+        }
+
+        const std::shared_ptr<void>& GetResourceReservation() const {
+            return ResourceReservation;
+        }
+
+        const std::function<std::shared_ptr<void>(ui64)>& GetResourceRetainer() const {
+            return RetainResource;
+        }
+
+        std::shared_ptr<void> RetainResourceReservation(ui64 bytes) const {
+            return RetainResource ? RetainResource(bytes) : ResourceReservation;
+        }
+
         using TRow = NTable::TRowState;
         using IDriver = NTable::IDriver;
         using TScheme = NTable::TRowScheme;

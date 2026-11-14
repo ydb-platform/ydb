@@ -664,6 +664,8 @@ class TExecutor
     TVector<NTable::TPartView> TableParts(ui32 table) override;
     TVector<TIntrusiveConstPtr<NTable::TColdPart>> TableColdParts(ui32 table) override;
     const NTable::TRowVersionRanges& TableRemovedRowVersions(ui32 table) override;
+    bool IsDataTieringEnabled() const override;
+    void RequestMemCompactionRetry(ui32 table) override;
     ui64 BeginCompaction(THolder<NTable::TCompactionParams> params) override;
     bool CancelCompaction(ui64 compactionId) override;
     void RequestChanges(ui32 table) override;

@@ -1829,9 +1829,11 @@ bool TPartitionConfigMerger::VerifyCreateParams(
 
     bool hasStorageConfig = false;
     bool hasAuxilaryFamilies = false;
+    THashSet<ui32> familyIds{0}; // The default family may be implicit.
 
     for (const auto& family : config.GetColumnFamilies()) {
         ui32 fId = family.GetId();
+        familyIds.insert(fId);
         if (fId == 0) {
             hasStorageConfig = family.HasStorageConfig();
         } else {
@@ -1864,6 +1866,17 @@ bool TPartitionConfigMerger::VerifyCreateParams(
 
     if (!VerifyCompactionPolicy(config.GetCompactionPolicy(), errDescr)) {
         return false;
+    }
+
+    const auto& policy = config.GetCompactionPolicy();
+    for (size_t index = 0; index < policy.GenerationSize(); ++index) {
+        const ui32 tierId = policy.GetGeneration(index).GetTierId();
+        if (!familyIds.contains(tierId)) {
+            errDescr = TStringBuilder()
+                << "Compaction generation " << index << " refers to tier " << tierId
+                << " that is not a column family of the table";
+            return false;
+        }
     }
 
     return true;

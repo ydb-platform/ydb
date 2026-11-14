@@ -1,7 +1,11 @@
 #include "flat_comp_gen.h"
+#include "flat_compaction_prepare.h"
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/generic/cast.h>
+#include <util/generic/hash_set.h>
+
+#include <algorithm>
 
 namespace NKikimr {
 namespace NTable {
@@ -11,6 +15,22 @@ namespace {
 
 static constexpr ui32 BAD_PRIORITY = Max<ui32>();
 static constexpr ui32 PRIORITY_UPDATE_FACTOR = 20;
+
+bool UsesTiering(const TScheme::TTableInfo& scheme) {
+    if (scheme.SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact
+            || scheme.SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
+        return false;
+    }
+    if (scheme.TieringPolicy) {
+        return true;
+    }
+    for (const auto& generation : scheme.CompactionPolicy->Generations) {
+        if (generation.TierId.value_or(0) != 0) {
+            return true;
+        }
+    }
+    return false;
+}
 
 }
 
@@ -202,13 +222,20 @@ void TGenCompactionStrategy::Start(TCompactionState state) {
     const auto* scheme = Backend->TableScheme(Table);
 
     Policy = scheme->CompactionPolicy;
+    TierManaged = UsesTiering(*scheme);
     Generations.resize(Policy->Generations.size());
+    for (const ui32 tier : Policy->GetTierIds()) {
+        if (tier != 0) {
+            TierFinals.try_emplace(Policy->GetFinalLevel(tier));
+        }
+    }
 
     for (auto& partView : Backend->TableParts(Table)) {
         auto label = partView->Label;
         ui32 level = state.PartLevels.Value(partView->Label, 255);
-        Y_ENSURE(level > 0 && level <= Generations.size() || level == 255);
-        auto& parts = level == 255 ? FinalParts : Generations.at(level - 1).Parts;
+        Y_ENSURE(level > 0 && level <= Generations.size()
+            || (TierManaged ? Policy->IsFinalLevel(level) : level == 255));
+        auto& parts = Policy->IsFinalLevel(level) ? GetFinalParts(level) : Generations.at(level - 1).Parts;
         parts.emplace_back(std::move(partView));
         KnownParts[label] = level;
     }
@@ -216,20 +243,30 @@ void TGenCompactionStrategy::Start(TCompactionState state) {
     for (auto& part : Backend->TableColdParts(Table)) {
         auto label = part->Label;
         ui32 level = state.PartLevels.Value(part->Label, 255);
-        Y_ENSURE(level > 0 && level <= Generations.size() || level == 255);
+        if (TierManaged) {
+            // Borrowed unloaded sources belong to default, even when the log
+            // associates them with a generation now bound to another tier.
+            level = ResolveColdPartLevel(level, *Policy);
+        } else {
+            Y_ENSURE(level > 0 && level <= Generations.size() || level == 255);
+        }
         ColdParts.emplace_back(std::move(part));
         KnownParts[label] = level;
     }
 
-    TEpoch lastEpoch = TEpoch::Max();
-    for (auto& gen : Generations) {
+    THashMap<ui32, TEpoch> lastEpochs;
+    for (size_t index = 0; index < Generations.size(); ++index) {
+        auto& gen = Generations[index];
         TPartAggregator agg;
         if (gen.Parts) {
             gen.Parts.sort();
 
-            // Verify epoch is decreasing from level to level
-            Y_ENSURE(gen.Parts.front().Epoch <= lastEpoch);
-            lastEpoch = gen.Parts.back().Epoch;
+            // Epochs from different storage tiers may interleave.
+            const ui32 tier = TierManaged ? TierForLevel(index + 1) : 0;
+            const auto [it, inserted] = lastEpochs.emplace(tier, TEpoch::Max());
+            Y_UNUSED(inserted);
+            Y_ENSURE(gen.Parts.front().Epoch <= it->second);
+            it->second = gen.Parts.back().Epoch;
 
             agg.Add(gen.Parts);
         }
@@ -240,6 +277,13 @@ void TGenCompactionStrategy::Start(TCompactionState state) {
 
     // Sorting FinalParts is not required, but let's be nice
     FinalParts.sort();
+    for (auto& [level, final] : TierFinals) {
+        Y_UNUSED(level);
+        final.Parts.sort();
+    }
+    if (TierManaged) {
+        ValidateTierEpochs();
+    }
 
     UpdateStats();
 
@@ -250,6 +294,9 @@ void TGenCompactionStrategy::Start(TCompactionState state) {
     }
 
     UpdateOverload();
+    if (TierManaged) {
+        CheckTierGenerations();
+    }
 }
 
 void TGenCompactionStrategy::Stop() {
@@ -282,20 +329,27 @@ void TGenCompactionStrategy::Stop() {
         gen.Task.CompactionId = 0;
     }
 
-    switch (std::exchange(FinalState.State, EState::Free)) {
-        case EState::Free:
-            break;
-        case EState::Pending:
-        case EState::PendingBackground:
-            // The task is scheduled, make sure to cancel it
-            Y_ENSURE(FinalState.Task.TaskId != 0);
-            Broker->CancelTask(FinalState.Task.TaskId);
-            break;
-        case EState::Compacting:
-            // Compaction is running, cancel it
-            Y_ENSURE(FinalState.Task.CompactionId != 0);
-            Backend->CancelCompaction(FinalState.Task.CompactionId);
-            break;
+    auto stopFinal = [&](TFinalState& final) {
+        switch (std::exchange(final.State, EState::Free)) {
+            case EState::Free:
+                break;
+            case EState::Pending:
+            case EState::PendingBackground:
+                // The task is scheduled, make sure to cancel it
+                Y_ENSURE(final.Task.TaskId != 0);
+                Broker->CancelTask(final.Task.TaskId);
+                break;
+            case EState::Compacting:
+                // Compaction is running, cancel it
+                Y_ENSURE(final.Task.CompactionId != 0);
+                Backend->CancelCompaction(final.Task.CompactionId);
+                break;
+        }
+    };
+    stopFinal(FinalState);
+    for (auto& [level, final] : TierFinals) {
+        Y_UNUSED(level);
+        stopFinal(final.State);
     }
 
     FinalCompactionId = 0;
@@ -312,9 +366,17 @@ void TGenCompactionStrategy::Stop() {
     Generations.clear();
     FinalState = { };
     FinalParts.clear();
+    TierFinals.clear();
     ColdParts.clear();
     KnownParts.clear();
     Policy = nullptr;
+    TierManaged = false;
+    TierCompactions.clear();
+    BusyTierParts.clear();
+    TierWaitRevisions.clear();
+    TierOccupancyRevision = 0;
+    TierSweepGeneration.reset();
+    NextTierSweep = 0;
 }
 
 void TGenCompactionStrategy::ReflectSchema() {
@@ -324,7 +386,28 @@ void TGenCompactionStrategy::ReflectSchema() {
     bool ok = NLocalDb::ValidateCompactionPolicyChange(*Policy, *scheme->CompactionPolicy, err);
     Y_ENSURE(ok, "Cannot change compaction policy for table " << scheme->Name << " id " << scheme->Id << ": " << err);
 
+    const bool tierManaged = UsesTiering(*scheme);
+    if (TierManaged || tierManaged) {
+        for (size_t index = 0; index < Generations.size(); ++index) {
+            const ui32 before = Policy->Generations[index].TierId.value_or(0);
+            const ui32 after = scheme->CompactionPolicy->Generations[index].TierId.value_or(0);
+            Y_ENSURE(before == after || (Generations[index].Parts.empty()
+                    && UnloadedPartsAtLevel(index + 1) == 0),
+                "Cannot change TierId of generation " << index + 1
+                    << " while it contains live parts; evacuate the generation first");
+        }
+        CancelTierCompactions();
+    }
     Policy = scheme->CompactionPolicy;
+    TierManaged = tierManaged;
+    for (const ui32 tier : Policy->GetTierIds()) {
+        if (tier != 0) {
+            TierFinals.try_emplace(Policy->GetFinalLevel(tier));
+        }
+    }
+    if (!TierManaged) {
+        TierWaitRevisions.clear();
+    }
     Y_ENSURE(Generations.size() <= Policy->Generations.size(), "Cannot currently shrink the number of generations");
     Generations.resize(Policy->Generations.size());
 
@@ -334,6 +417,9 @@ void TGenCompactionStrategy::ReflectSchema() {
     }
 
     UpdateOverload();
+    if (TierManaged) {
+        CheckTierGenerations();
+    }
 }
 
 void TGenCompactionStrategy::ReflectRemovedRowVersions() {
@@ -376,10 +462,30 @@ void TGenCompactionStrategy::UpdateCompactions() {
                 priority);
         }
     }
+    if (TierManaged) {
+        ScheduleTierSweep();
+    }
 }
 
 ui64 TGenCompactionStrategy::BeginMemCompaction(TTaskId taskId, TSnapEdge edge, ui64 forcedCompactionId) {
     Y_ENSURE(MemCompactionId == 0, "Unexpected concurrent mem compaction requests");
+
+    if (TierManaged) {
+        // A conflicting flush is deferred by the caller, preserving its
+        // snapshot/forced request until reservations become available.
+        if (!CanStartTierCompaction(0)) {
+            DeferTierCompaction(0);
+            return 0;
+        }
+        TExtraState extra;
+        MemCompactionId = PrepareTierCompaction(taskId, edge, 0, extra,
+            forcedCompactionId != 0, false);
+        if (MemCompactionId != 0 && forcedCompactionId != 0) {
+            ForcedMemCompactionId = MemCompactionId;
+            NextForcedGenCompactionId = forcedCompactionId;
+        }
+        return MemCompactionId;
+    }
 
     TExtraState extra;
     if (forcedCompactionId == 0 && !Policy->Generations.empty() && ForcedState == EForcedState::None && edge.Head == TEpoch::Max()) {
@@ -409,6 +515,24 @@ bool TGenCompactionStrategy::ScheduleBorrowedCompaction() {
         logl << "TGenCompactionStrategy ScheduleBorrowedCompaction for " << ownerTabletId;
     }
     
+    if (TierManaged) {
+        if (!CanStartTierCompaction(255) || FinalState.State != EState::Free
+                || ForcedState != EForcedState::None) {
+            return false;
+        }
+        bool hasBorrowed = false;
+        for (const auto& [label, level] : KnownParts) {
+            Y_UNUSED(level);
+            hasBorrowed |= label.TabletID() != ownerTabletId;
+        }
+        if (!hasBorrowed) {
+            return false;
+        }
+        SubmitTask(FinalState.Task, "compaction_borrowed", 5, 255);
+        FinalState.State = EState::Pending;
+        return true;
+    }
+
     // Find if we actually have borrowed parts
     bool hasBorrowed = false;
     for (const auto& pr : KnownParts) {
@@ -441,7 +565,7 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
 {
     auto* params = CheckedCast<TGenCompactionParams*>(rawParams.Get());
     ui32 generation = params->Generation;
-    Y_ENSURE(generation <= Generations.size() || generation == 255, "Unexpected CompactionFinished generation");
+    Y_ENSURE(generation <= Generations.size() || Policy->IsFinalLevel(generation), "Unexpected CompactionFinished generation");
     if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
         logl << "TGenCompactionStrategy CompactionFinished for " << Backend->OwnerTabletId()
             << ": compaction " << compactionId << ", generation " << generation;
@@ -451,13 +575,14 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         Y_ENSURE(compactionId == MemCompactionId,
             "Unexpected CompactionFinished for gen 0");
         MemCompactionId = 0;
-    } else if (generation == 255) {
-        Y_ENSURE(FinalState.State == EState::Compacting);
-        Y_ENSURE(compactionId == FinalState.Task.CompactionId,
+    } else if (Policy->IsFinalLevel(generation)) {
+        auto& final = GetFinalState(generation);
+        Y_ENSURE(final.State == EState::Compacting);
+        Y_ENSURE(compactionId == final.Task.CompactionId,
             "Unexpected CompactionFinished for gen " << generation);
-        FinalState.State = EState::Free;
-        FinalState.Task.TaskId = 0;
-        FinalState.Task.CompactionId = 0;
+        final.State = EState::Free;
+        final.Task.TaskId = 0;
+        final.Task.CompactionId = 0;
     } else {
         auto& gen = Generations[generation - 1];
         Y_ENSURE(gen.State == EState::Compacting);
@@ -466,6 +591,10 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         gen.State = EState::Free;
         gen.Task.TaskId = 0;
         gen.Task.CompactionId = 0;
+    }
+
+    if (params->Tiering) {
+        return FinishTierCompaction(compactionId, *params, *result);
     }
 
     TCompactionChanges changes;
@@ -737,7 +866,12 @@ void TGenCompactionStrategy::OnForcedGenCompactionDone() {
 }
 
 void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
-    Y_ENSURE(level == 255, "Unexpected level of the merged part");
+    Y_ENSURE(TierManaged ? Policy->IsFinalLevel(level) : level == 255,
+        "Unexpected level of the merged part");
+    if (TierManaged) {
+        CancelTierCompactions();
+    }
+    auto& finalParts = GetFinalParts(level);
 
     const auto label = partView->Label;
 
@@ -753,12 +887,12 @@ void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
             Y_ENSURE((*it)->Label != label,
                 "Cannot attach borrowed part, another cold part with the same label exists");
         }
-        for (auto it = FinalParts.begin(); it != FinalParts.end(); ++it) {
+        for (auto it = finalParts.begin(); it != finalParts.end(); ++it) {
             if (it->Label == label) {
                 Stats -= it->Stats;
                 StatsPerTablet[label.TabletID()] -= it->Stats;
                 KnownParts.erase(it->Label);
-                FinalParts.erase(it);
+                finalParts.erase(it);
                 break;
             }
         }
@@ -768,9 +902,13 @@ void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
     }
 
     KnownParts[label] = level;
-    auto& back = FinalParts.emplace_back(std::move(partView));
+    auto& back = finalParts.emplace_back(std::move(partView));
     Stats += back.Stats;
     StatsPerTablet[back.Label.TabletID()] += back.Stats;
+    if (TierManaged) {
+        RebuildTierStats();
+        CheckTierGenerations();
+    }
 
     // WARNING: we don't call UpdateStats here, so GarbageStatsAgg is not
     // recalculated properly. This is not a problem, because this method is
@@ -781,6 +919,9 @@ void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
 
 void TGenCompactionStrategy::PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) {
     Y_ENSURE(level == 255, "Unexpected level of the merged part");
+    if (TierManaged) {
+        CancelTierCompactions();
+    }
 
     const auto label = part->Label;
     Y_ENSURE(!KnownParts.contains(label),
@@ -788,6 +929,9 @@ void TGenCompactionStrategy::PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32
 
     ColdParts.emplace_back(std::move(part));
     KnownParts[label] = level;
+    if (TierManaged) {
+        CheckTierGenerations();
+    }
 }
 
 TCompactionChanges TGenCompactionStrategy::PartsRemoved(TArrayRef<const TLogoBlobID> parts) {
@@ -827,6 +971,11 @@ bool TGenCompactionStrategy::AllowForcedCompaction() {
 
 void TGenCompactionStrategy::OutputHtml(IOutputStream& out) {
     HTML(out) {
+        if (TierManaged) {
+            DIV_CLASS("row") {
+                out << "Active tier compactions: " << TierCompactions.size();
+            }
+        }
         ui32 nextGenerationId = 1;
         for (const auto& gen : Generations) {
             ui32 generation = nextGenerationId++;
@@ -856,24 +1005,39 @@ void TGenCompactionStrategy::OutputHtml(IOutputStream& out) {
             }
         }
 
-        if (FinalParts) {
-            DIV_CLASS("row") {out << "Final parts count: " << FinalParts.size();}
-            if (FinalState.State != EState::Free) {
-                out << ", Compaction state: " << FinalState.State;
+        auto outputFinal = [&](ui32 level, const auto& parts, const auto& state) {
+            if (parts.empty()) {
+                return;
             }
-            if (FinalState.Task.TaskId) {
-                out << ", Task #" << FinalState.Task.TaskId
-                    << " (priority " << FinalState.Task.Priority
-                    << ") submitted " << FinalState.Task.SubmissionTimestamp.ToStringLocal();
+            DIV_CLASS("row") {
+                out << "Final parts count: " << parts.size();
+                if (TierManaged) {
+                    out << ", Tier: " << TierForLevel(level) << ", Level: " << level;
+                }
+            }
+            if (state.State != EState::Free) {
+                out << ", Compaction state: " << state.State;
+            }
+            if (state.Task.TaskId) {
+                out << ", Task #" << state.Task.TaskId
+                    << " (priority " << state.Task.Priority
+                    << ") submitted " << state.Task.SubmissionTimestamp.ToStringLocal();
             }
             PRE() {
-                for (const auto& part : FinalParts) {
+                for (const auto& part : parts) {
                     auto &bundleId = part.Label;
 
                     out << "Genstep: " << bundleId.Generation() << ":" << bundleId.Step()
                             << ", Backing size: " << part.Stats.BackingSize
                             << ", Base: " << bundleId << Endl;
                 }
+            }
+        };
+        outputFinal(255, FinalParts, FinalState);
+        for (const ui32 tier : Policy->GetTierIds()) {
+            if (tier != 0) {
+                const ui32 level = Policy->GetFinalLevel(tier);
+                outputFinal(level, GetFinalParts(level), GetFinalState(level));
             }
         }
 
@@ -892,6 +1056,10 @@ void TGenCompactionStrategy::OutputHtml(IOutputStream& out) {
 }
 
 void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation) {
+    if (TierManaged) {
+        BeginTierGenCompaction(taskId, generation);
+        return;
+    }
     if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
         logl << "TGenCompactionStrategy BeginGenCompaction for " << Backend->OwnerTabletId()
             << ": task " << taskId << ", generation " << generation;
@@ -1125,6 +1293,11 @@ void TGenCompactionStrategy::CheckGeneration(ui32 generation) {
 
     CheckOverload(generation);
 
+    if (TierManaged && (!CanStartTierCompaction(generation)
+            || (!HasFreeTierInputs(generation) && !NeedToForceCompact(generation)))) {
+        return;
+    }
+
     auto& gen = Generations[generation - 1];
 
     if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
@@ -1185,6 +1358,57 @@ TGenCompactionStrategy::EDesiredMode TGenCompactionStrategy::DesiredMode(ui32 ge
     Y_ENSURE(generation <= Generations.size());
 
     auto& gen = Generations[generation - 1];
+    if (TierManaged) {
+        if (NeedToForceCompact(generation) || TierSweepGeneration == generation) {
+            return EDesiredMode::Normal;
+        }
+        TPartAggregator available;
+        for (const auto& part : gen.Parts) {
+            if (!BusyTierParts.contains(part.Label)) {
+                available.Add(part);
+            }
+        }
+        size_t unloaded = 0;
+        size_t unloadedFinal = 0;
+        const ui32 finalLevel = Policy->GetFinalLevel(TierForLevel(generation));
+        const auto& finalParts = GetFinalParts(finalLevel);
+        for (const auto& part : ColdParts) {
+            if (!BusyTierParts.contains(part->Label)) {
+                const ui32 level = KnownParts.Value(part->Label, 255);
+                unloaded += level == generation;
+                unloadedFinal += level == finalLevel;
+            }
+        }
+        const bool hasFinal = IsLastTierGeneration(generation)
+            && (unloadedFinal != 0 || std::any_of(finalParts.begin(), finalParts.end(),
+                [&](const auto& part) { return !BusyTierParts.contains(part.Label); }));
+        if (unloaded != 0) {
+            return EDesiredMode::Normal;
+        }
+        if (available.PartEpochCount == 0 && !hasFinal) {
+            return EDesiredMode::None;
+        }
+        const auto& policy = Policy->Generations[generation - 1];
+        if (policy.ForceSizeToCompact <= available.Stats.BackingSize
+                || policy.ForceCountToCompact <= available.PartEpochCount
+                || (policy.SizeToCompact <= available.Stats.BackingSize
+                    && policy.CountToCompact <= available.PartEpochCount)) {
+            return EDesiredMode::Normal;
+        }
+        size_t finalEpochs = 0;
+        if (hasFinal) {
+            TEpoch previous = TEpoch::Max();
+            for (const auto& part : finalParts) {
+                if (!BusyTierParts.contains(part.Label) && part.Epoch != previous) {
+                    ++finalEpochs;
+                    previous = part.Epoch;
+                }
+            }
+            finalEpochs += unloadedFinal;
+        }
+        return available.PartEpochCount + finalEpochs > 1
+            ? EDesiredMode::Background : EDesiredMode::None;
+    }
     ui64 genSize = gen.Stats.BackingSize - gen.TakenHeadBackingSize;
     ui32 genParts = gen.PartEpochCount - gen.TakenHeadPartEpochCount;
 
@@ -1236,6 +1460,726 @@ bool TGenCompactionStrategy::NeedToCompactAfterSplit(ui32 generation) const {
     }
 
     return false;
+}
+
+ui32 TGenCompactionStrategy::TierForLevel(ui32 level) const {
+    return Policy->GetTierForLevel(level);
+}
+
+TList<TGenCompactionStrategy::TPartInfo>& TGenCompactionStrategy::GetFinalParts(ui32 level) {
+    Y_ENSURE(Policy->IsFinalLevel(level), "Unknown final compaction level");
+    return level == 255 ? FinalParts : TierFinals.at(level).Parts;
+}
+
+const TList<TGenCompactionStrategy::TPartInfo>& TGenCompactionStrategy::GetFinalParts(ui32 level) const {
+    Y_ENSURE(Policy->IsFinalLevel(level), "Unknown final compaction level");
+    return level == 255 ? FinalParts : TierFinals.at(level).Parts;
+}
+
+TGenCompactionStrategy::TFinalState& TGenCompactionStrategy::GetFinalState(ui32 level) {
+    Y_ENSURE(Policy->IsFinalLevel(level), "Unknown final compaction level");
+    return level == 255 ? FinalState : TierFinals.at(level).State;
+}
+
+const TGenCompactionStrategy::TFinalState& TGenCompactionStrategy::GetFinalState(ui32 level) const {
+    Y_ENSURE(Policy->IsFinalLevel(level), "Unknown final compaction level");
+    return level == 255 ? FinalState : TierFinals.at(level).State;
+}
+
+bool TGenCompactionStrategy::IsLastTierGeneration(ui32 generation) const {
+    Y_ENSURE(generation > 0 && generation <= Generations.size());
+    return generation == Generations.size()
+        || TierForLevel(generation) != TierForLevel(generation + 1);
+}
+
+size_t TGenCompactionStrategy::UnloadedPartsAtLevel(ui32 level) const {
+    size_t count = 0;
+    for (const auto& part : ColdParts) {
+        count += KnownParts.Value(part->Label, 255) == level;
+    }
+    return count;
+}
+
+void TGenCompactionStrategy::ValidateTierEpochs() const {
+    // Historical borrowed FinalParts may overlap configured default generations.
+    // The prepare/placement helper reconciles those by widening its inputs;
+    // do not reject such a restored table before it can run that operation.
+    THashMap<ui32, TEpoch> previous;
+    for (ui32 level = 1; level <= Generations.size(); ++level) {
+        std::optional<TEpoch> minimum;
+        std::optional<TEpoch> maximum;
+        auto add = [&](TEpoch epoch) {
+            minimum = minimum ? Min(*minimum, epoch) : epoch;
+            maximum = maximum ? Max(*maximum, epoch) : epoch;
+        };
+        for (const auto& part : Generations[level - 1].Parts) {
+            add(part.Epoch);
+        }
+        for (const auto& part : ColdParts) {
+            if (KnownParts.Value(part->Label, 255) == level) {
+                add(part->Epoch);
+            }
+        }
+        if (minimum) {
+            const auto [it, inserted] = previous.emplace(TierForLevel(level), TEpoch::Max());
+            Y_UNUSED(inserted);
+            Y_ENSURE(*maximum <= it->second,
+                "Compaction epochs are not ordered within a tier");
+            it->second = *minimum;
+        }
+    }
+    for (const auto& [level, final] : TierFinals) {
+        const auto it = previous.find(TierForLevel(level));
+        if (it != previous.end()) {
+            for (const auto& part : final.Parts) {
+                Y_ENSURE(part.Epoch <= it->second,
+                    "Final compaction epochs are not ordered within a tier");
+            }
+        }
+    }
+}
+
+void TGenCompactionStrategy::RebuildTierStats() {
+    THashMap<ui32, TEpoch> lastEpochs;
+    for (size_t index = 0; index < Generations.size(); ++index) {
+        auto& gen = Generations[index];
+        gen.Parts.sort();
+        TPartAggregator agg;
+        agg.Add(gen.Parts);
+        gen.Stats = agg.Stats;
+        gen.StatsPerTablet = std::move(agg.StatsPerTablet);
+        gen.PartEpochCount = agg.PartEpochCount;
+        gen.CompactingTailParts = 0;
+        gen.TakenHeadParts = 0;
+        gen.TakenHeadBackingSize = 0;
+        gen.TakenHeadPartEpochCount = 0;
+        if (!gen.Parts.empty()) {
+            const auto [it, inserted] = lastEpochs.emplace(TierForLevel(index + 1), TEpoch::Max());
+            Y_UNUSED(inserted);
+            Y_ENSURE(gen.Parts.front().Epoch <= it->second,
+                "Compaction epochs are not ordered within a tier");
+            it->second = gen.Parts.back().Epoch;
+        }
+        CheckOverload(index + 1);
+    }
+    FinalParts.sort();
+    for (auto& [level, final] : TierFinals) {
+        Y_UNUSED(level);
+        final.Parts.sort();
+    }
+    ValidateTierEpochs();
+    UpdateStats();
+    UpdateOverload();
+}
+
+bool TGenCompactionStrategy::CanStartTierCompaction(ui32 generation) const {
+    if (TierCompactions.contains(generation)) {
+        return false;
+    }
+    const auto it = TierWaitRevisions.find(generation);
+    return it == TierWaitRevisions.end() || it->second != TierOccupancyRevision;
+}
+
+bool TGenCompactionStrategy::HasFreeTierInputs(ui32 generation) const {
+    const auto hasLoaded = [&](const auto& parts) {
+        for (const auto& part : parts) {
+            if (!BusyTierParts.contains(part.Label)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (generation != 0 && !Policy->IsFinalLevel(generation) && hasLoaded(Generations[generation - 1].Parts)) {
+        return true;
+    }
+    const bool withFinal = Policy->IsFinalLevel(generation) || (generation != 0
+        && IsLastTierGeneration(generation));
+    const ui32 finalLevel = Policy->GetFinalLevel(TierForLevel(generation));
+    if (withFinal && hasLoaded(GetFinalParts(finalLevel))) {
+        return true;
+    }
+    for (const auto& part : ColdParts) {
+        const ui32 level = KnownParts.Value(part->Label, 255);
+        if ((level == generation || (withFinal && level == finalLevel))
+                && !BusyTierParts.contains(part->Label)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void TGenCompactionStrategy::DeferTierCompaction(ui32 generation) {
+    TierWaitRevisions[generation] = TierOccupancyRevision;
+}
+
+bool TGenCompactionStrategy::TryReserveCompaction(TCompactionParams& rawParams) {
+    if (!rawParams.Tiering) {
+        return true;
+    }
+    auto& params = *CheckedCast<TGenCompactionParams*>(&rawParams);
+    Y_ENSURE(params.Context, "Cannot reserve an unprepared compaction");
+    if (!CanStartTierCompaction(params.Generation)) {
+        DeferTierCompaction(params.Generation);
+        return false;
+    }
+    for (const auto& part : params.Context->Inputs) {
+        if (BusyTierParts.contains(part.Label())) {
+            DeferTierCompaction(params.Generation);
+            return false;
+        }
+    }
+    for (const auto& [generation, active] : TierCompactions) {
+        Y_UNUSED(generation);
+        if (params.Context->Epochs && active.Context->Epochs
+                && params.Context->Epochs->Min <= active.Context->Epochs->Max
+                && active.Context->Epochs->Min <= params.Context->Epochs->Max) {
+            // Frozen/status sources can make intervals overlap even when no
+            // existing disk label is shared. Their outputs must not overlap.
+            DeferTierCompaction(params.Generation);
+            return false;
+        }
+    }
+    auto& settings = *params.Tiering;
+    for (const auto& [generation, active] : TierCompactions) {
+        if (active.Params->Tiering->HasMemoryInputs) {
+            settings.HasUnknownRemaining = true;
+        }
+        Y_UNUSED(generation);
+    }
+    if (params.Generation == 0 && !TierCompactions.empty()) {
+        // Older scans only captured existing parts. Keep new memory keys in
+        // the default tier until those scans have finished.
+        settings.AllowCooling = false;
+    }
+    auto& active = TierCompactions[params.Generation];
+    active.Context = params.Context;
+    active.Params = &params;
+    for (const auto& part : params.Context->Inputs) {
+        Y_ENSURE(BusyTierParts.emplace(part.Label(), params.Generation).second,
+            "Compaction input was reserved twice");
+    }
+    return true;
+}
+
+void TGenCompactionStrategy::ReleaseTierCompaction(ui32 generation, ui64 compactionId) {
+    const auto it = TierCompactions.find(generation);
+    Y_ENSURE(it != TierCompactions.end() && it->second.CompactionId == compactionId,
+        "Unexpected tier-managed compaction release");
+    for (const auto& part : it->second.Context->Inputs) {
+        Y_ENSURE(BusyTierParts.erase(part.Label()) == 1, "Compaction input was not reserved");
+    }
+    TierCompactions.erase(it);
+    TierWaitRevisions.erase(generation);
+    // Both publication and cancellation change which inputs can be reserved.
+    ++TierOccupancyRevision;
+}
+
+void TGenCompactionStrategy::CheckTierGenerations() {
+    if (!TierManaged) {
+        return;
+    }
+    if (TierWaitRevisions.contains(0) && CanStartTierCompaction(0)) {
+        Backend->RequestMemCompactionRetry(Table);
+    }
+    if (ForcedState == EForcedState::Pending) {
+        if (!Generations.empty() && !Policy->IsFinalLevel(ForcedGeneration)) {
+            CheckGeneration(ForcedGeneration);
+        } else {
+            const ui32 level = Policy->IsFinalLevel(ForcedGeneration) ? ForcedGeneration : 255;
+            auto& final = GetFinalState(level);
+            if (final.State == EState::Free && CanStartTierCompaction(level)) {
+                ForcedGeneration = level;
+                SubmitTask(final.Task, Policy->InMemResourceBrokerTask,
+                    Policy->DefaultTaskPriority, level);
+                final.State = EState::Pending;
+            }
+        }
+        return;
+    }
+    for (ui32 level = 1; level <= Generations.size(); ++level) {
+        CheckGeneration(level);
+    }
+    for (const ui32 tier : Policy->GetTierIds()) {
+        const ui32 level = Policy->GetFinalLevel(tier);
+        auto& final = GetFinalState(level);
+        size_t finalEpochs = 0;
+        TEpoch previous = TEpoch::Max();
+        for (const auto& part : GetFinalParts(level)) {
+            if (!BusyTierParts.contains(part.Label) && part.Epoch != previous) {
+                ++finalEpochs;
+                previous = part.Epoch;
+            }
+        }
+        const bool hasUnloadedFinal = std::any_of(ColdParts.begin(), ColdParts.end(), [&](const auto& part) {
+            return KnownParts.Value(part->Label, 255) == level && !BusyTierParts.contains(part->Label);
+        });
+        if (final.State == EState::Free && CanStartTierCompaction(level)
+                && HasFreeTierInputs(level)
+                && (TierSweepGeneration == level || finalEpochs > 1 || hasUnloadedFinal)) {
+            SubmitTask(final.Task, Policy->InMemResourceBrokerTask,
+                Policy->DefaultTaskPriority, level);
+            final.State = EState::Pending;
+        }
+    }
+}
+
+void TGenCompactionStrategy::CancelTierCompactions() {
+    auto cancelTask = [&](EState& state, TCompactionTask& task) {
+        if (state == EState::Pending || state == EState::PendingBackground) {
+            Broker->CancelTask(task.TaskId);
+        } else if (state == EState::Compacting) {
+            Backend->CancelCompaction(task.CompactionId);
+        }
+        state = EState::Free;
+        task = {};
+    };
+    for (auto& gen : Generations) {
+        cancelTask(gen.State, gen.Task);
+        gen.CompactingTailParts = 0;
+        gen.TakenHeadParts = 0;
+        gen.TakenHeadBackingSize = 0;
+        gen.TakenHeadPartEpochCount = 0;
+    }
+    cancelTask(FinalState.State, FinalState.Task);
+    for (auto& [level, final] : TierFinals) {
+        Y_UNUSED(level);
+        cancelTask(final.State.State, final.State.Task);
+    }
+    if (MemCompactionId != 0) {
+        Backend->CancelCompaction(MemCompactionId);
+        if (ForcedMemCompactionId == MemCompactionId) {
+            // The outer memory request still owns this forced id and will
+            // retry it. A parallel disk completion must not advance it early.
+            NextForcedGenCompactionId = 0;
+        }
+        MemCompactionId = 0;
+        ForcedMemCompactionId = 0;
+    }
+    if (ForcedState == EForcedState::Compacting) {
+        ForcedState = EForcedState::Pending;
+    }
+    FinalCompactionId = 0;
+    FinalCompactionLevel = 0;
+    FinalCompactionTaken = 0;
+    TierSweepGeneration.reset();
+    TierCompactions.clear();
+    BusyTierParts.clear();
+    ++TierOccupancyRevision;
+    if (TierWaitRevisions.contains(0)) {
+        // ReflectSchema may switch back to the legacy path, which will no
+        // longer call CheckTierGenerations to wake an already deferred flush.
+        Backend->RequestMemCompactionRetry(Table);
+    }
+}
+
+void TGenCompactionStrategy::BeginTierGenCompaction(TTaskId taskId, ui32 generation) {
+    const bool isFinal = Policy->IsFinalLevel(generation);
+    Y_ENSURE(isFinal || (generation > 0 && generation <= Generations.size()));
+    auto& state = isFinal ? GetFinalState(generation).State : Generations[generation - 1].State;
+    auto& task = isFinal ? GetFinalState(generation).Task : Generations[generation - 1].Task;
+    if ((state != EState::Pending && state != EState::PendingBackground) || task.TaskId != taskId) {
+        Broker->FinishTask(taskId, EResourceStatus::Cancelled);
+        return;
+    }
+    const bool forced = ForcedState == EForcedState::Pending && ForcedGeneration == generation;
+    const bool sweep = TierSweepGeneration == generation;
+    if (!CanStartTierCompaction(generation)
+            || (!forced && (!HasFreeTierInputs(generation)
+                || (!isFinal && !sweep && DesiredMode(generation) == EDesiredMode::None)))) {
+        Broker->FinishTask(taskId, EResourceStatus::Cancelled);
+        state = EState::Free;
+        task = {};
+        if (sweep) {
+            TierSweepGeneration.reset();
+        }
+        return;
+    }
+    TExtraState extra;
+    if (!forced && !isFinal && generation < Generations.size()
+            && TierForLevel(generation) == TierForLevel(generation + 1)) {
+        extra.InitFromPolicy(Policy->Generations[generation]);
+    }
+    const ui64 id = PrepareTierCompaction(taskId, {}, generation, extra, forced, sweep);
+    if (id == 0) {
+        Broker->FinishTask(taskId, EResourceStatus::Cancelled);
+        state = EState::Free;
+        task = {};
+        CheckTierGenerations();
+        return;
+    }
+    state = EState::Compacting;
+    task.CompactionId = id;
+    if (forced) {
+        ForcedState = EForcedState::Compacting;
+    }
+}
+
+ui64 TGenCompactionStrategy::PrepareTierCompaction(TTaskId taskId, TSnapEdge edge,
+        ui32 generation, TExtraState& extra, bool forced, bool sweep)
+{
+    Y_ENSURE(CanStartTierCompaction(generation), "Tier-managed compaction cannot start yet");
+    auto params = MakeHolder<TGenCompactionParams>();
+    params->Table = Table;
+    params->TaskId = taskId;
+    params->Edge = edge;
+    params->Generation = generation;
+    params->TierId = TierForLevel(generation);
+    params->TieringForced = forced;
+    params->Tiering = MakeHolder<TTieringCompaction>();
+    params->Tiering->PartLevels = KnownParts;
+    const bool cool = Backend->IsDataTieringEnabled() && Backend->TableScheme(Table)->TieringPolicy;
+    params->Mode = sweep || cool
+        ? TCompactionParams::EMode::TierAware : TCompactionParams::EMode::Regular;
+    const bool isFinal = Policy->IsFinalLevel(generation);
+    params->KeepInCache = generation == 0
+        || (!isFinal && Policy->Generations[generation - 1].KeepInCache);
+    params->PreferredLevel = generation == 0 ? Policy->GetFinalLevel(0) : generation;
+    if (generation == 0) {
+        for (ui32 level = 1; level <= Generations.size(); ++level) {
+            if (TierForLevel(level) == 0) {
+                params->PreferredLevel = level;
+                break;
+            }
+        }
+    } else if (!isFinal) {
+        if (!IsLastTierGeneration(generation)) {
+            params->PreferredLevel = generation + 1;
+        } else {
+            params->PreferredLevel = Policy->GetFinalLevel(params->TierId);
+        }
+    }
+
+    if (forced) {
+        params->Parts = Backend->TableParts(Table);
+        params->ColdParts = Backend->TableColdParts(Table);
+    } else {
+        if (generation > 0 && !isFinal) {
+            for (const auto& part : Generations[generation - 1].Parts) {
+                if (!BusyTierParts.contains(part.Label)) {
+                    params->Parts.push_back(part.PartView);
+                    extra.Add(part.Stats.BackingSize);
+                }
+            }
+            for (const auto& part : ColdParts) {
+                if (KnownParts.Value(part->Label, 255) == generation
+                        && !BusyTierParts.contains(part->Label)) {
+                    params->ColdParts.push_back(part);
+                }
+            }
+            if (!IsLastTierGeneration(generation) && extra.ExtrasAllowed()) {
+                for (const auto& part : Generations[generation].Parts) {
+                    if (BusyTierParts.contains(part.Label) || !extra.ExtraAllowed(part.Stats.BackingSize)) {
+                        break;
+                    }
+                    params->Parts.push_back(part.PartView);
+                    extra.Add(part.Stats.BackingSize);
+                }
+            }
+        }
+        if (isFinal || (generation != 0 && IsLastTierGeneration(generation))) {
+            const ui32 finalLevel = Policy->GetFinalLevel(params->TierId);
+            for (const auto& part : GetFinalParts(finalLevel)) {
+                if (!BusyTierParts.contains(part.Label)) {
+                    params->Parts.push_back(part.PartView);
+                }
+            }
+            for (const auto& part : ColdParts) {
+                if (KnownParts.Value(part->Label, 255) == finalLevel
+                        && !BusyTierParts.contains(part->Label)) {
+                    params->ColdParts.push_back(part);
+                }
+            }
+        }
+    }
+    params->IsFinal = false;
+    const ui64 id = Backend->BeginCompaction(std::move(params));
+    if (id != 0) {
+        auto it = TierCompactions.find(generation);
+        Y_ENSURE(it != TierCompactions.end(), "Backend did not reserve compaction inputs");
+        it->second.CompactionId = id;
+    }
+    return id;
+}
+
+void TGenCompactionStrategy::ScheduleTierSweep() {
+    if (TierSweepGeneration
+            || ForcedState != EForcedState::None
+            || !Backend->IsDataTieringEnabled() || !Backend->TableScheme(Table)->TieringPolicy) {
+        return;
+    }
+    const auto tiers = Policy->GetTierIds();
+    const size_t count = Generations.size() + tiers.size();
+    for (size_t step = 0; step < count; ++step) {
+        const size_t index = (NextTierSweep + step) % count;
+        const bool isFinal = index >= Generations.size();
+        const ui32 level = isFinal ? Policy->GetFinalLevel(tiers[index - Generations.size()]) : index + 1;
+        const bool hasParts = isFinal ? !GetFinalParts(level).empty() || UnloadedPartsAtLevel(level) != 0
+            : !Generations[index].Parts.empty() || UnloadedPartsAtLevel(level) != 0;
+        const auto candidateState = isFinal ? GetFinalState(level).State : Generations[index].State;
+        if (candidateState != EState::Free || !hasParts
+                || !CanStartTierCompaction(level) || !HasFreeTierInputs(level)) {
+            continue;
+        }
+        TierSweepGeneration = level;
+        NextTierSweep = (index + 1) % count;
+        auto& state = isFinal ? GetFinalState(level).State : Generations[index].State;
+        auto& task = isFinal ? GetFinalState(level).Task : Generations[index].Task;
+        const auto& type = isFinal ? Policy->InMemResourceBrokerTask
+            : Policy->Generations[index].ResourceBrokerTask;
+        SubmitTask(task, type, Policy->DefaultTaskPriority, level);
+        state = EState::Pending;
+        break;
+    }
+}
+
+ui32 TGenCompactionStrategy::ChooseTierLevel(ui32 tierId, TEpoch epoch, ui32 preferredLevel) const {
+    // The backend has already replaced its inventory by the time completion is
+    // called. Placement must use the strategy's remaining sources instead.
+    TVector<TCompactionPartInfo> remaining;
+    for (ui32 level = 1; level <= Generations.size(); ++level) {
+        for (const auto& part : Generations[level - 1].Parts) {
+            remaining.emplace_back(part.PartView, level, TierForLevel(level));
+        }
+    }
+    for (const ui32 tier : Policy->GetTierIds()) {
+        const ui32 level = Policy->GetFinalLevel(tier);
+        for (const auto& part : GetFinalParts(level)) {
+            remaining.emplace_back(part.PartView, level, tier);
+        }
+    }
+    for (const auto& part : ColdParts) {
+        const ui32 level = KnownParts.Value(part->Label, 255);
+        Y_ENSURE(TierForLevel(level) == 0, "Unloaded compaction parts must belong to the default tier");
+        remaining.emplace_back(part, level, 0);
+    }
+    const auto level = FindTierCompactionLevel(*Policy, remaining, tierId, epoch, preferredLevel);
+    Y_ENSURE(level, "No generation can accept the compaction epoch in tier " << tierId);
+    return *level;
+}
+
+ui32 TGenCompactionStrategy::UpliftTierLevel(ui32 tierId, TEpoch epoch,
+        const TStats& outputStats, ui32 preferredLevel) const {
+    ui32 candidate = preferredLevel;
+    if (Policy->IsFinalLevel(candidate)) {
+        candidate = 0;
+        for (ui32 level = 1; level <= Generations.size(); ++level) {
+            if (TierForLevel(level) == tierId) {
+                candidate = level;
+            }
+        }
+    } else if (candidate > 0 && candidate <= Generations.size()) {
+        --candidate;
+    } else {
+        return preferredLevel;
+    }
+    while (candidate > 0 && TierForLevel(candidate) == tierId) {
+        const auto& gen = Generations[candidate - 1];
+        const auto& policy = Policy->Generations[candidate - 1];
+        if (outputStats.BackingSize > policy.UpliftPartSize) {
+            break;
+        }
+        // Inputs have been removed, but generation statistics are rebuilt only
+        // after placement. Inspect the remaining parts of this candidate.
+        TPartAggregator remaining;
+        remaining.Add(gen.Parts);
+        const ui64 size = remaining.Stats.BackingSize + outputStats.BackingSize;
+        ui64 epochs = remaining.PartEpochCount;
+        if (gen.Parts.empty() || gen.Parts.back().Epoch != epoch) {
+            ++epochs;
+        }
+        if (size >= policy.ForceSizeToCompact || epochs >= policy.ForceCountToCompact
+                || (size >= policy.SizeToCompact && epochs >= policy.CountToCompact)
+                || ChooseTierLevel(tierId, epoch, candidate) != candidate) {
+            break;
+        }
+        preferredLevel = candidate;
+        if (!gen.Parts.empty() || UnloadedPartsAtLevel(candidate) != 0) {
+            break;
+        }
+        --candidate;
+    }
+    return preferredLevel;
+}
+
+TCompactionChanges TGenCompactionStrategy::FinishTierCompaction(ui64 compactionId,
+        TGenCompactionParams& params, TCompactionResult& result)
+{
+    Y_ENSURE(params.Context, "Tier-managed compaction has no prepared inputs");
+    ReleaseTierCompaction(params.Generation, compactionId);
+    if (TierSweepGeneration == params.Generation) {
+        TierSweepGeneration.reset();
+    }
+    THashSet<TLogoBlobID> leaving;
+    for (const auto& part : params.Context->Inputs) {
+        const auto it = KnownParts.find(part.Label());
+        Y_ENSURE(it != KnownParts.end() && it->second == part.Level,
+            "Tier-managed compaction input placement has changed");
+        leaving.insert(part.Label());
+        KnownParts.erase(it);
+    }
+    size_t removed = 0;
+    for (auto& gen : Generations) {
+        for (auto it = gen.Parts.begin(); it != gen.Parts.end();) {
+            if (leaving.contains(it->Label)) {
+                it = gen.Parts.erase(it);
+                ++removed;
+            } else {
+                ++it;
+            }
+        }
+    }
+    for (const ui32 tier : Policy->GetTierIds()) {
+        auto& parts = GetFinalParts(Policy->GetFinalLevel(tier));
+        for (auto it = parts.begin(); it != parts.end();) {
+            if (leaving.contains(it->Label)) {
+                it = parts.erase(it);
+                ++removed;
+            } else {
+                ++it;
+            }
+        }
+    }
+    for (auto it = ColdParts.begin(); it != ColdParts.end();) {
+        if (leaving.contains((*it)->Label)) {
+            it = ColdParts.erase(it);
+            ++removed;
+        } else {
+            ++it;
+        }
+    }
+    Y_ENSURE(removed == leaving.size(), "Tier-managed compaction inputs are missing from the strategy");
+    Y_ENSURE(result.PartOutputIds.size() == result.Parts.size(), "Missing tier-managed compaction output ids");
+    THashMap<ui32, TStats> statsByTier;
+    for (const auto& part : result.Parts) {
+        const auto output = result.PartOutputIds.find(part->Label);
+        Y_ENSURE(output != result.PartOutputIds.end(), "Missing compaction part output id");
+        const auto tier = params.Tiering->OutputTiers.find(output->second);
+        Y_ENSURE(tier != params.Tiering->OutputTiers.end(), "Missing compaction output tier");
+        statsByTier[tier->second] += TStats(part);
+    }
+    ui32 sourcePreferred = params.PreferredLevel;
+    const ui32 sourceTier = TierForLevel(params.Generation);
+    if (const auto* sourceStats = statsByTier.FindPtr(sourceTier)) {
+        sourcePreferred = UpliftTierLevel(sourceTier, result.Epoch, *sourceStats, sourcePreferred);
+    }
+    TCompactionChanges changes;
+    for (const auto& part : result.Parts) {
+        const auto output = result.PartOutputIds.find(part->Label);
+        Y_ENSURE(output != result.PartOutputIds.end(), "Missing compaction part output id");
+        const auto tier = params.Tiering->OutputTiers.find(output->second);
+        Y_ENSURE(tier != params.Tiering->OutputTiers.end(), "Missing compaction output tier");
+        Y_ENSURE(params.Context->Epochs && part->Epoch == params.Context->Epochs->Max
+                && result.Epoch == part->Epoch,
+            "Tier-managed compaction result has an unexpected epoch");
+        const ui32 preferred = tier->second == sourceTier ? sourcePreferred : Max<ui32>();
+        const ui32 level = ChooseTierLevel(tier->second, part->Epoch, preferred);
+        Y_ENSURE(!KnownParts.contains(part->Label), "Duplicate resulting compaction part");
+        KnownParts[part->Label] = level;
+        changes.NewPartLevels.emplace(part->Label, level);
+        if (changes.NewPartLevels.size() == 1) {
+            changes.NewPartsLevel = level;
+        }
+        if (Policy->IsFinalLevel(level)) {
+            GetFinalParts(level).emplace_back(part);
+        } else {
+            Generations[level - 1].Parts.emplace_back(part);
+        }
+    }
+    RebuildTierStats();
+
+    // Preparation and reservation run synchronously on the executor actor,
+    // capturing the full disk inventory, not just the selected epoch interval.
+    // Every managed publication updates all active inventories, including new
+    // labels from memory flushes. External additions/removals and schema changes
+    // cancel active operations (PartMerged, PartsRemoved, ReflectSchema).
+    // Thus every leaving label must be known to every still-active operation.
+    // Advance only this known lineage; other changes still invalidate publication.
+    for (auto& [generation, active] : TierCompactions) {
+        Y_UNUSED(generation);
+        Y_ENSURE(!params.Context->Epochs || !active.Context->Epochs
+            || params.Context->Epochs->Max < active.Context->Epochs->Min
+            || active.Context->Epochs->Max < params.Context->Epochs->Min,
+            "Concurrent compactions have overlapping epoch intervals");
+        auto& other = *active.Params->Tiering;
+        auto& inventory = other.ExpectedInventory;
+        size_t erased = 0;
+        for (auto it = inventory.begin(); it != inventory.end();) {
+            if (leaving.contains(it->Label())) {
+                it = inventory.erase(it);
+                ++erased;
+            } else {
+                ++it;
+            }
+        }
+        Y_ENSURE(erased == leaving.size(), "Concurrent publication lineage is incomplete");
+        for (const auto& label : leaving) {
+            other.PartLevels.erase(label);
+        }
+        for (const auto& part : result.Parts) {
+            const ui32 level = changes.NewPartLevels.at(part->Label);
+            inventory.emplace_back(Backend->TablePart(Table, part->Label), level, TierForLevel(level));
+            other.PartLevels[part->Label] = level;
+        }
+    }
+
+    if (params.Generation == 0 && ForcedMemCompactionId == compactionId) {
+        ForcedMemCompactionId = 0;
+    }
+    if (params.TieringForced) {
+        CurrentForcedGenCompactionId = Max(CurrentForcedGenCompactionId,
+            std::exchange(NextForcedGenCompactionId, 0));
+        ForcedState = EForcedState::None;
+        ForcedGeneration = 0;
+        OnForcedGenCompactionDone();
+    } else if (NextForcedGenCompactionId != 0 && ForcedMemCompactionId == 0) {
+        CurrentForcedGenCompactionId = std::exchange(NextForcedGenCompactionId, 0);
+        ForcedState = EForcedState::Pending;
+        ForcedGeneration = Generations.empty() ? 255 : 1;
+    } else {
+        MaybeAutoStartForceCompaction();
+    }
+    CheckTierGenerations();
+    return changes;
+}
+
+void TGenCompactionStrategy::CompactionCancelled(ui64 compactionId, const TCompactionParams& rawParams) {
+    if (!rawParams.Tiering && MemCompactionId == compactionId) {
+        MemCompactionId = 0;
+        if (ForcedMemCompactionId == compactionId) {
+            ForcedMemCompactionId = 0;
+            NextForcedGenCompactionId = 0;
+        }
+        return;
+    }
+    if (!rawParams.Tiering) {
+        return;
+    }
+    const auto& params = static_cast<const TGenCompactionParams&>(rawParams);
+    const auto active = TierCompactions.find(params.Generation);
+    if (active == TierCompactions.end() || active->second.CompactionId != compactionId) {
+        return;
+    }
+    ReleaseTierCompaction(params.Generation, compactionId);
+    if (params.Generation == 0) {
+        MemCompactionId = 0;
+        if (ForcedMemCompactionId == compactionId) {
+            ForcedMemCompactionId = 0;
+            NextForcedGenCompactionId = 0;
+        }
+        // The caller retains the original snapshot/forced request and decides
+        // when to retry it. Other generations may continue in parallel.
+        CheckTierGenerations();
+        return;
+    }
+    const bool isFinal = Policy->IsFinalLevel(params.Generation);
+    auto& state = isFinal ? GetFinalState(params.Generation).State : Generations[params.Generation - 1].State;
+    auto& task = isFinal ? GetFinalState(params.Generation).Task : Generations[params.Generation - 1].Task;
+    state = EState::Free;
+    task = {};
+    if (params.TieringForced && ForcedState == EForcedState::Compacting) {
+        ForcedState = EForcedState::Pending;
+    }
+    CheckTierGenerations();
 }
 
 ui64 TGenCompactionStrategy::PrepareCompaction(
@@ -1407,6 +2351,13 @@ void TGenCompactionStrategy::UpdateStats() {
         Stats += part.Stats;
         StatsPerTablet[part.Label.TabletID()] += part.Stats;
     }
+    for (const auto& [level, final] : TierFinals) {
+        Y_UNUSED(level);
+        for (const auto& part : final.Parts) {
+            Stats += part.Stats;
+            StatsPerTablet[part.Label.TabletID()] += part.Stats;
+        }
+    }
 
     // This rebuild is pretty expensive, however UpdateStats is only called
     // when we start or compact something, so right now it's not a very big
@@ -1426,6 +2377,12 @@ void TGenCompactionStrategy::UpdateStats() {
         }
         for (auto& part : FinalParts) {
             process(part);
+        }
+        for (auto& [level, final] : TierFinals) {
+            Y_UNUSED(level);
+            for (auto& part : final.Parts) {
+                process(part);
+            }
         }
         GarbageStatsAgg = builder.Build();
     }

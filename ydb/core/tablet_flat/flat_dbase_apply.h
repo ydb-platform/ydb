@@ -18,6 +18,8 @@ namespace NTable {
 
         explicit TSchemeModifier(TScheme &scheme, TSchemeRollbackState *rollbackState = nullptr);
 
+        // Both overloads return whether the scheme changed, not a success status.
+        // Invalid changes may throw; false only means there were no changes.
         bool Apply(const TSchemeChanges &delta)
         {
             bool changed = false;

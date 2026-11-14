@@ -10,6 +10,8 @@
 #include "flat_executor_snapshot.h"
 #include "flat_scan_actor.h"
 #include "flat_ops_compact.h"
+#include "flat_compaction_config.h"
+#include "flat_compaction_prepare.h"
 #include "flat_part_loader.h"
 #include "flat_store_hotdog.h"
 #include "flat_store_solid.h"
@@ -3714,7 +3716,9 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
         }
 
         if (*subset) {
-            Y_ENSURE(subset->IsStickedToHead(),
+            // A tier-managed forced request may include disk parts even when
+            // no memory remains to flush. Their epoch can lag the log head.
+            Y_ENSURE(subset->IsStickedToHead() || (params->Tiering && subset->Frozen.empty()),
                 "Got table subset with unexpected head " << subset->Head
                 << " and epoch " << subset->Epoch());
         }
@@ -3948,15 +3952,19 @@ void TExecutor::Handle(NOps::TEvResult::TPtr &ev) {
 void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) {
     THPTimer partSwitchCpuTimer;
 
+    const ui32 tableId = msg->Params->Table;
+    const auto* currentTable = Scheme().GetTableInfo(tableId);
+    const bool stale = currentTable && msg->Params->Tiering
+        && !NTable::IsTieringCompactionCurrent(*msg->Params, *currentTable,
+            RowScheme(tableId), TableParts(tableId), TableColdParts(tableId), IsDataTieringEnabled());
+
     if (msg->Params->TaskId != 0) {
         // We have taken over this task, mark it as finished in the broker
-        auto status = cancelled ? EResourceStatus::Cancelled : EResourceStatus::Finished;
+        auto status = cancelled || stale ? EResourceStatus::Cancelled : EResourceStatus::Finished;
         Broker->FinishTask(msg->Params->TaskId, status);
     }
 
-    const ui32 tableId = msg->Params->Table;
-
-    const bool abandoned = cancelled || !Scheme().GetTableInfo(tableId);
+    const bool abandoned = cancelled || stale || !currentTable;
 
     TProdCompact::TResults results = std::move(msg->Results);
     TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> newTxStatus = std::move(msg->TxStatus);
@@ -3971,7 +3979,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             << " epoch " << ops->Subset->Head << "} ";
 
         if (abandoned) {
-            logl << "thrown";
+            logl << (stale ? "stale tiering context" : "thrown");
         } else if (!msg->Success) {
             logl << "failed";
         } else {
@@ -3980,7 +3988,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     }
 
     if (abandoned) {
-        if (cancelled && Scheme().GetTableInfo(tableId)) {
+        if ((cancelled || stale) && currentTable) {
             CompactionLogic->CancelledCompaction(ops->Serial, std::move(msg->Params));
         }
         return;
@@ -5380,46 +5388,34 @@ void TExecutor::ReleaseWritePart(ui32 step)
     CheckCollectionBarrier(barrier);
 }
 
+bool TExecutor::IsDataTieringEnabled() const
+{
+    return AppData()->FeatureFlags.GetEnableDataTiering();
+}
+
+void TExecutor::RequestMemCompactionRetry(ui32 table)
+{
+    CompactionLogic->RequestMemCompactionRetry(table);
+    PlanCompactionChangesActivation();
+}
+
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 {
+    Y_ENSURE(params->Tiering || params->Mode == NTable::TCompactionParams::EMode::Regular,
+        "Tier-aware compaction requires a managed strategy operation");
+
     if (auto logl = Logger->Log(ELnLev::Info))
         logl << NFmt::Do(*this) << " starting compaction";
-
-    using NTable::NPage::ECache;
 
     auto table = params->Table;
     auto snapshot = PrepareScanSnapshot(table, params.Get());
 
     auto rowScheme = RowScheme(table);
     auto *tableInfo = Scheme().GetTableInfo(table);
-    auto *policy = tableInfo->CompactionPolicy.Get();
-
-    const ECache cache = params->KeepInCache ? ECache::Once : ECache::None;
 
     TAutoPtr<TCompactCfg> comp = new TCompactCfg(std::move(params));
-    auto& output = comp->Outputs.emplace_back();
 
     comp->Epoch = snapshot->Subset->Epoch(); /* narrows requested to actual */
-    output.Layout.Final = comp->Params->IsFinal;
-    const bool writeBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
-    const bool writeBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
-    const bool writeBTreeIndex = writeBTreeIndexV1 || writeBTreeIndexV2;
-    output.Layout.WriteBTreeIndexV1 = writeBTreeIndexV1;
-    output.Layout.WriteBTreeIndexV2 = writeBTreeIndexV2;
-    // V2 b-tree index replaces the flat index
-    output.Layout.WriteFlatIndex = !writeBTreeIndexV2 && AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
-    output.Writer.StickyFlatIndex = !writeBTreeIndex;
-    output.Writer.WriteBTreeIndexV1 = writeBTreeIndexV1;
-    output.Writer.WriteBTreeIndexV2 = writeBTreeIndexV2;
-    output.Layout.MaxRows = snapshot->Subset->MaxRows();
-    for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
-        output.Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});
-    }
-    output.Layout.UnderlayMask = comp->Params->UnderlayMask.Get();
-    output.Layout.SplitKeys = comp->Params->SplitKeys.Get();
-    output.Layout.MinRowVersion = snapshot->Subset->MinRowVersion();
-    output.Layout.Groups.resize(rowScheme->Families.size());
-    output.Writer.Groups.resize(rowScheme->Families.size());
 
     // Detect fulltext compact tables
     if (tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
@@ -5443,80 +5439,9 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         }
     }
 
-    auto addChannel = [&](ui8 channel) {
-        auto group = Owner->Info()->GroupFor(channel, Generation());
-
-        output.Writer.Slots.emplace_back(channel, group);
-    };
-
-    auto addChannels = [&](const std::vector<ui8>& channels) {
-        for (auto channel : channels) {
-            addChannel(channel);
-        }
-    };
-
-    ui8 descriptorChannel = NTable::TScheme::DefaultChannel;
-
-    for (size_t group : xrange(rowScheme->Families.size())) {
-        auto familyId = rowScheme->Families[group];
-        static const NTable::TScheme::TFamily defaultFamilySettings;
-        const auto& family = tableInfo->Families.ValueRef(familyId, defaultFamilySettings); // Workaround for KIKIMR-17222
-
-        auto* room = tableInfo->Rooms.FindPtr(family.Room);
-        Y_ENSURE(room, "Cannot find room " << family.Room << " in table " << table);
-
-        auto& pageGroup = output.Layout.Groups.at(group);
-        auto& writeGroup = output.Writer.Groups.at(group);
-
-        pageGroup.Codec = family.Codec;
-        pageGroup.CodecLevel = family.CodecLevel;
-        pageGroup.PageSize = policy->MinDataPageSize;
-        pageGroup.BTreeIndexNodeTargetSize = policy->MinBTreeIndexNodeSize;
-        pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
-
-        writeGroup.Cache = Max(family.Cache, cache);
-        writeGroup.CacheMode = family.CacheMode;
-        writeGroup.MaxBlobSize = NBlockIO::BlockSize;
-        writeGroup.Channel = room->Main;
-        addChannel(room->Main);
-
-        if (group == 0) {
-            // Small/Large edges are taken from the leader family
-            output.Layout.SmallEdge = family.Small;
-            output.Layout.LargeEdge = family.Large;
-            output.MaterializeExtEdge = family.Large;
-
-            // Small/Large channels are taken from the leader family
-            output.Writer.BlobsChannels = room->Blobs;
-            output.Writer.OuterChannel = room->Outer;
-            addChannels(room->Blobs);
-            addChannel(room->Outer);
-
-            output.Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
-
-            descriptorChannel = room->Main;
-        }
-    }
-
-    // Transaction status uses the extra channel even when the leader family
-    // stores its data in another room.
-    addChannel(output.Writer.ExtraChannel);
-
-    // Data of the main group is written to the leader family channel too until tier compaction,
-    // so parts keep descriptor pages and main group data in a single page collection
-    if (NWriter::ApplyDescriptorChannel(output.Layout, output.Writer, descriptorChannel)) {
-        // The descriptor channel differs from the main group channel then and may be missing from
-        // the slots (e.g. of a tier output); a slot of an already added channel is merged
-        addChannel(descriptorChannel);
-    }
-
     if (const auto& ranges = Database->GetRemovedRowVersions(table)) {
-        // Make a copy of removed versions for compacted table
-        // Version removal cannot be undone, so it's still valid at commit time
+        // Version removal cannot be undone, so the snapshot remains valid at commit time.
         comp->RemovedRowVersions = ranges.Snapshot();
-
-        // We have to adjust MinRowVersion, so it correctly expects an adjusted version
-        output.Layout.MinRowVersion = comp->RemovedRowVersions.AdjustDown(output.Layout.MinRowVersion);
     }
 
     bool compactTxStatus = false;
@@ -5551,12 +5476,51 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         snapshot->Subset->TxStatus.clear();
     }
 
+    if (comp->Params->Tiering) {
+        Y_ENSURE(!comp->IsFulltextCompact, "Tier-aware fulltext compaction is not supported");
+        NTable::PrepareTieringCompaction(*comp->Params, *tableInfo, rowScheme,
+            *snapshot->Subset, TableParts(table), TableColdParts(table),
+            IsDataTieringEnabled(), Time->Now());
+        comp->Epoch = snapshot->Subset->Epoch();
+        if (!CompactionLogic->TryReserveCompaction(*comp->Params)) {
+            // Preparation may have frozen memory, but no data was replaced
+            // and no blobs were written. The caller still owns its broker task.
+            CheckCollectionBarrier(snapshot->Barrier);
+            return 0;
+        }
+    }
+
+    TCompactionOutputSettings outputSettings;
+    outputSettings.WriteBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    outputSettings.WriteBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
+    outputSettings.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
+    outputSettings.MaxBlobSize = NBlockIO::BlockSize;
+    outputSettings.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
+    PrepareCompactionOutputs(*comp, *tableInfo, *rowScheme, *snapshot->Subset, outputSettings,
+        [&](ui8 channel) { return Owner->Info()->GroupFor(channel, Generation()); });
+
+    if (comp->Params->Tiering) {
+        for (const auto& output : comp->Outputs) {
+            Y_ENSURE(comp->Params->Tiering->OutputTiers.emplace(output.OutputId, output.TierId).second,
+                "Duplicate compaction output identity");
+        }
+    }
+
     comp->DataKind = DataKindByTabletType(Owner->TabletType());
 
     TLogoBlobID mask(Owner->TabletID(), Generation(),
                     snapshot->Barrier->Step, Max<ui8>(), 0, 0);
 
-    auto *scan = new TOpsCompact(SelfId(), mask, comp, MakeHolder<TDefaultCompactionRouter>());
+    THolder<ICompactionRouter> router;
+    if (comp->Params->Mode == NTable::TCompactionParams::EMode::TierAware) {
+        const auto& settings = *comp->Params->Tiering;
+        router = MakeHolder<TTierCompactionRouter>(*comp,
+            settings.AllowCooling ? settings.Schema->TieringPolicy : std::nullopt,
+            settings.Now, settings.TierOrder, settings.AllowCooling);
+    } else {
+        router = MakeHolder<TDefaultCompactionRouter>();
+    }
+    auto *scan = new TOpsCompact(SelfId(), mask, comp, std::move(router));
 
     NOps::TConf conf;
 

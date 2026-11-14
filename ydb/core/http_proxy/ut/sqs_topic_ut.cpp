@@ -2931,7 +2931,8 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
     Y_UNIT_TEST_F(TestGetQueueAttributesAbsoluteDlq, TFixture) {
         auto driver = MakeDriver(*this);
-        UNIT_ASSERT(CreateDlqTopic(driver));
+        NYdb::NTopic::TCreateTopicSettings dlqSettings;
+        UNIT_ASSERT(CreateTopic(driver, "DeadLetterQueue", dlqSettings));
         NYdb::NTopic::TCreateTopicSettings settings;
         auto& consumer = settings.BeginAddSharedConsumer("consumer");
         auto&& dlq = consumer.BeginDeadLetterPolicy();

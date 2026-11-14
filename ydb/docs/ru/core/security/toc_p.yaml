@@ -17,3 +17,5 @@ items:
     path: encryption/toc_p.yaml
 - name: Краткая запись управления доступом
   href: short-access-control-notation.md
+- name: Очистка данных с диска
+  href: shred.md

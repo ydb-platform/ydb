@@ -705,7 +705,16 @@ private:
                         }
 
                         YQL_CLOG(DEBUG, ProviderDq) << "Try to resolve " << moduleName;
-                        TMaybe<TFilePathWithMd5> udfPathWithMd5 = State->TypeCtx->UdfResolver->GetSystemModulePath(moduleName);
+                        TMaybe<TFilePathWithMd5> udfPathWithMd5;
+                        if (it != udfModules.end() && !it->second.FileAlias.empty()) {
+                            const auto& fileAlias = it->second.FileAlias;
+                            const auto* block = TUserDataStorage::FindUserDataBlock(files, fileAlias);
+                            YQL_ENSURE(block, "Attached UDF file not found: module " << moduleName << ", alias " << fileAlias);
+                            YQL_ENSURE(block->FrozenFile, "Attached UDF file is not frozen: module " << moduleName << ", alias " << fileAlias);
+                            udfPathWithMd5.ConstructInPlace(block->FrozenFile->GetPath().GetPath(), block->FrozenFile->GetMd5());
+                        } else {
+                            udfPathWithMd5 = State->TypeCtx->UdfResolver->GetSystemModulePath(moduleName);
+                        }
                         YQL_ENSURE(udfPathWithMd5.Defined());
 
                         const auto preparedFile = PrepareFile(*udfPathWithMd5);

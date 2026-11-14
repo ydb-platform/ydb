@@ -5,6 +5,7 @@ SRCS(
     encryption.cpp
     feature_flags.cpp
     fields_wrappers.cpp
+    index_metadata.cpp
     metadata.cpp
     omit_backup.cpp
 )
@@ -15,6 +16,7 @@ PEERDIR(
     ydb/core/backup/common/proto
     ydb/core/base
     ydb/core/util
+    ydb/public/api/protos
     ydb/library/yverify_stream
     ydb/public/api/protos
 )

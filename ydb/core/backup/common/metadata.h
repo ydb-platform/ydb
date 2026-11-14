@@ -44,6 +44,7 @@ struct TChangefeedMetadata {
 struct TIndexMetadata {
     TString ExportPrefix;
     TString ImplTablePrefix;
+    TMaybe<TEncryptionIV> IV = Nothing();
 };
 
 struct TRateLimiterResourceMetadata {
@@ -135,6 +136,7 @@ public:
         TString ExportPrefix;
         TString ObjectPath;
         TMaybe<NBackup::TEncryptionIV> IV;
+        TMap<TString, TEncryptionIV> IndexIVs = {};
     };
 
     TSchemaMapping() = default;

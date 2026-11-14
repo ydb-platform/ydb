@@ -19,6 +19,8 @@
 #include <ydb/core/backup/common/fields_wrappers.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/map.h>
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
@@ -60,6 +62,11 @@ bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& ite
 template <typename T>
 concept HasIncludeIndexData = requires(const T& t) {
     { t.include_index_data() } -> std::same_as<bool>;
+};
+
+template <typename T>
+concept HasEncryptionSettings = requires(const T& t) {
+    { t.has_encryption_settings() } -> std::same_as<bool>;
 };
 
 }
@@ -375,6 +382,26 @@ private:
             exportInfo.PendingItems.push_back(exportInfo.Items.size() - 1);
 
             if (exportInfo.IncludeIndexData && path.Base()->IsTable()) {
+                bool encrypted = false;
+                if constexpr (HasEncryptionSettings<TSettings>) {
+                    encrypted = settings.has_encryption_settings();
+                }
+
+                // With encryption, index items are uploaded under anonymized prefixes
+                // that DataShard assigns only to the impl tables it lists in the
+                // table metadata. Other impl tables could never be found on import.
+                THashSet<TString> listedImplTables;
+                if (encrypted) {
+                    const auto indexes = GetTableIndexesExportMetadata(Self, path.Base()->PathId, encrypted);
+                    if (!indexes) {
+                        explain = indexes.GetErrorMessage();
+                        return false;
+                    }
+                    for (const auto& index : indexes.GetResult()) {
+                        listedImplTables.insert(index.ImplTablePrefix);
+                    }
+                }
+
                 for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
                     TVector<TString> childParts;
                     childParts.push_back(childName);
@@ -394,6 +421,9 @@ private:
                             continue;
                         }
                         const auto implTableRelPath = JoinPath(ChildPath(childParts, implTableName));
+                        if (encrypted && !listedImplTables.contains(implTableRelPath)) {
+                            continue;
+                        }
                         indexItems.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
                     }
                 }
@@ -476,7 +506,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         YDB_LOG_DEBUG("TExport::TTxProgress: DoExecute");
 
         if (AllocateResult) {
-            OnAllocateResult();
+            OnAllocateResult(txc);
         } else if (ModifyResult) {
             OnModifyResult(txc, ctx);
         } else if (SchemeUploadResult) {
@@ -519,9 +549,14 @@ private:
         Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
     }
 
-    void TransferData(TExportInfo& exportInfo, ui32 itemIdx, TTxId txId) {
+    bool TransferData(TExportInfo& exportInfo, ui32 itemIdx, TTxId txId, TString& error) {
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         auto& item = exportInfo.Items[itemIdx];
+
+        auto propose = BackupPropose(Self, txId, exportInfo, itemIdx, error);
+        if (!propose) {
+            return false;
+        }
 
         item.SubState = ESubState::Proposed;
 
@@ -532,7 +567,8 @@ private:
         );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
+        Send(Self->SelfId(), std::move(propose));
+        return true;
     }
 
     template <typename Func>
@@ -680,6 +716,43 @@ private:
                 schemaMappingItem.SetIV(NBackup::TEncryptionIV::Combine(*iv, NBackup::EBackupFileType::Metadata, itemIndex, 0).GetBinaryString());
             }
         }
+        if (iv) {
+            // SchemeShard writes the authenticated index IVs itself. DataShards
+            // only need the existing per-item encryption settings, including
+            // when their binaries predate encrypted index materialization.
+            TMap<ui32, THashSet<TString>> indexItemsByParent;
+            for (ui32 indexIdx : xrange(exportInfo.Items.size())) {
+                const auto& indexItem = exportInfo.Items[indexIdx];
+                if (indexItem.ParentIdx != Max<ui32>()) {
+                    auto& parent = *exportInfo.ExportMetadata.MutableSchemaMapping(indexItem.ParentIdx);
+                    (*parent.MutableIndexIVs()->MutableIVs())[indexItem.SourcePathName] =
+                        MakeExportIndexItemIV(*iv, indexIdx).GetBinaryString();
+                    indexItemsByParent[indexItem.ParentIdx].insert(indexItem.SourcePathName);
+                }
+            }
+
+            // Anonymized index prefixes depend on the position of the index in the table
+            // scheme, which can be changed during the export. Fix them once here and use
+            // the same list for index items and for the table metadata written by DataShard.
+            for (const auto& [parentIdx, implTables] : indexItemsByParent) {
+                auto& mapping = *exportInfo.ExportMetadata.MutableSchemaMapping(parentIdx);
+                auto& prefixes = *mapping.MutableIndexExportPrefixes();
+                const auto& parentItem = exportInfo.Items.at(parentIdx);
+                const auto indexes = GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true,
+                    mapping.MutableIndexExportSnapshot());
+                if (!indexes) {
+                    issues = indexes.GetErrorMessage();
+                    return false;
+                }
+                for (const auto& index : indexes.GetResult()) {
+                    if (implTables.contains(index.ImplTablePrefix)) {
+                        auto& entry = *prefixes.AddIndexes();
+                        entry.SetImplTablePrefix(index.ImplTablePrefix);
+                        entry.SetExportPrefix(index.ExportPrefix);
+                    }
+                }
+            }
+        }
         if (!exportSettings.SerializeToString(&exportInfo.Settings)) {
             issues = "Failed to serialize settings";
             return false;
@@ -799,7 +872,7 @@ private:
         }
     }
 
-    void UploadCompletion(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+    void UploadCompletion(TExportInfo& exportInfo, ui32 itemIdx, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const bool operationMarker = itemIdx == Max<ui32>();
         auto& uploader = operationMarker
             ? exportInfo.ExportMetadataUploader
@@ -811,11 +884,21 @@ private:
 
         Ydb::Export::ExportToS3Settings settings;
         Y_ABORT_UNLESS(settings.ParseFromString(exportInfo.Settings));
-        const TString prefix = operationMarker
-            ? GetExportCompletionPrefix(settings)
+        const auto prefix = operationMarker
+            ? TConclusion<TString>(GetExportCompletionPrefix(settings))
             : ExportItemDestinationPrefix(Self, exportInfo, itemIdx);
+        if (!prefix) {
+            auto& item = exportInfo.Items.at(itemIdx);
+            Self->TxIdToExport.erase(item.WaitTxId);
+            item.WaitTxId = InvalidTxId;
+            item.State = EState::Cancelled;
+            item.Issue = prefix.GetErrorMessage();
+            Self->PersistExportItemState(db, exportInfo, itemIdx);
+            CancelAndPersistExport(Self->Exports.at(exportInfo.Id), itemIdx, "invalid index description", db);
+            return;
+        }
 
-        uploader = ctx.Register(CreateExportCompletionUploader(Self->SelfId(), exportInfo.Id, itemIdx, settings, prefix));
+        uploader = ctx.Register(CreateExportCompletionUploader(Self->SelfId(), exportInfo.Id, itemIdx, settings, prefix.GetResult()));
         Self->RunningExportSchemeUploaders.emplace(uploader);
         // Bootstrap waits for this event: no S3 request is issued before commit.
         Send(uploader, new TEvents::TEvWakeup());
@@ -835,7 +918,7 @@ private:
         }
 
         if (exportInfo->Kind == TExportInfo::EKind::S3) {
-            UploadCompletion(*exportInfo, Max<ui32>(), ctx);
+            UploadCompletion(*exportInfo, Max<ui32>(), db, ctx);
         } else {
             CompleteTransfer(exportInfo, db);
         }
@@ -1121,7 +1204,7 @@ private:
         case EState::Transferring: {
             const bool allItemsDone = AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone);
             if (exportInfo->Kind == TExportInfo::EKind::S3 && allItemsDone) {
-                UploadCompletion(*exportInfo, Max<ui32>(), ctx);
+                UploadCompletion(*exportInfo, Max<ui32>(), db, ctx);
                 break;
             }
             TDeque<ui32> pendingTables;
@@ -1219,7 +1302,7 @@ private:
         AuditLogExportEnd(*exportInfo, Self);
     }
 
-    void OnAllocateResult() {
+    void OnAllocateResult(TTransactionContext& txc) {
         Y_ABORT_UNLESS(AllocateResult);
 
         const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
@@ -1255,7 +1338,16 @@ private:
             }
             itemIdx = PopFront(exportInfo->PendingItems);
             if (IsPathTypeTransferrable(exportInfo->Items.at(itemIdx))) {
-                TransferData(*exportInfo, itemIdx, txId);
+                TString error;
+                if (!TransferData(*exportInfo, itemIdx, txId, error)) {
+                    NIceDb::TNiceDb db(txc.DB);
+                    auto& item = exportInfo->Items.at(itemIdx);
+                    item.State = EState::Cancelled;
+                    item.Issue = std::move(error);
+                    Self->PersistExportItemState(db, *exportInfo, itemIdx);
+                    CancelAndPersistExport(exportInfo, itemIdx, "cannot prepare backup proposal", db);
+                    return;
+                }
             } else {
                 YDB_LOG_WARN("TExport::TTxProgress: OnAllocateResult allocated a needless txId for an item transferring",
                     {"id", id},
@@ -1758,7 +1850,7 @@ private:
             if (needsCompletionMarker) {
                 // Keep the durable backup tx id until the marker is acknowledged.
                 // Recovery can recheck BackupHistory and safely repeat the PUT.
-                UploadCompletion(*exportInfo, itemIdx, ctx);
+                UploadCompletion(*exportInfo, itemIdx, db, ctx);
                 return;
             }
 

@@ -94,7 +94,7 @@ void AuditLogEndConfigureDatabase(
         AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EMPTY_VALUE))
         AUDIT_PART("database", database)
         AUDIT_PART("status", success ? "SUCCESS" : "ERROR")
-        AUDIT_PART("reason", reason, !reason.empty())
+        AUDIT_PART("reason", (!reason.empty() ? reason : "Database configuration failed: reason not provided"), !success || !reason.empty())
         AUDIT_PART("operation", "END INIT DATABASE CONFIG")
     );
 }

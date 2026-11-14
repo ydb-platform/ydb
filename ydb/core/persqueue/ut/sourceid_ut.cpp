@@ -684,6 +684,75 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         UNIT_ASSERT_VALUES_EQUAL(it->second.Offset, 10);
     }
 
+    Y_UNIT_TEST(ExplicitRegistrationUpgradesImplicitSourceId) {
+        TSourceIdStorage storage;
+
+        const auto sourceId = TestSourceId();
+        // write-path auto-registration: implicit
+        storage.RegisterSourceId(sourceId, /*seqNo=*/5, /*offset=*/10, TInstant::Seconds(100));
+
+        // an explicit registration upgrades the id preserving the dedup state
+        auto explicitInfo = TSourceIdInfo(/*seqNo=*/5, /*offset=*/10, TInstant::Seconds(100));
+        explicitInfo.Explicit = true;
+        storage.RegisterSourceIdInfo(sourceId, std::move(explicitInfo), /*load=*/false);
+
+        const auto& info = storage.GetInMemorySourceIds().at(sourceId);
+        UNIT_ASSERT(info.Explicit);
+        UNIT_ASSERT_VALUES_EQUAL(info.SeqNo, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(info.State, TSourceIdInfo::EState::Registered);
+        // IsExpired() is only defined for non-explicit entries (asserted), so
+        // eviction survival is checked via DropOldSourceIds in the next test.
+    }
+
+    Y_UNIT_TEST(ExplicitRegistrationSurvivesEviction) {
+        TSourceIdStorage storage;
+
+        storage.RegisterSourceId(TestSourceId(), 1, 10, TInstant::Seconds(100));
+
+        auto explicitInfo = TSourceIdInfo(1, 10, TInstant::Seconds(100));
+        explicitInfo.Explicit = true;
+        storage.RegisterSourceIdInfo(TestSourceId(), std::move(explicitInfo), /*load=*/false);
+
+        NKikimrPQ::TPartitionConfig config;
+        config.SetSourceIdLifetimeSeconds(1);
+        config.SetSourceIdMaxCounts(1);
+        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 0, TPartitionId(TestPartition), config);
+        UNIT_ASSERT_EQUAL(dropped, false);
+        UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 0);
+        UNIT_ASSERT(storage.GetInMemorySourceIds().contains(TestSourceId()));
+    }
+
+    Y_UNIT_TEST(ExplicitEntriesPersistInProtoFormat) {
+        TSourceIdWriter writer(ESourceIdFormat::Raw);
+
+        writer.RegisterSourceId(TestSourceId(1), 1, 10, TInstant::Seconds(100));
+        {
+            auto explicitInfo = TSourceIdInfo(2, 20, TInstant::Seconds(200));
+            explicitInfo.Explicit = true;
+            writer.RegisterSourceId(TestSourceId(2), explicitInfo);
+        }
+
+        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        writer.FillRequest(request.Get(), TPartitionId(TestPartition));
+
+        auto& record = request.Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.CmdWriteSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(record.CmdDeleteRangeSize(), 1);
+
+        const auto rawKey = [&]() {
+            TKeyPrefix key(TKeyPrefix::TypeInfo, TPartitionId(TestPartition), TKeyPrefix::MarkSourceId);
+            key.Append(TestSourceId(2).c_str(), TestSourceId(2).size());
+            return TString(key.Data(), key.Size());
+        }();
+        UNIT_ASSERT_VALUES_EQUAL(record.GetCmdDeleteRange(0).GetRange().GetFrom(), rawKey);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetCmdDeleteRange(0).GetRange().GetTo(), rawKey);
+
+        // the implicit entry stays in the batch format, the explicit one does
+        // not: their keys must differ
+        UNIT_ASSERT_VALUES_UNEQUAL(record.GetCmdWrite(0).GetKey(), record.GetCmdWrite(1).GetKey());
+    }
+
 } // TSourceIdTests
 
 } // namespace NKikimr::NPQ

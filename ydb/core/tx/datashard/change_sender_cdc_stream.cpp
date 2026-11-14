@@ -43,8 +43,16 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
     void Init() {
         auto opts = TPartitionWriterOpts()
+            // The source id is registered explicitly on first use
+            // (WithExplicitRegistration): explicit ids are immune to the
+            // tablet's source-id eviction, so the dedup state survives sender
+            // restarts regardless of whether the schemeshard provided the
+            // bootstrap. The strict checks then only verify the id is
+            // explicit: a fresh source passes after its own registration; an
+            // unexpected implicit one fails loudly.
             .WithCheckState(true)
             .WithAutoRegister(true)
+            .WithExplicitRegistration(true)
             .WithSourceId(SourceId);
         Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), ShardId, PartitionId, opts));
         Become(&TThis::StateInit);

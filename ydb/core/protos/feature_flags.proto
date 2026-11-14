@@ -488,4 +488,11 @@ message TFeatureFlags {
     optional bool EnableRowTableZstdCompression = 388 [default = false];
     optional bool EnableAsyncReplicationTableOwnership = 389 [default = false, (RequireRestart) = true];
     optional bool EnableCsDefaultValues = 390 [default = false];
+    // When enabled, schemeshard stops building the source-id registration
+    // bootstrap for cdc streams that emit neither heartbeats (virtual/resolved
+    // timestamps) nor schema changes — such streams' change senders register
+    // their source ids explicitly on first use instead. Heartbeat/schema-change
+    // streams keep the bootstrap in every mode. Enable after the fleet
+    // upgrade; toggling later is safe.
+    optional bool EnableCdcStreamBootstrapSkip = 391 [default = false];
 }

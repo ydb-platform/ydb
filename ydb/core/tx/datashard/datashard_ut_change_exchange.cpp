@@ -1021,8 +1021,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
             bool useRealThreads = true,
             const TString& root = "Root",
             const TString& tableName = "Table",
-            bool enableGrpc = false)
-        {
+            bool enableGrpc = false,
+            std::optional<bool> bootstrapSkip = std::nullopt
+        ) {
             auto settings = TServerSettings(PortManager.GetPort(2134), {}, DefaultPQConfig())
                 .SetUseRealThreads(useRealThreads)
                 .SetDomainName(root)
@@ -1042,6 +1043,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             const auto database = JoinPath({root});
             auto& runtime = *Server->GetRuntime();
+            if (bootstrapSkip) {
+                // The flag gates the schemeshard bootstrap skip for cdc
+                // streams; the suite default is off, tests may run both.
+                runtime.GetAppData().FeatureFlags.SetEnableCdcStreamBootstrapSkip(*bootstrapSkip);
+            }
             EdgeActor = runtime.AllocateEdgeActor();
 
             SetupLogging(runtime);
@@ -1348,9 +1354,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct PqRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr,
+                std::optional<bool> bootstrapSkip = std::nullopt)
         {
-            TTestPqEnv env(tableDesc, streamDesc);
+            TTestPqEnv env(tableDesc, streamDesc, /*useRealThreads*/ true, "Root", "Table", /*enableGrpc*/ false, bootstrapSkip);
 
             for (const auto& query : queries) {
                 ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, userCtx);
@@ -1401,6 +1408,74 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     UNIT_ASSERT_VALUES_EQUAL(pStream->GetTopicPath(), "/Root/Table/Stream");
                 }
             }
+
+            // remove consumer
+            {
+                auto res = client.RemoveReadRule("/Root/Table/Stream", TRemoveReadRuleSettings()
+                    .ConsumerName("user")).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+        }
+
+        // Proto-format record bodies are serialized NKikimrChangeExchange::TChangeRecord
+        // protos (not JSON), so delivery is asserted structurally.
+        static void ReadProto(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
+                const TVector<TString>& queries, ui32 expectedRecords,
+                std::optional<bool> bootstrapSkip = std::nullopt)
+        {
+            TTestPqEnv env(tableDesc, streamDesc, /*useRealThreads*/ true, "Root", "Table", /*enableGrpc*/ false, bootstrapSkip);
+
+            for (const auto& query : queries) {
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true);
+            }
+
+            auto& client = env.GetClient();
+
+            // add consumer
+            {
+                auto res = client.AddReadRule("/Root/Table/Stream", TAddReadRuleSettings()
+                    .ReadRule(TReadRuleSettings().ConsumerName("user"))).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+
+            // get records
+            auto reader = client.CreateReadSession(TReadSessionSettings()
+                .AppendTopics(std::string{"/Root/Table/Stream"})
+                .ConsumerName("user")
+                .DisableClusterDiscovery(true)
+            );
+
+            ui32 reads = 0;
+            while (reads < expectedRecords) {
+                auto ev = reader->GetEvent(true);
+                UNIT_ASSERT(ev);
+
+                TPartitionStream::TPtr pStream;
+                if (auto* data = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*ev)) {
+                    pStream = data->GetPartitionStream();
+                    for (const auto& item : data->GetMessages()) {
+                        NKikimrChangeExchange::TChangeRecord record;
+                        UNIT_ASSERT_C(record.ParseFromString(item.GetData()), "Unparsable proto record at index " << reads);
+                        UNIT_ASSERT_C(record.HasCdcDataChange(), "Unexpected record kind at index " << reads);
+                        UNIT_ASSERT_C(record.GetCdcDataChange().GetKey().GetData().size() > 0, "Empty record key at index " << reads);
+                        ++reads;
+                    }
+                } else if (auto* create = std::get_if<TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev)) {
+                    pStream = create->GetPartitionStream();
+                    create->Confirm();
+                } else if (auto* destroy = std::get_if<TReadSessionEvent::TDestroyPartitionStreamEvent>(&*ev)) {
+                    pStream = destroy->GetPartitionStream();
+                    destroy->Confirm();
+                } else if (std::get_if<TSessionClosedEvent>(&*ev)) {
+                    break;
+                }
+
+                if (pStream) {
+                    UNIT_ASSERT_VALUES_EQUAL(pStream->GetTopicPath(), "/Root/Table/Stream");
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(reads, expectedRecords);
 
             // remove consumer
             {
@@ -1983,6 +2058,41 @@ Y_UNIT_TEST_SUITE(Cdc) {
         UNIT_ASSERT_VALUES_EQUAL(Base64Decode(json["update"]["value"].GetString()), binary);
     }
 
+    // Same plain-Json delivery with the bootstrap-skip flag explicitly off
+    // (bootstrap built) and on (bootstrap skipped) — both sides of the flag
+    // must deliver.
+    Y_UNIT_TEST_TWIN(KeysOnlyLogBootstrapSkip, BootstrapSkip) {
+        PqRunner::Read(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, {
+            R"({"update":{},"key":[1]})",
+            R"({"update":{},"key":[2]})",
+            R"({"update":{},"key":[3]})",
+            R"({"erase":{},"key":[1]})",
+        }, true, nullptr, BootstrapSkip);
+    }
+
+    // Same delivery for a plain Proto-format stream: the format itself needs no
+    // bootstrap (no heartbeat/schema-change quorum, routing comes from the
+    // scheme-cache partitioning), so it must deliver with the bootstrap-skip
+    // flag off (bootstrap built) and on (bootstrap skipped) alike. Record
+    // bodies are serialized TChangeRecord protos.
+    Y_UNIT_TEST_TWIN(ProtoLogBootstrapSkip, BootstrapSkip) {
+        PqRunner::ReadProto(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatProto), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, 4, BootstrapSkip);
+    }
+
     Y_UNIT_TEST_TRIPLET(UuidExchange, PqRunner, YdsRunner, TopicRunner) {
         TRunner::Read(UuidTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
@@ -2299,6 +2409,21 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{},"key":[2],"ts":"***"})",
             R"({"update":{},"key":[3],"ts":"***"})",
         });
+    }
+
+    // A heartbeat stream keeps the bootstrap in every mode; delivery must work
+    // with the bootstrap-skip flag on as well.
+    Y_UNIT_TEST(VirtualTimestampsBootstrapSkipFlag) {
+        PqRunner::Read(SimpleTable(), WithVirtualTimestamps(KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson)), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )"}, {
+            R"({"update":{},"key":[1],"ts":"***"})",
+            R"({"update":{},"key":[2],"ts":"***"})",
+            R"({"update":{},"key":[3],"ts":"***"})",
+        }, true, nullptr, /*bootstrapSkip=*/true);
     }
 
     TShardedTableOptions DocApiTable() {

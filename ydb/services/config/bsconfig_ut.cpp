@@ -1212,6 +1212,296 @@ config:
         UNIT_ASSERT_C(mainConfig->Contains("replacement-a"), *mainConfig);
     }
 
+    // With the dedicated storage YAML, the storage YAML alone is replaced: there is no main YAML for Console to
+    // validate. The replacement must still go on in BSC and apply, and the next one must not be refused as ongoing.
+    Y_UNIT_TEST(StorageOnlyReplacementApplies) {
+        TRaceServer server;
+        auto& runtime = *server.GetRuntime();
+        const TString pdiskPath = runtime.GetTempDir() + "pdisk_1.dat";
+        auto makeStorageYaml = [&](ui32 version, ui32 extraDrives) {
+            return Sprintf(R"(
+metadata:
+  kind: StorageConfig
+  cluster: ""
+  version: %u
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: %s
+      type: ROT
+%s  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)", version, pdiskPath.c_str(), ExtraDrives(extraDrives).c_str());
+        };
+        auto makeMainYaml = [&](ui32 version, const char *name) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  log_config:
+    cluster_name: %s
+)", version, name) + HostsYaml(runtime);
+        };
+        auto replace = [&](std::optional<TString> mainConfig, std::optional<TString> storageConfig,
+                std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode) {
+            Ydb::Config::ReplaceConfigResponse response;
+            Dispatched(runtime, [&] {
+                ReplaceConfig(server.GetChannel(), mainConfig, storageConfig, switchDedicatedStorageSection,
+                    dedicatedConfigMode, false, [&](const auto& resp) { response = resp; });
+            });
+            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+        };
+        auto fetchMain = [&] {
+            const auto edge = runtime.AllocateEdgeActor();
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerFetchConfigRequest>();
+            request->Record.SetDedicatedClusterSection(true);
+            runtime.SendToPipe(MakeBSControllerID(), edge, request.release());
+            const auto response = runtime.GrabEdgeEvent<TEvBlobStorage::TEvControllerFetchConfigResponse>(edge);
+            const auto& record = response->Get()->Record;
+            UNIT_ASSERT_C(!record.HasErrorReason(), record.GetErrorReason());
+            UNIT_ASSERT(record.HasClusterYaml());
+            return record.GetClusterYaml();
+        };
+        // BSC turns configuration v2 on with the first replacement, which can't switch the dedicated storage mode too
+        replace(makeMainYaml(1, "single"), std::nullopt, std::nullopt, false);
+        replace(makeMainYaml(2, "storage-only"), makeStorageYaml(0, 0),
+            /*switchDedicatedStorageSection=*/ true, false);
+        const auto mainBefore = fetchMain();
+        for (ui32 version : {1, 2}) {
+            replace(std::nullopt, makeStorageYaml(version, version), std::nullopt, /*dedicatedConfigMode=*/ true);
+            UNIT_ASSERT_VALUES_EQUAL(fetchMain(), mainBefore);
+        }
+        // version 2 is accepted only if version 1 has applied and the replacement isn't seen as ongoing any more
+
+        TActorId controller;
+        bool reconnected = false;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerValidateConfigResponse) {
+                controller = ev->GetRecipientRewrite();
+            }
+            if (controller && ev->GetRecipientRewrite() == controller
+                    && ev->GetTypeRewrite() == TEvBlobStorage::EvControllerProposeConfigResponse) {
+                const auto status = ev->Get<TEvBlobStorage::TEvControllerProposeConfigResponse>()->Record.GetStatus();
+                UNIT_ASSERT_C(status == NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNotNeeded,
+                    NKikimrBlobStorage::TEvControllerProposeConfigResponse::EStatus_Name(status));
+                reconnected = true;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        // Storage-only commits must leave Console expecting main version 3, just as BSC does.
+        replace(makeMainYaml(3, "main-after-storage"), std::nullopt, std::nullopt, /*dedicatedConfigMode=*/ true);
+        UNIT_ASSERT(controller);
+        const auto mainAfter = fetchMain();
+        UNIT_ASSERT_C(mainAfter.Contains("main-after-storage"), mainAfter);
+
+        // BSC schedules GetBlock before it reconnects; the simulated runtime otherwise drops this event.
+        runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& ev, TDuration delay,
+                TInstant& deadline) {
+            return ev->GetTypeRewrite() != TEvBlobStorage::EvGetBlock
+                && TTestActorRuntime::DefaultScheduledFilterFunc(r, ev, delay, deadline);
+        });
+        RebootTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor());
+        WaitFor(runtime, [&] { return reconnected; });
+        runtime.SetObserverFunc(prevObserver);
+        replace(makeMainYaml(4, "main-after-reconnect"), std::nullopt, std::nullopt, /*dedicatedConfigMode=*/ true);
+        const auto mainAfterReconnect = fetchMain();
+        UNIT_ASSERT_C(mainAfterReconnect.Contains("main-after-reconnect"), mainAfterReconnect);
+    }
+
+    // The new YAML puts into the box a host that is in its node list, but not in the node list BSC has now. BSC checks
+    // the box against the node list of the new YAML, and then applies it against its own list. It must not go down
+    // there; the YAML with the known host only is the control and applies.
+    Y_UNIT_TEST(BoxHostUnknownToControllerIsNotApplied) {
+        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+        TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(&server);
+        const TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
+        auto makeYaml = [&](ui32 version, const char *extraHost) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: %s
+      type: ROT
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+%s)", version, pdiskPath.c_str(), extraHost);
+        };
+        ReplaceConfig(server.GetChannel(), makeYaml(1, R"(  - host: ::1
+    port: 12099
+    host_config_id: 1
+)"), std::nullopt, std::nullopt, false, false, [](const auto& resp) {
+            UNIT_ASSERT_C(resp.operation().status() != Ydb::StatusIds::SUCCESS, resp.operation().DebugString());
+        });
+
+        // nothing was persisted: the same version applies with the known host only
+        ReplaceConfig(server.GetChannel(), makeYaml(1, ""), std::nullopt, std::nullopt, false, false,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+            });
+    }
+
+    // The dedicated storage YAML is turned off, and the single YAML coming instead of it has the storage settings now.
+    // BSC must check them as in the single-config mode: the host config listing one drive twice is refused, the same
+    // YAML without it applies.
+    Y_UNIT_TEST(DisablingDedicatedStorageChecksStorageOfMainYaml) {
+        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+        TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(&server);
+        const TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
+        const TString storageYaml = Sprintf(R"(
+metadata:
+  kind: StorageConfig
+  cluster: ""
+  version: 0
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: %s
+      type: SSD
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)", pdiskPath.c_str());
+        auto makeMainYaml = [&](ui32 version, const char *name) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  log_config:
+    cluster_name: %s
+)", version, name) + HostsYaml(*server.GetRuntime());
+        };
+        auto success = [](const auto& resp) {
+            UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+        };
+        // BSC turns configuration v2 on with the first replacement, which can't switch the dedicated storage mode too
+        ReplaceConfig(server.GetChannel(), makeMainYaml(1, "single"), std::nullopt, std::nullopt, false, false, success);
+        ReplaceConfig(server.GetChannel(), makeMainYaml(2, "dedicated"), storageYaml,
+            /*switchDedicatedStorageSection=*/ true, false, false, success);
+
+        auto makeSingleYaml = [&](const TString& drives) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 3
+config:
+  log_config:
+    cluster_name: single
+  host_configs:
+  - host_config_id: 1
+    drive:
+%s  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)", drives.c_str());
+        };
+        const TString drive = Sprintf("    - path: %s\n      type: SSD\n", pdiskPath.c_str());
+        ReplaceConfig(server.GetChannel(), makeSingleYaml(drive + drive), std::nullopt,
+            /*switchDedicatedStorageSection=*/ false, false, false, [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::INTERNAL_ERROR);
+                const TString opDebugString = resp.operation().DebugString();
+                UNIT_ASSERT_C(opDebugString.Contains("duplicate path"), opDebugString);
+            });
+
+        ReplaceConfig(server.GetChannel(), makeSingleYaml(drive), std::nullopt,
+            /*switchDedicatedStorageSection=*/ false, false, false, success);
+        std::optional<TString> mainConfig, storageConfig;
+        FetchConfig(server.GetChannel(), false, false, mainConfig, storageConfig);
+        UNIT_ASSERT(mainConfig);
+        UNIT_ASSERT(!storageConfig);
+        UNIT_ASSERT_C(mainConfig->Contains("cluster_name: single"), *mainConfig);
+    }
+
+    // An unchanged main YAML still becomes the source of storage settings when the dedicated section is turned off.
+    // Check the host config in BSC itself: dropping the dedicated YAML alone does not apply the extra drive from main.
+    Y_UNIT_TEST(DisablingDedicatedStorageAppliesUnchangedMainYaml) {
+        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+        TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(&server);
+        auto& runtime = *server.GetRuntime();
+        const TString pdiskPath = runtime.GetTempDir() + "pdisk_1.dat";
+        auto makeYaml = [&](const char *kind, ui32 version, ui32 extraDrives) {
+            return Sprintf(R"(
+metadata:
+  kind: %s
+  cluster: ""
+  version: %u
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: %s
+      type: ROT
+%s  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)", kind, version, pdiskPath.c_str(), ExtraDrives(extraDrives).c_str());
+        };
+        auto success = [](const auto& resp) {
+            UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+        };
+        auto checkExtraDrive = [&](bool expected) {
+            const TActorId sender = runtime.AllocateEdgeActor();
+            auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+            request->Record.MutableRequest()->AddCommand()->MutableReadHostConfig()->AddHostConfigId(1);
+            runtime.SendToPipe(MakeBSControllerID(), sender, request.Release());
+            const auto event = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(sender);
+            const auto& response = event->Get()->Record.GetResponse();
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            const auto& status = response.GetStatus(0);
+            UNIT_ASSERT_C(status.GetSuccess(), status.GetErrorDescription());
+            UNIT_ASSERT_VALUES_EQUAL(status.HostConfigSize(), 1);
+            const auto& hostConfig = status.GetHostConfig(0);
+            UNIT_ASSERT_VALUES_EQUAL(hostConfig.DriveSize(), expected ? 2 : 1);
+            bool found = false;
+            for (const auto& drive : hostConfig.GetDrive()) {
+                found |= drive.GetPath() == "SectorMap:1:64";
+            }
+            UNIT_ASSERT_VALUES_EQUAL(found, expected);
+        };
+
+        ReplaceConfig(server.GetChannel(), makeYaml("MainConfig", 1, 0), std::nullopt, std::nullopt,
+            false, false, success);
+        const TString mainYaml = makeYaml("MainConfig", 2, 1);
+        ReplaceConfig(server.GetChannel(), mainYaml, makeYaml("StorageConfig", 0, 0),
+            /*switchDedicatedStorageSection=*/ true, false, false, success);
+        checkExtraDrive(false);
+
+        ReplaceConfig(server.GetChannel(), mainYaml, std::nullopt,
+            /*switchDedicatedStorageSection=*/ false, false, /*dryRun=*/ true, success);
+        checkExtraDrive(false);
+        ReplaceConfig(server.GetChannel(), mainYaml, std::nullopt,
+            /*switchDedicatedStorageSection=*/ false, false, false, success);
+        checkExtraDrive(true);
+
+        std::optional<TString> mainConfig, storageConfig;
+        FetchConfig(server.GetChannel(), false, false, mainConfig, storageConfig);
+        UNIT_ASSERT(mainConfig);
+        UNIT_ASSERT_VALUES_EQUAL(*mainConfig, mainYaml);
+        UNIT_ASSERT(!storageConfig);
+    }
+
 }
 
 } // NKikimr::NGRpcService

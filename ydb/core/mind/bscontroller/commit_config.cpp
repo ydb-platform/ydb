@@ -111,6 +111,7 @@ namespace NKikimr::NBsController {
 
             std::optional<NKikimrBlobStorage::TYamlConfig> update;
 
+            const bool mainConfigChanged = YamlConfig.has_value();
             if (YamlConfig) {
                 Self->YamlConfig = std::move(YamlConfig);
                 Self->YamlConfigHash = GetSingleConfigHash(*Self->YamlConfig);
@@ -156,7 +157,7 @@ namespace NKikimr::NBsController {
             if (Handle) {
                 TActivationContext::Send(Handle.release());
             } else {
-                Self->ConsoleInteraction->OnConfigCommit();
+                Self->ConsoleInteraction->OnConfigCommit(mainConfigChanged);
             }
 
             if (update) {

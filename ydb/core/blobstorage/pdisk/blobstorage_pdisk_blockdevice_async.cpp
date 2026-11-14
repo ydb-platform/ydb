@@ -42,8 +42,6 @@ namespace NPDisk {
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
-constexpr ui64 MaxWaitingNoops = 256;
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TRealBlockDevice
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -430,7 +428,6 @@ class TRealBlockDevice : public IBlockDevice {
 
 
     class TSharedCallback : public ICallback {
-        ui64 NextPossibleNoop = 0;
         ui64 EndOffset = 0;
         NHPTimer::STime PrevEventGotAtCycle = HPNow();
         NHPTimer::STime PrevEstimationAtCycle = HPNow();
@@ -442,7 +439,8 @@ class TRealBlockDevice : public IBlockDevice {
         ui64 MergedEstimatedNs = 0;
         ui64 MergedActualNs = 0;
 
-        TCompletionAction* WaitingNoops[MaxWaitingNoops] = {nullptr};
+        // Flush actions of completed operations that wait for all earlier operations, by operation index
+        TMap<ui64, TCompletionAction*> WaitingNoops;
         // The first failed completion that its action cannot handle, that is one that moves the device to the error
         // state (failed reads are handled per request and are not counted). Flush actions released after it fail too:
         // a chunk or log write answers through the flush action of its last buffer only, so an earlier failed buffer
@@ -529,9 +527,8 @@ class TRealBlockDevice : public IBlockDevice {
 
             if (opSize == 0) { // Special case for flush operation, which is a read operation with 0 bytes size
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
-                    Y_VERIFY_S(WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] == nullptr,
-                        PCtx->PDiskLogPrefix);
-                    WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] = completionAction;
+                    const bool inserted = WaitingNoops.emplace(completionAction->OperationIdx, completionAction).second;
+                    Y_VERIFY_S(inserted, PCtx->PDiskLogPrefix);
                 } else {
                     Y_DEBUG_ABORT_S(PCtx->PDiskLogPrefix << "Threre must not be writes of size 0 in TRealBlockDevice");
                 }
@@ -575,8 +572,8 @@ class TRealBlockDevice : public IBlockDevice {
                     {"size", opSize});
                 if (completionAction->FlushAction) {
                     ui64 idx = completionAction->FlushAction->OperationIdx;
-                    Y_VERIFY_S(WaitingNoops[idx % MaxWaitingNoops] == nullptr, PCtx->PDiskLogPrefix);
-                    WaitingNoops[idx % MaxWaitingNoops] = completionAction->FlushAction;
+                    const bool inserted = WaitingNoops.emplace(idx, completionAction->FlushAction).second;
+                    Y_VERIFY_S(inserted, PCtx->PDiskLogPrefix);
                     completionAction->FlushAction = nullptr;
                 }
                 Device.CompletionThreads->Schedule(completionAction);
@@ -591,21 +588,18 @@ class TRealBlockDevice : public IBlockDevice {
 
             Device.IoContext->DestroyAsyncIoOperation(op);
             ui64 firstIncompleteIdx = Device.FlightControl.FirstIncompleteIdx();
-            while (NextPossibleNoop < firstIncompleteIdx) {
-                ui64 i = NextPossibleNoop % MaxWaitingNoops;
-                if (WaitingNoops[i] && WaitingNoops[i]->OperationIdx == NextPossibleNoop) {
-                    LWTRACK(PDiskDeviceGetFromWaiting, WaitingNoops[i]->Orbit);
-                    double durationMs = HPMilliSecondsFloat(HPNow() - WaitingNoops[i]->GetTime);
-                    Device.Mon.DeviceFlushDuration.Increment(durationMs);
-                    if (FailedCompletionReason && WaitingNoops[i]->Result == EIoResult::Ok) {
-                        WaitingNoops[i]->SetResult(EIoResult::IOError);
-                        WaitingNoops[i]->SetErrorReason(TStringBuilder() << " an earlier device operation failed,"
-                                << FailedCompletionReason);
-                    }
-                    Device.CompletionThreads->Schedule(WaitingNoops[i]);
-                    WaitingNoops[i] = nullptr;
+            while (!WaitingNoops.empty() && WaitingNoops.begin()->first < firstIncompleteIdx) {
+                TCompletionAction *flushAction = WaitingNoops.begin()->second;
+                WaitingNoops.erase(WaitingNoops.begin());
+                LWTRACK(PDiskDeviceGetFromWaiting, flushAction->Orbit);
+                double durationMs = HPMilliSecondsFloat(HPNow() - flushAction->GetTime);
+                Device.Mon.DeviceFlushDuration.Increment(durationMs);
+                if (FailedCompletionReason && flushAction->Result == EIoResult::Ok) {
+                    flushAction->SetResult(EIoResult::IOError);
+                    flushAction->SetErrorReason(TStringBuilder() << " an earlier device operation failed,"
+                            << FailedCompletionReason);
                 }
-                ++NextPossibleNoop;
+                Device.CompletionThreads->Schedule(flushAction);
             }
             *Device.Mon.DeviceEstimatedCostNs += totalCostNs;
             *Device.Mon.DeviceActualCostNs += HPNanoSeconds(totalExecutionCycles);
@@ -660,11 +654,10 @@ class TRealBlockDevice : public IBlockDevice {
 
         void Destroy() {
             // There are no Schedule() calls in progress
-            for (ui64 idx = 0; idx < MaxWaitingNoops; ++idx) {
-                if (WaitingNoops[idx]) {
-                    WaitingNoops[idx]->Release(Device.PCtx->ActorSystem);
-                }
+            for (const auto& waiting : WaitingNoops) {
+                waiting.second->Release(Device.PCtx->ActorSystem);
             }
+            WaitingNoops.clear();
             // Stop the completion thread
             Device.CompletionThreads->Schedule(nullptr);
         }

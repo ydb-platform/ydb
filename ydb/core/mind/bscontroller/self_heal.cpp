@@ -462,6 +462,7 @@ namespace NKikimr::NBsController {
                         Y_DEBUG_ABORT_UNLESS(ActiveReassignerActorId);
                         if (ActiveReassignerActorId) {
                             Send(*ActiveReassignerActorId, new TEvents::TEvPoison);
+                            ActiveReassignerActorId.reset();
                         }
                     }
 
@@ -685,9 +686,10 @@ namespace NKikimr::NBsController {
         }
 
         void Handle(TEvReassignerDone::TPtr& ev) {
-            Y_ABORT_UNLESS(ActiveReassignerActorId);
-            TActorId reassigner = *std::exchange(ActiveReassignerActorId, std::nullopt);
-            Y_ABORT_UNLESS(reassigner == ev->Sender);
+            if (!ActiveReassignerActorId || *ActiveReassignerActorId != ev->Sender) {
+                return;
+            }
+            ActiveReassignerActorId.reset();
 
             if (const auto it = Groups.find(ev->Get()->GroupId); it != Groups.end()) {
                 auto& group = it->second;

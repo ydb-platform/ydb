@@ -3,6 +3,7 @@
 # Only git operations (rebase, push) are performed - no build/test scripts.
 # Preflight checks require a repository collaborator to trigger rebase and,
 # for fork PRs, maintainer_can_modify (Allow edits from maintainers).
+# Trigger labels: rebase-and-check (preferred) and rebase-user-branch (alias).
 # Do NOT add steps that execute untrusted code from the PR head.
 name: Rebase user branch
 
@@ -17,12 +18,17 @@ on:
         type: string
 
 concurrency:
-  group: rebase-pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
+  # In particular, our own ok-to-test event must not cancel the rebase run.
+  group: >-
+    rebase-pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}${{
+      github.event_name == 'pull_request_target' &&
+      github.event.label.name != 'rebase-and-check' && github.event.label.name != 'rebase-user-branch' &&
+      format('-ignore-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 jobs:
   rebase:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'rebase-user-branch'
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'rebase-and-check' || github.event.label.name == 'rebase-user-branch'
 
     runs-on: ubuntu-latest
     permissions:
@@ -354,8 +360,14 @@ jobs:
         env:
           BASE_REF: ${{ steps.pr.outputs.base_ref }}
         run: |
+          before=$(git rev-parse HEAD)
           if git rebase "upstream/$BASE_REF"; then
             echo "rebase_status=success" >> $GITHUB_OUTPUT
+            if [ "$(git rev-parse HEAD)" = "$before" ]; then
+              echo "head_changed=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "head_changed=true" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "rebase_status=failed" >> $GITHUB_OUTPUT
             git rebase --abort
@@ -373,7 +385,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: '❌ **Rebase failed unexpectedly.**\n\nPlease check the workflow logs or try re-applying the `rebase-user-branch` label.' + footer
+              body: '❌ **Rebase failed unexpectedly.**\n\nPlease check the workflow logs or try re-applying the `rebase-and-check` or `rebase-user-branch` label.' + footer
             });
 
       - name: Fail on unexpected error
@@ -404,7 +416,48 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: '⚠️ **Rebase succeeded but push failed.**\n\nThe remote branch may have been updated.' + forkHint + '\n\nPlease re-apply the `rebase-user-branch` label to retry.' + footer
+              body: '⚠️ **Rebase succeeded but push failed.**\n\nThe remote branch may have been updated.' + forkHint + '\n\nPlease re-apply the `rebase-and-check` or `rebase-user-branch` label to retry.' + footer
+            });
+
+      - name: Restart checks when the branch is already up to date
+        id: restart_checks
+        if: >-
+          steps.rebase.outputs.rebase_status == 'success' &&
+          steps.rebase.outputs.head_changed == 'false' && steps.push.outcome == 'success'
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          EXPECTED_HEAD: ${{ steps.pr.outputs.head_sha }}
+        with:
+          # A label added with GITHUB_TOKEN would not trigger PR-check.
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const issueNumber = Number(process.env.PR_NUMBER);
+            const { data: pr } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: issueNumber
+            });
+            if (pr.state !== 'open' || pr.head.sha !== process.env.EXPECTED_HEAD) {
+              core.info('PR closed or head changed; skipping the unchanged-head restart.');
+              return;
+            }
+
+            // Removing an existing label ensures addLabels produces a new event.
+            try {
+              await github.rest.issues.removeLabel({
+                ...context.repo,
+                issue_number: issueNumber,
+                name: 'ok-to-test'
+              });
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: issueNumber,
+              labels: ['ok-to-test']
             });
 
       - name: Add success comment
@@ -463,16 +516,18 @@ jobs:
         with:
           script: |
             const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
-            try {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-                name: 'rebase-user-branch'
-              });
-            } catch (error) {
-              if (!error.status || error.status != 404) {
-                throw error;
+            for (const name of ['rebase-and-check', 'rebase-user-branch']) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  name
+                });
+              } catch (error) {
+                if (!error.status || error.status != 404) {
+                  throw error;
+                }
               }
             }
 

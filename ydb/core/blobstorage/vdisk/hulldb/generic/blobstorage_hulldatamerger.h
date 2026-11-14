@@ -197,6 +197,10 @@ namespace NKikimr {
                             SlotsToAllocate.push_back(part.HugePartSize);
                         }
                     } else {
+                        if ((part.InMemData || !part.SmallBlobPart.Empty()) && !part.HugeBlob.Empty()) {
+                            // the part is inlined from its other copy, so nothing refers to the huge one any more
+                            DeletedHugeBlobs.push_back(part.HugeBlob);
+                        }
                         if (part.InMemData) { // prefer in-memory data if we have options
                             merger.Add(TDiskBlob(part.InMemData, partMask, GType, fullId));
                         } else if (!part.SmallBlobPart.Empty()) {
@@ -333,16 +337,51 @@ namespace NKikimr {
         void FilterLocalParts(NMatrix::TVectorType remainingLocalParts) {
             Y_DEBUG_ABORT_UNLESS(Finished);
             const NMatrix::TVectorType partsToRemove = PartsMask & ~remainingLocalParts;
-            for (ui8 partIdx : partsToRemove) { // local parts to remove
-                if (const auto& part = Parts[partIdx].HugeBlob; !part.Empty()) {
-                    DeletedHugeBlobs.push_back(part);
-                    const auto it = std::remove(SavedHugeBlobs.begin(), SavedHugeBlobs.end(), part);
-                    Y_ABORT_UNLESS(std::next(it) == SavedHugeBlobs.end());
-                    SavedHugeBlobs.pop_back();
-                } else if (Parts[partIdx].InMemData) {
-                    CollectTask.BlobMerger.ClearPart(partIdx);
+            if (partsToRemove.Empty()) {
+                return;
+            }
+
+            // when producing a huge blob, SavedHugeBlobs holds an entry for every part and SlotsToAllocate a request
+            // for every part that needs a new slot, both in the order of PartsMask; otherwise both are empty
+            const bool producingHugeBlob = !SavedHugeBlobs.empty();
+            std::vector<TDiskPart> savedHugeBlobs;
+            std::vector<ui32> slotsToAllocate;
+            size_t savedIndex = 0;
+            size_t slotIndex = 0;
+            for (ui8 partIdx : PartsMask) {
+                TPart& part = Parts[partIdx];
+                const bool remove = partsToRemove.Get(partIdx);
+                if (producingHugeBlob) {
+                    Y_ABORT_UNLESS(savedIndex < SavedHugeBlobs.size());
+                    if (!remove) {
+                        savedHugeBlobs.push_back(SavedHugeBlobs[savedIndex]);
+                    }
+                    ++savedIndex;
+                    if (!part.IsMetadataPart && part.NeedHugeSlot()) {
+                        Y_ABORT_UNLESS(slotIndex < SlotsToAllocate.size());
+                        if (!remove) {
+                            slotsToAllocate.push_back(SlotsToAllocate[slotIndex]);
+                        }
+                        ++slotIndex;
+                    }
                 }
-                Parts[partIdx] = {};
+                if (remove) {
+                    // when inlining, Finish has already deleted the huge blob of every part
+                    if (!part.HugeBlob.Empty() && producingHugeBlob) {
+                        DeletedHugeBlobs.push_back(part.HugeBlob);
+                    }
+                    // in-memory and metadata parts are in the merger at once, and only when inlining
+                    if (!producingHugeBlob && (part.InMemData || part.IsMetadataPart)) {
+                        CollectTask.BlobMerger.ClearPart(partIdx);
+                    }
+                    part = {};
+                }
+            }
+            if (producingHugeBlob) {
+                Y_ABORT_UNLESS(savedIndex == SavedHugeBlobs.size());
+                Y_ABORT_UNLESS(slotIndex == SlotsToAllocate.size());
+                SavedHugeBlobs = std::move(savedHugeBlobs);
+                SlotsToAllocate = std::move(slotsToAllocate);
             }
 
             auto pred = [&](const std::tuple<TDiskPart, ui8, bool>& x) { return partsToRemove.Get(std::get<1>(x)); };

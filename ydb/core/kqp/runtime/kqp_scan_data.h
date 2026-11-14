@@ -95,23 +95,23 @@ public:
         : Batch(HandleBatch(mode, batch))
         , DataIndexes(std::move(dataIndexes))
     {
-        AFL_VERIFY(Batch);
-        AFL_VERIFY(Batch->num_rows());
+        YDB_LOG_VERIFY(Batch);
+        YDB_LOG_VERIFY(Batch->num_rows());
     }
 
     TBatchDataAccessor(const std::shared_ptr<arrow::Table>& batch,
         EBlockTrackingMode mode = NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE)
         : Batch(HandleBatch(mode, batch)) {
-        AFL_VERIFY(Batch);
-        AFL_VERIFY(Batch->num_rows());
+        YDB_LOG_VERIFY(Batch);
+        YDB_LOG_VERIFY(Batch->num_rows());
 
     }
 
     TBatchDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch,
         EBlockTrackingMode mode = NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE)
         : Batch(HandleBatch(mode, NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({batch})))) {
-        AFL_VERIFY(Batch);
-        AFL_VERIFY(Batch->num_rows());
+        YDB_LOG_VERIFY(Batch);
+        YDB_LOG_VERIFY(Batch->num_rows());
 
     }
 

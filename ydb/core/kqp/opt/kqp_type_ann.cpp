@@ -870,7 +870,7 @@ TStatus AnnotateFillTable(const TExprNode::TPtr& node, TExprContext& ctx)
 
     const auto* input = node->Child(TKqlFillTable::idx_Input);
 
-    AFL_ENSURE(input->GetTypeAnn());
+    YDB_LOG_ENSURE(input->GetTypeAnn());
 
     const TTypeAnnotationNode* itemType = nullptr;
     bool isStream = false;

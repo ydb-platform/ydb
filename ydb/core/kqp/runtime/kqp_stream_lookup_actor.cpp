@@ -45,9 +45,9 @@ TKqpStreamLockSettings BuildStreamLockSettings(
     const TString& database,
     ui64 querySpanId)
 {
-    AFL_ENSURE(isolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW);
-    AFL_ENSURE(lockMode);
-    AFL_ENSURE(*lockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE);
+    YDB_LOG_ENSURE(isolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW);
+    YDB_LOG_ENSURE(lockMode);
+    YDB_LOG_ENSURE(*lockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE);
 
     TKqpStreamLockSettings lockSettings(holderFactory);
     lockSettings.Table = settings.GetTable();
@@ -942,7 +942,7 @@ private:
         i64 bytesBefore = allocState->GetAllocated();
         while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
             if (StreamLockWorker) {
-                AFL_ENSURE(LockMode && (*LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE
+                YDB_LOG_ENSURE(LockMode && (*LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE
                     || *LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE));
                 StreamLockWorker->AddInputRow(std::move(row));
             } else {
@@ -979,7 +979,7 @@ private:
         }
 
         if (StreamLockWorker) {
-            AFL_ENSURE(LockMode
+            YDB_LOG_ENSURE(LockMode
                 && *LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
                 && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW);
 
@@ -1162,7 +1162,7 @@ private:
         Counters->LockedRowsCount->Add(record.LockedKeysSize());
 
         for (const auto& lock : record.GetLocks()) {
-            AFL_ENSURE(lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken
+            YDB_LOG_ENSURE(lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken
                     && lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken);
             LockInfo.Locks.push_back(lock);
         }
@@ -1188,7 +1188,7 @@ private:
                         hasUnmodifiedRows = true;
                     } else {
                         // skipped absent row
-                        AFL_ENSURE(!modified);
+                        YDB_LOG_ENSURE(!modified);
                         hasSkippedRows = true;
                     }
                 });

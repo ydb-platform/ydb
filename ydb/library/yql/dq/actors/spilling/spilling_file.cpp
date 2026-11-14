@@ -228,12 +228,15 @@ private:
 
 public:
     TDqLocalFileSpillingService(const TFileSpillingServiceConfig& config,
-        TIntrusivePtr<TSpillingCounters> counters)
+        TIntrusivePtr<TSpillingCounters> counters, THolder<IThreadPool> ioThreadPool)
         : Config_(config)
         , Counters_(counters)
+        , IoThreadPool_(std::move(ioThreadPool))
     {
-        IoThreadPool_ = CreateThreadPool(Config_.IoThreadPoolWorkersCount,
-            Config_.IoThreadPoolQueueSize, IThreadPool::TParams().SetThreadNamePrefix("DqSpilling"));
+        if (!IoThreadPool_) {
+            IoThreadPool_ = CreateThreadPool(Config_.IoThreadPoolWorkersCount,
+                Config_.IoThreadPoolQueueSize, IThreadPool::TParams().SetThreadNamePrefix("DqSpilling"));
+        }
     }
 
     void Bootstrap() {
@@ -376,6 +379,7 @@ private:
 
             if (!RunOp("CloseFile", std::move(closeOp), fd)) {
                 LOG_E("[CloseFile] Can not run operation");
+                FinishClose(it);
             }
         } else {
             MoveFileToClosed(it);
@@ -392,18 +396,7 @@ private:
             return;
         }
 
-        auto& tc = Counters_->GetTypeCounters(it->second.SpillingType);
-        tc.FileDescriptors->Sub(it->second.PartsList.size());
-
-        ui64 blobs = 0;
-        for (auto& fp : it->second.PartsList) {
-            blobs += fp.Blobs.size();
-        }
-
-        tc.StoredBlobs->Sub(blobs);
-        tc.TotalSpaceUsed->Sub(it->second.TotalSize);
-
-        MoveFileToClosed(it);
+        FinishClose(it);
     }
 
     void HandleWork(TEvDqSpilling::TEvWrite::TPtr& ev) {
@@ -537,9 +530,12 @@ private:
 
             tc.StoredBlobs->Inc();
             tc.TotalSpaceUsed->Add(blobDesc.Size);
+            ++fp->StoredBlobs;
+            fp->StoredSize += blobDesc.Size;
 
             if (msg.NewFileHandle) {
                 tc.FileDescriptors->Inc();
+                fp->Opened = true;
                 fp->FileHandle.Swap(msg.NewFileHandle);
             }
         } else {
@@ -568,6 +564,9 @@ private:
 
             ReplyError(msg.Client, error, tc);
             tc.QueueOverflowErrors->Inc();
+            if (fd.CloseAt) {
+                FinishClose(it);
+            }
             return;
         }
     }
@@ -692,9 +691,7 @@ private:
                 fd.TotalSize -= fp->Size;
                 TotalSize_ -= fp->Size;
 
-                tc.TotalSpaceUsed->Sub(fp->Size);
-                tc.StoredBlobs->Sub(fp->Blobs.size());
-                tc.FileDescriptors->Dec();
+                fp->SubStored(tc);
 
                 fd.Parts.erase(msg.BlobId);
                 fd.PartsList.remove_if([fp](const auto& x) { return &x == fp; });
@@ -724,6 +721,9 @@ private:
 
             ReplyError(msg.Client, error, tc);
             tc.QueueOverflowErrors->Inc();
+            if (fd.CloseAt) {
+                FinishClose(it);
+            }
             return;
         }
     }
@@ -921,6 +921,15 @@ private:
         return RunOp(opName, std::move(op), fd);
     }
 
+    void FinishClose(TFilesIt it) {
+        auto& tc = Counters_->GetTypeCounters(it->second.SpillingType);
+        for (const auto& fp : it->second.PartsList) {
+            fp.SubStored(tc);
+        }
+
+        MoveFileToClosed(it);
+    }
+
     void MoveFileToClosed(TFilesIt it) {
         TotalSize_ -= it->second.TotalSize;
         ClosedFiles_.emplace_back(TClosedFileDesc(std::move(it->second)));
@@ -939,6 +948,10 @@ private:
         TVector<TString> FileNames;
         TInstant Ts = TInstant::Now();
 
+        ~TCloseFileOp() override {
+            CloseFiles();
+        }
+
         void Process(void*) override {
             auto now = TInstant::Now();
 
@@ -948,19 +961,21 @@ private:
 
             A_LOG_D("[CloseFile async] from: " << Client << ", waitTime: " << resp->WaitTime);
 
-            for (ui64 i = 0; i < FileHandles.size(); ++i) {
-                try {
-                    FileHandles[i].Reset();
-#ifdef REMOVE_FILES
-                    ::unlink(FileNames[i].c_str());
-#endif
-                } catch (const yexception& e) {
-                    A_LOG_E("[CloseFile async] error while closing file " << FileNames[i] << ": " << e.what());
-                }
-            }
+            CloseFiles();
             resp->WorkTime = TInstant::Now() - now;
 
             ActorSystem->Send(Service, resp.Release());
+        }
+
+        void CloseFiles() {
+            for (ui64 i = 0; i < FileHandles.size(); ++i) {
+                FileHandles[i].Reset();
+#ifdef REMOVE_FILES
+                ::unlink(FileNames[i].c_str());
+#endif
+            }
+            FileHandles.clear();
+            FileNames.clear();
         }
     };
 
@@ -1080,9 +1095,20 @@ private:
             ui64 WriteBytes = 0;
             ui64 ReadBytes = 0;
             ui64 Size = 0; // also it is an offset for the next blob
+            ui64 StoredSize = 0;
+            ui64 StoredBlobs = 0;
+            bool Opened = false;
             TDuration WorkTime;
             TDuration WaitTime;
             bool Last = true;
+
+            void SubStored(TSpillingCounters::TTypeCounters& tc) const {
+                tc.TotalSpaceUsed->Sub(StoredSize);
+                tc.StoredBlobs->Sub(StoredBlobs);
+                if (Opened) {
+                    tc.FileDescriptors->Dec();
+                }
+            }
         };
 
         ui64 TotalSize = 0;
@@ -1156,9 +1182,10 @@ IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const
     return new TDqLocalFileSpillingActor(txId, details, client, removeBlobsAfterRead, spillingType);
 }
 
-IActor* CreateDqLocalFileSpillingService(const TFileSpillingServiceConfig& config, TIntrusivePtr<TSpillingCounters> counters)
+IActor* CreateDqLocalFileSpillingService(const TFileSpillingServiceConfig& config, TIntrusivePtr<TSpillingCounters> counters,
+    THolder<IThreadPool> ioThreadPool)
 {
-    return new TDqLocalFileSpillingService(config, counters);
+    return new TDqLocalFileSpillingService(config, counters, std::move(ioThreadPool));
 }
 
 } // namespace NYql::NDq

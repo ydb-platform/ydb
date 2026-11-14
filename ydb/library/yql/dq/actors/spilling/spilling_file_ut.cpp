@@ -55,7 +55,8 @@ public:
     }
 
     TActorId StartSpillingService(ui64 maxTotalSize = 1000, ui64 maxFileSize = 500,
-        ui64 maxFilePartSize = 100, ui32 ioThreadPoolQueueSize = 1000, const TFsPath& root = TFsPath::Cwd() / GetSpillingPrefix())
+        ui64 maxFilePartSize = 100, ui32 ioThreadPoolQueueSize = 1000, const TFsPath& root = TFsPath::Cwd() / GetSpillingPrefix(),
+        THolder<IThreadPool> ioThreadPool = {})
     {
         SpillingRoot_ = root;
         SpillingRoot_.MkDir();
@@ -73,7 +74,7 @@ public:
         auto counters = Counters();
         counters->ResetCounters();
 
-        auto spillingService = CreateDqLocalFileSpillingService(config, MakeIntrusive<TSpillingCounters>(counters));
+        auto spillingService = CreateDqLocalFileSpillingService(config, MakeIntrusive<TSpillingCounters>(counters), std::move(ioThreadPool));
         auto spillingServiceActorId = Register(spillingService);
         EnableScheduleForActor(spillingServiceActorId);
         RegisterService(MakeDqLocalFileSpillingServiceID(GetNodeId()), spillingServiceActorId);
@@ -690,6 +691,120 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
 
         // The successfully written part must have been removed from disk during cleanup.
         UNIT_ASSERT_C(!NFs::Exists(firstFile.GetPath()), "partially written file was not cleaned up");
+    }
+
+    constexpr ui32 EvCloseFile = EventSpaceBegin(TEvents::ES_PRIVATE) + 1;
+    constexpr ui32 EvWriteFileResponse = EventSpaceBegin(TEvents::ES_PRIVATE) + 3;
+    constexpr ui32 EvReadFileResponse = EventSpaceBegin(TEvents::ES_PRIVATE) + 4;
+
+    class TRejectingThreadPool: public IThreadPool {
+    public:
+        std::atomic<bool> Reject = false;
+
+        TRejectingThreadPool() {
+            Pool.Start(1);
+        }
+
+        bool Add(IObjectInQueue* obj) override {
+            return !Reject && Pool.Add(obj);
+        }
+
+        void Start(size_t, size_t) override {
+        }
+
+        void Stop() noexcept override {
+            Pool.Stop();
+        }
+
+        size_t Size() const noexcept override {
+            return Pool.Size();
+        }
+
+    private:
+        TThreadPool Pool;
+    };
+
+    struct TRejectingSetup {
+        TTestActorRuntime Runtime;
+        std::atomic<bool>* Reject = nullptr;
+        TActorId Service;
+        TActorId Tester;
+        TActorId Actor;
+
+        TRejectingSetup() {
+            Runtime.Initialize();
+            auto pool = MakeHolder<TRejectingThreadPool>();
+            Reject = &pool->Reject;
+            Service = Runtime.StartSpillingService(1000, 500, 100, 1000, TFsPath::Cwd() / Runtime.GetSpillingPrefix(), std::move(pool));
+            Tester = Runtime.AllocateEdgeActor();
+            Actor = Runtime.StartSpillingActor(Tester, false);
+            Runtime.WaitBootstrap();
+            WriteOk(Runtime, Actor, Tester, 0, 10);
+        }
+
+        void CloseFile() {
+            Runtime.Send(new IEventHandle(Actor, Tester, new TEvents::TEvPoison));
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(EvCloseFile);
+            UNIT_ASSERT(Runtime.DispatchEvents(options));
+        }
+
+        void AssertFileClosed() {
+            UNIT_ASSERT(!NFs::Exists((Runtime.GetSpillingNodeDir() / "1_test_0").GetPath()));
+            UNIT_ASSERT_VALUES_EQUAL(CounterVal(Runtime, "Spilling/Compute/FileDescriptors", false), 0);
+            UNIT_ASSERT_VALUES_EQUAL(CounterVal(Runtime, "Spilling/Compute/StoredBlobs", false), 0);
+            UNIT_ASSERT_VALUES_EQUAL(CounterVal(Runtime, "Spilling/Compute/TotalSpaceUsed", false), 0);
+        }
+    };
+
+    void CloseBehindRejectedOp(bool write) {
+        TRejectingSetup setup;
+        auto& runtime = setup.Runtime;
+
+        auto sendOp = [&](ui64 blobId) {
+            IEventBase* ev = write
+                ? static_cast<IEventBase*>(new TEvDqSpilling::TEvWrite(blobId, CreateRope(10, 'a')))
+                : new TEvDqSpilling::TEvRead(0, false);
+            runtime.Send(new IEventHandle(setup.Actor, setup.Tester, ev));
+        };
+
+        TAutoPtr<IEventHandle> response;
+        const ui32 responseType = write ? EvWriteFileResponse : EvReadFileResponse;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!response && ev->GetRecipientRewrite() == setup.Service && ev->GetTypeRewrite() == responseType) {
+                response.Reset(ev.Release());
+                return TTestActorRuntimeBase::EEventAction::DROP;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+        sendOp(1);
+        {
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() { return bool(response); };
+            UNIT_ASSERT(runtime.DispatchEvents(options));
+        }
+
+        sendOp(2);
+        setup.CloseFile();
+
+        *setup.Reject = true;
+        runtime.Send(response.Release());
+        setup.AssertFileClosed();
+    }
+
+    Y_UNIT_TEST(CloseBehindRejectedRead) {
+        CloseBehindRejectedOp(false);
+    }
+
+    Y_UNIT_TEST(CloseBehindRejectedWrite) {
+        CloseBehindRejectedOp(true);
+    }
+
+    Y_UNIT_TEST(CloseRejectedByIoQueue) {
+        TRejectingSetup setup;
+        *setup.Reject = true;
+        setup.CloseFile();
+        setup.AssertFileClosed();
     }
 
     Y_UNIT_TEST(ThreadPoolQueueOverflow) {

@@ -4370,9 +4370,9 @@ Y_UNIT_TEST(ExplainHybridFulltextVectorQuery) {
         $FtTop = (
             SELECT
                 id,
-                FullTextScore(body, $QueryText, "And" as Mode) AS bm25
+                FullTextScore(body, $QueryText, "And" as DefaultOperator) AS bm25
             FROM `/Root/test_table` VIEW ft_idx
-            WHERE FullTextScore(body, $QueryText, "And" as Mode) > 0
+            WHERE FullTextScore(body, $QueryText, "And" as DefaultOperator) > 0
             ORDER BY bm25 DESC
             LIMIT $KFt
         );

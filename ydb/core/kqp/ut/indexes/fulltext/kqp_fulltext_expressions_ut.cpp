@@ -716,8 +716,9 @@ Y_UNIT_TEST_TWIN(InvalidPredicatePlacement, Score) {
 Y_UNIT_TEST_TWIN(NamedArgumentsWithExpression, Score) {
     TExpressionFixture fixture({.Relevance = Score});
     const TString expression = "IF($choose, $q, $other)";
-    fixture.ExpectIds(fixture.Query(expression, "", Score,
-        ", Just(0.75f) AS B, Just(1.2) AS K1, Just(\"or\"u) AS DefaultOperator, Just(\"1\"u) AS MinimumShouldMatch"),
+    const TString scoreOptions = Score ? ", Just(0.75f) AS B, Just(1.2) AS K1" : "";
+    fixture.ExpectIds(fixture.Query(expression, "", Score, scoreOptions
+        + ", Just(\"or\"u) AS DefaultOperator, Just(\"1\"u) AS MinimumShouldMatch"),
         {1, 2, 3, 5}, fixture.Parameters("alpha beta"));
 
     for (bool floatB : {false, true}) {
@@ -731,8 +732,9 @@ Y_UNIT_TEST_TWIN(NamedArgumentsWithExpression, Score) {
                 DECLARE $minimum AS %s;
             )sql", floatB ? "Float" : "Double", floatB ? "Double" : "Float",
                 utf8Options ? "Utf8" : "String", utf8Options ? "Utf8" : "String");
-            const TString query = declarations + fixture.Select("IF($choose, $words, \"absent\")", Score,
-                ", $b AS B, $k1 AS K1, $operator AS DefaultOperator, $minimum AS MinimumShouldMatch");
+            const TString namedOptions = (Score ? TString(", $b AS B, $k1 AS K1") : TString())
+                + ", $operator AS DefaultOperator, $minimum AS MinimumShouldMatch";
+            const TString query = declarations + fixture.Select("IF($choose, $words, \"absent\")", Score, namedOptions);
             for (bool choose : {false, true}) {
                 NYdb::TParamsBuilder builder;
                 builder.AddParam("$words").String("alpha beta").Build();
@@ -757,6 +759,29 @@ Y_UNIT_TEST_TWIN(NamedArgumentsWithExpression, Score) {
     }
 }
 
+Y_UNIT_TEST_TWIN(FunctionSpecificNamedArguments, Score) {
+    TExpressionFixture fixture({.Ngram = !Score, .Relevance = Score});
+    const TString expression = "IF($choose, $q, $other)";
+    if (Score) {
+        for (const TString& mode : {TString("Keywords"), TString("Wildcard"), TString("unknown")}) {
+            fixture.ExpectError(fixture.Query(expression, "", true, ", \"" + mode + "\" AS Mode"),
+                "unsupported FullTextScore named argument 'Mode'");
+        }
+    } else {
+        for (const TString& option : {TString("B"), TString("K1")}) {
+            fixture.ExpectError(fixture.Query(expression, "", false, ", 0.75 AS " + option),
+                "unsupported FullTextMatch named argument '" + option + "'");
+        }
+        for (const TString& mode : {TString("unknown"), TString("")}) {
+            fixture.ExpectError(fixture.Query(expression, "", false, ", \"" + mode + "\" AS Mode"),
+                "Mode must be 'Keywords' or 'Wildcard'");
+        }
+        fixture.ExpectIds(fixture.Query(expression, "", false, ", \"kEyWoRdS\" AS Mode"), {1, 3, 4, 5, 8});
+        fixture.ExpectIds(fixture.Query(expression, "", false, ", \"wIlDcArD\" AS Mode"), {1, 3},
+            fixture.Parameters("alpha"));
+    }
+}
+
 Y_UNIT_TEST_TWIN(InvalidNamedArgumentTypes, Score) {
     TExpressionFixture fixture({.Ngram = !Score, .Relevance = Score});
     const TVector<TString> invalidValues = {"$lo", "$choose", "AsList($q)", "AsStruct($q AS pattern)", "NULL"};
@@ -766,16 +791,19 @@ Y_UNIT_TEST_TWIN(InvalidNamedArgumentTypes, Score) {
                 ", " + value + " AS " + option), "Unsupported index access");
         }
         fixture.ExpectError(fixture.Query("IF($choose, $q, $other)", "", Score,
-            ", " + value + " AS Mode"), "Mode must be a String literal");
+            ", " + value + " AS Mode"), Score ? "unsupported FullTextScore named argument 'Mode'"
+                                              : "Mode must be a String literal");
     }
     for (const TString& value : {TString("$q"), TString("\"Wildcard\"u"), TString("Just(\"Wildcard\")"), TString("0.5")}) {
         fixture.ExpectError(fixture.Query("IF($choose, $q, $other)", "", Score,
-            ", " + value + " AS Mode"), "Mode must be a String literal");
+            ", " + value + " AS Mode"), Score ? "unsupported FullTextScore named argument 'Mode'"
+                                              : "Mode must be a String literal");
     }
     for (const TString& value : {TString("$q"), TString("Just($q)"), TString("AsTuple($q, $other)")}) {
         for (const TString& option : {TString("B"), TString("K1")}) {
             fixture.ExpectError(fixture.Query("IF($choose, $q, $other)", "", Score,
-                ", " + value + " AS " + option), "must be a Float or Double literal or parameter");
+                ", " + value + " AS " + option), Score ? "must be a Float or Double literal or parameter"
+                    : "unsupported FullTextMatch named argument '" + option + "'");
         }
     }
 }

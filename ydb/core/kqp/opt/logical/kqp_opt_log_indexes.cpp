@@ -1760,14 +1760,14 @@ struct TFulltextQuery {
             auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
             TExprBase value = TExprBase(nameValueTuple.Value().Cast().Ptr());
             TString name = nameValueTuple.Name().StringValue();
-            if (name == TKqpReadTableFullTextIndexSettings::BFactorSettingName) {
+            if (IsScoreQuery() && name == TKqpReadTableFullTextIndexSettings::BFactorSettingName) {
                 if (!FloatingPointOrParameter(value)) {
                     return invalid("FullTextScore named argument 'B' must be a Float or Double literal or parameter.");
                 }
                 continue;
             }
 
-            if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName) {
+            if (IsScoreQuery() && name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName) {
                 if (!FloatingPointOrParameter(value)) {
                     return invalid("FullTextScore named argument 'K1' must be a Float or Double literal or parameter.");
                 }
@@ -1788,9 +1788,14 @@ struct TFulltextQuery {
                 continue;
             }
 
-            if (name == TKqpReadTableFullTextIndexSettings::ModeSettingName) {
+            if (IsMatchQuery() && name == TKqpReadTableFullTextIndexSettings::ModeSettingName) {
                 if (!value.Maybe<TCoString>()) {
                     return invalid("Fulltext Mode must be a String literal.");
+                }
+                auto mode = value.Cast<TCoString>().Literal().StringValue();
+                mode.to_lower();
+                if (mode != "keywords" && mode != "wildcard") {
+                    return invalid("Fulltext Mode must be 'Keywords' or 'Wildcard'.");
                 }
                 continue;
             }
@@ -3217,18 +3222,6 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     return addError(fulltextError);
                 }
                 return addError(TStringBuilder() << "the first argument of FullTextScore (" << branchId << ") must reference a table column");
-            }
-
-            // Hybrid branches cap candidates before loading the document text, so they
-            // cannot apply the postfilter required by wildcard searches on ngram indexes.
-            if (parsedFulltext.NamedOptions) {
-                for (const auto& option : parsedFulltext.NamedOptions->Children()) {
-                    if (TExprBase(option).Cast<TCoNameValueTuple>().Name().Value()
-                        == TKqpReadTableFullTextIndexSettings::ModeSettingName)
-                    {
-                        return addError("unsupported FullTextScore named argument 'Mode' in hybrid ranking");
-                    }
-                }
             }
 
             auto ftColumnMember = TExprBase(parsedFulltext.Column).Maybe<TCoMember>();

@@ -204,6 +204,30 @@ TString ListSecrets(const TVector<TString>& paths) {
     return sb;
 }
 
+
+IRetryPolicy<>::TPtr MakeShortRetryPolicy() {
+    return IRetryPolicy<>::GetExponentialBackoffPolicy(
+        [](){ return ERetryErrorClass::ShortRetry; },
+        /* minDelay */ TDuration::MilliSeconds(100),
+        /* minLongRetryDelay */ TDuration::MilliSeconds(500),
+        /* maxDelay */ TDuration::Seconds(5),
+        /* maxRetries */ 10,
+        /* maxTime */ TDuration::Seconds(10)
+    );
+}
+
+IRetryPolicy<>::TPtr MakeLongRetryPolicy() {
+    return IRetryPolicy<>::GetExponentialBackoffPolicy(
+        [](){ return ERetryErrorClass::LongRetry; },
+        /* minDelay */ TDuration::Seconds(1),
+        /* minLongRetryDelay */ TDuration::Seconds(10),
+        /* maxDelay */ TDuration::Seconds(30),
+        /* maxRetries */ std::numeric_limits<size_t>::max(),
+        /* maxTime */ TDuration::Minutes(60)
+    );
+}
+
+
 }  // anonymous namespace
 
 void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr& ev) {
@@ -531,27 +555,23 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
         {"error", EStatus_Name(status)}
     );
     if (IsRetryableSchemeShardStatus(status)) {
-        const auto requestIt = RequestsInFlight.find(requestId);
-        Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
-        if (requestIt->second.Request->Settings.RetryPolicy) {
-            if (ScheduleSchemeShardRetry(requestId, secretName)) {
-                return true;
-            }
-
-            YDB_LOG_NOTICE("Retry limit exceeded for secret",
-                {"event", "TEvDescribeSchemeResult"},
-                {"requestId", requestId},
-                {"secret", secretName}
-            );
-            FillResponse(
-                requestId,
-                NKqp::TEvDescribeSecretsResponse::TDescription(
-                    Ydb::StatusIds::UNAVAILABLE,
-                    { NYql::TIssue(TStringBuilder() << "Retry limit exceeded for secret `" << secretName << "`") }
-                )
-            );
+        if (ScheduleSchemeShardRetry(requestId, secretName)) {
             return true;
         }
+
+        YDB_LOG_NOTICE("Retry limit exceeded for secret",
+            {"event", "TEvDescribeSchemeResult"},
+            {"requestId", requestId},
+            {"secret", secretName}
+        );
+        FillResponse(
+            requestId,
+            NKqp::TEvDescribeSecretsResponse::TDescription(
+                Ydb::StatusIds::UNAVAILABLE,
+                { NYql::TIssue(TStringBuilder() << "Retry limit exceeded for secret `" << secretName << "`") }
+            )
+        );
+        return true;
     }
 
     const auto errorStatus = MapSchemeShardStatus(status);
@@ -563,6 +583,18 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
     return true;
 }
 
+IRetryPolicy<>::TPtr ConvertEnumToRetryPolicy(ERetryPolicy policy) {
+    switch (policy) {
+        case ERetryPolicy::ShortRetries:
+            return MakeShortRetryPolicy();
+        case ERetryPolicy::LongRetries:
+            return MakeLongRetryPolicy();
+        case ERetryPolicy::NoRetries:
+            return IRetryPolicy<>::GetNoRetryPolicy();
+    }
+    Y_UNREACHABLE();
+}
+
 bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& requestId,
     const TString& unresolvedSecretPath
 ) {
@@ -570,10 +602,7 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& request
     Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
 
     if (!requestIt->second.SchemeCacheRetryState) {
-        static const auto defaultSchemeCacheRetryPolicy = MakeShortRetryPolicy();
-        const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy
-            ? requestIt->second.Request->Settings.RetryPolicy
-            : defaultSchemeCacheRetryPolicy;
+        const auto retryPolicy = ConvertEnumToRetryPolicy(requestIt->second.Request->Settings.RetryPolicy);
         requestIt->second.SchemeCacheRetryState = retryPolicy->CreateRetryState();
     }
 
@@ -595,13 +624,9 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeShardRetry(const ui64& request
     const auto requestIt = RequestsInFlight.find(requestId);
     Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
 
-    const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy;
-    if (!retryPolicy) {
-        return false;
-    }
-
     auto& retryState = requestIt->second.SchemeShardRetryStates[secretPath];
     if (!retryState) {
+        const auto retryPolicy = ConvertEnumToRetryPolicy(requestIt->second.Request->Settings.RetryPolicy);
         retryState = retryPolicy->CreateRetryState();
     }
 
@@ -619,27 +644,6 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeShardRetry(const ui64& request
     return false;
 }
 
-IRetryPolicy<>::TPtr MakeShortRetryPolicy() {
-    return IRetryPolicy<>::GetExponentialBackoffPolicy(
-        [](){ return ERetryErrorClass::ShortRetry; },
-        /* minDelay */ TDuration::MilliSeconds(100),
-        /* minLongRetryDelay */ TDuration::MilliSeconds(500),
-        /* maxDelay */ TDuration::Seconds(5),
-        /* maxRetries */ 10,
-        /* maxTime */ TDuration::Seconds(10)
-    );
-}
-
-IRetryPolicy<>::TPtr MakeLongRetryPolicy() {
-    return IRetryPolicy<>::GetExponentialBackoffPolicy(
-        [](){ return ERetryErrorClass::LongRetry; },
-        /* minDelay */ TDuration::Seconds(1),
-        /* minLongRetryDelay */ TDuration::Seconds(10),
-        /* maxDelay */ TDuration::Seconds(30),
-        /* maxRetries */ std::numeric_limits<size_t>::max(),
-        /* maxTime */ TDuration::Minutes(60)
-    );
-}
 
 void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId, const TResponseContext& responseCtx) {
     if (responseCtx.FilledSecretsCnt != responseCtx.Secrets.size()) {

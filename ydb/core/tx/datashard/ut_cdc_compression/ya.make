@@ -1,8 +1,9 @@
-UNITTEST_FOR(ydb/core/tx/datashard)
+UNITTEST()
 
 SIZE(SMALL)
 
 PEERDIR(
+    ydb/core/tx/datashard
     contrib/libs/zstd
     ydb/library/aclib
     yql/essentials/public/udf/service/exception_policy

@@ -14,6 +14,9 @@ COPY_FILE(
        llvm/IR/Instructions.h
        llvm/IR/LLVMContext.h
        llvm/IR/Module.h
+       llvm/ExecutionEngine/ExecutionEngine.h
+       llvm/Target/TargetMachine.h
+       llvm/MC/MCSubtargetInfo.h
 )
 
 

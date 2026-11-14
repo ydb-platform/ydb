@@ -794,7 +794,7 @@ public:
         TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
         userAttrs->Attrs = srcPath.Base()->UserAttrs->Attrs;
 
-        dstPath.MaterializeLeaf(owner, allocatedPathId);
+        dstPath.MaterializeLeaf(isBackup ? srcPath.Base()->Owner : owner, allocatedPathId);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         TPathElement::TPtr newTable = dstPath.Base();
@@ -803,6 +803,10 @@ public:
         newTable->PathState = TPathElement::EPathState::EPathStateCreate;
         newTable->PathType = TPathElement::EPathType::EPathTypeTable;
         newTable->UserAttrs->AlterData = userAttrs;
+        if (isBackup) {
+            // Preserve snapshot permissions even if the source is replaced before export.
+            newTable->ACL = srcPath.Base()->ACL;
+        }
 
         srcPath.Base()->PathState = TPathElement::EPathState::EPathStateCopying;
         srcPath.Base()->LastTxId = OperationId.GetTxId();

@@ -1,11 +1,15 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_create_cdc_stream.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/lib/value/value.h>
 
 #include <google/protobuf/text_format.h>
@@ -64,9 +68,427 @@ TCdcIndexTestCase MakeCdcIndexTestCase(NKikimrSchemeOp::EIndexType type) {
     };
 }
 
+struct TCdcRebuildTest {
+    TTestBasicRuntime Runtime;
+    TTestEnv Env;
+    ui64 TxId = 100;
+    const bool Async;
+    const TString Table = "/MyRoot/Table";
+    const TString IndexPath = Table + "/Index";
+
+    explicit TCdcRebuildTest(bool async)
+        : Env(Runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true).EnableChangefeedsOnIndexTables(true))
+        , Async(async)
+    {
+        TestCreateTable(Runtime, ++TxId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env.TestWaitNotification(Runtime, TxId);
+        WriteRow(Runtime, ++TxId, Table, 0, 1, "alpha");
+        WriteRow(Runtime, ++TxId, Table, 0, 2, "beta");
+        const ui64 build = Start(false);
+        Wait(build, Ydb::Table::IndexBuildState::STATE_DONE);
+        TestForgetBuildIndex(Runtime, ++TxId, TTestTxConfig::SchemeShard, "/MyRoot", build);
+        CheckIndex({{1, "alpha"}, {2, "beta"}});
+    }
+
+    ui64 Start(bool rebuild = true, Ydb::StatusIds::StatusCode expected = Ydb::StatusIds::SUCCESS) {
+        Ydb::Table::TableIndex index;
+        index.set_name("Index");
+        if (Async) {
+            index.mutable_global_async_index();
+        } else {
+            index.mutable_global_index();
+        }
+        if (!rebuild) {
+            index.add_index_columns("value");
+        }
+        const ui64 id = ++TxId;
+        auto* request = CreateBuildIndexRequest(id, "/MyRoot", Table, index);
+        request->Record.MutableSettings()->set_is_rebuild(rebuild);
+        const auto sender = Runtime.AllocateEdgeActor();
+        Runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request);
+        const auto response = Runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), expected,
+            response->Get()->Record.DebugString());
+        if (expected == Ydb::StatusIds::PRECONDITION_FAILED) {
+            UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(),
+                "REBUILD INDEX cannot replace an index with active changefeeds");
+        }
+        return id;
+    }
+
+    void Wait(ui64 id, Ydb::Table::IndexBuildState::State state) {
+        const auto sender = Runtime.AllocateEdgeActor();
+        Runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, new TEvSchemeShard::TEvNotifyTxCompletion(id));
+        const auto notification = Runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(
+            sender, TDuration::Seconds(30));
+        UNIT_ASSERT_C(notification, "Index build did not finish: "
+            << TestGetBuildIndex(Runtime, TTestTxConfig::SchemeShard, "/MyRoot", id).DebugString());
+        const auto result = TestGetBuildIndex(Runtime, TTestTxConfig::SchemeShard, "/MyRoot", id);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetIndexBuild().GetState(), state, result.DebugString());
+    }
+
+    TMap<ui32, TString> IndexRows() {
+        const auto description = DescribePrivatePath(Runtime, IndexPath + "/indexImplTable", true);
+        const auto& path = description.GetPathDescription();
+        TMap<ui32, TString> rows;
+        for (const auto& partition : path.GetTablePartitions()) {
+            const auto result = ReadTable(Runtime, partition.GetDatashardId(), "indexImplTable",
+                {"value", "key"}, {"key", "value"});
+            const auto value = NClient::TValue::Create(result);
+            const auto list = value["Result"]["List"];
+            for (size_t i = 0; i < list.Size(); ++i) {
+                const auto row = list[int(i)];
+                UNIT_ASSERT(rows.emplace(ui32(row["key"]), TString(row["value"])).second);
+            }
+        }
+        return rows;
+    }
+
+    void CheckIndex(const TMap<ui32, TString>& rows) {
+        const auto description = DescribePrivatePath(Runtime, IndexPath);
+        TestDescribeResult(description, {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexType(Async ? NKikimrSchemeOp::EIndexTypeGlobalAsync : NKikimrSchemeOp::EIndexTypeGlobal)});
+        const auto& index = description.GetPathDescription().GetTableIndex();
+        UNIT_ASSERT_VALUES_EQUAL(index.KeyColumnNamesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(index.GetKeyColumnNames(0), "value");
+        UNIT_ASSERT_VALUES_EQUAL(IndexRows(), rows);
+    }
+
+    void CheckCleanup(ui64 id) {
+        TestDescribeResult(DescribePrivatePath(Runtime, TStringBuilder() << Table << "/__ydb_rebuild_" << id),
+            {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(Runtime, Table), {NLs::IndexesCount(1)});
+        TestForgetBuildIndex(Runtime, ++TxId, TTestTxConfig::SchemeShard, "/MyRoot", id);
+        UNIT_ASSERT_VALUES_EQUAL(TestListBuildIndex(Runtime, TTestTxConfig::SchemeShard, "/MyRoot").EntriesSize(), 0);
+    }
+
+    void DiscardSnapshot(const TString& table, TRowVersion snapshot) {
+        const auto sender = Runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto* tx = request->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();
+        tx->AddTables()->SetTablePath(table);
+        tx->SetSnapshotStep(snapshot.Step);
+        tx->SetSnapshotTxId(snapshot.TxId);
+        Runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+        const auto response = Runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(
+            sender, TDuration::Seconds(10));
+        UNIT_ASSERT_C(response, "Timed out discarding index snapshot");
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete,
+            response->Get()->Record.DebugString());
+    }
+
+    TString StreamScheme(const TString& name) const {
+        return Sprintf(R"(
+            TableName: "Table"
+            StreamDescription {
+                Name: "%s"
+                Mode: ECdcStreamModeUpdate
+                Format: ECdcStreamFormatJson
+            }
+        )", name.c_str());
+    }
+
+    TVector<std::pair<ui32, TString>> Records() {
+        const TString topic = Table + "/Stream/streamImpl";
+        const auto description = DescribePrivatePath(Runtime, topic);
+        const auto& partitions = description.GetPathDescription().GetPersQueueGroup().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+        const auto sender = Runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto* partition = request->Record.MutablePartitionRequest();
+        partition->SetTopic(topic);
+        partition->SetPartition(partitions.Get(0).GetPartitionId());
+        auto* read = partition->MutableCmdRead();
+        read->SetClientId(NPQ::CLIENTID_WITHOUT_CONSUMER);
+        read->SetCount(100);
+        read->SetBytes(1 << 20);
+        read->SetOffset(0);
+        read->SetTimeoutMs(0);
+        read->SetReadTimestampMs(0);
+        read->SetExternalOperation(true);
+        Runtime.SendToPipe(partitions.Get(0).GetTabletId(), sender, request.Release());
+        const auto response = Runtime.GrabEdgeEventRethrow<TEvPersQueue::TEvResponse>(sender, TDuration::Seconds(5));
+        UNIT_ASSERT_C(response, "Timed out reading " << topic);
+        UNIT_ASSERT_C(response->Get()->Record.GetErrorCode() == NPersQueue::NErrorCode::OK,
+            response->Get()->Record.DebugString());
+        UNIT_ASSERT_C(response->Get()->Record.GetPartitionResponse().HasCmdReadResult(),
+            response->Get()->Record.DebugString());
+        TVector<std::pair<ui32, TString>> result;
+        for (const auto& record : response->Get()->Record.GetPartitionResponse().GetCmdReadResult().GetResult()) {
+            const auto data = GetDeserializedData(record.GetData());
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(data.GetData(), &json), data.GetData());
+            result.emplace_back(json["key"][0].GetUIntegerSafe(), json["update"]["value"].GetStringSafe());
+        }
+        return result;
+    }
+
+    void WaitRecords(const TVector<std::pair<ui32, TString>>& expected) {
+        const auto deadline = Runtime.GetCurrentTime() + TDuration::Seconds(30);
+        do {
+            const auto records = Records();
+            if (records.size() >= expected.size()) {
+                UNIT_ASSERT_VALUES_EQUAL(records, expected);
+                return;
+            }
+            Runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        } while (Runtime.GetCurrentTime() < deadline);
+        UNIT_FAIL("Timed out waiting for changefeed records");
+    }
+
+    void WaitIndex(const TMap<ui32, TString>& expected) {
+        const auto deadline = Runtime.GetCurrentTime() + TDuration::Seconds(30);
+        do {
+            if (IndexRows() == expected) {
+                return;
+            }
+            Runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        } while (Runtime.GetCurrentTime() < deadline);
+        CheckIndex(expected);
+    }
+};
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TCdcStreamTests) {
+    Y_UNIT_TEST(RebuildIndexPreservesImplementationChangefeed) {
+        TCdcRebuildTest test(false);
+        auto& runtime = test.Runtime;
+        TestCreateCdcStream(runtime, ++test.TxId, test.IndexPath, R"(
+            TableName: "indexImplTable"
+            StreamDescription { Name: "Stream" Mode: ECdcStreamModeKeysOnly Format: ECdcStreamFormatProto }
+        )");
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        const TString impl = test.IndexPath + "/indexImplTable";
+        const TString stream = impl + "/Stream";
+        TMap<TString, ui64> pathIds;
+        for (const auto& path : {test.IndexPath, impl, stream, stream + "/streamImpl"}) {
+            pathIds.emplace(path, DescribePrivatePath(runtime, path).GetPathDescription().GetSelf().GetPathId());
+        }
+        for (ui32 attempt = 0; attempt < 2; ++attempt) {
+            const ui64 rejected = test.Start(true, Ydb::StatusIds::PRECONDITION_FAILED);
+            TestDescribeResult(DescribePrivatePath(runtime, TStringBuilder() << test.Table << "/__ydb_rebuild_" << rejected),
+                {NLs::PathNotExist});
+            UNIT_ASSERT_VALUES_EQUAL(TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot").EntriesSize(), 0);
+            for (const auto& [path, id] : pathIds) {
+                UNIT_ASSERT_VALUES_EQUAL_C(DescribePrivatePath(runtime, path).GetPathDescription().GetSelf().GetPathId(), id, path);
+            }
+            test.CheckIndex({{1, "alpha"}, {2, "beta"}});
+        }
+        TestDropCdcStream(runtime, ++test.TxId, test.IndexPath, R"(
+            TableName: "indexImplTable" StreamName: "Stream"
+        )");
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        const ui64 retry = test.Start();
+        test.Wait(retry, Ydb::Table::IndexBuildState::STATE_DONE);
+        test.CheckIndex({{1, "alpha"}, {2, "beta"}});
+        test.CheckCleanup(retry);
+        UNIT_ASSERT(DescribePrivatePath(runtime, test.IndexPath).GetPathDescription().GetSelf().GetPathId()
+            != pathIds.at(test.IndexPath));
+        TestDescribeResult(DescribePrivatePath(runtime, stream), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(RebuildIndexRejectsChangefeedCreatedBeforeReplacement) {
+        TCdcRebuildTest test(false);
+        auto& runtime = test.Runtime;
+        const TMap<ui32, TString> rows = {{1, "alpha"}, {2, "beta"}};
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> replacement(runtime, [](const auto& event) {
+            const auto& record = event->Get()->Record;
+            return record.TransactionSize() && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveIndex;
+        });
+        Y_DEFER { replacement.Stop().Unblock(); };
+        const ui64 build = test.Start();
+        runtime.WaitFor("index rebuild replacement", [&] { return !replacement.empty(); }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", build)
+            .GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_APPLYING);
+        TestDescribeResult(DescribePrivatePath(runtime, TStringBuilder() << test.Table << "/__ydb_rebuild_" << build),
+            {NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+        test.CheckIndex(rows);
+
+        // Continuous-backup feeds attach directly to the implementation table.
+        // They do not alter the index and therefore do not acquire the base-table lock.
+        TestCreateCdcStream(runtime, ++test.TxId, test.IndexPath, R"(
+            TableName: "indexImplTable"
+            StreamDescription {
+                Name: "Stream_continuousBackupImpl"
+                Mode: ECdcStreamModeKeysOnly
+                Format: ECdcStreamFormatProto
+            }
+        )");
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        const TString impl = test.IndexPath + "/indexImplTable";
+        const TString stream = impl + "/Stream_continuousBackupImpl";
+        TMap<TString, ui64> pathIds;
+        for (const auto& path : {test.IndexPath, impl, stream, stream + "/streamImpl"}) {
+            const auto description = DescribePrivatePath(runtime, path);
+            TestDescribeResult(description, {NLs::PathExist});
+            pathIds[path] = description.GetPathDescription().GetSelf().GetPathId();
+        }
+        replacement.Stop().Unblock();
+        test.Wait(build, Ydb::Table::IndexBuildState::STATE_REJECTED);
+        UNIT_ASSERT_STRING_CONTAINS(TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", build).DebugString(),
+            "REBUILD INDEX cannot replace an index with active changefeeds");
+        test.CheckCleanup(build);
+        test.CheckIndex(rows);
+        for (const auto& [path, id] : pathIds) {
+            const auto description = DescribePrivatePath(runtime, path);
+            TestDescribeResult(description, {NLs::PathExist});
+            UNIT_ASSERT_VALUES_EQUAL_C(description.GetPathDescription().GetSelf().GetPathId(), id, path);
+        }
+        TestDescribeResult(DescribePrivatePath(runtime, stream), {NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady)});
+
+        TestDropCdcStream(runtime, ++test.TxId, test.IndexPath, R"(
+            TableName: "indexImplTable" StreamName: "Stream_continuousBackupImpl"
+        )");
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        const ui64 retry = test.Start();
+        test.Wait(retry, Ydb::Table::IndexBuildState::STATE_DONE);
+        test.CheckIndex(rows);
+        test.CheckCleanup(retry);
+        UNIT_ASSERT(DescribePrivatePath(runtime, test.IndexPath).GetPathDescription().GetSelf().GetPathId()
+            != pathIds.at(test.IndexPath));
+        TestDescribeResult(DescribePrivatePath(runtime, stream), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(RebuildAsyncIndexPreservesChangefeed) {
+        TCdcRebuildTest test(true);
+        auto& runtime = test.Runtime;
+        TestCreateCdcStream(runtime, ++test.TxId, "/MyRoot", test.StreamScheme("Stream"));
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        const auto stream = DescribePrivatePath(runtime, test.Table + "/Stream");
+        const auto topic = DescribePrivatePath(runtime, test.Table + "/Stream/streamImpl");
+        TMap<ui32, TString> expected = {{1, "alpha"}, {2, "beta"}};
+        TVector<std::pair<ui32, TString>> records;
+
+        for (ui32 iteration = 0; iteration < 2; ++iteration) {
+            const ui64 liveId = DescribePrivatePath(runtime, test.IndexPath).GetPathDescription().GetSelf().GetPathId();
+            TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> filling(runtime);
+            Y_DEFER { filling.Stop().Unblock(); };
+            const ui64 build = test.Start();
+            runtime.WaitFor("index rebuild scan", [&] { return !filling.empty(); }, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", build)
+                .GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
+
+            const ui32 key = 3 + iteration;
+            const TString value = TStringBuilder() << "during-" << iteration;
+            WriteRow(runtime, ++test.TxId, test.Table, 0, key, value);
+            expected[key] = value;
+            records.emplace_back(key, value);
+            test.WaitRecords(records);
+            test.WaitIndex(expected);
+            test.CheckIndex(expected);
+            UNIT_ASSERT_VALUES_EQUAL(DescribePrivatePath(runtime, test.IndexPath).GetPathDescription().GetSelf().GetPathId(), liveId);
+
+            const TString temporaryImpl = TStringBuilder() << test.Table << "/__ydb_rebuild_" << build << "/indexImplTable";
+            // The lightweight fixture has no mediator clock. Advance this shard
+            // with a planned transaction so it can acknowledge the scan's writes.
+            const ui64 step = test.Env.GetCoordinatorStep();
+            const auto snapshot = CreateVolatileSnapshot(runtime, {temporaryImpl}, TDuration::Minutes(1));
+            UNIT_ASSERT_C(snapshot.Step > step, "Snapshot " << snapshot << " did not advance coordinator step " << step);
+            test.DiscardSnapshot(temporaryImpl, snapshot);
+            filling.Stop().Unblock();
+            test.Wait(build, Ydb::Table::IndexBuildState::STATE_DONE);
+            test.CheckIndex(expected);
+            UNIT_ASSERT(DescribePrivatePath(runtime, test.IndexPath).GetPathDescription().GetSelf().GetPathId() != liveId);
+            test.CheckCleanup(build);
+
+            const TString after = TStringBuilder() << "after-" << iteration;
+            WriteRow(runtime, ++test.TxId, test.Table, 0, 1, after);
+            expected[1] = after;
+            records.emplace_back(1, after);
+            test.WaitRecords(records);
+            test.WaitIndex(expected);
+            test.CheckIndex(expected);
+            const auto currentStream = DescribePrivatePath(runtime, test.Table + "/Stream");
+            TestDescribeResult(currentStream, {NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+                NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate), NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatJson)});
+            UNIT_ASSERT_VALUES_EQUAL(currentStream.GetPathDescription().GetSelf().GetPathId(),
+                stream.GetPathDescription().GetSelf().GetPathId());
+            UNIT_ASSERT_VALUES_EQUAL(DescribePrivatePath(runtime, test.Table + "/Stream/streamImpl")
+                .GetPathDescription().GetSelf().GetPathId(), topic.GetPathDescription().GetSelf().GetPathId());
+        }
+        // Rebuilding index rows must not introduce base-table changefeed records.
+        test.WaitRecords(records);
+    }
+
+    Y_UNIT_TEST(RebuildIndexBlocksChangefeedSchemaChanges) {
+        TCdcRebuildTest test(false);
+        auto& runtime = test.Runtime;
+        const TMap<ui32, TString> rows = {{1, "alpha"}, {2, "beta"}};
+        TestCreateCdcStream(runtime, ++test.TxId, "/MyRoot", test.StreamScheme("Stream"));
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        const ui64 streamId = DescribePrivatePath(runtime, test.Table + "/Stream").GetPathDescription().GetSelf().GetPathId();
+        const ui64 liveId = DescribePrivatePath(runtime, test.IndexPath).GetPathDescription().GetSelf().GetPathId();
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> filling(runtime);
+        Y_DEFER { filling.Stop().Unblock(); };
+        const ui64 build = test.Start();
+        runtime.WaitFor("index rebuild scan", [&] { return !filling.empty(); });
+
+        TestCreateCdcStream(runtime, ++test.TxId, "/MyRoot", test.StreamScheme("Another"),
+            {NKikimrScheme::StatusMultipleModifications});
+        TestAlterCdcStream(runtime, ++test.TxId, "/MyRoot", R"(
+            TableName: "Table" StreamName: "Stream" Disable {}
+        )", {NKikimrScheme::StatusMultipleModifications});
+        TestDropCdcStream(runtime, ++test.TxId, "/MyRoot", R"(
+            TableName: "Table" StreamName: "Stream"
+        )", {NKikimrScheme::StatusMultipleModifications});
+        TestDescribeResult(DescribePrivatePath(runtime, test.Table + "/Another"), {NLs::PathNotExist});
+        const auto stream = DescribePrivatePath(runtime, test.Table + "/Stream");
+        TestDescribeResult(stream, {NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady)});
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetPathDescription().GetSelf().GetPathId(), streamId);
+        test.CheckIndex(rows);
+        UNIT_ASSERT_VALUES_EQUAL(DescribePrivatePath(runtime, test.IndexPath).GetPathDescription().GetSelf().GetPathId(), liveId);
+
+        TestCreateTable(runtime, ++test.TxId, "/MyRoot", R"(
+            Name: "Other"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        TestCreateCdcStream(runtime, ++test.TxId, "/MyRoot", R"(
+            TableName: "Other"
+            StreamDescription { Name: "Stream" Mode: ECdcStreamModeKeysOnly Format: ECdcStreamFormatProto }
+        )");
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Other/Stream"),
+            {NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady)});
+
+        TestCancelBuildIndex(runtime, ++test.TxId, TTestTxConfig::SchemeShard, "/MyRoot", build);
+        filling.Stop().Unblock();
+        test.Wait(build, Ydb::Table::IndexBuildState::STATE_CANCELLED);
+        test.CheckCleanup(build);
+        test.CheckIndex(rows);
+        UNIT_ASSERT_VALUES_EQUAL(DescribePrivatePath(runtime, test.IndexPath).GetPathDescription().GetSelf().GetPathId(), liveId);
+
+        // The same CDC operations must succeed once cancellation releases the table lock.
+        TestCreateCdcStream(runtime, ++test.TxId, "/MyRoot", test.StreamScheme("Another"));
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        TestDropCdcStream(runtime, ++test.TxId, "/MyRoot", R"(
+            TableName: "Table" StreamName: "Stream"
+        )");
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        TestDescribeResult(DescribePrivatePath(runtime, test.Table + "/Stream"), {NLs::PathNotExist});
+        const ui64 anotherId = DescribePrivatePath(runtime, test.Table + "/Another").GetPathDescription().GetSelf().GetPathId();
+        const ui64 retry = test.Start();
+        test.Wait(retry, Ydb::Table::IndexBuildState::STATE_DONE);
+        test.CheckIndex(rows);
+        test.CheckCleanup(retry);
+        UNIT_ASSERT(DescribePrivatePath(runtime, test.IndexPath).GetPathDescription().GetSelf().GetPathId() != liveId);
+        const auto another = DescribePrivatePath(runtime, test.Table + "/Another");
+        TestDescribeResult(another, {NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady)});
+        UNIT_ASSERT_VALUES_EQUAL(another.GetPathDescription().GetSelf().GetPathId(), anotherId);
+        TestDropCdcStream(runtime, ++test.TxId, "/MyRoot", R"(
+            TableName: "Table" StreamName: "Another"
+        )");
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        TestDescribeResult(DescribePrivatePath(runtime, test.Table + "/Another"), {NLs::PathNotExist});
+    }
+
     Y_UNIT_TEST(Basic) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));

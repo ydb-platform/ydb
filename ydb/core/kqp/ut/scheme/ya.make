@@ -3,6 +3,11 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
+# Keep this executable's debug sections below the DWARF32 relocation limit.
+IF (OS_LINUX)
+    LDFLAGS(-Wl,--strip-debug)
+ENDIF()
+
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
     REQUIREMENTS(cpu:4)
@@ -17,6 +22,7 @@ SRCS(
     kqp_constraints_ut.cpp
     kqp_generated_columns_ut.cpp
     kqp_scheme_ut.cpp
+    kqp_rebuild_index_ut.cpp
     kqp_secrets_ut.cpp
     kqp_scheme_fulltext_ut.cpp
     kqp_scheme_index_copy_ut.cpp

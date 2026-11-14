@@ -136,6 +136,13 @@ public:
                 if (Self->Indexes.at(indexPath.Base()->PathId)->State != NKikimrSchemeOp::EIndexStateReady) {
                     return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "REBUILD INDEX requires a Ready index");
                 }
+                for (const auto& child : indexPath.Base()->GetChildren()) {
+                    const auto& impl = Self->PathsById.at(child.second);
+                    if (!impl->Dropped() && Self->GetAliveChildren(impl, NKikimrSchemeOp::EPathTypeCdcStream)) {
+                        return Reply(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "REBUILD INDEX cannot replace an index with active changefeeds");
+                    }
+                }
             } else {
                 const auto checks = indexPath.Check();
                 checks
@@ -406,7 +413,36 @@ private:
     bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings,
                  TTableInfo::TPtr tableInfo, TString& explain) {
         Y_ASSERT(settings.has_index());
-        const auto& index = settings.index();
+        auto index = settings.index();
+        TTableIndexInfo::TPtr existingIndex;
+        if (buildInfo.IsRebuild) {
+            const auto indexPath = TPath::Resolve(settings.source_path(), Self).Child(index.name());
+            existingIndex = Self->Indexes.at(indexPath.Base()->PathId);
+            // Preserve fulltext settings and row-id mode, including for JSON indexes.
+            if (const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
+                &existingIndex->SpecializedIndexDescription)) {
+                buildInfo.SpecializedIndexDescription = *fulltextDesc;
+            }
+        }
+        const bool useCompactFulltext = existingIndex
+            ? NTableIndex::IsCompactFulltextIndex(existingIndex->Type)
+            : Self->EnableCompactFulltextIndex;
+
+        buildInfo.IndexName = index.name();
+        buildInfo.IndexColumns.assign(index.index_columns().begin(), index.index_columns().end());
+        buildInfo.DataColumns.assign(index.data_columns().begin(), index.data_columns().end());
+        if (buildInfo.IsRebuild && (index.index_columns().empty() || index.data_columns().empty())) {
+            // Inherit columns from the existing index when they are not provided explicitly.
+            // Index columns and data columns are inherited independently: providing one must
+            // not silently drop the other (e.g. specifying index_columns without data_columns
+            // must preserve the existing data columns).
+            if (index.index_columns().empty()) {
+                buildInfo.IndexColumns.assign(existingIndex->IndexKeys.begin(), existingIndex->IndexKeys.end());
+            }
+            if (index.data_columns().empty()) {
+                buildInfo.DataColumns.assign(existingIndex->IndexDataColumns.begin(), existingIndex->IndexDataColumns.end());
+            }
+        }
 
         switch (index.type_case()) {
         case Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex:
@@ -433,7 +469,7 @@ private:
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
-            buildInfo.BuildKind = index.index_columns().size() == 1
+            buildInfo.BuildKind = buildInfo.IndexColumns.size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
@@ -441,13 +477,10 @@ private:
 
             if (buildInfo.IsRebuild) {
                 // For rebuild: start from existing index settings, then merge user overrides
-                const auto& indexPath = TPath::Resolve(settings.source_path(), Self).Child(index.name());
-                Y_ENSURE(indexPath.IsResolved());
-                auto existingIndex = Self->Indexes.at(indexPath.Base()->PathId);
                 const auto* existingDesc = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
                     &existingIndex->SpecializedIndexDescription);
                 if (!existingDesc) {
-                    explain = "REBUILD INDEX is only supported for vector_kmeans_tree indexes";
+                    explain = "REBUILD INDEX cannot change index type";
                     return false;
                 }
                 vectorIndexKmeansTreeDescription = *existingDesc;
@@ -480,7 +513,7 @@ private:
 
             if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
                 ui64 rowCount = tableInfo->GetStats().Aggregated.RowCount;
-                const bool isPrefixed = index.index_columns().size() > 1;
+                const bool isPrefixed = buildInfo.IndexColumns.size() > 1;
                 NKikimr::NKMeans::AutoSelectKMeansSettings(*vectorIndexKmeansTreeDescription.MutableSettings(), rowCount, isPrefixed);
                 if (isPrefixed) {
                     vectorIndexKmeansTreeDescription.MutableSettings()->set_adaptive_clusters(true);
@@ -516,7 +549,7 @@ private:
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex: {
-            auto type = Self->EnableCompactFulltextIndex
+            auto type = useCompactFulltext
                 ? EIndexType::EIndexTypeGlobalFulltextCompact
                 : EIndexType::EIndexTypeGlobalFulltextPlain;
             if (!PrepareFulltext(buildInfo, type, index.global_fulltext_plain_index().fulltext_settings(), explain)) {
@@ -525,7 +558,7 @@ private:
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex: {
-            auto type = Self->EnableCompactFulltextIndex
+            auto type = useCompactFulltext
                 ? EIndexType::EIndexTypeGlobalFulltextCompactRelevance
                 : EIndexType::EIndexTypeGlobalFulltextRelevance;
             if (!PrepareFulltext(buildInfo, type, index.global_fulltext_relevance_index().fulltext_settings(), explain)) {
@@ -539,7 +572,7 @@ private:
                 return false;
             }
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
-            buildInfo.IndexType = Self->EnableCompactFulltextIndex
+            buildInfo.IndexType = useCompactFulltext
                 ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact
                 : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson;
             break;
@@ -553,34 +586,86 @@ private:
             return false;
         };
 
-        buildInfo.IndexName = index.name();
-        buildInfo.IndexColumns.assign(index.index_columns().begin(), index.index_columns().end());
-        buildInfo.DataColumns.assign(index.data_columns().begin(), index.data_columns().end());
-        if (buildInfo.IsRebuild && (index.index_columns().empty() || index.data_columns().empty())) {
-            // Inherit columns from the existing index when they are not provided explicitly.
-            // Index columns and data columns are inherited independently: providing one must
-            // not silently drop the other (e.g. specifying index_columns without data_columns
-            // must preserve the existing data columns).
-            const auto& indexPath = TPath::Resolve(settings.source_path(), Self).Child(index.name());
-            auto existingIndex = Self->Indexes.at(indexPath.Base()->PathId);
-            if (index.index_columns().empty()) {
-                buildInfo.IndexColumns.assign(existingIndex->IndexKeys.begin(), existingIndex->IndexKeys.end());
-            }
-            if (index.data_columns().empty()) {
-                buildInfo.DataColumns.assign(existingIndex->IndexDataColumns.begin(), existingIndex->IndexDataColumns.end());
-            }
+        if (existingIndex && buildInfo.IndexType != existingIndex->Type) {
+            explain = "REBUILD INDEX cannot change index type";
+            return false;
         }
 
-        // Re-evaluate BuildKind for vector indexes after column inheritance
-        if (buildInfo.IsBuildVectorIndex()) {
-            buildInfo.BuildKind = buildInfo.IndexColumns.size() == 1
-                ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
-                : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
+        // Partition settings also depend on the effective keys (notably vector prefixes).
+        if (index.index_columns().empty()) {
+            for (const auto& column : buildInfo.IndexColumns) {
+                index.add_index_columns(column);
+            }
         }
-
         Ydb::StatusIds::StatusCode status;
         if (!FillIndexTablePartitioning(buildInfo.ImplTableDescriptions, index, status, explain)) {
             return false;
+        }
+        if (existingIndex) {
+            const auto indexPath = TPath::Resolve(settings.source_path(), Self).Child(index.name());
+            const bool sameKeys = existingIndex->IndexKeys == buildInfo.IndexColumns;
+            // Keep API slot order, including the absent dictionary of compact relevance.
+            // Retain request presence: an empty partition_at_keys explicitly requests one partition.
+            TVector<std::pair<const char*, const Ydb::Table::GlobalIndexSettings*>> implSettings;
+            switch (index.type_case()) {
+            case Ydb::Table::TableIndex::kGlobalIndex:
+                implSettings = {{NTableIndex::ImplTable, &index.global_index().settings()}};
+                break;
+            case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+                implSettings = {{NTableIndex::ImplTable, &index.global_async_index().settings()}};
+                break;
+            case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+                implSettings = {{NTableIndex::ImplTable, &index.global_unique_index().settings()}};
+                break;
+            case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
+                const auto& vector = index.global_vector_kmeans_tree_index();
+                implSettings = {{NTableIndex::NKMeans::LevelTable, &vector.level_table_settings()},
+                    {NTableIndex::NKMeans::PostingTable, &vector.posting_table_settings()},
+                    {NTableIndex::NKMeans::PrefixTable, &vector.prefix_table_settings()}};
+                break;
+            }
+            case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+                implSettings = {{NTableIndex::ImplTable, &index.global_fulltext_plain_index().settings()}};
+                break;
+            case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+                const auto& fulltext = index.global_fulltext_relevance_index();
+                implSettings = {{NTableIndex::NFulltext::DictTable, &fulltext.dict_table_settings()},
+                    {NTableIndex::NFulltext::DocsTable, &fulltext.docs_table_settings()},
+                    {NTableIndex::NFulltext::StatsTable, &fulltext.stats_table_settings()},
+                    {NTableIndex::ImplTable, &fulltext.posting_table_settings()}};
+                break;
+            }
+            case Ydb::Table::TableIndex::kGlobalJsonIndex:
+                implSettings = {{NTableIndex::ImplTable, &index.global_json_index().settings()}};
+                break;
+            default:
+                Y_UNREACHABLE(); // Unsupported index types were rejected above.
+            }
+            for (size_t position = 0; position < buildInfo.ImplTableDescriptions.size(); ++position) {
+                const auto& [name, requested] = implSettings.at(position);
+                const auto implPath = indexPath.Child(TString(name));
+                if (!implPath.IsResolved()) {
+                    continue; // Compact dictionaries and newly added vector prefixes have no source table.
+                }
+                const auto& implInfo = *Self->Tables.at(implPath.Base()->PathId);
+                const auto& oldConfig = implInfo.PartitionConfig();
+                auto& description = buildInfo.ImplTableDescriptions.at(position);
+                auto& config = *description.MutablePartitionConfig();
+                if (oldConfig.HasPartitioningPolicy()) {
+                    auto policy = oldConfig.GetPartitioningPolicy();
+                    policy.MergeFrom(config.GetPartitioningPolicy());
+                    config.MutablePartitioningPolicy()->CopyFrom(policy);
+                }
+                if (!config.FollowerGroupsSize()) {
+                    config.MutableFollowerGroups()->CopyFrom(oldConfig.GetFollowerGroups());
+                }
+                if (sameKeys && requested->partitions_case() == Ydb::Table::GlobalIndexSettings::PARTITIONS_NOT_SET) {
+                    const auto& partitions = implInfo.GetPartitions();
+                    for (size_t i = 0; i + 1 < partitions.size(); ++i) {
+                        description.AddSplitBoundary()->SetSerializedKeyPrefix(partitions[i]->EndOfRange);
+                    }
+                }
+            }
         }
         return true;
     }
@@ -591,7 +676,18 @@ private:
             return false;
         }
         NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
-        *fulltextIndexDescription.MutableSettings() = settings;
+        if (buildInfo.IsRebuild) {
+            const auto* existingDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
+                &buildInfo.SpecializedIndexDescription);
+            if (!existingDesc) {
+                explain = "REBUILD INDEX cannot change index type";
+                return false;
+            }
+            fulltextIndexDescription = *existingDesc;
+        }
+        if (!buildInfo.IsRebuild || !settings.columns().empty()) {
+            *fulltextIndexDescription.MutableSettings() = settings;
+        }
         buildInfo.IndexType = indexType;
         buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
         if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), explain)) {

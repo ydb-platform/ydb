@@ -363,8 +363,8 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
         }
     }
 
-    AFL_ENSURE(!hasUniqIndex || !usedIndexes.empty());
-
+    // Covered-column updates may leave every unique key unchanged. Keep the lookup
+    // below to preserve missing keys without requiring a uniqueness check.
     if (!hasUniqIndex) {
         missedKeyInput.clear();
     }

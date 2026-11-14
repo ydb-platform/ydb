@@ -12,6 +12,126 @@
 
 using namespace NSchemeShardUT_Private;
 
+namespace {
+
+struct TReplicationRebuildTest {
+    TTestBasicRuntime Runtime;
+    TTestEnv Env;
+    ui64 TxId = 100;
+    const TString Table = "/MyRoot/Table";
+    const TString IndexPath = Table + "/Index";
+    TVector<TString> TableRows;
+    TVector<TString> IndexRows;
+
+    TReplicationRebuildTest()
+        : Env(Runtime)
+    {
+        TestCreateTable(Runtime, ++TxId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            Columns { Name: "payload" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env.TestWaitNotification(Runtime, TxId);
+        for (ui32 key = 1; key <= 3; ++key) {
+            const TString value = TStringBuilder() << "value-" << key;
+            const TString payload = TStringBuilder() << "payload-" << key;
+            UploadRow(Runtime, Table, 0, {1}, {2, 3}, {TCell::Make(key)},
+                {TCell(value.data(), value.size()), TCell(payload.data(), payload.size())});
+        }
+        const ui64 build = Start(false);
+        Wait(build);
+        TestForgetBuildIndex(Runtime, ++TxId, TTestTxConfig::SchemeShard, "/MyRoot", build);
+        TableRows = ReadShards(Runtime, TTestTxConfig::SchemeShard, Table);
+        IndexRows = ReadShards(Runtime, TTestTxConfig::SchemeShard, IndexPath + "/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(Runtime, Table), 3);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(Runtime, IndexPath + "/indexImplTable"), 3);
+    }
+
+    ui64 Start(bool rebuild = true, Ydb::StatusIds::StatusCode expected = Ydb::StatusIds::SUCCESS) {
+        Ydb::Table::TableIndex index;
+        index.set_name("Index");
+        index.mutable_global_index();
+        if (!rebuild) {
+            index.add_index_columns("value");
+            index.add_data_columns("payload");
+        }
+        const ui64 id = ++TxId;
+        auto* request = CreateBuildIndexRequest(id, "/MyRoot", Table, index);
+        request->Record.MutableSettings()->set_is_rebuild(rebuild);
+        const auto sender = Runtime.AllocateEdgeActor();
+        Runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request);
+        const auto response = Runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), expected, response->Get()->Record.DebugString());
+        if (expected == Ydb::StatusIds::BAD_REQUEST) {
+            UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(), "path is an async replica table");
+        }
+        return id;
+    }
+
+    void Wait(ui64 id) {
+        Env.TestWaitNotification(Runtime, id);
+        const auto result = TestGetBuildIndex(Runtime, TTestTxConfig::SchemeShard, "/MyRoot", id);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+            result.DebugString());
+    }
+
+    void SetMode(const TString& directory, const TString& table, bool replica,
+            bool global = false, NKikimrScheme::EStatus expected = NKikimrScheme::StatusAccepted)
+    {
+        const TString config = replica
+            ? TStringBuilder() << "Mode: REPLICATION_MODE_READ_ONLY ConsistencyLevel: "
+                << (global ? "CONSISTENCY_LEVEL_GLOBAL" : "CONSISTENCY_LEVEL_ROW")
+            : TString("Mode: REPLICATION_MODE_NONE");
+        AsyncSend(Runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++TxId, directory,
+            Sprintf(R"(Name: "%s" ReplicationConfig { %s })", table.c_str(), config.c_str()))));
+        TestModificationResults(Runtime, TxId, {expected});
+        if (expected == NKikimrScheme::StatusAccepted) {
+            Env.TestWaitNotification(Runtime, TxId);
+        }
+    }
+
+    ui64 CheckIndex() {
+        const auto description = DescribePrivatePath(Runtime, IndexPath);
+        TestDescribeResult(description, {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal)});
+        const auto& index = description.GetPathDescription().GetTableIndex();
+        UNIT_ASSERT_VALUES_EQUAL(index.KeyColumnNamesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(index.GetKeyColumnNames(0), "value");
+        UNIT_ASSERT_VALUES_EQUAL(index.DataColumnNamesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(index.GetDataColumnNames(0), "payload");
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(Runtime, TTestTxConfig::SchemeShard, Table), TableRows);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(Runtime, TTestTxConfig::SchemeShard, IndexPath + "/indexImplTable"), IndexRows);
+        return description.GetPathDescription().GetSelf().GetPathId();
+    }
+
+    void CheckNoTemporaryIndex(ui64 id) {
+        TestDescribeResult(DescribePrivatePath(Runtime, TStringBuilder() << Table << "/__ydb_rebuild_" << id),
+            {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(Runtime, Table), {NLs::IndexesCount(1)});
+    }
+
+    void CheckReplica(bool replica) {
+        const auto mode = replica ? NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+            : NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE;
+        const TUserAttrs attrs = replica ? TUserAttrs{{"__async_replica", "true"}} : TUserAttrs{};
+        for (const auto& path : {Table, IndexPath + "/indexImplTable"}) {
+            const auto description = DescribePrivatePath(Runtime, path);
+            TestDescribeResult(description, {NLs::UserAttrsEqual(attrs)});
+            UNIT_ASSERT_VALUES_EQUAL_C(description.GetPathDescription().GetTable().GetReplicationConfig().GetMode(), mode, path);
+        }
+    }
+
+    void Forget(ui64 id) {
+        CheckNoTemporaryIndex(id);
+        TestForgetBuildIndex(Runtime, ++TxId, TTestTxConfig::SchemeShard, "/MyRoot", id);
+        UNIT_ASSERT_VALUES_EQUAL(TestListBuildIndex(Runtime, TTestTxConfig::SchemeShard, "/MyRoot").EntriesSize(), 0);
+    }
+};
+
+} // anonymous namespace
+
 Y_UNIT_TEST_SUITE(TReplicationTests) {
     static TString DefaultScheme(const TString& name) {
         return Sprintf(R"(
@@ -924,6 +1044,132 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable"), {
             NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
         });
+    }
+
+    Y_UNIT_TEST_FLAG(RebuildIndexOnReplicaPreservesLiveIndex, GlobalConsistency) {
+        TReplicationRebuildTest test;
+        auto& runtime = test.Runtime;
+        const ui64 liveId = test.CheckIndex();
+        test.SetMode("/MyRoot", "Table", true, GlobalConsistency);
+        test.SetMode(test.IndexPath, "indexImplTable", true, GlobalConsistency);
+        test.CheckReplica(true);
+        const auto consistency = GlobalConsistency
+            ? NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
+            : NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW;
+        for (const auto& path : {test.Table, test.IndexPath + "/indexImplTable"}) {
+            const auto description = DescribePrivatePath(runtime, path);
+            UNIT_ASSERT_VALUES_EQUAL(description.GetPathDescription().GetTable().GetReplicationConfig().GetConsistencyLevel(),
+                consistency);
+        }
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        test.CheckReplica(true);
+
+        for (ui32 attempt = 0; attempt < 2; ++attempt) {
+            const ui64 rejected = test.Start(true, Ydb::StatusIds::BAD_REQUEST);
+            test.CheckNoTemporaryIndex(rejected);
+            UNIT_ASSERT_VALUES_EQUAL(test.CheckIndex(), liveId);
+            UNIT_ASSERT_VALUES_EQUAL(TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot").EntriesSize(), 0);
+        }
+        WriteRow(runtime, ++test.TxId, test.Table, 0, 1, "forbidden", false);
+        TestAlterTable(runtime, ++test.TxId, "/MyRoot", R"(
+            Name: "Table" DropColumns { Name: "payload" }
+        )", {NKikimrScheme::StatusSchemeError});
+        TestCreateCdcStream(runtime, ++test.TxId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription { Name: "Stream" Mode: ECdcStreamModeKeysOnly Format: ECdcStreamFormatProto }
+        )", {NKikimrScheme::StatusSchemeError});
+        TestDescribeResult(DescribePrivatePath(runtime, test.Table + "/Stream"), {NLs::PathNotExist});
+        UNIT_ASSERT_VALUES_EQUAL(test.CheckIndex(), liveId);
+
+        // Replication detaches each implementation table as well as the base table.
+        test.SetMode(test.IndexPath, "indexImplTable", false);
+        test.SetMode("/MyRoot", "Table", false);
+        test.CheckReplica(false);
+        ui64 previousId = liveId;
+        for (ui32 iteration = 0; iteration < 2; ++iteration) {
+            const ui64 build = test.Start();
+            test.Wait(build);
+            const ui64 rebuiltId = test.CheckIndex();
+            UNIT_ASSERT(rebuiltId != previousId);
+            previousId = rebuiltId;
+            test.CheckReplica(false);
+            test.Forget(build);
+        }
+    }
+
+    Y_UNIT_TEST(RebuildIndexProtectsReplicationAttachment) {
+        TReplicationRebuildTest test;
+        auto& runtime = test.Runtime;
+        TestCreateCdcStream(runtime, ++test.TxId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+                Name: "ReplicationStream"
+                Mode: ECdcStreamModeUpdate
+                Format: ECdcStreamFormatJson
+                UserAttributes {
+                    Key: "__async_replication"
+                    Value: "{\"id\":\"replication-id\",\"path\":\"/MyRoot/Replication\"}"
+                }
+            }
+        )");
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        const auto stream = DescribePrivatePath(runtime, test.Table + "/ReplicationStream");
+        const ui64 liveId = test.CheckIndex();
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> filling(runtime);
+        Y_DEFER { filling.Stop().Unblock(); };
+        const ui64 build = test.Start();
+        runtime.WaitFor("index rebuild scan", [&] { return !filling.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", build)
+            .GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
+
+        test.SetMode("/MyRoot", "Table", true, false, NKikimrScheme::StatusMultipleModifications);
+        test.SetMode(test.IndexPath, "indexImplTable", true, false, NKikimrScheme::StatusMultipleModifications);
+        TestAlterTable(runtime, ++test.TxId, "/MyRoot", R"(
+            Name: "Table" Columns { Name: "extra" Type: "Uint64" }
+        )", {NKikimrScheme::StatusMultipleModifications});
+        test.CheckReplica(false);
+        UNIT_ASSERT_VALUES_EQUAL(test.CheckIndex(), liveId);
+
+        // An unrelated replica can be created while this table is rebuilding.
+        TestCreateTable(runtime, ++test.TxId, "/MyRoot", R"(
+            Name: "OtherReplica"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+            ReplicationConfig { Mode: REPLICATION_MODE_READ_ONLY }
+        )");
+        test.Env.TestWaitNotification(runtime, test.TxId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/OtherReplica"),
+            {NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY)});
+
+        filling.Stop().Unblock();
+        test.Wait(build);
+        UNIT_ASSERT(test.CheckIndex() != liveId);
+        test.CheckReplica(false);
+        test.Forget(build);
+        const auto currentStream = DescribePrivatePath(runtime, test.Table + "/ReplicationStream");
+        TestDescribeResult(currentStream, {NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+            NLs::UserAttrsHas({{"__async_replication", "{\"id\":\"replication-id\",\"path\":\"/MyRoot/Replication\"}"}})});
+        UNIT_ASSERT_VALUES_EQUAL(currentStream.GetPathDescription().GetSelf().GetPathId(),
+            stream.GetPathDescription().GetSelf().GetPathId());
+
+        // The legacy replication stream still forbids column changes after the rebuild lock is gone.
+        TestAlterTable(runtime, ++test.TxId, "/MyRoot", R"(
+            Name: "Table" Columns { Name: "extra" Type: "Uint64" }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+        const ui64 rebuiltId = test.CheckIndex();
+        test.SetMode("/MyRoot", "Table", true);
+        test.SetMode(test.IndexPath, "indexImplTable", true);
+        test.CheckReplica(true);
+        const ui64 rejected = test.Start(true, Ydb::StatusIds::BAD_REQUEST);
+        test.CheckNoTemporaryIndex(rejected);
+        UNIT_ASSERT_VALUES_EQUAL(test.CheckIndex(), rebuiltId);
+        test.SetMode(test.IndexPath, "indexImplTable", false);
+        test.SetMode("/MyRoot", "Table", false);
+        const ui64 retry = test.Start();
+        test.Wait(retry);
+        UNIT_ASSERT(test.CheckIndex() != rebuiltId);
+        test.CheckReplica(false);
+        test.Forget(retry);
     }
 
     Y_UNIT_TEST(CopyReplicatedTable) {

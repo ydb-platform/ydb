@@ -2,7 +2,8 @@
 
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/base/tablet.h>
-#include <ydb/core/util/stlog.h>
+
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NKeyValue {

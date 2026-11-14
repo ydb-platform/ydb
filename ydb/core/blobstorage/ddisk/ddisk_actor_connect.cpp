@@ -1,6 +1,5 @@
 #include "ddisk_actor.h"
 
-#include <ydb/core/util/stlog.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 

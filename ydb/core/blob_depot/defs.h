@@ -17,7 +17,8 @@
 #include <ydb/core/util/format.h>
 #include <ydb/core/util/gen_step.h>
 #include <ydb/core/util/pb.h>
-#include <ydb/core/util/stlog.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/json_writer.h>

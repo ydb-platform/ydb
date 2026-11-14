@@ -3,7 +3,6 @@
 #include "defs.h"
 #include "blobstorage_syncer_localwriter.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwriteindexsst.h>
-#include <ydb/core/util/stlog.h>
 
 namespace NKikimr {
 

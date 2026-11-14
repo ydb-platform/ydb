@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib
     ydb/core/protos
     ydb/core/testlib
+    ydb/core/testlib/basics
 )
 
 END()

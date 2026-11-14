@@ -1,6 +1,8 @@
 #include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/core/tx/cdc_aggregator/tablet/tablet.h>
+#include <ydb/core/tx/cdc_aggregator/tablet/tablet_impl.h>
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -8,6 +10,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/builder.h>
+
+#include <stdexcept>
 
 namespace NKikimr::NCdcAggregator {
 
@@ -113,6 +117,61 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(TCdcAggregatorTabletTest) {
+    Y_UNIT_TEST(ShouldRestartAfterUnhandledException) {
+        // Inject an exception into dispatch while retaining the concrete
+        // tablet's exception policy and cleanup. Only the first instance throws.
+        class TThrowingTablet final : public TCdcAggregator {
+        public:
+            TThrowingTablet(
+                const TActorId& tablet,
+                TTabletStorageInfo* info,
+                bool& exceptionThrown)
+                : TCdcAggregator(tablet, info)
+                , ExceptionThrown(exceptionThrown)
+            {
+                Become(&TThrowingTablet::StateThrow);
+            }
+
+        private:
+            void StateThrow(TAutoPtr<IEventHandle>&) {
+                ExceptionThrown = true;
+                throw std::runtime_error("tablet dispatch exception");
+            }
+
+            bool& ExceptionThrown;
+        };
+
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
+
+        bool exceptionThrown = false;
+        ui32 instances = 0;
+        const ui64 tabletId = MakeTabletID(0, 0, 1);
+        const TActorId bootstrapper = CreateTestBootstrapper(
+            runtime,
+            CreateTestTabletInfo(tabletId, TTabletTypes::CdcAggregator),
+            [&](const TActorId& tablet, TTabletStorageInfo* info) -> IActor* {
+                if (++instances == 1) {
+                    return new TThrowingTablet(tablet, info, exceptionThrown);
+                }
+                return new TCdcAggregator(tablet, info);
+            });
+
+        runtime.EnableScheduleForActor(bootstrapper);
+
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return instances >= 2; };
+        runtime.DispatchEvents(options);
+
+        UNIT_ASSERT(exceptionThrown);
+        UNIT_ASSERT_VALUES_EQUAL(instances, 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetServiceCounters(runtime.GetAppData().Counters, "tablets")
+                ->GetCounter("alerts_exception", true)->Val(),
+            1);
+    }
+
     Y_UNIT_TEST(BecomesActive) {
         TTestEnv env;
         env.ConnectPipe();

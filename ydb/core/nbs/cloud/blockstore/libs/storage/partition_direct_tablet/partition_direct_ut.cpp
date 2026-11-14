@@ -11,12 +11,14 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service.h>
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 
@@ -29,6 +31,7 @@
 #include <util/string/builder.h>
 
 #include <set>
+#include <stdexcept>
 
 using namespace NKikimr;
 
@@ -1034,6 +1037,72 @@ void ShouldWriteAndReadMultipleBlocks(
 
 Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 {
+    Y_UNIT_TEST(ShouldRestartAfterUnhandledException)
+    {
+        // Inject an exception into dispatch while retaining the concrete
+        // tablet's exception policy and cleanup. Only the first instance
+        // throws.
+        class TThrowingTablet final: public TPartitionActor
+        {
+        public:
+            TThrowingTablet(
+                const TActorId& tablet,
+                TTabletStorageInfo* info,
+                bool& exceptionThrown)
+                : TPartitionActor(tablet, info)
+                , ExceptionThrown(exceptionThrown)
+            {
+                Become(&TThrowingTablet::StateThrow);
+            }
+
+        private:
+            void StateThrow(TAutoPtr<IEventHandle>&)
+            {
+                ExceptionThrown = true;
+                throw std::runtime_error("tablet dispatch exception");
+            }
+
+            bool& ExceptionThrown;
+        };
+
+        TScopedNbsService service(CreateNbsConfig(EWriteMode::DirectWrite));
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        runtime.GetAppData()
+            .FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
+
+        bool exceptionThrown = false;
+        ui32 instances = 0;
+        const ui64 tabletId = MakeTabletID(0, 0, 1);
+        const TActorId bootstrapper = CreateTestBootstrapper(
+            runtime,
+            CreateTestTabletInfo(tabletId, TTabletTypes::Unknown),
+            [&](const TActorId& tablet, TTabletStorageInfo* info) -> IActor*
+            {
+                if (++instances == 1) {
+                    return new TThrowingTablet(tablet, info, exceptionThrown);
+                }
+                return new TPartitionActor(tablet, info);
+            });
+
+        runtime.EnableScheduleForActor(bootstrapper);
+
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]
+        {
+            return instances >= 2;
+        };
+        runtime.DispatchEvents(options);
+
+        UNIT_ASSERT(exceptionThrown);
+        UNIT_ASSERT_VALUES_EQUAL(instances, 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetServiceCounters(runtime.GetAppData().Counters, "tablets")
+                ->GetCounter("alerts_exception", true)
+                ->Val(),
+            1);
+    }
+
     Y_UNIT_TEST(ShouldRevokeFrontendBackendOnActorSystemCleanup)
     {
         auto env =

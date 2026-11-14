@@ -805,6 +805,8 @@ TMaybe<bool> OptimizePossibleOutOfBounds(const TStringBuf& opName, EDataSlot col
 // Returns the generated QL expression tree depth (references and literals have depth one),
 // or Nothing() if the expression cannot be generated.
 // Depth mirrors the QL parser's AST nesting; see yt/yt/library/query/base/parser.ypp.
+// Use = NULL / != NULL throughout for compatibility with YT 25.1 and lower expression
+// depth: IS NOT NULL becomes NOT(is_null(...)), whose constraints YT 25.1 cannot infer.
 TMaybe<ui32> GenerateInputQueryComparison(const TStringBuf& opName, const TExprNode::TPtr& column, TExprNode::TPtr value, const TMaybe<bool>& nullValue, TStringBuilder& result) {
     for (auto maybeJust = TMaybeNode<TCoJust>(value); maybeJust;) {
         value = maybeJust.Cast().Input().Ptr();
@@ -869,8 +871,8 @@ TMaybe<ui32> GenerateInputQueryComparison(const TStringBuf& opName, const TExprN
         if (columnIsOptional && !nullValue.GetRef()) {
             // Handle comparison with NULL as FALSE.
             QuoteColumnForQL(columnName, result);
-            result << " IS NOT NULL";
-            return 3;
+            result << " != NULL";
+            return 2;
         } else {
             result << "TRUE";
             return 1;
@@ -880,7 +882,7 @@ TMaybe<ui32> GenerateInputQueryComparison(const TStringBuf& opName, const TExprN
         if (columnIsOptional && nullValue.GetRef()) {
             // Handle comparison with NULL as TRUE.
             QuoteColumnForQL(columnName, result);
-            result << " IS NULL";
+            result << " = NULL";
             return 2;
         } else {
             result << "FALSE";
@@ -1007,7 +1009,7 @@ TMaybe<ui32> GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStr
             if (!childDepth) {
                 return {};
             }
-            result << ") IS NULL";
+            result << ") = NULL";
             return *childDepth + 1;
         } else {
             result << "NOT (";
@@ -1024,8 +1026,8 @@ TMaybe<ui32> GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStr
         if (!childDepth) {
             return {};
         }
-        result << ") IS NOT NULL";
-        return *childDepth + 2;
+        result << ") != NULL";
+        return *childDepth + 1;
     } else if (node->IsCallable({"And", "Or"})) {
         const TStringBuf op = node->IsCallable("And") ? "AND" : "OR";
         return GenerateInputQueryLogicalExpression(node->ChildrenList(), op, result);

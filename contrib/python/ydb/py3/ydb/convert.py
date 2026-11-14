@@ -4,7 +4,6 @@ from google.protobuf import struct_pb2
 
 from . import issues, types, _apis
 
-
 _SHIFT_BIT_COUNT = 64
 _SHIFT = 2**64
 _SIGN_BIT = 2**63

@@ -11,6 +11,7 @@
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 #include <yql/essentials/core/layers/remote_layer_provider.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/getopt/last_getopt.h>
@@ -127,9 +128,8 @@ public:
     TCredentials::TPtr Credentials = MakeIntrusive<TCredentials>();
 
     THashSet<TString> GatewayTypes;
-    TString UdfResolverPath;
+    NCommon::TOutProcUdfResolverOptions UdfResolverOptions;
     TString UdfResolverLog;
-    bool UdfResolverFilterSyscalls = false;
     bool ScanUdfs = false;
     TString UdfBridgePath;
     THolder<NYqlMountConfig::TMountConfig> MountConfig;

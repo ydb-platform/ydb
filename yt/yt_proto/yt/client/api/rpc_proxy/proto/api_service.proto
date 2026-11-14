@@ -3778,8 +3778,9 @@ message TReqGetQuery
     required NYT.NProto.TGuid query_id = 2;
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 3;
     optional uint64 timestamp = 4;
-    repeated string progress_parts = 5;
-    optional uint32 min_progress_revision = 6;
+    repeated string progress_parts = 5; // deprecated
+    optional uint32 min_progress_revision = 6; // deprecated
+    optional bytes progress_options = 7; // YSON
 }
 
 message TRspGetQuery

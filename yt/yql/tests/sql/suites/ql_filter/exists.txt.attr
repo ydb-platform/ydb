@@ -1,0 +1,9 @@
+{
+    "optimize_for"="scan";
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+            ["a";["OptionalType";["DataType";"String"]]];
+            ["b";["OptionalType";["DataType";"String"]]]
+        ]]
+    }
+}

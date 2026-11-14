@@ -1,4 +1,5 @@
 #include "yql_yt_file_services.h"
+#include "yql_yt_file_text_yson.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/core/issue/yql_issue.h>
@@ -7,9 +8,9 @@
 #include <util/system/guard.h>
 #include <util/system/fs.h>
 #include <util/generic/yexception.h>
+#include <util/generic/guid.h>
 #include <util/folder/path.h>
 #include <util/string/cast.h>
-#include <util/random/random.h>
 #include <util/stream/file.h>
 #include <util/stream/input.h>
 
@@ -44,6 +45,10 @@ TYtFileServices::TYtFileServices(
 TYtFileServices::~TYtFileServices() {
     for (auto& x: Snapshots_) {
         try {
+            const auto numParts = ReadSplittedPartsCount(x.second);
+            for (i64 part = 0; part < numParts; ++part) {
+                NFs::Remove(x.second + ".part." + ToString(part));
+            }
             NFs::Remove(x.second);
             NFs::Remove(x.second + ".attr");
         } catch (...) {
@@ -86,24 +91,30 @@ TString TYtFileServices::SnapshotTable(const TString& tablePath, TStringBuf clus
     auto guard = Guard(Mutex_);
 
     const TString lockKey = TStringBuilder() << YtProviderName << '.' << cluster << '.' << table;
-    auto& lockPath = Snapshots_[std::make_pair(lockKey, epoch)];
-    if (!lockPath) {
-        auto name = TFsPath(tablePath).GetName();
-        lockPath = TFsPath(TmpDir_) / (name + ToString(RandomNumber<float>()));
-        while (true) {
-            try {
-                TUnbufferedFileInput src(tablePath);
-                TUnbufferedFileOutput dst(TFile(lockPath, CreateNew | WrOnly | Seq));
-                TransferData(&src, &dst);
-                break;
-            } catch (const TFileError& e) {
-                lockPath = TFsPath(TmpDir_) / (name + ToString(RandomNumber<float>()));
-            }
+    const auto snapshotKey = std::make_pair(lockKey, epoch);
+    if (const auto* snapshot = Snapshots_.FindPtr(snapshotKey)) {
+        return *snapshot;
+    }
+    const TString lockPath = TFsPath(TmpDir_) / (TFsPath(tablePath).GetName() + "." + CreateGuidAsString());
+    {
+        const auto numParts = ReadSplittedPartsCount(tablePath);
+        THolder<TUnbufferedFileInput> src;
+        if (numParts == 0) {
+            src = MakeHolder<TUnbufferedFileInput>(tablePath);
+        }
+        TUnbufferedFileOutput dst(TFile(lockPath, CreateNew | WrOnly | Seq));
+        if (src) {
+            TransferData(src.Get(), &dst);
         }
         if (NFs::Exists(tablePath + ".attr")) {
             NFs::Copy(tablePath + ".attr", lockPath + ".attr");
         }
+        for (i64 part = 0; part < numParts; ++part) {
+            const TString suffix = ".part." + ToString(part);
+            NFs::Copy(tablePath + suffix, lockPath + suffix);
+        }
     }
+    Snapshots_.emplace(snapshotKey, lockPath);
     return lockPath;
 }
 

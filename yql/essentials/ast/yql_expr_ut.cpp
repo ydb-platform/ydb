@@ -1,4 +1,5 @@
 #include "yql_expr.h"
+#include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/utils/limiting_allocator.h>
 #include <util/string/hex.h>
@@ -39,6 +40,35 @@ bool ParseAndCompile(const TString& program) {
 }
 
 } // namespace
+
+Y_UNIT_TEST_SUITE(TTypeNanFlags) {
+Y_UNIT_TEST(RecursiveTypes) {
+    TExprContext ctx;
+    const auto* integer = ctx.MakeType<TDataExprType>(EDataSlot::Int64);
+    const auto* floating = ctx.MakeType<TDataExprType>(EDataSlot::Double);
+    UNIT_ASSERT(!integer->HasYqlNaN());
+    UNIT_ASSERT(floating->HasYqlNaN());
+    UNIT_ASSERT(ctx.MakeType<TDataExprType>(EDataSlot::Float)->HasYqlNaN());
+    UNIT_ASSERT(ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, "22", "9")->HasYqlNaN());
+    UNIT_ASSERT(!ctx.MakeType<TNullExprType>()->HasYqlNaN());
+    UNIT_ASSERT(!ctx.MakeType<TOptionalExprType>(integer)->HasYqlNaN());
+    UNIT_ASSERT(ctx.MakeType<TOptionalExprType>(floating)->HasYqlNaN());
+    UNIT_ASSERT(ctx.MakeType<TListExprType>(floating)->HasYqlNaN());
+    UNIT_ASSERT(ctx.MakeType<TDictExprType>(integer, floating)->HasYqlNaN());
+    const auto* tuple = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{integer, floating});
+    UNIT_ASSERT(tuple->HasYqlNaN());
+    UNIT_ASSERT(ctx.MakeType<TVariantExprType>(tuple)->HasYqlNaN());
+    UNIT_ASSERT(ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{ctx.MakeType<TItemExprType>("value", floating)})->HasYqlNaN());
+}
+
+Y_UNIT_TEST(PgTypes) {
+    TExprContext ctx;
+    for (const auto* name : {"float4", "float8", "numeric", "_float4", "_float8", "_numeric", "point",
+                             "text", "_text", "int2", "int4", "int8", "_int2", "_int4", "_int8"}) {
+        UNIT_ASSERT_C(!ctx.MakeType<TPgExprType>(NPg::LookupType(name).TypeId)->HasYqlNaN(), name);
+    }
+}
+} // Y_UNIT_TEST_SUITE(TTypeNanFlags)
 
 Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 

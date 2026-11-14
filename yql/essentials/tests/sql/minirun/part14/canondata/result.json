@@ -865,9 +865,9 @@
     ],
     "test.test[pg-pg_corr_sort_limit-default.txt-Debug]": [
         {
-            "checksum": "6f0c40b12f84c0fbcc41504e5cfc5020",
-            "size": 3094,
-            "uri": "https://{canondata_backend}/1773845/ebf77941ed44040d8edc339731afefc98084125e/resource.tar.gz#test.test_pg-pg_corr_sort_limit-default.txt-Debug_/opt.yql"
+            "checksum": "5fd1160f95127b6c91a775344dcf6d32",
+            "size": 3509,
+            "uri": "https://{canondata_backend}/1781765/092147ae04e6d758dc69d3df0dac703a1c405c61/resource.tar.gz#test.test_pg-pg_corr_sort_limit-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-pg_corr_sort_limit-default.txt-Results]": [
@@ -1161,7 +1161,7 @@
         {
             "checksum": "1fd537a4959b72d1c04dd5d05af4a0a2",
             "size": 1692,
-            "uri": "https://{canondata_backend}/1773845/ebf77941ed44040d8edc339731afefc98084125e/resource.tar.gz#test.test_select_yql-correlated_where_exists-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1917492/0e2429a721481b87a8c662c2c5cc4a1cc17c4730/resource.tar.gz#test.test_select_yql-correlated_where_exists-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-correlated_where_exists-default.txt-Results]": [
@@ -1173,9 +1173,9 @@
     ],
     "test.test[select_yql-correlated_where_group_by-default.txt-Debug]": [
         {
-            "checksum": "231628a49dbe7ce945a63486ef9c9dd7",
-            "size": 3221,
-            "uri": "https://{canondata_backend}/1773845/ebf77941ed44040d8edc339731afefc98084125e/resource.tar.gz#test.test_select_yql-correlated_where_group_by-default.txt-Debug_/opt.yql"
+            "checksum": "1a055d4753f66aeedf515f89026daf78",
+            "size": 3323,
+            "uri": "https://{canondata_backend}/1775319/ac51746ed8c3cef50af6ae28fa82a17abf5df5ff/resource.tar.gz#test.test_select_yql-correlated_where_group_by-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-correlated_where_group_by-default.txt-Results]": [

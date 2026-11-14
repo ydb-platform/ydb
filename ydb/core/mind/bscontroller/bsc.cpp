@@ -431,9 +431,25 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         if (!prevBridgeInfo) {
             changed = true;
         } else {
-            changed = std::size(prevBridgeInfo->Piles) != std::size(BridgeInfo->Piles); // list of piles has changed
+            changed = prevBridgeInfo->IsImplicit != BridgeInfo->IsImplicit ||
+                std::size(prevBridgeInfo->Piles) != std::size(BridgeInfo->Piles); // list of piles has changed
             for (size_t k = 0; !changed && k < std::size(BridgeInfo->Piles); ++k) {
-                changed = prevBridgeInfo->Piles[k].State != BridgeInfo->Piles[k].State;
+                const auto& pile = BridgeInfo->Piles[k];
+                changed = prevBridgeInfo->Piles[k].State != pile.State ||
+                    prevBridgeInfo->Piles[k].IsFreeSlot != pile.IsFreeSlot;
+                const NKikimrBridge::TClusterStateDetails::TPileSyncState* previousSync = nullptr;
+                if (prevStorageConfig) {
+                    for (const auto& sync : prevStorageConfig->GetClusterStateDetails().GetPileSyncState()) {
+                        if (TBridgePileId::FromProto(&sync,
+                                &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId) == pile.BridgePileId) {
+                            previousSync = &sync;
+                            break;
+                        }
+                    }
+                }
+                const auto* currentSync = FindPileSyncState(pile.BridgePileId);
+                changed |= bool(previousSync) != bool(currentSync) || (previousSync && currentSync &&
+                    previousSync->GetBecameUnsyncedGeneration() != currentSync->GetBecameUnsyncedGeneration());
             }
         }
         if (changed) {
@@ -446,6 +462,10 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             if (Loaded) {
                 UpdateDatabaseSpaceOnPileChanges();
             }
+        }
+    } else if (prevBridgeInfo) {
+        for (const auto& [groupId, group] : GroupMap) {
+            SysViewChangedGroups.insert(groupId);
         }
     }
 

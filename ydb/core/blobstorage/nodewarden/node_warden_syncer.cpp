@@ -7,6 +7,67 @@
 
 namespace NKikimr::NStorage {
 
+    void TNodeWarden::Handle(NGroupSyncer::TEvRunMirror3dcRepair::TPtr& ev) {
+        const NKikimrBlobStorage::TEvRunMirror3dcRepair& request = ev->Get()->Record;
+        ui32 groupId = request.GetGroupId();
+        ui32 generation = request.GetGeneration();
+        auto reply = [&](TActorId recipient, ui64 cookie, ui32 replyGeneration, NKikimrProto::EReplyStatus status) {
+            std::unique_ptr<NGroupSyncer::TEvRunMirror3dcRepairResult> result = std::make_unique<NGroupSyncer::TEvRunMirror3dcRepairResult>();
+            result->Record.SetGroupId(groupId);
+            result->Record.SetGeneration(replyGeneration);
+            result->Record.SetStatus(status);
+            Send(recipient, result.release(), 0, cookie);
+        };
+        auto running = RepairSyncers.find(groupId);
+        if (request.GetCancel()) {
+            if (running != RepairSyncers.end()) {
+                const TRepairSyncer& syncer = running->second;
+                bool sameRequest = syncer.Requester == ev->Sender && syncer.Cookie == ev->Cookie && syncer.Generation == generation;
+                if (sameRequest) {
+                    Send(syncer.ActorId, new TEvents::TEvPoisonPill);
+                    RepairSyncerGroups.erase(syncer.ActorId);
+                    RepairSyncers.erase(running);
+                }
+            }
+            return;
+        }
+        TIntrusivePtr<TBlobStorageGroupInfo> info = NeedGroupInfo(groupId);
+        if (!info || info->GroupGeneration != generation) {
+            return reply(ev->Sender, ev->Cookie, generation, NKikimrProto::RACE);
+        }
+        if (running != RepairSyncers.end()) {
+            const TRepairSyncer& syncer = running->second;
+            bool sameRequest = syncer.Requester == ev->Sender && syncer.Cookie == ev->Cookie && syncer.Generation == generation;
+            if (sameRequest) {
+                return;
+            }
+            Send(syncer.ActorId, new TEvents::TEvPoisonPill);
+            reply(syncer.Requester, syncer.Cookie, syncer.Generation, NKikimrProto::RACE);
+            RepairSyncerGroups.erase(syncer.ActorId);
+            RepairSyncers.erase(running);
+        }
+        TActorId actor = Register(NGroupSyncer::CreateMirror3dcRepairSyncer(info, SelfId()));
+        RepairSyncers.emplace(groupId, TRepairSyncer{generation, actor, ev->Sender, ev->Cookie});
+        RepairSyncerGroups.emplace(actor, groupId);
+    }
+
+    void TNodeWarden::Handle(NGroupSyncer::TEvMirror3dcRepairScanResult::TPtr& ev) {
+        const auto actor = RepairSyncerGroups.find(ev->Sender);
+        if (actor == RepairSyncerGroups.end()) {
+            return;
+        }
+        auto running = RepairSyncers.find(actor->second);
+        Y_ABORT_UNLESS(running != RepairSyncers.end() && running->second.ActorId == ev->Sender);
+        const TRepairSyncer& syncer = running->second;
+        std::unique_ptr<NGroupSyncer::TEvRunMirror3dcRepairResult> result = std::make_unique<NGroupSyncer::TEvRunMirror3dcRepairResult>();
+        result->Record.SetGroupId(actor->second);
+        result->Record.SetGeneration(syncer.Generation);
+        result->Record.SetStatus(ev->Get()->Status);
+        Send(syncer.Requester, result.release(), 0, syncer.Cookie);
+        RepairSyncers.erase(running);
+        RepairSyncerGroups.erase(actor);
+    }
+
     void TNodeWarden::UpdateSyncRateQuoter() {
         const ui64 rate = !SyncRateConfigLimit ? SyncRateControllerLimit
             : !SyncRateControllerLimit ? SyncRateConfigLimit
@@ -159,6 +220,7 @@ namespace NKikimr::NStorage {
         ISSUE_METRIC(BlobsDone)
         ISSUE_METRIC(BlobsTotal)
         ISSUE_METRIC(BlobsError)
+        ISSUE_METRIC(ScannedItems)
         ISSUE_METRIC(BytesToCopy)
         ISSUE_METRIC(BytesCopied)
 

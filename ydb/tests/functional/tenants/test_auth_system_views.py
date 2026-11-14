@@ -61,6 +61,8 @@ def ydb_configurator(ydb_cluster_configuration):
     config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
     config_generator.yaml_config['auth_config'] = {
         'domain_login_only': False,
+        # Authenticate dynamic nodes when they fetch their configuration from CMS.
+        'staff_api_user_token': config_generator.default_clusteradmin,
     }
     config_generator.yaml_config['domains_config']['disable_builtin_security'] = True
     security_config = config_generator.yaml_config['domains_config']['security_config']
@@ -95,8 +97,7 @@ def prepared_root_db(ydb_cluster, ydb_root, ydb_endpoint):
     # prepare root database
     driver_config = ydb.DriverConfig(ydb_endpoint, ydb_root, credentials=cluster_admin)
     with ydb.Driver(driver_config) as driver:
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.SessionPool(driver) as pool, pool.checkout() as session:
             session.execute_scheme("create user clusteradmin password '1234'")
             session.execute_scheme("create user clusteruser password '1234'")
 
@@ -109,8 +110,7 @@ def prepared_tenant_db(ydb_cluster, ydb_endpoint, ydb_database_module_scope):
     database_path = ydb_database_module_scope
     driver_config = ydb.DriverConfig(ydb_endpoint, database_path, credentials=cluster_admin)
     with ydb.Driver(driver_config) as driver:
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.SessionPool(driver) as pool, pool.checkout() as session:
             # add users
             session.execute_scheme("create user dbadmin password '1234'")
             session.execute_scheme("create user ordinaryuser password '1234'")

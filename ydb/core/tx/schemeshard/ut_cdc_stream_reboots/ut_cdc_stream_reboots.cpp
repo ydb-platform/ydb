@@ -196,6 +196,43 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithCdcAggregator, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        // Reboots hit CreateParts and ConfigureParts of the aggregator creation as well
+        t.GetTestEnvOptions().EnableCdcAggregator(true);
+
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                  ResolvedTimestampsIntervalMs: 1000
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                    NLs::StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeAggregated),
+                    NLs::StreamHasAggregatorTabletId(true),
+                });
+            }
+        });
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithSchemaChanges, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {

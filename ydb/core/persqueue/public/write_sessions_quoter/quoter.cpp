@@ -22,6 +22,7 @@ static constexpr TDuration BUCKET_WINDOW = TDuration::Seconds(1);
 static constexpr TDuration WAKEUP_INTERVAL = TDuration::MilliSeconds(100);
 
 struct TKey {
+    TString Database;
     TString Topic;
     ui32 Partition;
     ui32 Generation;
@@ -30,7 +31,7 @@ struct TKey {
 
     template <typename H>
     friend H AbslHashValue(H h, const TKey& key) {
-        return H::combine(std::move(h), key.Topic, key.Partition, key.Generation);
+        return H::combine(std::move(h), key.Database, key.Topic, key.Partition, key.Generation);
     }
 };
 
@@ -100,6 +101,7 @@ void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvNotify::TPtr& ev, c
 
     Buckets.try_emplace(
         TKey{
+            .Database = msg.Database,
             .Topic = msg.Topic,
             .Partition = msg.Partition,
             .Generation = msg.Generation
@@ -111,6 +113,7 @@ void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvNotify::TPtr& ev, c
 void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvAcquireQuota::TPtr& ev, const TActorContext& ctx) {
     const auto& msg = *ev->Get();
     const auto key = TKey{
+        .Database = msg.Database,
         .Topic = msg.Topic,
         .Partition = msg.Partition,
         .Generation = msg.Generation
@@ -147,7 +150,7 @@ void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvAcquireQuota::TPtr&
 
 void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvRemove::TPtr& ev, const TActorContext& ctx) {
     const auto& msg = *ev->Get();
-    const auto key = TKey{msg.Topic, msg.Partition, msg.Generation};
+    const auto key = TKey{msg.Database, msg.Topic, msg.Partition, msg.Generation};
 
     Buckets.erase(key);
 

@@ -441,25 +441,17 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-        const auto& partitions = table->GetPartitions();
-
-        for (ui32 i = 0; i < partitions.size(); ++i) {
-            const auto* cur = partitions.at(i);
-
-            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(cur->ShardIdx));
-            const auto& shard = context.SS->ShardInfos.at(cur->ShardIdx);
+        for (const auto* p : table->GetPartitions()) {
+            const auto* shardInfo = context.SS->ShardInfos.FindPtr(p->ShardIdx);
+            Y_ABORT_UNLESS(shardInfo != nullptr);
 
             auto& mg = *bootstrapConfig.AddExplicitMessageGroups();
-            mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shard.TabletID)));
+            mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shardInfo->TabletID)));
 
-            if (i != partitions.size() - 1) {
-                mg.MutableKeyRange()->SetToBound(cur->EndOfRange);
-            }
-
-            if (i) {
-                const auto* prev = partitions.at(i - 1);
-                mg.MutableKeyRange()->SetFromBound(prev->EndOfRange);
-            }
+            //NOTE: No KeyRange on the group: nothing consumes the key ranges on the pqtablet side.
+            // Routing is datashard-side over the topic partitioning, split continuity is
+            // the change-exchange re-registration, and the table split/merge re-registration
+            // produces rangeless ids anyway.
         }
     }
 

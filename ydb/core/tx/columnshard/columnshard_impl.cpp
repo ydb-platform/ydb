@@ -34,8 +34,8 @@
 #include "transactions/operators/ev_write/sync.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
@@ -638,7 +638,6 @@ private:
                 Changes->SetStage(NOlap::NChanges::EStage::AskAccessors);
                 break;
             case NOlap::NDataFetcher::EFetchingStage::AskDataResources:
-            case NOlap::NDataFetcher::EFetchingStage::AskGeneralResources:
                 Changes->SetStage(NOlap::NChanges::EStage::AskDataResources);
                 break;
             case NOlap::NDataFetcher::EFetchingStage::AskAccessorResources:

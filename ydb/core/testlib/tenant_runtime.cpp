@@ -20,6 +20,7 @@
 #include <ydb/core/tablet/tablet_monitoring_proxy.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/cdc_aggregator/tablet/tablet.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -462,6 +463,8 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
                 bootstrapperActorId = Boot(ctx, type, &NStat::CreateStatisticsAggregator, DataGroupErasure);
             } else if (type == TTabletTypes::WasmCompileController) {
                 bootstrapperActorId = Boot(ctx, type, &NUdfStore::CreateWasmCompileController, DataGroupErasure);
+            } else if (type == TTabletTypes::CdcAggregator) {
+                bootstrapperActorId = Boot(ctx, type, &NCdcAggregator::CreateCdcAggregator, DataGroupErasure);
             } else {
                 status = NKikimrProto::ERROR;
             }

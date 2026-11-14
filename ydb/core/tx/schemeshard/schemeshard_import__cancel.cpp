@@ -66,6 +66,10 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                     Send(schemeQueryExecutor, new TEvents::TEvPoisonPill());
                     Self->RunningImportSchemeQueryExecutors.erase(schemeQueryExecutor);
                 }
+                if (auto restorer = std::exchange(item.KesusRestorer, {})) {
+                    Send(restorer, new TEvents::TEvPoisonPill());
+                    Self->RunningImportKesusRestorers.erase(restorer);
+                }
             }
         };
 

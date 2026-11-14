@@ -367,7 +367,8 @@ void TVDiskInfo::MigrateOldInfo(const TLockableItem &old)
 TStateStorageRingInfo::RingState TStateStorageRingInfo::CountState(TInstant now,
                                                                    TDuration retryTime,
                                                                    TDuration duration,
-                                                                   const TString &requestId) const
+                                                                   const TString &requestId,
+                                                                   TDuration restartCooldown) const
 {
     if (IsDisabled) {
         return Disabled;
@@ -386,7 +387,7 @@ TStateStorageRingInfo::RingState TStateStorageRingInfo::CountState(TInstant now,
             }
         }
 
-        if (now <= node->StartTime + Timeout) {
+        if (now <= node->StartTime + restartCooldown) {
             hasTimeout = true;
         }
     }

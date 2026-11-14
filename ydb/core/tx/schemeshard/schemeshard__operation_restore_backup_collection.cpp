@@ -197,20 +197,24 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+        const auto& tx = Transaction;
+        const TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()});
+
         if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::LateBackupCollectionNotFound))) {
-            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
+            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist,
+                ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()),
+                TStringBuilder() << "Backup collection not found: " << bcPathStr);
         }
 
-        const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         YDB_LOG_INFO_CTX(context.Ctx, "");
-
-        TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()});
 
         const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
 
         if (!bcPath.IsResolved()) {
-            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
+            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist,
+                ui64(OperationId.GetTxId()), ui64(schemeshardTabletId),
+                TStringBuilder() << "Backup collection not found: " << bcPathStr);
         }
 
         const auto& bc = context.SS->BackupCollections.at(bcPath->PathId);

@@ -46,8 +46,8 @@ public:
 
 class TRBOStatistics {
 public:
-    double ERows = 0;
-    double EBytes = 0;
+    double ERows = 0.0;
+    double EBytes = 0.0;
     double Selectivity = 1.0;
 
     TString ToString(ui32 printOptions);

@@ -120,6 +120,17 @@ public:
         return result ? result : defaultSchema;
     }
 
+    // SchemeNeedActualization: true makes the current schema the one every older portion is rewritten to, false stops that
+    void SetSchemeNeedActualization(const bool value) {
+        if (value) {
+            SchemeVersionForActualization = LastSchemaVersion;
+            SchemeForActualization = GetLastSchema();
+        } else {
+            SchemeVersionForActualization.reset();
+            SchemeForActualization = nullptr;
+        }
+    }
+
     std::optional<TGranuleShardingInfo> GetShardingInfoOptional(const TInternalPathId pathId, const TSnapshot& ss) const {
         auto it = ShardingInfo.find(pathId);
         if (it == ShardingInfo.end() || it->second.empty()) {

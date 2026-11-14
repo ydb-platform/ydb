@@ -269,6 +269,10 @@ public:
         ActualizationIndex->RefreshScheme(context);
     }
 
+    bool IsSchemeActualizationFinished() const {
+        return ActualizationIndex->IsSchemeActualizationFinished();
+    }
+
     void ReturnToIndexes(const THashSet<ui64>& portionIds) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         context.SetPortionExclusiveGuarantee(false);

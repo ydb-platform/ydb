@@ -17,7 +17,13 @@ void TSchemeShard::AddForcedCompaction(
             ForcedCompactionTablesQueue.Enqueue(tablePathId);
         }
     } else if (forcedCompactionInfo->State == TForcedCompactionInfo::EState::Cancelling) {
+        // loaded after a restart in the middle of a cancel: as without the restart, the tables stay registered until
+        // the progress transaction finalizes the operation, so that a newer operation does not take them over before
+        for (auto& tablePathId : forcedCompactionInfo->TablesToCompact) {
+            InProgressForcedCompactionsByTable[tablePathId] = forcedCompactionInfo;
+        }
         CancellingForcedCompactions.emplace_back(forcedCompactionInfo);
+        ForcedCompactionNeedsImmediatePersist = true;
     }
 }
 
@@ -330,6 +336,13 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
     std::unique_ptr<TEvDataShard::TEvCompactTable> request(
         new TEvDataShard::TEvCompactTable(pathId.OwnerId, pathId.LocalPathId));
     request->Record.SetCompactBorrowed(true);
+    if (it->second.TabletType == ETabletType::ColumnShard) {
+        if (auto* info = InProgressForcedCompactionsByShard.FindPtr(shardIdx)) {
+            // CASCADE on a column table: the shard also rewrites every portion to the current schema
+            request->Record.SetActualizeSchema((*info)->Cascade);
+            *request->Record.MutableSeqNo() = NextRound().SerializeToProto();
+        }
+    }
 
     PipeClientCache->Send(
         ctx,

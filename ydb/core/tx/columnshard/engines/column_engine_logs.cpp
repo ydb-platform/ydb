@@ -305,10 +305,14 @@ void TColumnEngineForLogs::RegisterSchemaVersion(
         {"switchOptimizer", switchOptimizer},
         {"switchAccessors", switchAccessorsManager});
 
+    const auto criticalSchemaBefore = vIndex.GetLastCriticalSchema();
     const bool isCriticalScheme = indexInfo->GetSchemeNeedActualization();
     auto* indexInfoActual = vIndex.AddIndex(snapshot, std::move(indexInfo));
     if (isCriticalScheme || switchTieringActualization) {
         StartActualization({});
+    }
+    if (ActualizationStarted && vIndex.GetLastCriticalSchema() != criticalSchemaBefore) {
+        // the new schema is the actualization target, or (SchemeNeedActualization set back to false) there is none now
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
         }
@@ -847,6 +851,18 @@ bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TT
     }
     ActualizationStarted = true;
     return true;
+}
+
+void TColumnEngineForLogs::SetSchemeNeedActualization(const bool value) {
+    // off falls back to the option of the current schema: the end or the stop of a CASCADE compaction must not switch
+    // off a rewrite asked for by SCHEME_NEED_ACTUALIZATION (the schemeshard refuses the combination, but an ALTER in
+    // flight or a lost stop can still produce it)
+    auto& vIndex = MutableVersionedIndex();
+    vIndex.SetSchemeNeedActualization(value || vIndex.GetLastSchema()->GetIndexInfo().GetSchemeNeedActualization());
+    StartActualization({});
+    for (auto&& i : GranulesStorage->GetTables()) {
+        i.second->RefreshScheme();
+    }
 }
 
 void TColumnEngineForLogs::OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const TInternalPathId pathId) {

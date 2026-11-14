@@ -571,6 +571,12 @@ private:
     };
 
     THashMap<TInternalPathId, std::vector<TForcedCompactionWaiter>> ForcedCompactionWaiters;
+    // The schemeshard's requests are applied in SeqNo order; ActualizeSchema of the latest one is in effect until the
+    // request is answered: the portions are being rewritten to the current schema (CASCADE) and the waiters also wait
+    // for that.
+    TMessageSeqNo LastForcedCompactionSeqNo;
+    bool ForcedCompactionActualizeSchema = false;
+    void FinishForcedCompactionActualization();
     ui32 JitterIntervalMS = 200;
     ui32 BaseStatsEvInflight = 0;
     ui32 ExecutorStatsEvInflight = 0;

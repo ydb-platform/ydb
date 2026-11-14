@@ -2404,6 +2404,10 @@ message TEvCompactTable {
     optional NKikimrProto.TPathID PathId = 1;
     optional bool CompactBorrowed = 2; // i.e. taken
     optional bool CompactSinglePartedShards = 3;
+    // Column tables: true also rewrites every portion to the current schema (the reply waits for that too),
+    // false stops that rewrite. The latest SeqNo wins: a request older than the last applied one is ignored.
+    optional bool ActualizeSchema = 4;
+    optional NKikimrTx.TMessageSeqNo SeqNo = 5;
 }
 
 message TEvCompactTableResult {

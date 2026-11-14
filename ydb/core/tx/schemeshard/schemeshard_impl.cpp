@@ -6862,6 +6862,9 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
     case ECompactionType::Forced:
         HandleForcedCompactionResult(ev, ctx);
         break;
+    case ECompactionType::ForcedStop:
+        // the operation was cancelled, there is nothing to complete
+        break;
     default:
         YDB_LOG_WARN_CTX(ctx, "Got TEvDataShard::TEvCompactTableResult with unknown cookie",
             {"cookie", ev->Cookie},

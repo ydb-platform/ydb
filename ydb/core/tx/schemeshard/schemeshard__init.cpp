@@ -6608,7 +6608,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto compactionId = shardsRowset.GetValue<Schema::WaitingForcedCompactionShards::ForcedCompactionId>();
 
                 if (auto* info = Self->ForcedCompactions.FindPtr(compactionId)) {
-                    if (const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx); shardInfo && (*info)->TablesToCompact.contains(shardInfo->PathId)) {
+                    if ((*info)->State != TForcedCompactionInfo::EState::InProgress) {
+                        // a cancel was persisted before the completion of this shard: the operation has given the
+                        // shard up, nothing waits for it any more
+                        Self->PersistForcedCompactionDoneShard(db, shardIdx);
+                    } else if (const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx); shardInfo && (*info)->TablesToCompact.contains(shardInfo->PathId)) {
                         Self->AddForcedCompactionShard(shardIdx, shardInfo->PathId, *info);
                     } else {
                         YDB_LOG_WARN_CTX(ctx, "Unknown shardIdx for compaction",

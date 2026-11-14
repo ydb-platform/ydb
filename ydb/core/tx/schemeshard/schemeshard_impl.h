@@ -396,6 +396,7 @@ public:
         Unspecified = 0,
         Background = 1,
         Forced = 2,
+        ForcedStop = 3,   // the stop of a cancelled CASCADE request to a column shard: its reply means nothing
     };
 
     TBackgroundCleaningStarter BackgroundCleaningStarter;

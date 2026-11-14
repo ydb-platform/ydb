@@ -1155,6 +1155,11 @@ void TColumnShard::SetupCleanupSchemas() {
     if (!AppDataVerified().FeatureFlags.GetEnableCSSchemasCollapsing()) {
         return;
     }
+    if (ForcedCompactionActualizeSchema) {
+        // a cascade compaction is rewriting the portions to the current schema: a version collapsed meanwhile would
+        // make its portions look current and hide them from the rewrite
+        return;
+    }
     Counters.GetCSCounters().OnSetupCleanup();
     if (BackgroundController.IsCleanupSchemasActive()) {
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
@@ -1230,7 +1235,7 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
     }
 
     const auto internalPathId = TablesManager.ResolveInternalPathIdOptional(TSchemeShardLocalPathId::FromRawValue(pathId.LocalPathId), true);
-    auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    auto& engine = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
     auto granule = internalPathId ? engine.GetGranuleOptional(*internalPathId) : nullptr;
     if (!granule) {
         YDB_LOG_WARN("Forced compaction of unknown path",
@@ -1253,17 +1258,44 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    if (*noIntersections) {
+    if (record.HasSeqNo()) {
+        TMessageSeqNo seqNo;
+        seqNo.DeserializeFromProto(record.GetSeqNo()).Validate();
+        if (seqNo < LastForcedCompactionSeqNo) {
+            YDB_LOG_DEBUG("Forced compaction request is outdated",
+                {"tablet", TabletID()},
+                {"pathId", pathId},
+                {"seqNo", ToString(seqNo)},
+                {"lastSeqNo", ToString(LastForcedCompactionSeqNo)});
+            return;
+        }
+        LastForcedCompactionSeqNo = seqNo;
+        // CASCADE: every portion is also rewritten to the current schema and the reply waits for that too; a cancel
+        // repeats the request with the flag off, which stops the rewrite. A plain request leaves the engine alone.
+        if (record.GetActualizeSchema()) {
+            engine.SetSchemeNeedActualization(true);   // always: the current schema may be newer than the last target
+        } else if (ForcedCompactionActualizeSchema) {
+            engine.SetSchemeNeedActualization(false);
+        }
+        ForcedCompactionActualizeSchema = record.GetActualizeSchema();
+    }
+
+    // the latest request supersedes the previous one: there is one forced compaction per table at a time, and the
+    // waiter of a cancelled one must not answer on behalf of the next (also when this request is answered at once)
+    ForcedCompactionWaiters.erase(*internalPathId);
+
+    if (*noIntersections && (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
         YDB_LOG_DEBUG("Forced compaction already done",
             {"tablet", TabletID()},
             {"pathId", pathId},
             {"requestedFrom", ev->Sender});
+        FinishForcedCompactionActualization();
         reply(NKikimrTxDataShard::TEvCompactTableResult::OK);
         return;
     }
 
-    // Portions still intersect: hold the request and reply once the table settles. Background
-    // compaction is kicked for this path; RecheckForcedCompactions() answers the waiter later.
+    // Portions still intersect (or are not rewritten yet): hold the request and reply once the table settles.
+    // Background compaction is kicked for this path; RecheckForcedCompactions() answers the waiter later.
     YDB_LOG_DEBUG("Forced compaction registered",
         {"tablet", TabletID()},
         {"pathId", pathId},
@@ -1291,7 +1323,7 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
             const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
             if (noIntersections.IsFail()) {
                 status = NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED;
-            } else if (*noIntersections) {
+            } else if (*noIntersections && (!ForcedCompactionActualizeSchema || granule->IsSchemeActualizationFinished())) {
                 status = NKikimrTxDataShard::TEvCompactTableResult::OK;
             }
         }
@@ -1307,10 +1339,19 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), waiter.SchemePathId, *status);
             ctx.Send(waiter.Sender, response.Release(), 0, waiter.Cookie);
         }
+        FinishForcedCompactionActualization();   // the request is over whatever the answer
         finished.push_back(internalPathId);
     }
     for (const auto& internalPathId : finished) {
         ForcedCompactionWaiters.erase(internalPathId);
+    }
+}
+
+void TColumnShard::FinishForcedCompactionActualization() {
+    // the CASCADE request is answered: no rewrite target any more, schema cleanup is allowed again
+    if (ForcedCompactionActualizeSchema) {
+        ForcedCompactionActualizeSchema = false;
+        TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().SetSchemeNeedActualization(false);
     }
 }
 

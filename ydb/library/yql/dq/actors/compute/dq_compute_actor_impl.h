@@ -189,6 +189,9 @@ public:
                     CA_LOG_D("Set periodic stats " << reportStatsSettings->MaxInterval << ", has checkpoints: " << (Checkpoints ? "true" : "false"));
                     this->Schedule(reportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
                 }
+                if (reportStatsSettings->DelayFirstReport) {
+                    LastSendStatsTime = NActors::TActivationContext::Monotonic();
+                }
             }
 
             if (SayHelloOnBootstrap()) {

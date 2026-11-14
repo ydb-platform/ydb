@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/generic/maybe.h>
+#include <util/generic/strbuf.h>
 #include <util/folder/path.h>
 #include <util/stream/str.h>
 #include <util/system/file.h>
@@ -48,6 +49,13 @@ void BackupFolder(
 
 void BackupCluster(const TDriver& driver, TFsPath folderPath);
 void BackupDatabase(const TDriver& driver, const TString& database, TFsPath folderPath);
+
+// Enables primary-key-ordered reads of column tables. Older servers reject this pragma.
+inline constexpr const char* OlapSortedReadPragmaSql =
+    "PRAGMA kikimr.OptEnableOlapSortedRead = \"true\";\n";
+
+// True when query issues mean the server does not know PRAGMA kikimr.OptEnableOlapSortedRead.
+bool IsUnknownOlapSortedReadPragma(TStringBuf issues);
 
 // For unit-tests only
 TMaybe<TValue> ProcessResultSet(

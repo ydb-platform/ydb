@@ -3841,6 +3841,100 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(ColumnTableDumpUsesOlapSortedRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        constexpr const char* table = "/Root/olap_sorted";
+
+        const auto missing = session.ExecuteQuery(
+            "PRAGMA kikimr.OptEnableOlapSortedReadMissing = \"true\"; SELECT 1;",
+            NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SerializableRW()).CommitTx()
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(!missing.IsSuccess(), missing.GetIssues().ToString());
+        auto missingIssues = missing.GetIssues().ToOneLineString();
+        SubstGlobal(missingIssues, "OptEnableOlapSortedReadMissing", "OptEnableOlapSortedRead");
+        UNIT_ASSERT_C(NBackup::IsUnknownOlapSortedReadPragma(TStringBuf(missingIssues.data(), missingIssues.size())), missingIssues);
+
+        ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    k Uint64 NOT NULL,
+                    subkey Uint64 NOT NULL,
+                    value Int32 NOT NULL,
+                    PRIMARY KEY (k, subkey)
+                )
+                PARTITION BY HASH(k)
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4
+                );
+            )", table
+        ), true);
+        for (ui32 portion = 0; portion < 2; ++portion) {
+            TStringBuilder query;
+            query << "UPSERT INTO `" << table << "` (k, subkey, value) VALUES ";
+            bool first = true;
+            for (ui32 k = portion; k < 8; k += 2) {
+                for (ui32 subkey : {1u, 0u}) {
+                    query << (std::exchange(first, false) ? "" : ", ")
+                        << "(" << k << "u, " << subkey << "u, " << (100 - k - subkey) << ")";
+                }
+            }
+            query << ";";
+            ExecuteQuery(session, query);
+        }
+
+        const TString fullScan = TString(NBackup::OlapSortedReadPragmaSql) + Sprintf(
+            "SELECT `k`, `subkey`, `value` FROM `%s` ORDER BY `k`, `subkey`;", table);
+        const TString resume = TString(NBackup::OlapSortedReadPragmaSql) + Sprintf(R"(
+                DECLARE $pk AS Tuple<Uint64, Uint64>;
+                SELECT `k`, `subkey`, `value` FROM `%s`
+                WHERE (`k`, `subkey`) > $pk
+                ORDER BY `k`, `subkey`;
+            )", table);
+        const auto pk = TValueBuilder().BeginTuple().AddElement().Uint64(0).AddElement().Uint64(0).EndTuple().Build();
+        TParamsBuilder params;
+        params.AddParam("$pk", pk);
+
+        auto astOf = [&](const TString& query, const TParams& queryParams) {
+            const auto result = session.ExecuteQuery(
+                query,
+                NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SerializableRW()).CommitTx(),
+                queryParams,
+                NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetStats() && result.GetStats()->GetAst(), query);
+            return TString(*result.GetStats()->GetAst());
+        };
+        const auto fullAst = astOf(fullScan, TParamsBuilder().Build());
+        const auto resumeAst = astOf(resume, params.Build());
+        UNIT_ASSERT_C(fullAst.Contains("RequireSortedRead"), fullAst);
+        UNIT_ASSERT_C(fullAst.Contains("DqCnMerge"), fullAst);
+        UNIT_ASSERT_C(resumeAst.Contains("RequireSortedRead"), resumeAst);
+        UNIT_ASSERT_C(resumeAst.Contains("DqCnMerge"), resumeAst);
+
+        const TString withoutPragma = Sprintf(
+            "SELECT `k`, `subkey`, `value` FROM `%s` ORDER BY `k`, `subkey`;", table);
+        const auto unsortedAst = astOf(withoutPragma, TParamsBuilder().Build());
+        UNIT_ASSERT_C(!unsortedAst.Contains("RequireSortedRead"), unsortedAst);
+
+        const auto originalContent = GetTableContent(session, table, "k, subkey");
+        TTempDir tempDir;
+        NDump::TClient backupClient(driver);
+        const auto dumpResult = backupClient.Dump("/Root", tempDir.Path(),
+            NDump::TDumpSettings().AvoidCopy(true).Database("/Root"));
+        UNIT_ASSERT_C(dumpResult.IsSuccess(), dumpResult.GetIssues().ToString());
+
+        ExecuteQuery(session, Sprintf("DROP TABLE `%s`;", table), true);
+        const auto restoreResult = backupClient.Restore(tempDir.Path(), "/Root");
+        UNIT_ASSERT_C(restoreResult.IsSuccess(), restoreResult.GetIssues().ToString());
+        CompareResults(GetTableContent(session, table, "k, subkey"), originalContent);
+    }
+
     Y_UNIT_TEST(OlapColumnTableContentPreservedThroughFsBackupRestore) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

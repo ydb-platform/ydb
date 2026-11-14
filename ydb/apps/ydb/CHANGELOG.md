@@ -1,3 +1,5 @@
+* `ydb tools dump` now prefetches the next result part while writing the current part of a column-oriented table to CSV.
+* `ydb tools dump` checks whether the server supports `PRAGMA kikimr.OptEnableOlapSortedRead` and uses it when reading column-oriented tables. Sorted reads keep dump and the following `ydb tools restore` of large column tables within memory. Servers that do not support the pragma keep the previous read path.
 * Fixed a crash when searching documentation in interactive AI mode.
 * `export s3`, `export nfs` and `export yt` now honor `__omit_backup = "true"`; `tools dump` honors it for tables and changefeeds. S3 export/import now skip async replication changefeeds.
 * Added `ydb admin cluster bridge rollback` to roll a converted cluster back to ordinary mode. `ydb admin cluster bridge list piles` shows its progress.

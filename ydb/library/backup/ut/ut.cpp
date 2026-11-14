@@ -730,6 +730,18 @@ Y_UNIT_TEST(PathParseTest) {
     UNIT_CHECK_GENERATED_EXCEPTION(RelPathFromAbsolute("/ru/my_db", ""), yexception);
 }
 
+Y_UNIT_TEST(UnknownOlapSortedReadPragma) {
+    UNIT_ASSERT(NBackup::IsUnknownOlapSortedReadPragma(
+        "Unknown setting name 'OptEnableOlapSortedRead'"));
+    UNIT_ASSERT(NBackup::IsUnknownOlapSortedReadPragma(
+        "error: UNKNOWN SETTING name \"optenableolapsortedread\""));
+    UNIT_ASSERT(!NBackup::IsUnknownOlapSortedReadPragma(
+        "Unknown setting name 'OptEnableOlapPushdown'"));
+    UNIT_ASSERT(!NBackup::IsUnknownOlapSortedReadPragma(
+        "OptEnableOlapSortedRead is disabled"));
+    UNIT_ASSERT(!NBackup::IsUnknownOlapSortedReadPragma(""));
+}
+
 Y_UNIT_TEST(UnknownFieldsHidden) {
     Ydb::Table::CreateTableRequest proto;
     proto.set_path("/my_db/my_table");

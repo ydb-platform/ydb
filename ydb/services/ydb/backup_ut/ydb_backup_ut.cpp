@@ -3042,6 +3042,55 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    void TestTablePermissionsBackupRestore(bool interruptInheritance) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = CreateSession(queryClient);
+        TSchemeClient schemeClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* table = "/Root/table";
+        ExecuteQuery(session, R"(
+            CREATE TABLE `/Root/table` (
+                Key Uint32,
+                PRIMARY KEY (Key)
+            );
+        )", true);
+
+        const auto modifyResult = schemeClient.ModifyPermissions(
+            table,
+            TModifyPermissionsSettings().AddInterruptInheritance(interruptInheritance)
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(modifyResult.IsSuccess(), modifyResult.GetIssues().ToString());
+
+        CreateBackupLambda(driver, pathToBackup)();
+
+        Ydb::Scheme::ModifyPermissionsRequest permissions;
+        const auto permissionsContent = TFileInput(
+            pathToBackup.Child("table").Child(NDump::NFiles::Permissions().FileName).GetPath()
+        ).ReadAll();
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(permissionsContent, &permissions));
+        UNIT_ASSERT(permissions.has_interrupt_inheritance());
+        UNIT_ASSERT_VALUES_EQUAL(permissions.interrupt_inheritance(), interruptInheritance);
+
+        ExecuteQuery(session, "DROP TABLE `/Root/table`;", true);
+        CreateRestoreLambda(driver, pathToBackup)();
+
+        const auto describeResult = schemeClient.DescribePath(table).ExtractValueSync();
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetEntry().InterruptInheritance, interruptInheritance);
+    }
+
+    Y_UNIT_TEST(TablePermissionsBackupRestore) {
+        TestTablePermissionsBackupRestore(/* interruptInheritance */ false);
+    }
+
+    Y_UNIT_TEST(TablePermissionsBackupRestoreWithInterruptInheritance) {
+        TestTablePermissionsBackupRestore(/* interruptInheritance */ true);
+    }
+
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         NKikimrConfig::TAppConfig appConfig;
         if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact ||

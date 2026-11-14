@@ -2234,6 +2234,111 @@ namespace {
             FinalizeColumnTableSlowS3Export(ctx);
         }
 
+        void TestTablePermissions(bool interruptInheritance) {
+            EnvOptions().EnablePermissionsExport(true);
+            Env(); // Init test env
+            ui64 txId = 100;
+
+            TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+            Env().TestWaitNotification(Runtime(), txId);
+
+            NACLib::TDiffACL diffACL;
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user@builtin", NACLib::InheritNone);
+            if (interruptInheritance) {
+                diffACL.SetInterruptInheritance(true);
+            }
+            TestModifyACL(Runtime(), ++txId, "/MyRoot", "Table", diffACL.SerializeAsString(), "user@builtin");
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                  endpoint: "localhost:%d"
+                  scheme: HTTP
+                  items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: ""
+                  }
+                }
+            )", S3Port()));
+            Env().TestWaitNotification(Runtime(), txId);
+
+            auto* permissions = S3Mock().GetData().FindPtr("/permissions.pb");
+            UNIT_ASSERT(permissions);
+
+            CheckPermissions(*permissions, CreateProtoComparator(Sprintf(R"(
+                actions {
+                  change_owner: "user@builtin"
+                }
+                actions {
+                  grant {
+                    subject: "user@builtin"
+                    permission_names: "ydb.generic.use"
+                  }
+                }
+                interrupt_inheritance: %s
+            )", interruptInheritance ? "true" : "false")));
+        }
+
+        void TestSystemViewPermissions(bool interruptInheritance) {
+            Env();
+            ui64 txId = 100;
+
+            Runtime().GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+            TestLs(Runtime(), "/MyRoot/.sys/partition_stats", false, NLs::PathExist);
+
+            NACLib::TDiffACL diffACL;
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+            if (interruptInheritance) {
+                diffACL.SetInterruptInheritance(true);
+            }
+            TestModifyACL(Runtime(), ++txId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
+            Env().TestWaitNotification(Runtime(), txId);
+
+            auto exportRequest = NDescUT::TExportRequest(S3Port(), {
+                R"(
+                    items {
+                        source_path: "/MyRoot/.sys/partition_stats"
+                        destination_prefix: "/partition_stats"
+                    }
+                )",
+            });
+
+            TestExport(Runtime(), ++txId, "/MyRoot", exportRequest.GetRequest());
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TestGetExport(Runtime(), txId, "/MyRoot");
+
+            UNIT_ASSERT(HasS3File("/partition_stats/system_view.pb"));
+            UNIT_ASSERT(HasS3File("/partition_stats/permissions.pb"));
+            UNIT_ASSERT(HasS3File("/partition_stats/metadata.json"));
+
+            const auto sysviewDesc = GetS3FileContent("/partition_stats/system_view.pb");
+            const auto sysviewDescExpected = "sys_view_id: 1\nsys_view_name: \"partition_stats\"\n";
+            UNIT_ASSERT_EQUAL_C(
+                sysviewDesc, sysviewDescExpected,
+                TStringBuilder() << "\nExpected:\n\n" << sysviewDescExpected << "\n\nActual:\n\n" << sysviewDesc);
+
+            const auto permissions = GetS3FileContent("/partition_stats/permissions.pb");
+            CheckPermissions(permissions, CreateProtoComparator(Sprintf(R"(
+                actions {
+                  change_owner: "user0@builtin"
+                }
+                actions {
+                  grant {
+                    subject: "user0@builtin"
+                    permission_names: "ydb.generic.use"
+                  }
+                }
+                interrupt_inheritance: %s
+            )", interruptInheritance ? "true" : "false")));
+        }
+
     private:
         TPortManager PortManager;
         ui16 S3ServerPort = 0;
@@ -4900,48 +5005,11 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(TablePermissions) {
-        EnvOptions().EnablePermissionsExport(true);
-        Env(); // Init test env
-        ui64 txId = 100;
+        TestTablePermissions(/* interruptInheritance */ false);
+    }
 
-        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
-        )");
-        Env().TestWaitNotification(Runtime(), txId);
-
-        NACLib::TDiffACL diffACL;
-        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user@builtin", NACLib::InheritNone);
-        TestModifyACL(Runtime(), ++txId, "/MyRoot", "Table", diffACL.SerializeAsString(), "user@builtin");
-        Env().TestWaitNotification(Runtime(), txId);
-
-        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: ""
-              }
-            }
-        )", S3Port()));
-        Env().TestWaitNotification(Runtime(), txId);
-
-        auto* permissions = S3Mock().GetData().FindPtr("/permissions.pb");
-        UNIT_ASSERT(permissions);
-        CheckPermissions(*permissions, CreateProtoComparator(R"(
-            actions {
-              change_owner: "user@builtin"
-            }
-            actions {
-              grant {
-                subject: "user@builtin"
-                permission_names: "ydb.generic.use"
-              }
-            }
-        )"));
+    Y_UNIT_TEST(TablePermissionsWithInterruptInheritance) {
+        TestTablePermissions(/* interruptInheritance */ true);
     }
 
     Y_UNIT_TEST(Checksums) {
@@ -5876,54 +5944,11 @@ state: STATE_ENABLED
     }
 
     Y_UNIT_TEST(SystemViewWithPermissionsExport) {
-        Env();
-        ui64 txId = 100;
+        TestSystemViewPermissions(/* interruptInheritance */ false);
+    }
 
-        Runtime().GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
-
-        TestLs(Runtime(), "/MyRoot/.sys/partition_stats", false, NLs::PathExist);
-
-        NACLib::TDiffACL diffACL;
-        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
-        TestModifyACL(Runtime(), ++txId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
-        Env().TestWaitNotification(Runtime(), txId);
-
-        auto exportRequest = NDescUT::TExportRequest(S3Port(), {
-            R"(
-                items {
-                    source_path: "/MyRoot/.sys/partition_stats"
-                    destination_prefix: "/partition_stats"
-                }
-            )",
-        });
-
-        TestExport(Runtime(), ++txId, "/MyRoot", exportRequest.GetRequest());
-        Env().TestWaitNotification(Runtime(), txId);
-
-        TestGetExport(Runtime(), txId, "/MyRoot");
-
-        UNIT_ASSERT(HasS3File("/partition_stats/system_view.pb"));
-        UNIT_ASSERT(HasS3File("/partition_stats/permissions.pb"));
-        UNIT_ASSERT(HasS3File("/partition_stats/metadata.json"));
-
-        const auto sysviewDesc = GetS3FileContent("/partition_stats/system_view.pb");
-        const auto sysviewDescExpected = "sys_view_id: 1\nsys_view_name: \"partition_stats\"\n";
-        UNIT_ASSERT_EQUAL_C(
-            sysviewDesc, sysviewDescExpected,
-            TStringBuilder() << "\nExpected:\n\n" << sysviewDescExpected << "\n\nActual:\n\n" << sysviewDesc);
-
-        const auto permissions = GetS3FileContent("/partition_stats/permissions.pb");
-        CheckPermissions(permissions, CreateProtoComparator(R"(
-            actions {
-              change_owner: "user0@builtin"
-            }
-            actions {
-              grant {
-                subject: "user0@builtin"
-                permission_names: "ydb.generic.use"
-              }
-            }
-        )"));
+    Y_UNIT_TEST(SystemViewWithPermissionsAndInterruptInheritanceExport) {
+        TestSystemViewPermissions(/* interruptInheritance */ true);
     }
 
     Y_UNIT_TEST(ExportTableWithUniqueIndex) {

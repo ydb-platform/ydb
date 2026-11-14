@@ -855,9 +855,8 @@ void FillPermissionsFromAcl(
     for (const auto& permission : toGrant) {
         *to->mutable_actions()->Add()->mutable_grant() = permission;
     }
-    if (acl.GetInterruptInheritance()) {
-        to->set_interrupt_inheritance(true);
-    }
+    // The output describes the complete ACL state, so serialize false explicitly too.
+    to->set_interrupt_inheritance(acl.GetInterruptInheritance());
 }
 
 using namespace NACLib;
@@ -1515,6 +1514,9 @@ bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
 
     NACLib::TDiffACL diffACL;
     diffACL.ClearAccess();
+    // A present input describes the complete ACL state. Treat an omitted field as
+    // false and apply it explicitly.
+    diffACL.SetInterruptInheritance(in->interrupt_inheritance());
     for (const auto& action : in->actions()) {
         if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
             return false;

@@ -24,4 +24,4 @@ Optional initial spreading across keys uses [`UNIFORM_PARTITIONS`](../../../conc
 
 ---
 
-<span id="cluster-partition-size-limit">\*</span> Regardless of the `AUTO_PARTITIONING_PARTITION_SIZE_MB` value, a partition is always split when it reaches the hard size limit configured at the cluster level (**2 GiB** by default).
+<span id="cluster-partition-size-limit">\*</span> Regardless of the `AUTO_PARTITIONING_PARTITION_SIZE_MB` value, a partition is always split when it reaches the hard size limit configured at the cluster level using the [force_shard_split_data_size](../../../reference/configuration/immediate_controls_config.md) parameter (**2 GiB** by default).

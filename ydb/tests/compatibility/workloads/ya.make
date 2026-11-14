@@ -17,7 +17,11 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
-REQUIREMENTS(cpu:4)
+IF (SANITIZER_TYPE == "address")
+    REQUIREMENTS(cpu:4 ram:72)
+ELSE()
+    REQUIREMENTS(cpu:4 ram:48)
+ENDIF()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(

@@ -801,6 +801,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             del self._slots[i.node_id]
 
     def unregister_and_stop_slots(self, slots):
+        slots = [self._slots[i.node_id] for i in slots if i.node_id in self._slots]
         self.__unregister_slots(slots)
         for i in slots:
             i.stop()

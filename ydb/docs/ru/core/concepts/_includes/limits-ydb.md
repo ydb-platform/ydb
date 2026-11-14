@@ -20,6 +20,7 @@
 | Таблица | Максимальная длина имени столбца | 255 | Ограничивает количество символов в имени столбца.  | MaxTableColumnNameLength | SCHEME_ERROR | Column name too long
 | Таблица | Максимальное количество столбцов в первичном ключе | 20 | Каждая таблица должна иметь первичный ключ. Количество столбцов, входящих в состав первичного ключа, не может превышать это ограничение. | MaxTableKeyColumns | SCHEME_ERROR | Too many key columns
 | Таблица | Максимальное количество индексов | 20 | Максимальное количество индексов помимо индекса первичного ключа, которые могут быть созданы на таблице. | MaxTableIndices | PRECONDITION_FAILED | Indexes count has reached maximum value in the table
+| Таблица | Максимальное количество потоков изменений | 5 | Максимальное количество потоков изменений Change Data Capture (CDC), которые могут быть созданы на таблице. | MaxTableCdcStreams | GENERIC_ERROR | Cdc streams count has reached maximum value in the table
 | Таблица | Максимальное количество реплик | 3 | Максимальное количество read-only реплик, которое можно указать при создании таблицы с репликами. | MaxFollowersCount | BAD_REQUEST | Too much followers
 | Таблица | Максимальное количество копируемых таблиц | 10 000 | Ограничение на размер списка таблиц для операций консистентного копирования таблиц. | MaxConsistentCopyTargets | BAD_REQUEST | Consistent copy object count limit exceeded
 

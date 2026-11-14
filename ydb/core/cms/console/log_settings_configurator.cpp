@@ -8,8 +8,17 @@
 #include <util/stream/file.h>
 #include <google/protobuf/text_format.h>
 #include <ydb/core/cms/console/grpc_library_helper.h>
+#include <ydb/core/kqp/event_log/audit_event_log_writer.h>
+#include <ydb/core/kqp/event_log/kqp_event_log_writer.h>
+#include <ydb/core/kqp/event_log/tli_event_log_writer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
+namespace {
+
+const TString DefaultSinkName("Default");
+
+}
 
 namespace NKikimr::NConsole {
 
@@ -38,6 +47,15 @@ public:
                              const TActorContext &ctx);
     void ApplyComponentSettings(const TVector<NLog::TComponentSettings> &settings,
                                 const TActorContext &ctx);
+
+    static std::pair<TString, TString> GetDefaultStoreTableName(const TString& eventSource);
+
+    static NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings
+    GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink, const NKikimrConfig::TLogConfig_TSink* defaultSink);
+
+    NStructuredLog::ILogSinkSPtr CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
+        const NKikimrConfig::TLogConfig_TSink* defaultSink);
+    void ApplyLogSinkSettings(const NKikimrConfig::TLogConfig &config, const TActorContext &ctx);
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -138,6 +156,8 @@ void TLogSettingsConfigurator::ApplyLogConfig(const NKikimrConfig::TLogConfig &c
 
     // TODO: support update for AllowDrop, Format, ClusterName, UseLocalTimestamps.
     // Options should either become atomic or update should be done via log service.
+
+    ApplyLogSinkSettings(config, ctx);
 }
 
 TVector<NLog::TComponentSettings>
@@ -205,6 +225,180 @@ void TLogSettingsConfigurator::ApplyComponentSettings(const TVector<NLog::TCompo
             YDB_LOG_CTX(ctx, prio, "TLogSettingsConfigurator",
                 {"message", msg});
         }
+    }
+}
+
+std::pair<TString, TString> TLogSettingsConfigurator::GetDefaultStoreTableName(const TString& eventSource) {
+    std::map<TString, std::pair<TString, TString>> defValues = {
+        {"kqp-requests", {"kqp_requests", "kqp_requests"}},
+        {"tli-datashard", {"tli_datashard", "tli_datashard"}},
+        {"tli-session", {"tli_session", "tli_session"}},
+        {"audit-schemeshard", {"audit_schemeshard", "audit_schemeshard"}},
+        {"audit-grpc-proxy", {"audit_grpc_proxy", "audit_grpc_proxy"}},
+        {"audit-grpc-conn", {"audit_grpc_conn", "audit_grpc_conn"}},
+        {"audit-grpc-login", {"audit_grpc_login", "audit_grpc_login"}},
+        {"audit-monitoring", {"audit_monitoring", "audit_monitoring"}},
+        {"audit-heartbeat", {"audit_heartbeat", "audit_heartbeat"}},
+        {"audit-bsc", {"audit_bsc", "audit_bsc"}},
+        {"audit-distconf", {"audit_distconf", "audit_distconf"}},
+        {"audit-web-login", {"audit_web_login", "audit_web_login"}},
+        {"audit-console", {"audit_console", "audit_console"}}};
+    auto it = defValues.find(eventSource);
+    if (it == end(defValues)) {
+        return {};
+    }
+    return it->second;
+}
+
+NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings
+TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink,
+    const NKikimrConfig::TLogConfig_TSink* defaultSink) {
+
+    NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings settings;
+
+#define SET_PROPERTY(X)                                             \
+    if (sink.Has##X()) {                                            \
+        settings.X = sink.Get##X();                                 \
+    } else if (defaultSink != nullptr && defaultSink->Has##X()) {   \
+        settings.X = defaultSink->Get##X();                         \
+    }
+
+    SET_PROPERTY(DatabasePath);
+    SET_PROPERTY(StoreName);
+    SET_PROPERTY(TableName);
+    SET_PROPERTY(MaxBatchSize);
+    SET_PROPERTY(FlushBatchSize);
+
+    if (!sink.HasFlushTimeout()) {
+        settings.FlushTimeout = TDuration::MilliSeconds(sink.GetFlushTimeout());
+    } else if (defaultSink != nullptr && defaultSink->HasFlushTimeout()) {
+        settings.FlushTimeout = TDuration::MilliSeconds(defaultSink->GetFlushTimeout());
+    }
+
+    SET_PROPERTY(StoreShardsCount);
+    SET_PROPERTY(TableShardsCount);
+    SET_PROPERTY(MaxWriteAttempts);
+    SET_PROPERTY(MaxActiveWrites);
+
+    if (!sink.HasTryCreateTimeout()) {
+        settings.TryCreateTimeout = TDuration::MilliSeconds(sink.GetTryCreateTimeout());
+    } else if (defaultSink != nullptr && defaultSink->HasFlushTimeout()) {
+        settings.TryCreateTimeout = TDuration::MilliSeconds(defaultSink->GetTryCreateTimeout());
+    }
+
+#undef SET_PROPERTY
+
+    // Apply default store and table name
+    if (settings.StoreName.empty() || settings.TableName.empty()) {
+        auto defs = GetDefaultStoreTableName(sink.GetSource());
+
+        if (settings.StoreName.empty()) {
+            settings.StoreName = defs.first;
+        }
+
+        if (settings.TableName.empty()) {
+            settings.TableName = defs.second;
+        }
+    }
+    return settings;
+}
+
+NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
+    const NKikimrConfig::TLogConfig_TSink* defaultSink) {
+
+    auto eventSource = sink.GetSource();
+
+    TString destination;
+    if (sink.HasDestination()) {
+        destination = sink.GetDestination();
+    } else if (defaultSink != nullptr && defaultSink->HasDestination()) {
+        destination = defaultSink->GetDestination();
+    }
+
+#define CHECK_SINK(EventSource, Dest, Class, GetSettings) if (eventSource == EventSource && destination == Dest) {       \
+        auto settins = GetSettings(sink, defaultSink);                                                                   \
+        return std::make_shared<Class>(settins);                                                                         \
+    }
+
+    using namespace NKqp::NEventLog;
+    CHECK_SINK("kqp-requests", "local-db", NToColumnShard::TKqpEventLogWriter, GetColumnShardDatabaseSettings);
+
+    CHECK_SINK("tli-datashard", "local-db", NToColumnShard::TDataShardTliEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("tli-session", "local-db", NToColumnShard::TSessionTliEventLogWriter, GetColumnShardDatabaseSettings);
+
+    CHECK_SINK("audit-schemeshard", "local-db", NAudit::NToColumnShard::TSchemeShardEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-grpc-proxy", "local-db", NAudit::NToColumnShard::TGrpcProxyEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-grpc-conn", "local-db", NAudit::NToColumnShard::TGrpcConnEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-grpc-login", "local-db", NAudit::NToColumnShard::TGrpcLoginEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-monitoring", "local-db", NAudit::NToColumnShard::TMonitoringEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-heartbeat", "local-db", NAudit::NToColumnShard::TAuditServiceEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-bsc", "local-db", NAudit::NToColumnShard::TBscEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-distconf", "local-db", NAudit::NToColumnShard::TDistconfEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-web-login", "local-db", NAudit::NToColumnShard::TWebLoginEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-console", "local-db", NAudit::NToColumnShard::TConsoleEventLogWriter, GetColumnShardDatabaseSettings);
+
+#undef CHECK
+    return nullptr;
+}
+
+void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogConfig &config, const TActorContext &ctx) {
+    Y_UNUSED(config);
+
+    auto *logSettings = static_cast<NLog::TSettings*>(ctx.LoggerSettings());
+
+    NActors::NLog::TSettings::TLogSinkMap oldSinks, newSinks;
+
+    auto oldSinksPtr = logSettings->Sinks.atomic_load();
+    if (oldSinksPtr) {
+        oldSinks = *oldSinksPtr;
+    }
+
+    const NKikimrConfig::TLogConfig_TSink* defaultSinkPtr{nullptr};
+    for(const auto& sink: config.GetSink()) {
+        if (sink.GetSource() == DefaultSinkName) {
+            auto sinkConfig = sink.ShortDebugString();
+            YDB_LOG_INFO("LogSinksConfig: Found default sink settings",
+                {"sinkConfig", sinkConfig});
+            defaultSinkPtr = & sink;
+            break;
+        }
+    }
+
+    std::map<TString, NKikimrConfig::TLogConfig_TSink> result;
+    for(const auto& sink: config.GetSink()) {
+        if (&sink == defaultSinkPtr) {
+            continue;
+        }
+
+        auto sinkConfig = sink.ShortDebugString();
+        YDB_LOG_CREATE_CONTEXT({"sinkConfig", sinkConfig});
+
+        if (!sink.HasSource()) {
+            YDB_LOG_ERROR("LogSinksConfig: Source is not specified");
+            continue;
+        }
+
+        auto it = oldSinks.find(sinkConfig);
+        if (it != end(oldSinks)) {
+            YDB_LOG_INFO("LogSinksConfig: Don't reconfigure sink");
+
+            newSinks[sinkConfig] = it->second;
+            oldSinks.erase(it);
+        } else {
+            auto sinkPtr = CreateLogSink(sink, defaultSinkPtr);
+            if (sinkPtr != nullptr) {
+                YDB_LOG_INFO("LogSinksConfig: Create sink");
+
+                newSinks[sinkConfig] = sinkPtr;
+            } else {
+                YDB_LOG_ERROR("LogSinksConfig: Can't create sink");
+            }
+        }
+    }
+
+    logSettings->Sinks.atomic_store(MakeTrueAtomicShared<NLog::TSettings::TLogSinkMap>(std::move(newSinks)));
+    for(auto& oldSink: oldSinks) {
+        oldSink.second->Stop();
     }
 }
 

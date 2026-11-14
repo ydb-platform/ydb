@@ -2002,7 +2002,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         entry.SyncVersion = true;
         runtime.Send(new IEventHandle(schemeCache, sender,
-            new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.Release())));
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.Release())), 0, true);
         const auto result = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender,
             TDuration::Seconds(10));
         UNIT_ASSERT(result);

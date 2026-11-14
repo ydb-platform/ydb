@@ -307,3 +307,5 @@ class TestSqsCountersExportDelay(KikimrSqsTestBase):
 
             assert_that(counter, equal_to(0))
             break
+
+# CI baseline for #59292: keep the original waits.

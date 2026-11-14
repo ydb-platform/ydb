@@ -77,6 +77,20 @@ Y_UNIT_TEST_SUITE(KqpReadQuotaRegression) {
         }
     };
 
+    Y_UNIT_TEST(FrequentPollingDoesNotLoseRefill) {
+        TFixture f;
+        auto read = f.Read();
+        UNIT_ASSERT(read->TryConsumeQuota(TDuration::MilliSeconds(5)));
+        read->ReturnQuota(TFixture::Cycles(TDuration::MilliSeconds(6)));
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(2);
+        bool available = false;
+        do {
+            Sleep(TDuration::MilliSeconds(1));
+            available = read->HasAvailableQuota();
+        } while (!available && TMonotonic::Now() < deadline);
+        UNIT_ASSERT_C(available, "Positive quota must refill even when polled every millisecond");
+    }
+
     Y_UNIT_TEST(DebtSurvivesLastIteratorAndCacheCleanup) {
         TFixture f;
         {

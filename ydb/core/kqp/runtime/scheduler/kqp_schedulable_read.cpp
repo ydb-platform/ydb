@@ -102,8 +102,14 @@ bool TSchedulableRead::HasAvailableQuota() {
 
 void TSchedulableRead::TQuotaState::Refill() {
     if (const auto now = TMonotonic::Now(); Y_LIKELY(now >= LastRefill)) {
-        auto elapsedMs = (now - LastRefill).MilliSeconds();
-        AvailableQuotaMs = std::min<i64>(MaxQuotaMs, AvailableQuotaMs + (elapsedMs * QuotaPerSecond));
+        constexpr ui64 usPerSecond = TDuration::Seconds(1).MicroSeconds();
+        const auto elapsedUs = (now - LastRefill).MicroSeconds();
+        // Split whole seconds first to avoid overflowing elapsedUs * MaxQuotaMs.
+        const auto fractionalCredit = (elapsedUs % usPerSecond) * MaxQuotaMs + RefillRemainder;
+        const auto refillMs = (elapsedUs / usPerSecond) * MaxQuotaMs + fractionalCredit / usPerSecond;
+        AvailableQuotaMs = std::min<i64>(MaxQuotaMs, AvailableQuotaMs + static_cast<i64>(refillMs));
+        // Once full, discard excess credit instead of carrying it into the next burst.
+        RefillRemainder = AvailableQuotaMs == static_cast<i64>(MaxQuotaMs) ? 0 : fractionalCredit % usPerSecond;
         LastRefill = now;
     }
 }

@@ -12,6 +12,7 @@ struct TSchedulableRead : TSchedulableTask {
         ui64 MaxQuotaMs = 1000;
         double QuotaPerSecond = 1.0;
         i64 AvailableQuotaMs = 1000;
+        ui64 RefillRemainder = 0;
         TMonotonic LastRefill = TMonotonic::Now();
 
         void Refill();

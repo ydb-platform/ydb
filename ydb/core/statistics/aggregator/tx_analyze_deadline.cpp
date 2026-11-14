@@ -1,4 +1,5 @@
 #include "aggregator_impl.h"
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/statistics/service/service.h>

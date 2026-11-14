@@ -1,4 +1,5 @@
 #include "traceid.h"
+#include <ydb/core/protos/tracing.pb.h>
 #include <util/random/random.h>
 #include <util/stream/str.h>
 

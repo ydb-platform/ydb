@@ -1,4 +1,5 @@
 #include "mirrorer.h"
+#include <google/protobuf/util/message_differencer.h>
 
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>

@@ -1,4 +1,5 @@
 #include "scram_auth_actor.h"
+#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <openssl/rand.h>
 #include <library/cpp/string_utils/base64/base64.h>

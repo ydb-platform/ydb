@@ -1,4 +1,5 @@
 #include "plain_ldap_auth_proxy_actor.h"
+#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/login_shared_func.h>

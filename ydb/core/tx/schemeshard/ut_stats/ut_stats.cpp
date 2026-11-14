@@ -1,4 +1,5 @@
 #include <ydb/core/cms/console/console.h>
+#include <google/protobuf/util/message_differencer.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>

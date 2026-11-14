@@ -180,3 +180,66 @@ TString TSchemeCacheRequest::ToString(const NScheme::TTypeRegistry& typeRegistry
 
 } // NSchemeCache
 } // NKikimr
+
+namespace NKikimr::NSchemeCache {
+
+TDomainInfo::TDomainInfo(const NKikimrSubDomains::TDomainDescription& descr)
+    : DomainKey(TPathId::FromDomainKey(descr.GetDomainKey()))
+    , Params(descr.GetProcessingParams())
+    , Coordinators(descr.GetProcessingParams())
+{
+    if (descr.HasResourcesDomainKey()) {
+        ResourcesDomainKey = TPathId::FromDomainKey(descr.GetResourcesDomainKey());
+    } else {
+        ResourcesDomainKey = DomainKey;
+    }
+
+    if (descr.HasServerlessComputeResourcesMode()) {
+        ServerlessComputeResourcesMode = descr.GetServerlessComputeResourcesMode();
+    }
+
+    if (descr.HasSharedHive()) {
+        SharedHiveId = descr.GetSharedHive();
+    }
+
+    if (descr.HasSecurityState()) {
+        for (const auto& sid : descr.GetSecurityState().GetSids()) {
+            switch (sid.GetType()) {
+            case NLoginProto::ESidType_SidType_USER: {
+                THashInitParams userHashesInitParams;
+                userHashesInitParams.reserve(sid.HashesInitParamsSize());
+                for (const auto& hashInitParams : sid.GetHashesInitParams()) {
+                    userHashesInitParams.emplace(hashInitParams.GetHashType(), hashInitParams.GetInitParams());
+                }
+                Users.emplace(sid.GetName(), std::move(userHashesInitParams));
+                break;
+            }
+            case NLoginProto::ESidType_SidType_GROUP: {
+                TVector<TString> members(sid.GetMembers().begin(), sid.GetMembers().end());
+                Groups.emplace_back(sid.GetName(), std::move(members));
+                break;
+            }
+            default:
+                break;
+            }
+        }
+    }
+}
+
+ui64 TDomainInfo::ExtractSchemeShard() const {
+    if (Params.HasSchemeShard()) {
+        return Params.GetSchemeShard();
+    } else {
+        return DomainKey.OwnerId;
+    }
+}
+
+ui64 TDomainInfo::ExtractHive() const {
+    if (IsServerless()) {
+        return SharedHiveId;
+    } else {
+        return Params.GetHive();
+    }
+}
+
+} // namespace NKikimr::NSchemeCache

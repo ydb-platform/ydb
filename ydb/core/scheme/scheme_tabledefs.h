@@ -4,18 +4,19 @@
 #include "scheme_tablecell.h"
 
 #include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/scheme/protos/key_range.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>  // for NScheme::TTypeInfo
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>  // for NScheme::NTypeIds
 
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>  // for NPg::TypeDescIsComparable
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/map.h>
-#include <util/generic/yexception.h>
+
+namespace NKikimrTx {
+    class TKeyRange;
+}
 
 namespace NKikimr {
 
@@ -24,20 +25,7 @@ enum class EColumnTypeConstraint {
     NotNull,
 };
 
-inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
-    switch (typeInfo.GetTypeId()) {
-        case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::Yson:
-        case NScheme::NTypeIds::Float:
-        case NScheme::NTypeIds::Double:
-        case NScheme::NTypeIds::JsonDocument:
-            return false;
-        case NScheme::NTypeIds::Pg:
-            return NPg::TypeDescIsComparable(typeInfo.GetPgTypeDesc());
-        default:
-            return true;
-    }
-}
+bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo);
 
 using TSchemaVersion = ui64;
 
@@ -252,25 +240,9 @@ public:
     TSerializedTableRange &operator=(const TSerializedTableRange &other) = default;
     TSerializedTableRange &operator=(TSerializedTableRange &&other) = default;
 
-    void Load(const NKikimrTx::TKeyRange& range) {
-        From.Parse(range.GetFrom());
-        To.Parse(range.GetTo());
-        FromInclusive = range.GetFromInclusive();
-        ToInclusive = range.GetToInclusive();
-    }
+    void Load(const NKikimrTx::TKeyRange& range);
 
-    void Serialize(NKikimrTx::TKeyRange& range) const {
-        range.SetFrom(From.GetBuffer());
-        range.SetFromInclusive(FromInclusive);
-        if (Point) {
-            Y_ENSURE(FromInclusive);
-            range.SetTo(From.GetBuffer());
-            range.SetToInclusive(true);
-        } else {
-            range.SetTo(To.GetBuffer());
-            range.SetToInclusive(ToInclusive);
-        }
-    }
+    void Serialize(NKikimrTx::TKeyRange& range) const;
 
     bool IsEmpty(TConstArrayRef<NScheme::TTypeInfo> types) const;
 
@@ -600,11 +572,7 @@ private:
 struct TSecurityObject : TAtomicRefCount<TSecurityObject>, NACLib::TSecurityObject {
     using TPtr = TIntrusivePtr<TSecurityObject>;
 
-    static NACLib::TSecurityObject FromByteStream(const NACLibProto::TSecurityObject* parent, const TString& owner, const TString& acl, bool isContainer) {
-        NACLib::TSecurityObject object(owner, isContainer);
-        Y_ENSURE(object.MutableACL()->ParseFromString(acl));
-        return parent != nullptr ? object.MergeWithParent(*parent) : object;
-    }
+    static NACLib::TSecurityObject FromByteStream(const NACLibProto::TSecurityObject* parent, const TString& owner, const TString& acl, bool isContainer);
 
     TSecurityObject(const TString& owner, const TString& acl, bool isContainer)
         : NACLib::TSecurityObject(FromByteStream(nullptr, owner, acl, isContainer))

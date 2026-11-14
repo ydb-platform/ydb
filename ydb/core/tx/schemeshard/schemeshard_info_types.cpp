@@ -1,4 +1,9 @@
 #include "schemeshard_info_types.h"
+#include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/kmeans_clusters.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <google/protobuf/util/message_differencer.h>
 
 #include "schemeshard_generated_column_utils.h"
 #include "schemeshard_impl.h"
@@ -3865,3 +3870,1937 @@ bool ValidateTableDetailedMetricsSettings(
 
 } // namespace NSchemeShard
 } // namespace NKikimr
+
+namespace NKikimr::NSchemeShard {
+
+void TSplitSettings::Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
+    TControlBoard::RegisterSharedControl(SplitMergePartCountLimit,         icb->SchemeShardControls.SplitMergePartCountLimit);
+    TControlBoard::RegisterSharedControl(FastSplitSizeThreshold,           icb->SchemeShardControls.FastSplitSizeThreshold);
+    TControlBoard::RegisterSharedControl(FastSplitRowCountThreshold,       icb->SchemeShardControls.FastSplitRowCountThreshold);
+    TControlBoard::RegisterSharedControl(FastSplitCpuPercentageThreshold,  icb->SchemeShardControls.FastSplitCpuPercentageThreshold);
+
+    TControlBoard::RegisterSharedControl(SplitByLoadEnabled,               icb->SchemeShardControls.SplitByLoadEnabled);
+    TControlBoard::RegisterSharedControl(SplitByLoadMaxShardsDefault,      icb->SchemeShardControls.SplitByLoadMaxShardsDefault);
+    TControlBoard::RegisterSharedControl(MergeByLoadMinUptimeSec,          icb->SchemeShardControls.MergeByLoadMinUptimeSec);
+    TControlBoard::RegisterSharedControl(MergeByLoadMinLowLoadDurationSec, icb->SchemeShardControls.MergeByLoadMinLowLoadDurationSec);
+
+    TControlBoard::RegisterSharedControl(ForceShardSplitDataSize,          icb->SchemeShardControls.ForceShardSplitDataSize);
+    TControlBoard::RegisterSharedControl(DisableForceShardSplit,           icb->SchemeShardControls.DisableForceShardSplit);
+
+    TControlBoard::RegisterSharedControl(EnableSplitMergeFairScheduling,   icb->SchemeShardControls.EnableSplitMergeFairScheduling);
+    TControlBoard::RegisterSharedControl(MergeBySizeEnabled,               icb->SchemeShardControls.MergeBySizeEnabled);
+}
+
+TForceShardSplitSettings TSplitSettings::GetForceShardSplitSettings() const {
+    return TForceShardSplitSettings{
+        .ForceShardSplitDataSize = ui64(ForceShardSplitDataSize),
+        .DisableForceShardSplit = ui64(DisableForceShardSplit) != 0,
+        .MergeBySizeEnabled = ui64(MergeBySizeEnabled) != 0,
+    };
+}
+
+void TBackupToS3Settings::Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
+    TControlBoard::RegisterSharedControl(EnableAsyncReplicationExport, icb->BackupControls.S3Controls.EnableAsyncReplicationExport);
+    TControlBoard::RegisterSharedControl(EnableAsyncReplicationImport, icb->BackupControls.S3Controls.EnableAsyncReplicationImport);
+
+    TControlBoard::RegisterSharedControl(EnableTransferExport, icb->BackupControls.S3Controls.EnableTransferExport);
+    TControlBoard::RegisterSharedControl(EnableTransferImport, icb->BackupControls.S3Controls.EnableTransferImport);
+
+    TControlBoard::RegisterSharedControl(EnableExternalDataSourceExport, icb->BackupControls.S3Controls.EnableExternalDataSourceExport);
+    TControlBoard::RegisterSharedControl(EnableExternalDataSourceImport, icb->BackupControls.S3Controls.EnableExternalDataSourceImport);
+
+    TControlBoard::RegisterSharedControl(EnableExternalTableExport, icb->BackupControls.S3Controls.EnableExternalTableExport);
+    TControlBoard::RegisterSharedControl(EnableExternalTableImport, icb->BackupControls.S3Controls.EnableExternalTableImport);
+
+    TControlBoard::RegisterSharedControl(EnableSysViewPermissionsExport, icb->BackupControls.S3Controls.EnableSysViewPermissionsExport);
+    TControlBoard::RegisterSharedControl(EnableSysViewPermissionsImport, icb->BackupControls.S3Controls.EnableSysViewPermissionsImport);
+
+    TControlBoard::RegisterSharedControl(EnableKesusExport, icb->BackupControls.S3Controls.EnableKesusExport);
+}
+
+void TIncrementalRestoreSettings::Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
+    TControlBoard::RegisterSharedControl(MaxIncrementalRestoreTablesInFlight,
+                                         icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+    TControlBoard::RegisterSharedControl(MaxIncrementalRestoreOverallDurationSeconds,
+                                         icb->SchemeShardControls.MaxIncrementalRestoreOverallDurationSeconds);
+    TControlBoard::RegisterSharedControl(MaxIncrementalRestoreStageDurationSeconds,
+                                         icb->SchemeShardControls.MaxIncrementalRestoreStageDurationSeconds);
+}
+
+void TPartitionStats::TTopCpuUsage::Update(const TTopCpuUsage& usage) {
+    // Keep only the latest time for each bucket
+    for (ui64 i = 0; i < Buckets.size(); ++i) {
+        BucketUpdateTimes[i] = std::max(BucketUpdateTimes[i], usage.BucketUpdateTimes[i]);
+    }
+}
+
+void TPartitionStats::TTopCpuUsage::UpdateCpuUsage(ui64 rawCpuUsage, TInstant now) {
+    ui32 percent = static_cast<ui32>(rawCpuUsage * 0.000001 * 100);
+
+    // Update all buckets, which have low boundaries below the given CPU usage
+    for (ui64 i = 0; i < Buckets.size(); ++i) {
+        if (percent < Buckets[i].LowBoundary) {
+            return;
+        }
+
+        BucketUpdateTimes[i] = now;
+    }
+}
+
+ui32 TPartitionStats::TTopCpuUsage::GetLatestMaxCpuUsagePercent(TInstant since) const {
+    // Find the highest bucket (from the end of the list),
+    // which was updated after the given time
+    for (i64 i = Buckets.size() - 1; i >= 0; --i) {
+        if (BucketUpdateTimes[i] > since) {
+            return Buckets[i].EffectiveValue;
+        }
+    }
+
+    // No bucket was found, return at least some minimum CPU usage percentage
+    return 2;
+}
+
+void TPartitionSplitMergeState::RecordDeferral(EDeferralReason r) {
+    const size_t idx = static_cast<size_t>(r);
+    if (idx >= DeferralReasonCounts.size()) {
+        return;  // guard against a garbage/uninitialized reason value (OOB write)
+    }
+    auto& c = DeferralReasonCounts[idx];
+    if (c != Max<ui16>()) {
+        ++c;
+    }
+}
+
+TInstant TPartitionSplitMergeState::OldestCandidate() const {
+    return Min(
+        LastSplitCandidate ? LastSplitCandidate : TInstant::Max(),
+        LastMergeCandidate ? LastMergeCandidate : TInstant::Max());
+}
+
+void TPartitionSplitMergeState::ResetOnSplitMerge() {
+    SplitCandidateCount = MergeCandidateCount = 0;
+    SplitDeferredCount = MergeDeferredCount = 0;
+    DeferralReasonCounts = {};
+}
+
+void TTableSplitMergeState::MoveDemandCount(bool wantsSplit) {
+    ui32& opposite = wantsSplit ? MergeDemandCount : SplitDemandCount;
+    ui32& target = wantsSplit ? SplitDemandCount : MergeDemandCount;
+    if (opposite) {
+        --opposite;
+    }
+    ++target;
+}
+
+void TCondEraseSchedule::Push(TInstant t, const TShardIdx& shardIdx) {
+    Y_ABORT_UNLESS(!Contains(shardIdx));
+    const ui32 i = Heap.size();
+    Heap.push_back({t, shardIdx});
+    Pos[shardIdx] = i;
+    SiftUp(i);
+}
+
+void TCondEraseSchedule::BuildHeap() {
+    std::make_heap(Heap.begin(), Heap.end(), TGreater{});
+    Pos.clear();
+    Pos.reserve(Heap.size());
+    for (ui32 i = 0; i < Heap.size(); ++i) {
+        Pos[Heap[i].second] = i;
+    }
+}
+
+void TCondEraseSchedule::Pop() {
+    Y_ABORT_UNLESS(!Heap.empty());
+    Pos.erase(Heap[0].second);
+    if (Heap.size() > 1) {
+        Heap[0] = std::move(Heap.back());
+        Pos[Heap[0].second] = 0;
+    }
+    Heap.pop_back();
+    if (!Heap.empty()) {
+        SiftDown(0);
+    }
+}
+
+void TCondEraseSchedule::Erase(const TShardIdx& shardIdx) {
+    auto posIt = Pos.find(shardIdx);
+    if (posIt == Pos.end()) {
+        return;
+    }
+    const ui32 i = posIt->second;
+    Pos.erase(posIt);
+    const ui32 last = Heap.size() - 1;
+    if (i < last) {
+        Heap[i] = std::move(Heap[last]);
+        Pos[Heap[i].second] = i;
+        Heap.pop_back();
+        SiftUp(i);
+        SiftDown(i);
+    } else {
+        Heap.pop_back();
+    }
+}
+
+bool TCondEraseSchedule::IsValidHeap() const {
+    if (Pos.size() != Heap.size()) {
+        return false;
+    }
+    for (ui32 i = 0; i < Heap.size(); ++i) {
+        auto it = Pos.find(Heap[i].second);
+        if (it == Pos.end() || it->second != i) {
+            return false;
+        }
+    }
+    return std::is_heap(Heap.begin(), Heap.end(), TGreater{});
+}
+
+void TCondEraseSchedule::SwapAt(ui32 i, ui32 j) {
+    std::swap(Heap[i], Heap[j]);
+    Pos[Heap[i].second] = i;
+    Pos[Heap[j].second] = j;
+}
+
+void TCondEraseSchedule::SiftUp(ui32 i) {
+    while (i > 0) {
+        const ui32 p = (i - 1) >> 1;
+        if (Heap[p].first <= Heap[i].first) {
+            break;
+        }
+        SwapAt(i, p);
+        i = p;
+    }
+}
+
+void TCondEraseSchedule::SiftDown(ui32 i) {
+    const ui32 n = Heap.size();
+    while (true) {
+        ui32 best = i;
+        const ui32 l = 2*i + 1, r = l + 1;
+        if (l < n && Heap[l].first < Heap[best].first) {
+            best = l;
+        }
+        if (r < n && Heap[r].first < Heap[best].first) {
+            best = r;
+        }
+        if (best == i) {
+            break;
+        }
+        SwapAt(i, best);
+        i = best;
+    }
+}
+
+const NKikimrSchemeOp::TTableDescription& TTableInfo::TAlterTableInfo::TableDescription() const {
+    if (IsFullPartitionConfig()) {
+        return *TableDescriptionFull;
+    }
+    return TableDescriptionDiff;
+}
+
+NKikimrSchemeOp::TTableDescription& TTableInfo::TAlterTableInfo::TableDescription() {
+    if (IsFullPartitionConfig()) {
+        return *TableDescriptionFull;
+    }
+    return TableDescriptionDiff;
+}
+
+bool TTableInfo::IsAsyncReplica() const {
+    switch (TableDescription.GetReplicationConfig().GetMode()) {
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+            return false;
+        default:
+            return true;
+    }
+}
+
+bool TTableInfo::IsIncrementalRestoreTable() const {
+    switch (TableDescription.GetIncrementalBackupConfig().GetMode()) {
+        case NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_NONE:
+            return false;
+        default:
+            return true;
+    }
+}
+
+bool TTableInfo::HasDetailedMetricsSettings() const {
+    return TableDescription.HasDetailedMetricsSettings()
+        && (TableDescription.GetDetailedMetricsSettings().GetStatusCase()
+                == NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured)
+        && (TableDescription.GetDetailedMetricsSettings().HasConfigured());
+}
+
+ui32 TTableInfo::GetTTLColumnId() const {
+    if (!IsTTLEnabled()) {
+        return Max<ui32>();
+    }
+
+    if (!TTLColumnId) {
+        for (const auto& [id, col] : Columns) {
+            if (!col.IsDropped() && col.Name == TTLSettings().GetEnabled().GetColumnName()) {
+                TTLColumnId = id;
+                break;
+            }
+        }
+    }
+
+    if (!TTLColumnId) {
+        TTLColumnId = Max<ui32>();
+    }
+
+    return *TTLColumnId;
+}
+
+TTableInfo::TPtr TTableInfo::DeepCopy(const TTableInfo& other) {
+    TTableInfo::TPtr copy(new TTableInfo(other));
+    // Partitions holds raw pointers into PartitionStore; after the value copy
+    // they point into other's store — rebuild them to point into the copy's.
+    copy->Partitions.resize(other.Partitions.size());
+    for (ui64 i = 0; i < other.Partitions.size(); ++i) {
+        copy->Partitions[i] = copy->PartitionStore.FindPtr(other.Partitions[i]->ShardIdx);
+        Y_ABORT_UNLESS(copy->Partitions[i]);
+    }
+
+    copy->VerifyConsistency();
+
+    return copy;
+}
+
+ui32 TTableInfo::ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
+    if (descr.HasUniformPartitionsCount()) {
+        return descr.GetUniformPartitionsCount();
+    } else {
+        return descr.SplitBoundarySize() + 1;
+    }
+}
+
+void TTableInfo::SetRoom(const TStorageRoom& room) {
+    // WARNING: this is legacy support code
+    // StorageRooms from per-table partition config are only used for
+    // tablets that don't have per-shard patches. During migration we
+    // expect to only ever create single-room shards, which cannot have
+    // their storage config altered, so per-table and per-shard rooms
+    // cannot diverge. These settings will eventually become dead weight,
+    // only useful for ancient shards, after which may remove this code.
+    Y_ENSURE(room.GetId() == 0);
+    auto rooms = MutablePartitionConfig().MutableStorageRooms();
+    rooms->Clear();
+    rooms->Add()->CopyFrom(room);
+}
+
+void TTableInfo::InitAlterData() {
+    if (!AlterData) {
+        AlterData = new TTableInfo::TAlterTableInfo;
+        AlterData->AlterVersion = AlterVersion + 1;
+        AlterData->NextColumnId = NextColumnId;
+    }
+}
+
+void TTableInfo::InitAlterData(const TOperationId& opId) {
+    // If AlterData exists but has no users, it's stale from restart - reset it
+    if (AlterData && AlterData->CoordinatedVersionUsers.empty()) {
+        AlterData.Reset();
+    }
+    if (!AlterData) {
+        AlterData = new TTableInfo::TAlterTableInfo;
+        AlterData->AlterVersion = AlterVersion + 1;
+        AlterData->CoordinatedSchemaVersion = AlterVersion + 1;
+        AlterData->NextColumnId = NextColumnId;
+    }
+    // Ensure TableDescriptionFull exists and has CoordinatedSchemaVersion set for persistence
+    if (!AlterData->TableDescriptionFull) {
+        AlterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
+    }
+    AlterData->TableDescriptionFull->SetCoordinatedSchemaVersion(*AlterData->CoordinatedSchemaVersion);
+    AlterData->CoordinatedVersionUsers.insert(opId);
+}
+
+bool TTableInfo::ReleaseAlterData(const TOperationId& opId) {
+    if (!AlterData) {
+        return false;
+    }
+    AlterData->CoordinatedVersionUsers.erase(opId);
+    if (AlterData->CoordinatedVersionUsers.empty()) {
+        AlterData.Reset();
+        return true;  // Caller should clear AlterTableFull from DB
+    }
+    return false;
+}
+
+void TTableInfo::PrepareAlter(TAlterDataPtr alterData) {
+    Y_ENSURE(alterData, "No alter data at Alter prepare");
+    Y_ENSURE(alterData->AlterVersion == AlterVersion + 1);
+    AlterData = alterData;
+}
+
+bool TTableInfo::IsSplitBySizeEnabled(const TForceShardSplitSettings& params) const {
+    // Respect unspecified SizeToSplit when force shard splits are disabled
+    if (params.DisableForceShardSplit && PartitionConfig().GetPartitioningPolicy().GetSizeToSplit() == 0) {
+        return false;
+    }
+    // Auto split is always enabled, unless table is using external blobs
+    return (IsExternalBlobsEnabled == false);
+}
+
+bool TTableInfo::IsMergeBySizeEnabled(const TForceShardSplitSettings& params) const {
+    // Global switch: merge by size can be disabled cluster-wide via ICB
+    if (!params.MergeBySizeEnabled) {
+        return false;
+    }
+    // Auto merge is only enabled when auto split is also enabled
+    if (!IsSplitBySizeEnabled(params)) {
+        return false;
+    }
+    // We want auto merge enabled when user has explicitly specified the
+    // size to split and the minimum partitions count.
+    if (PartitionConfig().GetPartitioningPolicy().GetSizeToSplit() > 0 &&
+        PartitionConfig().GetPartitioningPolicy().GetMinPartitionsCount() != 0)
+    {
+        return true;
+    }
+    // We also want auto merge enabled when table has more shards than the
+    // specified maximum number of partitions. This way when something
+    // splits by size over the limit we merge some smaller partitions.
+    return Partitions.size() > GetMaxPartitionsCount() && !params.DisableForceShardSplit;
+}
+
+NKikimrSchemeOp::TSplitByLoadSettings TTableInfo::GetEffectiveSplitByLoadSettings(
+        const TTableInfo* mainTableForIndex) const
+{
+    NKikimrSchemeOp::TSplitByLoadSettings settings;
+
+    if (mainTableForIndex) {
+        // Merge main table settings first
+        // Index settings will override these
+        settings.MergeFrom(
+            mainTableForIndex->PartitionConfig()
+            .GetPartitioningPolicy()
+            .GetSplitByLoadSettings());
+    }
+
+    // Merge local table settings last, they take precedence
+    settings.MergeFrom(
+        PartitionConfig()
+        .GetPartitioningPolicy()
+        .GetSplitByLoadSettings());
+
+    return settings;
+}
+
+bool TTableInfo::IsSplitByLoadEnabled(const TTableInfo* mainTableForIndex) const {
+    // We cannot split when external blobs are enabled
+    if (IsExternalBlobsEnabled) {
+        return false;
+    }
+
+    const auto& policy = PartitionConfig().GetPartitioningPolicy();
+    if (policy.HasSplitByLoadSettings() && policy.GetSplitByLoadSettings().HasEnabled()) {
+        // Always prefer any explicit setting
+        return policy.GetSplitByLoadSettings().GetEnabled();
+    }
+
+    if (mainTableForIndex) {
+        // Enable by default for indexes, when enabled for the main table
+        // TODO: consider always enabling by default
+        const auto& mainPolicy = mainTableForIndex->PartitionConfig().GetPartitioningPolicy();
+        return mainPolicy.GetSplitByLoadSettings().GetEnabled();
+    }
+
+    // Disable by default for normal tables
+    return false;
+}
+
+ui64 TTableInfo::GetShardSizeToSplit(const TForceShardSplitSettings& params) const {
+    if (!IsSplitBySizeEnabled(params)) {
+        return Max<ui64>();
+    }
+    ui64 threshold = PartitionConfig().GetPartitioningPolicy().GetSizeToSplit();
+    if (params.DisableForceShardSplit) {
+        if (threshold == 0) {
+            return Max<ui64>();
+        }
+    } else {
+        if (threshold == 0 || threshold >= params.ForceShardSplitDataSize) {
+            return params.ForceShardSplitDataSize;
+        }
+    }
+    return threshold;
+}
+
+ui64 TTableInfo::GetSizeToMerge(const TForceShardSplitSettings& params) const {
+    if (!IsMergeBySizeEnabled(params)) {
+        // Disable auto-merge by default
+        return 0;
+    } else {
+        return GetShardSizeToSplit(params) / 2;
+    }
+}
+
+bool TTableInfo::IsForceSplitBySizeShardIdx(TShardIdx shardIdx, const TForceShardSplitSettings& params) const {
+    if (!Stats.PartitionStats.contains(shardIdx) || params.DisableForceShardSplit) {
+        return false;
+    }
+    const auto& stats = Stats.PartitionStats.at(shardIdx);
+    return stats.DataSize >= params.ForceShardSplitDataSize;
+}
+
+bool TTableInfo::ShouldSplitBySize(ui64 dataSize, const TForceShardSplitSettings& params, TString& reason) const {
+    // Don't split/merge backup tables
+    if (IsBackup) {
+        return false;
+    }
+
+    if (!IsSplitBySizeEnabled(params)) {
+        return false;
+    }
+    // When shard is over the maximum size we split even when over max partitions
+    if (dataSize >= params.ForceShardSplitDataSize && !params.DisableForceShardSplit) {
+        reason = TStringBuilder() << "force split by size ("
+            << "shardSize: " << dataSize << ", "
+            << "maxShardSize: " << params.ForceShardSplitDataSize << ")";
+
+        return true;
+    }
+    // Otherwise we split when we may add one more partition
+    if (Partitions.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit(params)) {
+        reason = TStringBuilder() << "split by size ("
+            << "shardCount: " << Partitions.size() << ", "
+            << "maxShardCount: " << GetMaxPartitionsCount() << ", "
+            << "shardSize: " << dataSize << ", "
+            << "maxShardSize: " << GetShardSizeToSplit(params) << ")";
+
+        return true;
+    }
+
+    return false;
+}
+
+bool TTableInfo::NeedRecreateParts() const {
+    if (!AlterData) {
+        return false;
+    }
+
+    auto srcFollowerParams = std::tuple<ui64, bool, ui32>(
+                                     PartitionConfig().GetFollowerCount(),
+                                     PartitionConfig().GetAllowFollowerPromotion(),
+                                     PartitionConfig().GetCrossDataCenterFollowerCount()
+        );
+
+    auto alterFollowerParams = std::tuple<ui64, bool, ui32>(
+                                     AlterData->PartitionConfigCompatible().GetFollowerCount(),
+                                     AlterData->PartitionConfigCompatible().GetAllowFollowerPromotion(),
+                                     AlterData->PartitionConfigCompatible().GetCrossDataCenterFollowerCount()
+
+        );
+
+    auto equals_proto_array = [] (const auto& left, const auto& right) {
+        if (left.size() != right.size()) {
+            return false;
+        }
+
+        for (decltype(right.size()) i = 0; i < right.size(); ++i) {
+            if (!google::protobuf::util::MessageDifferencer::Equals(left[i], right[i])) {
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+
+
+    return srcFollowerParams != alterFollowerParams
+        || !equals_proto_array(
+               PartitionConfig().GetFollowerGroups(),
+               AlterData->PartitionConfigCompatible().GetFollowerGroups());
+}
+
+const TTableShardInfo* TTableInfo::GetScheduledCondEraseShard() const {
+    if (CondEraseSchedule.Empty()) {
+        return nullptr;
+    }
+    const TShardIdx& shardIdx = CondEraseSchedule.Top().second;
+    const auto* p = PartitionStore.FindPtr(shardIdx);
+    Y_ABORT_UNLESS(p);
+    return p;
+}
+
+void TTableInfo::ScheduleAllCondErase() {
+    for (const auto* p : Partitions) {
+        if (!CondEraseSchedule.Contains(p->ShardIdx) && !InFlightCondErase.contains(p->ShardIdx)) {
+            CondEraseSchedule.Push(p->NextCondErase, p->ShardIdx);
+        }
+    }
+}
+
+void TTableInfo::AddInFlightCondErase(const TShardIdx& shardIdx) {
+    const auto* shardInfo = GetScheduledCondEraseShard();
+    Y_ENSURE(shardInfo && shardIdx == shardInfo->ShardIdx);
+
+    InFlightCondErase[shardIdx] = TActorId();
+    CondEraseSchedule.Pop();
+}
+
+void TTableInfo::RescheduleCondErase(const TShardIdx& shardIdx) {
+    Y_ENSURE(InFlightCondErase.contains(shardIdx));
+
+    auto* p = FindPartition(shardIdx);
+    Y_ENSURE(p);
+
+    CondEraseSchedule.Push(p->NextCondErase, shardIdx);
+    InFlightCondErase.erase(shardIdx);
+}
+
+void TTableInfo::UpdateNextCondErase(const TShardIdx& shardIdx, const TInstant& now, const TDuration& next) {
+    auto* p = FindPartition(shardIdx);
+    Y_ENSURE(p);
+
+    p->LastCondErase = now;
+    p->NextCondErase = now + next;
+    p->LastCondEraseLag = TDuration::Zero();
+}
+
+bool TTableInfo::IsUsingSequence(const TString& name) {
+    for (const auto& pr : Columns) {
+        if (pr.second.DefaultKind == ETableColumnDefaultKind::FromSequence &&
+            pr.second.DefaultValue == name &&
+            !pr.second.IsDropped())
+        {
+            // A column scheduled to be dropped by the pending alter no longer keeps the
+            // sequence alive. This lets a single ALTER drop a serial column and cascade
+            // a DropSequence sub-operation for its backing sequence in the same operation:
+            // the AlterTable part is proposed first (marking the column for deletion in
+            // AlterData), so the DropSequence part that follows does not see the sequence
+            // as still in use.
+            if (AlterData) {
+                auto it = AlterData->Columns.find(pr.first);
+                if (it != AlterData->Columns.end() && it->second.DeleteVersion == AlterData->AlterVersion) {
+                    continue;
+                }
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+TString TTopicStats::ToString() const {
+    return TStringBuilder() << "TTopicStats {"
+                            << " DataSize: " << DataSize
+                            << " UsedReserveSize: " << UsedReserveSize
+                            << " }";
+}
+
+TShardInfo TShardInfo::WithTabletID(TTabletId tabletId) const & {
+    TShardInfo copy = *this;
+    copy.TabletID = tabletId;
+    return copy;
+}
+
+TShardInfo TShardInfo::WithTabletType(TTabletTypes::EType tabletType) const & {
+    TShardInfo copy = *this;
+    copy.TabletType = tabletType;
+    return copy;
+}
+
+TShardInfo TShardInfo::WithBindedChannels(TChannelsBindings bindedChannels) const & {
+    TShardInfo copy = *this;
+    copy.BindedChannels = std::move(bindedChannels);
+    return copy;
+}
+
+void TTopicInfo::AddPartition(TShardIdx shardIdx, TTopicTabletInfo::TTopicPartitionInfo* partition) {
+    partition->ShardIdx = shardIdx;
+
+    TTopicTabletInfo::TPtr& pqShard = Shards[shardIdx];
+    if (!pqShard) {
+        pqShard.Reset(new TTopicTabletInfo());
+    }
+    pqShard->Partitions.push_back(partition);
+    Partitions[partition->PqId] = pqShard->Partitions.back().Get();
+}
+
+void TTopicInfo::UpdateSplitMergeGraph(const TTopicTabletInfo::TTopicPartitionInfo& partition) {
+    for (const auto parent : partition.ParentPartitionIds) {
+        auto it = Partitions.find(parent);
+        Y_ENSURE(it != Partitions.end(),
+                 "Partition " << partition.GroupId << " has parent partition " << parent << " which doesn't exists");
+        it->second->ChildPartitionIds.emplace(partition.PqId);
+    }
+}
+
+void TTopicInfo::InitSplitMergeGraph() {
+    for (const auto& [_, partition] : Partitions) {
+        UpdateSplitMergeGraph(*partition);
+    }
+}
+
+ui32 TTopicInfo::ExpectedShardCount() const {
+
+    Y_ENSURE(TotalPartitionCount);
+    Y_ENSURE(MaxPartsPerTablet);
+
+    ui32 partsPerTablet = MaxPartsPerTablet;
+    ui32 pqTabletCount = TotalPartitionCount / partsPerTablet;
+    if (TotalPartitionCount % partsPerTablet) {
+        ++pqTabletCount;
+    }
+    return pqTabletCount;
+}
+
+TVector<std::pair<TShardIdx, TTopicTabletInfo::TTopicPartitionInfo*>> TTopicInfo::GetPartitions() {
+    TVector<std::pair<TShardIdx, TTopicTabletInfo::TTopicPartitionInfo*>> partitions;
+    partitions.reserve(TotalPartitionCount);
+
+    for (auto& [shardIdx, tabletInfo] : Shards) {
+        for (const auto& partitionInfo : tabletInfo->Partitions) {
+            partitions.push_back({shardIdx, partitionInfo.Get()});
+        }
+    }
+
+    std::sort(partitions.begin(), partitions.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.second->PqId < rhs.second->PqId;
+    });
+
+    return partitions;
+}
+
+NKikimrPQ::TPQTabletConfig TTopicInfo::GetTabletConfig() const {
+    NKikimrPQ::TPQTabletConfig tabletConfig;
+    if (!TabletConfig.empty()) {
+        bool parseOk = ParseFromStringNoSizeLimit(tabletConfig, TabletConfig);
+        Y_ENSURE(parseOk, "Previously serialized pq tablet config cannot be parsed");
+    }
+    return tabletConfig;
+}
+
+void TTopicInfo::PrepareAlter(TTopicInfo::TPtr alterData) {
+    Y_ENSURE(alterData, "No alter data at Alter prepare");
+    alterData->AlterVersion = AlterVersion + 1;
+    Y_ENSURE(alterData->TotalGroupCount);
+    Y_ENSURE(alterData->TotalPartitionCount);
+    Y_ENSURE(0 < alterData->ActivePartitionCount && alterData->ActivePartitionCount <= alterData->TotalPartitionCount);
+    Y_ENSURE(alterData->NextPartitionId);
+    Y_ENSURE(alterData->MaxPartsPerTablet);
+    alterData->KeySchema = KeySchema;
+    alterData->BalancerTabletID = BalancerTabletID;
+    alterData->BalancerShardIdx = BalancerShardIdx;
+    AlterData = alterData;
+}
+
+void TTopicInfo::FinishAlter() {
+    Y_ENSURE(AlterData, "No alter data at Alter complete");
+    TotalGroupCount = AlterData->TotalGroupCount;
+    NextPartitionId = AlterData->NextPartitionId;
+    TotalPartitionCount = AlterData->TotalPartitionCount;
+    ActivePartitionCount = AlterData->ActivePartitionCount;
+    MaxPartsPerTablet = AlterData->MaxPartsPerTablet;
+    if (!AlterData->TabletConfig.empty())
+        TabletConfig = std::move(AlterData->TabletConfig);
+    ++AlterVersion;
+    Y_ENSURE(BalancerTabletID == AlterData->BalancerTabletID || !HasBalancer());
+    Y_ENSURE(AlterData->HasBalancer());
+    Y_ENSURE(AlterData->BalancerShardIdx);
+    KeySchema = AlterData->KeySchema;
+    BalancerTabletID = AlterData->BalancerTabletID;
+    BalancerShardIdx = AlterData->BalancerShardIdx;
+    AlterData.Reset();
+
+    Partitions.clear();
+    for (const auto& [_, shard] : Shards) {
+        for (auto& partition : shard->Partitions) {
+            Partitions[partition->PqId] = partition.Get();
+        }
+    }
+
+    InitSplitMergeGraph();
+}
+
+TSolomonVolumeInfo::TPtr TSolomonVolumeInfo::CreateAlter(ui64 version) const {
+    Y_ENSURE(Version < version);
+    TSolomonVolumeInfo::TPtr alter = new TSolomonVolumeInfo(*this);
+    alter->Version = version;
+    return alter;
+}
+
+TSubDomainInfo::TDiskSpaceQuotas::operator bool() const {
+    return HardQuota || SoftQuota || AnyOf(StoragePoolsQuotas, [](const auto& storagePoolQuota) {
+            return storagePoolQuota.second.HardQuota || storagePoolQuota.second.SoftQuota;
+        }
+    );
+}
+
+TSubDomainInfo::TSubDomainInfo(ui64 version, ui64 resolution, ui32 bucketsPerMediator, const TPathId& resourcesDomainId)
+{
+    ProcessingParams.SetVersion(version);
+    ProcessingParams.SetPlanResolution(resolution);
+    ProcessingParams.SetTimeCastBucketsPerMediator(bucketsPerMediator);
+    ResourcesDomainId = resourcesDomainId;
+}
+
+void TSubDomainInfo::SetSchemeLimits(const TSchemeLimits& limits, IQuotaCounters* counters) {
+    SchemeLimits = limits;
+    if (counters) {
+        counters->SetPathsQuota(limits.MaxPaths);
+        counters->SetShardsQuota(limits.MaxShards);
+    }
+}
+
+void TSubDomainInfo::MergeSchemeLimits(const NKikimrSubDomains::TSchemeLimits& in, IQuotaCounters* counters) {
+    SchemeLimits.MergeFromProto(in);
+    if (counters) {
+        if (in.HasMaxPaths()) {
+            counters->SetPathsQuota(SchemeLimits.MaxPaths);
+        }
+        if (in.HasMaxShards()) {
+            counters->SetShardsQuota(SchemeLimits.MaxShards);
+        }
+    }
+}
+
+void TSubDomainInfo::SetAlter(TPtr alterData) {
+    Y_ENSURE(alterData);
+    Y_ENSURE(GetVersion() < alterData->GetVersion());
+    AlterData = alterData;
+}
+
+void TSubDomainInfo::SetStoragePools(TStoragePools& storagePools, ui64 subDomainVersion) {
+    Y_ENSURE(GetVersion() < subDomainVersion);
+    StoragePools.swap(storagePools);
+    ProcessingParams.SetVersion(subDomainVersion);
+}
+
+TTabletId TSubDomainInfo::GetTenantSchemeShardID() const {
+    if (!ProcessingParams.HasSchemeShard()) {
+        return InvalidTabletId;
+    }
+    return TTabletId(ProcessingParams.GetSchemeShard());
+}
+
+TTabletId TSubDomainInfo::GetTenantHiveID() const {
+    if (!ProcessingParams.HasHive()) {
+        return InvalidTabletId;
+    }
+    return TTabletId(ProcessingParams.GetHive());
+}
+
+TTabletId TSubDomainInfo::GetTenantSysViewProcessorID() const {
+    if (!ProcessingParams.HasSysViewProcessor()) {
+        return InvalidTabletId;
+    }
+    return TTabletId(ProcessingParams.GetSysViewProcessor());
+}
+
+TTabletId TSubDomainInfo::GetTenantStatisticsAggregatorID() const {
+    if (!ProcessingParams.HasStatisticsAggregator()) {
+        return InvalidTabletId;
+    }
+    return TTabletId(ProcessingParams.GetStatisticsAggregator());
+}
+
+TTabletId TSubDomainInfo::GetTenantBackupControllerID() const {
+    if (!ProcessingParams.HasBackupController()) {
+        return InvalidTabletId;
+    }
+    return TTabletId(ProcessingParams.GetBackupController());
+}
+
+TTabletId TSubDomainInfo::GetTenantGraphShardID() const {
+    if (!ProcessingParams.HasGraphShard()) {
+        return InvalidTabletId;
+    }
+    return TTabletId(ProcessingParams.GetGraphShard());
+}
+
+TTabletId TSubDomainInfo::GetTenantWasmCompileControllerID() const {
+    if (!ProcessingParams.HasWasmCompileController()) {
+        return InvalidTabletId;
+    }
+    return TTabletId(ProcessingParams.GetWasmCompileController());
+}
+
+void TSubDomainInfo::IncPathsInside(IQuotaCounters* counters, ui64 delta, EPathCategory category) {
+    Y_ENSURE(Max<ui64>() - PathsInsideCount >= delta);
+    PathsInsideCount += delta;
+
+    switch (category) {
+    case EPathCategory::Backup: {
+        Y_ENSURE(Max<ui64>() - BackupPathsCount >= delta);
+        BackupPathsCount += delta;
+        break;
+    }
+    case EPathCategory::System: {
+        Y_ENSURE(Max<ui64>() - SystemPathsCount >= delta);
+        SystemPathsCount += delta;
+        break;
+    }
+    case EPathCategory::Regular: {
+        counters->ChangePathCount(delta);
+        break;
+    }
+    }
+}
+
+void TSubDomainInfo::DecPathsInside(IQuotaCounters* counters, ui64 delta, EPathCategory category) {
+    Y_ENSURE(PathsInsideCount >= delta, "PathsInsideCount: " << PathsInsideCount << " delta: " << delta);
+    PathsInsideCount -= delta;
+
+    switch (category) {
+    case EPathCategory::Backup: {
+        Y_ENSURE(BackupPathsCount >= delta, "BackupPathsCount: " << BackupPathsCount << " delta: " << delta);
+        BackupPathsCount -= delta;
+        break;
+    }
+    case EPathCategory::System: {
+        Y_ENSURE(SystemPathsCount >= delta, "SystemPathsCount: " << SystemPathsCount << " delta: " << delta);
+        SystemPathsCount -= delta;
+        break;
+    }
+    case EPathCategory::Regular: {
+        counters->ChangePathCount(-delta);
+        break;
+    }
+    }
+}
+
+ui64 TSubDomainInfo::GetPQAccountStorage() const {
+    const auto& topics = DiskSpaceUsage.Topics;
+    return topics.DataSize - std::min(topics.UsedReserveSize, PQReservedStorage) + PQReservedStorage;
+
+}
+
+void TSubDomainInfo::UpdatePQReservedStorage(ui64 oldStorage, ui64 newStorage) {
+    if (oldStorage == newStorage)
+        return;
+    DecPQReservedStorage(oldStorage);
+    IncPQReservedStorage(newStorage);
+}
+
+void TSubDomainInfo::ActualizeAlterData(const THashMap<TShardIdx, TShardInfo>& allShards, TInstant now, bool isExternal, IQuotaCounters* counters) {
+    Y_ENSURE(AlterData);
+
+    AlterData->SetPathsInside(GetPathsInside());
+    AlterData->InternalShards.swap(InternalShards);
+    AlterData->Initialize(allShards);
+
+    AlterData->SchemeQuotas = SchemeQuotas;
+    if (isExternal) {
+        AlterData->RemoveSchemeQuotas();
+    } else if (!AlterData->DeclaredSchemeQuotas && DeclaredSchemeQuotas) {
+        AlterData->DeclaredSchemeQuotas = DeclaredSchemeQuotas;
+    } else {
+        AlterData->RegenerateSchemeQuotas(now);
+    }
+
+    if (!AlterData->DatabaseQuotas && DatabaseQuotas && !isExternal) {
+        AlterData->DatabaseQuotas = DatabaseQuotas;
+        AlterData->SmallBlobsStorageUnits = SmallBlobsStorageUnits;
+    }
+
+    AlterData->DomainStateVersion = DomainStateVersion;
+    AlterData->DiskQuotaExceeded = DiskQuotaExceeded;
+    AlterData->SmallBlobsQuotaExceeded = SmallBlobsQuotaExceeded;
+    AlterData->StorageSpaceExhausted = StorageSpaceExhausted;
+
+    // Update usage and recheck quotas (which may have changed by an alter)
+    AlterData->DiskSpaceUsage = DiskSpaceUsage;
+    AlterData->SmallBlobsUsage = SmallBlobsUsage;
+    AlterData->CheckQuotas(counters);
+
+    CountDiskSpaceQuotas(counters, GetDiskSpaceQuotas(), AlterData->GetDiskSpaceQuotas());
+    CountSmallBlobsQuotas(counters, GetSmallBlobsQuotas(), AlterData->GetSmallBlobsQuotas());
+    CountStreamShardsQuota(counters, GetStreamShardsQuota(), AlterData->GetStreamShardsQuota());
+    CountStreamReservedStorageQuota(counters, GetStreamReservedStorageQuota(), AlterData->GetStreamReservedStorageQuota());
+}
+
+TDuration TSubDomainInfo::GetTtlMinRunInterval() const {
+    static constexpr auto TtlMinRunInterval = TDuration::Minutes(15);
+
+    if (!DatabaseQuotas) {
+        return TtlMinRunInterval;
+    }
+
+    if (!DatabaseQuotas->ttl_min_run_internal_seconds()) {
+        return TtlMinRunInterval;
+    }
+
+    return TDuration::Seconds(DatabaseQuotas->ttl_min_run_internal_seconds());
+}
+
+ui64 TSubDomainInfo::DiskSpaceQuotasAvailable() {
+    auto quotas = GetDiskSpaceQuotas();
+    if (!quotas) {
+        return Max<ui64>();
+    }
+
+    auto usage = TotalDiskSpaceUsage();
+    return usage < quotas.HardQuota ? quotas.HardQuota - usage : 0;
+}
+
+const TStoragePools& TSubDomainInfo::EffectiveStoragePools() const {
+    if (StoragePools) {
+        return StoragePools;
+    }
+    if (AlterData) {
+        return AlterData->StoragePools;
+    }
+    return StoragePools;
+}
+
+void TSubDomainInfo::AddInternalShard(TShardIdx shardId, IQuotaCounters* counters, bool isBackup) {
+    InternalShards.insert(shardId);
+    if (isBackup) {
+        BackupShards.insert(shardId);
+    } else {
+        counters->ChangeShardCount(1);
+    }
+}
+
+void TSubDomainInfo::AddInternalShards(const TTxState& txState, IQuotaCounters* counters, bool isBackup) {
+    for (auto txShard: txState.Shards) {
+        if (txShard.Operation != TTxState::CreateParts) {
+            continue;
+        }
+        AddInternalShard(txShard.Idx, counters, isBackup);
+    }
+}
+
+void TSubDomainInfo::RemoveInternalShard(TShardIdx shardIdx, IQuotaCounters* counters) {
+    auto it = InternalShards.find(shardIdx);
+    Y_ENSURE(it != InternalShards.end(), "shardIdx: " << shardIdx);
+    InternalShards.erase(it);
+
+    if (BackupShards.contains(shardIdx)) {
+        BackupShards.erase(shardIdx);
+    } else {
+        counters->ChangeShardCount(-1);
+    }
+}
+
+void TSubDomainInfo::RemoveSequenceShard(const TShardIdx& shardIdx) {
+    auto it = SequenceShards.find(shardIdx);
+    Y_ENSURE(it != SequenceShards.end(), "shardIdx: " << shardIdx);
+    SequenceShards.erase(it);
+}
+
+void TSubDomainInfo::Initialize(const THashMap<TShardIdx, TShardInfo>& allShards) {
+    if (InitiatedAsGlobal) {
+        return;
+    }
+
+    ProcessingParams.ClearCoordinators();
+    TVector<TTabletId> coordinators = FilterPrivateTablets(ETabletType::Coordinator, allShards);
+    for (TTabletId coordinator: coordinators) {
+        ProcessingParams.AddCoordinators(ui64(coordinator));
+    }
+    CoordinatorSelector = new TCoordinators(ProcessingParams);
+
+    ProcessingParams.ClearMediators();
+    TVector<TTabletId> mediators = FilterPrivateTablets(ETabletType::Mediator, allShards);
+    for (TTabletId mediator: mediators) {
+        ProcessingParams.AddMediators(ui64(mediator));
+    }
+
+    ProcessingParams.ClearSchemeShard();
+    TVector<TTabletId> schemeshards = FilterPrivateTablets(ETabletType::SchemeShard, allShards);
+    Y_ENSURE(schemeshards.size() <= 1, "size was: " << schemeshards.size());
+    if (schemeshards.size()) {
+        ProcessingParams.SetSchemeShard(ui64(schemeshards.front()));
+    }
+
+    ProcessingParams.ClearHive();
+    TVector<TTabletId> hives = FilterPrivateTablets(ETabletType::Hive, allShards);
+    Y_ENSURE(hives.size() <= 1, "size was: " << hives.size());
+    if (hives.size()) {
+        ProcessingParams.SetHive(ui64(hives.front()));
+        SetSharedHive(InvalidTabletId); // set off shared hive when our own hive has found
+    }
+
+    ProcessingParams.ClearSysViewProcessor();
+    TVector<TTabletId> sysViewProcessors = FilterPrivateTablets(ETabletType::SysViewProcessor, allShards);
+    Y_ENSURE(sysViewProcessors.size() <= 1, "size was: " << sysViewProcessors.size());
+    if (sysViewProcessors.size()) {
+        ProcessingParams.SetSysViewProcessor(ui64(sysViewProcessors.front()));
+    }
+
+    ProcessingParams.ClearStatisticsAggregator();
+    TVector<TTabletId> statisticsAggregators = FilterPrivateTablets(ETabletType::StatisticsAggregator, allShards);
+    Y_ENSURE(statisticsAggregators.size() <= 1, "size was: " << statisticsAggregators.size());
+    if (statisticsAggregators.size()) {
+        ProcessingParams.SetStatisticsAggregator(ui64(statisticsAggregators.front()));
+    }
+
+    ProcessingParams.ClearGraphShard();
+    TVector<TTabletId> graphs = FilterPrivateTablets(ETabletType::GraphShard, allShards);
+    Y_ENSURE(graphs.size() <= 1, "size was: " << graphs.size());
+    if (graphs.size()) {
+        ProcessingParams.SetGraphShard(ui64(graphs.front()));
+    }
+
+    ProcessingParams.ClearWasmCompileController();
+    TVector<TTabletId> wasmCompileControllers = FilterPrivateTablets(ETabletType::WasmCompileController, allShards);
+    Y_ENSURE(wasmCompileControllers.size() <= 1, "size was: " << wasmCompileControllers.size());
+    if (wasmCompileControllers.size()) {
+        ProcessingParams.SetWasmCompileController(ui64(wasmCompileControllers.front()));
+    }
+}
+
+void TSubDomainInfo::InitializeAsGlobal(NKikimrSubDomains::TProcessingParams&& processingParams) {
+    InitiatedAsGlobal = true;
+
+    Y_ENSURE(processingParams.GetPlanResolution());
+    Y_ENSURE(processingParams.GetTimeCastBucketsPerMediator());
+
+    ui64 version = ProcessingParams.GetVersion();
+    ProcessingParams = std::move(processingParams);
+    ProcessingParams.SetVersion(version);
+
+    CoordinatorSelector = new TCoordinators(ProcessingParams);
+}
+
+void TSubDomainInfo::SetDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& databaseQuotas, IQuotaCounters* counters) {
+    auto prev = GetDiskSpaceQuotas();
+    auto prevSmallBlobs = GetSmallBlobsQuotas();
+    auto prevs = GetStreamShardsQuota();
+    auto prevrs = GetStreamReservedStorageQuota();
+    SetDatabaseQuotas(databaseQuotas);
+    auto next = GetDiskSpaceQuotas();
+    auto nextSmallBlobs = GetSmallBlobsQuotas();
+    auto nexts = GetStreamShardsQuota();
+    auto nextrs = GetStreamReservedStorageQuota();
+    CountDiskSpaceQuotas(counters, prev, next);
+    CountSmallBlobsQuotas(counters, prevSmallBlobs, nextSmallBlobs);
+    CountStreamShardsQuota(counters, prevs, nexts);
+    CountStreamReservedStorageQuota(counters, prevrs, nextrs);
+}
+
+void TSubDomainInfo::ApplyDeclaredSchemeQuotas(const NKikimrSubDomains::TSchemeQuotas& declaredSchemeQuotas, TInstant now) {
+    // Check if there was no change in declared quotas
+    if (DeclaredSchemeQuotas) {
+        TString prev, next;
+        Y_ENSURE(DeclaredSchemeQuotas->SerializeToString(&prev));
+        Y_ENSURE(declaredSchemeQuotas.SerializeToString(&next));
+        if (prev == next) {
+            return; // there was no change in quotas
+        }
+    }
+
+    // Make a local copy of these quotas and regenerate
+    DeclaredSchemeQuotas.ConstructInPlace(declaredSchemeQuotas);
+    RegenerateSchemeQuotas(now);
+}
+
+void TSubDomainInfo::RegenerateSchemeQuotas(TInstant now) {
+    RemoveSchemeQuotas();
+    if (DeclaredSchemeQuotas) {
+        for (const auto& declaredQuota : DeclaredSchemeQuotas->GetSchemeQuotas()) {
+            double bucketSize = declaredQuota.GetBucketSize();
+            TDuration bucketDuration = TDuration::Seconds(declaredQuota.GetBucketSeconds());
+            SchemeQuotas.emplace_back(bucketSize, bucketDuration, now);
+        }
+    }
+}
+
+bool TSubDomainInfo::TryConsumeSchemeQuota(TInstant now) {
+    bool ok = true;
+    for (auto& quota : SchemeQuotas) {
+        quota.Update(now);
+        ok &= quota.CanPush(1.0);
+    }
+
+    if (!ok) {
+        return false;
+    }
+
+    for (auto& quota : SchemeQuotas) {
+        quota.Push(now, 1.0);
+    }
+
+    return true;
+}
+
+TVector<TTabletId> TSubDomainInfo::FilterPrivateTablets(TTabletTypes::EType type, const THashMap<TShardIdx, TShardInfo>& allShards) const {
+    TVector<TTabletId> tablets;
+    for (auto shardId: PrivateShards) {
+
+        if (!allShards.contains(shardId)) {
+            // KIKIMR-9849
+            // some private shards, which has been migrated, might be deleted
+            continue;
+        }
+
+        const auto& shard = allShards.at(shardId);
+        if (shard.TabletType == type && shard.TabletID != InvalidTabletId) {
+            tablets.push_back(shard.TabletID);
+        }
+    }
+    return tablets;
+}
+
+ui32 TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(
+    const NKikimrBlockStore::TVolumeConfig& config)
+{
+    ui32 c = 0;
+    for (const auto& partition: config.GetPartitions()) {
+        if (partition.GetType() == NKikimrBlockStore::EPartitionType::Default) {
+            ++c;
+        }
+    }
+
+    return c;
+}
+
+void TBlockStoreVolumeInfo::PrepareAlter(TBlockStoreVolumeInfo::TPtr alterData) {
+    Y_ENSURE(alterData, "No alter data at Alter preparation");
+    if (!alterData->DefaultPartitionCount) {
+        alterData->DefaultPartitionCount =
+            CalculateDefaultPartitionCount(alterData->VolumeConfig);
+    }
+    alterData->VolumeTabletId = VolumeTabletId;
+    alterData->VolumeShardIdx = VolumeShardIdx;
+    alterData->AlterVersion = AlterVersion + 1;
+    AlterData = alterData;
+}
+
+void TBlockStoreVolumeInfo::FinishAlter() {
+    Y_ENSURE(AlterData, "No alter data at Alter completion");
+    DefaultPartitionCount = AlterData->DefaultPartitionCount;
+    ExplicitChannelProfileCount = AlterData->ExplicitChannelProfileCount;
+    VolumeConfig.CopyFrom(AlterData->VolumeConfig);
+    ++AlterVersion;
+    Y_ENSURE(AlterVersion == AlterData->AlterVersion);
+    Y_ENSURE(VolumeTabletId == AlterData->VolumeTabletId || !HasVolumeTablet());
+    Y_ENSURE(AlterData->HasVolumeTablet());
+    Y_ENSURE(AlterData->VolumeShardIdx);
+    VolumeTabletId = AlterData->VolumeTabletId;
+    VolumeShardIdx = AlterData->VolumeShardIdx;
+    AlterData.Reset();
+}
+
+const TVector<TTabletId>& TBlockStoreVolumeInfo::GetTablets(const THashMap<TShardIdx, TShardInfo>& allShards) {
+    if (TabletCache.AlterVersion == AlterVersion) {
+        return TabletCache.Tablets;
+    }
+
+    TabletCache.Tablets.clear();
+    TabletCache.Tablets.resize(DefaultPartitionCount);
+
+    for (const auto& kv : Shards) {
+        TShardIdx shardIdx = kv.first;
+        const auto& partInfo = *kv.second;
+
+        auto itShard = allShards.find(shardIdx);
+        Y_ENSURE(itShard != allShards.end(), "No shard with shardIdx " << shardIdx);
+        TTabletId tabletId = itShard->second.TabletID;
+
+        if (partInfo.AlterVersion <= AlterVersion) {
+            Y_ENSURE(partInfo.PartitionId < DefaultPartitionCount,
+                "Wrong PartitionId " << partInfo.PartitionId);
+            TabletCache.Tablets[partInfo.PartitionId] = tabletId;
+        }
+    }
+
+    // Verify there are no missing tabletIds
+    for (ui32 idx = 0; idx < TabletCache.Tablets.size(); ++idx) {
+        TTabletId tabletId = TabletCache.Tablets[idx];
+        Y_ENSURE(tabletId, "Unassigned tabletId"
+                       << " for partition " << idx
+                       << " out of " << TabletCache.Tablets.size()
+                       << " TabletCache.AlterVersion" << TabletCache.AlterVersion
+                       << " AlterVersion " << AlterVersion);
+    }
+
+    TabletCache.AlterVersion = AlterVersion;
+    return TabletCache.Tablets;
+}
+
+TVolumeSpace TBlockStoreVolumeInfo::GetVolumeSpace() const {
+    ui64 blockSize = VolumeConfig.GetBlockSize();
+    ui64 blockCount = 0;
+    for (const auto& partition: VolumeConfig.GetPartitions()) {
+        blockCount += partition.GetBlockCount();
+    }
+
+    TVolumeSpace space;
+    space.Raw += blockCount * blockSize;
+    switch (VolumeConfig.GetStorageMediaKind()) {
+        case 1: // STORAGE_MEDIA_SSD
+            if (VolumeConfig.GetIsSystem()) {
+                space.SSDSystem += blockCount * blockSize; // merged blobs
+            } else {
+                space.SSD += blockCount * blockSize; // merged blobs
+                space.SSD += (blockCount / 8) * blockSize; // mixed blobs
+            }
+            break;
+        case 2: // STORAGE_MEDIA_HYBRID
+            space.HDD += blockCount * blockSize; // merged blobs
+            space.SSD += (blockCount / 8) * blockSize; // mixed blobs
+            break;
+        case 3: // STORAGE_MEDIA_HDD
+            space.HDD += blockCount * blockSize; // merged blobs
+            space.SSD += (blockCount / 8) * blockSize; // mixed blobs
+            break;
+        case 4: // STORAGE_MEDIA_SSD_NONREPLICATED
+            space.SSDNonrepl += blockCount * blockSize; // blocks are stored directly
+            break;
+    }
+
+    if (AlterData) {
+        auto altSpace = AlterData->GetVolumeSpace();
+        space.Raw = Max(space.Raw, altSpace.Raw);
+        space.SSD = Max(space.SSD, altSpace.SSD);
+        space.HDD = Max(space.HDD, altSpace.HDD);
+        space.SSDNonrepl = Max(space.SSDNonrepl, altSpace.SSDNonrepl);
+        space.SSDSystem = Max(space.SSDSystem, altSpace.SSDSystem);
+    }
+
+    return space;
+}
+
+void TFileStoreInfo::PrepareAlter(const NKikimrFileStore::TConfig& alterConfig) {
+    Y_ENSURE(!AlterConfig);
+    Y_ENSURE(!AlterVersion);
+
+    AlterConfig = MakeHolder<NKikimrFileStore::TConfig>();
+    AlterConfig->CopyFrom(alterConfig);
+
+    Y_ENSURE(!AlterConfig->GetBlockSize());
+    AlterConfig->SetBlockSize(Config.GetBlockSize());
+
+    AlterVersion = Version + 1;
+}
+
+void TFileStoreInfo::ForgetAlter() {
+    Y_ENSURE(AlterConfig);
+    Y_ENSURE(AlterVersion);
+
+    AlterConfig.Reset();
+    AlterVersion = 0;
+}
+
+void TFileStoreInfo::FinishAlter() {
+    Y_ENSURE(AlterConfig);
+    Y_ENSURE(AlterVersion);
+
+    Config.CopyFrom(*AlterConfig);
+    ++Version;
+    Y_ENSURE(Version == AlterVersion);
+
+    ForgetAlter();
+}
+
+TFileStoreSpace TFileStoreInfo::GetFileStoreSpace() const {
+    auto space = GetFileStoreSpace(Config);
+
+    if (AlterConfig) {
+        const auto alterSpace = GetFileStoreSpace(*AlterConfig);
+        space.SSD = Max(space.SSD, alterSpace.SSD);
+        space.HDD = Max(space.HDD, alterSpace.HDD);
+        space.SSDSystem = Max(space.SSDSystem, alterSpace.SSDSystem);
+    }
+
+    return space;
+}
+
+bool TFileStoreInfo::ValidateFileStoreConfigSpaceOverflow(ui64 blockSize, ui64 blockCount, TString& errStr) {
+    if (blockSize && blockCount > Max<ui64>() / blockSize) {
+        errStr = TStringBuilder()
+            << "FileStore size overflows ui64: blocks count " << blockCount
+            << " * block size " << blockSize
+            << " > " << Max<ui64>();
+        return false;
+    }
+
+    return true;
+}
+
+TFileStoreSpace TFileStoreInfo::GetFileStoreSpace(const NKikimrFileStore::TConfig& config) const {
+    const ui64 blockSize = config.GetBlockSize();
+    const ui64 blockCount = config.GetBlocksCount();
+
+    TFileStoreSpace space;
+    switch (config.GetStorageMediaKind()) {
+        case 1: // STORAGE_MEDIA_SSD
+            if (config.GetIsSystem()) {
+                space.SSDSystem += blockCount * blockSize;
+            } else {
+                space.SSD += blockCount * blockSize;
+            }
+            break;
+        case 2: // STORAGE_MEDIA_HYBRID
+        case 3: // STORAGE_MEDIA_HDD
+            space.HDD += blockCount * blockSize;
+            break;
+    }
+
+    return space;
+}
+
+void TKesusInfo::FinishAlter() {
+    Y_ENSURE(AlterConfig, "No alter config at Alter completion");
+    Y_ENSURE(AlterVersion, "No alter version at Alter completion");
+    Config.CopyFrom(*AlterConfig);
+    ++Version;
+    Y_ENSURE(Version == AlterVersion);
+    AlterConfig.Reset();
+    AlterVersion = 0;
+}
+
+TTableIndexInfo::TTableIndexInfo(ui64 version, EType type, EState state, std::string_view description)
+    : AlterVersion(version)
+    , Type(type)
+    , State(state)
+{
+    switch (type) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+        case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+            // no specialized index description
+            Y_ASSERT(description.empty());
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+            // is enabled (the serialized description is then non-empty); legacy JSON indexes have none.
+            if (!description.empty()) {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TFulltextIndexDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+            }
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            auto success = SpecializedIndexDescription
+                .emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>()
+                .ParseFromString(description);
+            Y_ENSURE(success, description);
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+            auto success = SpecializedIndexDescription
+                .emplace<NKikimrSchemeOp::THnswIndexDescription>()
+                .ParseFromString(description);
+            Y_ENSURE(success, description);
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
+            auto success = SpecializedIndexDescription
+                .emplace<NKikimrSchemeOp::TFulltextIndexDescription>()
+                .ParseFromString(description);
+            Y_ENSURE(success, description);
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter: {
+            auto success = SpecializedIndexDescription
+                .emplace<NKikimrSchemeOp::TBloomFilter>()
+                .ParseFromString(description);
+            Y_ENSURE(success, description);
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter: {
+            auto success = SpecializedIndexDescription
+                .emplace<NKikimrSchemeOp::TBloomNGrammFilter>()
+                .ParseFromString(description);
+            Y_ENSURE(success, description);
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeInvalid:
+            break;
+    }
+}
+
+TTableIndexInfo::TPtr TTableIndexInfo::GetNextVersion() const {
+    Y_ENSURE(AlterData == nullptr);
+    TPtr result = new TTableIndexInfo(*this);
+    ++result->AlterVersion;
+    return result;
+}
+
+TString TTableIndexInfo::SerializeDescription() const {
+    return std::visit([]<typename T>(const T& v) {
+        if constexpr (std::is_same_v<std::monostate, T>) {
+            return TString{};
+        } else if constexpr (std::is_same_v<NKikimrSchemeOp::TBloomNGrammFilter, T>) {
+            TString str;
+            Y_ENSURE(v.SerializeToString(&str));
+            return str;
+        } else {
+            TString str{v.SerializeAsString()};
+            Y_ENSURE(!str.empty());
+            return str;
+        }
+    }, SpecializedIndexDescription);
+}
+
+bool TTableIndexInfo::IsLocalIndex(EType type) {
+    return type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
+        || type == NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter
+        || type == NKikimrSchemeOp::EIndexTypeLocalMinMax
+        || type == NKikimrSchemeOp::EIndexTypeLocalCountMinSketch;
+}
+
+TTableIndexInfo::TPtr TTableIndexInfo::Create(const NKikimrSchemeOp::TIndexCreationConfig& config, TString& errMsg) {
+    if (!config.KeyColumnNamesSize() && !IsLocalIndex(config.GetType())) {
+        errMsg += TStringBuilder() << "no key columns in index creation config";
+        return nullptr;
+    }
+
+    TPtr result = NotExistedYet(config.GetType());
+
+    TPtr alterData = result->CreateNextVersion();
+    alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
+    if (!IsLocalIndex(config.GetType())) {
+        Y_ENSURE(!alterData->IndexKeys.empty());
+    }
+    alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
+
+    alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
+
+    switch (GetIndexType(config)) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+        case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+            // no specialized index description
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+            // is enabled; otherwise there is no specialized index description.
+            if (config.HasFulltextIndexDescription()) {
+                alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
+            }
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            alterData->SpecializedIndexDescription = config.GetHnswIndexDescription();
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+            alterData->SpecializedIndexDescription = config.GetBloomFilterDescription();
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+            alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
+            break;
+        case NKikimrSchemeOp::EIndexTypeInvalid:
+            errMsg += InvalidIndexType(config.GetType());
+            return nullptr;
+    }
+
+    return result;
+}
+
+TTableIndexInfo::TPtr TTableIndexInfo::Create(const NKikimrSchemeOp::TIndexAlteringConfig& config, TString& errMsg) {
+    if (!config.HasType() || !IsLocalIndex(config.GetType())) {
+        errMsg += TStringBuilder() << "TIndexAlteringConfig requires a valid local index type to be set";
+        return nullptr;
+    }
+
+    if (!config.KeyColumnNamesSize() && !IsLocalIndex(config.GetType())) {
+        errMsg += TStringBuilder() << "no key columns in index altering config";
+        return nullptr;
+    }
+
+    TPtr result = NotExistedYet(config.GetType());
+
+    TPtr alterData = result->CreateNextVersion();
+    alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
+    if (!IsLocalIndex(config.GetType())) {
+        Y_ENSURE(!alterData->IndexKeys.empty());
+    }
+
+    alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
+
+    switch (GetIndexType(config)) {
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+            alterData->SpecializedIndexDescription = config.GetBloomFilterDescription();
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+            alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+        case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+            alterData->SpecializedIndexDescription = std::monostate{};
+            break;
+        default:
+            errMsg += TStringBuilder() << "TIndexAlteringConfig only supports local index types, got: " << NKikimrSchemeOp::EIndexType_Name(config.GetType());
+            return nullptr;
+    }
+
+    return result;
+}
+
+TCdcStreamInfo::TPtr TCdcStreamInfo::CreateNextVersion() {
+    Y_ENSURE(AlterData == nullptr);
+    TPtr result = new TCdcStreamInfo(*this);
+    ++result->AlterVersion;
+    this->AlterData = result;
+    return result;
+}
+
+TCdcStreamInfo::TPtr TCdcStreamInfo::Create(const NKikimrSchemeOp::TCdcStreamDescription& desc) {
+    TPtr result = New(TCdcStreamSettings()
+        .WithMode(desc.GetMode())
+        .WithFormat(desc.GetFormat())
+        .WithVirtualTimestamps(desc.GetVirtualTimestamps())
+        .WithResolvedTimestamps(TDuration::MilliSeconds(desc.GetResolvedTimestampsIntervalMs()))
+        .WithSchemaChanges(desc.GetSchemaChanges())
+        .WithAwsRegion(desc.GetAwsRegion())
+        .WithUserSIDs(desc.GetUserSIDs())
+        .WithTraceIds(desc.GetTraceIds())
+        .WithCompression(desc.GetCompression())
+        .WithCompressionLevel(desc.HasCompressionLevel()
+            ? desc.GetCompressionLevel()
+            : (desc.GetCompression() == NKikimrSchemeOp::ECdcStreamCompressionZstd ? 3 : 0))
+        .WithHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect)
+    );
+    TPtr alterData = result->CreateNextVersion();
+    alterData->State = EState::ECdcStreamStateReady;
+    if (desc.HasState()) {
+        alterData->State = desc.GetState();
+    }
+
+    return result;
+}
+
+void TCdcStreamInfo::Serialize(NKikimrSchemeOp::TCdcStreamDescription& desc) const {
+    desc.SetSchemaVersion(AlterVersion);
+    desc.SetMode(Mode);
+    desc.SetFormat(Format);
+    desc.SetVirtualTimestamps(VirtualTimestamps);
+    desc.SetResolvedTimestampsIntervalMs(ResolvedTimestamps.MilliSeconds());
+    desc.SetSchemaChanges(SchemaChanges);
+    desc.SetAwsRegion(AwsRegion);
+    desc.SetState(State);
+    if (ScanShards) {
+        auto& scanProgress = *desc.MutableScanProgress();
+        scanProgress.SetShardsTotal(ScanShards.size());
+        scanProgress.SetShardsCompleted(DoneShards.size());
+    }
+    desc.SetUserSIDs(UserSIDs);
+    desc.SetTraceIds(TraceIds);
+    desc.SetCompression(Compression);
+    if (CompressionLevel) {
+        desc.SetCompressionLevel(CompressionLevel);
+    }
+    desc.SetHeartbeatMode(HeartbeatMode);
+}
+
+void TCdcStreamInfo::FinishAlter() {
+    Y_ENSURE(AlterData);
+
+    AlterVersion = AlterData->AlterVersion;
+    static_cast<TCdcStreamSettings&>(*this) = static_cast<TCdcStreamSettings&>(*AlterData);
+    AggregatorShardIdx = AlterData->AggregatorShardIdx;
+
+    AlterData.Reset();
+}
+
+TSequenceInfo::TPtr TSequenceInfo::CreateNextVersion() {
+    Y_ENSURE(AlterData == nullptr);
+    TPtr result = new TSequenceInfo(*this);
+    ++result->AlterVersion;
+    this->AlterData = result;
+    return result;
+}
+
+TReplicationInfo::TPtr TReplicationInfo::CreateNextVersion() {
+    Y_ENSURE(AlterData == nullptr);
+
+    TPtr result = new TReplicationInfo(*this);
+    ++result->AlterVersion;
+    this->AlterData = result;
+
+    return result;
+}
+
+TReplicationInfo::TPtr TReplicationInfo::Create(NKikimrSchemeOp::TReplicationDescription&& desc) {
+    TPtr result = New();
+    TPtr alterData = result->CreateNextVersion();
+    alterData->Description = std::move(desc);
+
+    return result;
+}
+
+TBlobDepotInfo::TPtr TBlobDepotInfo::CreateNextVersion() {
+    Y_ENSURE(!AlterData);
+    AlterData = MakeIntrusive<TBlobDepotInfo>(*this);
+    ++AlterData->AlterVersion;
+    return AlterData;
+}
+
+TString TImportInfo::GetItemSrcPrefix(size_t i) const {
+    if (i < Items.size() && Items[i].SrcPrefix) {
+        return Items[i].SrcPrefix;
+    }
+
+    // Backward compatibility.
+    // But there can be no paths in settings at all.
+    return Visit([i](const auto& settings) -> TString {
+        return GetItemSource(settings, i);
+    });
+}
+
+TString TImportInfo::GetSource() const {
+    if (Kind == EKind::S3) {
+        return GetS3Settings().source_prefix();
+    } else if (Kind == EKind::FS) {
+        return GetFsSettings().base_path();
+    }
+    Y_ABORT("Unknown import kind");
+    return {};
+}
+
+bool TImportInfo::GetNoAcl() const {
+    return Visit([](const auto& settings) {
+        return settings.no_acl();
+    });
+}
+
+TString TImportInfo::GetDestinationPath() const {
+    return Visit([](const auto& settings) {
+        return settings.destination_path();
+    });
+}
+
+bool TImportInfo::GetEncryptedBackup() const {
+    return Visit([](const auto& settings) {
+        return settings.has_encryption_settings();
+    });
+}
+
+bool TImportInfo::GetSkipChecksumValidation() const {
+    return Visit([](const auto& settings) {
+        return settings.skip_checksum_validation();
+    });
+}
+
+Ydb::Import::ImportFromS3Settings::IndexPopulationMode TImportInfo::GetIndexPopulationMode() const {
+    return Visit([](const auto& settings) {
+        return settings.index_population_mode();
+    });
+}
+
+TImportInfo::TImportInfo(
+        const ui64 id,
+        const TString& uid,
+        const EKind kind,
+        const TString& serializedSettings,
+        const TPathId domainPathId,
+        const TString& peerName)
+    : Id(id)
+    , Uid(uid)
+    , Kind(kind)
+    , SettingsSerialized(serializedSettings)
+    , DomainPathId(domainPathId)
+    , PeerName(peerName)
+{
+    switch (kind) {
+    case EKind::S3: {
+        Settings = ParseSettings<Ydb::Import::ImportFromS3Settings>(serializedSettings);
+        break;
+    }
+    case EKind::FS: {
+        Settings = ParseSettings<Ydb::Import::ImportFromFsSettings>(serializedSettings);
+        break;
+    }
+    default:
+        Y_ABORT("Unknown import kind");
+    }
+}
+
+bool TImportInfo::EraseEncryptionKey() {
+    return std::visit([this](auto& settings) {
+        if (settings.encryption_settings().has_symmetric_key()) {
+            settings.mutable_encryption_settings()->clear_symmetric_key();
+            Y_ABORT_UNLESS(settings.SerializeToString(&SettingsSerialized));
+            return true;
+        }
+        return false;
+    }, Settings);
+}
+
+void TExternalDataSourceInfo::FillProto(NKikimrSchemeOp::TExternalDataSourceDescription& proto, bool withReferences) const {
+    proto.SetVersion(AlterVersion);
+    proto.SetSourceType(SourceType);
+    proto.SetLocation(Location);
+    proto.SetInstallation(Installation);
+    proto.MutableAuth()->CopyFrom(Auth);
+    proto.MutableProperties()->CopyFrom(Properties);
+    if (withReferences) {
+        proto.MutableReferences()->CopyFrom(ExternalTableReferences);
+    }
+}
+
+TBackupCollectionInfo::TPtr TBackupCollectionInfo::Create(const NKikimrSchemeOp::TBackupCollectionDescription& desc) {
+    TPtr result = New();
+
+    result->Description = desc;
+
+    return result;
+}
+
+bool TIncrementalRestoreState::TTableOperationState::RecordShardResult(TShardIdx shardIdx, bool success, bool retriable) {
+    if (CompletedShards.contains(shardIdx) || FailedShards.contains(shardIdx)) {
+        return false;
+    }
+    if (success) {
+        CompletedShards.insert(shardIdx);
+    } else {
+        FailedShards.insert(shardIdx);
+        if (!retriable) {
+            HasNonRetriableFailure = true;
+        }
+    }
+    return true;
+}
+
+float TIncrementalRestoreState::CalcCurrentIncrementalProgress() const {
+    ui32 totalShards = 0;
+    ui32 doneShards = 0;
+    for (const auto& [_, tableOp] : TableOperations) {
+        totalShards += tableOp.ExpectedShards.size();
+        doneShards += tableOp.CompletedShards.size() + tableOp.FailedShards.size();
+    }
+    if (totalShards == 0) {
+        return 0.0f;
+    }
+    return static_cast<float>(doneShards) / totalShards;
+}
+
+bool TIncrementalRestoreState::AreAllCurrentOperationsComplete() const {
+    // If we started processing the current incremental but there are no operations at all,
+    // it means no table backups were found in this incremental backup, so consider it complete
+    // TODO: probably have to ensure that empty backups are impossible
+    if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()
+        && PendingTables.empty() && PendingItems.empty()) {
+        return true;
+    }
+    // All in-progress ops completed and no sub-ops still queued or awaiting allocation.
+    return InProgressOperations.empty()
+        && PendingTables.empty()
+        && PendingItems.empty()
+        && !CompletedOperations.empty();
+}
+
+void TIncrementalRestoreState::MarkCurrentIncrementalComplete() {
+    if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+        IncrementalBackups[CurrentIncrementalIdx].Completed = true;
+    }
+}
+
+void TIncrementalRestoreState::MoveToNextIncremental() {
+    if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+        CurrentIncrementalIdx++;
+        CurrentIncrementalStarted = false;
+
+        InProgressOperations.clear();
+        CompletedOperations.clear();
+        // TableOperations.clear() also clears HasNonRetriableFailure on each table.
+        TableOperations.clear();
+        PendingTables.clear();
+
+        // Stage deadline anchor reset is owned by the caller (HandleAllOperationsComplete)
+        // because it needs ctx.Now() and a paired db.Update.
+        RetryScheduled = false;
+        NextRetryAttemptAt = TInstant::Zero();
+        NonRetriableFailure = false;
+    }
+}
+
+const TIncrementalRestoreState::TIncrementalBackup* TIncrementalRestoreState::GetCurrentIncremental() const {
+    if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+        return &IncrementalBackups[CurrentIncrementalIdx];
+    }
+
+    return nullptr;
+}
+
+void TIncrementalRestoreState::AddIncrementalBackup(const TPathId& pathId, const TString& path, ui64 timestamp) {
+    IncrementalBackups.emplace_back(pathId, path, timestamp);
+
+    // Sort by timestamp to ensure chronological order
+    std::sort(IncrementalBackups.begin(), IncrementalBackups.end(),
+                [](const TIncrementalBackup& a, const TIncrementalBackup& b) {
+                    return a.Timestamp < b.Timestamp;
+                });
+}
+
+bool TIncrementalBackupInfo::IsAllItemsDone() const {
+    for (const auto& item : Items) {
+        if (!item.second.IsDone()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TFullBackupInfo::IsAllItemsDone() const {
+    for (const auto& item : Items) {
+        if (!item.second.IsDone()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TFullBackupInfo::HasAnyFailed() const {
+    for (const auto& [_, item] : Items) {
+        if (item.State == TItem::EState::Failed) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TSecretInfo::TPtr TSecretInfo::CreateNextVersion() {
+    Y_ENSURE(AlterData == nullptr);
+
+    TPtr result = new TSecretInfo(*this);
+    ++result->AlterVersion;
+    this->AlterData = result;
+
+    return result;
+}
+
+TSecretInfo::TPtr TSecretInfo::Create(NKikimrSchemeOp::TSecretDescription&& desc) {
+    TPtr result = New();
+    TPtr alterData = result->CreateNextVersion();
+    alterData->Description = std::move(desc);
+
+    return result;
+}
+
+bool IsValidColumnName(const TString& name, bool allowSystemColumnNames) {
+    // The fulltext rowid column carries the system prefix but is user-facing: callers may
+    // pre-create it (or ALTER ADD it) and the schemeshard auto-provisions it. Always accept it,
+    // so a plain user CREATE/ALTER naming it is not rejected as a forbidden system column.
+    if (!allowSystemColumnNames
+        && name != NTableIndex::NFulltext::RowIdColumn
+        && name.StartsWith(SYSTEM_COLUMN_PREFIX))
+    {
+        return false;
+    }
+
+    for (auto c: name) {
+        if (!std::isalnum(c) && c != '_' && c != '-') {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+} // namespace NKikimr::NSchemeShard

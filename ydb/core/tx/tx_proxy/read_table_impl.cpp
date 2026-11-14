@@ -1,4 +1,5 @@
 #include "read_table_impl.h"
+#include <ydb/core/scheme/protos/key_range.pb.h>
 #include "proxy.h"
 
 #include <ydb/core/tx/datashard/datashard.h>

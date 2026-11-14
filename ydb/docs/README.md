@@ -61,6 +61,8 @@ The skill descriptions provide automatic routing. Requests containing
 
 All documentation tools are in [`.ruler/`](.ruler/):
 
+- **[DOCUMENTATION_POLICY.md](.ruler/DOCUMENTATION_POLICY.md)** - Canonical
+  entry point for documentation writing and review rules.
 - **[ydb-documentation](.ruler/skills/ydb-documentation/SKILL.md)** -
   Documentation writing workflow.
 - **[generate-internal-changelog](.ruler/skills/generate-internal-changelog/SKILL.md)** -
@@ -69,6 +71,11 @@ All documentation tools are in [`.ruler/`](.ruler/):
 - **[FORMAT_RULES.md](.ruler/FORMAT_RULES.md)** - Markdown formatting standards.
 - **[ruler.toml](.ruler/ruler.toml)** - Agent and skill distribution
   configuration.
+
+When changing documentation rules, start with `DOCUMENTATION_POLICY.md` and
+edit only the normative files it lists. Do not copy rule summaries into
+workflow skills. Run `ruler apply --skills` from `ydb/docs` after changing the
+policy, rules, or skills.
 
 ## Quick Start
 

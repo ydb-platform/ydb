@@ -637,7 +637,7 @@ public:
         // ScheduleWakeUp(StartTime, MovedPatchTag);
         Become(&TBlobStorageGroupPatchRequest::MovedPatchState);
         IsMovedPatch = true;
-        std::optional<ui32> subgroupIdx = 0;
+        std::optional<ui32> subgroupIdx;
         ReceivedResponseFlags.resize(VDisks.size(), false);
         ErrorResponseFlags.resize(VDisks.size(), false);
         EmptyResponseFlags.resize(VDisks.size(), false);
@@ -993,7 +993,9 @@ public:
         *outWorstNs = 0;
         *outNextToWorstNs = 0;
         for (ui32 diskIdx = 0; diskIdx < VDisks.size(); ++diskIdx) {
-            ui64 predictedNs = GroupQueues->GetPredictedDelayNsByOrderNumber(diskIdx, queueId);;
+            // diskIdx is the position in the subgroup, the queues are kept by the order number in the group
+            const ui32 orderNumber = Info->GetOrderNumber(VDisks[diskIdx]);
+            ui64 predictedNs = GroupQueues->GetPredictedDelayNsByOrderNumber(orderNumber, queueId);
             if (predictedNs > *outWorstNs) {
                 *outNextToWorstNs = *outWorstNs;
                 *outWorstNs = predictedNs;

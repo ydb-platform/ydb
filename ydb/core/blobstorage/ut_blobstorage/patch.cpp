@@ -492,4 +492,130 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
             checkBlob(id);
         }
     }
+
+    // Without a slow or failed disk the moved patch should go to a random disk of the subgroup of the original blob.
+    Y_UNIT_TEST(MovedPatchTargetIsNotAlwaysTheFirstDisk) {
+        TEnvironmentSetup env(true, TBlobStorageGroupType::Erasure4Plus2Block);
+        TTestInfo test = InitTest(env);
+
+        constexpr ui32 size = 100;
+        const TString data(size, 'a');
+        const TLogoBlobID originalBlobId(1, 1, 0, 0, size, 0);
+        SendPut(test, originalBlobId, data, NKikimrProto::OK);
+
+        // the subgroup position of the VDisk that receives the moved patch, for each patched blob
+        std::map<TLogoBlobID, ui32> targets;
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvVMovedPatch) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvVMovedPatch>()->Record;
+                targets[LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId())] = test.Info->GetIdxInSubgroup(
+                    VDiskIDFromVDiskID(record.GetVDiskID()), originalBlobId.Hash());
+            }
+            return true;
+        };
+
+        constexpr ui32 patchCount = 12;
+        TVector<TEvBlobStorage::TEvPatch::TDiff> diffs(1);
+        diffs[0].Set("b", 0);
+        for (ui32 patchIdx = 0; patchIdx < patchCount; ++patchIdx) {
+            const TLogoBlobID patchedBlobId(1, 1, patchIdx + 1, 0, size, 0);
+            SendPatch(test, originalBlobId, patchedBlobId, 0, diffs, NKikimrProto::OK);
+            // the queues forget request times after 12.8 s, so no disk looks slow at the next patch
+            env.Sim(TDuration::Seconds(15));
+        }
+        env.Runtime->FilterFunction = {};
+
+        UNIT_ASSERT_VALUES_EQUAL(targets.size(), patchCount);
+        std::set<ui32> positions;
+        for (const auto& [patchedBlobId, idx] : targets) {
+            positions.insert(idx);
+        }
+        UNIT_ASSERT_C(positions.size() > 1, "every moved patch went to subgroup position " << *positions.begin());
+    }
+
+    // A moved patch should not go to the disk whose queue predicts a long delay. The slow disk here is the first one
+    // in the subgroup of the original blob, and its order number in the group is not 0.
+    Y_UNIT_TEST(MovedPatchAvoidsTheSlowDisk) {
+        TEnvironmentSetup env(true, TBlobStorageGroupType::Erasure4Plus2Block);
+        TTestInfo test = InitTest(env);
+
+        constexpr ui32 size = 100;
+        TLogoBlobID originalBlobId;
+        for (ui32 step = 1; ; ++step) {
+            originalBlobId = TLogoBlobID(1, 1, step, 0, size, 0);
+            if (test.Info->GetOrderNumber(test.Info->GetVDiskInSubgroup(0, originalBlobId.Hash())) != 0) {
+                break;
+            }
+        }
+        const TVDiskIdShort slowVDiskId = test.Info->GetVDiskInSubgroup(0, originalBlobId.Hash());
+
+        auto getResultVDiskId = [](IEventHandle& ev) -> std::optional<TVDiskIdShort> {
+            switch (ev.GetTypeRewrite()) {
+                case TEvBlobStorage::EvVPutResult:
+                    return VDiskIDFromVDiskID(ev.Get<TEvBlobStorage::TEvVPutResult>()->Record.GetVDiskID());
+                case TEvBlobStorage::EvVMultiPutResult:
+                    return VDiskIDFromVDiskID(ev.Get<TEvBlobStorage::TEvVMultiPutResult>()->Record.GetVDiskID());
+                default:
+                    return std::nullopt;
+            }
+        };
+
+        // the original blob is put with the AsyncBlob class, and the answer of the slow disk is held for 3 s, so the
+        // PutAsyncBlob queue of that disk predicts a delay of 3 s for the next 12.8 s
+        bool hold = true;
+        std::unique_ptr<IEventHandle> heldResult;
+        std::unique_ptr<IEventHandle> putResult;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (hold && nodeId == test.Edge.NodeId() && getResultVDiskId(*ev) == slowVDiskId) {
+                heldResult = std::move(ev);
+                hold = false;
+                return false;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult && ev->GetRecipientRewrite() == test.Edge) {
+                putResult = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+        const TString data(size, 'a');
+        test.Runtime->WrapInActorContext(test.Edge, [&] {
+            SendToBSProxy(test.Edge, test.Info->GroupID, new TEvBlobStorage::TEvPut(originalBlobId, data, TInstant::Max(),
+                NKikimrBlobStorage::AsyncBlob));
+        });
+        env.Sim(TDuration::Seconds(3));
+        UNIT_ASSERT(heldResult);
+        env.Runtime->Send(heldResult.release(), test.Edge.NodeId());
+        env.Sim(TDuration::MilliSeconds(100));
+        UNIT_ASSERT(putResult);
+        UNIT_ASSERT_VALUES_EQUAL(putResult->Get<TEvBlobStorage::TEvPutResult>()->Status, NKikimrProto::OK);
+
+        // the VDisk that receives the moved patch, for each patched blob
+        std::map<TLogoBlobID, TVDiskIdShort> targets;
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvVMovedPatch) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvVMovedPatch>()->Record;
+                targets.emplace(LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId()),
+                    VDiskIDFromVDiskID(record.GetVDiskID()));
+            }
+            return true;
+        };
+
+        const TInstant start = env.Runtime->GetClock();
+        constexpr ui32 patchCount = 50;
+        TVector<TEvBlobStorage::TEvPatch::TDiff> diffs(1);
+        diffs[0].Set("b", 0);
+        for (ui32 patchIdx = 0; patchIdx < patchCount; ++patchIdx) {
+            const TLogoBlobID patchedBlobId(1, 2, patchIdx + 1, 0, size, 0);
+            SendPatch(test, originalBlobId, patchedBlobId, 0, diffs, NKikimrProto::OK);
+        }
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_C(env.Runtime->GetClock() - start < TDuration::Seconds(9), "the delay prediction may have expired");
+
+        UNIT_ASSERT_VALUES_EQUAL(targets.size(), patchCount);
+        ui32 toSlowDisk = 0;
+        for (const auto& [patchedBlobId, vdiskId] : targets) {
+            toSlowDisk += vdiskId == slowVDiskId;
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(toSlowDisk, 0u, "moved patches went to the slow disk " << slowVDiskId.ToString());
+    }
 }

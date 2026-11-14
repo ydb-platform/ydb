@@ -69,6 +69,17 @@
             ]
         },
         {
+            "Name": "TKiChecksumTable",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiChecksumTable!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSource", "Type": "TKiDataSource"},
+                {"Index": 2, "Name": "TableKey", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
             "Name": "TKiReadTable",
             "Base": "TKiReadBase",
             "Definition": "Custom",

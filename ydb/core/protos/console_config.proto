@@ -282,6 +282,8 @@ message TSetYamlConfigRequest {
     optional string IngressDatabase = 4;
     optional bool BypassAuth = 5;
     optional bool SkipAuditLog = 6;
+    // the commit of the controller session of this epoch; refused once a newer session is there
+    optional uint64 ControllerSessionEpoch = 7;
 }
 
 message TSetYamlConfigResponse {

@@ -360,6 +360,10 @@ private:
 
     TActorId ConfigsProvider;
     TActorId CommitActor;
+    // the epoch of the session of each controller slot (as ConfigClients), taken from LastControllerSessionEpoch by
+    // every new session of the slot; a commit accepted in an older session of its slot must not apply
+    ui64 LastControllerSessionEpoch = 0;
+    std::array<ui64, 2> ControllerSessionEpochs = {};
     TTxProcessor::TPtr TxProcessor;
     TLogger Logger;
     TSchedulerCookieHolder LogCleanupTimerCookieHolder;

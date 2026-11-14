@@ -2444,23 +2444,23 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
             CheckAggregatePushdown(client, averages + suffix, true);
         }
 
-        // Storage sums Float in Double. Keep Float sums, including mixed
-        // aggregates, in compute so their state type and rounding are preserved.
+        // As in the old optimizer, column shards compute a Float sum without keys. With keys, they return it as Double,
+        // which compute reads as Float, so keep it in compute, with the aggregates next to it.
         for (const auto& fields : {"SUM(float_value)", "SUM(optional_float)", "SUM(float_value), AVG(unsigned_value)"}) {
             const TString query = TStringBuilder() << "SELECT " << fields
                 << ", COUNT(optional_unsigned) AS cnt FROM `/Root/numeric_aggregates`";
-            CheckAggregatePushdown(client, query, false);
+            CheckAggregatePushdown(client, query, true);
             CheckAggregatePushdown(client, query + " GROUP BY group_key ORDER BY cnt", false);
         }
 
-        // Column shards drop NaN in MIN and MAX, while compute orders it last.
-        // Keep floating-point MIN and MAX, including mixed aggregates, in compute.
+        // As in the old optimizer, column shards compute MIN and MAX of floating-point values. They ignore NaN, which
+        // compute orders above every other value; the data here has none.
         for (const auto& fields : {"MIN(float_value)", "MAX(double_value)", "MIN(optional_float), MAX(optional_float)",
                                    "MAX(double_value), AVG(unsigned_value)"}) {
             const TString query = TStringBuilder() << "SELECT " << fields
                 << ", COUNT(optional_unsigned) AS cnt FROM `/Root/numeric_aggregates`";
-            CheckAggregatePushdown(client, query, false);
-            CheckAggregatePushdown(client, query + " GROUP BY group_key ORDER BY cnt", false);
+            CheckAggregatePushdown(client, query, true);
+            CheckAggregatePushdown(client, query + " GROUP BY group_key ORDER BY cnt", true);
         }
     }
 
@@ -2614,6 +2614,30 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
         CheckAggregatePushdown(client, "SELECT AVG(level) FROM `/Root/olapStore/olapTable`", true);
         CheckAggregatePushdown(client, "SELECT AVG(level), SUM(level), COUNT(*) FROM `/Root/olapStore/olapTable`", true);
         CheckAggregatePushdown(client, "SELECT COUNT(*), SUM(level), MIN(level) FROM `/Root/olapStore/olapTable`", true);
+
+        // Without the cast, AVG sums the Float column itself. With keys, column shards return that sum as Double, which
+        // compute reads as Float, so keep it in compute.
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto created = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/floats` (
+                    id Uint64 NOT NULL, k Uint64, f Float,
+                    PRIMARY KEY (id)
+                ) PARTITION BY HASH(id) WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )").GetValueSync();
+            UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (ui64 id = 0; id < 10; ++id) {
+                rows.AddListItem().BeginStruct().AddMember("id").Uint64(id).AddMember("k").OptionalUint64(id % 2)
+                    .AddMember("f").OptionalFloat(1.5f * id).EndStruct();
+            }
+            rows.EndList();
+            const auto written = client.BulkUpsert("/Root/floats", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
+        }
+        CheckAggregatePushdown(client, "SELECT AVG(f) FROM `/Root/floats`", true);
+        CheckAggregatePushdown(client, "SELECT k, AVG(f) AS a FROM `/Root/floats` GROUP BY k ORDER BY k", false);
     }
 
     Y_UNIT_TEST(DoubleOutOfRangeInJson) {
@@ -5126,6 +5150,57 @@ Y_UNIT_TEST_SUITE(KqpRboOlapAggregations) {
             const auto rows = getRows(expected);
             CompareYson(rows, getRows(query));
             CompareYson(rows, getRows(aggregates + query));
+        }
+    }
+
+    // With keys, column shards return the sum of a Float column as Double, while the plan reads it as Float: with debug
+    // checks the compute task aborts the process ("Bad datum type: array[float] expected, array[double] got"), without
+    // them the query returns wrong values. So SUM of Float with keys, and AVG of Float with keys when the read program
+    // cannot cast its input to Double, stay in compute.
+    Y_UNIT_TEST_TWIN(GroupedFloatSumsDoNotAbort, ScalarApply) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableOlapScalarApply(ScalarApply);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        {
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            const auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/floats` (
+                    id Uint64 NOT NULL, k Int32, f Float,
+                    PRIMARY KEY (id)
+                ) PARTITION BY HASH(id) WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            // In Float, 2^24 + 1 rounds back to 2^24, so a Float sum differs from a Double one.
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (ui64 id = 1; id <= 12; ++id) {
+                rows.AddListItem().BeginStruct().AddMember("id").Uint64(id).AddMember("k").OptionalInt32(id % 2)
+                    .AddMember("f").OptionalFloat(id <= 2 ? 16777216.f : 1.f).EndStruct();
+            }
+            rows.EndList();
+            const auto result = kikimr.GetTableClient().BulkUpsert("/Root/floats", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        const auto run = [&](const TString& query) {
+            const auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return std::make_pair(TString{*result.GetStats()->GetAst()}, FormatResultSetYson(result.GetResultSet(0)));
+        };
+        const TString pushdown = R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; )";
+        // The read program casts the input of AVG to Double only with scalar apply, and then column shards may sum it.
+        for (const auto& [query, pushed] : std::vector<std::pair<TString, bool>>{
+                 {"SELECT k, SUM(f) AS s FROM `/Root/floats` GROUP BY k ORDER BY k", false},
+                 {"SELECT k, AVG(f) AS a FROM `/Root/floats` GROUP BY k ORDER BY k", ScalarApply}}) {
+            const auto [ast, rows] = run(pushdown + query);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("TKqpOlapAgg"), pushed, query << ", AST: " << ast);
+            CompareYson(run(query).second, rows);
         }
     }
 }

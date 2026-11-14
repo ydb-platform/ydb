@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -38,7 +39,7 @@ TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
     return out;
 }
 
-TString FormatOffsetsByConsumers(const y_absl::flat_hash_map<TString, ui64>& offsetsByConsumers) {
+TString FormatOffsetsByConsumers(const auto& offsetsByConsumers) {
     TStringBuilder out;
     bool firstConsumer = true;
     for (const auto& [consumer, offset] : offsetsByConsumers) {
@@ -92,6 +93,7 @@ TMirrorer::TMirrorer(
     bool localDC,
     ui64 endOffset,
     const NKikimrPQ::TMirrorPartitionConfig& config,
+    const TVector<TString>& destinationConsumers,
     const TTabletCountersBase& counters
 )
     : TBaseTabletActor(tabletId, tabletActor, NKikimrServices::PQ_MIRRORER)
@@ -104,8 +106,24 @@ TMirrorer::TMirrorer(
     , OffsetToRead(endOffset)
     , Config(config)
 {
+    SetDestinationConsumers(destinationConsumers);
     Counters.Populate(counters);
     Counters.ResetCounters();
+}
+
+void TMirrorer::SetDestinationConsumers(const TVector<TString>& consumers) {
+    THashSet<TString> next;
+    next.insert(consumers.begin(), consumers.end());
+
+    for (const auto& consumer : DestinationConsumers) {
+        if (!next.contains(consumer)) {
+            OffsetsByConsumers.erase(consumer);
+            ReplicatedOffsetsByConsumers.erase(consumer);
+            VersionedOffsetsByConsumers.erase(consumer);
+            MissingVersionedOffsetDiagnostics.erase(consumer);
+        }
+    }
+    DestinationConsumers = std::move(next);
 }
 
 void TMirrorer::Bootstrap(const TActorContext& ctx) {
@@ -424,16 +442,28 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
 }
 
 void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
+    const auto& tabletConfig = ev->Get()->Config;
+    TVector<TString> destinationConsumers;
+    for (const auto& consumer : tabletConfig.GetConsumers()) {
+        destinationConsumers.push_back(consumer.GetName());
+    }
+    SetDestinationConsumers(destinationConsumers);
+
     bool equalConfigs = google::protobuf::util::MessageDifferencer::Equals(
         Config,
-        ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()
+        tabletConfig.GetPartitionConfig().GetMirrorFrom()
     );
     LOG_N(
         "Got new config, equal with previous",
         {"previous", equalConfigs}
     );
     if (!equalConfigs) {
-        Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
+        Config = tabletConfig.GetPartitionConfig().GetMirrorFrom();
+        OffsetsByConsumers.clear();
+        ReplicatedOffsetsByConsumers.clear();
+        VersionedOffsetsByConsumers.clear();
+        MissingVersionedOffsetDiagnostics.clear();
+        MirroredOffsetToSend = Nothing();
         LOG_N("Changing config");
 
         StartInit(ctx);
@@ -509,37 +539,46 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
 }
 
 void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
-    if (OffsetsByConsumers.empty() && !MirroredOffsetToSend) {
-        return;
-    }
-
-    y_absl::flat_hash_map<TString, ui64> offsetsByConsumersToSend;
-    for (auto& [consumer, offset] : OffsetsByConsumers) {
-        auto offsetToSend = Min(offset, Max(EndOffset, ConfirmedEndOffset));
-        if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offsetToSend) {
-            continue;
-        }
-        
-        offsetsByConsumersToSend[consumer] = offsetToSend;
-    }
-
-    if (offsetsByConsumersToSend.empty() && !MirroredOffsetToSend.Defined()) {
+    const bool versioned = Config.GetMirrorVersionedConsumerOffsets();
+    const ui64 availableOffset = versioned ? ConfirmedEndOffset : Max(EndOffset, ConfirmedEndOffset);
+    if (!MirroredOffsetToSend
+        && (versioned ? VersionedOffsetsByConsumers.empty() : OffsetsByConsumers.empty())) {
         return;
     }
 
     auto event = MakeHolder<TEvPQ::TEvReplicationData>();
-    for (const auto& [consumer, offset] : offsetsByConsumersToSend) {
-        (event->OffsetsByConsumers)[consumer] = offset;
+    if (versioned) {
+        y_absl::erase_if(VersionedOffsetsByConsumers, [&](const auto& entry) {
+            const auto& [consumer, offset] = entry;
+            if (offset.GetOffset() > availableOffset || offset.GetOffset() > static_cast<ui64>(Max<i64>())) {
+                return false;
+            }
 
-        ReplicatedOffsetsByConsumers[consumer] = offset;
+            event->VersionedOffsetsByConsumers[consumer] = offset;
+            event->OffsetsByConsumers[consumer] = offset.GetOffset();
+            return true;
+        });
+    } else {
+        y_absl::erase_if(OffsetsByConsumers, [&](const auto& entry) {
+            const auto& [consumer, pendingOffset] = entry;
+            const ui64 offsetToSend = Min(pendingOffset, availableOffset);
+            const auto replicated = ReplicatedOffsetsByConsumers.find(consumer);
+            if (replicated != ReplicatedOffsetsByConsumers.end() && replicated->second == offsetToSend) {
+                return false;
+            }
 
-        if (offset == OffsetsByConsumers[consumer]) {
-            OffsetsByConsumers.erase(consumer);
-        }
+            event->OffsetsByConsumers[consumer] = offsetToSend;
+            ReplicatedOffsetsByConsumers[consumer] = offsetToSend;
+            return offsetToSend == pendingOffset;
+        });
+    }
+
+    if (event->OffsetsByConsumers.empty() && !MirroredOffsetToSend) {
+        return;
     }
 
     LOG_D("Sending replication data to consumers",
-        {"offsetsByConsumersToSend", FormatOffsetsByConsumers(offsetsByConsumersToSend)},
+        {"offsetsByConsumersToSend", FormatOffsetsByConsumers(event->OffsetsByConsumers)},
         {"ReplicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
         {"OffsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
         {"MirroredOffsetToSend", MirroredOffsetToSend ? ToString(*MirroredOffsetToSend) : "none"});
@@ -756,8 +795,10 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
 }
 
 void TMirrorer::AddMessagesToQueue(
-    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages
+    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages,
+    const TActorContext& ctx
 ) {
+    const bool versioned = Config.GetMirrorVersionedConsumerOffsets();
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
         if (NYdb::NTopic::IsReplicationServiceMessage(offset, msg.GetMessageMeta()->Fields)) {
@@ -766,7 +807,37 @@ void TMirrorer::AddMessagesToQueue(
                 LastReplicationDataTimestamp = TActivationContext::Now();
                 LOG_D("Received replication data", {"replicationData", replicationData.DebugString()});
 
+                if (versioned) {
+                    // Entry presence defines the tuple; omitted scalar fields have their protobuf zero defaults.
+                    for (const auto& [consumer, offset] : replicationData.GetVersionedOffsetsByConsumers()) {
+                        if (!DestinationConsumers.contains(consumer)) {
+                            continue;
+                        }
+                        MissingVersionedOffsetDiagnostics.erase(consumer);
+                        auto [it, inserted] = VersionedOffsetsByConsumers.try_emplace(consumer, offset);
+                        if (inserted) {
+                            continue;
+                        }
+                        const auto comparison = CompareConsumerOffsetVersions(offset, it->second);
+                        if (comparison > 0) {
+                            it->second = offset;
+                        } else if (comparison == 0 && offset.GetOffset() != it->second.GetOffset()) {
+                            ProcessError(ctx, TStringBuilder() << "Conflicting versioned offsets for consumer " << consumer);
+                        }
+                    }
+                }
                 for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
+                    if (!DestinationConsumers.contains(consumer)) {
+                        continue;
+                    }
+                    if (versioned) {
+                        if (!replicationData.GetVersionedOffsetsByConsumers().contains(consumer)
+                            && MissingVersionedOffsetDiagnostics.insert(consumer).second) {
+                            ProcessError(ctx, TStringBuilder()
+                                << "Source consumer " << consumer << " has no versioned offset in opt-in mode");
+                        }
+                        continue;
+                    }
                     auto& pendingOffset = OffsetsByConsumers[consumer];
                     pendingOffset = Max(pendingOffset, offset);
                 }
@@ -877,7 +948,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     LastReadEventTime = ctx.Now();
 
     if (auto* dataEvent = std::get_if<TPersQueueReadEvent::TDataReceivedEvent>(&event.value())) {
-        AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()));
+        AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()), ctx);
     } else if (auto* createStream = std::get_if<TPersQueueReadEvent::TStartPartitionSessionEvent>(&event.value())) {
         LOG_I(
             "Got create stream event for and will set",
@@ -1041,8 +1112,9 @@ NActors::IActor* CreateMirrorer(const ui64 tabletId,
                                 const bool localDC,
                                 const ui64 endOffset,
                                 const NKikimrPQ::TMirrorPartitionConfig& config,
+                                const TVector<TString>& destinationConsumers,
                                 const TTabletCountersBase& counters) {
-    return new TMirrorer(tabletId, tabletActor, partitionActor, topicConverter, partition, localDC, endOffset, config, counters);
+    return new TMirrorer(tabletId, tabletActor, partitionActor, topicConverter, partition, localDC, endOffset, config, destinationConsumers, counters);
 }
 
 }// NPQ

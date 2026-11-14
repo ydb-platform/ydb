@@ -416,6 +416,12 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
     }
     userInfo = GetIfExists(user);
     AFL_ENSURE(userInfo);
+    userInfo->OffsetRevision = userData.GetOffsetRevision();
+    if (userData.HasReplicatedOffset()) {
+        userInfo->ReplicatedOffset = userData.GetReplicatedOffset();
+    } else {
+        userInfo->ReplicatedOffset.reset();
+    }
     userInfo->Parsed = true;
 }
 

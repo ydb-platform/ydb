@@ -45,7 +45,6 @@ TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant t
 
 
 class TKeyLevel;
-struct TMirrorerInfo;
 
 enum class ECommitState {
     Pending,
@@ -477,8 +476,9 @@ private:
                      const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated,
                      ui64 offset, ui32 gen, ui32 step, const TString& session,
                      ui64 readOffsetRewindSum,
-                     ui64 readRuleGeneration,
-                     bool anyCommits, const std::optional<TString>& committedMetadata);
+                     ui64 readRuleGeneration, ui64 offsetRevision,
+                     bool anyCommits, const std::optional<TString>& committedMetadata,
+                     const std::optional<NKikimrPQ::TVersionedConsumerOffset>& replicatedOffset);
     void AddCmdWriteTxMeta(NKikimrClient::TKeyValueRequest& request);
     void AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request);
     void AddCmdWriteConfig(NKikimrClient::TKeyValueRequest& request);
@@ -1172,7 +1172,7 @@ private:
 
     TDeque<NKikimrPQ::TStatusResponse::TErrorMessage> Errors;
 
-    THolder<TMirrorerInfo> Mirrorer;
+    TActorId Mirrorer;
 
     TInstant LastUsedStorageMeterTimestamp;
 

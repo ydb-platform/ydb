@@ -24,6 +24,12 @@ message TPartitionCounterData {
     //ToDo: !! InputLag = 7
 }
 
+message TVersionedConsumerOffset {
+    optional uint64 Offset = 1;
+    optional uint64 ReadRuleGeneration = 2;
+    optional uint64 OffsetRevision = 3;
+}
+
 message TPartitionMeta {
     optional uint64 StartOffset = 1;
     optional uint64 EndOffset = 2;
@@ -267,6 +273,7 @@ message TMirrorPartitionConfig {
     optional bool UseSecureConnection = 9 [default = false];
     reserved 10; // was SyncWriteTime; mirrored topics always sync source write time (PQv1 API)
     optional bool MirrorConsumerOffsets = 11 [default = false];
+    optional bool MirrorVersionedConsumerOffsets = 12 [default = false];
 }
 
 message TPartitionConfig {
@@ -853,6 +860,8 @@ message TUserInfo {
     // used for first-commit distributed commits when the partition has parents after a split.
     optional bool AnyCommits = 8;
     optional string CommittedMetadata = 9;
+    optional uint64 OffsetRevision = 10 [default = 0];
+    optional TVersionedConsumerOffset ReplicatedOffset = 11;
 }
 
 message TPQClusterDiscoveryConfig {

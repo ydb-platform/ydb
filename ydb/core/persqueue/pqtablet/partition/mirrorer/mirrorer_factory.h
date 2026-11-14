@@ -26,6 +26,7 @@ NActors::IActor* CreateMirrorer(const ui64 tabletId,
                                 const bool localDC,
                                 const ui64 endOffset,
                                 const NKikimrPQ::TMirrorPartitionConfig& config,
+                                const TVector<TString>& destinationConsumers,
                                 const TTabletCountersBase& counters);
 
 } // namespace NPQ

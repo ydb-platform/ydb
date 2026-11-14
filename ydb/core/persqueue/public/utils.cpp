@@ -8,7 +8,9 @@
 
 #include <util/generic/algorithm.h>
 
+#include <compare>
 #include <deque>
+#include <utility>
 
 namespace NKikimr::NPQ {
 
@@ -42,7 +44,20 @@ bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config) {
 }
 
 bool ReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config) {
-    return MirroringEnabled(config) && config.GetPartitionConfig().GetMirrorFrom().GetMirrorConsumerOffsets();
+    const auto& mirrorFrom = config.GetPartitionConfig().GetMirrorFrom();
+    return MirroringEnabled(config)
+        && (mirrorFrom.GetMirrorConsumerOffsets() || mirrorFrom.GetMirrorVersionedConsumerOffsets());
+}
+
+bool VersionedReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config) {
+    return MirroringEnabled(config) && config.GetPartitionConfig().GetMirrorFrom().GetMirrorVersionedConsumerOffsets();
+}
+
+std::strong_ordering CompareConsumerOffsetVersions(const NKikimrPQ::TVersionedConsumerOffset& left,
+                                                   const NKikimrPQ::TVersionedConsumerOffset& right) {
+    const auto leftVersion = std::make_pair(left.GetReadRuleGeneration(), left.GetOffsetRevision());
+    const auto rightVersion = std::make_pair(right.GetReadRuleGeneration(), right.GetOffsetRevision());
+    return leftVersion <=> rightVersion;
 }
 
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {

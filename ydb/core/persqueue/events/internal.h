@@ -1379,6 +1379,7 @@ struct TEvPQ {
 
     struct TEvReplicationData : public TEventLocal<TEvReplicationData, EvReplicationData> {
         THashMap<TString, ui64> OffsetsByConsumers;
+        THashMap<TString, NKikimrPQ::TVersionedConsumerOffset> VersionedOffsetsByConsumers;
         TMaybe<ui64> MirroredOffset;
     };
 

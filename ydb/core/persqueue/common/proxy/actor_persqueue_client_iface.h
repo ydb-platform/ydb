@@ -139,7 +139,7 @@ public:
             .AutoPartitioningSupport(true)
             .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
 
-        if (config.GetMirrorConsumerOffsets()) {
+        if (config.GetMirrorConsumerOffsets() || config.GetMirrorVersionedConsumerOffsets()) {
             settings.Header({{"x-ydb-supports-replication-messages", "true"}});
         }
 

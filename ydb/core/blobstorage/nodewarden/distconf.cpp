@@ -107,7 +107,32 @@ namespace NKikimr::NStorage {
         }
     }
 
+    bool TDistributedConfigKeeper::ConflictsWithCommittedMetadata(const NKikimrBlobStorage::TStorageConfig& config) const {
+        if (LocalCommittedStorageConfig) {
+            return false;
+        }
+        for (const auto& [path, record] : MetadataByPath) {
+            if (record.HasCommittedStorageConfig()) {
+                const auto& committed = record.GetCommittedStorageConfig();
+                if (config.GetGeneration() < committed.GetGeneration() ||
+                    (config.GetGeneration() == committed.GetGeneration() && config.GetFingerprint() != committed.GetFingerprint())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (auto error = ValidateStateStorageSelections(config)) {
+            YDB_LOG_ERROR("Storage configuration rejected", {"error", *error}, {"generation", config.GetGeneration()});
+            return false;
+        }
+        // The initial Base config keeps the node available to collect and diagnose rejected stored configurations.
+        if ((StorageConfig || &config != BaseConfig.get()) && ConflictsWithCommittedMetadata(config)) {
+            YDB_LOG_ERROR("Storage configuration conflicts with stored committed metadata", {"generation", config.GetGeneration()});
+            return false;
+        }
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
                 (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
             if (!IsSelfStatic && Cfg->BridgeConfig) {
@@ -210,6 +235,15 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::ApplyCommittedStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (auto error = ValidateStateStorageSelections(config)) {
+            YDB_LOG_ERROR("Committed storage configuration rejected", {"error", *error}, {"generation", config.GetGeneration()});
+            return;
+        }
+        if (ConflictsWithCommittedMetadata(config)) {
+            YDB_LOG_ERROR("Committed storage configuration conflicts with stored committed metadata",
+                {"generation", config.GetGeneration()});
+            return;
+        }
         FanOutReversePush(&config); // send this configuration to all direct bound nodes (before they get possibly unbound)
         ApplyStorageConfig(config);
 
@@ -435,9 +469,9 @@ namespace NKikimr::NStorage {
         }
 
         for (const auto& [path, record] : MetadataByPath) {
-            if (record.HasCommittedStorageConfig()) {
+            // Rejected committed metadata can remain available without being installed as a local commit.
+            if (record.HasCommittedStorageConfig() && LocalCommittedStorageConfig) {
                 const auto& config = record.GetCommittedStorageConfig();
-                Y_ABORT_UNLESS(LocalCommittedStorageConfig);
                 Y_ABORT_UNLESS(config.GetGeneration() <= LocalCommittedStorageConfig->GetGeneration());
             }
         }

@@ -344,6 +344,29 @@ ERingGroupState GetRingGroupState(const NKikimrConfig::TStateStorageConfig::TRin
             Y_ABORT("Unsupported ring group pile state");
     }
 }
+
+TString ValidateStateStorageConfigSelection(const NKikimrConfig::TStateStorageConfig& config) {
+    const auto validate = [](const auto& group, const TString& path) -> TString {
+        const ui32 rings = group.RingSize() ? group.RingSize() : group.NodeSize();
+        if (!group.GetNToSelect() || group.GetNToSelect() > rings) {
+            return TStringBuilder() << path << ".NToSelect# " << group.GetNToSelect()
+                << " must be in [1, " << rings << "] (number of configured rings)";
+        }
+        return {};
+    };
+    if (config.HasRing()) {
+        if (TString error = validate(config.GetRing(), "Ring")) {
+            return error;
+        }
+    }
+    for (ui32 i = 0; i < config.RingGroupsSize(); ++i) {
+        if (TString error = validate(config.GetRingGroups(i), TStringBuilder() << "RingGroups[" << i << ']')) {
+            return error;
+        }
+    }
+    return {};
+}
+
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const TString& namePrefix,
         const NKikimrConfig::TStateStorageConfig& config) {
     char name[TActorId::MaxServiceIDLength];

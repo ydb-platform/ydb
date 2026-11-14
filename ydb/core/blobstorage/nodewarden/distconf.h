@@ -472,6 +472,8 @@ namespace NKikimr::NStorage {
         THashMap<TString, TCacheItem> Cache;
         std::set<std::tuple<TString, TActorId>> CacheSubscriptions;
 
+        bool ConflictsWithCommittedMetadata(const NKikimrBlobStorage::TStorageConfig& config) const;
+
         friend void ::Out<ERootState>(IOutputStream&, ERootState);
 
     public:
@@ -962,6 +964,8 @@ namespace NKikimr::NStorage {
             const NKikimrBlobStorage::TStorageConfig& proposed);
 
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config);
+
+    std::optional<TString> ValidateStateStorageSelections(const NKikimrBlobStorage::TStorageConfig& config);
 
     std::optional<TString> ValidateBridgeClusterState(const NKikimrBridge::TClusterState& state);
 

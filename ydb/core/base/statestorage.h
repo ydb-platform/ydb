@@ -647,6 +647,9 @@ struct TBoardRetrySettings {
 ui64 GetSchemeBoardSelectionKey(TStringBuf path);
 ui64 GetSchemeBoardSelectionKey(const TPathId& pathId);
 
+// Validate selection bounds in the original configuration before applying it.
+TString ValidateStateStorageConfigSelection(const NKikimrConfig::TStateStorageConfig& config);
+
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TStateStorageConfig& config);
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TStateStorageConfig& config);
 TIntrusivePtr<TStateStorageInfo> BuildSchemeBoardInfo(const NKikimrConfig::TStateStorageConfig& config);

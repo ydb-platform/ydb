@@ -135,7 +135,8 @@ void PreFillArgs(std::vector<TString>& args, const TString& configPath) {
     args.push_back(configPath);
 }
 
-NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args, std::unique_ptr<NConfig::IEnv> envMock) {
+NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args, std::unique_ptr<NConfig::IEnv> envMock,
+        NYamlConfig::IConfigSwissKnife* configSwissKnife = nullptr) {
     auto errorCollector = NConfig::MakeDefaultErrorCollector();
     auto protoConfigFileProvider = NConfig::MakeDefaultProtoConfigFileProvider();
     auto configUpdateTracer = NConfig::MakeDefaultConfigUpdateTracer();
@@ -171,7 +172,7 @@ NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args, std:
     NLastGetopt::TOptsParseResult parseResult(&opts, argv.size(), argv.data());
 
     initCfg->ValidateOptions(opts, parseResult);
-    initCfg->Parse(parseResult.GetFreeArgs(), nullptr);
+    initCfg->Parse(parseResult.GetFreeArgs(), configSwissKnife);
 
     NKikimrConfig::TAppConfig appConfig;
     ui32 nodeId;
@@ -382,6 +383,44 @@ selector_config:
         UNIT_ASSERT(appConfig.HasActorSystemConfig());
         const auto& actorConfig = appConfig.GetActorSystemConfig();
         UNIT_ASSERT_EQUAL(actorConfig.GetCpuCount(), 42);
+    }
+
+    Y_UNIT_TEST(StateStorageSelectionIsValidatedAfterApplyingSelectors) {
+        auto configSwissKnife = NYamlConfig::CreateDefaultConfigSwissKnife();
+        for (ui32 nToSelect : {3u, 0u, 9u}) {
+            const TString selectedConfig = TStringBuilder() << config << R"(
+  - description: "State storage selection for this node"
+    selector:
+      node_id: 1
+    config:
+      domains_config:
+        state_storage:
+        - ssid: 1
+          ring:
+            nto_select: )" << nToSelect << R"(
+            ring:
+            - node: [1, 2, 3]
+            - node: [4, 5, 6]
+            - node: [7, 8, 9]
+)";
+            TTempFileHandle configFile = CreateConfigFile(selectedConfig);
+            TVector<TString> args;
+            PreFillArgs(args, configFile.Name());
+
+            try {
+                const auto appConfig = TransformConfig(args, GetEnvMock(), configSwissKnife.get());
+                UNIT_ASSERT_VALUES_EQUAL(nToSelect, 3);
+                const auto& ring = appConfig.GetDomainsConfig().GetStateStorage(0).GetRing();
+                UNIT_ASSERT_VALUES_EQUAL(ring.GetNToSelect(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(ring.RingSize(), 3);
+            } catch (const TInitializationException& e) {
+                UNIT_ASSERT_C(nToSelect != 3, e.what());
+                UNIT_ASSERT_C(e.HasErrorCode(), e.what());
+                UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDBE-10013");
+                UNIT_ASSERT_STRING_CONTAINS(TString(e.what()),
+                    TStringBuilder() << "NToSelect# " << nToSelect << " must be in [1, 3]");
+            }
+        }
     }
 }
 

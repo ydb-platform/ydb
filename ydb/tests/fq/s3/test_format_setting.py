@@ -921,13 +921,13 @@ Pear;15;33'''
         query = client.execute(sql)
         query.check()
 
-    def test_precompute_with_pg_binding(self, kikimr, s3, client, unique_prefix):
+    def test_precompute_with_binding(self, kikimr, s3, client, unique_prefix):
         test_suffix = "_0"
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
-        bucket_name = "precompute_with_pg_binding" + test_suffix
+        bucket_name = "precompute_with_binding" + test_suffix
         bucket = resource.Bucket(bucket_name)
         bucket.create(ACL='public-read')
 
@@ -942,7 +942,7 @@ Pear;15;33'''
 
         s3_client.put_object(Body=ids_data, Bucket=bucket_name, Key='ids.json', ContentType='text/json')
         connection_response = client.create_external_data_source(
-            unique_prefix + "precompute_with_pg" + test_suffix, bucket_name
+            unique_prefix + "precompute_with_binding" + test_suffix, bucket_name
         )
 
         binding_for_ids_name = unique_prefix + "binding_for_ids" + test_suffix

@@ -168,7 +168,6 @@ public:
         TString ColName;
         ui32 PositionInStruct;
         NScheme::TTypeInfo Type;
-        i32 Typmod;
         bool NotNull = false;
         bool SetNotNullInProgress = false;
     };
@@ -541,11 +540,11 @@ private:
             }
 
             if (ci.KeyOrder != -1) {
-                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, -1, notNull, ci.SetNotNullInProgress};
+                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, notNull, ci.SetNotNullInProgress};
                 keyColumnsLeft.erase(ci.Name);
                 KeyColumnNames[ci.KeyOrder] = ci.Name;
             } else {
-                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, -1, notNull, ci.SetNotNullInProgress});
+                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, notNull, ci.SetNotNullInProgress});
                 ValueColumnNames.emplace_back(ci.Name);
                 ValueColumnTypes.emplace_back(ci.PType);
             }
@@ -1518,7 +1517,7 @@ inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescri
         }
         cells.push_back({});
         if (!CellFromProtoVal(
-                fd.Type, fd.Typmod, &proto.Getitems(fd.PositionInStruct), false, cells.back(), err, valueDataPool, allowInfDouble)) {
+                fd.Type, &proto.Getitems(fd.PositionInStruct), false, cells.back(), err, valueDataPool, allowInfDouble)) {
             return false;
         }
 

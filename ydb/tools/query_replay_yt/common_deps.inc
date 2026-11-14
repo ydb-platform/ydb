@@ -61,9 +61,8 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/services/ydb
     yql/essentials/core/services/mounts
     yql/essentials/minikql/comp_nodes/llvm16
-    yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/sql/pg
+    yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/compress_base
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/digest

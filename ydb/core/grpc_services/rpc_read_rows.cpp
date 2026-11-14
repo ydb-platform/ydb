@@ -174,7 +174,7 @@ public:
             KeyColumnTypes[colInfo.KeyOrder] = colInfo.PType;
 
             bool notNull = notNullColumns.contains(colInfo.Name);
-            KeyColumnPositions[colInfo.KeyOrder] = NTxProxy::TFieldDescription{colInfo.Id, colInfo.Name, static_cast<ui32>(pos), colInfo.PType, -1, notNull};
+            KeyColumnPositions[colInfo.KeyOrder] = NTxProxy::TFieldDescription{colInfo.Id, colInfo.Name, static_cast<ui32>(pos), colInfo.PType, notNull};
             keyColumnsLeft.erase(colInfo.Name);
         }
 

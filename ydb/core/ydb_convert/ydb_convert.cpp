@@ -1193,7 +1193,7 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
     return ok;
 }
 
-bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32, const Ydb::Value* vp, bool allowCastFromString,
+bool CellFromProtoVal(const NScheme::TTypeInfo& type, const Ydb::Value* vp, bool allowCastFromString,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool, bool allowInfDouble)
 {
     if (vp->Hasnull_flag_value()) {
@@ -1530,7 +1530,7 @@ bool CellsFromTuple(const Ydb::Type* tupleType,
 
         TCell c;
         TString cellErr;
-        bool parsed = CellFromProtoVal(types[i].TypeInfo, -1, &v, allowCastFromString, c, cellErr, valueDataPool);
+        bool parsed = CellFromProtoVal(types[i].TypeInfo, &v, allowCastFromString, c, cellErr, valueDataPool);
 
         CHECK_OR_RETURN_ERROR(parsed, cellErr + " in tuple at position " + ToString(i));
 

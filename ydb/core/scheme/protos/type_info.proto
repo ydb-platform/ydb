@@ -2,8 +2,8 @@ package NKikimrProto;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TTypeInfo {
-    reserved 1, 2;
-    reserved "PgTypeId", "PgTypeMod";
+    reserved 1; // PgTypeId
+    reserved 2; // PgTypeMod
     optional uint32 DecimalPrecision = 3;
     optional uint32 DecimalScale = 4;
 }

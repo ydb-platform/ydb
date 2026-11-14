@@ -17,8 +17,7 @@ PEERDIR(
     ydb/apps/version
     ydb/core/load_test/ddisk
     ydb/library/pdisk_io
-    yql/essentials/parser/pg_wrapper
-    yql/essentials/sql/pg
+    yql/essentials/sql/pg_dummy
     yql/essentials/minikql/comp_nodes/llvm16
     yt/yql/providers/yt/comp_nodes/dq/llvm16
     yt/yql/providers/yt/comp_nodes/llvm16

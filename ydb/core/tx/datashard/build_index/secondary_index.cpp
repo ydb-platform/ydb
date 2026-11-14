@@ -86,19 +86,14 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
         }
 
         NScheme::TTypeInfo typeInfo;
-        i32 typeMod = -1;
         Ydb::StatusIds::StatusCode status;
-
-        if (column.default_from_literal().type().has_pg_type()) {
-            typeMod = column.default_from_literal().type().pg_type().typmod();
-        }
 
         TString unusedtm;
         if (!ExtractColumnTypeInfo(typeInfo, unusedtm, column.default_from_literal().type(), status, err)) {
             return false;
         }
 
-        if (!CellFromProtoVal(typeInfo, typeMod, &column.default_from_literal().value(), false, back, err, valueDataPool)) {
+        if (!CellFromProtoVal(typeInfo, &column.default_from_literal().value(), false, back, err, valueDataPool)) {
             return false;
         }
     }

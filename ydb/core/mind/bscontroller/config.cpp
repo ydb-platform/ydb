@@ -84,8 +84,8 @@ namespace NKikimr::NBsController {
 
             // NodeWarden latches the pool override from the VDisk record when the VDisk starts. Resend the records
             // of every VDisk, donors included, whose pool override may have changed: groups of pools with a changed
-            // override and groups moved to another pool. Group generation stays put, and a running VDisk keeps the
-            // mode it latched.
+            // override and groups moved to another pool. A moved group gets a new generation, but a running VDisk
+            // keeps the mode it latched.
             void PublishHeapAllocatorOverrides() {
                 THashSet<TGroupId> groups;
                 const auto& storagePoolGroups = State.StoragePoolGroups.Get();

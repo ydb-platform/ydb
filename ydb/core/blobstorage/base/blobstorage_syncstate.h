@@ -1,14 +1,14 @@
 #pragma once
+#include <util/stream/fwd.h>
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_vdisk_guids.h>
 
-#include <ydb/core/protos/blobstorage.pb.h>
-#include <ydb/core/base/blobstorage.h>
-#include <ydb/core/base/appdata_fwd.h>
 
-#include <util/stream/input.h>
-#include <util/string/printf.h>
+
+namespace NKikimrBlobStorage {
+    class TSyncState;
+}
 
 namespace NKikimr {
 
@@ -37,38 +37,18 @@ namespace NKikimr {
             return !operator ==(x);
         }
 
-        void Serialize(IOutputStream &s) const {
-            s.Write(&Guid, sizeof(Guid));
-            s.Write(&SyncedLsn, sizeof(SyncedLsn));
-        }
+        void Serialize(IOutputStream &s) const;
 
-        bool Deserialize(IInputStream &s) {
-            if (s.Load(&Guid, sizeof(Guid)) != sizeof(Guid))
-                return false;
-            if (s.Load(&SyncedLsn, sizeof(SyncedLsn)) != sizeof(SyncedLsn))
-                return false;
-            return true;
-        }
+        bool Deserialize(IInputStream &s);
 
-        void Output(IOutputStream &str) const {
-            str << "[" << Guid << " " << SyncedLsn << "]";
-        }
+        void Output(IOutputStream &str) const;
 
-        TString ToString() const {
-            TStringStream str;
-            Output(str);
-            return str.Str();
-        }
+        TString ToString() const;
     };
 
-    inline TSyncState SyncStateFromSyncState(const NKikimrBlobStorage::TSyncState &x) {
-        return TSyncState(x.GetGuid(), x.GetSyncedLsn());
-    }
+    TSyncState SyncStateFromSyncState(const NKikimrBlobStorage::TSyncState &x);
 
-    inline void SyncStateFromSyncState(const TSyncState &state, NKikimrBlobStorage::TSyncState *proto) {
-        proto->SetGuid(state.Guid);
-        proto->SetSyncedLsn(state.SyncedLsn);
-    }
+    void SyncStateFromSyncState(const TSyncState &state, NKikimrBlobStorage::TSyncState *proto);
 
 } // NKikimr
 

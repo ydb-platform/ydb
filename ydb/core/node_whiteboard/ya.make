@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    node_whiteboard.cpp
     node_whiteboard.h
 )
 

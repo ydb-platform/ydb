@@ -5,7 +5,6 @@
 #include <ydb/core/protos/statestorage.pb.h>
 #include <ydb/core/util/numerical_maybe.h>
 #include <ydb/library/actors/interconnect/event_filter.h>
-#include <util/stream/str.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
 #include <util/generic/strbuf.h>
@@ -94,14 +93,7 @@ struct TEvStateStorage {
             : SigWaitMode(sigWaitMode)
         {}
 
-        TString ToString() const {
-            switch (SigWaitMode) {
-            case SigNone: return WaitForAllRingGroups ? "SigNone WaitForAllRingGroups" : "SigNone";
-            case SigAsync: return WaitForAllRingGroups ? "SigAsync WaitForAllRingGroups" : "SigAsync";
-            case SigSync: return "SigSync";
-            default: return "Unknown";
-            }
-        }
+        TString ToString() const;
     };
 
     struct TEvLookup : public TEventLocal<TEvLookup, EvLookup> {
@@ -121,14 +113,7 @@ struct TEvStateStorage {
             , ProxyOptions(ev.ProxyOptions)
         {}
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{EvLookup TabletID: " << TabletID;
-            str << " Cookie: " << Cookie;
-            str << " ProxyOptions: " << ProxyOptions.ToString();
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
     };
 
     class TSignature {
@@ -177,19 +162,7 @@ struct TEvStateStorage {
         {
         }
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{EvUpdate TabletID: " << TabletID;
-            str << " Cookie: " << Cookie;
-            str << " ProposedLeader: " << ProposedLeader.ToString();
-            str << " ProposedLeaderTablet: " << ProposedLeaderTablet.ToString();
-            str << " ProposedGeneration: " << ProposedGeneration;
-            str << " ProposedStep: " << ProposedStep;
-            str << " Signature: " << Signature.ToString();
-            str << " ProxyOptions: " << ProxyOptions.ToString();
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
     };
 
     struct TEvDelete : TEventLocal<TEvDelete, EvDelete> {
@@ -201,13 +174,7 @@ struct TEvStateStorage {
             , Cookie(cookie)
         {}
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{EvDelete TabletID: " << TabletID;
-            str << " Cookie: " << Cookie;
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
     };
 
     struct TEvCleanup : TEventLocal<TEvCleanup, EvCleanup> {
@@ -229,13 +196,7 @@ struct TEvStateStorage {
             , Status(status)
         {}
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{EvDeleteResult TabletID: " << TabletID;
-            str << " Status: " << (ui32)Status;
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
     };
 
     struct TEvLock : public TEventLocal<TEvLock, EvLock> {
@@ -266,17 +227,7 @@ struct TEvStateStorage {
         {
         }
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{EvLock TabletID: " << TabletID;
-            str << " Cookie: " << Cookie;
-            str << " ProposedLeader: " << ProposedLeader.ToString();
-            str << " ProposedGeneration: " << ProposedGeneration;
-            str << " Signature: " << Signature.ToString();
-            str << " ProxyOptions: " << ProxyOptions.ToString();
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
     };
 
     struct TEvConfigVersionInfo : public TEventLocal<TEvConfigVersionInfo, EvConfigVersionInfo> {
@@ -335,16 +286,7 @@ struct TEvStateStorage {
             TFollowerInfo(TFollowerInfo&&) = default;
             TFollowerInfo& operator=(const TFollowerInfo&) = default;
 
-            TString ToString() const {
-                TStringStream str;
-
-                str << "{Follower: " << Follower.ToString();
-                str << " FollowerTablet: " << FollowerTablet.ToString();
-                str << " FollowerId: " << FollowerId;
-                str << '}';
-
-                return str.Str();
-            }
+            TString ToString() const;
         };
 
         const NKikimrProto::EReplyStatus Status;
@@ -376,31 +318,7 @@ struct TEvStateStorage {
             , Followers(std::move(followers))
         {}
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{EvInfo Status: " << (ui32)Status;
-            str << " TabletID: " << TabletID;
-            str << " Cookie: " << Cookie;
-            str << " CurrentLeader: " << CurrentLeader.ToString();
-            str << " CurrentLeaderTablet: " << CurrentLeaderTablet.ToString();
-            str << " CurrentGeneration: " << CurrentGeneration;
-            str << " CurrentStep: " << CurrentStep;
-            str << " Locked: " << (Locked ? "true" : "false");
-            str << " LockedFor: " << LockedFor;
-            str << " Signature: " << Signature.ToString();
-            if (!Followers.empty()) {
-                str << " Followers: [";
-                for (auto it = Followers.begin(); it != Followers.end(); ++it) {
-                    if (it != Followers.begin()) {
-                        str << ", ";
-                    }
-                    str << it->ToString();
-                }
-                str << "]";
-            }
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
     };
 
     struct TEvUpdateSignature : public TEventLocal<TEvUpdateSignature, EvUpdateSignature> {
@@ -412,22 +330,12 @@ struct TEvStateStorage {
             , Signature(sig)
         {}
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{EvUpdateSignature TabletID: " << TabletID;
-            str << " Signature: " << Signature.ToString();
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
     };
 
     struct TEvReplicaLeaderDemoted : public TEventPB<TEvReplicaLeaderDemoted, NKikimrStateStorage::TEvReplicaLeaderDemoted, EvReplicaLeaderDemoted> {
         TEvReplicaLeaderDemoted() {}
-        TEvReplicaLeaderDemoted(ui64 tabletId, ui64 signature)
-        {
-            Record.SetTabletID(tabletId);
-            Record.SetSignature(signature);
-        }
+        TEvReplicaLeaderDemoted(ui64 tabletId, ui64 signature);
     };
 
     struct TEvResolveReplicas;
@@ -478,30 +386,14 @@ struct TEvStateStorage {
         TEvReplicaRegFollower()
         {}
 
-        TEvReplicaRegFollower(ui64 tabletId, ui32 followerId, TActorId follower, TActorId tablet, bool isCandidate, ui64 clusterStateGeneration, ui64 clusterStateGuid)
-        {
-            Record.SetTabletID(tabletId);
-            Record.SetClusterStateGeneration(clusterStateGeneration);
-            Record.SetClusterStateGuid(clusterStateGuid);
-            ActorIdToProto(follower, Record.MutableFollower());
-            ActorIdToProto(tablet, Record.MutableFollowerTablet());
-            Record.SetCandidate(isCandidate);
-            Record.SetFollowerId(followerId);
-        }
+        TEvReplicaRegFollower(ui64 tabletId, ui32 followerId, TActorId follower, TActorId tablet, bool isCandidate, ui64 clusterStateGeneration, ui64 clusterStateGuid);
     };
 
     struct TEvReplicaUnregFollower : public TEventPB<TEvReplicaUnregFollower, NKikimrStateStorage::TEvUnregisterFollower, EvReplicaUnregFollower> {
         TEvReplicaUnregFollower()
         {}
 
-        TEvReplicaUnregFollower(ui64 tabletId, ui32 followerId, const TActorId &follower, ui64 clusterStateGeneration, ui64 clusterStateGuid)
-        {
-            Record.SetTabletID(tabletId);
-            Record.SetClusterStateGeneration(clusterStateGeneration);
-            Record.SetClusterStateGuid(clusterStateGuid);
-            ActorIdToProto(follower, Record.MutableFollower());
-            Record.SetFollowerId(followerId);
-        }
+        TEvReplicaUnregFollower(ui64 tabletId, ui32 followerId, const TActorId &follower, ui64 clusterStateGeneration, ui64 clusterStateGuid);
     };
 
     struct TBoardInfoEntry {

@@ -33,35 +33,9 @@ struct TTimestampInfo {
         , Precision(precision)
     {}
 
-    static TString GetTextMode(EMode mode) {
-        switch (mode) {
-        case ModeDisabled:
-            return "Disabled";
-        case ModeAbsolute:
-        case ModeDefault:
-            return "Absolute";
-        case ModeFirst:
-            return "Relative to first";
-        case ModePrevious:
-            return "Relative to previous";
-        default:
-            return "Unknown mode";
-        }
-    }
+    static TString GetTextMode(EMode mode);
 
-    static TString GetTextPrecision(EPrecision precision) {
-        switch (precision) {
-        case PrecisionSeconds:
-            return "Seconds";
-        case PrecisionMilliseconds:
-        case PrecisionDefault:
-            return "Milliseconds";
-        case PrecisionMicroseconds:
-            return "Microseconds";
-        default:
-            return "Unknown precision";
-        }
-    }
+    static TString GetTextPrecision(EPrecision precision);
 };
 
 struct TTimestampData : TTimestampInfo {
@@ -177,14 +151,7 @@ public:
         }
     }
 
-    ITraceSignal* Create(const ITrace::TSerializedSignal& signal) {
-        TLightReadGuard g{ Lock };
-        auto it = Factorymap.find(signal.Type);
-        if (it != Factorymap.end()) {
-            return it->second->Create(signal.Signal);
-        }
-        return nullptr;
-    }
+    ITraceSignal* Create(const ITrace::TSerializedSignal& signal);
 
 private:
     using TFactoryMap = THashMap<ui32, THolder<ISignalCreator>>;

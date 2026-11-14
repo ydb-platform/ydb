@@ -1,4 +1,5 @@
 #include "schemeshard_import_flow_proposals.h"
+#include <google/protobuf/util/message_differencer.h>
 #include "schemeshard_import_helpers.h"
 
 #include "index/index_utils.h"

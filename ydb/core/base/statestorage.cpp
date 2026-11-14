@@ -1,4 +1,5 @@
 #include "statestorage.h"
+#include <util/stream/str.h>
 #include "tabletid.h"
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/protos/config.pb.h>
@@ -402,3 +403,138 @@ void BuildStateStorageInfos(const NKikimrConfig::TStateStorageConfig& config,
 }
 
 }
+
+namespace NKikimr {
+
+TString TEvStateStorage::TProxyOptions::ToString() const {
+    switch (SigWaitMode) {
+    case SigNone: return WaitForAllRingGroups ? "SigNone WaitForAllRingGroups" : "SigNone";
+    case SigAsync: return WaitForAllRingGroups ? "SigAsync WaitForAllRingGroups" : "SigAsync";
+    case SigSync: return "SigSync";
+    default: return "Unknown";
+    }
+}
+
+TString TEvStateStorage::TEvLookup::ToString() const {
+    TStringStream str;
+    str << "{EvLookup TabletID: " << TabletID;
+    str << " Cookie: " << Cookie;
+    str << " ProxyOptions: " << ProxyOptions.ToString();
+    str << "}";
+    return str.Str();
+}
+
+TString TEvStateStorage::TEvUpdate::ToString() const {
+    TStringStream str;
+    str << "{EvUpdate TabletID: " << TabletID;
+    str << " Cookie: " << Cookie;
+    str << " ProposedLeader: " << ProposedLeader.ToString();
+    str << " ProposedLeaderTablet: " << ProposedLeaderTablet.ToString();
+    str << " ProposedGeneration: " << ProposedGeneration;
+    str << " ProposedStep: " << ProposedStep;
+    str << " Signature: " << Signature.ToString();
+    str << " ProxyOptions: " << ProxyOptions.ToString();
+    str << "}";
+    return str.Str();
+}
+
+TString TEvStateStorage::TEvDelete::ToString() const {
+    TStringStream str;
+    str << "{EvDelete TabletID: " << TabletID;
+    str << " Cookie: " << Cookie;
+    str << "}";
+    return str.Str();
+}
+
+TString TEvStateStorage::TEvDeleteResult::ToString() const {
+    TStringStream str;
+    str << "{EvDeleteResult TabletID: " << TabletID;
+    str << " Status: " << (ui32)Status;
+    str << "}";
+    return str.Str();
+}
+
+TString TEvStateStorage::TEvLock::ToString() const {
+    TStringStream str;
+    str << "{EvLock TabletID: " << TabletID;
+    str << " Cookie: " << Cookie;
+    str << " ProposedLeader: " << ProposedLeader.ToString();
+    str << " ProposedGeneration: " << ProposedGeneration;
+    str << " Signature: " << Signature.ToString();
+    str << " ProxyOptions: " << ProxyOptions.ToString();
+    str << "}";
+    return str.Str();
+}
+
+TString TEvStateStorage::TEvInfo::TFollowerInfo::ToString() const {
+    TStringStream str;
+
+    str << "{Follower: " << Follower.ToString();
+    str << " FollowerTablet: " << FollowerTablet.ToString();
+    str << " FollowerId: " << FollowerId;
+    str << '}';
+
+    return str.Str();
+}
+
+TString TEvStateStorage::TEvInfo::ToString() const {
+    TStringStream str;
+    str << "{EvInfo Status: " << (ui32)Status;
+    str << " TabletID: " << TabletID;
+    str << " Cookie: " << Cookie;
+    str << " CurrentLeader: " << CurrentLeader.ToString();
+    str << " CurrentLeaderTablet: " << CurrentLeaderTablet.ToString();
+    str << " CurrentGeneration: " << CurrentGeneration;
+    str << " CurrentStep: " << CurrentStep;
+    str << " Locked: " << (Locked ? "true" : "false");
+    str << " LockedFor: " << LockedFor;
+    str << " Signature: " << Signature.ToString();
+    if (!Followers.empty()) {
+        str << " Followers: [";
+        for (auto it = Followers.begin(); it != Followers.end(); ++it) {
+            if (it != Followers.begin()) {
+                str << ", ";
+            }
+            str << it->ToString();
+        }
+        str << "]";
+    }
+    str << "}";
+    return str.Str();
+}
+
+TString TEvStateStorage::TEvUpdateSignature::ToString() const {
+    TStringStream str;
+    str << "{EvUpdateSignature TabletID: " << TabletID;
+    str << " Signature: " << Signature.ToString();
+    str << "}";
+    return str.Str();
+}
+
+TEvStateStorage::TEvReplicaLeaderDemoted::TEvReplicaLeaderDemoted(ui64 tabletId, ui64 signature)
+{
+    Record.SetTabletID(tabletId);
+    Record.SetSignature(signature);
+}
+
+TEvStateStorage::TEvReplicaRegFollower::TEvReplicaRegFollower(ui64 tabletId, ui32 followerId, TActorId follower, TActorId tablet, bool isCandidate, ui64 clusterStateGeneration, ui64 clusterStateGuid)
+{
+    Record.SetTabletID(tabletId);
+    Record.SetClusterStateGeneration(clusterStateGeneration);
+    Record.SetClusterStateGuid(clusterStateGuid);
+    ActorIdToProto(follower, Record.MutableFollower());
+    ActorIdToProto(tablet, Record.MutableFollowerTablet());
+    Record.SetCandidate(isCandidate);
+    Record.SetFollowerId(followerId);
+}
+
+TEvStateStorage::TEvReplicaUnregFollower::TEvReplicaUnregFollower(ui64 tabletId, ui32 followerId, const TActorId &follower, ui64 clusterStateGeneration, ui64 clusterStateGuid)
+{
+    Record.SetTabletID(tabletId);
+    Record.SetClusterStateGeneration(clusterStateGeneration);
+    Record.SetClusterStateGuid(clusterStateGuid);
+    ActorIdToProto(follower, Record.MutableFollower());
+    Record.SetFollowerId(followerId);
+}
+
+} // namespace NKikimr

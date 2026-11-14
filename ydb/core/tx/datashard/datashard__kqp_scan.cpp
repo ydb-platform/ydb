@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include <ydb/core/scheme/protos/key_range.pb.h>
 #include "range_ops.h"
 #include <util/string/vector.h>
 

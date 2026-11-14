@@ -1,4 +1,6 @@
 #include "localdb.h"
+#include <google/protobuf/util/message_differencer.h>
+#include <util/generic/hash_set.h>
 
 #include <ydb/core/protos/resource_broker.pb.h>
 
@@ -291,3 +293,58 @@ const TString ColumnShardCompactionTtlQueue = "queue_cs_ttl";
 const TString ColumnShardCompactionGeneralQueue = "queue_cs_general";
 const TString ColumnShardCompactionNormalizerQueue = "queue_cs_normalizer";
 }}
+
+namespace NKikimr::NLocalDb {
+
+bool TCompactionPolicy::TBackgroundPolicy::operator ==(const TBackgroundPolicy& p) const {
+    return (Threshold == p.Threshold
+            && PriorityBase == p.PriorityBase
+            && TimeFactor == p.TimeFactor
+            && ResourceBrokerTask == p.ResourceBrokerTask);
+}
+
+bool TCompactionPolicy::TGenerationPolicy::operator ==(const TGenerationPolicy& p) const {
+    return SizeToCompact == p.SizeToCompact
+            && CountToCompact == p.CountToCompact
+            && ForceCountToCompact == p.ForceCountToCompact
+            && ForceSizeToCompact == p.ForceSizeToCompact
+            && CompactionBrokerQueue == p.CompactionBrokerQueue
+            && ResourceBrokerTask == p.ResourceBrokerTask
+            && KeepInCache == p.KeepInCache
+            && BackgroundCompactionPolicy == p.BackgroundCompactionPolicy
+            && ExtraCompactionPercent == p.ExtraCompactionPercent
+            && ExtraCompactionExpPercent == p.ExtraCompactionExpPercent
+            && ExtraCompactionMinSize == p.ExtraCompactionMinSize
+            && ExtraCompactionExpMaxSize == p.ExtraCompactionExpMaxSize
+            && UpliftPartSize == p.UpliftPartSize
+            && TierId == p.TierId;
+}
+
+bool TCompactionPolicy::operator ==(const TCompactionPolicy& p) const {
+    return InMemSizeToSnapshot == p.InMemSizeToSnapshot
+            && InMemStepsToSnapshot == p.InMemStepsToSnapshot
+            && InMemForceStepsToSnapshot == p.InMemForceStepsToSnapshot
+            && InMemForceSizeToSnapshot == p.InMemForceSizeToSnapshot
+            && InMemCompactionBrokerQueue == p.InMemCompactionBrokerQueue
+            && InMemResourceBrokerTask == p.InMemResourceBrokerTask
+            && ReadAheadHiThreshold == p.ReadAheadHiThreshold
+            && ReadAheadLoThreshold == p.ReadAheadLoThreshold
+            && MinDataPageSize == p.MinDataPageSize
+            && MinBTreeIndexNodeSize == p.MinBTreeIndexNodeSize
+            && MinBTreeIndexNodeKeys == p.MinBTreeIndexNodeKeys
+            && Generations == p.Generations
+            && SnapshotCompactionBrokerQueue == p.SnapshotCompactionBrokerQueue
+            && SnapshotResourceBrokerTask == p.SnapshotResourceBrokerTask
+            && BackupCompactionBrokerQueue == p.BackupCompactionBrokerQueue
+            && BackupResourceBrokerTask == p.BackupResourceBrokerTask
+            && DefaultTaskPriority == p.DefaultTaskPriority
+            && BackgroundSnapshotPolicy == p.BackgroundSnapshotPolicy
+            && LogOverheadSizeToSnapshot == p.LogOverheadSizeToSnapshot
+            && LogOverheadCountToSnapshot == p.LogOverheadCountToSnapshot
+            && DroppedRowsPercentToCompact == p.DroppedRowsPercentToCompact
+            && CompactionStrategy == p.CompactionStrategy
+            && KeepEraseMarkers == p.KeepEraseMarkers
+            && ::google::protobuf::util::MessageDifferencer::Equals(ShardPolicy, p.ShardPolicy);
+}
+
+} // namespace NKikimr::NLocalDb

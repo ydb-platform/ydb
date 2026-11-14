@@ -1,6 +1,7 @@
 #pragma once
 
 #include "datashard.h"
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/core/tx/locks/locks.h>
 #include "datashard__engine_host.h"
 #include "operation.h"

@@ -1,10 +1,13 @@
 #pragma once
 
 #include <ydb/core/base/defs.h>
-#include <ydb/core/base/blobstorage.h>
-#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <util/generic/hash_multi_map.h>
+
+namespace NKikimrBlobStorage {
+    class TNodeIdentifier;
+    class TStorageConfig;
+}
 
 namespace NKikimr {
 namespace NBsController {
@@ -15,15 +18,9 @@ namespace NBsController {
         TNodeId NodeId;
         TNodeLocation Location;
 
-        THostRecord(const TEvInterconnect::TNodeInfo& nodeInfo)
-            : NodeId(nodeInfo.NodeId)
-            , Location(nodeInfo.Location)
-        {}
+        THostRecord(const TEvInterconnect::TNodeInfo& nodeInfo);
 
-        THostRecord(const NKikimrBlobStorage::TNodeIdentifier& node)
-            : NodeId(node.GetNodeId())
-            , Location(node.GetLocation())
-        {}
+        THostRecord(const NKikimrBlobStorage::TNodeIdentifier& node);
     };
 
     class THostRecordMapImpl {
@@ -36,49 +33,15 @@ namespace NBsController {
     public:
         THostRecordMapImpl() = default;
 
-        THostRecordMapImpl(TEvInterconnect::TEvNodesInfo *msg) {
-            for (const TEvInterconnect::TNodeInfo& nodeInfo : msg->Nodes) {
-                const THostId hostId(nodeInfo.Host, nodeInfo.Port);
-                NodeIdToHostId.emplace(nodeInfo.NodeId, hostId);
-                HostIdToRecord.emplace(hostId, nodeInfo);
-                FqdnToNodeId.emplace(nodeInfo.Host, nodeInfo.NodeId);
-            }
-        }
+        THostRecordMapImpl(TEvInterconnect::TEvNodesInfo *msg);
 
-        THostRecordMapImpl(const NKikimrBlobStorage::TStorageConfig& config) {
-            for (const auto& item : config.GetAllNodes()) {
-                const THostId hostId(item.GetHost(), item.GetPort());
-                const TNodeId nodeId = item.GetNodeId();
-                NodeIdToHostId.emplace(nodeId, hostId);
-                HostIdToRecord.emplace(hostId, item);
-                FqdnToNodeId.emplace(item.GetHost(), nodeId);
-            }
-        }
+        THostRecordMapImpl(const NKikimrBlobStorage::TStorageConfig& config);
 
-        const TNodeLocation& GetLocation(TNodeId nodeId) const {
-            if (auto it = NodeIdToHostId.find(nodeId); it != NodeIdToHostId.end()) {
-                if (auto hostIt = HostIdToRecord.find(it->second); hostIt != HostIdToRecord.end()) {
-                    return hostIt->second.Location;
-                }
-            }
-            Y_ABORT();
-        }
+        const TNodeLocation& GetLocation(TNodeId nodeId) const;
 
-        TMaybe<TNodeId> ResolveNodeId(const THostId& hostId) const {
-            if (const auto it = HostIdToRecord.find(hostId); it != HostIdToRecord.end()) {
-                return it->second.NodeId;
-            } else {
-                return {};
-            }
-        }
+        TMaybe<TNodeId> ResolveNodeId(const THostId& hostId) const;
 
-        TMaybe<THostId> GetHostId(TNodeId nodeId) const {
-            if (const auto it = NodeIdToHostId.find(nodeId); it != NodeIdToHostId.end()) {
-                return it->second;
-            } else {
-                return {};
-            }
-        }
+        TMaybe<THostId> GetHostId(TNodeId nodeId) const;
 
         auto ResolveNodeId(const TString& fqdn) const {
             return FqdnToNodeId.equal_range(fqdn);

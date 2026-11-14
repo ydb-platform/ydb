@@ -1,4 +1,5 @@
 #include "shard_key_ranges.h"
+#include <ydb/core/scheme/protos/key_range.pb.h>
 
 #include <ydb/core/tx/datashard/range_ops.h>
 

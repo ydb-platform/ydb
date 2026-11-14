@@ -1311,3 +1311,37 @@ TFailDomain TFailDomain::Slice(ui32 level) const {
 }
 
 }
+
+namespace NKikimr {
+
+TString TBlobStorageGroupInfo::PrintEncryptionMode(EEncryptionMode mode) {
+    switch (mode) {
+    case EEncryptionMode::EEM_NONE:
+        return "NONE";
+    case EEncryptionMode::EEM_ENC_V1:
+        return "ENC_V1";
+    }
+}
+
+TString TBlobStorageGroupInfo::PrintLifeCyclePhase(ELifeCyclePhase phase) {
+    switch (phase) {
+    case ELifeCyclePhase::ELCP_INITIAL:
+        return "INITIAL";
+    case ELifeCyclePhase::ELCP_PROPOSE:
+        return "PROPOSE";
+    case ELifeCyclePhase::ELCP_IN_TRANSITION:
+        return "IN_TRANSITION";
+    case ELifeCyclePhase::ELCP_IN_USE:
+        return "IN_USE";
+    case ELifeCyclePhase::ELCP_KEY_CRC_ERROR:
+        return "KEY_CRC_ERROR";
+    case ELifeCyclePhase::ELCP_KEY_VERSION_ERROR:
+        return "KEY_VERSION_ERROR";
+    case ELifeCyclePhase::ELCP_KEY_ID_ERROR:
+        return "KEY_ID_ERROR";
+    case ELifeCyclePhase::ELCP_KEY_NOT_LOADED:
+        return "KEY_NOT_LOADED";
+    }
+}
+
+} // namespace NKikimr

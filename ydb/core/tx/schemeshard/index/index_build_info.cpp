@@ -528,3 +528,232 @@ bool TIndexBuildInfo::IsValidBuildKind(EBuildKind value)
 
 } // namespace NSchemeShard
 } // namespace NKikimr
+
+namespace NKikimr::NSchemeShard {
+
+TString TIndexBuildShardStatus::ToString(TShardIdx shardIdx) const {
+    TStringBuilder result;
+
+    result << "TShardStatus {";
+
+    if (shardIdx) {
+        result << " ShardIdx: " << shardIdx;
+    }
+    result << " Status: " << NKikimrIndexBuilder::EBuildStatus_Name(Status);
+    result << " UploadStatus: " << Ydb::StatusIds::StatusCode_Name(UploadStatus);
+    result << " DebugMessage: " << DebugMessage;
+    result << " SeqNoRound: " << SeqNoRound;
+    result << " Processed: " << Processed.ShortDebugString();
+
+    result << " }";
+
+    return result;
+}
+
+void TIndexBuildInfo::TColumnBuildInfo::SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting, const TString& tablePath) const {
+    setting->SetColumnName(ColumnName);
+    if (IsFromSequence()) {
+        setting->set_default_from_sequence(JoinPath({tablePath, DefaultFromSequence}));
+        setting->set_bit_reverse_sequence_value(BitReverseSequenceValue);
+        if (DefaultFromLiteral.has_type()) {
+            *setting->mutable_default_from_literal()->mutable_type() = DefaultFromLiteral.type();
+        }
+    } else {
+        setting->mutable_default_from_literal()->CopyFrom(DefaultFromLiteral);
+    }
+    setting->SetNotNull(NotNull);
+    setting->SetFamily(FamilyName);
+}
+
+TString TIndexBuildInfo::TSample::DebugString() const {
+    return TStringBuilder()
+        << "{ "
+        << "State = " << State
+        << ", Rows = " << Rows.size()
+        << ", MaxProbability = " << MaxProbability
+        << " }";
+}
+
+bool TIndexBuildInfo::TSample::MakeWeakTop(ui64 k) {
+    // 2 * k is needed to make it linear, 2 * N at all.
+    // x * k approximately is x / (x - 1) * N, but with larger x more memory used
+    if (Rows.size() < 2 * k) {
+        return false;
+    }
+    MakeTop(k);
+    return true;
+}
+
+void TIndexBuildInfo::TSample::MakeStrictTop(ui64 k) {
+    // The idea is send to shards smallest possible max probability
+    // Even if only single element was pushed from last time,
+    // we want to account it and decrease max possible probability.
+    // to potentially decrease counts of serialized and sent by network rows
+    if (Rows.size() < k) {
+        return;
+    }
+    if (Rows.size() == k) {
+        if (Y_UNLIKELY(MaxProbability == std::numeric_limits<ui64>::max())) {
+            MaxProbability = std::max_element(Rows.begin(), Rows.end())->P;
+        }
+        return;
+    }
+    MakeTop(k);
+}
+
+void TIndexBuildInfo::TSample::Clear() {
+    Rows.clear();
+    MaxProbability = std::numeric_limits<ui64>::max();
+    State = EState::Collect;
+}
+
+void TIndexBuildInfo::TSample::MakeTop(ui64 k) {
+    Y_ENSURE(k > 0);
+    auto kth = Rows.begin() + k - 1;
+    // TODO(mbkkt) use floyd rivest
+    std::nth_element(Rows.begin(), kth, Rows.end());
+    Rows.erase(kth + 1, Rows.end());
+    Y_ENSURE(kth->P < MaxProbability);
+    MaxProbability = kth->P;
+}
+
+TString TIndexBuildInfo::DebugString() const {
+    auto result = TStringBuilder() << BuildKind << " " << State << "/" << SubState << " ";
+
+    if (IsBuildVectorIndex()) {
+        result << KMeans.DebugString() << ", "
+            << "{ Rows = " << Sample.Rows.size()
+            << ", Sample = " << Sample.State
+            << ", Clusters = " << (Clusters ? Clusters->GetClusters().size() : 0) << " }, ";
+    }
+
+    result
+        << "{ Done = " << DoneShards.size()
+        << ", ToUpload = " << ToUploadShards.size()
+        << ", InProgress = " << InProgressShards.size() << " }";
+
+    return result;
+}
+
+bool TIndexBuildInfo::IsBuildFulltextRelevance() const {
+    return BuildKind == EBuildKind::BuildFulltext && (
+        IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance ||
+        IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance);
+}
+
+bool TIndexBuildInfo::IsBuildFulltextCompactRowId() const {
+    if (!IsBuildFulltextCompact()) {
+        return false;
+    }
+    const auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+    return desc && desc->GetUseRowIdAsDocId();
+}
+
+bool TIndexBuildInfo::HasFromSequenceBuildColumn() const {
+    for (const auto& col : BuildColumns) {
+        if (col.IsFromSequence()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TIndexBuildInfo::IsPreparing() const {
+    return State == EState::AlterMainTable ||
+           State == EState::CreateBuildSequence ||
+           State == EState::ProvisioningRowIdColumn ||
+           State == EState::ProvisioningRowIdUniqueIndex ||
+           State == EState::Locking ||
+           State == EState::GatheringStatistics ||
+           State == EState::Initiating;
+}
+
+bool TIndexBuildInfo::IsTransferring() const {
+    return State == EState::Filling ||
+           State == EState::DropBuild ||
+           State == EState::CreateBuild ||
+           State == EState::LockBuild ||
+           State == EState::AlterSequence;
+}
+
+bool TIndexBuildInfo::IsFlatRelevanceFulltext() const {
+    if (BuildKind != EBuildKind::BuildFulltext) {
+        return false;
+    }
+    return IndexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+}
+
+bool TIndexBuildInfo::AddIssue(TString issue) {
+    if (Issue.Contains(issue)) { // deduplication
+        return false;
+    }
+
+    if (Issue) {
+        // TODO: store as list?
+        Issue += "; ";
+    }
+    Issue += issue;
+    return true;
+}
+
+float TIndexBuildInfo::CalcProgressPercent() const {
+    const auto total = Shards.size();
+    const auto done = DoneShards.size();
+    if (IsBuildVectorIndex()) {
+        const auto inProgress = InProgressShards.size();
+        const auto toUpload = ToUploadShards.size();
+        Y_ENSURE(KMeans.Level != 0 && KMeans.Levels != 0);
+        if (!KMeans.NeedsAnotherLevel() && !KMeans.NeedsAnotherParent()
+            && toUpload == 0 && inProgress == 0) {
+            return 100.f;
+        }
+        const float shardProgress = total > 0 ? static_cast<float>(done) / total : 0.f;
+        const bool hasFilterPass = KMeans.OverlapClusters > 1 && KMeans.Levels > 1;
+        float levelProgress;
+        if (hasFilterPass) {
+            if (KMeans.State == TKMeans::Filter || KMeans.State == TKMeans::FilterBorders) {
+                levelProgress = 0.5f + 0.5f * shardProgress;
+            } else {
+                levelProgress = 0.5f * shardProgress;
+            }
+        } else {
+            levelProgress = shardProgress;
+        }
+        return 100.f * (KMeans.Level - 1 + levelProgress) / static_cast<float>(KMeans.Levels);
+    }
+    if (IsFlatRelevanceFulltext()) {
+        const float shardProgress = total > 0 ? static_cast<float>(done) / total : 0.f;
+        switch (SubState) {
+        case ESubState::None:
+            return 50.f * shardProgress;
+        case ESubState::FulltextIndexStats:
+            return 50.f;
+        case ESubState::FulltextIndexDictionary:
+            return 50.f + 50.f * shardProgress;
+        case ESubState::FulltextIndexBorders:
+            return 100.f;
+        default:
+            return 0.f;
+        }
+    }
+    if (Shards) {
+        return (100.f * done) / total;
+    }
+    // No shards - no progress
+    return 0.f;
+}
+
+bool TSetColumnConstraintOperationInfo::IsCloseToCompletion() const {
+    return OperationState == EOperationState::Done
+        || OperationState == EOperationState::Unlocking
+        || OperationState == EOperationState::Finishing;
+}
+
+void TSetColumnConstraintOperationInfo::MarkAsCancelled(TString&& reason) {
+    if (!IsCancelled) {
+        IsCancelled = true;
+        CancellationReason = std::move(reason);
+    }
+}
+
+} // namespace NKikimr::NSchemeShard

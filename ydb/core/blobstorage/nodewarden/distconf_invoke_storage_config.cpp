@@ -1,4 +1,5 @@
 #include "distconf_invoke.h"
+#include <google/protobuf/util/message_differencer.h>
 #include "distconf_quorum.h"
 #include "node_warden_impl.h"
 

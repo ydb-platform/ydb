@@ -1,4 +1,7 @@
 #include "scheme_tabledefs.h"
+#include <ydb/core/scheme/protos/key_range.pb.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <util/generic/yexception.h>
 
 namespace NKikimr {
 
@@ -383,3 +386,48 @@ const TMap<TString, TSystemColumnInfo>& GetSystemColumns() {
 }
 
 }
+
+namespace NKikimr {
+
+bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
+    switch (typeInfo.GetTypeId()) {
+        case NScheme::NTypeIds::Json:
+        case NScheme::NTypeIds::Yson:
+        case NScheme::NTypeIds::Float:
+        case NScheme::NTypeIds::Double:
+        case NScheme::NTypeIds::JsonDocument:
+            return false;
+        case NScheme::NTypeIds::Pg:
+            return NPg::TypeDescIsComparable(typeInfo.GetPgTypeDesc());
+        default:
+            return true;
+    }
+}
+
+void TSerializedTableRange::Load(const NKikimrTx::TKeyRange& range) {
+    From.Parse(range.GetFrom());
+    To.Parse(range.GetTo());
+    FromInclusive = range.GetFromInclusive();
+    ToInclusive = range.GetToInclusive();
+}
+
+void TSerializedTableRange::Serialize(NKikimrTx::TKeyRange& range) const {
+    range.SetFrom(From.GetBuffer());
+    range.SetFromInclusive(FromInclusive);
+    if (Point) {
+        Y_ENSURE(FromInclusive);
+        range.SetTo(From.GetBuffer());
+        range.SetToInclusive(true);
+    } else {
+        range.SetTo(To.GetBuffer());
+        range.SetToInclusive(ToInclusive);
+    }
+}
+
+NACLib::TSecurityObject TSecurityObject::FromByteStream(const NACLibProto::TSecurityObject* parent, const TString& owner, const TString& acl, bool isContainer) {
+    NACLib::TSecurityObject object(owner, isContainer);
+    Y_ENSURE(object.MutableACL()->ParseFromString(acl));
+    return parent != nullptr ? object.MergeWithParent(*parent) : object;
+}
+
+} // namespace NKikimr

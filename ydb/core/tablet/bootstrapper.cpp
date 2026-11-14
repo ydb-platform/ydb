@@ -1,4 +1,5 @@
 #include "bootstrapper.h"
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include "bootstrapper_impl.h"
 
 #include <ydb/core/base/tablet.h>

@@ -94,54 +94,17 @@ struct TEvTxUserProxy {
                 return HasModifyScheme() || HasTransactionalModification();
         }
 
-        bool HasModifyScheme() const {
-            const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction();
-            return tx.HasModifyScheme();
-        }
+        bool HasModifyScheme() const;
 
-        bool HasTransactionalModification() const {
-            const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction();
-            return tx.TransactionalModificationSize();
-        }
+        bool HasTransactionalModification() const;
 
-        bool HasMakeProposal() const {
-                const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction();
-                return (tx.HasMiniKQLTransaction() && tx.GetMiniKQLTransaction().HasProgram())
-                        || tx.HasReadTableTransaction();
-        }
+        bool HasMakeProposal() const;
 
-        bool HasSnapshotProposal() const {
-            const auto& tx = Record.GetTransaction();
-            return (tx.HasCreateVolatileSnapshot() ||
-                    tx.HasRefreshVolatileSnapshot() ||
-                    tx.HasDiscardVolatileSnapshot());
-        }
+        bool HasSnapshotProposal() const;
 
-        bool HasCommitWritesProposal() const {
-            const auto& tx = Record.GetTransaction();
-            return tx.HasCommitWrites();
-        }
+        bool HasCommitWritesProposal() const;
 
-        bool NeedTxId() const {
-            if (HasSchemeProposal() || HasMakeProposal()) {
-                return true;
-            }
-
-            if (HasSnapshotProposal()) {
-                const auto& tx = Record.GetTransaction();
-                if (tx.HasRefreshVolatileSnapshot() || tx.HasDiscardVolatileSnapshot()) {
-                    return false;
-                }
-
-                return true;
-            }
-
-            if (HasCommitWritesProposal()) {
-                return true;
-            }
-
-            return false;
-        }
+        bool NeedTxId() const;
     };
 
     struct TEvNavigate : public TEventPB<TEvNavigate, NKikimrTxUserProxy::TEvNavigate, EvNavigate> {
@@ -170,10 +133,7 @@ struct TEvTxUserProxy {
 
     struct TEvInvalidateTable : public TEventPB<TEvInvalidateTable, NKikimrTxUserProxy::TEvInvalidateTable, EvInvalidateTable> {
         TEvInvalidateTable() = default;
-        TEvInvalidateTable(const TTableId& tableId) {
-            Record.SetSchemeShardId(tableId.PathId.OwnerId);
-            Record.SetTableId(tableId.PathId.LocalPathId);
-        }
+        TEvInvalidateTable(const TTableId& tableId);
     };
 
     struct TEvInvalidateTableResult : public TEventPB<TEvInvalidateTableResult, NKikimrTxUserProxy::TEvInvalidateTableResult, EvInvalidateTableResult> {};
@@ -300,25 +260,7 @@ namespace NTxProxy {
             , MaxReadSetCount(1000000, 0, 100000000)
         {}
 
-        void Reqister(const TActorContext &ctx) {
-            if (Registered) {
-                return;
-            }
-
-            auto& icb = *AppData(ctx)->Icb;
-            TControlBoard::RegisterSharedControl(PerRequestDataSizeLimit,
-                                                 icb.TxLimitControls.PerRequestDataSizeLimit);
-            TControlBoard::RegisterSharedControl(PerShardIncomingReadSetSizeLimit,
-                                                 icb.TxLimitControls.PerShardIncomingReadSetSizeLimit);
-            TControlBoard::RegisterSharedControl(DefaultTimeoutMs,
-                                                 icb.TxLimitControls.DefaultTimeoutMs);
-            TControlBoard::RegisterSharedControl(MaxShardCount,
-                                                 icb.TxLimitControls.MaxShardCount);
-            TControlBoard::RegisterSharedControl(MaxReadSetCount,
-                                                 icb.TxLimitControls.MaxReadSetCount);
-
-            Registered = true;
-        }
+        void Reqister(const TActorContext &ctx);
     };
 
     IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<TTxProxyMon>& txProxyMon,

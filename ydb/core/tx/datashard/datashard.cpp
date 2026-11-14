@@ -5310,3 +5310,472 @@ void TEvDataShard::TEvProposeTransactionResult::SetStepOrderId(const std::pair<u
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
+
+namespace NKikimr::TEvDataShard {
+
+TEvGetShardStateResult::TEvGetShardStateResult(ui64 origin, ui32 state)
+{
+    Record.SetOrigin(origin);
+    Record.SetState(state);
+}
+
+TEvSchemaChanged::TEvSchemaChanged(const TActorId& source, ui64 origin, ui32 state, ui64 txId, ui64 step, ui32 generation) {
+    ActorIdToProto(source, Record.MutableSource());
+    Record.SetOrigin(origin);
+    Record.SetState(state);
+    Record.SetTxId(txId);
+    Record.SetStep(step);
+    Record.SetGeneration(generation);
+}
+
+TEvStateChanged::TEvStateChanged(const TActorId& source, ui64 tabletId, ui32 state) {
+    ActorIdToProto(source, Record.MutableSource());
+    Record.SetTabletId(tabletId);
+    Record.SetState(state);
+}
+
+TEvStateChangedResult::TEvStateChangedResult(ui64 tabletId, ui32 state) {
+    Record.SetTabletId(tabletId);
+    Record.SetState(state);
+}
+
+TEvProposeTransaction::TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId,
+    const TStringBuf& txBody, ui32 flags)
+{
+    Record.SetTxKind(txKind);
+    ActorIdToProto(source, Record.MutableSourceDeprecated());
+    Record.SetTxId(txId);
+    Record.SetExecLevel(0);
+    Record.SetTxBody(txBody.data(), txBody.size());
+    Record.SetFlags(flags);
+}
+
+TEvProposeTransaction::TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId,
+    const TStringBuf& txBody, ui64 snapshotStep, ui64 snapshotTxId, ui32 flags)
+    : TEvProposeTransaction(txKind, source, txId, txBody, flags)
+{
+    auto &snapshot = *Record.MutableMvccSnapshot();
+    snapshot.SetStep(snapshotStep);
+    snapshot.SetTxId(snapshotTxId);
+}
+
+TEvProposeTransaction::TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, const TActorId& source, ui64 txId,
+    const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags)
+    : TEvProposeTransaction(txKind, source, txId, txBody, flags)
+{
+    Y_ENSURE(txKind == NKikimrTxDataShard::TX_KIND_SCHEME);
+    Record.SetSchemeShardId(ssId);
+    Record.MutableProcessingParams()->CopyFrom(processingParams);
+}
+
+TEvProposeTransaction::TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, ui64 subDomainPathId, const TActorId& source, ui64 txId,
+    const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags)
+    : TEvProposeTransaction(txKind, ssId, source, txId, txBody, processingParams, flags)
+{
+    if (subDomainPathId) {
+        Record.SetSubDomainPathId(subDomainPathId);
+    }
+}
+
+TEvProposeTransactionResult::TEvProposeTransactionResult(NKikimrTxDataShard::ETransactionKind txKind, ui64 origin, ui64 txId,
+    NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status)
+{
+    Record.SetTxKind(txKind);
+    Record.SetOrigin(origin);
+    Record.SetTxId(txId);
+    Record.SetStatus(status);
+}
+
+void TEvProposeTransactionResult::SetSchemeTxDuplicate(bool sameTxId) {
+    if (sameTxId) {
+        Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED);
+    } else {
+        SetProcessError(NKikimrTxDataShard::TError::SCHEME_CHANGED,
+            "Duplicate scheme tx must not be proposed with a different tx id");
+    }
+}
+
+void TEvProposeTransactionResult::SetPrepared(ui64 minStep, ui64 maxStep, const TInstant& RequestStartTime) {
+    Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED);
+    Record.SetMinStep(minStep);
+    Record.SetMaxStep(maxStep);
+    Record.SetPrepareArriveTime(RequestStartTime.MicroSeconds());
+}
+
+void TEvProposeTransactionResult::SetExecutionError(const NKikimrTxDataShard::TError::EKind& error, const TStringBuf& message) {
+    switch (error) {
+        case NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED:
+            Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::RESULT_UNAVAILABLE);
+            break;
+        case NKikimrTxDataShard::TError::EXECUTION_CANCELLED:
+            Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED);
+            break;
+        default:
+            Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR);
+            break;
+    }
+
+    AddError(error, message);
+}
+
+void TEvProposeTransactionResult::SetProcessError(const NKikimrTxDataShard::TError::EKind& error, const TStringBuf& message) {
+    switch (error) {
+        case NKikimrTxDataShard::TError::PROGRAM_ERROR:
+            Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR);
+            break;
+        default:
+            Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+            break;
+    }
+
+    AddError(error, message);
+}
+
+void TEvProposeTransactionResult::AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
+    auto entry = Record.AddTxLocks();
+    entry->SetLockId(lockId);
+    entry->SetDataShard(shard);
+    entry->SetGeneration(generation);
+    entry->SetCounter(counter);
+    entry->SetSchemeShard(ssId);
+    entry->SetPathId(pathId);
+    if (hasWrites) {
+        entry->SetHasWrites(true);
+    }
+}
+
+TString TEvProposeTransactionResult::GetError() const {
+    if (Record.ErrorSize() > 0) {
+        TString result;
+        TStringOutput out(result);
+        for (ui32 i = 0; i < Record.ErrorSize(); ++i) {
+            out << Record.GetError(i).GetKind() << " ("
+                << (Record.GetError(i).HasReason() ? Record.GetError(i).GetReason() : "no reason")
+                << ") |";
+        }
+        return result;
+    } else {
+        return TString();
+    }
+}
+
+void TEvProposeTransactionResult::AddError(NKikimrTxDataShard::TError::EKind kind, const TStringBuf& reason, const TStringBuf& keyBuffer) {
+    auto error = Record.MutableError()->Add();
+    error->SetKind(kind);
+    if (reason) {
+        error->SetReason(reason.data(), reason.size());
+    }
+
+    if (keyBuffer) {
+        error->SetKey(keyBuffer.data(), keyBuffer.size());
+    }
+}
+
+TEvProposeTransactionRestart::TEvProposeTransactionRestart(ui64 tabletId, ui64 txId) {
+    Record.SetTabletId(tabletId);
+    Record.SetTxId(txId);
+}
+
+TEvProposeTransactionAttach::TEvProposeTransactionAttach(ui64 tabletId, ui64 txId) {
+    Record.SetTabletId(tabletId);
+    Record.SetTxId(txId);
+}
+
+TEvProposeTransactionAttachResult::TEvProposeTransactionAttachResult(ui64 tabletId, ui64 txId, NKikimrProto::EReplyStatus status) {
+    Record.SetTabletId(tabletId);
+    Record.SetTxId(txId);
+    Record.SetStatus(status);
+}
+
+TEvReturnBorrowedPart::TEvReturnBorrowedPart(ui64 tabletId, const TVector<TLogoBlobID>& partMetaVec) {
+    Record.SetFromTabletId(tabletId);
+    for (const auto& partMeta : partMetaVec) {
+        LogoBlobIDFromLogoBlobID(partMeta, Record.AddPartMetadata());
+    }
+}
+
+TEvReturnBorrowedPartAck::TEvReturnBorrowedPartAck(const TVector<TLogoBlobID>& partMetaVec) {
+    for (const auto& partMeta : partMetaVec) {
+        LogoBlobIDFromLogoBlobID(partMeta, Record.AddPartMetadata());
+    }
+}
+
+TEvInitSplitMergeDestination::TEvInitSplitMergeDestination(ui64 opId, ui64 schemeshardTabletId, ui64 subDomainPathId,
+                             const NKikimrTxDataShard::TSplitMergeDescription &splitDesc,
+                             const NKikimrSubDomains::TProcessingParams &processingParams) {
+    Record.SetOperationCookie(opId);
+    Record.SetSchemeshardTabletId(schemeshardTabletId);
+    Record.SetSubDomainPathId(subDomainPathId);
+    Record.MutableSplitDescription()->CopyFrom(splitDesc);
+    Record.MutableProcessingParams()->CopyFrom(processingParams);
+}
+
+TEvInitSplitMergeDestinationAck::TEvInitSplitMergeDestinationAck(ui64 opId, ui64 tabletId) {
+    Record.SetOperationCookie(opId);
+    Record.SetTabletId(tabletId);
+}
+
+TEvSplitAck::TEvSplitAck(ui64 opId, ui64 tabletId) {
+    Record.SetOperationCookie(opId);
+    Record.SetTabletId(tabletId);
+}
+
+TEvSplitTransferSnapshotAck::TEvSplitTransferSnapshotAck(ui64 opId, ui64 tabletId) {
+    Record.SetOperationCookie(opId);
+    Record.SetTabletId(tabletId);
+}
+
+TEvSplitPartitioningChangedAck::TEvSplitPartitioningChangedAck(ui64 opId, ui64 tabletId) {
+    Record.SetOperationCookie(opId);
+    Record.SetTabletId(tabletId);
+}
+
+TEvCancelBackup::TEvCancelBackup(ui64 txid, ui64 tableId) {
+    Record.SetBackupTxId(txid);
+    Record.SetTableId(tableId);
+}
+
+TEvCancelRestore::TEvCancelRestore(ui64 txid, ui64 tableId) {
+    Record.SetRestoreTxId(txid);
+    Record.SetTableId(tableId);
+}
+
+TEvGetTableStatsResult::TEvGetTableStatsResult(ui64 datashardId, ui64 tableOwnerId, ui64 tableLocalId) {
+    Record.SetDatashardId(datashardId);
+    Record.SetTableOwnerId(tableOwnerId);
+    Record.SetTableLocalId(tableLocalId);
+}
+
+TEvPeriodicTableStats::TEvPeriodicTableStats(ui64 datashardId, ui64 tableOwnerId, ui64 tableLocalId) {
+    Record.SetDatashardId(datashardId);
+    Record.SetTableOwnerId(tableOwnerId);
+    Record.SetTableLocalId(tableLocalId);
+}
+
+TEvPeriodicTableStats::TEvPeriodicTableStats(ui64 datashardId, ui64 tableLocalId) {
+    Record.SetDatashardId(datashardId);
+    Record.SetTableLocalId(tableLocalId);
+}
+
+TEvUploadRowsResponse::TEvUploadRowsResponse(ui64 tabletId, ui32 status) {
+    Record.SetTabletID(tabletId);
+    Record.SetStatus(status);
+}
+
+bool TEvUploadRowsResponse::IsRetriableError() const {
+    Y_ASSERT(Record.GetStatus() != NKikimrTxDataShard::TError::OK);
+    return
+        Record.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE // = Ydb::StatusIds::OVERLOADED
+        || Record.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED // = Ydb::StatusIds::OVERLOADED
+        || Record.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED // Ydb::StatusIds::GENERIC_ERROR
+    ;
+}
+
+TEvOverloadReady::TEvOverloadReady(ui64 tabletId, ui64 seqNo) {
+    Record.SetTabletID(tabletId);
+    Record.SetSeqNo(seqNo);
+}
+
+TEvReadColumnsResponse::TEvReadColumnsResponse(ui64 tabletId, ui32 status) {
+    Record.SetTabletID(tabletId);
+    Record.SetStatus(status);
+}
+
+TString TEvStoreS3DownloadInfo::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " TxId: " << TxId
+        << " Info: " << Info
+    << " }";
+}
+
+TString TEvS3DownloadInfo::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " Info: " << Info
+    << " }";
+}
+
+TString TEvS3UploadRowsRequest::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " TxId: " << TxId
+        << " Info: " << Info
+    << " }";
+}
+
+TEvS3UploadRowsResponse::TEvS3UploadRowsResponse(ui64 tabletId, ui32 status) {
+    Record.SetTabletID(tabletId);
+    Record.SetStatus(status);
+}
+
+bool TEvS3UploadRowsResponse::IsRetriableError() const {
+    return TEvUploadRowsResponse(Record.GetTabletID(), Record.GetStatus())
+        .IsRetriableError();
+}
+
+TString TEvS3UploadRowsResponse::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " Record: " << Record.ShortDebugString()
+        << " Info: " << Info
+    << " }";
+}
+
+TString TEvS3DirectWriteBegin::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " TxId: " << TxId
+        << " TableId: " << TableId
+    << " }";
+}
+
+TString TEvS3DirectWriteBeginResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " TxId: " << TxId
+        << " Success: " << Success
+        << " Error: " << Error
+        << " Step: " << Step
+        << " RowVersion: " << RowVersion
+    << " }";
+}
+
+TString TEvS3DirectWriteFinish::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " TxId: " << TxId
+        << " TableId: " << TableId
+        << " Info: " << Info
+    << " }";
+}
+
+TString TEvS3DirectWriteFinishResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " TxId: " << TxId
+        << " Success: " << Success
+        << " Error: " << Error
+    << " }";
+}
+
+TString TEvS3DirectWriteAbort::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " TxId: " << TxId
+        << " Step: " << Step
+    << " }";
+}
+
+TEvObjectStorageListingResponse::TEvObjectStorageListingResponse(ui64 tabletId, ui32 status) {
+    Record.SetTabletID(tabletId);
+    Record.SetStatus(status);
+}
+
+TEvIncrementalRestoreResponse::TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx,
+                             NKikimrTxDataShard::TEvIncrementalRestoreResponse::Status status, const TString& errorMessage) {
+    Record.SetTxId(txId);
+    Record.SetTableId(tableId);
+    Record.SetOperationId(operationId);
+    Record.SetIncrementalIdx(incrementalIdx);
+    Record.SetRestoreStatus(status);
+    if (!errorMessage.empty()) {
+        Record.SetErrorMessage(errorMessage);
+    }
+}
+
+TEvIncrementalRestoreResponse::TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx,
+                             NKikimrTxDataShard::TEvIncrementalRestoreResponse::Status status, ui64 processedRows, ui64 processedBytes,
+                             const TString& lastProcessedKey, const TString& errorMessage) {
+    Record.SetTxId(txId);
+    Record.SetTableId(tableId);
+    Record.SetOperationId(operationId);
+    Record.SetIncrementalIdx(incrementalIdx);
+    Record.SetRestoreStatus(status);
+    Record.SetProcessedRows(processedRows);
+    Record.SetProcessedBytes(processedBytes);
+    if (!lastProcessedKey.empty()) {
+        Record.SetLastProcessedKey(lastProcessedKey);
+    }
+    if (!errorMessage.empty()) {
+        Record.SetErrorMessage(errorMessage);
+    }
+}
+
+TEvCompactTable::TEvCompactTable(ui64 ownerId, ui64 localId) {
+    Record.MutablePathId()->SetOwnerId(ownerId);
+    Record.MutablePathId()->SetLocalId(localId);
+}
+
+TEvCompactTableResult::TEvCompactTableResult(ui64 tabletId, ui64 ownerId, ui64 localId, NKikimrTxDataShard::TEvCompactTableResult::EStatus status) {
+    Record.SetTabletId(tabletId);
+    Record.MutablePathId()->SetOwnerId(ownerId);
+    Record.MutablePathId()->SetLocalId(localId);
+    Record.SetStatus(status);
+}
+
+TEvVacuumResult::TEvVacuumResult(ui64 vacuumGeneration, ui64 tabletId, NKikimrTxDataShard::TEvVacuumResult::EStatus status) {
+    Record.SetVacuumGeneration(vacuumGeneration);
+    Record.SetTabletId(tabletId);
+    Record.SetStatus(status);
+}
+
+TEvCompactBorrowed::TEvCompactBorrowed(ui64 ownerId, ui64 localId) {
+    Record.MutablePathId()->SetOwnerId(ownerId);
+    Record.MutablePathId()->SetLocalId(localId);
+}
+
+TEvCompactBorrowedResult::TEvCompactBorrowedResult(ui64 tabletId, ui64 ownerId, ui64 localId) {
+    Record.SetTabletId(tabletId);
+    Record.MutablePathId()->SetOwnerId(ownerId);
+    Record.MutablePathId()->SetLocalId(localId);
+}
+
+TEvGetCompactTableStats::TEvGetCompactTableStats(ui64 ownerId, ui64 localId) {
+    Record.MutablePathId()->SetOwnerId(ownerId);
+    Record.MutablePathId()->SetLocalId(localId);
+}
+
+TEvApplyReplicationChanges::TEvApplyReplicationChanges(const TPathId& pathId, ui64 schemaVersion) {
+    auto* p = Record.MutableTableId();
+    p->SetOwnerId(pathId.OwnerId);
+    p->SetTableId(pathId.LocalPathId);
+    if (schemaVersion != 0) {
+        p->SetSchemaVersion(schemaVersion);
+    }
+}
+
+TEvApplyReplicationChangesResult::TEvApplyReplicationChangesResult(
+        EStatus status,
+        EReason reason,
+        const TString& errorDescription)
+{
+    Record.SetStatus(status);
+    if (reason != NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_NONE) {
+        Record.SetReason(reason);
+    }
+    if (!errorDescription.empty()) {
+        Record.SetErrorDescription(errorDescription);
+    }
+}
+
+TEvGetReplicationSourceOffsets::TEvGetReplicationSourceOffsets(ui64 readId, const TPathId& pathId) {
+    Record.SetReadId(readId);
+    SetPathId(pathId);
+}
+
+TEvGetReplicationSourceOffsets* TEvGetReplicationSourceOffsets::SetPathId(const TPathId& pathId) {
+    auto* p = Record.MutableTableId();
+    p->SetOwnerId(pathId.OwnerId);
+    p->SetTableId(pathId.LocalPathId);
+    return this;
+}
+
+TEvGetReplicationSourceOffsets* TEvGetReplicationSourceOffsets::SetFrom(ui64 sourceId, ui64 splitKeyId) {
+    Record.SetFromSourceId(sourceId);
+    Record.SetFromSplitKeyId(splitKeyId);
+    return this;
+}
+
+TEvReplicationSourceOffsets::TEvReplicationSourceOffsets(ui64 readId, ui64 seqNo) {
+    Record.SetReadId(readId);
+    Record.SetSeqNo(seqNo);
+}
+
+TEvReplicationSourceOffsetsAck::TEvReplicationSourceOffsetsAck(ui64 readId, ui64 seqNo) {
+    Record.SetReadId(readId);
+    Record.SetAckSeqNo(seqNo);
+}
+
+} // namespace NKikimr::TEvDataShard

@@ -26,7 +26,6 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/utility.h>
 #include <util/datetime/base.h>
-#include <util/stream/str.h>
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
@@ -66,11 +65,7 @@ struct TStorageStatusFlags {
         return (Raw & ui32(NKikimrBlobStorage::StatusIsValid)) && (Raw & ui32(statusToCheck));
     }
 
-    TString ToString() const {
-        TStringStream str;
-        Output(str);
-        return str.Str();
-    }
+    TString ToString() const;
 
     void Output(IOutputStream &out) const {
         out << "{"
@@ -224,15 +219,7 @@ struct TTabletChannelInfo {
             }
         };
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{FromGeneration# " << FromGeneration;
-            str << " GroupID# " << GroupID;
-            str << " Timestamp# " << Timestamp.ToString();
-            str << " Version# " << Version;
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
 
         bool operator ==(const THistoryEntry& other) const {
             return FromGeneration == other.FromGeneration
@@ -305,22 +292,7 @@ struct TTabletChannelInfo {
             return nullptr;
     }
 
-    TString ToString() const {
-        TStringStream str;
-        str << "{Channel# " << Channel;
-        str << " Type# " << Type.ToString();
-        str << " StoragePool# " << StoragePool;
-        str << " History# {";
-        const size_t historySize = History.size();
-        for (size_t historyIdx = 0; historyIdx < historySize; ++historyIdx) {
-            if (historyIdx != 0) {
-                str <<", ";
-            }
-            str << historyIdx << ":" << History[historyIdx].ToString();
-        }
-        str << "}";
-        return str.Str();
-    }
+    TString ToString() const;
 };
 
 class TTabletStorageInfo : public TThrRefBase {
@@ -361,25 +333,7 @@ public:
         return GroupFor(id.Channel(), id.Generation());
     }
 
-    TString ToString() const {
-        TStringStream str;
-        str << "{Version# " << Version;
-        str << " TabletID# " << TabletID;
-        str << " TabletType# " << TabletType;
-        str << " Channels# {";
-        const size_t channelsSize = Channels.size();
-        for (size_t channelIdx = 0; channelIdx < channelsSize; ++channelIdx) {
-            if (channelIdx != 0) {
-                str <<", ";
-            }
-            str << channelIdx << ":" << Channels[channelIdx].ToString();
-        }
-        str << "}";
-        if (TenantPathId)
-            str << " Tenant: " << TenantPathId;
-        str << " BootType: " << BootType;
-        return str.Str();
-    }
+    TString ToString() const;
 
     TActorId BSProxyIDForChannel(ui32 channel, ui32 generation) const;
 

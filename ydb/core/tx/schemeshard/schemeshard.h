@@ -11,7 +11,6 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/tx.h>
 
-#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 #include <library/cpp/object_factory/object_factory.h>
@@ -138,21 +137,9 @@ namespace TEvSchemeShard {
             NKikimrScheme::TEvProcessingRequest, EvProcessingRequest>;
     public:
         using TBase::TBase;
-        TEvProcessingRequest(const ISSDataProcessor& processor) {
-            Record.SetClassName(processor.GetClassName());
-            Record.SetData(processor.SerializeToString());
-        }
+        TEvProcessingRequest(const ISSDataProcessor& processor);
 
-        ISSDataProcessor::TPtr RestoreProcessor() const {
-            auto result = ISSDataProcessor::TFactory::MakeHolder(TBase::Record.GetClassName());
-            if (!result) {
-                return nullptr;
-            } else if (!result->DeserializeFromString(TBase::Record.GetData())) {
-                return nullptr;
-            } else {
-                return std::shared_ptr<ISSDataProcessor>(result.Release());
-            }
-        }
+        ISSDataProcessor::TPtr RestoreProcessor() const;
     };
 
     struct TEvModifySchemeTransaction : public TEventPB<TEvModifySchemeTransaction,
@@ -161,24 +148,9 @@ namespace TEvSchemeShard {
         TEvModifySchemeTransaction()
         {}
 
-        TEvModifySchemeTransaction(ui64 txid, ui64 tabletId)
-        {
-            Record.SetTxId(txid);
-            Record.SetTabletId(tabletId);
-        }
+        TEvModifySchemeTransaction(ui64 txid, ui64 tabletId);
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{TEvModifySchemeTransaction";
-            if (Record.HasTxId()) {
-                str << " txid# " << Record.GetTxId();
-            }
-            if (Record.HasTabletId()) {
-                str << " TabletId# " << Record.GetTabletId();
-            }
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
     };
 
     struct TEvCancelTx
@@ -194,10 +166,7 @@ namespace TEvSchemeShard {
                         EvCancelTxResult>
     {
         TEvCancelTxResult() = default;
-        TEvCancelTxResult(ui64 targetTxId, ui64 txId) {
-            Record.SetTargetTxId(targetTxId);
-            Record.SetTxId(txId);
-        }
+        TEvCancelTxResult(ui64 targetTxId, ui64 txId);
     };
 
     using EStatus = NKikimrScheme::EStatus;
@@ -209,28 +178,15 @@ namespace TEvSchemeShard {
         TEvModifySchemeTransactionResult()
         {}
 
-        TEvModifySchemeTransactionResult(TTxId txid, TTabletId schemeshardId) {
-            Record.SetTxId(ui64(txid));
-            Record.SetSchemeshardId(ui64(schemeshardId));
-        }
+        TEvModifySchemeTransactionResult(TTxId txid, TTabletId schemeshardId);
 
-        TEvModifySchemeTransactionResult(EStatus status, ui64 txid, ui64 schemeshardId, const TStringBuf& reason = TStringBuf())
-            : TEvModifySchemeTransactionResult(TTxId(txid), TTabletId(schemeshardId))
-        {
-            Record.SetStatus(status);
-            if (reason.size() > 0) {
-                Record.SetReason(reason.data(), reason.size());
-            }
-        }
+        TEvModifySchemeTransactionResult(EStatus status, ui64 txid, ui64 schemeshardId, const TStringBuf& reason = TStringBuf());
 
         bool IsAccepted() const {
             return Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusAccepted);
         }
 
-        bool IsConditionalAccepted() const {
-            //happens on retries, we answer like StatusAccepted with error message and do nothing in operation
-            return !Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusAccepted);
-        }
+        bool IsConditionalAccepted() const;
 
         bool IsDone() const {
             return Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusSuccess);
@@ -243,52 +199,24 @@ namespace TEvSchemeShard {
             }
         }
 
-        void SetError(EStatus status, const TString& errStr) {
-            Record.SetStatus(status);
-            Record.SetReason(errStr);
-        }
+        void SetError(EStatus status, const TString& errStr);
 
-        void AddWarning(const TString& text) {
-            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::WARNING, text);
-            NYql::IssueToMessage(issue, Record.AddIssues());
-        }
+        void AddWarning(const TString& text);
 
-        void AddNotice(const TString& text) {
-            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::INFO, text);
-            NYql::IssueToMessage(issue, Record.AddIssues());
-        }
+        void AddNotice(const TString& text);
 
         void SetPathCreateTxId(ui64 txId) { Record.SetPathCreateTxId(txId); }
         void SetPathDropTxId(ui64 txId) { Record.SetPathDropTxId(txId); }
         void SetPathId(ui64 pathId) { Record.SetPathId(pathId); }
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{TEvModifySchemeTransactionResult";
-            if (Record.HasStatus()) {
-                str << " Status# " << Record.GetStatus();
-            }
-            if (Record.HasTxId()) {
-                str << " txid# " << Record.GetTxId();
-            }
-            if (Record.HasReason()) {
-                str << " Reason# " << Record.GetReason();
-            }
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
     };
 
     struct TEvInitRootShard : public TEventPB<TEvInitRootShard, NKikimrTxScheme::TEvInitRootShard, EvInitRootShard> {
         TEvInitRootShard()
         {}
 
-        TEvInitRootShard(const TActorId& source, ui32 rootTag, const TString& rootTagName)
-        {
-            ActorIdToProto(source, Record.MutableSource());
-            Record.SetRootTag(rootTag);
-            Record.SetRootTagName(rootTagName);
-        }
+        TEvInitRootShard(const TActorId& source, ui32 rootTag, const TString& rootTagName);
     };
 
     struct TEvInitRootShardResult : public TEventPB<TEvInitRootShardResult,
@@ -303,11 +231,7 @@ namespace TEvSchemeShard {
         TEvInitRootShardResult()
         {}
 
-        TEvInitRootShardResult(ui64 origin, EStatus status)
-        {
-            Record.SetOrigin(origin);
-            Record.SetStatus(status);
-        }
+        TEvInitRootShardResult(ui64 origin, EStatus status);
     };
 
     struct TEvDescribeScheme : public TEventPB<TEvDescribeScheme,
@@ -326,23 +250,11 @@ namespace TEvSchemeShard {
             Record.SetPath(path);
         }
 
-        TEvDescribeScheme(ui64 tabletId, ui64 pathId)
-        {
-            Record.SetSchemeshardId(tabletId);
-            Record.SetPathId(pathId);
-        }
+        TEvDescribeScheme(ui64 tabletId, ui64 pathId);
 
-        TEvDescribeScheme(TTableId tableId)
-        {
-            Record.SetSchemeshardId(tableId.PathId.OwnerId);
-            Record.SetPathId(tableId.PathId.LocalPathId);
-        }
+        TEvDescribeScheme(TTableId tableId);
 
-        TEvDescribeScheme(NKikimr::TPathId pathId)
-        {
-            Record.SetSchemeshardId(pathId.OwnerId);
-            Record.SetPathId(pathId.LocalPathId);
-        }
+        TEvDescribeScheme(NKikimr::TPathId pathId);
     };
 
     struct TEvDescribeSchemeResult : public TEventPreSerializedPB<TEvDescribeSchemeResult,
@@ -350,26 +262,14 @@ namespace TEvSchemeShard {
                                                                   EvDescribeSchemeResult> {
         TEvDescribeSchemeResult() = default;
 
-        TEvDescribeSchemeResult(const TString& path, TPathId pathId)
-        {
-            Record.SetPath(path);
-            Record.SetPathId(pathId.LocalPathId);
-            Record.SetPathOwnerId(pathId.OwnerId);
-        }
+        TEvDescribeSchemeResult(const TString& path, TPathId pathId);
 
         // TEventPreSerializedPB::ToString() calls TEventPreSerializedPB::GetRecord()
         // which reconstructs full message by deserializing PreSerializedData.
         // That could be expensive for NKikimrScheme::TEvDescribeSchemeResult (e.g.
         // table with huge number of partitions).
         // Override ToString() to avoid unintentional message reconstruction.
-        TString ToString() const override {
-            TStringStream str;
-            str << ToStringHeader()
-                << " PreSerializedData size# " << PreSerializedData.size()
-                << " Record# " << Record.ShortDebugString()
-            ;
-            return str.Str();
-        }
+        TString ToString() const override;
     };
 
     struct TEvDescribeSchemeResultBuilder : TEvDescribeSchemeResult {
@@ -443,10 +343,7 @@ namespace TEvSchemeShard {
 
         TEvInitTenantSchemeShardResult() = default;
 
-        TEvInitTenantSchemeShardResult(ui64 tenantSchemeShard, EStatus status) {
-            Record.SetTenantSchemeShard(tenantSchemeShard);
-            Record.SetStatus(status);
-        }
+        TEvInitTenantSchemeShardResult(ui64 tenantSchemeShard, EStatus status);
     };
 
     struct TEvMigrateSchemeShard: public TEventPB<TEvMigrateSchemeShard,
@@ -454,14 +351,7 @@ namespace TEvSchemeShard {
                                                    EvMigrateSchemeShard> {
         TEvMigrateSchemeShard() = default;
 
-        TPathId GetPathId() const {
-            if (!Record.GetPath().HasPathId()) {
-                return NKikimr::TPathId();
-            }
-
-            auto& pathId = Record.GetPath().GetPathId();
-            return NKikimr::TPathId(pathId.GetOwnerId(), pathId.GetLocalId());
-        }
+        TPathId GetPathId() const;
     };
 
     struct TEvMigrateSchemeShardResult: public TEventPB<TEvMigrateSchemeShardResult,
@@ -473,14 +363,7 @@ namespace TEvSchemeShard {
             Record.SetTenantSchemeShard(tenantSchemeShard);
         }
 
-        TPathId GetPathId() const {
-            if (!Record.HasPathId()) {
-                return NKikimr::TPathId();
-            }
-
-            auto& pathId = Record.GetPathId();
-            return NKikimr::TPathId(pathId.GetOwnerId(), pathId.GetLocalId());
-        }
+        TPathId GetPathId() const;
     };
 
     struct TEvPublishTenantAsReadOnly: public TEventPB<TEvPublishTenantAsReadOnly,
@@ -496,10 +379,7 @@ namespace TEvSchemeShard {
                                                         NKikimrScheme::TEvPublishTenantAsReadOnlyResult,
                                                         EvPublishTenantAsReadOnlyResult> {
         TEvPublishTenantAsReadOnlyResult() = default;
-        TEvPublishTenantAsReadOnlyResult(ui64 tenantSchemeShard, EStatus status) {
-            Record.SetTenantSchemeShard(tenantSchemeShard);
-            Record.SetStatus(status);
-        }
+        TEvPublishTenantAsReadOnlyResult(ui64 tenantSchemeShard, EStatus status);
     };
 
     struct TEvRewriteOwner: public TEventPB<TEvRewriteOwner,
@@ -552,26 +432,7 @@ namespace TEvSchemeShard {
             TString RootACL;
         };
 
-        TEvSyncTenantSchemeShard(const TEvSyncTenantSchemeShardInitializer& _)
-        {
-            Record.SetDomainSchemeShard(_.DomainKey.OwnerId);
-            Record.SetDomainPathId(_.DomainKey.LocalPathId);
-
-            Record.SetTabletID(_.TabletId);
-            Record.SetGeneration(_.Generation);
-
-            Record.SetEffectiveACLVersion(_.EffectiveACLVersion);
-            Record.SetSubdomainVersion(_.SubdomainVersion);
-            Record.SetUserAttributesVersion(_.UserAttrsVersion);
-
-            Record.SetTenantHive(_.TenantHive);
-            Record.SetTenantSysViewProcessor(_.TenantSysViewProcessor);
-            Record.SetTenantStatisticsAggregator(_.TenantStatisticsAggregator);
-            Record.SetTenantGraphShard(_.TenantGraphShard);
-            Record.SetTenantWasmCompileController(_.TenantWasmCompileController);
-
-            Record.SetTenantRootACL(_.RootACL);
-        }
+        TEvSyncTenantSchemeShard(const TEvSyncTenantSchemeShardInitializer& _);
 
     };
 
@@ -581,32 +442,13 @@ namespace TEvSchemeShard {
 
         TEvUpdateTenantSchemeShard() = default;
 
-        TEvUpdateTenantSchemeShard(ui64 tabletId, ui64 generation) {
-            Record.SetTabletId(tabletId);
-            Record.SetGeneration(generation);
-        }
+        TEvUpdateTenantSchemeShard(ui64 tabletId, ui64 generation);
 
-        void SetEffectiveACL(const TString& owner, const TString& effectiveACL, ui64 version) {
-            Record.SetOwner(owner);
-            Record.SetEffectiveACL(effectiveACL);
-            Record.SetEffectiveACLVersion(version);
-        }
+        void SetEffectiveACL(const TString& owner, const TString& effectiveACL, ui64 version);
 
-        void SetStoragePools(const TStoragePools& storagePools, ui64 version) {
-            for (auto& x: storagePools) {
-                *Record.AddStoragePools() = x;
-            }
-            Record.SetSubdomainVersion(version);
-        }
+        void SetStoragePools(const TStoragePools& storagePools, ui64 version);
 
-        void SetUserAttrs(const TMap<TString, TString>& userAttrData, ui64 version) {
-            for (auto& x: userAttrData) {
-                auto item = Record.AddUserAttributes();
-                item->SetKey(x.first);
-                item->SetValue(x.second);
-            }
-            Record.SetUserAttributesVersion(version);
-        }
+        void SetUserAttrs(const TMap<TString, TString>& userAttrData, ui64 version);
 
         void SetTenantHive(ui64 hive) {
             Record.SetTenantHive(hive);
@@ -655,18 +497,10 @@ namespace TEvSchemeShard {
         TEvFindTabletSubDomainPathIdResult() = default;
 
         // Failure
-        TEvFindTabletSubDomainPathIdResult(ui64 tabletId, EStatus status) {
-            Record.SetStatus(status);
-            Record.SetTabletId(tabletId);
-        }
+        TEvFindTabletSubDomainPathIdResult(ui64 tabletId, EStatus status);
 
         // Success
-        TEvFindTabletSubDomainPathIdResult(ui64 tabletId, ui64 schemeShardId, ui64 subDomainPathId) {
-            Record.SetStatus(NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);
-            Record.SetTabletId(tabletId);
-            Record.SetSchemeShardId(schemeShardId);
-            Record.SetSubDomainPathId(subDomainPathId);
-        }
+        TEvFindTabletSubDomainPathIdResult(ui64 tabletId, ui64 schemeShardId, ui64 subDomainPathId);
     };
 
     struct TEvSubDomainPathIdFound : public TEventLocal<TEvSubDomainPathIdFound, EvSubDomainPathIdFound> {
@@ -712,12 +546,7 @@ namespace TEvSchemeShard {
     struct TEvTenantShredResponse : TEventPB<TEvTenantShredResponse, NKikimrScheme::TEvTenantShredResponse, EvTenantShredResponse> {
 
         TEvTenantShredResponse() = default;
-        TEvTenantShredResponse(const TPathId& pathId, ui64 generation, const NKikimrScheme::TEvTenantShredResponse::EStatus& status) {
-            Record.MutablePathId()->SetOwnerId(pathId.OwnerId);
-            Record.MutablePathId()->SetLocalId(pathId.LocalPathId);
-            Record.SetGeneration(generation);
-            Record.SetStatus(status);
-        }
+        TEvTenantShredResponse(const TPathId& pathId, ui64 generation, const NKikimrScheme::TEvTenantShredResponse::EStatus& status);
 
         TEvTenantShredResponse(ui64 ownerId, ui64 localPathId, ui64 generation, const NKikimrScheme::TEvTenantShredResponse::EStatus& status)
             : TEvTenantShredResponse(TPathId(ownerId, localPathId), generation, status)
@@ -729,10 +558,7 @@ namespace TEvSchemeShard {
     struct TEvShredInfoResponse : TEventPB<TEvShredInfoResponse, NKikimrScheme::TEvShredInfoResponse, EvShredInfoResponse> {
 
         TEvShredInfoResponse() = default;
-        TEvShredInfoResponse(ui64 generation, const NKikimrScheme::TEvShredInfoResponse::EStatus& status) {
-            Record.SetGeneration(generation);
-            Record.SetStatus(status);
-        }
+        TEvShredInfoResponse(ui64 generation, const NKikimrScheme::TEvShredInfoResponse::EStatus& status);
     };
 
     struct TEvShredManualStartupRequest : TEventPB<TEvShredManualStartupRequest, NKikimrScheme::TEvShredManualStartupRequest, EvShredManualStartupRequest> {};

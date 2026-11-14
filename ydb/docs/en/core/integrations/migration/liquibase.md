@@ -4,17 +4,17 @@
 
 [Liquibase](https://www.liquibase.com/) is an open-source library for tracking, managing, and applying changes to database schemas. It is extended with dialects for different database management systems (DBMS), including {{ ydb-short-name }}.
 
-Dialect is the main component in the Liquibase framework, which assists in creating SQL queries for a database, considering the specific features of a given DBMS.
+A dialect is the main entity in the Liquibase framework that helps generate SQL queries for a database, taking into account the specifics of a particular DBMS.
 
-## Features of the {{ ydb-short-name }} Dialect {#ydb-dialect}
+## Features of the {{ ydb-short-name }} dialect {#ydb-dialect}
 
-Liquibase's main functionality is the abstract description of database schemas in a `.xml`, `.json`, or `.yaml` format. This ensures portability when switching between different DBMSs.
+Liquibase's main functionality is the abstract description of a database schema in `.xml`, `.json`, or `.yaml` formats. This ensures portability when switching from one DBMS to another.
 
-The {{ ydb-short-name }} dialect supports the following basic constructs in the standard migration description (changeset).
+The dialect supports the basic constructs of the standard migration description (changeset).
 
 ### Creating a table
 
-The `сreateTable` changeset is responsible for creating a table. The descriptions of types from the SQL standard are mapped to primitive types in {{ ydb-short-name }}. For example, the `bigint` type will be converted to `Int64`.
+The `createTable` changeset is responsible for creating a table. Type descriptions from the SQL standard are mapped to primitive {{ ydb-short-name }} types. For example, the `bigint` type will be converted to `Int64`.
 
 {% note info %}
 
@@ -22,7 +22,7 @@ You can also explicitly specify the original type name, such as `Int32`, `Json`,
 
 {% endnote %}
 
-Table of comparison of Liquibase types descriptions with [{{ ydb-short-name }} types](../../yql/reference/types/primitive.md):
+Table of default Liquibase type mappings to [{{ ydb-short-name }} types](../../yql/reference/types/primitive.md):
 
 | Liquibase types                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | {{ ydb-short-name }} type  |
 |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
@@ -42,17 +42,70 @@ Table of comparison of Liquibase types descriptions with [{{ ydb-short-name }} t
 
 {% note warning %}
 
-In {{ ydb-short-name }}, the `Timestamp` data type stores dates with microsecond precision. The `java.sql.Timestamp` or `java.time.Instant` store timestamps with nanosecond precision, so you should be aware of this when using these data types.
+In {{ ydb-short-name }}, the `Timestamp` data type stores dates with microsecond precision, while `java.sql.Timestamp` or `java.time.Instant` store timestamps with nanosecond precision. Be aware of this when working with this data type.
 
-The type names are case insensitive.
+Type names are case insensitive.
 
 {% endnote %}
 
-The `dropTable` changeset - delete a table. For example: `<dropTable tableName="episodes"/>`
+`dropTable` - deletes a table. Example: `<dropTable tableName="episodes"/>`
+
+### Extended date and interval types {#extended-datetime}
+
+To create columns with an extended date or interval range, specify the native type names `Date32`, `Datetime64`, `Timestamp64`, and `Interval64` in the `type` attribute. The standard names `date`, `datetime`, and `timestamp` still create `Date`, `Datetime`, and `Timestamp`; extended types are not selected automatically.
+
+For example, add the following changeset to the migration changelog:
+
+```xml
+<changeSet id="extended-datetime" author="example">
+    <createTable tableName="events">
+        <column name="id" type="Int64">
+            <constraints primaryKey="true" nullable="false"/>
+        </column>
+        <column name="event_date" type="Date32"/>
+        <column name="event_datetime" type="Datetime64"/>
+        <column name="event_timestamp" type="Timestamp64"/>
+        <column name="event_interval" type="Interval64"/>
+    </createTable>
+</changeSet>
+```
+
+The same type names can be used in `addColumn`, as well as in YAML and JSON migration changelogs. Value ranges and precision are described in the [Date and time](../../yql/reference/types/primitive.md#datetime) section.
+
+Use the [JDBC driver](../../reference/languages-and-apis/jdbc-driver/maven.md) version 2.3.11 or newer: this version adds support for extended types. Specifying a column type does not add automatic conversion of string values for `insert`, `loadData`, and `loadUpdateData`. To load extended dates and intervals, use SQL migrations with explicitly typed values.
+
+### Decimal with specified precision and scale {#decimal}
+
+In {{ ydb-short-name }}, the `Decimal(precision, scale)` type allows you to specify the total number of decimal digits and the number of digits after the decimal point. Valid values are `1 ≤ precision ≤ 35` and `0 ≤ scale ≤ precision`; see [Primitive data types](../../yql/reference/types/primitive.md#numeric) for details.
+
+{% note info %}
+
+The following examples require `liquibase-ydb-dialect` version [1.1.3](https://github.com/ydb-platform/ydb-java-dialects/blob/main/liquibase-dialect/CHANGELOG.md) or newer. In earlier releases, the `decimal` handler uses the fixed type `Decimal(22,9)`, including when other parameters are explicitly specified.
+
+{% endnote %}
+
+To create a column with the desired precision and scale, specify both parameters in the `type` attribute:
+
+```xml
+<changeSet id="parameterized-decimal" author="example">
+    <createTable tableName="decimal_values">
+        <column name="id" type="Int64">
+            <constraints primaryKey="true" nullable="false"/>
+        </column>
+        <column name="amount" type="Decimal(35,10)"/>
+    </createTable>
+</changeSet>
+```
+
+The dialect preserves precision and scale in `createTable`, `addColumn`, when writing via `insert`, `loadData`, and `loadUpdateData`, and when generating a migration changelog from an existing schema. No SQL changeset is required for an arbitrary `Decimal(precision, scale)`. The same parameters are supported in YAML and JSON migration changelogs and for the names `java.sql.Types.DECIMAL` and `java.math.BigDecimal`.
+
+If parameters are not specified, for example `type="decimal"`, `Decimal(22,9)` is used. A single parameter specifies precision with zero scale: `type="decimal(10)"` creates `Decimal(10,0)`. More than two parameters, non-integer values, or values outside the valid range result in a type validation error.
+
+When used with Hibernate, specify the same precision and scale [in the entity class](../orm/hibernate.md#decimal).
 
 ### Changing the table structure
 
-`addColumn` - add a column to a table. For example:
+`addColumn` - adds a column. Example:
 
 {% list tabs group=format %}
 
@@ -98,7 +151,7 @@ The `dropTable` changeset - delete a table. For example: `<dropTable tableName="
 
 {% endlist %}
 
-`createIndex` - create a secondary index. For example:
+`createIndex` - creates a secondary index. Example:
 
 {% list tabs group=format %}
 
@@ -153,7 +206,7 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 {% endnote %}
 
-`dropIndex` - drop a secondary index. For example:
+`dropIndex` - drops a secondary index. Example:
 
 {% list tabs group=format %}
 
@@ -189,9 +242,9 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 ### Ingesting data into a table
 
-`loadData`, `loadUpdateData` - upload data from a `CSV` file into a table. `loadUpdateData` loads data using the [{#T}](../../yql/reference/syntax/upsert_into.md) command.
+`loadData`, `loadUpdateData` - load data from a `CSV` file. `loadUpdateData` loads data using the [{#T}](../../yql/reference/syntax/upsert_into.md) command.
 
-`insert` is a changeset that performs a single insert into a table using the [INSERT INTO](../../yql/reference/syntax/insert_into.md) command. For example:
+`insert` - a changeset that performs a single insert into a table using the [INSERT INTO](../../yql/reference/syntax/insert_into.md) command. For example:
 
 {% list tabs group=format %}
 
@@ -277,40 +330,21 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 {% endlist %}
 
-You can also specify any value in the `value` field. Data from the `value` field in `insert` changeset or `CSV` files will be automatically converted to the required types, taking into account strict typing in {{ydb-short-name }}.
+For the types in the table below, values in the `value` field of the `insert` changeset or in CSV files are automatically converted to the corresponding {{ ydb-short-name }} types. For [extended dates and intervals](#extended-datetime), use SQL migrations. Passing values of a [parameterized Decimal](#decimal) preserves the column's precision and scale.
 
-The type formatting table to load into the table:
+Table of type formatting for loading into a table:
 
-#|
-|| {{ ydb-short-name }} type | Description format ||
-|| `Bool` |
-`true` or `false`
-    ||
-|| `Int8`, `Int16`, `Int32`, `Int64` |
-A signed integer
-    ||
-|| `Uint8`, `Uint16`, `Uint32`, `Uint64` |
-An unsigned integer
-    ||
-|| `Text`, `Bytes`, `Json`, `JsonDocument` |
-Represent as text
-    ||
-|| `Float`, `Double`, `Decimal(22, 9)` |
-A real number
-    ||
-|| `Interval` |
-[ISO-8601](https://en.wikipedia.org/wiki/ISO_8601#Durations), corresponds to the `java.time.Duration` in Java.
-    ||
-|| `Date` |
-Pattern `YYYY-MM-DD` calendar date from standard [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601)
-    ||
-|| `Datetime` |
-Pattern `YYYY-MM-DDThh:mm:ss`, timezone will be set to `UTC`
-    ||
-|| `Timestamp` |
-The timestamp from the [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601) standard corresponds to the `java.time.Instant` in Java, timezone will be set to `UTC` (precision in microseconds - `Timestamp` type {{ ydb-short-name }} restriction)
-    ||
-|#
+| {{ ydb-short-name }} type                                 | Description format                                                                                                                                                                                                                                           |
+|-----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Bool`                                  | `true` or `false`                                                                                                                                                                                                                                        |
+| `Int8`, `Int16`, `Int32`, `Int64`       | A signed integer                                                                                                                                                                                                                                       |
+| `Uint8`, `Uint16`, `Uint32`, `Uint64`   | An unsigned integer                                                                                                                                                                                                                                     |
+| `Text`, `Bytes`, `Json`, `JsonDocument` | Represent as text                                                                                                                                                                                                                                        |
+| `Float`, `Double`, `Decimal(precision, scale)`     | A real number                                                                                                                                                                                                                                        |
+| `Interval`                              | [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601#Durations), corresponds to the `java.time.Duration` class in Java.                                                                                                                                           |
+| `Date`                                  | Pattern `YYYY-MM-DD` calendar date from the standard [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601)                                                                                                                                                      |
+| `Datetime`                              | Pattern `YYYY-MM-DDThh:mm:ss`, timezone will be set to `UTC`                                                                                                                                                                                            |
+| `Timestamp`                             | Timestamp from the [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601) standard corresponds to the `java.time.Instant` class in Java, timezone will be set to `UTC` (precision in microseconds - a limitation of the `Timestamp` data type in {{ ydb-short-name }}) |
 
 Example `CSV` file:
 
@@ -321,13 +355,13 @@ id,bool,bigint,smallint,tinyint,float,double,decimal,uint8,uint16,uint32,uint64,
 
 {% note warning %}
 
-To understand which SQL statements {{ydb-short-name}} can perform and what are the restrictions on data types, read the documentation for the query language [YQL](../../yql/reference/index.md).
+To understand which SQL constructs {{ ydb-short-name }} can execute and what data type restrictions exist, refer to the [YQL](../../yql/reference/index.md) query language documentation.
 
 {% endnote %}
 
-{% note info %}
+{% note tip %}
 
-It is important to note that custom YQL instructions can be applied via [native SQL queries](https://docs.liquibase.com/concepts/changelogs/sql-format.html).
+It is important to note that custom YQL instructions can be applied using [native SQL queries](https://docs.liquibase.com/concepts/changelogs/sql-format.html).
 
 {% endnote %}
 
@@ -339,11 +373,11 @@ There are two ways:
 
 - Programmatically from Java / Kotlin applications
 
-  The project's [README](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect) describes how to use it from Java or Kotlin in detail. There is also an [example of a Spring Boot application](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-liquibase-app) using it.
+  How to use it from Java / Kotlin is described in detail in the project's [README](https://github.com/ydb-platform/ydb-java-dialects/tree/main/liquibase-dialect). There is also an [example Spring Boot application](https://github.com/ydb-platform/ydb-java-examples/tree/master/jdbc/spring-liquibase-app) that uses it.
 
 - Liquibase CLI
 
-  First, you need to install Liquibase itself using [one of the recommended methods](https://docs.liquibase.com/start/install/home.html). Then you need to place the `.jar` archives of [{{ ydb-short-name }} JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases) and Liquibase [{{ ydb-short-name }} dialect](https://mvnrepository.com/artifact/tech.ydb.dialects/liquibase-ydb-dialect/1.0.0) into the `internal/lib` folder.
+  First, you need to install the liquibase utility itself using [any of the recommended methods](https://docs.liquibase.com/start/install/home.html). Then you need to place the current `.jar` archives of the [{{ ydb-short-name }} JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases) and the Liquibase [{{ ydb-short-name }} dialect](https://mvnrepository.com/artifact/tech.ydb.dialects/liquibase-ydb-dialect/1.1.3) into the `internal/lib` folder.
 
   ```bash
   # $(which liquibase)
@@ -351,23 +385,30 @@ There are two ways:
 
   # you may need to sudo
   # set actual versions of .jar files
-  curl -L -o ydb-jdbc-driver.jar https://repo.maven.apache.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.0.7/ydb-jdbc-driver-shaded-2.0.7.jar
-  curl -L -o liquibase-ydb-dialect.jar https://repo.maven.apache.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
+  curl -L -o ydb-jdbc-driver.jar https://repo.maven.apache.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.4.1/ydb-jdbc-driver-shaded-2.4.1.jar
+  curl -L -o liquibase-ydb-dialect.jar https://repo.maven.apache.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.1.3/liquibase-ydb-dialect-1.1.3.jar
   ```
 
-  For a more detailed description, see the [Manual library management](https://docs.liquibase.com/start/install/home.html) in Liquibase documentation.
+  A more detailed description is in the [manual library management](https://docs.liquibase.com/start/install/home.html) section of the Liquibase documentation.
 
-  Now the `liquibase` command line utility can be used with {{ ydb-short-name }}.
+  Now the liquibase command line utility can be used with {{ ydb-short-name }}.
 
 {% endlist %}
 
 ## Liquibase usage scenarios
 
-### Initializing Liquibase on an empty {{ ydb-short-name }} cluster
+### Initializing liquibase on an empty {{ ydb-short-name }}
 
-The main command is `liquibase update`, which applies migrations if the current schema in {{ ydb-short-name }} lags behind the user-defined description.
+The main command is `liquibase update`, which applies migrations if the current {{ ydb-short-name }} schema lags behind the user-defined description.
 
-Let's apply this changeset to an empty database:
+The examples below assume the following `liquibase.properties` configuration file:
+
+```properties
+changelog-file=changelogs.xml
+url=jdbc:ydb:grpc://localhost:2136/local
+```
+
+Let's apply the following changeset to an empty database:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -406,9 +447,9 @@ Let's apply this changeset to an empty database:
 </databaseChangeLog>
 ```
 
-After executing the `liquibase update` command, Liquibase will print the following log:
+After executing the `liquibase update` command, liquibase will print the following log:
 
-```text
+```bash
 UPDATE SUMMARY
 Run:                          2
 Previously run:               0
@@ -420,13 +461,13 @@ Liquibase: Update has been successful. Rows affected: 2
 Liquibase command 'update' was executed successfully.
 ```
 
-After applying migrations, the data schema now looks like this:
+After applying the migrations, the data schema looks as follows:
 
 ![_assets/liquibase-step-1.png](_assets/liquibase-step-1.png)
 
-You can see that Liquibase has created two service tables: `DATABASECHANGELOG`, which is the migration log, and `DATABASECHANGELOGLOCK`, which is a table for acquiring a distributed lock.
+You can see that Liquibase has created two service tables: `DATABASECHANGELOG` - the migration log, and `DATABASECHANGELOGLOCK` - a table for acquiring a distributed lock.
 
-Example contents of the `DATABASECHANGELOG` table:
+Contents of the DATABASECHANGELOG table:
 
 | AUTHOR        | COMMENTS        | CONTEXTS | DATEEXECUTED | DEPLOYMENT_ID | DESCRIPTION                                                    | EXECTYPE | FILENAME               | ID                   | LABELS | LIQUIBASE | MD5SUM                             | ORDEREXECUTED | TAG |
 |:--------------|:----------------|:---------|:-------------|:--------------|:---------------------------------------------------------------|:---------|:-----------------------|:---------------------|:-------|:----------|:-----------------------------------|:--------------|:----|
@@ -435,7 +476,7 @@ Example contents of the `DATABASECHANGELOG` table:
 
 ### Database schema evolution
 
-Let's say we need to create a {{ ydb-short-name }} topic and turn off the param `AUTO_PARTITIONING_BY_SIZE` of the table. This can be done with a native SQL script:
+Let's say we need to create a {{ ydb-short-name }} topic and disable the `AUTO_PARTITIONING_BY_SIZE` parameter of the table. This can be done with a native SQL script:
 
 ```yql
 --liquibase formatted sql
@@ -451,10 +492,9 @@ CREATE TOPIC `my_topic` (
 ALTER TABLE episodes SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
 ```
 
-Also, let's add a new column `is_deleted` and remove the `index_episodes_title` index:
+Let's also add a new column `is_deleted` and drop the `index_episodes_title` index:
 
 ```xml
-
 <changeSet id="alter-episodes" author="kurdyukov-kir">
     <comment>Alter table episodes.</comment>
 
@@ -467,7 +507,7 @@ Also, let's add a new column `is_deleted` and remove the `index_episodes_title` 
 <include file="/migration/sql/yql.sql" relativeToChangelogFile="true"/>
 ```
 
-After executing `liquibase update`, the database schema will be successfully updated with all of these changes:
+After executing `liquibase update`, the database schema will be successfully updated.
 
 ```text
 UPDATE SUMMARY
@@ -481,23 +521,23 @@ Liquibase: Update has been successful. Rows affected: 3
 Liquibase command 'update' was executed successfully.
 ```
 
-The result will be deleting the index, adding the `is_deleted` column, disabling the auto partitioning setting, and creating a topic:
+The result will be dropping the index, adding the `is_deleted` column, disabling the `AUTO_PARTITIONING_BY_SIZE` parameter, and creating the topic:
 
 ![_assets/liquibase-step-2.png](_assets/liquibase-step-2.png)
 
 ### Initializing liquibase in a project with a non-empty data schema
 
-Let's suppose there's an existing project with the following database schema:
+Let's suppose there is an existing project with the current database schema:
 
 ![_assets/liquibase-step-3.png](_assets/liquibase-step-3.png)
 
-In this case to start using Liquibase, you need to run:
+To start using liquibase, you need to run:
 
 ```bash
 liquibase generate-changelog --changelog-file=changelog.xml
 ```
 
-The contents of the generated changelog.xml:
+Contents of the generated changelog.xml:
 
 ```xml
 <changeSet author="kurdyukov-kir (generated)" id="1711556283305-1">
@@ -548,10 +588,10 @@ The contents of the generated changelog.xml:
 </changeSet>
 ```
 
-Then you need to synchronize the generated changelog.xml the file, this is done by the command:
+Then you need to synchronize the generated changelog.xml file, which is done with the command:
 
 ```bash
-liquibase changelog-sync --changelog-file=changelog.xml
+liquibase changelog-sync --changelog-file=dbchangelog.xml
 ```
 
 The result will be liquibase synchronization in your project:
@@ -560,15 +600,15 @@ The result will be liquibase synchronization in your project:
 
 ## Connecting to {{ ydb-short-name }} {#connect-to-ydb}
 
-In the examples above, a Docker container was used, which didn't require any additional authentication settings.
+In the examples above, we used a Docker container, which didn't require additional authentication parameters.
 
-List of different authentication options through URL parameters:
+There are various authentication options through the URL parameter:
 
-* Local or remote Docker (anonymous authentication):<br/>`jdbc:ydb:grpc://localhost:2136/local`
+* Docker container (anonymous authentication):<br/>`jdbc:ydb:grpc://localhost:2136/local`
 * Self-hosted cluster:<br/>`jdbc:ydb:grpcs://<host>:2135/Root/testdb?secureConnectionCertificate=file:~/myca.cer`
-* Connect with token to the cloud instance:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?token=file:~/my_token`
-* Connect with service account to the cloud instance:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?saFile=file:~/sa_key.json`
+* Connection using a token:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?token=file:~/my_token`
+* Connection using a service account:<br/>`jdbc:ydb:grpcs://<host>:2135/path/to/database?saFile=file:~/sa_key.json`
 
-Also, if your cluster is configured using username and password, authentication is done through Liquibase parameters.
+If your cluster is configured with a username and password, authentication is done through Liquibase parameters.
 
-For more info about different authentication settings, refer to the [section](../../security/authentication.md).
+For more information about various authentication settings, refer to the corresponding [section](../../security/authentication.md).

@@ -537,6 +537,38 @@ namespace NActors {
 
     constexpr size_t TimeBufSize = 512;
 
+    void TLoggerActor::OutputRecordToSinks(
+        TInstant time,
+        NLog::EPrio priority,
+        NLog::EComponent component,
+        const char* fileName,
+        ui64 lineNumber,
+        const TString& formatted,
+        const TMaybe<NStructuredLog::TStructuredMessage>& structuredMessage) noexcept
+    {
+        auto sinks = Settings->Sinks.atomic_load();
+        if (!sinks || sinks->empty()) {
+            return;
+        }
+
+        NStructuredLog::TLogMessage message {
+            .Time = time,
+            .Priority = priority,
+            .Component = component,
+            .NodeId = Settings->NodeId,
+            .FileName = fileName,
+            .LineNumber = lineNumber,
+            .TextMessage = formatted,
+            .StructuredMessage = structuredMessage.GetOrElse({})};
+
+        for (auto& sink : *sinks) {
+            try {
+                sink.second->Write(message);
+            } catch (...) {
+            }
+        }
+    }
+
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
         return OutputRecord(
             evLog->Stamp,
@@ -559,6 +591,8 @@ namespace NActors {
         bool json,
         const TMaybe<NActors::NStructuredLog::TStructuredMessage>& structuredMessage) noexcept
     try {
+        OutputRecordToSinks(time, priority, component, fileName, lineNumber, formatted, structuredMessage);
+
         const auto logPrio = ::ELogPriority(ui16(priority));
 
         TLogRecord::TMetaFlags metaFlags;

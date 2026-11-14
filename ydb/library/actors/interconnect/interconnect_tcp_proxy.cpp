@@ -5,6 +5,7 @@
 #include "interconnect_tcp_session_v2.h"
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/system/getpid.h>
 
@@ -63,11 +64,15 @@ namespace NActors {
     }
 
     void TInterconnectProxyTCP::Bootstrap() {
-        SetPrefix(Sprintf("Proxy %s [node %" PRIu32 "]", SelfId().ToString().data(), PeerNodeId));
+        SetPrefix(YDB_LOG_CREATE_MESSAGE(
+            {"selfActorKind", "Proxy"},
+            {"selfActorId", SelfId()},
+            {"peerNodeId", PeerNodeId}));
 
         SwitchToInitialState();
 
         YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "Ready to work",
+            {"logPrefix", LogPrefix},
             {"marker", "ICP01"});
     }
 
@@ -150,6 +155,7 @@ namespace NActors {
             PeerBridgePileName = info.Location.GetBridgePileName();
 
             YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Configured for host",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP02"},
                 {"name", name.data()});
 
@@ -236,6 +242,7 @@ namespace NActors {
             // Both outgoing and incoming handshake are in progress. To prevent race condition during semultanous handshake
             // incoming handshake must be held till outgoing handshake is complete or failed
             YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Reply for incoming handshake (actor is held",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP06"},
                 {"incomingHandshakeActor", IncomingHandshakeActor});
             HeldHandshakeReply = std::move(event);
@@ -245,6 +252,7 @@ namespace NActors {
             Y_ABORT_UNLESS(state == &TThis::PendingConnection || state == &TThis::StateWork, "invalid handshake request in state# %s", State);
         } else {
             YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Issued incoming handshake reply",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP07"});
 
             // No race, so we can send reply immediately.
@@ -255,6 +263,7 @@ namespace NActors {
             // switch from working state.
             if (!Session) {
                 YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "No active sessions, becoming PendingConnection",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP08"});
                 SwitchToState(__LINE__, "PendingConnection", &TThis::PendingConnection);
             } else {
@@ -270,6 +279,7 @@ namespace NActors {
 
         // TEvHandshakeAsk is only applicable for continuation requests
         YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "(actor",
+            {"logPrefix", LogPrefix},
             {"marker", "ICP09"},
             {"sender", ev->Sender},
             {"from", ev->Get()->Self},
@@ -278,6 +288,7 @@ namespace NActors {
         if (!Session) {
             // if there is no open session, report error -- continuation request works only with open sessions
             YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT, "(actor peer tries to resume nonexistent session",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP12"},
                 {"sender", ev->Sender},
                 {"self", msg->Self},
@@ -285,6 +296,7 @@ namespace NActors {
         } else if (SessionVirtualId != ev->Get()->Peer || RemoteSessionVirtualId != ev->Get()->Self) {
             // check session virtual ids for continuation
             YDB_LOG_NOTICE("(actor virtual id mismatch with existing session",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP13"},
                 {"sender", ev->Sender},
                 {"peer", ev->Get()->Peer},
@@ -295,12 +307,14 @@ namespace NActors {
             // v2 sessions do not support continuation; reject the resume request so the peer establishes
             // a brand new session instead
             YDB_LOG_NOTICE("(actor rejecting resume for session that does not support continuation",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP14"},
                 {"sender", ev->Sender},
                 {"self", msg->Self},
                 {"peer", msg->Peer});
         } else if (Session->GetRdmaState() != IInterconnectSession::ERdmaState::None) {
             YDB_LOG_NOTICE("(actor rejecting graceful reconnect for RDMA session",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"sender", ev->Sender},
                 {"self", msg->Self},
@@ -323,6 +337,7 @@ namespace NActors {
         ICPROXY_PROFILED;
 
         YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Incoming handshake (actor",
+            {"logPrefix", LogPrefix},
             {"marker", "ICP17"},
             {"sender", ev->Sender});
 
@@ -334,6 +349,7 @@ namespace NActors {
         if (RemoteProgramInfo && remotePID == RemoteProgramInfo->PID && remoteStartTime == RemoteProgramInfo->StartTime) {
             if (remoteSerial < RemoteProgramInfo->Serial) {
                 YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "Handshake (actor is too old)",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP18"},
                     {"sender", ev->Sender});
                 Send(ev->Sender, new TEvents::TEvPoisonPill);
@@ -360,6 +376,7 @@ namespace NActors {
             const ui64 serial = record.GetSerial();
             if (serial < *LastSerialFromIncomingHandshake) {
                 YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT, "Has duplicate",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP15"},
                     {"handshake", ev->Sender},
                     {"serial", serial},
@@ -368,6 +385,7 @@ namespace NActors {
                 return;
             } else if (serial == *LastSerialFromIncomingHandshake) {
                 YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT, "Is obsolete",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP00"},
                     {"handshake", ev->Sender},
                     {"serial", serial},
@@ -410,11 +428,13 @@ namespace NActors {
         // Terminate handshake actor working in opposite direction, if set up.
         if (ev->Sender == IncomingHandshakeActor) {
             YDB_LOG_COMP(handshakeSuccessLogPriority, NActorsServices::INTERCONNECT, "Incoming handshake succeeded",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP19"});
             DropIncomingHandshake(false);
             DropOutgoingHandshake();
         } else if (ev->Sender == OutgoingHandshakeActor) {
             YDB_LOG_COMP(handshakeSuccessLogPriority, NActorsServices::INTERCONNECT, "Outgoing handshake succeeded",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP20"});
             if (auto rdmaDisabled = msg->RdmaHanshakeResult.GetDisabled()) {
                 runDelayedRdmaHandshakeTimer = rdmaDisabled->RunDelayedHandshake;
@@ -468,6 +488,7 @@ namespace NActors {
             SessionVirtualId = msg->Self;
             RemoteSessionVirtualId = msg->Peer;
             YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "Created new",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP22"},
                 {"session", SessionID});
         }
@@ -510,6 +531,7 @@ namespace NActors {
                 LogHandshakeStatusNotice("ICP24", EHandshakeStatusDirection::Incoming, *ev->Get());
             } else {
                 YDB_LOG_COMP(handshakeFailLogPriority, NActorsServices::INTERCONNECT, "Incoming handshake failed",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP24"},
                     {"temporary", ui32(ev->Get()->Temporary)},
                     {"explanation", ev->Get()->Explanation.data()},
@@ -521,6 +543,7 @@ namespace NActors {
                 LogHandshakeStatusNotice("ICP25", EHandshakeStatusDirection::Outgoing, *ev->Get());
             } else {
                 YDB_LOG_COMP(handshakeFailLogPriority, NActorsServices::INTERCONNECT, "Outgoing handshake failed",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP25"},
                     {"temporary", ui32(ev->Get()->Temporary)},
                     {"explanation", ev->Get()->Explanation.data()},
@@ -532,6 +555,7 @@ namespace NActors {
             if (IEventBase* reply = HeldHandshakeReply.Release()) {
                 Y_ABORT_UNLESS(IncomingHandshakeActor);
                 YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Sent held handshake reply",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP26"},
                     {"incomingHandshakeActor", IncomingHandshakeActor});
                 Send(IncomingHandshakeActor, reply);
@@ -542,6 +566,7 @@ namespace NActors {
         } else {
             /* It seems to be an old fail, just ignore it */
             YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Obsolete handshake fail ignored",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP27"});
             return;
         }
@@ -551,6 +576,7 @@ namespace NActors {
         }
         if (Common->Settings.MergePerHostCounters) {
             YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT, "Peer-level handshake fail",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP36"},
                 {"peerNodeId", PeerNodeId},
                 {"peer", Metrics ? Metrics->GetHumanFriendlyPeerHostName().data() : ""},
@@ -562,6 +588,7 @@ namespace NActors {
         if (IncomingHandshakeActor || OutgoingHandshakeActor) {
             // one of handshakes is still going on
             YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Other handshake is still going",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP28"});
             return;
         }
@@ -695,6 +722,7 @@ namespace NActors {
         Y_ABORT_UNLESS(Session && Session == session && SessionID);
 
         YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "Unregister session",
+            {"logPrefix", LogPrefix},
             {"marker", "ICP30"},
             {"session", SessionID},
             {"virtualId", SessionVirtualId});
@@ -813,6 +841,7 @@ namespace NActors {
             const TDuration resetDelay = GetMaxRdmaRetryDelay();
             if (stableRdmaPeriod >= resetDelay) {
                 YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT, "Reset rdma retry failures after stable rdma period",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP40"},
                     {"session", SessionID},
                     {"failures", ConsecutiveRdmaFailures},
@@ -832,6 +861,7 @@ namespace NActors {
     void TInterconnectProxyTCP::ScheduleDelayedRdmaHandshake() {
         if (DelayedRdmaHandshakeTimeout) {
             YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Rdma delayed handshake already scheduled",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP37"},
                 {"session", SessionID},
                 {"failures", ConsecutiveRdmaFailures},
@@ -842,6 +872,7 @@ namespace NActors {
         DelayedRdmaHandshakeTimeout = GetNextRdmaRetryDelay();
         SetRdmaRetryWatchdogPending(true);
         YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT, "Schedule delayed rdma handshake",
+            {"logPrefix", LogPrefix},
             {"marker", "ICP38"},
             {"session", SessionID},
             {"failures", ConsecutiveRdmaFailures},
@@ -853,6 +884,7 @@ namespace NActors {
     void TInterconnectProxyTCP::HandleRdmaDelayedHandshake(STATEFN_SIG) {
         if (ev->Cookie != RdmaRetryWatchdogCookie) {
             YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Ignore stale rdma retry watchdog event",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP41"},
                 {"session", SessionID},
                 {"eventCookie", ev->Cookie},
@@ -879,6 +911,7 @@ namespace NActors {
             }
         } else {
             YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT, "Restart delayed rdma handshake",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP39"},
                 {"session", SessionID});
             DelayedRdmaHandshakeTimeout = RdmaRetryStateCheckDelay;
@@ -892,6 +925,7 @@ namespace NActors {
         ICPROXY_PROFILED;
 
         YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "Proxy http called",
+            {"logPrefix", LogPrefix},
             {"marker", "ICP31"});
 
         TStringStream str;
@@ -1098,7 +1132,12 @@ namespace NActors {
     }
 
     void TInterconnectProxyTCP::AppendHandshakeFailDebugInfo(TStringBuilder& stream, TStringBuf marker, TStringBuf rawReason, TStringBuf extraDebugInfo) const {
-        stream << "; debug: " << LogPrefix << " " << marker << " raw_reason=" << rawReason;
+
+        TStringBuilder stringPrefix;
+        NActors::NStructuredLog::TTextWriter TextWriter;
+        TextWriter.Write(stringPrefix, LogPrefix);
+
+        stream << "; debug: " << stringPrefix << " " << marker << " raw_reason=" << rawReason;
         if (extraDebugInfo) {
             stream << " " << extraDebugInfo;
         }
@@ -1143,6 +1182,7 @@ namespace NActors {
                 LOG_NOTICE_SOURCELESS(ctx, NActorsServices::INTERCONNECT, "[YDBE-02001] %s", makeNotice().data());
 
                 YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Transit to hold-by-error state",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP32"},
                     {"explanation", explanation.data()});
             } else {
@@ -1153,6 +1193,7 @@ namespace NActors {
                     return notice;
                 };
                 YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT, makeNotice().data(),
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICP32"});
             }
             LastErrorStateLogAt = now;
@@ -1163,10 +1204,12 @@ namespace NActors {
                 Common->ErrorStateLogSuppressed.fetch_add(1, std::memory_order_relaxed);
             }
             YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT, "Transit to hold-by-error state",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP32"},
                 {"explanation", explanation.data()});
         }
         YDB_LOG_INFO_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "Error",
+            {"logPrefix", LogPrefix},
             {"peerNodeId", PeerNodeId},
             {"state", explanation.data()});
 
@@ -1215,6 +1258,7 @@ namespace NActors {
         ICPROXY_PROFILED;
 
         YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT, "Wake up from error state",
+            {"logPrefix", LogPrefix},
             {"marker", "ICP33"});
 
         if (ev->Get() == HoldByErrorWakeupCookie) {
@@ -1280,6 +1324,7 @@ namespace NActors {
 
         if (Session && Session->GetSocket()) {
             YDB_LOG_INFO(logEntry.data(),
+                {"logPrefix", LogPrefix},
                 {"marker", "ICP34"});
             Session->GetSocket()->Shutdown(SHUT_RDWR);
         }

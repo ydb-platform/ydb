@@ -92,7 +92,7 @@ private:
         ui64 ReservedCpuUs = 0;
         TMonotonic NotBefore;
     };
-    bool HasWorkLocked() const;
+    ui32 CountWorkLocked(ui32 limit) const;
     TVector<NActors::TActorId> WakeLocked();
     void Wake(TVector<NActors::TActorId> workers);
 
@@ -105,7 +105,7 @@ private:
     ui64 Sequence = 0;
     ui64 Selections = 0;
     double ServiceFloor = 0;
-    NMonitoring::TDynamicCounters::TCounterPtr WorkerSlices, WorkerRuns, WorkerCpuUs, QuotaRejected, LeaseRetries, InlineCompletions;
+    NMonitoring::TDynamicCounters::TCounterPtr WorkerSlices, WorkerRuns, WorkerCpuUs, QuotaRejected, LeaseRetries, InlineCompletions, Wakeups, EmptyTakes;
 public:
     void RecordInlineCompletion() { if (InlineCompletions) { ++*InlineCompletions; } }
 private:

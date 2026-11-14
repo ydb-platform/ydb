@@ -13,8 +13,7 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
-#include <ydb/core/mind/tenant_slot_broker.h>
-#include <ydb/core/mind/tenant_slot_broker_impl.h>
+#include <ydb/core/mind/events/tenant_slot_broker.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>

@@ -14,7 +14,6 @@ PEERDIR(
     ydb/core/cms/console/events
     ydb/core/kqp/common
     ydb/core/kqp/query_data
-    ydb/core/mind
     ydb/core/protos
     ydb/core/resource_pools
     ydb/library/aclib

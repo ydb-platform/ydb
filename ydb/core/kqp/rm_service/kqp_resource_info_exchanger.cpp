@@ -7,7 +7,7 @@
 #include <ydb/core/cms/console/events/configs_dispatcher.h>
 #include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mind/events/tenant_pool.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

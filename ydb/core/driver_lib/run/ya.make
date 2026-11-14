@@ -84,6 +84,7 @@ PEERDIR(
     ydb/core/mind
     ydb/core/mind/address_classification
     ydb/core/mind/bscontroller
+    ydb/core/mind/configured_tablet_bootstrapper
     ydb/core/mind/hive
     ydb/core/mon
     ydb/core/mon_alloc

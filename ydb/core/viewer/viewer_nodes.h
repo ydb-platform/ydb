@@ -1425,7 +1425,11 @@ public:
             FilterStorageStage = EFilterStorageStage::Pools;
         } else if (!FilterGroupIds.empty() || FieldsRequired.test(+ENodeFields::VDisks)) {
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
-            FilterStorageStage = EFilterStorageStage::VSlots;
+            if (FilterStorageStage == EFilterStorageStage::None) {
+                // the storage pools of a database (the Pools stage set above) are resolved first,
+                // the VSlots are processed when the stages get to them
+                FilterStorageStage = EFilterStorageStage::VSlots;
+            }
         }
         if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
             if (!StoragePoolsResponse) {
@@ -1509,6 +1513,12 @@ public:
 
     bool FilterDone() const {
         return PreFilterDone() && FilterStorageStage == EFilterStorageStage::None && !NeedFilter;
+    }
+
+    // The storage pools were not resolved to groups, so there is no pool filter. The VSlots are still needed:
+    // for the disks of the nodes that do not answer themselves and for an explicit group filter.
+    EFilterStorageStage GetStorageStageWithoutPools() const {
+        return VSlotsResponse ? EFilterStorageStage::VSlots : EFilterStorageStage::None;
     }
 
     void ApplyFilter() {
@@ -2449,6 +2459,19 @@ public:
             DDiskGroupsProcessed = true;
         }
 
+        if (FilterStorageStage == EFilterStorageStage::Pools && FilterStoragePools.empty()) {
+            // The pools were to be taken from the database (all navigate requests are processed by now),
+            // and it gave none: no domain description, or no storage pools of its own.
+            // There is nothing to filter by, so go on without the pool filter instead of waiting forever.
+            const bool databaseResolved = (!DatabaseNavigateResponse || DatabaseNavigateResponse->IsOk())
+                && (!ResourceNavigateResponse || ResourceNavigateResponse->IsOk());
+            if (databaseResolved) {
+                // The nodes are not limited to the database, and nothing else in the response tells it.
+                // A database that was not resolved has a problem of its own and an empty list.
+                AddProblem("filter-not-applied");
+            }
+            FilterStorageStage = GetStorageStageWithoutPools();
+        }
         if (FilterStorageStage == EFilterStorageStage::Pools && StoragePoolsResponse && StoragePoolsResponse->IsDone()) {
             if (StoragePoolsResponse->IsOk()) {
                 for (const auto& storagePoolEntry : StoragePoolsResponse->Get()->Record.GetEntries()) {
@@ -2464,7 +2487,7 @@ public:
                 FilterStorageStage = EFilterStorageStage::Groups;
             } else {
                 AddProblem("bsc-storage-pools-no-data");
-                FilterStorageStage = EFilterStorageStage::None;
+                FilterStorageStage = GetStorageStageWithoutPools();
             }
             StoragePoolsResponse.reset();
         }
@@ -2481,7 +2504,7 @@ public:
                 FilterStorageStage = EFilterStorageStage::VSlots;
             } else {
                 AddProblem("bsc-storage-groups-no-data");
-                FilterStorageStage = EFilterStorageStage::None;
+                FilterStorageStage = GetStorageStageWithoutPools();
             }
         }
         if (FilterStorageStage == EFilterStorageStage::VSlots && VSlotsResponse && VSlotsResponse->IsDone()) {

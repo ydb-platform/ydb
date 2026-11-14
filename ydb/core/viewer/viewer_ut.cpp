@@ -4904,15 +4904,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
         runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
         TAutoPtr<IEventHandle> handle;
         auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        NJson::TJsonValue json;
-        NJson::ReadJsonTree(result->Response->Body, &json, true);
         const TString context = TStringBuilder() << query << ": " << result->Response->Body;
+        NJson::TJsonValue json;
+        // a rejected request is answered with plain text: show it instead of a bare parse error
+        UNIT_ASSERT_C(NJson::ReadJsonTree(result->Response->Body, &json), context);
         UNIT_ASSERT_VALUES_EQUAL_C(vslotsResponses > 0, expectVSlots, context);
         bool hasVSlotsError = false;
+        bool hasFilterNotApplied = false;
         for (const auto& problem : json["Problems"].GetArray()) {
             hasVSlotsError |= problem.GetString() == "bsc-storage-slots-no-data";
+            hasFilterNotApplied |= problem.GetString() == "filter-not-applied";
         }
         UNIT_ASSERT_VALUES_EQUAL_C(hasVSlotsError, expectVSlots && !vslotsAvailable, context);
+        // with the data the storage filter needs received, the filter is applied, the pools of a database included
+        UNIT_ASSERT_C(hasVSlotsError || !hasFilterNotApplied, context);
         UNIT_ASSERT_VALUES_EQUAL_C(json["TotalNodes"].GetString(), ToString(expectedNodeIds.size()), context);
         UNIT_ASSERT_VALUES_EQUAL_C(json["FoundNodes"].GetString(), ToString(expectedNodeIds.size()), context);
         UNIT_ASSERT_C(!json["NeedFilter"].GetBoolean(), context);
@@ -4921,6 +4926,101 @@ Y_UNIT_TEST_SUITE(Viewer) {
         for (size_t i = 0; i < nodes.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(nodes[i]["NodeId"].GetUInteger(), expectedNodeIds[i], context);
         }
+    }
+
+    // What the database of the request tells about its storage pools
+    enum class ENodesDatabasePools {
+        TestPool, // the description lists the only mocked pool
+        Empty, // the description is received, but the database has no storage pools of its own
+        NoDescription, // the database has no domain description
+    };
+
+    // A database that gives no storage pools to filter by: the handler must go on without the pool filter
+    // instead of waiting for the pools forever, so the reply is still filtered by type, sorted and limited.
+    void CheckNodesDatabaseWithoutPoolsCase(TTestActorRuntime& runtime, const TString& fields,
+                                            const std::vector<TNodeId>& nodeIdsDescending, bool page) {
+        // a nonzero offset with a limit shorter than the rest: the page is one node from the middle of the sorted list,
+        // which checks the order, the offset and the cut by the limit at once
+        const std::vector<TNodeId> expectedNodeIds = page
+            ? std::vector<TNodeId>(nodeIdsDescending.begin() + 1, nodeIdsDescending.begin() + 2)
+            : nodeIdsDescending;
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /viewer/json/nodes?type=static&sort=-NodeId&offload_merge=false"
+                << "&use_cache=false&timeout=1000&with=all&database=/Root&direct=1" << fields
+                << (page ? "&offset=1&limit=1" : "&offset=0&limit=20") << " HTTP/1.1\r\n\r\n", endpoint, {});
+        const TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        const TString context = TStringBuilder() << fields << (page ? " (page)" : "") << ": " << result->Response->Body;
+        NJson::TJsonValue json;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(result->Response->Body, &json), context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["TotalNodes"].GetString(), ToString(nodeIdsDescending.size()), context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["FoundNodes"].GetString(), ToString(nodeIdsDescending.size()), context);
+        // a handler that is still waiting for the pools leaves these flags set and returns the nodes as they are
+        UNIT_ASSERT_C(!json["NeedFilter"].GetBoolean(), context);
+        UNIT_ASSERT_C(!json["NeedSort"].GetBoolean(), context);
+        // the nodes are not limited to the database, and this is the only sign of it
+        bool hasFilterNotApplied = false;
+        for (const auto& problem : json["Problems"].GetArray()) {
+            hasFilterNotApplied |= problem.GetString() == "filter-not-applied";
+        }
+        UNIT_ASSERT_C(hasFilterNotApplied, context);
+        const auto& nodes = json["Nodes"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL_C(nodes.size(), expectedNodeIds.size(), context);
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(nodes[i]["NodeId"].GetUInteger(), expectedNodeIds[i], context);
+        }
+    }
+
+    // What BSC does not answer about while the pools of a database are resolved to nodes
+    enum class ENodesLostPoolData {
+        None,
+        Pools,
+        Groups,
+    };
+
+    // The pools of the database could not be resolved to groups, but the VSlots were received: the pool filter
+    // is dropped, and the VSlots still give the disks of a node that does not answer itself.
+    void CheckNodesKeepBscVDisksWithoutPoolFilterCase(TTestActorRuntime& runtime, const TString& problem,
+                                                      const std::vector<TNodeId>& allNodeIds, TNodeId silentNodeId) {
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /viewer/json/nodes?type=static&sort=NodeId&offload_merge=false"
+                // SystemState: a node is known as disconnected by its missing system state
+                << "&use_cache=false&timeout=1000&limit=20&offset=0&with=all&fields_required=NodeId,VDisks,SystemState"
+                << "&database=/Root&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
+        const TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        const TString context = TStringBuilder() << problem << ": " << result->Response->Body;
+        NJson::TJsonValue json;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(result->Response->Body, &json), context);
+        bool hasProblem = false;
+        bool hasVSlotsError = false;
+        for (const auto& item : json["Problems"].GetArray()) {
+            hasProblem |= item.GetString() == problem;
+            hasVSlotsError |= item.GetString() == "bsc-storage-slots-no-data";
+        }
+        UNIT_ASSERT_C(hasProblem, context);
+        UNIT_ASSERT_C(!hasVSlotsError, context);
+        // without the pools there is nothing to filter by
+        const auto& nodes = json["Nodes"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL_C(nodes.size(), allNodeIds.size(), context);
+        const NJson::TJsonValue* silentNode = nullptr;
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(nodes[i]["NodeId"].GetUInteger(), allNodeIds[i], context);
+            if (nodes[i]["NodeId"].GetUInteger() == silentNodeId) {
+                silentNode = &nodes[i];
+            }
+        }
+        UNIT_ASSERT_C(silentNode, context);
+        // the only source of the disks of this node is the VSlots response
+        const auto& vdisks = (*silentNode)["VDisks"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL_C(vdisks.size(), 1, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(vdisks[0]["VDiskSlotId"].GetUIntegerRobust(), 1000, context);
     }
 
     void CheckNodesStorageFilter(bool vslotsAvailable) {
@@ -4937,8 +5037,17 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const TNodeId secondNodeId = runtime.GetNodeId(1);
         const TNodeId nodeWithoutVSlotsId = runtime.GetNodeId(2);
         size_t vslotsResponses = 0;
+        ENodesDatabasePools databasePools = ENodesDatabasePools::TestPool;
+        ENodesLostPoolData lostPoolData = ENodesLostPoolData::None;
+        TNodeId silentNodeId = 0; // the whiteboard of this node does not answer
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (silentNodeId && ev->Cookie == silentNodeId
+                    && (ev->GetTypeRewrite() == TEvWhiteboard::EvSystemStateResponse
+                        || ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse
+                        || ev->GetTypeRewrite() == TEvWhiteboard::EvPDiskStateResponse)) {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
             if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse) {
                 ++vslotsResponses;
                 if (!vslotsAvailable) {
@@ -4952,6 +5061,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     record.MutableEntries(i)->MutableInfo()->SetGroupId(10 + i);
                 }
             } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
+                if (lostPoolData == ENodesLostPoolData::Pools) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
                 auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
                 record.ClearEntries();
                 auto* entry = record.AddEntries();
@@ -4959,6 +5071,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 entry->MutableKey()->SetStoragePoolId(7);
                 entry->MutableInfo()->SetName("test-pool");
             } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse) {
+                if (lostPoolData == ENodesLostPoolData::Groups) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
                 auto& record = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
                 record.ClearEntries();
                 for (ui32 i = 0; i < 2; ++i) {
@@ -4966,6 +5081,39 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     entry->MutableKey()->SetGroupId(10 + i);
                     entry->MutableInfo()->SetBoxId(1);
                     entry->MutableInfo()->SetStoragePoolId(7 + i);
+                }
+            } else if (ev->GetTypeRewrite() == TEvStateStorage::EvBoardInfo) {
+                // A request with a database first resolves the endpoints board of the database and is
+                // rejected when the board is not available, which it is not for the root in this test.
+                using EStatus = TEvStateStorage::TEvBoardInfo::EStatus;
+                const auto* info = ev->Get<TEvStateStorage::TEvBoardInfo>();
+                if (info->Path == "gpc+/Root" && info->Status != EStatus::Ok) {
+                    // the status is a const member: the event is replaced, not changed
+                    auto available = std::make_unique<TEvStateStorage::TEvBoardInfo>(EStatus::Ok, info->Path);
+                    available->InfoEntries = info->InfoEntries;
+                    ev.Reset(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender, available.release(),
+                        ev->Flags, ev->Cookie));
+                }
+            } else if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySetResult) {
+                auto* event = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                auto& resultSet = (*event)->Get()->Request->ResultSet;
+                if (!resultSet.empty() && CanonizePath(resultSet.front().Path) == "/Root") {
+                    TSchemeCacheNavigate::TEntry& entry(resultSet.front());
+                    if (databasePools == ENodesDatabasePools::NoDescription) {
+                        entry.DomainDescription = TIntrusiveConstPtr<TSchemeCacheNavigate::TDomainDescription>();
+                    } else {
+                        auto description = MakeIntrusive<TSchemeCacheNavigate::TDomainDescription>();
+                        if (entry.DomainDescription) {
+                            description->Kind = entry.DomainDescription->Kind;
+                            description->Description = entry.DomainDescription->Description;
+                        }
+                        description->Description.ClearStoragePools();
+                        if (databasePools == ENodesDatabasePools::TestPool) {
+                            // the database owns the only mocked storage pool
+                            description->Description.AddStoragePools()->SetName("test-pool");
+                        }
+                        entry.DomainDescription = description;
+                    }
                 }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -4996,6 +5144,33 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     TStringBuilder() << fields << filter << "&node_id=" << firstNodeId << ',' << secondNodeId,
                     vslotsAvailable ? groupNodeIds : selectedNodeIds, true);
             }
+            // The storage nodes of a database are the nodes of its storage pools, whether disks are requested or not:
+            // requesting VSlots for the disks must not replace the pool filter of the database.
+            // direct=1: the request is not redirected to a node of the database.
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
+                fields + "&database=/Root&direct=1", vslotsAvailable ? groupNodeIds : allNodeIds, true);
+        }
+
+        // A database without a description or without storage pools has nothing to filter the nodes by:
+        // all static nodes are returned, sorted and paged as requested, with and without disks requested.
+        const std::vector<TNodeId> allNodeIdsDescending(allNodeIds.rbegin(), allNodeIds.rend());
+        for (const ENodesDatabasePools pools : {ENodesDatabasePools::Empty, ENodesDatabasePools::NoDescription}) {
+            databasePools = pools;
+            for (const auto& fieldCase : fieldCases) {
+                for (const bool page : {false, true}) {
+                    CheckNodesDatabaseWithoutPoolsCase(runtime, fieldCase.first, allNodeIdsDescending, page);
+                }
+            }
+        }
+
+        if (vslotsAvailable) {
+            // BSC answers about the VSlots, but not about the pools or the groups of the database
+            databasePools = ENodesDatabasePools::TestPool;
+            silentNodeId = secondNodeId;
+            lostPoolData = ENodesLostPoolData::Pools;
+            CheckNodesKeepBscVDisksWithoutPoolFilterCase(runtime, "bsc-storage-pools-no-data", allNodeIds, silentNodeId);
+            lostPoolData = ENodesLostPoolData::Groups;
+            CheckNodesKeepBscVDisksWithoutPoolFilterCase(runtime, "bsc-storage-groups-no-data", allNodeIds, silentNodeId);
         }
     }
 

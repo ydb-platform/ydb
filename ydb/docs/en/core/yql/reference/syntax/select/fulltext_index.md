@@ -57,9 +57,9 @@ WHERE FulltextMatch(body, "mach% learn%", "Wildcard" AS Mode)
 LIMIT 20;
 ```
 
-### LIKE / ILIKE (use the fulltext index)
+## LIKE / ILIKE {#like-ilike}
 
-For fulltext indexes with n-grams, `LIKE`/`ILIKE` predicates use the index to find candidates and then check the pattern against the original text. `LIKE` is case-sensitive and `ILIKE` is case-insensitive:
+Use an n-gram index to search with patterns. `LIKE` is case-sensitive; `ILIKE` is not:
 
 ```yql
 SELECT id, title
@@ -68,7 +68,45 @@ WHERE body ILIKE "%learn%ing%"
 LIMIT 20;
 ```
 
-For a [filtered fulltext index](../../../../dev/fulltext-indexes.md#filtered), `WHERE` must contain equality predicates for every prefix column.
+Using `ILIKE` to search through a fulltext index requires `use_filter_lowercase=true`.
+
+A pattern can be a parameter or an expression built from parameters. It must not depend on table rows or change during query execution. [`ESCAPE`](../expressions.md#check-match) lets you search for literal `%` and `_` characters.
+
+Example substring search with escaping:
+
+```yql
+DECLARE $pattern AS String;
+
+SELECT id, title
+FROM articles VIEW ft_idx
+WHERE body LIKE "%" || $pattern || "%" ESCAPE "!"
+LIMIT 20;
+```
+
+With `$pattern = "abc!%def"`, the query searches for the literal substring `abc%def`.
+
+## Equality, StartsWith, and EndsWith {#string-predicates}
+
+An n-gram index also supports equality on the text column and [StartsWith / EndsWith](../../builtins/basic.md#starts_ends_with). These conditions are case-sensitive; `%` and `_` are ordinary characters.
+
+Examples matching the whole text, the beginning, and the end of a string:
+
+```yql
+DECLARE $text AS String;
+
+SELECT id FROM articles VIEW ft_idx WHERE body = $text;
+SELECT id FROM articles VIEW ft_idx WHERE StartsWith(body, $text);
+SELECT id FROM articles VIEW ft_idx WHERE EndsWith(body, $text);
+```
+
+## Searching with short patterns {#scan-fallback}
+
+An index with `filter_ngram_min_length=3` cannot help with the pattern `%at%`: the fragment `at` has only two characters. In this case, {{ ydb-short-name }} searches the main table for matches, which can be slower.
+
+This approach is consistent with [partial indexes](https://en.wikipedia.org/wiki/Partial_index), which store only some rows: if the index cannot answer a query, the query reads the table.
+
+Scan fallback is available for string conditions (`LIKE`, `ILIKE`, equality, `StartsWith`, `EndsWith`) and `FulltextMatch` in `Wildcard` mode.
+It does not apply if the query uses keyword matching (`Keywords`) or relevance scoring (`FulltextScore`).
 
 ## FulltextScore ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25) relevance)
 

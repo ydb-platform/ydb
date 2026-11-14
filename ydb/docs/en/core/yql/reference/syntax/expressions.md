@@ -40,7 +40,7 @@ The most popular way to use the `LIKE` and `REGEXP` keywords is to filter a tabl
 
 ### LIKE / ILIKE with a fulltext index {#like-ilike-with-fulltext-index}
 
-For [fulltext indexes](../../../dev/fulltext-indexes.md) with n-grams (`use_filter_ngram` / `use_filter_edge_ngram`), `LIKE`/`ILIKE` over the indexed text column is supported.
+For [fulltext indexes](../../../dev/fulltext-indexes.md) with n-grams (`use_filter_ngram` / `use_filter_edge_ngram`), `LIKE`/`ILIKE` over the indexed text column is supported. A pattern can be passed as a parameter or computed by an expression. `ESCAPE` is supported. Using `ILIKE` to search through the index requires `use_filter_lowercase=true`.
 
 ```yql
 SELECT id, title
@@ -48,6 +48,8 @@ FROM articles VIEW ft_idx
 WHERE body ILIKE "%learn%ing%"
 LIMIT 20;
 ```
+
+If the pattern is too short for the n-gram index, the search can scan the main table. See [Searching with short patterns](select/fulltext_index.md#scan-fallback).
 
 ### Examples
 

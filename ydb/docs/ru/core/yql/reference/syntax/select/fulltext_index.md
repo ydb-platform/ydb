@@ -57,9 +57,9 @@ WHERE FulltextMatch(body, "маш% обу%ние", "Wildcard" AS Mode)
 LIMIT 20;
 ```
 
-### LIKE / ILIKE (используют полнотекстовый индекс)
+## LIKE / ILIKE {#like-ilike}
 
-Для полнотекстовых индексов с N-граммами предикаты `LIKE`/`ILIKE` используют индекс для отбора кандидатов, затем проверяют шаблон по исходному тексту. `LIKE` учитывает регистр, а `ILIKE` выполняет регистронезависимую проверку:
+Для поиска по шаблону используйте N-граммный индекс. `LIKE` учитывает регистр, а `ILIKE` — нет:
 
 ```yql
 SELECT id, title
@@ -68,7 +68,45 @@ WHERE body ILIKE "%обуч%ние%"
 LIMIT 20;
 ```
 
-Для [полнотекстового индекса с фильтрацией](../../../../dev/fulltext-indexes.md#filtered) в `WHERE` требуется предикат равенства для каждой колонки префикса.
+Для поиска через полнотекстовый индекс по `ILIKE` требуется `use_filter_lowercase=true`.
+
+Шаблон можно передать параметром или составить из параметров. Он не должен зависеть от строк таблицы или меняться во время выполнения запроса. Поддерживается [`ESCAPE`](../expressions.md#check-match) для поиска буквальных `%` и `_`.
+
+Пример поиска подстроки с экранированием:
+
+```yql
+DECLARE $pattern AS String;
+
+SELECT id, title
+FROM articles VIEW ft_idx
+WHERE body LIKE "%" || $pattern || "%" ESCAPE "!"
+LIMIT 20;
+```
+
+При `$pattern = "abc!%def"` запрос ищет буквальную подстроку `abc%def`.
+
+## Равенство, StartsWith и EndsWith {#string-predicates}
+
+N-граммный индекс также поддерживает равенство по текстовой колонке и [StartsWith / EndsWith](../../builtins/basic.md#starts_ends_with). Эти условия учитывают регистр; `%` и `_` в них означают обычные символы.
+
+Примеры поиска по всему тексту, началу и концу строки:
+
+```yql
+DECLARE $text AS String;
+
+SELECT id FROM articles VIEW ft_idx WHERE body = $text;
+SELECT id FROM articles VIEW ft_idx WHERE StartsWith(body, $text);
+SELECT id FROM articles VIEW ft_idx WHERE EndsWith(body, $text);
+```
+
+## Поиск по коротким шаблонам {#scan-fallback}
+
+Для шаблона `%at%` индекс с `filter_ngram_min_length=3` не подходит: фрагмент `at` содержит только два символа. В таком случае {{ ydb-short-name }} ищет совпадения в основной таблице, что может быть медленнее.
+
+Этот подход согласуется с [частичными индексами](https://en.wikipedia.org/wiki/Partial_index), которые хранят только часть строк: если индекс не позволяет выполнить поиск, запрос обращается к таблице.
+
+Переход к сканированию доступен для строковых условий (`LIKE`, `ILIKE`, равенства, `StartsWith`, `EndsWith`) и `FulltextMatch` в режиме `Wildcard`.
+Если запрос использует поиск по словам (`Keywords`) или оценку релевантности (`FulltextScore`), такой переход не выполняется.
 
 ## FulltextScore
 

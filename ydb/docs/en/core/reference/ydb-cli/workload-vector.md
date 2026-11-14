@@ -80,7 +80,7 @@ Example:
 | `--table <name>` | Name of the table to load data into. | `vector_index_workload` |
 | `--index <name>` | Name of the vector index to build after import. | `index` |
 | `--index-type <type>` | Index type to build after import. Possible values: `None`, `KmeansTree`. Set to `None` to skip index building. | `KmeansTree` |
-| `--vector-type <type>` | Type of vectors. One of `float`, `int8`, `uint8`, `bit`. | `float` |
+| `--vector-type <type>` | Type of vectors. One of `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `int4`, `uint4`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension (size of embedding vectors). | `1024` |
 | `--distance <value>` | Distance or similarity function. One of `inner_product`, `cosine`, `euclidean`, `manhattan`. | `inner_product` |
 | `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. If not set, auto-detected by server. See [kmeans-tree type](../../dev/vector-indexes.md#kmeans-tree-type). | Auto-detected |
@@ -114,7 +114,7 @@ Generate random vectors and load them into the table. Vector components are samp
 | `--table <name>` | Name of the table to load data into. | `vector_index_workload` |
 | `--index <name>` | Name of the vector index to build after import. | `index` |
 | `--index-type <type>` | Index type to build after import. Possible values: `None`, `KmeansTree`. | `KmeansTree` |
-| `--vector-type <type>` | Type of vectors. One of `float`, `int8`, `uint8`, `bit`. | `float` |
+| `--vector-type <type>` | Type of vectors. One of `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `int4`, `uint4`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension. | `1024` |
 | `--distance <value>` | Distance or similarity function. | `inner_product` |
 | `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. If not set, auto-detected by server. | Auto-detected |
@@ -144,7 +144,7 @@ If the table was loaded with `--index-type None`, or if you want to build an add
 |---|---|---|
 | `--table <name>` | Name of the table to build the index on. | `vector_index_workload` |
 | `--index <name>` | Name of the index to create. | `index` |
-| `--vector-type <type>` | Type of vectors. One of `float`, `int8`, `uint8`, `bit`. | `float` |
+| `--vector-type <type>` | Type of vectors. One of `float`, `float16`, `bfloat16`, `float8_e4m3`, `float8_e5m2`, `int8`, `uint8`, `int4`, `uint4`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension. | `1024` |
 | `--distance <value>` | Distance or similarity function. | `inner_product` |
 | `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. If not set, auto-detected by server. | Auto-detected |

@@ -232,11 +232,7 @@ public:
 
     NYql::TIssues Issues;
 
-    TVector<TQueryAst> Statements;
-    TMaybe<TQueryTxId> ImplicitTxId = {}; // Implicit tx for all statements
-    ui32 CurrentStatementId = 0;
-    ui32 StatementResultIndex = 0;
-    ui32 StatementResultSize = 0;
+    TMaybe<TQueryTxId> ImplicitTxId = {}; // Implicit tx for the query
 
     TMaybe<TString> CommandTagName;
     THashSet<ui32> ParticipantNodes;
@@ -614,28 +610,6 @@ public:
 
     NKqpProto::EIsolationLevel GetIsolationLevel(TKqpTransactionContext* txCtx = nullptr) const;
 
-    bool ProcessingLastStatement() const {
-        return CurrentStatementId + 1 >= Statements.size();
-    }
-
-    void PrepareCurrentStatement() {
-        QueryData = std::make_shared<TQueryData>(TxCtx->TxAlloc);
-        PreparedQuery = {};
-        CompileResult = {};
-        CurrentTx = 0;
-        TableVersions = {};
-        MaxReadType = ETableReadType::Other;
-        TopicOperations = {};
-        ReplayMessage = {};
-    }
-
-    void PrepareNextStatement() {
-        CurrentStatementId++;
-        StatementResultIndex += StatementResultSize;
-        StatementResultSize = 0;
-        PrepareCurrentStatement();
-    }
-
     // validate the compiled query response and ensure that all table versions are not
     // changed since the last compilation.
      bool EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& response);
@@ -645,7 +619,6 @@ public:
     // same the context of the compiled query to the query state.
     bool SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr compileResult);
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
-    bool SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev);
     bool SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev);
 
     bool TryGetFromCache(

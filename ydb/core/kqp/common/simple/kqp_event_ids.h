@@ -37,8 +37,8 @@ struct TKqpEvents {
         EvCancelScriptExecutionResponse,
         EvCancelQueryRequest,
         EvCancelQueryResponse,
-        EvParseRequest,
-        EvParseResponse,
+        EvUnusedParseRequest, // EvParseRequest
+        EvUnusedParseResponse, // EvParseResponse
         EvSplitResponse,
         EvListSessionsRequest,
         EvListSessionsResponse,

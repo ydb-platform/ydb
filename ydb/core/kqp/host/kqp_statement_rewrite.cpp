@@ -447,12 +447,12 @@ bool CheckRewrite(
     } else if (createTableAsCount > 1) {
         exprCtx.AddError(NYql::TIssue(
             exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
-            "Several CTAS statement can't be used without per-statement mode."));
+            "Multiple CTAS statements in one query are not supported."));
         return false;
     } else if (actionsCount > 1) {
         exprCtx.AddError(NYql::TIssue(
             exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
-            "CTAS statement can't be used with other statements without per-statement mode."));
+            "CTAS cannot be combined with other statements."));
         return false;
     } else if (notOlapCreateTableAsCount > 0) {
         exprCtx.AddError(NYql::TIssue(
@@ -470,8 +470,7 @@ TPrepareRewriteInfo PrepareRewrite(
         const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
         const NMiniKQL::IFunctionRegistry& funcRegistry,
         const TString& cluster) {
-    // CREATE TABLE AS statement can be used only with perstatement execution.
-    // Thus we assume that there is only one such statement. (it was checked in CheckRewrite)
+    // CheckRewrite ensures that the query contains exactly one CTAS statement.
     NYql::TExprNode::TPtr createTableAsNode = nullptr;
     VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
         if (NYql::NNodes::TCoWrite::Match(node.Get()) && IsCreateTableAs(node, exprCtx)) {

@@ -4,7 +4,6 @@
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
-#include <ydb/core/kqp/host/kqp_translate.h>
 
 #include <util/system/spinlock.h>
 
@@ -19,7 +18,6 @@ class TKqpDbCounters;
 
 enum class ECompileActorAction {
     COMPILE,
-    PARSE,
     SPLIT,
 };
 
@@ -85,7 +83,7 @@ public:
         : List(size)
         , Ttl(ttl) {}
 
-    bool Insert(const TKqpCompileResult::TConstPtr& compileResult, bool isEnableAstCache, bool isPerStatementExecution);
+    bool Insert(const TKqpCompileResult::TConstPtr& compileResult);
 
     // Idempotent; no-op once the window is closed.
     void MarkWarmupInsert(const TString& uid);
@@ -119,16 +117,6 @@ public:
         const TActorId& sender,
         const TActorContext& ctx,
         EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None);
-
-    // warmupAttribution + counters must be set together (Client mode without
-    // counters aborts in AccountWarmupHitImpl); no defaults to keep it explicit.
-    TKqpCompileResult::TConstPtr FindByAst(
-        const TKqpQueryId& query,
-        const NYql::TAstParseResult& ast,
-        bool promote,
-        EWarmupAttributionMode warmupAttribution,
-        TIntrusivePtr<TKqpCounters> counters,
-        TKqpTempTablesState::TConstPtr tempTablesState = nullptr);
 
     bool EraseByUid(const TString& uid) {
         TGuard<TAdaptiveLock> guard(Lock);
@@ -165,15 +153,6 @@ private:
 
     void InsertQuery(const TKqpCompileResult::TConstPtr& compileResult);
 
-    void InsertAst(const TKqpCompileResult::TConstPtr& compileResult) {
-        Y_ENSURE(compileResult->Query);
-        Y_ENSURE(compileResult->GetAst());
-
-        AstIndex.emplace(GetQueryIdWithAst(*compileResult->Query, *compileResult->GetAst()), compileResult->Uid);
-    }
-
-    TKqpQueryId GetQueryIdWithAst(const TKqpQueryId& query, const NYql::TAstParseResult& ast);
-
     void DecBytes(ui64 bytes) {
         if (bytes > ByteSize) {
             ByteSize = 0;
@@ -201,7 +180,6 @@ private:
     TList List;
     THashSet<TItem, TItem::THash> Index;
     THashMap<TKqpQueryId, TString, THash<TKqpQueryId>> QueryIndex;
-    THashMap<TKqpQueryId, TString, THash<TKqpQueryId>> AstIndex;
     ui64 ByteSize = 0;
     TDuration Ttl;
 
@@ -276,9 +254,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, NWilson::TTraceId traceId = {},
     TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     ECompileActorAction compileAction = ECompileActorAction::COMPILE,
-    TMaybe<TQueryAst> queryAst = {},
     bool collectFullDiagnostics = false,
-    bool perStatementResult = false,
     std::shared_ptr<NYql::TExprContext> ctx = nullptr,
     NYql::TExprNode::TPtr expr = nullptr,
     bool usePessimisticLocks = false);

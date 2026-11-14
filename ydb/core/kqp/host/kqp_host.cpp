@@ -1439,8 +1439,8 @@ private:
         TKqpTranslationSettingsBuilder& settingsBuilder) const
     {
         TCompileExprResult result;
-        std::shared_ptr<NYql::TAstParseResult> queryAst;
-        if (!query.AstResult) {
+        NYql::TAstParseResult queryAst;
+        {
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
                 .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
                 .SetQueryParameters(query.ParameterTypes)
@@ -1488,20 +1488,11 @@ private:
             }
             traceScope.SetSuccess(astRes.IsOk() && astRes.Root);
             SessionCtx->Query().TranslationSettings = std::move(effectiveSettings);
-            queryAst = std::make_shared<NYql::TAstParseResult>(std::move(astRes));
-        } else {
-            queryAst = query.AstResult->Ast;
-            result.KeepInCache = query.AstResult->KeepInCache;
-            result.CommandTagName = query.AstResult->CommandTagName;
-            sqlVersion = query.AstResult->SqlVersion;
-            if (query.AstResult->DeprecatedSQL) {
-               TypesCtx->DeprecatedSQL = *query.AstResult->DeprecatedSQL;
-            }
+            queryAst = std::move(astRes);
         }
 
-        YQL_ENSURE(queryAst);
-        ctx.IssueManager.AddIssues(queryAst->Issues);
-        if (!queryAst->IsOk()) {
+        ctx.IssueManager.AddIssues(queryAst.Issues);
+        if (!queryAst.IsOk()) {
             return result;
         }
 
@@ -1522,11 +1513,11 @@ private:
             }
         }
 
-        YQL_ENSURE(queryAst->Root);
+        YQL_ENSURE(queryAst.Root);
         TExprNode::TPtr queryExpr;
         YQL_CLOG(INFO, CoreDq) << "Good place to weld in";
 
-        if (!CompileExpr(*queryAst->Root, queryExpr, ctx, ModuleResolver.get(), nullptr)) {
+        if (!CompileExpr(*queryAst.Root, queryExpr, ctx, ModuleResolver.get(), nullptr)) {
             return result;
         }
         YQL_CLOG(INFO, CoreDq) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);

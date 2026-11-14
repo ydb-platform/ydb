@@ -1,8 +1,10 @@
 #include "vdisk_histograms.h"
 #include "vdisk_mongroups.h"
+#include "vdisk_response.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/blobstorage/base/blobstorage_space_color.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/executor_thread.h>
@@ -209,6 +211,32 @@ Y_UNIT_TEST_SUITE(TVDiskMonitoring) {
             UNIT_ASSERT_VALUES_EQUAL(latency->FindCounter("LatencyCompletedCount")->Val(), count);
             UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), extended ? 54 : 51);
             UNIT_ASSERT_VALUES_EQUAL(CountSeries(asyncCounters), extended ? 56 : 52);
+        }
+    }
+
+    Y_UNIT_TEST(OutOfSpaceResponsesCountTheirSpaceColor) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        const std::pair<TColor::E, TString> cases[] = {
+            {TColor::GREEN, ""},
+            {TColor::CYAN, ""},
+            {TColor::LIGHT_YELLOW, "ResponsesWithDiskSpaceLightYellowMove"},
+            {TColor::YELLOW, "ResponsesWithDiskSpaceYellowStop"},
+            {TColor::LIGHT_ORANGE, "ResponsesWithDiskSpaceLightOrange"},
+            {TColor::PRE_ORANGE, "ResponsesWithDiskSpacePreOrange"},
+            {TColor::ORANGE, "ResponsesWithDiskSpaceOrange"},
+            {TColor::RED, "ResponsesWithDiskSpaceRed"},
+            {TColor::BLACK, "ResponsesWithDiskSpaceRed"},
+        };
+        for (const auto& [color, expected] : cases) {
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+            auto mon = std::make_shared<TOutOfSpaceGroup>(counters);
+            UpdateMonOOSStatus(SpaceColorToStatusFlag(color), mon);
+            for (const auto& [_, name] : cases) {
+                if (!name.empty()) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(counters->FindCounter(name)->Val(), i64(name == expected),
+                        TColor::E_Name(color) << " " << name);
+                }
+            }
         }
     }
 

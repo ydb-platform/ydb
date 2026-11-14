@@ -85,6 +85,68 @@ Y_UNIT_TEST_SUITE(Get) {
         SendGet(test, originalBlobId, data, NKikimrProto::BLOCKED, TEvBlobStorage::TEvGet::TReaderTabletData(tabletId, tabletGeneration));
     }
 
+    Y_UNIT_TEST(TestBlockedEvGetRequestThroughMultiGet) {
+        TEnvironmentSetup env(true);
+        TTestInfo test = InitTest(env);
+
+        const ui64 tabletId = 1;
+        const ui32 tabletGeneration = 1;
+        const TString data(100, 'a');
+        SendPut(test, TLogoBlobID(tabletId, tabletGeneration, 0, 0, data.size(), 0), data, NKikimrProto::OK);
+
+        std::unique_ptr<TEvBlobStorage::TEvBlock> block =
+            std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, tabletGeneration + 1, TInstant::Max());
+        test.Runtime->WrapInActorContext(test.Edge, [&] {
+            SendToBSProxy(test.Edge, test.Info->GroupID, block.release());
+        });
+        std::unique_ptr<IEventHandle> blockResult = test.Runtime->WaitForEdgeActorEvent({test.Edge});
+        UNIT_ASSERT_EQUAL(blockResult->Type, TEvBlobStorage::EvBlockResult);
+        UNIT_ASSERT_VALUES_EQUAL(blockResult->Get<TEvBlobStorage::TEvBlockResult>()->Status, NKikimrProto::OK);
+
+        // A get with more than 10000 queries goes to the multiget actor, which splits it; the reader's block must
+        // still apply to every part.
+        const ui32 querySize = 10001;
+        TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries{new TEvBlobStorage::TEvGet::TQuery[querySize]};
+        for (ui32 i = 0; i < querySize; ++i) {
+            queries[i].Id = TLogoBlobID(tabletId, tabletGeneration, i, 0, data.size(), 0);
+        }
+        std::unique_ptr<TEvBlobStorage::TEvGet> ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, querySize, TInstant::Max(),
+            NKikimrBlobStorage::AsyncRead);
+        ev->ReaderTabletData = TEvBlobStorage::TEvGet::TReaderTabletData(tabletId, tabletGeneration);
+        test.Runtime->WrapInActorContext(test.Edge, [&] {
+            SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
+        });
+        std::unique_ptr<IEventHandle> handle = test.Runtime->WaitForEdgeActorEvent({test.Edge});
+        UNIT_ASSERT_EQUAL(handle->Type, TEvBlobStorage::EvGetResult);
+        TEvBlobStorage::TEvGetResult *getResult = handle->Get<TEvBlobStorage::TEvGetResult>();
+        UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, querySize);
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Status, NKikimrProto::BLOCKED);
+    }
+
+    Y_UNIT_TEST(TestBlockedIndexRestoreGetRequest) {
+        TEnvironmentSetup env(true);
+        TTestInfo test = InitTest(env);
+
+        const ui64 tabletId = 1;
+        const ui32 tabletGeneration = 1;
+        const TString data(100, 'a');
+        const TLogoBlobID blobId(tabletId, tabletGeneration, 0, 0, data.size(), 0);
+        SendPut(test, blobId, data, NKikimrProto::OK);
+
+        std::unique_ptr<TEvBlobStorage::TEvBlock> block =
+            std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, tabletGeneration + 1, TInstant::Max());
+        test.Runtime->WrapInActorContext(test.Edge, [&] {
+            SendToBSProxy(test.Edge, test.Info->GroupID, block.release());
+        });
+        std::unique_ptr<IEventHandle> blockResult = test.Runtime->WaitForEdgeActorEvent({test.Edge});
+        UNIT_ASSERT_EQUAL(blockResult->Type, TEvBlobStorage::EvBlockResult);
+        UNIT_ASSERT_VALUES_EQUAL(blockResult->Get<TEvBlobStorage::TEvBlockResult>()->Status, NKikimrProto::OK);
+
+        // an index-only get with restore goes to the index restore get actor
+        SendGet(test, blobId, data, NKikimrProto::BLOCKED,
+            TEvBlobStorage::TEvGet::TReaderTabletData(tabletId, tabletGeneration), std::nullopt, true, true, false);
+    }
+
     Y_UNIT_TEST(TestForceBlockTabletDataWithIndexRestoreGetRequest) {
         TEnvironmentSetup env(true);
         TTestInfo test = InitTest(env);

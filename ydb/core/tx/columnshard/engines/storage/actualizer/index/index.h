@@ -2,7 +2,6 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
-#include <ydb/core/tx/columnshard/engines/storage/actualizer/counters/counters.h>
 
 namespace NKikimr::NOlap {
 class TVersionedIndex;
@@ -15,7 +14,6 @@ class TSchemeActualizer;
 
 class TGranuleActualizationIndex {
 private:
-    TCounters Counters;
     std::vector<std::shared_ptr<IActualizer>> Actualizers;
 
     std::shared_ptr<TTieringActualizer> TieringActualizer;

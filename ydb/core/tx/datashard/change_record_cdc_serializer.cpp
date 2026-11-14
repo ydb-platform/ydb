@@ -27,6 +27,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/stream/str.h>
 #include <util/string/printf.h>
@@ -114,6 +115,12 @@ protected:
                 data.SetData(std::move(payload));
                 break;
             }
+            // The topic stores this next to the compressed bytes. Readers use it
+            // for uncompressed-byte counters and for the decompression memory budget.
+            // The field is int32, so a larger payload is stored without the size.
+            if (payload.size() <= static_cast<size_t>(Max<i32>())) {
+                PendingUncompressedSize = static_cast<ui32>(payload.size());
+            }
             compressed.resize(written);
             data.SetCodec(NPersQueueCommon::ZSTD);
             data.SetData(std::move(compressed));
@@ -132,6 +139,7 @@ public:
     {}
 
     void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {
+        PendingUncompressedSize.Clear();
         cmd.SetSeqNo(record.GetSeqNo());
         cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
         switch (record.GetKind()) {
@@ -148,12 +156,17 @@ public:
         case TChangeRecord::EKind::IncrementalRestore:
             Y_ENSURE(false, "Unexpected");
         }
+        if (PendingUncompressedSize.Defined()) {
+            cmd.SetUncompressedSize(static_cast<i32>(*PendingUncompressedSize));
+        }
     }
 
 protected:
     const TChangeRecordSerializerOpts Opts;
     // The partition sender owns one serializer and calls it from a single actor.
     mutable THolder<ZSTD_CCtx, TFreeZstdContext> CompressionContext;
+    // Set only when this record's payload was stored compressed.
+    mutable TMaybe<ui32> PendingUncompressedSize;
 
 }; // TBaseSerializer
 

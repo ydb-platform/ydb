@@ -209,10 +209,12 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         UNIT_ASSERT_STRING_CONTAINS(schemaJson, "\"key\"");
         UNIT_ASSERT_STRING_CONTAINS(schemaJson, TString(800, 'n'));
         UNIT_ASSERT_VALUES_EQUAL(schemaChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
+        UNIT_ASSERT_VALUES_EQUAL(schemaCmd.GetUncompressedSize(), static_cast<i32>(schemaJson.size()));
 
         const auto heartbeat = MakeRecord(TChangeRecord::EKind::CdcHeartbeat, table, {});
         TCmdWrite heartbeatCmd;
         serializer->Serialize(heartbeatCmd, *heartbeat);
+        UNIT_ASSERT(!heartbeatCmd.HasUncompressedSize());
         UNIT_ASSERT(heartbeatCmd.HasHeartbeat());
         const auto heartbeatChunk = ParseChunk(heartbeatCmd.GetHeartbeat().GetData());
         UNIT_ASSERT_VALUES_EQUAL(heartbeatChunk.GetCodec(), 0);
@@ -236,6 +238,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         const auto binaryChunk = ParseChunk(binaryCmd.GetData());
         UNIT_ASSERT_VALUES_EQUAL(binaryChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
         const auto binaryRaw = MaybeDecompress(binaryChunk);
+        UNIT_ASSERT_VALUES_EQUAL(binaryCmd.GetUncompressedSize(), static_cast<i32>(binaryRaw.size()));
         NKikimrChangeExchange::TChangeRecord proto;
         UNIT_ASSERT(proto.ParseFromString(binaryRaw));
         ExpectRewrittenUpsert(proto.GetCdcDataChange(), valueBytes, false);
@@ -254,8 +257,10 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         if (smallPlain.size() < CdcZstdMinPayloadBytes) {
             UNIT_ASSERT_VALUES_EQUAL(smallChunk.GetCodec(), 0);
             UNIT_ASSERT_VALUES_EQUAL(smallChunk.GetData(), smallPlain);
+            UNIT_ASSERT(!smallCmd.HasUncompressedSize());
         } else {
             UNIT_ASSERT_VALUES_EQUAL(smallChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
+            UNIT_ASSERT_VALUES_EQUAL(smallCmd.GetUncompressedSize(), static_cast<i32>(smallPlain.size()));
         }
         NKikimrChangeExchange::TChangeRecord smallProto;
         UNIT_ASSERT(smallProto.ParseFromString(MaybeDecompress(smallChunk)));
@@ -272,6 +277,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         const auto jsonRaw = MaybeDecompress(jsonChunk);
         UNIT_ASSERT(jsonRaw.StartsWith("{"));
         UNIT_ASSERT_VALUES_EQUAL(jsonChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
+        UNIT_ASSERT_VALUES_EQUAL(jsonCmd.GetUncompressedSize(), static_cast<i32>(jsonRaw.size()));
 
         jsonOpts.Compression = NKikimrSchemeOp::ECdcStreamCompressionNone;
         std::unique_ptr<IChangeRecordSerializer> plain(CreateChangeRecordSerializer(jsonOpts));
@@ -279,6 +285,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         plain->Serialize(plainCmd, *record);
         const auto plainChunk = ParseChunk(plainCmd.GetData());
         UNIT_ASSERT_VALUES_EQUAL(plainChunk.GetCodec(), 0);
+        UNIT_ASSERT(!plainCmd.HasUncompressedSize());
         UNIT_ASSERT(plainChunk.GetData().StartsWith("{"));
     }
 
@@ -311,6 +318,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         serializer->Serialize(firstShort, *shortRecord);
         const auto firstShortChunk = ParseChunk(firstShort.GetData());
         UNIT_ASSERT_VALUES_EQUAL(firstShortChunk.GetCodec(), 0);
+        UNIT_ASSERT(!firstShort.HasUncompressedSize());
         UNIT_ASSERT_VALUES_EQUAL(firstShortChunk.GetData(), shortRaw);
 
         TCmdWrite firstLong;
@@ -320,15 +328,18 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         UNIT_ASSERT_VALUES_EQUAL(
             firstLongChunk.GetData(), ReferenceCompress(longRaw, DefaultCdcZstdCompressionLevel));
         UNIT_ASSERT_LT(firstLongChunk.GetData().size(), longRaw.size());
+        UNIT_ASSERT_VALUES_EQUAL(firstLong.GetUncompressedSize(), static_cast<i32>(longRaw.size()));
 
         TCmdWrite secondLong;
         serializer->Serialize(secondLong, *longRecord);
         UNIT_ASSERT_VALUES_EQUAL(ParseChunk(secondLong.GetData()).GetData(), firstLongChunk.GetData());
+        UNIT_ASSERT_VALUES_EQUAL(secondLong.GetUncompressedSize(), static_cast<i32>(longRaw.size()));
 
         TCmdWrite secondShort;
         serializer->Serialize(secondShort, *shortRecord);
         const auto secondShortChunk = ParseChunk(secondShort.GetData());
         UNIT_ASSERT_VALUES_EQUAL(secondShortChunk.GetCodec(), 0);
+        UNIT_ASSERT(!secondShort.HasUncompressedSize());
         UNIT_ASSERT_VALUES_EQUAL(secondShortChunk.GetData(), shortRaw);
 
         auto level3 = BinaryOpts(NKikimrSchemeOp::ECdcStreamCompressionZstd);
@@ -339,6 +350,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         const auto level3Chunk = ParseChunk(level3Cmd.GetData());
         UNIT_ASSERT_VALUES_EQUAL(level3Chunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
         UNIT_ASSERT_VALUES_EQUAL(level3Chunk.GetData(), ReferenceCompress(longRaw, 3));
+        UNIT_ASSERT_VALUES_EQUAL(level3Cmd.GetUncompressedSize(), static_cast<i32>(longRaw.size()));
         UNIT_ASSERT(level3Chunk.GetData() != firstLongChunk.GetData());
     }
 

@@ -109,11 +109,19 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     auto tableInfo = context.SS->Tables.at(table.Base()->PathId);
     const bool forReplication = op.GetForReplication();
+    const bool rowIdReplication = AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
+        && GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalUnique
+        && indexDesc.GetName() == NTableIndex::NFulltext::RowIdUniqueIndexName
+        && indexDesc.KeyColumnNamesSize() == 1
+        && indexDesc.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn
+        && !indexDesc.DataColumnNamesSize();
     if (forReplication && (!tx.GetInternal() || !table.IsAsyncReplicaTable()
-        || GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobal || op.GetIsRebuild()))
+        || (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobal
+            && !(AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
+                && NTableIndex::IsFulltextOrJsonIndex(GetIndexType(indexDesc))) && !rowIdReplication) || op.GetIsRebuild()))
     {
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter,
-            "Replication index creation requires an internal SYNC index on a replica")};
+            "Replication index creation requires an internal supported index on a replica")};
     }
 
     auto domainInfo = table.DomainInfo();
@@ -198,7 +206,38 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     TString errStr;
     if (!isRebuild) {
-        if (!NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, table.Base()->GetChildren(), context.SS->Indexes.AsMap(), indexDesc, errStr)) {
+        const bool replicatedRowId = forReplication && NTableIndex::IsFulltextOrJsonIndex(GetIndexType(indexDesc))
+            && indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId();
+        if (replicatedRowId) {
+            // The dependency's CDC scan may still be filling. Waiting here for
+            // Ready would park the base-table schema barrier and prevent that
+            // dependency from joining global commits. The controller keeps the
+            // fulltext index WriteOnly until both scans have joined.
+            bool validColumn = false;
+            for (const auto& [id, column] : tableInfo->Columns) {
+                Y_UNUSED(id);
+                validColumn |= !column.IsDropped() && column.Name == NTableIndex::NFulltext::RowIdColumn
+                    && column.PType.GetTypeId() == NScheme::NTypeIds::Uint64 && column.NotNull;
+            }
+            bool validIndex = false;
+            for (const auto& [name, pathId] : table.Base()->GetChildren()) {
+                Y_UNUSED(name);
+                const auto it = context.SS->Indexes.find(pathId);
+                if (it == context.SS->Indexes.end()) {
+                    continue;
+                }
+                const auto& dependency = *it->second;
+                validIndex |= dependency.Type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+                    && dependency.IndexKeys.size() == 1
+                    && dependency.IndexKeys.front() == NTableIndex::NFulltext::RowIdColumn
+                    && (dependency.State == NKikimrSchemeOp::EIndexStateReady
+                        || dependency.State == NKikimrSchemeOp::EIndexStateWriteOnly);
+            }
+            if (!validColumn || !validIndex) {
+                return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                    "Replicated fulltext/JSON index requires its Uint64 NOT NULL row-id column and unique index")};
+            }
+        } else if (!NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, table.Base()->GetChildren(), context.SS->Indexes.AsMap(), indexDesc, errStr)) {
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusInvalidParameter, errStr)};
         }
     }

@@ -7186,6 +7186,95 @@ Y_UNIT_TEST_SUITE(Cdc) {
         UNIT_ASSERT_VALUES_EQUAL(table["indexes"].GetMap().size(), 0);
     }
 
+    Y_UNIT_TEST_TWIN(SourceFulltextSchemaFinalization, Compact) {
+        for (const TString kind : {"plain", "relevance", "json"}) {
+            for (ui32 outcome = 0; outcome != 3; ++outcome) {
+                TPortManager ports;
+                NKikimrConfig::TFeatureFlags flags;
+                flags.SetEnableFulltextIndexReplication(true);
+                flags.SetEnableCompactFulltextIndex(Compact);
+                TServer::TPtr server = new TServer(TServerSettings(ports.GetPort(), {}, DefaultPQConfig())
+                    .SetUseRealThreads(false).SetDomainName("Root").SetFeatureFlags(flags));
+                auto& runtime = *server->GetRuntime();
+                const auto edge = runtime.AllocateEdgeActor();
+                InitRoot(server, edge);
+                CreateShardedTable(server, edge, "/Root", "Table", SimpleTable().Columns({
+                    {"key", "Uint64", true, true},
+                    {"value", kind == "json" ? "Json" : "Utf8", false, false},
+                }));
+                ExecSQL(server, edge, kind == "json"
+                    ? "UPSERT INTO `/Root/Table` (key,value) VALUES (1,CAST(@@{\"tag\":\"cats\"}@@ AS Json));"
+                    : "UPSERT INTO `/Root/Table` (key,value) VALUES (1,'cats'u);");
+                WaitTxNotification(server, edge, AsyncAlterAddStream(server, "/Root", "Table",
+                    WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+                Ydb::Table::TableIndex index;
+                index.set_name("by_value");
+                index.add_index_columns("value");
+                if (kind == "json") {
+                    index.mutable_global_json_index();
+                } else {
+                    auto* settings = kind == "plain"
+                        ? index.mutable_global_fulltext_plain_index()->mutable_fulltext_settings()
+                        : index.mutable_global_fulltext_relevance_index()->mutable_fulltext_settings();
+                    auto* column = settings->add_columns();
+                    column->set_column("value");
+                    column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+                }
+                runtime.Send(new IEventHandle(MakeTxProxyID(), edge, new TEvTxUserProxy::TEvAllocateTxId));
+                const auto allocated = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvAllocateTxIdResult>(edge);
+                const auto buildId = allocated->Get()->TxId;
+                TBlockEvents<TEvDataShard::TEvBuildFulltextIndexRequest> blocked(runtime);
+                AsyncBuildIndex(runtime, buildId, ChangeStateStorage(SchemeRoot, server->GetSettings().Domain),
+                    "/Root", "/Root/Table", index);
+                runtime.WaitFor("Fulltext scan", [&] { return blocked.size(); });
+                if (outcome == 1) {
+                    CancelAddIndex(server, "/Root", buildId);
+                    blocked.Stop();
+                } else {
+                    if (outcome == 2) {
+                        for (auto& event : blocked) {
+                            event->Get()->Record.SetIndexName("");
+                        }
+                    }
+                    blocked.Unblock().Stop();
+                }
+                WaitTxNotification(server, edge, buildId);
+                WaitTxNotification(server, edge, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
+                const auto records = outcome == 0
+                    ? WaitForContent(server, edge, "/Root/Table/Stream", {
+                        R"({"tableChanges":"***","ts":"***"})",
+                        R"({"tableChanges":"***","ts":"***"})"})
+                    : WaitForContent(server, edge, "/Root/Table/Stream", {
+                        R"({"tableChanges":"***","ts":"***"})"});
+                const auto& table = records.back()["tableChanges"][0]["table"];
+                UNIT_ASSERT(table["columns"].Has("extra"));
+                UNIT_ASSERT_VALUES_EQUAL(table["indexes"].GetMap().size(), outcome == 0 ? 1 : 0);
+                if (outcome == 0) {
+                    const auto& added = records[0]["tableChanges"][0]["table"]["indexes"]["by_value"];
+                    UNIT_ASSERT(added["fulltextSettings"].IsString());
+                    UNIT_ASSERT_VALUES_EQUAL(added["useRowIdAsDocId"].GetBoolean(), false);
+                    Ydb::Table::FulltextIndexSettings settings;
+                    UNIT_ASSERT(settings.ParseFromString(Base64Decode(added["fulltextSettings"].GetString())));
+                    if (kind != "json") {
+                        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(settings.columns(0).analyzers().tokenizer()),
+                            static_cast<int>(Ydb::Table::FulltextIndexSettings::WHITESPACE));
+                    }
+                    WaitTxNotification(server, edge, AsyncAlterAddStream(server, "/Root", "Table",
+                        WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson, "Stream2"))));
+                    const auto initial = WaitForContent(server, edge, "/Root/Table/Stream2", {
+                        R"({"tableChanges":"***","ts":"***"})"});
+                    UNIT_ASSERT(initial[0]["tableChanges"][0]["table"]["indexes"].Has("by_value"));
+                    // Creating a second stream must not emit another schema
+                    // snapshot into an already established stream.
+                    WaitForContent(server, edge, "/Root/Table/Stream", {
+                        R"({"tableChanges":"***","ts":"***"})",
+                        R"({"tableChanges":"***","ts":"***"})"});
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(UnnamedColumnFamilyAlter) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

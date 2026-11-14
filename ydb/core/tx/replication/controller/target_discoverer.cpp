@@ -1,4 +1,5 @@
 #include "logging.h"
+#include "index_replication.h"
 #include "private_events.h"
 #include "target_discoverer.h"
 #include "target_table.h"
@@ -6,6 +7,7 @@
 #include "util.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -13,9 +15,12 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/naming_conventions/scheme_object_names.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/algorithm.h>
+#include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -95,6 +100,24 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         MaybeReply();
     }
 
+    void ReportStatus(ui32 idx, const TString& issue) {
+        if (issue.empty()) {
+            PendingSourceIssues.erase(idx);
+        } else {
+            PendingSourceIssues[idx] = issue;
+        }
+        TVector<TString> issues;
+        for (const auto& [_, pending] : PendingSourceIssues) {
+            issues.push_back(pending);
+        }
+        Sort(issues);
+        const auto combined = JoinSeq("; ", issues);
+        if (combined != LastStatus) {
+            LastStatus = combined;
+            Send(Parent, new TEvPrivate::TEvSourceStatus(ReplicationId, std::nullopt, combined));
+        }
+    }
+
     void DescribeTable(ui32 idx) {
         Y_ABORT_UNLESS(idx < Paths.size());
         Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(Paths.at(idx).first, {}), 0, idx);
@@ -120,6 +143,16 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             YDB_LOG_DEBUG("Describe table succeeded",
                 {"path", path.first});
 
+            if (AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
+                const auto pendingIndexes = GetBuildingFulltextIndexes(NYdb::TProtoAccessor::GetProto(result.GetTableDescription()));
+                if (!pendingIndexes.empty()) {
+                    ReportStatus(*it, TStringBuilder() << "Waiting for source fulltext/JSON index builds on "
+                        << path.first << ": " << JoinSeq(", ", pendingIndexes));
+                    return RetryDescribe(*it);
+                }
+            }
+            ReportStatus(*it, {});
+
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
                 std::make_shared<TTargetTable::TTableConfig>(path.first, path.second));
             YDB_LOG_INFO("Add target",
@@ -127,6 +160,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"dstPath", target.Config->GetDstPath()},
                 {"kind", target.Kind});
 
+            const bool usesRowId = AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
+                && UsesFulltextRowId(NYdb::TProtoAccessor::GetProto(result.GetTableDescription()));
             for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
                 switch (index.GetIndexType()) {
                 case NYdb::NTable::EIndexType::GlobalSync:
@@ -140,12 +175,37 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                     TReplication::ETargetKind::IndexTable,
                     std::make_shared<TTargetIndexTable::TIndexTableConfig>(
                         CanonizePath(ChildPath(SplitPath(path.first), TString{index.GetIndexName()})),
-                        CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))
+                        CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"})),
+                        false, usesRowId && index.GetIndexType() == NYdb::NTable::EIndexType::GlobalUnique
+                            && index.GetIndexColumns().size() == 1
+                            && index.GetIndexColumns()[0] == NTableIndex::NFulltext::RowIdColumn
                     ));
                 YDB_LOG_INFO("Add target",
                     {"srcPath", target.Config->GetSrcPath()},
                     {"dstPath", target.Config->GetDstPath()},
                     {"kind", target.Kind});
+            }
+
+            if (AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
+                for (const auto& index : NYdb::TProtoAccessor::GetProto(result.GetTableDescription()).indexes()) {
+                    if (!IsFulltextIndex(index)) {
+                        continue;
+                    }
+                    if (!HasSupportedFulltextLayout(index)) {
+                        NYdb::NIssue::TIssues issues;
+                        issues.AddIssue(TStringBuilder() << "Source does not describe the physical layout of index " << index.name());
+                        Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
+                        continue;
+                    }
+                    TVector<TString> keys(index.index_columns().begin(), index.index_columns().end());
+                    for (const auto table : NTableIndex::GetImplTables(GetFulltextIndexType(index), keys)) {
+                        const TString tableName(table);
+                        ToAdd.emplace_back(TReplication::ETargetKind::IndexTable,
+                            std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+                                CanonizePath(ChildPath(SplitPath(path.first), {TString(index.name()), tableName})),
+                                CanonizePath(ChildPath(SplitPath(path.second), {TString(index.name()), tableName})), true));
+                    }
+                }
             }
         } else {
             YDB_LOG_ERROR("Describe table failed",
@@ -154,8 +214,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"issues", result.GetIssues().ToOneLineString()});
 
             if (IsRetryableError(result, Backoff)) {
+                ReportStatus(*it, TStringBuilder() << "Cannot describe source table " << path.first
+                    << ": " << result.GetStatus() << ", " << result.GetIssues().ToOneLineString());
                 return RetryDescribe(*it);
             } else {
+                ReportStatus(*it, {});
                 Failed.emplace_back(path.first, result);
             }
         }
@@ -397,6 +460,8 @@ private:
     TVector<TEvPrivate::TEvDiscoveryTargetsResult::TFailedEntry> Failed;
 
     TBackoff Backoff;
+    THashMap<ui32, TString> PendingSourceIssues;
+    TString LastStatus;
 
 }; // TTargetDiscoverer
 

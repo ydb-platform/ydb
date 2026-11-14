@@ -263,6 +263,19 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         } else if (needsCreator && canAttach) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         } else if (!DstCreator && !DstAlterer) {
+            if (Kind == ETargetKind::Table && Replication->GetDesiredState() == TReplication::EState::Done) {
+                for (const auto* peer : Replication->GetTargets()) {
+                    if ((peer->GetConfig()->IsSrcIndexTable() || peer->GetConfig()->IsRowIdIndex())
+                        && Replication->FindBaseTableTarget(*peer) == this
+                        && peer->GetDstState() != EDstState::Done && peer->GetDstState() != EDstState::Removing)
+                    {
+                        // Keep the base table read-only until compact index
+                        // sequences have been advanced and its backing tables
+                        // detached. Failed early writes must not cache old gens.
+                        return;
+                    }
+                }
+            }
             DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
         }
         break;

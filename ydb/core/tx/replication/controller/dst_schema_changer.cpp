@@ -1,4 +1,5 @@
 #include "dst_schema_changer.h"
+#include "index_replication.h"
 
 #include "logging.h"
 #include "private_events.h"
@@ -339,6 +340,17 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             auto* added = Alter.MutableAlterTable()->AddColumns();
             added->SetName(desired.GetName());
             added->SetType(desired.GetType());
+            if (AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
+                && desired.GetName() == NTableIndex::NFulltext::RowIdColumn)
+            {
+                if (desired.GetType() != "Uint64") {
+                    error = "Fulltext/JSON row-id column must have type Uint64";
+                    return false;
+                }
+                Alter.MutableAlterTable()->SetSystemColumnNamesAllowed(true);
+                added->SetNotNull(true);
+                added->SetDefaultFromSequence(NTableIndex::NFulltext::RowIdSequenceName);
+            }
             if (hasFamilies) {
                 added->SetFamilyName(desired.GetFamily());
             }
@@ -387,7 +399,12 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
                 index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end());
             const bool sameData = std::equal(expected.GetDataColumns().begin(), expected.GetDataColumns().end(),
                 index.GetDataColumnNames().begin(), index.GetDataColumnNames().end());
-            if (expected.GetType() != type || !sameKeys || !sameData) {
+            const bool sameFulltext = !NTableIndex::IsFulltextOrJsonIndex(index.GetType())
+                || (expected.HasFulltextSettings()
+                    && EqualFulltextSettings(expected.GetFulltextSettings(),
+                        index.GetFulltextIndexDescription().GetSettings())
+                    && expected.GetUseRowIdAsDocId() == index.GetFulltextIndexDescription().GetUseRowIdAsDocId());
+            if (expected.GetType() != type || !sameKeys || !sameData || !sameFulltext) {
                 error = TStringBuilder() << "destination index differs from source schema: " << index.GetName();
                 return false;
             }
@@ -397,7 +414,15 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
 
         const NKikimrReplication::TSchemaChange::TIndex* added = nullptr;
         for (const auto& [name, index] : desired) {
-            if (index->GetType() == "GlobalSync") {
+            const bool fulltext = NTableIndex::IsFulltextOrJsonIndex(GetSchemaIndexType(*index));
+            const bool rowId = AppData()->FeatureFlags.GetEnableFulltextIndexReplication() && IsFulltextRowIdIndex(*index);
+            if (index->GetType() == "GlobalSync" || fulltext || rowId) {
+                if (fulltext && (!AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
+                    || !index->HasFulltextSettings()))
+                {
+                    error = TStringBuilder() << "Fulltext/JSON index replication is disabled or settings are missing: " << name;
+                    return false;
+                }
                 if (added || dropped || HasTableChanges()) {
                     error = "combined ADD INDEX and other schema changes are not supported";
                     return false;
@@ -408,6 +433,10 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             }
 
             const auto& type = index->GetType();
+            if (index->HasFulltextSettings() || type.StartsWith("GlobalFulltext") || type.StartsWith("GlobalJson")) {
+                error = TStringBuilder() << "Unsupported fulltext/JSON index type '" << type << "': " << name;
+                return false;
+            }
             // Keep the same filtering as initial destination creation. An
             // index excluded there does not become an ADD on a later snapshot.
             const bool asyncReplication = AppData()->FeatureFlags.GetEnableAsyncIndexReplication();
@@ -418,7 +447,8 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
         }
 
         if (added) {
-            if (!GlobalConsistency) {
+            const auto type = GetSchemaIndexType(*added);
+            if (!GlobalConsistency && !NTableIndex::IsFulltextOrJsonIndex(type) && !IsFulltextRowIdIndex(*added)) {
                 error = "ADD SYNC INDEX replication requires global consistency";
                 return false;
             }
@@ -431,7 +461,11 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             build.SetForReplication(true);
             auto& index = *build.MutableIndex();
             index.SetName(added->GetName());
-            index.SetType(NKikimrSchemeOp::EIndexTypeGlobal);
+            index.SetType(type);
+            if (NTableIndex::IsFulltextOrJsonIndex(type)) {
+                *index.MutableFulltextIndexDescription()->MutableSettings() = added->GetFulltextSettings();
+                index.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(added->GetUseRowIdAsDocId());
+            }
             *index.MutableKeyColumnNames() = added->GetIndexColumns();
             *index.MutableDataColumnNames() = added->GetDataColumns();
             return true;
@@ -471,6 +505,8 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
     bool HasChanges() const {
         return HasTableChanges()
             || Alter.HasDropIndex()
+            || Alter.HasAlterTableIndex()
+            || Alter.HasSequence()
             || Alter.HasInitiateIndexBuild()
             || Alter.HasApplyIndexBuild()
             || Alter.HasCancelIndexBuild();
@@ -492,7 +528,12 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             const auto state = index.GetState();
             const bool validState = state == NKikimrSchemeOp::EIndexStateWriteOnly
                 || state == NKikimrSchemeOp::EIndexStateReady;
-            if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobal || !validState) {
+            // Existing reserved indexes must still complete after the creation
+            // feature flag is disabled. Validate their identity and shape.
+            const bool rowId = IsFulltextRowIdIndex(index);
+            if ((index.GetType() != NKikimrSchemeOp::EIndexTypeGlobal
+                && !NTableIndex::IsFulltextOrJsonIndex(index.GetType()) && !rowId) || !validState)
+            {
                 error = "Unexpected replica index type or state";
                 return NKikimrScheme::StatusPreconditionFailed;
             }
@@ -535,6 +576,32 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
         }
 
         const auto& table = record.GetPathDescription().GetTable();
+        RowIdColumnChange = false;
+        PreparingRowIdSequence = false;
+        if (!ReadyIndex && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
+            for (const auto& column : DesiredSchema.GetColumns()) {
+                if (column.GetName() == NTableIndex::NFulltext::RowIdColumn) {
+                    RowIdColumnChange = true;
+                }
+            }
+            for (const auto& column : table.GetColumns()) {
+                if (column.GetName() == NTableIndex::NFulltext::RowIdColumn) {
+                    RowIdColumnChange = false;
+                }
+            }
+            // The source provisions this reserved column and sequence before
+            // building its unique row-id index. Reconcile each standard DDL
+            // step from the catalog so a controller restart can resume it.
+            if (RowIdColumnChange) {
+                bool hasSequence = false;
+                for (const auto& sequence : table.GetSequences()) {
+                    hasSequence |= sequence.GetName() == NTableIndex::NFulltext::RowIdSequenceName;
+                }
+                if (!hasSequence) {
+                    PreparingRowIdSequence = true;
+                }
+            }
+        }
         TString error;
         if (ReadyIndex) {
             const auto status = CheckAndBuildIndexCompletion(table, record.GetPath(), error);
@@ -547,6 +614,16 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
 
         if (DesiredSchema.HasIndexes() && !CheckAndBuildIndexes(table, record.GetPath(), error)) {
             return Error(NKikimrScheme::StatusPreconditionFailed, error);
+        }
+
+        if (PreparingRowIdSequence) {
+            Alter.Clear();
+            Alter.SetInternal(true);
+            Alter.SetWorkingDir(record.GetPath());
+            Alter.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSequence);
+            Alter.MutableSequence()->SetName(NTableIndex::NFulltext::RowIdSequenceName);
+        } else if (RowIdColumnChange && TxId && StartedWithTxId && !MayHaveProposedTxId && !AlterCompletionConfirmed) {
+            return SubscribeTx(TxId);
         }
 
         if (!HasChanges()) {
@@ -562,12 +639,20 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
         }
 
         if (AlterCompletionConfirmed) {
+            if (RowIdColumnChange && !PreparingRowIdSequence) {
+                PreviousTxId = TxId;
+                TxId = 0;
+                StartedWithTxId = false;
+                MayHaveProposedTxId = false;
+                AlterCompletionConfirmed = false;
+                return AllocateTxId();
+            }
             return Error(NKikimrScheme::StatusPreconditionFailed,
                 TStringBuilder() << "destination schema differs after the DDL transaction completed: " << error);
         }
 
         if (RequireTargetFlush && HasTableChanges()) {
-            auto result = MakeHolder<TEvPrivate::TEvSchemaChangeDstAlterResult>(ReplicationId, TargetId, TxId);
+            auto result = MakeHolder<TEvPrivate::TEvSchemaChangeDstAlterResult>(ReplicationId, TargetId, ReportedTxId());
             result->RequiresTargetFlush = true;
             Send(Parent, result.Release());
             return PassAway();
@@ -577,7 +662,9 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             // A no-op description must not leave an unproposed transaction id
             // in durable barrier state: recovery would wait for it forever.
             TxId = AllocatedTxId;
-            Send(Parent, new TEvPrivate::TEvSchemaChangeDstAlterTxId(ReplicationId, TargetId, TxId));
+            auto event = MakeHolder<TEvPrivate::TEvSchemaChangeDstAlterTxId>(ReplicationId, TargetId, TxId);
+            event->PreviousTxId = PreviousTxId;
+            Send(Parent, event.Release());
             Become(&TThis::StatePersistTxId);
             return;
         }
@@ -676,7 +763,7 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
     }
 
     void Success() {
-        Send(Parent, new TEvPrivate::TEvSchemaChangeDstAlterResult(ReplicationId, TargetId, TxId));
+        Send(Parent, new TEvPrivate::TEvSchemaChangeDstAlterResult(ReplicationId, TargetId, ReportedTxId()));
         PassAway();
     }
 
@@ -686,8 +773,14 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
         YDB_LOG_ERROR("Schema change destination alter failed",
             {"status", status},
             {"reason", reason});
-        Send(Parent, new TEvPrivate::TEvSchemaChangeDstAlterResult(ReplicationId, TargetId, TxId, status, reason));
+        Send(Parent, new TEvPrivate::TEvSchemaChangeDstAlterResult(ReplicationId, TargetId, ReportedTxId(), status, reason));
         PassAway();
+    }
+
+    ui64 ReportedTxId() const {
+        // Until the next row-id DDL is persisted, the barrier still owns the
+        // completed sequence transaction. Flush/error replies must match it.
+        return TxId ? TxId : PreviousTxId;
     }
 
     void PassAway() override {
@@ -756,12 +849,15 @@ private:
 
     ui64 TxId = 0;
     ui64 AllocatedTxId = 0;
+    ui64 PreviousTxId = 0;
     const bool RequireTargetFlush;
     const bool GlobalConsistency;
     const TString ReadyIndex;
     const ui64 SnapshotTxId;
     const bool CancelIndex;
-    const bool StartedWithTxId;
+    bool StartedWithTxId;
+    bool RowIdColumnChange = false;
+    bool PreparingRowIdSequence = false;
     bool MayHaveProposedTxId = false;
     bool AlterCompletionConfirmed = false;
     TActorId PipeCache;

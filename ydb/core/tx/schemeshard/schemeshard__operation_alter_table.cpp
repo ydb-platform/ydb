@@ -7,6 +7,7 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/table_index.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -862,6 +863,18 @@ public:
             for (const auto& column : alter.GetColumns()) {
                 const bool altersExistingColumn = table->GetColumnIdByNameSlow(column.GetName())
                     != TTableInfo::InvalidColumnId;
+                const bool fulltextRowIdProvision = Transaction.GetInternal()
+                    && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
+                    && Transaction.GetLockGuard().GetOwnerTxId()
+                    && !altersExistingColumn && column.GetIsBuildInProgress()
+                    && column.GetName() == NTableIndex::NFulltext::RowIdColumn
+                    && column.GetType() == "Uint64" && column.GetNotNull()
+                    && column.GetDefaultFromSequence() == NTableIndex::NFulltext::RowIdSequenceName;
+                if (fulltextRowIdProvision) {
+                    // The specialized replica schema handler provisions this
+                    // reserved column and sequence before replaying its backfill.
+                    continue;
+                }
                 if (column.HasDefaultFromLiteral() || column.HasDefaultFromSequence()
                     || column.HasDefaultFromExpression() || column.HasEmptyDefault()
                     || (column.HasSetNotNullInProgress() && column.GetSetNotNullInProgress())
@@ -1415,7 +1428,12 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         tableIndexAltering.SetInternal(tx.GetInternal());
         auto alterIndex = tableIndexAltering.MutableAlterTableIndex();
         alterIndex->SetName(parent.LeafName());
-        alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+        const auto& index = *context.SS->Indexes.at(parent.Base()->PathId);
+        const bool replicatedFulltext = path.IsAsyncReplicaTable()
+            && (NTableIndex::IsFulltextOrJsonIndex(index.Type)
+                || (index.Type == NKikimrSchemeOp::EIndexTypeGlobalUnique && index.IndexKeys.size() == 1
+                    && index.IndexKeys.front() == NTableIndex::NFulltext::RowIdColumn));
+        alterIndex->SetState(replicatedFulltext ? index.State : NKikimrSchemeOp::EIndexStateReady);
 
         result.push_back(CreateAlterTableIndex(NextPartId(id, result), tableIndexAltering));
     }

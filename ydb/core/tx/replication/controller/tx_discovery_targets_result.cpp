@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "index_replication.h"
 #include "target_transfer.h"
 
 #include <util/string/join.h>
@@ -58,6 +59,8 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         if (Ev->Get()->IsSuccess()) {
+            Replication->SetState(Replication->GetState());
+            THashMap<TString, ui64> indexGroups;
             for (const auto& target : Ev->Get()->ToAdd) {
                 const auto tid = Replication->AddTarget(target.Kind, target.Config);
 
@@ -74,10 +77,27 @@ public:
                     NIceDb::TUpdate<Schema::Targets::Kind>(target.Kind),
                     NIceDb::TUpdate<Schema::Targets::SrcPath>(target.Config->GetSrcPath()),
                     NIceDb::TUpdate<Schema::Targets::DstPath>(target.Config->GetDstPath()),
+                    NIceDb::TUpdate<Schema::Targets::SrcIndexTable>(target.Config->IsSrcIndexTable()),
+                    NIceDb::TUpdate<Schema::Targets::RowIdIndex>(target.Config->IsRowIdIndex()),
                     NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda),
                     NIceDb::TUpdate<Schema::Targets::RunAsUser>(runAsUser),
                     NIceDb::TUpdate<Schema::Targets::DirectoryPath>(directoryPath)
                 );
+
+                if (target.Kind == TReplication::ETargetKind::IndexTable
+                    && (target.Config->IsSrcIndexTable() || target.Config->IsRowIdIndex())
+                    && Replication->GetConfig().GetInitialScan())
+                {
+                    const auto indexPath = GetSourceIndexPath(target.Config->GetSrcPath(), target.Config->IsSrcIndexTable());
+                    const auto [group, inserted] = indexGroups.emplace(indexPath, tid);
+                    Y_UNUSED(inserted);
+                    Replication->FindTarget(tid)->SetIndexBuild(true);
+                    auto& build = Self->IndexBuilds[{rid, tid}];
+                    build.SetPhase(NKikimrReplication::TIndexBuildState::FILLING);
+                    build.SetIndexGroupId(group->second);
+                    build.SetIndexName(SplitPath(indexPath).back());
+                    Self->SaveIndexBuild(db, {rid, tid}, build);
+                }
 
                 YDB_LOG_NOTICE_CTX(ctx, "Add target",
                     {"rid", rid},

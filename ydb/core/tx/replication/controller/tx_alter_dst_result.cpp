@@ -100,7 +100,12 @@ public:
             NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
         );
 
-        if (Replication->GetState() != TReplication::EState::Ready) {
+        // Completing a paused replication can leave its base target waiting
+        // for index targets to detach. Resume it after each dependency finishes.
+        if (Replication->GetState() != TReplication::EState::Ready
+            && !(Replication->GetState() == TReplication::EState::Paused
+                && Replication->GetDesiredState() == TReplication::EState::Done))
+        {
             Replication.Reset();
         }
 

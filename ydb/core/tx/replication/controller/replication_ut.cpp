@@ -1,14 +1,56 @@
 #include "replication.h"
+#include "index_replication.h"
 #include "target_table.h"
 #include "util.h"
 
 #include <ydb/core/protos/replication.pb.h>
+
+#include <google/protobuf/unknown_field_set.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(Replication) {
+    Y_UNIT_TEST(FulltextSettingsCompareKnownValues) {
+        Ydb::Table::FulltextIndexSettings expected;
+        auto* column = expected.add_columns();
+        column->set_column("text");
+        column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        auto actual = expected;
+        actual.mutable_columns(0)->mutable_analyzers()->set_use_filter_lowercase(false);
+        actual.GetReflection()->MutableUnknownFields(&actual)->AddVarint(9999, 123);
+        UNIT_ASSERT(EqualFulltextSettings(expected, actual));
+        actual.mutable_columns(0)->mutable_analyzers()->set_use_filter_lowercase(true);
+        UNIT_ASSERT(!EqualFulltextSettings(expected, actual));
+        actual = expected;
+        actual.mutable_columns(0)->set_column("another_column");
+        UNIT_ASSERT(!EqualFulltextSettings(expected, actual));
+    }
+
+    Y_UNIT_TEST(FulltextBackingTablesPreserveOrdinaryIndexPathSemantics) {
+        auto replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2),
+            NKikimrReplication::TReplicationConfig(), "/Root");
+        const auto base = replication->AddTarget(TReplication::ETargetKind::Table,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/table", "/Root/replica"));
+        const auto ordinary = replication->AddTarget(TReplication::ETargetKind::IndexTable,
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+                "/Root/table/indexImplTable", "/Root/replica/indexImplTable/indexImplTable"));
+        const auto fulltext = replication->AddTarget(TReplication::ETargetKind::IndexTable,
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+                "/Root/table/search/indexImplDocsTable", "/Root/replica/search/indexImplDocsTable", true));
+        for (const auto tid : {ordinary, fulltext}) {
+            const auto* target = replication->FindTarget(tid);
+            UNIT_ASSERT(replication->FindBaseTableTarget(*target) == replication->FindTarget(base));
+        }
+        replication->FindTarget(ordinary)->SetStreamName("changes");
+        replication->FindTarget(fulltext)->SetStreamName("changes");
+        UNIT_ASSERT_VALUES_EQUAL(replication->FindTarget(ordinary)->GetStreamPath(),
+            "/Root/table/indexImplTable/indexImplTable/changes");
+        UNIT_ASSERT_VALUES_EQUAL(replication->FindTarget(fulltext)->GetStreamPath(),
+            "/Root/table/search/indexImplDocsTable/changes");
+    }
+
     Y_UNIT_TEST(SourceRetryClassification) {
         struct TCase {
             NYdb::EStatus Status;

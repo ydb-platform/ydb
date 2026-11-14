@@ -254,11 +254,14 @@ public:
                     "ZSTD compression is supported only for JSON changefeed formats");
                 return result;
             }
-            if (streamDesc.HasCompressionLevel()
-                    && (streamDesc.GetCompressionLevel() < 1 || streamDesc.GetCompressionLevel() > 22)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "ZSTD compression level must be in range [1, 22]");
-                return result;
+            if (streamDesc.HasCompressionLevel()) {
+                const i32 level = streamDesc.GetCompressionLevel();
+                // -1 is the fast default and must round-trip. Other explicit levels stay in [1, 22].
+                if (level != -1 && (level < 1 || level > 22)) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter,
+                        "ZSTD compression level must be -1 or in range [1, 22]");
+                    return result;
+                }
             }
             break;
         default:

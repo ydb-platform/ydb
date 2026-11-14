@@ -35,4 +35,6 @@ message TDataShardConfig {
     optional uint32 KeyAccessSampleCollectionMinIntervalSeconds = 27 [default = 5];
     optional uint32 KeyAccessSampleCollectionMaxIntervalSeconds = 28 [default = 60];
     optional uint32 KeyAccessSampleValidityIntervalSeconds = 29 [default = 30];
+    // CDC payloads smaller than this stay uncompressed. Zero compresses every payload.
+    optional uint64 CdcZstdMinPayloadBytes = 34 [default = 200];
 }

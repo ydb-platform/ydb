@@ -8,6 +8,13 @@ namespace NKikimrClient {
 
 namespace NKikimr::NDataShard {
 
+// Fast zstd strategy used when a stream does not set a level. 0 means unset.
+inline constexpr int DefaultCdcZstdCompressionLevel = -1;
+
+// Same value as TDataShardConfig::CdcZstdMinPayloadBytes. Used when the
+// process has no actor app data, such as a serializer unit test.
+inline constexpr ui64 DefaultCdcZstdMinPayloadBytes = 200;
+
 class TChangeRecord;
 
 class IChangeRecordSerializer {

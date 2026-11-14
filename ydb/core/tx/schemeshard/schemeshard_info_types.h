@@ -3662,7 +3662,8 @@ struct TCdcStreamInfo
             .WithCompression(desc.GetCompression())
             .WithCompressionLevel(desc.HasCompressionLevel()
                 ? desc.GetCompressionLevel()
-                : (desc.GetCompression() == NKikimrSchemeOp::ECdcStreamCompressionZstd ? 3 : 0))
+                // -1 is the fast zstd default and must be stored: 0 means unset.
+                : (desc.GetCompression() == NKikimrSchemeOp::ECdcStreamCompressionZstd ? -1 : 0))
             .WithHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatModeDirect)
         );
         TPtr alterData = result->CreateNextVersion();

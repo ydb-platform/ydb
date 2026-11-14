@@ -801,8 +801,8 @@ Y_UNIT_TEST_SUITE(VDiskHeapAllocator) {
         UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "0");
     }
 
-    // MoveGroups changes the pool of a group without a new group generation. Its VDisk records are pushed again, so
-    // that a VDisk-only restart latches the target pool's value.
+    // MoveGroups changes the pool of a group and gives the group a new generation, while a running VDisk keeps the
+    // value it latched. Its VDisk records are pushed again, so that a VDisk-only restart latches the target pool's value.
     Y_UNIT_TEST(PoolSettingFollowsMovedGroup) {
         TEnvironmentSetup env({
             .NodeCount = 1,

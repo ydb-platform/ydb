@@ -937,7 +937,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     if (!NScheme::NTypeIds::IsPresortEncodable(column->PType.GetTypeId())) {
                         errStr = TStringBuilder()
                             << "EQ_HEIGHT_HISTOGRAM is not supported for column '" << colName
-                            << "' of type " << NScheme::TypeName(column->PType, column->PTypeMod);
+                            << "' of type " << NScheme::TypeName(column->PType);
                         return nullptr;
                     }
                 }

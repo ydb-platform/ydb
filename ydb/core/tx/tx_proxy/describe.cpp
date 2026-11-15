@@ -95,7 +95,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
             auto* col = table->AddColumns();
             col->SetId(column.Id);
             col->SetName(column.Name);
-            col->SetType(NScheme::TypeName(column.PType, column.PTypeMod));
+            col->SetType(NScheme::TypeName(column.PType));
             auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.PType, column.PTypeMod);
             col->SetTypeId(columnType.TypeId);
             if (columnType.TypeInfo) {
@@ -150,7 +150,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
         for (const auto& [id, column] : entry.Columns) {
             auto* col = table->AddColumns();
             col->SetName(column.Name);
-            col->SetType(NScheme::TypeName(column.PType, column.PTypeMod));
+            col->SetType(NScheme::TypeName(column.PType));
             auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.PType, column.PTypeMod);
             col->SetTypeId(columnType.TypeId);
             if (columnType.TypeInfo) {

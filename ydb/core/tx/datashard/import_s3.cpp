@@ -1108,8 +1108,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             if (type.first != schemeType.TypeInfo || type.second != schemeType.TypeMod) {
                 return finish(TStringBuilder() << Settings.GetObjectKeyPattern()
                     << ": column '" << column.GetName() << "' type mismatch"
-                    << ": expected '" << NScheme::TypeName(type.first, type.second) << "'"
-                    << ", got '" << NScheme::TypeName(schemeType.TypeInfo, schemeType.TypeMod) << "'");
+                    << ": expected '" << NScheme::TypeName(type.first) << "'"
+                    << ", got '" << NScheme::TypeName(schemeType.TypeInfo) << "'");
             }
         }
 

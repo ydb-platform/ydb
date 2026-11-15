@@ -364,7 +364,7 @@ void TAnalyzeActor::HandleNavigateResult() {
                     if (!NScheme::NTypeIds::IsPresortEncodable(col.PType.GetTypeId())) {
                         issue << (anyUnsupported ? ", " : ": ")
                               << "column '" << col.Name << "' of type "
-                              << NScheme::TypeName(col.PType, col.PTypeMod);
+                              << NScheme::TypeName(col.PType);
                         anyUnsupported = true;
                     }
                 }

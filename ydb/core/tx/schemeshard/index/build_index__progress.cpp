@@ -931,7 +931,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
             Y_ENSURE(false, "failed to extract column type info");
         }
 
-        col->SetType(NScheme::TypeName(typeInfo, typeMod));
+        col->SetType(NScheme::TypeName(typeInfo));
         col->SetName(colInfo.ColumnName);
         if (colInfo.IsFromSequence()) {
             // Store the sequence as a table-local leaf name (not an absolute path), matching

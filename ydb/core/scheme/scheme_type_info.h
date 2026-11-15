@@ -9,7 +9,7 @@ namespace NKikimrProto {
 
 namespace NKikimr::NScheme {
 
-::TString TypeName(const TTypeInfo typeInfo, const ::TString& typeMod = {});
+::TString TypeName(const TTypeInfo typeInfo);
 
 bool GetTypeInfo(const NScheme::IType* type, const NKikimrProto::TTypeInfo& typeInfoProto, const TStringBuf& typeName, const TStringBuf& columnName, NScheme::TTypeInfo &typeInfo, ::TString& errorStr);
 

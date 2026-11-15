@@ -483,7 +483,7 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
         Y_ENSURE(it->second.PType == typeInfo,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << name
             << "' expected type " << NScheme::TypeName(typeInfo)
-            << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
+            << ", existing type " << NScheme::TypeName(it->second.PType));
 
         bool changes = false;
         // We check if some properties have changed in the new scheme and update them if needed
@@ -504,7 +504,7 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
         Y_ENSURE(it->second.PType == typeInfo,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << it->second.Name << "' renamed to '" << name << "'"
             << " with type " << NScheme::TypeName(typeInfo)
-            << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
+            << ", existing type " << NScheme::TypeName(it->second.PType));
         table->ColumnNames.erase(it->second.Name);
         it->second.Name = name;
         table->ColumnNames.emplace(name, id);

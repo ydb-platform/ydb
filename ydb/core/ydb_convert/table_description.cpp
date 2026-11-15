@@ -1492,7 +1492,7 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
             return false;
         }
 
-        cd->SetType(NScheme::TypeName(typeInfo, typeMod));
+        cd->SetType(NScheme::TypeName(typeInfo));
 
         if (NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
             NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *cd->MutableTypeInfo());
@@ -1628,7 +1628,7 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
         if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.type(), status, error)) {
             return false;
         }
-        columnDesc->SetType(NScheme::TypeName(typeInfo, typeMod));
+        columnDesc->SetType(NScheme::TypeName(typeInfo));
 
         // The same rule as for row tables: a non-optional type means NOT NULL unless not_null says otherwise.
         const bool notOptional = !column.type().has_optional_type();
@@ -3558,7 +3558,7 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
             case NScheme::NTypeIds::Int16:
             case NScheme::NTypeIds::Int32:
             case NScheme::NTypeIds::Int64: {
-                out.SetDataType(NScheme::TypeName(typeInfo, typeMod));
+                out.SetDataType(NScheme::TypeName(typeInfo));
                 break;
             }
             default: {

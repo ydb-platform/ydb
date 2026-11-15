@@ -631,7 +631,7 @@ bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull,
     if (!NKikimr::NScheme::TypeInfoFromProto(itemType, typeInfoMod, error)) {
         return false;
     }
-    column.SetType(NKikimr::NScheme::TypeName(typeInfoMod.TypeInfo, typeInfoMod.TypeMod));
+    column.SetType(NKikimr::NScheme::TypeName(typeInfoMod.TypeInfo));
     const auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
     column.SetTypeId(columnType.TypeId);
     if (columnType.TypeInfo) {

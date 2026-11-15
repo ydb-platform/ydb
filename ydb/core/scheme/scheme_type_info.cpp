@@ -6,7 +6,7 @@
 
 namespace NKikimr::NScheme {
 
-::TString TypeName(const TTypeInfo typeInfo, const ::TString&) {
+::TString TypeName(const TTypeInfo typeInfo) {
     switch (typeInfo.GetTypeId()) {
     case NScheme::NTypeIds::Decimal: {
         const TDecimalType& decimal = typeInfo.GetDecimalType();

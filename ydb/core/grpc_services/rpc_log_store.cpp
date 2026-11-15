@@ -103,7 +103,7 @@ bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikim
         if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.type(), status, error)) {
             return false;
         }
-        auto typeName = NScheme::TypeName(typeInfo, typeMod);
+        auto typeName = NScheme::TypeName(typeInfo);
         col->SetType(typeName);
         if (key.contains(column.name())) {
             col->SetNotNull(true);

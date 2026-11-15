@@ -87,12 +87,10 @@ struct TStringProviderBackend {
 };
 
 TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
-    const TTypeEnvironment& env, bool copy = true,
-    i32 typmod = -1, TMaybe<TString>* error = {});
+    const TTypeEnvironment& env, bool copy = true);
 
 TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
-    const TStringProviderBackend& env, bool copy = true,
-    i32 typmod = -1, TMaybe<TString>* error = {});
+    const TStringProviderBackend& env, bool copy = true);
 
 void FillKeyTupleValue(const NUdf::TUnboxedValue& row, const TVector<ui32>& rowIndices,
     const TVector<NScheme::TTypeInfo>& rowTypes, TVector<TCell>& cells, const TTypeEnvironment& env);

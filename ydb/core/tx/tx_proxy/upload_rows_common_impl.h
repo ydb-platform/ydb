@@ -488,7 +488,7 @@ private:
                     << "Column " << name << " is a virtual generated column and its value cannot be set explicitly");
             }
 
-            TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
+            TString columnTypeName = NScheme::TypeName(ci.PType);
 
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
 

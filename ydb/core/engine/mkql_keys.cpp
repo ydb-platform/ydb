@@ -5,7 +5,6 @@
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-#include <util/generic/maybe.h>
 #include <util/generic/algorithm.h>
 #include <functional>
 
@@ -253,8 +252,7 @@ THolder<TKeyDesc> ExtractEraseRow(TCallable& callable, const TTypeEnvironment& e
 
 template<typename TStringBackend>
 TCell MakeCellImpl(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
-    const TStringBackend& env, bool copy,
-    i32, TMaybe<TString>*)
+    const TStringBackend& env, bool copy)
 {
     if (!value)
         return TCell();
@@ -282,17 +280,15 @@ TCell MakeCellImpl(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
 }
 
 TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
-    const TTypeEnvironment& env, bool copy,
-    i32 typmod, TMaybe<TString>* error)
+    const TTypeEnvironment& env, bool copy)
 {
-    return MakeCellImpl(type, value, env, copy, typmod, error);
+    return MakeCellImpl(type, value, env, copy);
 }
 
 TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
-    const TStringProviderBackend& env, bool copy,
-    i32 typmod, TMaybe<TString>* error)
+    const TStringProviderBackend& env, bool copy)
 {
-    return MakeCellImpl(type, value, env, copy, typmod, error);
+    return MakeCellImpl(type, value, env, copy);
 }
 
 

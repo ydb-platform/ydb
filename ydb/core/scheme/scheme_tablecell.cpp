@@ -693,7 +693,7 @@ size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
 
 TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry &reg) {
     Y_UNUSED(reg);
-    TString typeName = NScheme::TypeName(typeInfo, "");
+    TString typeName = NScheme::TypeName(typeInfo);
     typeName += " : ";
     DbgPrintValue(typeName, r, typeInfo);
     return typeName;

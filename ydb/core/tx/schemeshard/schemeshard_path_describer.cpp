@@ -98,7 +98,7 @@ static void FillColumns(
 
         auto* colDescr = out.Add();
         colDescr->SetName(cinfo.Name);
-        colDescr->SetType(NScheme::TypeName(cinfo.PType, cinfo.PTypeMod));
+        colDescr->SetType(NScheme::TypeName(cinfo.PType));
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
         colDescr->SetTypeId(columnType.TypeId);
         if (columnType.TypeInfo) {
@@ -1164,7 +1164,7 @@ void TPathDescriber::DescribeExternalTable(const TActorContext& ctx, TPathId pat
 
         auto colDescr = entry->AddColumns();
         colDescr->SetName(cinfo.Name);
-        colDescr->SetType(NScheme::TypeName(cinfo.PType, cinfo.PTypeMod));
+        colDescr->SetType(NScheme::TypeName(cinfo.PType));
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(cinfo.PType, cinfo.PTypeMod);
         colDescr->SetTypeId(columnType.TypeId);
         if (columnType.TypeInfo) {

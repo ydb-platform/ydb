@@ -151,7 +151,7 @@ public:
             }
             const auto& colInfo = *colInfoPtr;
 
-            TString columnTypeName = NScheme::TypeName(colInfo.PType, colInfo.PTypeMod);
+            TString columnTypeName = NScheme::TypeName(colInfo.PType);
 
             TString parseProtoError;
             NScheme::TTypeInfoMod inTypeInfoMod;
@@ -162,7 +162,7 @@ public:
             }
             const NScheme::TTypeInfo& inTypeInfo = inTypeInfoMod.TypeInfo;
 
-            TString inTypeName = NScheme::TypeName(inTypeInfo, inTypeInfoMod.TypeMod);
+            TString inTypeName = NScheme::TypeName(inTypeInfo);
 
             if (inTypeInfo != colInfo.PType) {
                 errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",

@@ -212,7 +212,7 @@ public:
                     for (ui32 column : columns) {
                         const auto &columnInfo = tableInfo->Columns.find(column)->second;
                         str << "<th>" 
-                            << column << ":" << NScheme::TypeName(columnInfo.PType, columnInfo.PTypeMod) 
+                            << column << ":" << NScheme::TypeName(columnInfo.PType)
                             << " " << columnInfo.Name
                         << "</th>";
                     }

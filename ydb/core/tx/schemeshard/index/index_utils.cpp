@@ -262,7 +262,7 @@ void FillIndexImplTableColumns(
             if (!columnInfo.IsDropped() && columns.contains(columnInfo.Name)) {
                 column = implTableDesc.AddColumns();
                 column->SetName(columnInfo.Name);
-                column->SetType(NScheme::TypeName(columnInfo.PType, columnInfo.PTypeMod));
+                column->SetType(NScheme::TypeName(columnInfo.PType));
                 column->SetNotNull(columnInfo.NotNull);
             }
         } else if constexpr (std::is_same_v<TColumn, NKikimrSchemeOp::TColumnDescription>) {

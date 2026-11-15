@@ -664,7 +664,7 @@ public:
 
                 throw yexception() << "Failed to write column to JSON: " << e.what()
                     << " Column# " << column.Name
-                    << " Type# " << NScheme::TypeName(column.PType.GetTypeId(), "")
+                    << " Type# " << NScheme::TypeName(column.PType)
                     << " Value# " << value;
             }
         }

@@ -482,7 +482,7 @@ protected:
         }
 
         for (const auto& [tag, column] : schema->Columns) {
-            table["columns"][column.Name]["type"] = NScheme::TypeName(column.Type, column.TypeMod);
+            table["columns"][column.Name]["type"] = NScheme::TypeName(column.Type);
             if (const auto family = schema->Families.find(column.Family); family != schema->Families.end()) {
                 table["columns"][column.Name]["family"] = family->second.GetName();
             } else {

@@ -134,7 +134,7 @@ void WriteDescription(IOutputStream& out, const NTable::TScheme& scheme, const T
         for (size_t pos = 0; pos < columns.size(); ++pos) {
             const auto* column = columns[pos];
             out << "  column " << pos << " id " << column->Id << " " << column->Name
-                << " " << NScheme::TypeName(column->PType, column->PTypeMod);
+                << " " << NScheme::TypeName(column->PType);
             if (const auto order = column->GetCorrectKeyOrder()) {
                 out << " key " << *order;
             }

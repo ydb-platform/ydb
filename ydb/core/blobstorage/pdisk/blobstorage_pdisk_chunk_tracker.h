@@ -531,7 +531,11 @@ public:
     bool TryAllocate(TOwner owner, i64 count, TString &outErrorReason) {
         if (IsOwnerUser(owner)) {
             OwnerQuota->ForceAllocate(owner, count);
-            return SharedQuota->TryAllocate(count, outErrorReason);
+            if (SharedQuota->TryAllocate(count, outErrorReason)) {
+                return true;
+            }
+            OwnerQuota->Release(owner, count);
+            return false;
         } else {
             switch (owner) {
                 case OwnerCommonStaticLog:

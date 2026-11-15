@@ -29,7 +29,6 @@ SRCS(
     kqp_native_index_ut.cpp
     kqp_native_optimizer_pragma_ut.cpp
     kqp_native_quoted_ut.cpp
-    kqp_native_reference_lowering_ut.cpp
     kqp_native_frontend_ut.cpp
     kqp_native_host_ut.cpp
 )

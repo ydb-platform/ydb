@@ -1,10 +1,12 @@
 #include "kqp_native_range_bounds.h"
 #include "kqp_expression.h"
+#include "frontend/predicate.h"
 
 #include <cmath>
 #include <limits>
 #include <type_traits>
 #include <utility>
+#include <unordered_map>
 
 namespace NKikimr::NKqp {
 
@@ -14,6 +16,92 @@ NFrontend::TExprId StripNativeOptionalLift(const NFrontend::TExpressionArena& ar
         id = arena[id].Arguments[0];
     }
     return id;
+}
+
+NFrontend::TExprId PrepareNativeRangePredicate(NFrontend::TExpressionArena& arena, NFrontend::TExprId root) {
+    using namespace NFrontend;
+    using O = EOpcode;
+    std::unordered_map<TExprId, TExprId> prepared;
+    std::vector<std::pair<TExprId, bool>> pending{{root, false}};
+    while (!pending.empty()) {
+        const auto [id, ready] = pending.back(); pending.pop_back();
+        if (prepared.contains(id)) continue;
+        const auto& node = arena[id];
+        const bool coalescedTruth = node.Op == O::Coalesce && node.Type.Kind == ETypeKind::Bool &&
+            node.Arguments.size() == 2 && arena[node.Arguments[1]].Op == O::Literal &&
+            std::holds_alternative<bool>(arena[node.Arguments[1]].Value) && !std::get<bool>(arena[node.Arguments[1]].Value);
+        if (coalescedTruth) {
+            // Range extraction observes selected rows, including for the
+            // left conjunct. The execution predicate remains unchanged.
+            const auto value = node.Arguments[0];
+            if (!ready) {
+                pending.emplace_back(id, true);
+                pending.emplace_back(value, false);
+            } else prepared.emplace(id, prepared.at(value));
+        } else if (node.Op == O::And || node.Op == O::Or) {
+            if (!ready) {
+                pending.emplace_back(id, true);
+                for (auto arg : node.Arguments) if (!prepared.contains(arg)) pending.emplace_back(arg, false);
+                continue;
+            }
+            const auto op = node.Op;
+            const auto position = node.Position;
+            const auto left = prepared.at(node.Arguments[0]), right = prepared.at(node.Arguments[1]);
+            const bool changed = left != node.Arguments[0] || right != node.Arguments[1];
+            prepared.emplace(id, changed ? arena.Binary(op, left, right, position) : id);
+        } else if (node.Op == O::Literal && node.Type.Kind == ETypeKind::Bool &&
+            std::holds_alternative<std::monostate>(node.Value)) {
+            // A positive range predicate observes NULL as a rejected row.
+            // This also removes the dead arm of nullable IN comparisons.
+            prepared.emplace(id, arena.Literal({ETypeKind::Bool}, false, node.Position));
+        } else if (node.Op == O::Not || node.Op == O::NotEqual) {
+            const auto& comparison = node.Op == O::Not ? arena[node.Arguments[0]] : node;
+            auto op = comparison.Op;
+            if (node.Op == O::Not) {
+                switch (op) {
+                    case O::Equal: op = O::NotEqual; break;
+                    case O::NotEqual: op = O::Equal; break;
+                    case O::Less: op = O::GreaterEqual; break;
+                    case O::LessEqual: op = O::Greater; break;
+                    case O::Greater: op = O::LessEqual; break;
+                    case O::GreaterEqual: op = O::Less; break;
+                    default: prepared.emplace(id, id); continue;
+                }
+            }
+            const auto left = comparison.Arguments[0], right = comparison.Arguments[1];
+            const auto type = arena[left].Type;
+            // Complementing an ordered comparison is invalid for NaN. Keep
+            // floating/decimal and non-scalar predicates in their original form.
+            if (type.OptionalDepth > 1 || !(type.IsIntegral() || type.IsString() || type.IsDate() ||
+                type.IsInterval() || type.Kind == ETypeKind::Bool || type.Kind == ETypeKind::Uuid)) {
+                prepared.emplace(id, id);
+                continue;
+            }
+            const auto position = node.Position;
+            if (op == O::NotEqual) {
+                const auto less = arena.Binary(O::Less, left, right, position);
+                const auto greater = arena.Binary(O::Greater, left, right, position);
+                prepared.emplace(id, arena.Binary(O::Or, less, greater, position));
+            } else {
+                prepared.emplace(id, arena.Binary(op, left, right, position));
+            }
+        } else if (node.Op == O::InResult && arena[node.Arguments[0]].Op == O::Column &&
+            !arena[node.Arguments[0]].Type.IsCollection() && arena[node.Arguments[0]].Type.OptionalDepth <= 1) {
+            // The old extractor accepts a scalar key member here. Computed
+            // lookups and tuple keys retain their original admission boundary.
+            const auto lookup = node.Arguments[0], match = node.Arguments[1];
+            const auto position = node.Position;
+            const auto condition = arena.Unary(O::IsNotNull, lookup, position);
+            const auto value = PrepareFilterPredicate(arena, match);
+            prepared.emplace(id, arena.Binary(O::And, condition, value, position));
+        } else {
+            // In particular, converting a membership below NOT would turn
+            // NULL into false before negation and select different rows.
+            prepared.emplace(id, id);
+        }
+    }
+    const auto result = prepared.at(root);
+    return result == root ? root : arena.FoldConstants(std::span(&result, 1)).front();
 }
 
 bool HasUnorderedNativeKeys(NFrontend::TType type) {

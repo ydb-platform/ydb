@@ -10,7 +10,10 @@ SRCS(
     kqp_native_expression_arena_ut.cpp
     kqp_native_scalar_ut.cpp
     kqp_native_range_policy_ut.cpp
+    kqp_native_lookup_admission_ut.cpp
+    kqp_native_predicate_admission_ut.cpp
     kqp_native_olap_policy_ut.cpp
+    kqp_native_reference_lowering_ut.cpp
 )
 
 PEERDIR(

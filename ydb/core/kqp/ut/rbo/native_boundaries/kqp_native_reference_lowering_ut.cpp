@@ -64,6 +64,32 @@ struct TFixture : NTests::TIdTestContext {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNativeReferenceRboLowering) {
+    // PR #58587 at a880d5da2b09: native types own the result contract after
+    // projected IN subplans have been lowered to the existing join operators.
+    Y_UNIT_TEST(InSubplansRetainAnnotatedNullability) {
+        TFixture f;
+        f.Sql = "SELECT value IN (SELECT value FROM t), id IN (SELECT id FROM t) FROM t;";
+        for (unsigned pass = 0; pass < 2; ++pass) {
+            auto root = f.Lower();
+            const auto check = [&] {
+                const auto& columns = root->GetColumns().Items();
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+                for (unsigned i = 0; i < 2; ++i) {
+                    const NFrontend::TType expected{NFrontend::ETypeKind::Bool, i == 0};
+                    UNIT_ASSERT(root->GetInput()->GetNativeIUType(columns[i].first) == expected);
+                }
+                NTests::AssertIdInvariants(*root, root->PlanProps);
+            };
+            // Import owns scalar types; relational schemas are computed at
+            // the RBO typing boundary, then remain stable on recomputation.
+            for (unsigned annotation = 0; annotation < 2; ++annotation) {
+                UNIT_ASSERT_C(f.Recompute(*root) == IGraphTransformer::TStatus::Ok,
+                    f.ExprCtx.IssueManager.GetIssues().ToString());
+                check();
+            }
+        }
+    }
+
     Y_UNIT_TEST(ScalarSubqueryValueSelectionPreservesTypePolicy) {
         const std::pair<const char*, const char*> cases[]{
             {"AsStruct(id AS k)", "some"},
@@ -251,7 +277,7 @@ Y_UNIT_TEST_SUITE(KqpNativeReferenceRboLowering) {
         const auto& count = (*countExpression.GetNativeArena())[countExpression.GetNativeRoot()];
         UNIT_ASSERT(count.Op == NFrontend::EOpcode::Literal);
         UNIT_ASSERT_VALUES_EQUAL(std::get<std::uint64_t>(count.Value), 5);
-        const auto& offsetExpression = *limit->GetOffsetCond();
+        const auto offsetExpression = *limit->GetOffsetCond();
         const auto& offset = (*offsetExpression.GetNativeArena())[offsetExpression.GetNativeRoot()];
         UNIT_ASSERT(offset.Op == NFrontend::EOpcode::Literal);
         UNIT_ASSERT_VALUES_EQUAL(std::get<std::uint64_t>(offset.Value), 1);

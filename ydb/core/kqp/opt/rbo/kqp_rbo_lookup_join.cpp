@@ -153,21 +153,12 @@ std::optional<TLookupJoinRightSide> MatchLookupJoinRightSide(const TIntrusivePtr
     // The lookup join replaces the whole subtree, so the index read and the filter above it are not needed:
     // the source read predicate contains the whole read predicate.
     const auto& source = *sourceLookup->SourceRead;
-    std::optional<TOpRead::TRangeInfo> rangeInfo;
-    if (!source.Predicate.IsNative() || !source.PointPrefixes.empty()) {
-        rangeInfo.emplace();
-        rangeInfo->PointPrefixes = source.PointPrefixes;
-    }
+    TOpRead::TRangeInfo rangeInfo;
+    rangeInfo.PointPrefixes = source.PointPrefixes;
     auto sourceRead = MakeIntrusive<TOpRead>(read->Alias, sourceLookup->GetColumns(), NYql::EStorageType::RowStorage,
                                              sourceLookup->Table, nullptr, std::nullopt, std::move(rangeInfo), source.Predicate,
                                              ESortDir::None, sourceLookup->Props, sourceLookup->Pos);
     sourceRead->NativeSchema = sourceLookup->NativeSchema;
-    if (!sourceRead->RangeInfo) {
-        // Native ranges are replaced by join-key lookups. Keep their whole predicate
-        // as an ordinary filter so both lookup selection and rewriting see it.
-        auto sourceFilter = MakeIntrusive<TOpFilter>(sourceRead, sourceLookup->Pos, source.Predicate);
-        return TLookupJoinRightSide{sourceRead, std::move(sourceFilter)};
-    }
     return TLookupJoinRightSide{sourceRead, nullptr};
 }
 
@@ -208,9 +199,7 @@ std::optional<TLookupJoinTarget> ChooseLookupJoinTarget(const TOpRead& read, con
     const bool autoIndexSelection = kqpCtx.Config->IsAutoIndexSelectionForIndexLookupJoinEnabled();
     const bool allPointPrefixes = kqpCtx.Config->GetEnableLookupJoinPointPrefixes();
 
-    // Native bounds retain the full predicate for fetched-row filtering, so
-    // adding them must not prevent an otherwise available covering-index lookup.
-    if (autoIndexSelection && (!read.RangeInfo || read.RangeInfo->NativeRanges)) {
+    if (autoIndexSelection && !read.RangeInfo.has_value()) {
         if (auto index = TryToFindBestIndexForRightSide(tableDesc, readColumns, joinKeyColumns); index && IsLookupTable(*index)) {
             return TLookupJoinTarget{index, nullptr, nullptr};
         }

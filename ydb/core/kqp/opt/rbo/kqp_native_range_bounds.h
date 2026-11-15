@@ -21,6 +21,9 @@ NFrontend::TExprId StripNativeOptionalLift(const NFrontend::TExpressionArena& ar
 NFrontend::TExprId StripNativeRangeKeyPromotion(const NFrontend::TExpressionArena& arena,
     NFrontend::TExprId id, NFrontend::EOpcode comparison);
 bool HasUnorderedNativeKeys(NFrontend::TType type);
+// A range-extraction view of filter truth, never a scalar replacement. Legacy
+// membership keeps its lookup guard; NOT and ordinary IF remain opaque.
+NFrontend::TExprId PrepareNativeRangePredicate(NFrontend::TExpressionArena& arena, NFrontend::TExprId root);
 std::optional<TNativeRangeBound> BuildNativeRangeBound(const TExpression& expression,
     NFrontend::TType keyType, NFrontend::EOpcode comparison);
 

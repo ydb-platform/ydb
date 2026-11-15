@@ -109,7 +109,7 @@ std::optional<TKeyMatch> MatchKeyPrefix(const TOpJoin& join, const TOpRead& read
 bool KeyTypesMatch(const IOperator& leftInput, const IOperator& rightInput, const TVector<TLookupKey>& keys, TExprContext& ctx) {
     Y_UNUSED(ctx);
     for (const auto& key : keys) {
-        if (leftInput.GetNativeIUType(key.LeftIU).Required() != rightInput.GetNativeIUType(key.RightIU).Required()) return false;
+        if (leftInput.GetNativeIUType(key.LeftIU).Unwrapped() != rightInput.GetNativeIUType(key.RightIU).Unwrapped()) return false;
     }
     return true;
 }

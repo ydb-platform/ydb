@@ -257,17 +257,39 @@ TIntrusivePtr<IOperator> PushNativeRanges(const TIntrusivePtr<IOperator>& input,
     if (read->Limit || read->OlapProgram ||
         !predicate.GetRawInputIUs().IsSubsetOf(read->GetColumns())) return input;
     const auto arena = predicate.GetNativeArena();
-    THashSet<TExprId> visited;
-    TVector<TExprId> pending{predicate.GetNativeRoot()};
-    while (!pending.empty()) {
-        const auto id = pending.back(); pending.pop_back();
-        if (!visited.insert(id).second) continue;
-        const auto& node = (*arena)[id];
-        // Discarding a row (including NULL) must not suppress a checked term
-        // which the original lazy Boolean expression would have evaluated.
-        if (node.Op == O::Ensure || node.Op == O::Unwrap) return input;
-        pending.insert(pending.end(), node.Arguments.begin(), node.Arguments.end());
+    THashMap<TExprId, bool> rowDependencies;
+    bool needsRangeView = false, hasChecked = false;
+    const auto usesRow = [&](TExprId root) {
+        TVector<std::pair<TExprId, bool>> pending{{root, false}};
+        while (!pending.empty()) {
+            const auto [id, ready] = pending.back(); pending.pop_back();
+            if (rowDependencies.contains(id)) continue;
+            const auto& node = (*arena)[id];
+            if (!ready) {
+                hasChecked |= node.Op == O::Ensure || node.Op == O::Unwrap;
+                needsRangeView |= node.Op == O::InResult || node.Op == O::Coalesce ||
+                    node.Op == O::Not || node.Op == O::NotEqual ||
+                    (node.Op == O::Literal && node.Type.Kind == K::Bool && std::holds_alternative<std::monostate>(node.Value));
+                pending.emplace_back(id, true);
+                for (const auto arg : node.Arguments) pending.emplace_back(arg, false);
+            } else {
+                bool dependent = node.Op == O::Column;
+                for (const auto arg : node.Arguments) dependent |= rowDependencies.at(arg);
+                rowDependencies.emplace(id, dependent);
+            }
+        }
+        return rowDependencies.at(root);
+    };
+    const bool rowDependent = usesRow(predicate.GetNativeRoot());
+    // A closed predicate is evaluated as the old extractor's conditional full
+    // range. Row-dependent checks must retain their original lazy evaluation.
+    if (hasChecked && rowDependent) return input;
+    std::optional<TExpression> rangeView;
+    if (needsRangeView) {
+        const auto root = PrepareNativeRangePredicate(*arena, predicate.GetNativeRoot());
+        if (root != predicate.GetNativeRoot()) rangeView = TExpression::FromNative(arena, root, &props, predicate.Pos());
     }
+    const auto& rangePredicate = rangeView ? *rangeView : predicate;
     struct TCondition {
         size_t Term;
         TExprId Value;
@@ -275,24 +297,52 @@ TIntrusivePtr<IOperator> PushNativeRanges(const TIntrusivePtr<IOperator>& input,
         TType KeyType;
         bool Inclusive;
     };
+    struct TNotNull {
+        size_t Term;
+        TType KeyType;
+    };
     struct TConditions {
         std::optional<TCondition> Equal, Lower, Upper;
+        std::optional<TNotNull> NotNull;
     };
-    auto branches = NativeRangeBranches(*arena, predicate.GetNativeRoot(), ctx.KqpCtx.Config->GetExtractPredicateRangesLimit());
+    std::optional<TExprId> closedCondition;
+    const auto& root = (*arena)[rangePredicate.GetNativeRoot()];
+    if (!usesRow(rangePredicate.GetNativeRoot()) && root.Repeatable && root.Type.Kind == K::Bool && root.Type.OptionalDepth <= 1) {
+        closedCondition = rangePredicate.GetNativeRoot();
+        if (root.Type.OptionalDepth) {
+            const TExprId alternatives[]{*closedCondition, arena->Literal({K::Bool}, false)};
+            closedCondition = arena->Coalesce(alternatives);
+        }
+    }
+    auto branches = closedCondition ? std::vector<std::vector<TExprId>>{{rangePredicate.GetNativeRoot()}}
+        : NativeRangeBranches(*arena, rangePredicate.GetNativeRoot(), ctx.KqpCtx.Config->GetExtractPredicateRangesLimit());
     if (branches.empty()) {
         branches.emplace_back();
-        for (const auto& term : predicate.SplitConjunct()) branches.back().push_back(term.GetNativeRoot());
+        for (const auto& term : rangePredicate.SplitConjunct()) branches.back().push_back(term.GetNativeRoot());
     }
     std::vector<THashMap<TString, TConditions>> branchKeys(branches.size());
+    std::vector<std::vector<std::pair<size_t, TExprId>>> branchConditions(branches.size());
+    THashMap<TExprId, TExprId> closedTerms;
     for (size_t branch = 0; branch < branches.size(); ++branch) for (size_t i = 0; i < branches[branch].size(); ++i) {
         const auto id = StripNativeOptionalLift(*arena, branches[branch][i]);
         auto op = (*arena)[id].Op;
-        const bool nullPoint = op == O::IsNull;
-        if (!nullPoint && op != O::Equal && op != O::Less && op != O::LessEqual && op != O::Greater && op != O::GreaterEqual) continue;
-        auto column = StripNativeRangeKeyPromotion(*arena, (*arena)[id].Arguments[0], op);
-        auto value = nullPoint ? column : (*arena)[id].Arguments[1];
+        const auto type = (*arena)[id].Type;
+        if (type.Kind == K::Bool && type.OptionalDepth <= 1 && (*arena)[id].Repeatable && !usesRow(id)) {
+            auto [entry, added] = closedTerms.emplace(id, id);
+            if (added && type.OptionalDepth) {
+                const TExprId alternatives[]{id, arena->Literal({K::Bool}, false)};
+                entry->second = arena->Coalesce(alternatives);
+            }
+            branchConditions[branch].emplace_back(i, entry->second);
+            continue;
+        }
+        const bool nullPoint = op == O::IsNull, notNull = op == O::IsNotNull;
+        if (!nullPoint && !notNull && op != O::Equal && op != O::Less && op != O::LessEqual && op != O::Greater && op != O::GreaterEqual) continue;
+        auto column = notNull ? StripNativeOptionalLift(*arena, (*arena)[id].Arguments[0])
+            : StripNativeRangeKeyPromotion(*arena, (*arena)[id].Arguments[0], op);
+        auto value = nullPoint || notNull ? column : (*arena)[id].Arguments[1];
         if ((*arena)[column].Op != O::Column) {
-            if (nullPoint) continue;
+            if (nullPoint || notNull) continue;
             std::swap(column, value);
             column = StripNativeRangeKeyPromotion(*arena, column, op);
             switch (op) {
@@ -311,12 +361,16 @@ TIntrusivePtr<IOperator> PushNativeRanges(const TIntrusivePtr<IOperator>& input,
             keyType.Kind != K::Datetime && keyType.Kind != K::Timestamp && keyType.Kind != K::Interval &&
             keyType.Kind != K::Date32 && keyType.Kind != K::Datetime64 && keyType.Kind != K::Timestamp64 &&
             keyType.Kind != K::Interval64 && keyType.Kind != K::Uuid && !HasUnorderedNativeKeys(keyType)) continue;
+        auto& conditions = branchKeys[branch][props.InfoUnitRegistry.Get((*arena)[column].ColumnId).GetColumnName()];
+        if (notNull) {
+            if (!conditions.NotNull) conditions.NotNull = TNotNull{i, keyType};
+            continue;
+        }
         // IS NULL is a finite NULL point, unlike comparison with NULL (UNKNOWN).
         const auto bound = nullPoint
             ? (keyType.OptionalDepth ? std::optional{TNativeRangeBound{arena->Literal(keyType, {}), {}, true}} : std::nullopt)
             : BuildNativeRangeBound(TExpression::FromNative(arena, value, &props), keyType, op);
         if (!bound) continue;
-        auto& conditions = branchKeys[branch][props.InfoUnitRegistry.Get((*arena)[column].ColumnId).GetColumnName()];
         auto& slot = nullPoint || op == O::Equal ? conditions.Equal : (op == O::Greater || op == O::GreaterEqual ? conditions.Lower : conditions.Upper);
         if (!slot) slot = TCondition{i, bound->Value, bound->Validity, keyType, bound->Inclusive};
     }
@@ -341,10 +395,24 @@ TIntrusivePtr<IOperator> PushNativeRanges(const TIntrusivePtr<IOperator>& input,
         info.ExpectedMaxRanges = branches.size();
         info.UsedPrefixLen = info.PointPrefixLen = metadata.KeyColumnNames.size();
         info.NativeRanges.emplace();
+        if (closedCondition && !metadata.KeyColumnNames.empty()) {
+            // The previous extractor assigns the first key to a conditional
+            // full range. Retain that admission/scoring contract even though
+            // the interval has no finite bound and no point prefix.
+            info.UsedPrefixLen = 1;
+            info.PointPrefixLen = 0;
+            auto& range = info.NativeRanges->emplace_back();
+            range.Condition = TExpression::FromNative(arena, *closedCondition, &props, read->Pos);
+            return result;
+        }
         for (size_t branch = 0; branch < branches.size(); ++branch) {
             auto& range = info.NativeRanges->emplace_back();
             THashSet<size_t> consumed;
             size_t usedPrefix = 0, pointPrefix = 0;
+            for (const auto& [term, condition] : branchConditions[branch]) {
+                addCondition(range.Condition, condition);
+                consumed.insert(term);
+            }
             const auto append = [&](TOpRead::TKeyBound& bound, const TCondition& condition) {
                 bound.Values.push_back(TExpression::FromNative(arena, condition.Value, &props, read->Pos));
                 bound.Inclusive = condition.Inclusive;
@@ -357,11 +425,17 @@ TIntrusivePtr<IOperator> PushNativeRanges(const TIntrusivePtr<IOperator>& input,
                 if (conditions.Equal) {
                     append(range.Lower, *conditions.Equal);
                     append(range.Upper, *conditions.Equal);
+                    if (conditions.NotNull) {
+                        consumed.insert(conditions.NotNull->Term);
+                        const auto& value = (*arena)[conditions.Equal->Value];
+                        if (value.Op == O::Literal && std::holds_alternative<std::monostate>(value.Value))
+                            addCondition(range.Condition, arena->Literal({K::Bool}, false));
+                    }
                     ++usedPrefix;
                     ++pointPrefix;
                     continue;
                 }
-                if (!conditions.Lower && !conditions.Upper) break;
+                if (!conditions.Lower && !conditions.Upper && !conditions.NotNull) break;
                 if (conditions.Lower) append(range.Lower, *conditions.Lower);
                 if (conditions.Lower && !conditions.Upper && HasUnorderedNativeKeys(conditions.Lower->KeyType)) {
                     const auto type = conditions.Lower->KeyType.Required();
@@ -380,9 +454,22 @@ TIntrusivePtr<IOperator> PushNativeRanges(const TIntrusivePtr<IOperator>& input,
                         range.Lower.Inclusive = false;
                     }
                 }
+                if (conditions.NotNull) {
+                    consumed.insert(conditions.NotNull->Term);
+                    if (!conditions.Lower && !conditions.Upper && conditions.NotNull->KeyType.OptionalDepth) {
+                        const auto null = arena->Literal(conditions.NotNull->KeyType, {});
+                        range.Lower.Values.push_back(TExpression::FromNative(arena, null, &props, read->Pos));
+                        range.Lower.Inclusive = false;
+                    }
+                    // An IS NOT NULL interval includes unordered non-NULL keys
+                    // (NaN); only actual comparisons install the NaN upper cut.
+                }
                 ++usedPrefix;
                 break;
             }
+            // A closed conjunct supplies a conditional full range on the first
+            // key when this branch has no finite key bound, as in the old extractor.
+            if (!usedPrefix && !branchConditions[branch].empty() && !metadata.KeyColumnNames.empty()) usedPrefix = 1;
             // Omitting an unconstrained OR branch would discard matching rows.
             info.UsedPrefixLen = std::min(info.UsedPrefixLen, usedPrefix);
             info.PointPrefixLen = std::min(info.PointPrefixLen, pointPrefix);
@@ -501,7 +588,9 @@ TIntrusivePtr<IOperator> PushNativeRanges(const TIntrusivePtr<IOperator>& input,
         TOpTableLookup::TLookupKeys lookupKeys;
         for (const auto& key : table.KeyColumnNames) lookupKeys.Append(ids.at(key), key);
         auto lookup = MakeIntrusive<TOpTableLookup>(indexRead, read->Pos, read->TableRef, read->GetColumns(), std::move(lookupKeys));
-        lookup->SourceRead = TOpTableLookup::TSourceRead{original, std::move(sourcePrefixes)};
+        if (allPointPrefixes && read->StorageType == NYql::EStorageType::RowStorage) {
+            lookup->SourceRead = TOpTableLookup::TSourceRead{original, std::move(sourcePrefixes)};
+        }
         return lookup;
     }
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), chosenIndex ? GetStorageType(*chosenIndex) : read->StorageType,

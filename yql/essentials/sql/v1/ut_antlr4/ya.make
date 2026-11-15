@@ -3,6 +3,7 @@ UNITTEST_FOR(yql/essentials/sql/v1)
 SRCS(
     sql_ut_antlr4.cpp
     sql_match_recognize_ut.cpp
+    sql_pragma_ut.cpp
 )
 
 PEERDIR(

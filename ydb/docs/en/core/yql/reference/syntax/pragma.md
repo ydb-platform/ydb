@@ -64,6 +64,19 @@ SELECT * FROM test;`
 
 The prefix is not added if the table name is an absolute path (starts with /).
 
+### RelativePathPrefix {#relative-path-prefix}
+
+| Value type | Default |
+| --- | --- |
+| String | — |
+
+Sets the prefix for schema object paths relative to the database root. The `RelativePathPrefix` value must be a string literal and must not start with `/`. Specify the pragma only once, only at the top level, and before SQL statements. It cannot be combined with `TablePathPrefix`. The pragma is supported only for the `kikimr` provider and applies only to relative schema object paths in the SQL query; absolute paths remain unchanged.
+
+```yql
+PRAGMA RelativePathPrefix = "folder";
+SELECT * FROM test;
+```
+
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 
 | Value type | Default |

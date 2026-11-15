@@ -21,6 +21,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateStreami
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryDdlRetriesUnderSchemeShardRestarts
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationDoubleCommitIsOk+LocalTopics
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationDoubleCommitIsOk-LocalTopics
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.DeferredPublicationRefreshOnCheckpoint
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.ExactlyOnceWritingWithMultipleSinks+LocalTopics
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.ExactlyOnceWritingWithMultipleSinks-LocalTopics
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesWithDeferredCommits.ExactlyOnceWritingWithMultipleSinksAndSameTopic
@@ -79,6 +80,7 @@ ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.Repla
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery-NewFirst
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery+Drop
 ydb/core/tx/schemeshard/ut_stats TStoragePoolsStatsPersistence.DatabaseUsageAfterRestartDuringMoveWithShardIdxStats
+ydb/core/viewer/ut unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk

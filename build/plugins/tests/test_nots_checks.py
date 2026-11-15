@@ -224,3 +224,32 @@ def test_tarballs_platform_uses_action_configuration(settings, expected):
         assert values["_PREPARE_DEPS_PLATFORM_ARG"] == "--tarballs-platform " + " ".join(expected)
     else:
         assert "_PREPARE_DEPS_PLATFORM_ARG" not in values
+
+
+@pytest.mark.parametrize("configure", [nots._TS_PROTO_CONFIGURE, nots._PREPARE_DEPS_CONFIGURE])
+def test_non_recursive_proto_requires_auto_package(monkeypatch, configure):
+    errors = []
+    unit = SimpleNamespace(
+        get=lambda key: "yes" if key in ("_TS_PROTO_NON_RECURSIVE", "TS_PROTO_PREPARE_DEPS") else "",
+        message=lambda value: None,
+    )
+    monkeypatch.setattr(nots, "_is_ts_proto_auto", lambda unit: False)
+    monkeypatch.setattr(nots.ymake, "report_configure_error", errors.append, raising=False)
+    configure(unit)
+    assert len(errors) == 1
+    assert "TS_PROTO_NON_RECURSIVE() requires auto-proto" in errors[0]
+
+
+def test_non_recursive_auto_proto_attaches_only_auto_peers(monkeypatch):
+    peers = []
+    unit = SimpleNamespace(
+        get=lambda key: "yes" if key in ("TS_PROTO_PREPARE_DEPS", "_TS_PROTO_NON_RECURSIVE") else "",
+        get_subst=lambda key: "proto/auto proto/custom proto/raw",
+        resolve=lambda path: path,
+        onpeerdir=peers.extend,
+        on_ts_proto_auto_prepare_deps_configure=lambda: None,
+    )
+    monkeypatch.setattr(nots, "_is_ts_proto_auto", lambda unit: True)
+    monkeypatch.setattr(nots, "_is_real_file", lambda path: path == "$S/proto/custom/package.json")
+    nots._PREPARE_DEPS_CONFIGURE(unit)
+    assert peers == ["proto/auto", "proto/raw"]

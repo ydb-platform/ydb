@@ -461,6 +461,8 @@ def _TS_PROTO_CONFIGURE(unit: ymake.Unit) -> None:
         unit.on_ts_proto_auto_configure()
         return
 
+    if unit.get("_TS_PROTO_NON_RECURSIVE") == "yes":
+        raise ValueError("TS_PROTO_NON_RECURSIVE() requires auto-proto (a module without package.json)")
     unit.set(["_TS_PROTO_AUTO_ARGS", ""])
     unit.on_node_modules_configure()
 
@@ -534,7 +536,10 @@ def _TS_PROTO_AUTO_CONFIGURE(unit: ymake.Unit) -> None:
 @_with_report_configure_error
 def _PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
     if unit.get("TS_PROTO_PREPARE_DEPS") == "yes" and unit.get("_TS_PROTO_NON_RECURSIVE") == "yes":
-        unit.onpeerdir(sorted(set((unit.get_subst("_TS_PROTO_PEERS") or "").split())))
+        if not _is_ts_proto_auto(unit):
+            raise ValueError("TS_PROTO_NON_RECURSIVE() requires auto-proto (a module without package.json)")
+        peers = sorted(set((unit.get_subst("_TS_PROTO_PEERS") or "").split()))
+        unit.onpeerdir([peer for peer in peers if not _is_real_file(unit.resolve("$S/" + peer + "/package.json"))])
 
     if _is_ts_proto_auto(unit):
         unit.on_ts_proto_auto_prepare_deps_configure()

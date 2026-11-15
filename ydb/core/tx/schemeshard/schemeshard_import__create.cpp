@@ -91,6 +91,10 @@ bool IsCreatedByQuery(const TItem& item) {
     return !item.CreationQuery.empty();
 }
 
+bool IsColumnTable(const TItem& item) {
+    return item.Table && item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN;
+}
+
 bool IsCreateViewQuery(const TString& query) {
     return query.Contains("CREATE VIEW");
 }
@@ -137,14 +141,15 @@ TString GetDatabase(TSchemeShard& ss) {
     return CanonizePath(ss.RootPathElements);
 }
 
-bool ShouldDelayQueryExecutionOnError(
-    const NKikimrSchemeOp::TModifyScheme& preparedQuery,
+bool ShouldDelayObjectCreationOnError(
+    NKikimrSchemeOp::EOperationType operationType,
     NKikimrScheme::EStatus status)
 {
-    switch (preparedQuery.GetOperationType()) {
+    switch (operationType) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
             return status == NKikimrScheme::StatusNotAvailable;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
             return IsIn({
                 NKikimrScheme::StatusPathDoesNotExist,
                 NKikimrScheme::StatusSchemeError,
@@ -863,7 +868,7 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
-        LOG_D("TImport::TTxProgress: delay scheme object query execution"
+        LOG_D("TImport::TTxProgress: delay scheme object creation"
             << ": id# " << importInfo->Id
             << ", delayed item# " << itemIdx);
 
@@ -874,21 +879,21 @@ private:
         if (AllDoneOrWaiting(stateCounts)) {
             if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjects) {
                 // No progress has been made since the last scheme object creation retry.
-                return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed, no progress");
+                return CancelAndPersist(db, importInfo, itemIdx, error, "scheme object creation failed, no progress");
             }
-            RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
+            RetrySchemeObjectsCreation(*importInfo, db, ctx);
         }
     }
 
-    void RetrySchemeObjectsQueryExecution(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    void RetrySchemeObjectsCreation(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const auto database = GetDatabase(*Self);
         TVector<ui32> retriedItems;
         for (ui32 itemIdx : xrange(importInfo.Items.size())) {
             auto& item = importInfo.Items[itemIdx];
-            if (item.State != EState::Waiting || !IsCreatedByQuery(item)) {
+            if (item.State != EState::Waiting || (!IsCreatedByQuery(item) && !IsColumnTable(item))) {
                 continue;
             }
-            if (item.PreparedCreationQuery) {
+            if (item.PreparedCreationQuery || IsColumnTable(item)) {
                 AllocateTxId(importInfo, itemIdx);
             } else {
                 item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
@@ -904,7 +909,7 @@ private:
         }
         if (!retriedItems.empty()) {
             importInfo.WaitingSchemeObjects = std::ssize(retriedItems);
-            LOG_D("TImport::TTxProgress: retry scheme object query execution"
+            LOG_D("TImport::TTxProgress: retry scheme object creation"
                 << ": id# " << importInfo.Id
                 << ", retried items# " << JoinSeq(", ", retriedItems)
             );
@@ -1822,7 +1827,16 @@ private:
             // As for created by query objects query must be compiled to execute
             Y_ABORT_UNLESS(item.PreparedCreationQuery);
 
-            if (ShouldDelayQueryExecutionOnError(*item.PreparedCreationQuery, record.GetStatus())) {
+            if (ShouldDelayObjectCreationOnError(item.PreparedCreationQuery->GetOperationType(), record.GetStatus())) {
+                return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
+            }
+        }
+
+        if (item.State == EState::CreateSchemeObject && IsColumnTable(item)
+            && AppData()->FeatureFlags.GetEnableColumnTableImportDependencyRetry()) {
+            if (ShouldDelayObjectCreationOnError(NKikimrSchemeOp::ESchemeOpCreateColumnTable, record.GetStatus())) {
+                // The external data source referenced by a TTL tier may be restored later in this import.
+                Self->TxIdToImport.erase(txId);
                 return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
             }
         }
@@ -2174,7 +2188,7 @@ private:
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         } else if (AllDoneOrWaiting(stateCounts)) {
-            RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
+            RetrySchemeObjectsCreation(*importInfo, db, ctx);
         }
 
         Self->PersistImportItemState(db, *importInfo, itemIdx);

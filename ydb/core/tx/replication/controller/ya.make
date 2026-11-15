@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    ydb/core/backup/common
     ydb/core/base
     ydb/core/discovery
     ydb/core/engine/minikql
@@ -17,6 +18,7 @@ PEERDIR(
     ydb/core/util
     ydb/core/ydb_convert
     ydb/public/api/protos
+    ydb/public/sdk/cpp/src/client/proto
     ydb/services/metadata
     yql/essentials/public/issue
     library/cpp/json

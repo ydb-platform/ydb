@@ -636,6 +636,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             .AutoCommit(autoCommit)
             .ReportStats(reportStats)
             .FailOnDataLoss(failOnDataLoss)
+            .CheckStatusForDataLoss(failOnDataLoss && AppData()->ReplicationConfig.GetEnableStatusBasedDataLossDetection())
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path(settings.GetTopicPath())
                 .AppendPartitionIds(settings.GetTopicPartitionId())

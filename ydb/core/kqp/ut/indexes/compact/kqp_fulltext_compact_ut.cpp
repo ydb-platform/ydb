@@ -2,6 +2,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <library/cpp/json/json_reader.h>
+#include <ydb/core/kqp/runtime/kqp_full_text_source.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
@@ -151,6 +152,65 @@ Y_UNIT_TEST(AddIndexCompact) {
         [%true;18446744073709551615u;400u;"\xAC\2d";"love"];
         [%true;18446744073709551615u;200u;"dd";"small"]
     ])", NYdb::FormatResultSetYson(index));
+}
+
+// A plain (non-relevance) LIMIT must not stream the whole posting list. All
+// delta rows still have to be applied, but from the base (gen == MAX) segments
+// only as many as needed to satisfy the limit may be read.
+Y_UNIT_TEST(PlainLimitReadsFewSegments) {
+    constexpr ui32 docCount = 40;
+    constexpr ui32 limit = 10;
+
+    Y_DEFER {
+        NDataShard::gFulltextMaxSegment = 10000;
+        gFulltextPostingReadMaxBytesWithLimit = 1 << 20;
+    };
+    NDataShard::gFulltextMaxSegment = 1;
+    gFulltextPostingReadMaxBytesWithLimit = 128;
+
+    auto kikimr = KikimrWithCompact(true, true);
+    auto db = kikimr.GetQueryClient();
+
+    const TString word = "love";
+
+    CreateTexts(db);
+    {
+        TStringBuilder query;
+        query << "UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES ";
+        for (ui32 i = 0; i < docCount; ++i) {
+            if (i) {
+                query << ", ";
+            }
+            query << "(" << i + 1 << ", \"" << word << " document " << i + 1 << "\", \"" << word << "\")";
+        }
+        ExecuteQuery(db, query);
+    }
+    AddIndex(db, "fulltext_plain");
+
+    NYdb::NQuery::TExecuteQuerySettings settings;
+    settings.StatsMode(NYdb::NQuery::EStatsMode::Basic);
+    auto result = db.ExecuteQuery(Sprintf(R"sql(
+        SELECT `Key` FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FulltextMatch(`Text`, "%s")
+        LIMIT %u;
+    )sql", word.c_str(), limit), NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), limit);
+
+    UNIT_ASSERT(result.GetStats());
+    const auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+    ui64 indexRows = 0;
+    for (const auto& phase : stats.query_phases()) {
+        for (const auto& access : phase.table_access()) {
+            if (TString(access.name()).EndsWith("/fulltext_idx/indexImplTable")) {
+                indexRows += access.reads().rows();
+            }
+        }
+    }
+    Cerr << "posting-list rows read: " << indexRows << " of " << docCount << Endl;
+    UNIT_ASSERT_C(indexRows > 0, "the posting list must have been read");
+    UNIT_ASSERT_C(indexRows <= limit * 2, "LIMIT " << limit << " must be satisfied from a few small batches, read "
+        << indexRows << " of " << docCount << " segment rows");
 }
 
 // ALTER ADD INDEX uses the public asynchronous BuildIndex path. The request carries a logical fulltext

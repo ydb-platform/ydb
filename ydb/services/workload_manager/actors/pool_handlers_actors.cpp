@@ -221,10 +221,6 @@ private:
         TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId, queryId, requestText, wmSessionUpdater)}).first->second;
         Counters.LocalDelayedRequests->Inc();
 
-        if (wmSessionUpdater) {
-            wmSessionUpdater->SetPoolId(PoolId);
-        }
-
         UpdatePoolConfig(ev->Get()->PoolConfig);
         UpdateSchemeboardSubscription(ev->Get()->PathId);
         OnScheduleRequest(request);

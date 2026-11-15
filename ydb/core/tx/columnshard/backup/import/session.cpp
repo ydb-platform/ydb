@@ -71,7 +71,11 @@ bool TSession::IsReadyForRemoveOnFinished() const {
 }
 
 TSession::TStatus TSession::GetStatus() const {
-    return TStatus{ Status == EStatus::Finished, ErrorMessage };
+    const bool success = Status == EStatus::Finished;
+    if (!success && !ErrorMessage) {
+        return TStatus{ false, TStringBuilder() << "import session is not finished, status: " << Status };
+    }
+    return TStatus{ success, ErrorMessage };
 }
 
 bool TSession::IsFinished() const {
@@ -100,6 +104,9 @@ TConclusionStatus TSession::DoDeserializeFromProto(const TProtoLogic &proto) {
 TSession::TProtoState TSession::DoSerializeStateToProto() const {
     TProtoState result;
     result.SetStatus(::ToString(Status));
+    if (ErrorMessage) {
+        result.SetErrorMessage(ErrorMessage);
+    }
     return result;
 }
 
@@ -107,6 +114,7 @@ TConclusionStatus TSession::DoDeserializeStateFromProto(const TProtoState &proto
     if (!TryFromString(proto.GetStatus(), Status)) {
         return TConclusionStatus::Fail("cannot read status from proto: " + proto.GetStatus());
     }
+    ErrorMessage = proto.GetErrorMessage();
     return TConclusionStatus::Success();
 }
 

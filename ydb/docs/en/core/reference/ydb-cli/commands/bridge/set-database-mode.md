@@ -28,7 +28,7 @@ View command help:
 | Name | Description |
 | --- | --- |
 | `--target-database <path>` | Required absolute path of the database to change. It does not change the connection or authentication database set by the global `--database` option. |
-| `--retain-pile <pile>` | With `ordinary`, retain group parts in the specified pile. You can select `PRIMARY` or another pile in the `SYNCHRONIZED` state; the pile's role does not change. If omitted, retained copies are selected automatically and may be in different piles for different groups. This option does not relocate data in pools that are already ordinary. |
+| `--retain-pile <pile>` | Only when switching to `ordinary`: retain parts of all converted groups in the specified pile. For details, see [Choosing retained copies](#retain-pile). |
 
 ## Requirements {#requirements}
 
@@ -44,6 +44,16 @@ For a serverless database, specify its shared database as `--target-database`. T
 All database pools are switched atomically: if validation fails, no pool mode is changed. After a successful switch to `ordinary`, group parts outside the retained piles are deleted in the background.
 
 For the complete procedure, see [Switching a database storage mode](../../../../devops/deployment-options/manual/bridge-management.md#database-mode).
+
+## Choosing retained copies when switching to ordinary storage {#retain-pile}
+
+Each bridged group has one part in every participating pile. When switching to `ordinary`, one part is selected for each such group; this part is retained and becomes an ordinary group. The other parts are deleted in the background. Pools already using ordinary storage are not changed: the command does not relocate their data to another pile.
+
+With `--retain-pile <pile>`, all converted groups in all database pools retain their parts in the single specified pile. You can select `PRIMARY` or another pile in the `SYNCHRONIZED` state; its role does not change. The selected pile must contain a `SYNCED` part of every group being converted. If this condition is not met for even one group, the command returns an error and no pool's mode changes. Use this option when data placement must be explicit, for example before removing another pile.
+
+Without `--retain-pile`, {{ ydb-short-name }} selects the retained part independently for each group: the previously designated retained part; if none is designated, the original inline part from which the bridged group was created; if there is no such part, the part in `PRIMARY`. The selected part must also be `SYNCED`. Consequently, after previous mode changes, different groups of the same database may remain in different piles: automatic selection does not consolidate all database data into one pile.
+
+Before switching, check the state of the group parts as described in [Verifying the result](#verify).
 
 ## Examples {#examples}
 

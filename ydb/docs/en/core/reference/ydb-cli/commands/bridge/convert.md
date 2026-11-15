@@ -29,8 +29,8 @@ View command help:
 
 ## Requirements {#requirements}
 
-- Configuration V2 and self-management must be enabled.
-- Every static and dynamic node must run a supporting build and must have been restarted with a single-pile `bridge_config`.
+- Configuration V2 and automatic configuration management (`self_management_config.enabled: true`) must be enabled.
+- Every static and dynamic node must run a {{ ydb-short-name }} build that supports conversion to bridge mode and must have been restarted with a single-pile `bridge_config`.
 - The configuration must contain exactly one pile.
 - With `--skip-storage-pool-conversion`, `bridge_config.enable_non_uniform_storage` must be `true`. With default conversion, it must be unset until conversion completes.
 

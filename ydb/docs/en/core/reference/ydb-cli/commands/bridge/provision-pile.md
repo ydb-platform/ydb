@@ -29,9 +29,9 @@ View command help:
 
 ## Requirements {#requirements}
 
-- Cluster conversion must be complete.
+- Cluster conversion must be complete. Check this with [`admin cluster bridge list`](list.md): its output must not contain `Conversion from non-bridged cluster is in progress, piles can't be added yet`.
 - The pile and its hosts must be present in the configuration, its static nodes must be running, and [list](list.md) must show it as `INACTIVE`.
-- The pile must have enough drives and failure domains for static groups, State Storage, and all bridged pools.
+- The pile must have enough drives and failure domains for static groups, State Storage, and all bridged pools. The command validates resource allocation before starting the operation: if resources are insufficient, it returns an error without starting `ADD`. Add the missing resources and rerun the command.
 - No other pile addition or removal can be in progress.
 
 For the full procedure, see [Adding a pile](../../../../devops/deployment-options/manual/bridge-management.md#add-pile).

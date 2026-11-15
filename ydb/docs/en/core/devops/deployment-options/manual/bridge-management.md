@@ -1,8 +1,10 @@
-## Managing a cluster in bridge mode
+# Managing a cluster in bridge mode
 
 {% include [feature_enterprise.md](../../../_includes/feature_enterprise.md) %}
 
 Below are typical operations for converting a cluster to [bridge mode](../../../concepts/bridge.md) and managing it using the [corresponding {{ ydb-short-name }} CLI commands](../../../reference/ydb-cli/commands/bridge/index.md).
+
+## Creating a bridge {#create}
 
 ### Convert an ordinary cluster to a single-pile bridge {#convert}
 
@@ -25,7 +27,7 @@ Conversion enables bridge mode for system storage and, by default, for all exist
           - name: pile-a
     ```
 
-    To leave existing database pools ordinary, also set `bridge_config.enable_non_uniform_storage: true`. Do not set this option for default conversion; it can be enabled after conversion completes if mixed storage modes are required.
+    To keep existing database pools in [ordinary storage mode](../../../concepts/bridge.md#storage-pools), also set `bridge_config.enable_non_uniform_storage: true`. Do not set this option for default conversion; it can be enabled after conversion completes if mixed storage modes are required.
 
 4. Replace the configuration and perform a rolling restart of all static and dynamic nodes. Every connected node must run with the new `bridge_config` before conversion starts:
 
@@ -171,6 +173,8 @@ Adding a pile allocates its storage and synchronizes bridged data without stoppi
 
 7. Start the new pile's dynamic nodes by adding the `--bridge-pile-name pile-b` option to the `ydbd server` command along with the other startup options.
 
+8. Perform a [rolling restart](../../../maintenance/manual/node_restarting.md) of the first (original) pile's dynamic nodes, for example `pile-a`.
+
 For command details, see [provision-pile](../../../reference/ydb-cli/commands/bridge/provision-pile.md) and [join-pile](../../../reference/ydb-cli/commands/bridge/rejoin.md).
 
 ### Remove a pile {#remove-pile}
@@ -229,7 +233,9 @@ Choose one of the two commands according to the required storage mode. These are
 
 `--target-database` must be the absolute path of the database and is independent of the global `--database` connection option. For a serverless database, specify its shared database; the change applies to that shared database and all its serverless databases.
 
-When switching to ordinary storage, `--retain-pile` selects the pile whose group parts must be retained. It does not disconnect the pile or change its role: you can specify `PRIMARY` or another pile in the `SYNCHRONIZED` state. The selected pile must already contain synchronized parts of every group being converted. If this option is omitted, {{ ydb-short-name }} selects retained copies automatically, potentially in different piles for different groups.
+When switching to ordinary storage, `--retain-pile` selects the pile in which parts of all converted groups are retained. It does not disconnect the pile or change its role: you can specify `PRIMARY` or another pile in the `SYNCHRONIZED` state. The selected pile must already contain a `SYNCED` part of every group being converted; otherwise, the command returns an error without changing any pool modes.
+
+If this option is omitted, {{ ydb-short-name }} selects the retained part independently for each group: the previously designated retained part, the original inline part, or the part in `PRIMARY`. Consequently, different groups of the same database may remain in different piles. For the selection rules and their implications, see [Choosing retained copies](../../../reference/ydb-cli/commands/bridge/set-database-mode.md#retain-pile).
 
 When switching to bridged storage, every existing group must reside within a single pile; a group spanning several piles cannot be converted directly.
 
@@ -277,6 +283,8 @@ Completion criteria depend on the selected mode:
 - **Cleanup after switching to ordinary storage:** redundant part rows first show `BLOCKS` and then disappear, leaving only the retained physical parts.
 
 `BridgeSyncLastError` contains the most recent synchronization error. `BridgeDataSyncProgress` covers only the data-copy stage, not the entire conversion. Do not use `BridgeSyncRunning = false` as the sole completion indicator: synchronization may still be waiting to start.
+
+## Switching piles {#switching}
 
 ### View current state {#list}
 

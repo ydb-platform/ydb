@@ -115,69 +115,6 @@ void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEI
     }
 }
 
-namespace {
-
-using TArrayByBalancerType = std::array<NHive::ECumulativeCounters, EBalancerTypeSize>;
-
-static consteval bool AllArrayIsNonZeroImpl(const TArrayByBalancerType counters, size_t index) {
-    return counters[index] != 0 && (index > 0 ? AllArrayIsNonZeroImpl(counters, index - 1) : true);
-}
-
-static consteval bool AllArrayIsNonZero(const TArrayByBalancerType counters) {
-    return AllArrayIsNonZeroImpl(counters, counters.size() - 1);
-}
-
-static consteval TArrayByBalancerType ExecutedByTypeCounters() {
-    TArrayByBalancerType counters = {};
-    counters[static_cast<size_t>(EBalancerType::Manual)] = NHive::COUNTER_BALANCER_EXECUTED_MANUAL;
-    counters[static_cast<size_t>(EBalancerType::Scatter)] = NHive::COUNTER_BALANCER_EXECUTED_SCATTER;
-    counters[static_cast<size_t>(EBalancerType::ScatterCounter)] = NHive::COUNTER_BALANCER_EXECUTED_COUNTER;
-    counters[static_cast<size_t>(EBalancerType::ScatterCPU)] = NHive::COUNTER_BALANCER_EXECUTED_CPU;
-    counters[static_cast<size_t>(EBalancerType::ScatterMemory)] = NHive::COUNTER_BALANCER_EXECUTED_MEMORY;
-    counters[static_cast<size_t>(EBalancerType::ScatterNetwork)] = NHive::COUNTER_BALANCER_EXECUTED_NETWORK;
-    counters[static_cast<size_t>(EBalancerType::Emergency)] = NHive::COUNTER_BALANCER_EXECUTED_EMERGENCY;
-    counters[static_cast<size_t>(EBalancerType::SpreadNeighbours)] = NHive::COUNTER_BALANCER_EXECUTED_SPREAD;
-    counters[static_cast<size_t>(EBalancerType::Storage)] = NHive::COUNTER_STORAGE_BALANCER_EXECUTED; // not used: the storage balancer is not a THiveBalancer
-    counters[static_cast<size_t>(EBalancerType::ScatterNamed)] = NHive::COUNTER_BALANCER_EXECUTED_SCATTER_NAMED;
-    return counters;
-}
-
-static consteval TArrayByBalancerType FailedByTypeCounters() {
-    TArrayByBalancerType counters = {};
-    counters[static_cast<size_t>(EBalancerType::Manual)] = NHive::COUNTER_BALANCER_FAILED_MANUAL;
-    counters[static_cast<size_t>(EBalancerType::Scatter)] = NHive::COUNTER_BALANCER_FAILED_SCATTER;
-    counters[static_cast<size_t>(EBalancerType::ScatterCounter)] = NHive::COUNTER_BALANCER_FAILED_COUNTER;
-    counters[static_cast<size_t>(EBalancerType::ScatterCPU)] = NHive::COUNTER_BALANCER_FAILED_CPU;
-    counters[static_cast<size_t>(EBalancerType::ScatterMemory)] = NHive::COUNTER_BALANCER_FAILED_MEMORY;
-    counters[static_cast<size_t>(EBalancerType::ScatterNetwork)] = NHive::COUNTER_BALANCER_FAILED_NETWORK;
-    counters[static_cast<size_t>(EBalancerType::Emergency)] = NHive::COUNTER_BALANCER_FAILED_EMERGENCY;
-    counters[static_cast<size_t>(EBalancerType::SpreadNeighbours)] = NHive::COUNTER_BALANCER_FAILED_SPREAD;
-    counters[static_cast<size_t>(EBalancerType::Storage)] = NHive::COUNTER_BALANCER_FAILED; // not used: the storage balancer is not a THiveBalancer
-    counters[static_cast<size_t>(EBalancerType::ScatterNamed)] = NHive::COUNTER_BALANCER_FAILED_SCATTER_NAMED;
-    return counters;
-}
-
-static consteval TArrayByBalancerType TabletsMovedByTypeCounters() {
-    TArrayByBalancerType counters = {};
-    counters[static_cast<size_t>(EBalancerType::Manual)] = NHive::COUNTER_TABLETS_MOVED_MANUAL;
-    counters[static_cast<size_t>(EBalancerType::Scatter)] = NHive::COUNTER_TABLETS_MOVED_SCATTER;
-    counters[static_cast<size_t>(EBalancerType::ScatterCounter)] = NHive::COUNTER_TABLETS_MOVED_COUNTER;
-    counters[static_cast<size_t>(EBalancerType::ScatterCPU)] = NHive::COUNTER_TABLETS_MOVED_CPU;
-    counters[static_cast<size_t>(EBalancerType::ScatterMemory)] = NHive::COUNTER_TABLETS_MOVED_MEMORY;
-    counters[static_cast<size_t>(EBalancerType::ScatterNetwork)] = NHive::COUNTER_TABLETS_MOVED_NETWORK;
-    counters[static_cast<size_t>(EBalancerType::Emergency)] = NHive::COUNTER_TABLETS_MOVED_EMERGENCY;
-    counters[static_cast<size_t>(EBalancerType::SpreadNeighbours)] = NHive::COUNTER_TABLETS_MOVED_SPREAD;
-    counters[static_cast<size_t>(EBalancerType::Storage)] = NHive::COUNTER_TABLETS_STORAGE_REASSIGNED; // not used: the storage balancer is not a THiveBalancer
-    counters[static_cast<size_t>(EBalancerType::ScatterNamed)] = NHive::COUNTER_TABLETS_MOVED_SCATTER_NAMED;
-    return counters;
-}
-
-static_assert(AllArrayIsNonZero(ExecutedByTypeCounters()));
-static_assert(AllArrayIsNonZero(FailedByTypeCounters()));
-static_assert(AllArrayIsNonZero(TabletsMovedByTypeCounters()));
-
-} // anonymous namespace
-
 class THiveBalancer : public NActors::TActorBootstrapped<THiveBalancer>, public ISubActor {
 protected:
     constexpr static TDuration TIMEOUT = TDuration::Minutes(10);
@@ -205,10 +142,13 @@ protected:
         return Hive->GetLogPrefix();
     }
 
-    void IncrementByType(const TArrayByBalancerType& byType, ui64 value = 1) const {
-        const size_t index = static_cast<size_t>(Settings.Type);
-        if (index < byType.size() && value > 0 && Hive->ExportPerResourceCounters()) {
-            Hive->TabletCounters->Cumulative()[byType[index]].Increment(value);
+    using TCountersByBalancerType = std::array<THive::TBalanceCounters::TCounterPtr, EBalancerTypeSize>;
+
+    void IncrementByType(TCountersByBalancerType THive::TBalanceCounters::* byType) const {
+        if (Hive->BalanceCounters) {
+            if (const auto& counter = (*Hive->BalanceCounters.*byType)[static_cast<size_t>(Settings.Type)]) {
+                counter->Inc();
+            }
         }
     }
 
@@ -263,7 +203,7 @@ protected:
         Hive->RemoveSubActor(this);
         if (Movements == 0) {
             Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_FAILED].Increment(1);
-            IncrementByType(FailedByTypeCounters());
+            IncrementByType(&THive::TBalanceCounters::BalancerFailed);
             // we failed to balance specific nodes
             for (TNodeId nodeId : Settings.FilterNodeIds) {
                 TNodeInfo* node = Hive->FindNode(nodeId);
@@ -595,7 +535,7 @@ protected:
                     if (Settings.MaxMovements != 0) {
                         details << "/" << Settings.MaxMovements;
                     }
-                    IncrementByType(TabletsMovedByTypeCounters());
+                    IncrementByType(&THive::TBalanceCounters::TabletsMoved);
                     Hive->RecordTabletMove(now, *tablet, *tablet->Node, *node, expediency.Reason, std::move(details));
                     Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
                     UpdateProgress();
@@ -645,7 +585,7 @@ public:
         UpdateProgress();
         RunStats.StartTime = TActivationContext::Now();
         Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_EXECUTED].Increment(1);
-        IncrementByType(ExecutedByTypeCounters());
+        IncrementByType(&THive::TBalanceCounters::BalancerExecuted);
         YDB_LOG_INFO("Balancer started",
             {"logPrefix", GetLogPrefix()},
             {"balancerType", EBalancerTypeName(Settings.Type)},

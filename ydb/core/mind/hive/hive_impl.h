@@ -464,6 +464,35 @@ protected:
     std::array<TBalancerStats, EBalancerTypeSize> BalancerStats;
     // group of the per-node counters (service tablets, type=HIVE, subgroup peer_node_id per node), see TNodeInfo::TCounters; present while CountersExportMode is at least HIVE_PER_NODE_COUNTERS.
     TIntrusivePtr<::NMonitoring::TDynamicCounters> PerNodeCountersGroup;
+    // Balancing counters (service tablets, type=HIVE), present while CountersExportMode is at least PER_RESOURCE_COUNTERS.
+    // Dynamic rather than tablet counters, which are exported in every mode; expiring, so releasing this struct removes them.
+    struct TBalanceCounters {
+        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+
+        // Per NMetrics::EResource, from the stats the scatter balancer is triggered on, in percent.
+        // Usages count only what tablets report (no TotalResourceUsage from Local); Cpu/Mem/Net usages below
+        // MinNodeUsageToBalance are raised to it. UsageMin/UsageMax of Counter are the number of tablets: every node's
+        // Counter maximum is MaxResourceCounter (1e8 by default), so the percent would round to 0.
+        // Scatter = (UsageMax - UsageMin) / UsageMax; a Counter scatter of one tablet is set to 0.
+        struct TResourceCounters {
+            TCounterPtr Scatter;
+            TCounterPtr UsageMin;
+            TCounterPtr UsageMax;
+        };
+        std::array<TResourceCounters, NMetrics::EResource::Counter + 1> ByResource;
+        // Alive nodes at least MaxNodeUsageToKick (TNodeInfo::IsOverloaded), what gates the emergency balancer.
+        TCounterPtr NodesOverloaded;
+
+        // Derivative, per EBalancerType; null for Storage, which TStorageBalancer runs with its own counters.
+        // TabletsMoved also counts drain and fill moves, counted by DrainExecuted and FillExecuted:
+        // TabletsMoved = sum of TabletsMoved<Type> + DrainExecuted + FillExecuted.
+        std::array<TCounterPtr, EBalancerTypeSize> BalancerExecuted;
+        std::array<TCounterPtr, EBalancerTypeSize> BalancerFailed;
+        std::array<TCounterPtr, EBalancerTypeSize> TabletsMoved;
+
+        explicit TBalanceCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group);
+    };
+    std::unique_ptr<TBalanceCounters> BalanceCounters;
     NKikimrHive::EMigrationState MigrationState = NKikimrHive::EMigrationState::MIGRATION_UNKNOWN;
     i32 MigrationProgress = 0;
     NKikimrHive::TEvSeizeTablets MigrationFilter;

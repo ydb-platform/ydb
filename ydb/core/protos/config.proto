@@ -2784,13 +2784,6 @@ message THiveConfig {
         optional string EnumDescription = 61003;
     }
 
-    enum ECountersExportMode {
-        COUNTERS_EXPORT_MODE_BASIC = 0 [(EnumDescription) = "only the basic Hive counters"];
-        COUNTERS_EXPORT_MODE_PER_RESOURCE_COUNTERS = 10 [(EnumDescription) = "also per-resource balancing counters (BalanceScatterCpu, BalancerExecuted by balancer type etc.)"];
-        COUNTERS_EXPORT_MODE_LOCAL_PER_NODE_COUNTERS = 20 [(EnumDescription) = "also node usage counters in Locals of this Hive, each node exports its own"];
-        COUNTERS_EXPORT_MODE_HIVE_PER_NODE_COUNTERS = 30 [(EnumDescription) = "also counters per node in Hive itself: all of them on the Hive node, the heaviest mode"];
-    }
-
     enum EHiveStorageBalanceStrategy {
         HIVE_STORAGE_BALANCE_STRATEGY_AUTO = 0 [(EnumDescription) = "use the parameter with maximum consumption"];
         HIVE_STORAGE_BALANCE_STRATEGY_IOPS = 1 [(EnumDescription) = "consider only IOPS"];
@@ -2836,6 +2829,13 @@ message THiveConfig {
     enum EHiveBootStrategy {
         HIVE_BOOT_STRATEGY_BALANCED = 0 [(EnumDescription) = "when the per-node startup limit is reached on one node, stop starting new tablets on all nodes"];
         HIVE_BOOT_STRATEGY_FAST = 1 [(EnumDescription) = "when the per-node startup limit is reached on one node, continue starting tablets on other nodes"];
+    }
+
+    enum ECountersExportMode {
+        COUNTERS_EXPORT_MODE_BASIC = 0 [(EnumDescription) = "only the basic Hive counters"];
+        COUNTERS_EXPORT_MODE_PER_RESOURCE_COUNTERS = 10 [(EnumDescription) = "also per-resource balancing counters (BalanceScatterCpu, BalancerExecuted by balancer type etc.)"];
+        COUNTERS_EXPORT_MODE_LOCAL_PER_NODE_COUNTERS = 20 [(EnumDescription) = "also node usage counters in Locals of this Hive, each node exports its own"];
+        COUNTERS_EXPORT_MODE_HIVE_PER_NODE_COUNTERS = 30 [(EnumDescription) = "also counters per node in Hive itself: all of them on the Hive node, the heaviest mode"];
     }
 
     message TBootPriority {

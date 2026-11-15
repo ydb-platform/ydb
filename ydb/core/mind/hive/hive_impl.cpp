@@ -4729,43 +4729,28 @@ void THive::Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr&) {
     TabletCounters->Simple()[NHive::COUNTER_BALANCE_USAGE_MIN].Set(stats.MinUsage * 100);
     TabletCounters->Simple()[NHive::COUNTER_BALANCE_USAGE_MAX].Set(stats.MaxUsage * 100);
 
-    // the same per resource, straight from the stats the balancer decision is made on: ScatterByResource is what
-    // CheckScatter compares with MinScatterToBalance, Min/MaxResourceNormValues is the range it is computed from
-    // Min/max of Counter are exported as the number of tablets, not in percent: every node's Counter maximum is
-    // MaxResourceCounter (1e8 by default), so the percent would round to 0. Scatter is a ratio and stays in percent.
-    // Below PER_RESOURCE_COUNTERS these counters are kept at 0 (tablet counters are always exported).
-    const bool exportPerResource = ExportPerResourceCounters();
-    auto setPerResource = [&](NHive::ESimpleCounters counter, NHive::ESimpleCounters minCounter, NHive::ESimpleCounters maxCounter, auto resource) {
-        if (!exportPerResource) {
-            TabletCounters->Simple()[counter].Set(0);
-            TabletCounters->Simple()[minCounter].Set(0);
-            TabletCounters->Simple()[maxCounter].Set(0);
-            return;
-        }
-        const double usageScale = resource() == NMetrics::EResource::Counter ? CurrentConfig.GetMaxResourceCounter() : 100;
-        TabletCounters->Simple()[counter].Set(std::get<resource>(stats.ScatterByResource) * 100);
-        TabletCounters->Simple()[minCounter].Set(std::llround(std::get<resource>(stats.MinResourceNormValues) * usageScale));
-        TabletCounters->Simple()[maxCounter].Set(std::llround(std::get<resource>(stats.MaxResourceNormValues) * usageScale));
-    };
-    setPerResource(NHive::COUNTER_BALANCE_SCATTER_COUNTER, NHive::COUNTER_BALANCE_USAGE_MIN_COUNTER, NHive::COUNTER_BALANCE_USAGE_MAX_COUNTER,
-        std::integral_constant<size_t, NMetrics::EResource::Counter>());
-    setPerResource(NHive::COUNTER_BALANCE_SCATTER_CPU, NHive::COUNTER_BALANCE_USAGE_MIN_CPU, NHive::COUNTER_BALANCE_USAGE_MAX_CPU,
-        std::integral_constant<size_t, NMetrics::EResource::CPU>());
-    setPerResource(NHive::COUNTER_BALANCE_SCATTER_MEMORY, NHive::COUNTER_BALANCE_USAGE_MIN_MEMORY, NHive::COUNTER_BALANCE_USAGE_MAX_MEMORY,
-        std::integral_constant<size_t, NMetrics::EResource::Memory>());
-    setPerResource(NHive::COUNTER_BALANCE_SCATTER_NETWORK, NHive::COUNTER_BALANCE_USAGE_MIN_NETWORK, NHive::COUNTER_BALANCE_USAGE_MAX_NETWORK,
-        std::integral_constant<size_t, NMetrics::EResource::Network>());
+    if (BalanceCounters) {
+        auto setPerResource = [&](auto resource) {
+            auto& counters = BalanceCounters->ByResource[resource()];
+            const double usageScale = resource() == NMetrics::EResource::Counter ? CurrentConfig.GetMaxResourceCounter() : 100;
+            counters.Scatter->Set(std::get<resource>(stats.ScatterByResource) * 100);
+            counters.UsageMin->Set(std::llround(std::get<resource>(stats.MinResourceNormValues) * usageScale));
+            counters.UsageMax->Set(std::llround(std::get<resource>(stats.MaxResourceNormValues) * usageScale));
+        };
+        setPerResource(std::integral_constant<size_t, NMetrics::EResource::CPU>());
+        setPerResource(std::integral_constant<size_t, NMetrics::EResource::Memory>());
+        setPerResource(std::integral_constant<size_t, NMetrics::EResource::Network>());
+        setPerResource(std::integral_constant<size_t, NMetrics::EResource::Counter>());
 
-    // the condition that gates the emergency balancer, counted as Handle(TEvProcessTabletBalancer) counts it
-    ui64 nodesOverloaded = 0;
-    if (exportPerResource) {
+        // counted as Handle(TEvProcessTabletBalancer) counts it
+        ui64 nodesOverloaded = 0;
         for (const auto& [nodeId, nodeInfo] : Nodes) {
             if (nodeInfo.IsAlive() && !nodeInfo.Down && nodeInfo.IsOverloaded()) {
                 ++nodesOverloaded;
             }
         }
+        BalanceCounters->NodesOverloaded->Set(nodesOverloaded);
     }
-    TabletCounters->Simple()[NHive::COUNTER_NODES_OVERLOADED].Set(nodesOverloaded);
 
     auto& nodeUsageHistogram = TabletCounters->Percentile()[NHive::COUNTER_NODE_USAGE];
     nodeUsageHistogram.Clear();
@@ -5266,13 +5251,68 @@ void THive::UpdateNodeCounters(TNodeInfo& node) {
 }
 
 void THive::UpdateCountersExportMode() {
-    if (ExportHivePerNodeCounters() || !PerNodeCountersGroup) {
-        return;
+    if (!ExportPerResourceCounters()) {
+        BalanceCounters.reset();
+    } else if (!BalanceCounters) {
+        BalanceCounters = std::make_unique<TBalanceCounters>(GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("type", "HIVE"));
     }
-    for (auto& [_, node] : Nodes) {
-        node.DropCounters();
+    if (!ExportHivePerNodeCounters() && PerNodeCountersGroup) {
+        for (auto& [_, node] : Nodes) {
+            node.DropCounters();
+        }
+        PerNodeCountersGroup.Reset();
     }
-    PerNodeCountersGroup.Reset();
+}
+
+namespace {
+
+// metric name suffix per EBalancerType; Storage has none, see TBalanceCounters
+consteval std::array<TStringBuf, EBalancerTypeSize> BalancerTypeCounterSuffixes() {
+    std::array<TStringBuf, EBalancerTypeSize> suffixes = {};
+    suffixes[static_cast<size_t>(EBalancerType::Manual)] = "Manual";
+    suffixes[static_cast<size_t>(EBalancerType::Scatter)] = "Scatter";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterCounter)] = "ScatterCtr";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterCPU)] = "ScatterCpu";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterMemory)] = "ScatterMem";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterNetwork)] = "ScatterNet";
+    suffixes[static_cast<size_t>(EBalancerType::Emergency)] = "Emergency";
+    suffixes[static_cast<size_t>(EBalancerType::SpreadNeighbours)] = "Spread";
+    suffixes[static_cast<size_t>(EBalancerType::ScatterNamed)] = "ScatterNamed";
+    return suffixes;
+}
+
+consteval bool OnlyStorageHasNoSuffix(const std::array<TStringBuf, EBalancerTypeSize>& suffixes) {
+    for (size_t i = 0; i < suffixes.size(); ++i) {
+        if ((suffixes[i] == nullptr) != (i == static_cast<size_t>(EBalancerType::Storage))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static_assert(OnlyStorageHasNoSuffix(BalancerTypeCounterSuffixes()));
+
+constexpr std::array<TStringBuf, NMetrics::EResource::Counter + 1> RESOURCE_COUNTER_SUFFIXES = {"Cpu", "Mem", "Net", "Ctr"};
+static_assert(NMetrics::EResource::CPU == 0 && NMetrics::EResource::Memory == 1 && NMetrics::EResource::Network == 2 && NMetrics::EResource::Counter == 3);
+
+} // anonymous namespace
+
+THive::TBalanceCounters::TBalanceCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group) {
+    for (size_t resource = 0; resource < ByResource.size(); ++resource) {
+        TStringBuf suffix = RESOURCE_COUNTER_SUFFIXES[resource];
+        ByResource[resource].Scatter = group->GetExpiringCounter(TStringBuilder() << "BalanceScatter" << suffix);
+        ByResource[resource].UsageMin = group->GetExpiringCounter(TStringBuilder() << "BalanceUsageMin" << suffix);
+        ByResource[resource].UsageMax = group->GetExpiringCounter(TStringBuilder() << "BalanceUsageMax" << suffix);
+    }
+    NodesOverloaded = group->GetExpiringCounter("NodesOverloaded");
+    static constexpr auto typeSuffixes = BalancerTypeCounterSuffixes();
+    for (size_t type = 0; type < typeSuffixes.size(); ++type) {
+        if (TStringBuf suffix = typeSuffixes[type]) {
+            BalancerExecuted[type] = group->GetExpiringCounter(TStringBuilder() << "BalancerExecuted" << suffix, true);
+            BalancerFailed[type] = group->GetExpiringCounter(TStringBuilder() << "BalancerFailed" << suffix, true);
+            TabletsMoved[type] = group->GetExpiringCounter(TStringBuilder() << "TabletsMoved" << suffix, true);
+        }
+    }
 }
 
 void THive::LogBalancerNotStarted(const TString& balancerType, EBalancerSuppressReason reason) {

@@ -63,7 +63,7 @@ def prepare(repo_root, output, preview=False):
                     for p in page.get('fragments', [])]
         if sorted(actual) != sorted(required):
             raise ValueError(f'Incompatible upstream extension points: {source}')
-        if required and 'if ydb_docs_overlay' not in content:
+        if required and 'if YDB' not in content:
             raise ValueError(f'Missing consumer condition: {source}')
         copies.append((source, target.relative_to(docs)))
         for relative in page.get('fragments', []):
@@ -76,14 +76,14 @@ def prepare(repo_root, output, preview=False):
             destinations.add(destination)
             copies.append((fragment, destination.relative_to(docs)))
     presets = (docs / 'presets.yaml').read_text()
-    if presets.count('default:\n') != 1 or re.search(r'^\s*ydb_docs_overlay:', presets, re.M):
+    if presets.count('default:\n') != 1 or re.search(r'^\s*YDB:', presets, re.M):
         raise ValueError('Unexpected root presets structure or existing overlay variable')
     shutil.copytree(docs, output, ignore=shutil.ignore_patterns('__pycache__', '.DS_Store'))
     for source, relative in copies:
         destination = output / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
-    (output / 'presets.yaml').write_text(presets.replace('default:\n', 'default:\n  ydb_docs_overlay: true\n', 1))
+    (output / 'presets.yaml').write_text(presets.replace('default:\n', 'default:\n  YDB: true\n', 1))
 
 
 if __name__ == '__main__':

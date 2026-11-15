@@ -13,7 +13,7 @@ for both locales. Paths are relative to `yql/essentials/docs/<locale>` and
 `ydb/docs/<locale>/core/yql/reference`, respectively.
 
 - `import`: copy the common page unchanged.
-- `include`: copy the common page containing optional `ydb_docs_overlay` branches
+- `include`: copy the common page containing optional `YDB` branches
   and install the corresponding files from `overlays/<locale>` beside it.
   The preparer enables the variable in the **output** presets. Ordinary YQL builds
   leave it unset and use the original text without requiring the YDB fragments.

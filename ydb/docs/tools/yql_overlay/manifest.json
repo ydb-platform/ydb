@@ -12,7 +12,7 @@
       "fragments": [
         "_includes/_ydb/cast_examples-01.md"
       ],
-      "hooked_sha256": "28eef51adec277805594dfecfd8734df59043475c0a4d336ecfaf6bbbbfefa2b"
+      "hooked_sha256": "df0943f510a13cd64706e07aa189bce3b73102aa6fa49993d1444be716a8e004"
     },
     {
       "lang": "ru",
@@ -40,7 +40,7 @@
       "fragments": [
         "_includes/_ydb/topg-01.md"
       ],
-      "hooked_sha256": "4ef7770962a6fe28ba03739721f5180ce4d10f07186791a64d69b7d72124e135"
+      "hooked_sha256": "873076f3498433a98b44320eccbf2a965a19caa07b87a136966b1ced09b92c13"
     },
     {
       "lang": "ru",
@@ -75,7 +75,7 @@
         "builtins/_ydb/aggregation-23.md",
         "builtins/_ydb/aggregation-24.md"
       ],
-      "hooked_sha256": "4ea9af9647d03f55900976a3fe6058f13cda368ece2980f6317dcdd71ce5c175"
+      "hooked_sha256": "d7cae95dceadee4327fe9cfbd83b1aaa9e7509f2569dc2facdc176e632867837"
     },
     {
       "lang": "ru",
@@ -135,7 +135,7 @@
         "builtins/_ydb/basic-48.md",
         "builtins/_ydb/basic-49.md"
       ],
-      "hooked_sha256": "13bb3f3814f9c3260496ec23170e6ef7aa8a5a06e28e2d4a224df02e95b74d40"
+      "hooked_sha256": "c0ddba0ee0045662939dfbb4a12ff6eaaa5ffedd6f720f828a8fc4545c65ff35"
     },
     {
       "lang": "ru",
@@ -156,7 +156,7 @@
         "builtins/_ydb/codegen-09.md",
         "builtins/_ydb/codegen-10.md"
       ],
-      "hooked_sha256": "a49a0acf451b2cf4262909bd594fb41132ef5aad6d3f01dad0769cfd37bcc550"
+      "hooked_sha256": "e4e30aaca2209faf8d998545d491d87d55a82e237db415a20c4de4a1580d8081"
     },
     {
       "lang": "ru",
@@ -183,7 +183,7 @@
         "builtins/_ydb/dict-15.md",
         "builtins/_ydb/dict-16.md"
       ],
-      "hooked_sha256": "f6071dc94795484752e5a3ebb7d16d704a9a46f0269f3b3cd73946032169942c"
+      "hooked_sha256": "2e3cc55d9811bfaf65e2564fcb1ceceaf5bdd7ee6827a1fe5143835a4e94325f"
     },
     {
       "lang": "ru",
@@ -195,7 +195,7 @@
       "fragments": [
         "builtins/_ydb/index-01.md"
       ],
-      "hooked_sha256": "21d66072090b4bfd2da5a846e7e83e7604cf992b0a823884c089b081c6017a36"
+      "hooked_sha256": "5b42c3a788dda5811d50c7e0e52d344013d047d37afc9949ede38d5d5aaa9077"
     },
     {
       "lang": "ru",
@@ -252,7 +252,7 @@
         "builtins/_ydb/list-36.md",
         "builtins/_ydb/list-37.md"
       ],
-      "hooked_sha256": "b40eb0405246556ae7e2f7b9ed5a66034145ea4a69d72fce1e8a3b24f607ac2f"
+      "hooked_sha256": "d7007efb1488c89da06538784bdc48f0b52d21f644676c1ff2cba209a046397c"
     },
     {
       "lang": "ru",
@@ -279,7 +279,7 @@
         "builtins/_ydb/struct-15.md",
         "builtins/_ydb/struct-16.md"
       ],
-      "hooked_sha256": "45e707fe9302b79f31baf56e820778d8322bb4883c7b7986307ef8f27746b735"
+      "hooked_sha256": "228aef984ec08d1c02d748c4e19ce499ad9e7ccdff14e28c86c1156ed19c22f4"
     },
     {
       "lang": "ru",
@@ -311,7 +311,7 @@
         "builtins/_ydb/types-20.md",
         "builtins/_ydb/types-21.md"
       ],
-      "hooked_sha256": "adf75fc55d45de4236108464fa8b62289bbccd8705f1e968a0da2b51098e9476"
+      "hooked_sha256": "855bddaec20cdda6eda46137565dd81eac141787c3dce34e682fee7f3ab6b977"
     },
     {
       "lang": "ru",
@@ -330,7 +330,7 @@
         "builtins/_ydb/window-07.md",
         "builtins/_ydb/window-08.md"
       ],
-      "hooked_sha256": "5b9ed8790d6de5cef8d3156e7f162f30dc6d16b44fa9bd3118213bb5494b0db3"
+      "hooked_sha256": "9a9dc089b9ec43ec2d67d943eb4e9b452460676847d76a9134f56073e6568599"
     },
     {
       "lang": "ru",
@@ -351,7 +351,7 @@
       "fragments": [
         "recipes/_ydb/accessing-json-01.md"
       ],
-      "hooked_sha256": "a5db00a6ae346f23dac862e2627cfb6cc864f07a4d460cc7ef84a871e5c3bddf"
+      "hooked_sha256": "2aa4f0e41a27845d3679183ee44a95dc5fb72fba1263bb48dc5bb9ea870588a1"
     },
     {
       "lang": "ru",
@@ -363,7 +363,7 @@
       "fragments": [
         "recipes/_ydb/index-01.md"
       ],
-      "hooked_sha256": "f64fefe5e4835fe4367d9d3490f64acff8bf044207401db5060b758d5f35cdfe"
+      "hooked_sha256": "d34383ffefeca11882c7b243a3459127650ecef1ea684e006f15183fe30d03e8"
     },
     {
       "lang": "ru",
@@ -385,7 +385,7 @@
         "syntax/_ydb/action-02.md",
         "syntax/_ydb/action-03.md"
       ],
-      "hooked_sha256": "b3d769d128f5a8aa7cdba7fb3f7b131805c1a8569ed6c773cca74b697bc1a11b"
+      "hooked_sha256": "1e242e5e04da6d216cac12827871604b223525818ed3cc43ae8c59fe437f7210"
     },
     {
       "lang": "ru",
@@ -414,7 +414,7 @@
       "fragments": [
         "syntax/_ydb/discard-01.md"
       ],
-      "hooked_sha256": "a7682fed0d1fadbf27a22f1ae18ede322e20c67c651767efbe2c8c75046ff06b"
+      "hooked_sha256": "e6379d9fb0f8c918cc19f42625d61b7c83eee43d4cfd1d6c33b4d32db047fd1d"
     },
     {
       "lang": "ru",
@@ -426,7 +426,7 @@
       "fragments": [
         "syntax/_ydb/export_import-01.md"
       ],
-      "hooked_sha256": "9cde160d1dc75356d6516919974cbef061c0ff4d8817bee5b738046c951215bf"
+      "hooked_sha256": "11cc766bc7d5ab30ed4746a7814ce006e7942f1c3db5037e653de54b12e2359d"
     },
     {
       "lang": "ru",
@@ -453,7 +453,7 @@
         "syntax/_ydb/expressions-15.md",
         "syntax/_ydb/expressions-16.md"
       ],
-      "hooked_sha256": "dc4c656e71d5aae6a339e7de1c67ef1ada80f5513e698124dc029940ee0d4ffc"
+      "hooked_sha256": "b9ad1641809c282d977a2bc7f3f412c6874d4a05cf31d9b4d09806ae015ae2c6"
     },
     {
       "lang": "ru",
@@ -467,7 +467,7 @@
         "syntax/select/_ydb/flatten-02.md",
         "syntax/select/_ydb/flatten-03.md"
       ],
-      "hooked_sha256": "4fb789153974df6001f09b67980723a2b78e350d6e6766640f8f4200c9c282d8"
+      "hooked_sha256": "e9e250ff881dddf42f242931ca54a0d36d8fb4bbfd17253e49379bc28c8a5f34"
     },
     {
       "lang": "ru",
@@ -506,7 +506,7 @@
       "fragments": [
         "syntax/_ydb/into_result-01.md"
       ],
-      "hooked_sha256": "882f6287441578af88d709db090fdcac40d0e17d909efc7ed3592fc96bb4936d"
+      "hooked_sha256": "99ee0b9b05ec4c4d3a058ee9d8c6cfeb836874c104e26c28a07c4bbf6e0463c1"
     },
     {
       "lang": "ru",
@@ -520,7 +520,7 @@
         "syntax/select/_ydb/join-02.md",
         "syntax/select/_ydb/join-03.md"
       ],
-      "hooked_sha256": "cc271b36630c80e756fd0c123691fa3a2b0edb5506b941677819a32012721f6f"
+      "hooked_sha256": "2a46bf910f09e18f512b40851d627ec0d76cc206dcc30cdf63b2efbbf5724c8d"
     },
     {
       "lang": "ru",
@@ -542,7 +542,7 @@
         "syntax/_ydb/not_yet_supported-01.md",
         "syntax/_ydb/not_yet_supported-02.md"
       ],
-      "hooked_sha256": "91f9a8e9a1d72daad315c02fd296bc9fc5a3d65fb04ee9e267280d370db83160"
+      "hooked_sha256": "d36d1f67d8167970dd9928164d0f41c273a3422cae1621cbb6af5f2bc66a8826"
     },
     {
       "lang": "ru",
@@ -554,7 +554,7 @@
       "fragments": [
         "syntax/_ydb/process-01.md"
       ],
-      "hooked_sha256": "50eae7043d8e4cb1bfab677e431c43e187687c665327b0c89454a6c305b2ed82"
+      "hooked_sha256": "f3b4a4fe22a8fb83850535410fb1754c7798b6d5b3c654e9371d556eafe7be6c"
     },
     {
       "lang": "ru",
@@ -592,7 +592,7 @@
         "syntax/select/_ydb/distinct-01.md",
         "syntax/select/_ydb/distinct-02.md"
       ],
-      "hooked_sha256": "530a450a8f2d79f76041db1df1e5730b59b808206a7a3c3181c4ba26ca1a1098"
+      "hooked_sha256": "901e4f99c5110bff53a84e069741a934c96090fc9b103b73dbfc682dfd4ae870"
     },
     {
       "lang": "ru",
@@ -604,7 +604,7 @@
       "fragments": [
         "syntax/select/_ydb/from-01.md"
       ],
-      "hooked_sha256": "421c097bd173f560658cd88713e7e73285a3c18a2f07d6d70f150413edd6bd76"
+      "hooked_sha256": "c0730a7f60b8e094fde5739df4fa234a5025a27be7686a85d8b0c24edcc1c632"
     },
     {
       "lang": "ru",
@@ -617,7 +617,7 @@
         "syntax/select/_ydb/from_as_table-01.md",
         "syntax/select/_ydb/from_as_table-02.md"
       ],
-      "hooked_sha256": "7d53c033736ab9937b5b0c71b823fd2b7bd65e76029edbe96d8aab6fcc36a829"
+      "hooked_sha256": "2ec3683c5f4397ccb39a23af54830a41d5613b2e5798f6e340775b35113b82f9"
     },
     {
       "lang": "ru",
@@ -655,7 +655,7 @@
         "syntax/select/_ydb/order_by-01.md",
         "syntax/select/_ydb/order_by-02.md"
       ],
-      "hooked_sha256": "670b3150254411e49aa3b2d5b9b9e578628dcf8746811aac5eb004b4fa777b15"
+      "hooked_sha256": "cafb45d6e809eac88319dc673056153a1ed2bc6a3555e1bc5902db7336ae27fd"
     },
     {
       "lang": "ru",
@@ -667,7 +667,7 @@
       "fragments": [
         "syntax/select/_ydb/sample-01.md"
       ],
-      "hooked_sha256": "69f5b32fc6e876db4845b4e2d04d1f2318f931ca2edd534e33d4546084de0e07"
+      "hooked_sha256": "a545c5422a4b43afcd4bb370da6f0930016e66d9d6071e52a3d2e568d79c9e51"
     },
     {
       "lang": "ru",
@@ -679,7 +679,7 @@
       "fragments": [
         "syntax/select/_ydb/unique_distinct_hints-01.md"
       ],
-      "hooked_sha256": "1de9c059c63738802dbed23a355af279fcc3660b9f8f722fe644acca77e3d659"
+      "hooked_sha256": "8819117879234ac53da84e0cdccb2f8bfde91e1634d8ccfb3a7ae95d1cff40e9"
     },
     {
       "lang": "ru",
@@ -692,7 +692,7 @@
         "syntax/select/_ydb/where-01.md",
         "syntax/select/_ydb/where-02.md"
       ],
-      "hooked_sha256": "31a3bab63028e5c2d821047ba6856d6867f8ca8ca145147183623ab953ee42c7"
+      "hooked_sha256": "19f7084fabb5a363c578f35265856e673a4115d496b47ee2e688d683a833276b"
     },
     {
       "lang": "ru",
@@ -705,7 +705,7 @@
         "syntax/select/_ydb/with-01.md",
         "syntax/select/_ydb/with-02.md"
       ],
-      "hooked_sha256": "3ea38615cc986c88be0ceb920cc97fc532482a517d39581a7fc3dc03a8c8b8e1"
+      "hooked_sha256": "317834bcf920e22c441f3b7381a8a50d545d371dbb4422fa8355df093bb72363"
     },
     {
       "lang": "ru",
@@ -728,7 +728,7 @@
         "syntax/_ydb/subquery-02.md",
         "syntax/_ydb/subquery-03.md"
       ],
-      "hooked_sha256": "1762ff988fb56e823f808637d4fef0ab38b4ead91516631b3d8e78550f09b4b3"
+      "hooked_sha256": "e82591151a348c3d8b26985caaf29ca5ce660496e8356e914f1991c7166cbca3"
     },
     {
       "lang": "ru",
@@ -741,7 +741,7 @@
         "syntax/_ydb/use-01.md",
         "syntax/_ydb/use-02.md"
       ],
-      "hooked_sha256": "217b15d447bded759026491343db6ac83cdabade0bc35bdbda0694f60f80e442"
+      "hooked_sha256": "641c13096662a3aeba144af535b59944ae61cce4307cce2eb9ca62d90aff4456"
     },
     {
       "lang": "ru",
@@ -766,7 +766,7 @@
         "syntax/select/_ydb/window-04.md",
         "syntax/select/_ydb/window-05.md"
       ],
-      "hooked_sha256": "2d86271c136be278c43b3f73a03ff06a56c7c731e30f412725a647a696a11740"
+      "hooked_sha256": "ccc20bb5b976905c71ea287eee06c81c6d4f96fb233b7ded4ca96e3c7a1282a8"
     },
     {
       "lang": "ru",
@@ -786,7 +786,7 @@
       "fragments": [
         "types/_ydb/containers-01.md"
       ],
-      "hooked_sha256": "d837fc1b4324a29539032c0d81422cd0bd05521aa0ae29fcd9697836e7cabddf"
+      "hooked_sha256": "51c52037dc50673adb351d7741111763e09cfdedf13006f9eb954a9ba1b1549d"
     },
     {
       "lang": "ru",
@@ -798,7 +798,7 @@
       "fragments": [
         "types/_ydb/index-01.md"
       ],
-      "hooked_sha256": "4507f146a0ce43a176bb92071083741c3c3874b7d3a786db67a2937feed28fbf"
+      "hooked_sha256": "eed58033d69d9e7c5a3c080085a9bb8af8775d3bec9485dbface7fe5b2b23d10"
     },
     {
       "lang": "ru",
@@ -820,7 +820,7 @@
         "types/_ydb/optional-01.md",
         "types/_ydb/optional-02.md"
       ],
-      "hooked_sha256": "98642aaac9981f78a5c4f78b6aff4181ec762e6d85d8a980a56ea2c4681f4a51"
+      "hooked_sha256": "2f021cc3a4852d2d3cfe63faa9068e1aa60c18f3b56833716d47dec6ca0c0b66"
     },
     {
       "lang": "ru",
@@ -841,7 +841,7 @@
       "fragments": [
         "types/_ydb/special-01.md"
       ],
-      "hooked_sha256": "6e3714c0415976d765316342e923dbf579eeba2c2641ca1afeed4dbec022de47"
+      "hooked_sha256": "7dca3bf172039e0f63dab09dd021d2c5056edaaa59ac97bc846ca608d44069b5"
     },
     {
       "lang": "ru",
@@ -878,7 +878,7 @@
       "fragments": [
         "udf/list/_ydb/digest-01.md"
       ],
-      "hooked_sha256": "d31e766d9faf4aacd3d7e42e53801091ee4e09d6c45e4963162236cf49eac6fa"
+      "hooked_sha256": "d155ea1d475339b42a22e3fb6388adf2cf9135d698ad976f7ba7aa3e9584185a"
     },
     {
       "lang": "ru",
@@ -890,7 +890,7 @@
       "fragments": [
         "udf/list/_ydb/histogram-01.md"
       ],
-      "hooked_sha256": "e4f575485e44635772620a54fc07dfe56b0b10bd3be209253759f80bb2eb46bd"
+      "hooked_sha256": "5e862ef8dcb0c0f34f26ca89f9a774e68f54964134bf63b1a949ea9328dd8b59"
     },
     {
       "lang": "ru",
@@ -911,7 +911,7 @@
       "fragments": [
         "udf/list/_ydb/index-01.md"
       ],
-      "hooked_sha256": "ddfffb3b50215c078d636bf6ae6e583b43ec90c78de0ac7e86d18820da42622b"
+      "hooked_sha256": "3b465f9ddf7d5e1cb61ca63273f629c4cc973cb67b768c6821b406006cae15c2"
     },
     {
       "lang": "ru",
@@ -941,7 +941,7 @@
       "fragments": [
         "udf/list/_ydb/pcre-01.md"
       ],
-      "hooked_sha256": "289216c21879f958e076b811a2fd4d61cb42e6a5019ffe9a77d3c213568115f6"
+      "hooked_sha256": "b9fa9776c53ed79f405087fec6d4400c62b7764bfb8eafbb8dd3421c9f76e93b"
     },
     {
       "lang": "ru",
@@ -953,7 +953,7 @@
       "fragments": [
         "udf/list/_ydb/pire-01.md"
       ],
-      "hooked_sha256": "b13303e5831c0b0f9d2598316742946eb91899a282b8cefcea9e088e34410bd0"
+      "hooked_sha256": "963d568ef3617a1f950be62b8153925f1c3fcf5bce081f552929f23fa80b7c0e"
     },
     {
       "lang": "ru",
@@ -971,7 +971,7 @@
         "udf/list/_ydb/postgres-06.md",
         "udf/list/_ydb/postgres-07.md"
       ],
-      "hooked_sha256": "44fdd6a4b8b5a182a0ed4e309f3143e805c086a2ba86b77df3452c2a428f4997"
+      "hooked_sha256": "b030385f2a79db9c0d8af32300b8a4d68154b366693c7bff62f7201c3817590e"
     },
     {
       "lang": "ru",
@@ -986,7 +986,7 @@
         "udf/list/_ydb/re2-03.md",
         "udf/list/_ydb/re2-04.md"
       ],
-      "hooked_sha256": "307943e9bbf9627dba795cac177864076ce7bebd0e5ee99d5f03fbe3eeab36ee"
+      "hooked_sha256": "ddfcad5575ba281d388bf34fb057f02dae8e04461d00200bfecc3c348dc57e7b"
     },
     {
       "lang": "ru",
@@ -1034,7 +1034,7 @@
       "fragments": [
         "_includes/_ydb/cast_examples-01.md"
       ],
-      "hooked_sha256": "85c319352bad7b30cdbeaa1ca84fccc9bb3d9af651b1c8183e742ff1ed52fb02"
+      "hooked_sha256": "784d89b3f1d73903c641c14fbfd003e2d407b1513eeaf9ea34fc70ef0a180be8"
     },
     {
       "lang": "en",
@@ -1077,7 +1077,7 @@
         "builtins/_ydb/aggregation-23.md",
         "builtins/_ydb/aggregation-24.md"
       ],
-      "hooked_sha256": "f8634290bdebc9d74a7b710b8f816dd60cdbb3c3051c3ebdadc1c5b59c8b6af7"
+      "hooked_sha256": "066d0bcf9c23ec81e08cbe7927d563c875dc9bf1d34ca2fd8957b37f847336ef"
     },
     {
       "lang": "en",
@@ -1133,7 +1133,7 @@
         "builtins/_ydb/basic-44.md",
         "builtins/_ydb/basic-45.md"
       ],
-      "hooked_sha256": "c617b8b0bc733c89af0f9cffc0984acea1f1d7262fa68ec336c55209b5a556e3"
+      "hooked_sha256": "1e51b713f867dc8cece25643eaedb99fe1866c098b8d191d0ea4825265d0637b"
     },
     {
       "lang": "en",
@@ -1154,7 +1154,7 @@
         "builtins/_ydb/codegen-09.md",
         "builtins/_ydb/codegen-10.md"
       ],
-      "hooked_sha256": "f978da66eefa78e590c8def80331b8a9bcd4305b5074e50155fad140d36edb65"
+      "hooked_sha256": "f2b1023b8848e0478eb23f0281ee5baf1442852e0966fa8704c07b3201eec947"
     },
     {
       "lang": "en",
@@ -1181,7 +1181,7 @@
         "builtins/_ydb/dict-15.md",
         "builtins/_ydb/dict-16.md"
       ],
-      "hooked_sha256": "115eea5bc19b75376ccfa81d43d4dc028b457f129515b36a3e71c1fcf7fd4d8b"
+      "hooked_sha256": "4a932e10f026d42b0d1faedcffc4444c1295470e9c491da8f30464fd71bac11c"
     },
     {
       "lang": "en",
@@ -1193,7 +1193,7 @@
       "fragments": [
         "builtins/_ydb/index-01.md"
       ],
-      "hooked_sha256": "19af553bbeec457bd735b9a039cd982e25141f24e5c92ca400049079a9971f44"
+      "hooked_sha256": "106c0e1209faf24549bd76032a2932f9742f37054125a44d0572e18bd42d318b"
     },
     {
       "lang": "en",
@@ -1247,7 +1247,7 @@
         "builtins/_ydb/list-33.md",
         "builtins/_ydb/list-34.md"
       ],
-      "hooked_sha256": "bc2d043fceb136191ac1409e3bb86ce6032ed6dea9d45174deb14e963e1b011b"
+      "hooked_sha256": "14dc7b34d442ec61fb3c74c753017875d59b0563dd2b9c8ab36c4b1da0b39f19"
     },
     {
       "lang": "en",
@@ -1273,7 +1273,7 @@
         "builtins/_ydb/struct-14.md",
         "builtins/_ydb/struct-15.md"
       ],
-      "hooked_sha256": "dc27c7053b2c6cb248e96f7b792458edd96999e56a9a81dd792da17bfe264f03"
+      "hooked_sha256": "696556754e5f444d002604de4cf6761f59ecfab2397730c8255609caa552ebc4"
     },
     {
       "lang": "en",
@@ -1303,7 +1303,7 @@
         "builtins/_ydb/types-18.md",
         "builtins/_ydb/types-19.md"
       ],
-      "hooked_sha256": "f394c786f595712ae31f58d6a98a0a670ea6cdc21e0d28673167d6fe89d6d8c5"
+      "hooked_sha256": "53d65a7b7687924a1d795586730e8460f419518c6ab11d037203e4f9171fbbea"
     },
     {
       "lang": "en",
@@ -1322,7 +1322,7 @@
         "builtins/_ydb/window-07.md",
         "builtins/_ydb/window-08.md"
       ],
-      "hooked_sha256": "b49a3466a8313cca1cb1659f3b164108a1b62ccd5d656de7900e9941ff26a430"
+      "hooked_sha256": "dc8f7ed9146ba680f18b5b79df36e90aedd5b1d2f772402b148c7a713fc0f539"
     },
     {
       "lang": "en",
@@ -1343,7 +1343,7 @@
       "fragments": [
         "recipes/_ydb/accessing-json-01.md"
       ],
-      "hooked_sha256": "871a1d78ef2594560f47630c1f5484414555fd7ed6be831852b72c526650406b"
+      "hooked_sha256": "796fa7ffc5df70c438a58b771c50d52ed76e46cd8840ab31b5778f4a44fa1300"
     },
     {
       "lang": "en",
@@ -1355,7 +1355,7 @@
       "fragments": [
         "recipes/_ydb/index-01.md"
       ],
-      "hooked_sha256": "ade9bd2e16d6572896050991aaf01874e748638328d83a8adca1f74b2d4ef1de"
+      "hooked_sha256": "a9b4b144d86ae64d98a826d82336100bb6627d7de59adaaece359de44841f1c9"
     },
     {
       "lang": "en",
@@ -1377,7 +1377,7 @@
         "syntax/_ydb/action-02.md",
         "syntax/_ydb/action-03.md"
       ],
-      "hooked_sha256": "6c833dd3159ff7aaf351239b92e66315b53d799c56e56536e9c676a6b8c868d2"
+      "hooked_sha256": "bdd4b725886834e20c8ae95985403f9acf7de2287fd9e066c20bad9953660681"
     },
     {
       "lang": "en",
@@ -1406,7 +1406,7 @@
       "fragments": [
         "syntax/_ydb/discard-01.md"
       ],
-      "hooked_sha256": "40c753b9f9d0d4aae0f0418f1c62b8574496f4e631298c68e81fd50733c21cd6"
+      "hooked_sha256": "71f05afebd8f4201fd0c1bf9f12b59f61948158120477d4453d5ffc3d2402dc2"
     },
     {
       "lang": "en",
@@ -1418,7 +1418,7 @@
       "fragments": [
         "syntax/_ydb/export_import-01.md"
       ],
-      "hooked_sha256": "cf23e277fc6fedd79b344fc473d8cb4222aaf97589f9b224a59dbfe8af4974e3"
+      "hooked_sha256": "403bc76be843c0d5b05725ba492a3ee2b9de4ad964e8ba54fe4a2ddb2aa1a444"
     },
     {
       "lang": "en",
@@ -1444,7 +1444,7 @@
         "syntax/_ydb/expressions-14.md",
         "syntax/_ydb/expressions-15.md"
       ],
-      "hooked_sha256": "57dfe586098cd18283328f68c0056f97bd768dfcba577a94ef336fda3bdc8976"
+      "hooked_sha256": "e620d2e7aec03e8e55ff0a248173d597e20aa98564b211954dbcc43693afebef"
     },
     {
       "lang": "en",
@@ -1458,7 +1458,7 @@
         "syntax/select/_ydb/flatten-02.md",
         "syntax/select/_ydb/flatten-03.md"
       ],
-      "hooked_sha256": "dcda434117ececbcdc65050c9918f09ee86e122fd3ba54cf553039a0accf2874"
+      "hooked_sha256": "ebd4e7f1aefc3f8a74693c1f9c9d1f276e3f4982dfec415aa27cf67da7a8a759"
     },
     {
       "lang": "en",
@@ -1497,7 +1497,7 @@
       "fragments": [
         "syntax/_ydb/into_result-01.md"
       ],
-      "hooked_sha256": "53bd1a86a06624de571550974c64256735c104a8ed1c8ac36336a3f8e63102c9"
+      "hooked_sha256": "2397daa3be975f55ba2ea116dc89241143ec0ca8773137d3f5c8dd484936555b"
     },
     {
       "lang": "en",
@@ -1510,7 +1510,7 @@
         "syntax/select/_ydb/join-01.md",
         "syntax/select/_ydb/join-02.md"
       ],
-      "hooked_sha256": "9ba4bffe4550a82d70d35dbd856827d374016eb0e80fa6870a4a345544f12e06"
+      "hooked_sha256": "6376157319976cb109a62bdd598b66f710aa6f58a0383f80d6945a9862fe39b9"
     },
     {
       "lang": "en",
@@ -1532,7 +1532,7 @@
         "syntax/_ydb/not_yet_supported-01.md",
         "syntax/_ydb/not_yet_supported-02.md"
       ],
-      "hooked_sha256": "eb8eb8c9e12c8288b43ade184cc7ce063a03b018e9f4e818667848adda633166"
+      "hooked_sha256": "26a464dd3c7c0d91ded51cb9109f3269078d88b32ec8b100640ba7064cb4c90a"
     },
     {
       "lang": "en",
@@ -1544,7 +1544,7 @@
       "fragments": [
         "syntax/_ydb/process-01.md"
       ],
-      "hooked_sha256": "152abaaa4b3c62d8eb7da0599e4815f3dd73d3ed4a9d88b8d1862a249173467d"
+      "hooked_sha256": "280b9d98ed6bc19421ce0413c17b8df0e92d92f60959a5b7bbedd9363af2a266"
     },
     {
       "lang": "en",
@@ -1582,7 +1582,7 @@
         "syntax/select/_ydb/distinct-01.md",
         "syntax/select/_ydb/distinct-02.md"
       ],
-      "hooked_sha256": "0041618c74cb1b1cbb28c90aef79b6ced7a274009834a6c72cc05d985d635507"
+      "hooked_sha256": "5f3c4f2444ba3dfb6adacc4df5e79a345b0710b89d5aa0b107f55796edefcac3"
     },
     {
       "lang": "en",
@@ -1594,7 +1594,7 @@
       "fragments": [
         "syntax/select/_ydb/from-01.md"
       ],
-      "hooked_sha256": "87111fe8dacf97e5bdd9118d218b5990e915d7a1777d13f7450d1cb881eea0e1"
+      "hooked_sha256": "de8360e926b66674c54788202dfd706b9be25159738949df99bc980d61074acd"
     },
     {
       "lang": "en",
@@ -1606,7 +1606,7 @@
       "fragments": [
         "syntax/select/_ydb/from_as_table-01.md"
       ],
-      "hooked_sha256": "7d83f18d75303805b40a7fe6490a9c4fcd026a30af52ffbd3c66b17f3bebd253"
+      "hooked_sha256": "9f4b00359d7a35abf05bd161b7f28a95f36ed9cc1606b552b8d8c51f1f82d756"
     },
     {
       "lang": "en",
@@ -1645,7 +1645,7 @@
         "syntax/select/_ydb/order_by-01.md",
         "syntax/select/_ydb/order_by-02.md"
       ],
-      "hooked_sha256": "a58aa38e7142f02ea434b3fea8e38ed52883a17895e2bde69e40122481b15da8"
+      "hooked_sha256": "1888685b06d7e93d6238d86f704c1696559acd3a737f56c77ddd98a55dc1b538"
     },
     {
       "lang": "en",
@@ -1657,7 +1657,7 @@
       "fragments": [
         "syntax/select/_ydb/sample-01.md"
       ],
-      "hooked_sha256": "991d092385ac02f3f917447cb85fffcadeb72819ada279ac70dffe30df9331b5"
+      "hooked_sha256": "a4e1f1ba949079cab9c002f5bf9d5b766d833d82300288881ce240487b021fb6"
     },
     {
       "lang": "en",
@@ -1670,7 +1670,7 @@
         "syntax/select/_ydb/union-01.md",
         "syntax/select/_ydb/union-02.md"
       ],
-      "hooked_sha256": "03f946c5641a39bedde3dbca54137dff1a9473dd172d40757f3575898b59bf27"
+      "hooked_sha256": "829f99625b73d99bc77f8a7b617d28506065985999c4ad3e57faef9ca57e25f0"
     },
     {
       "lang": "en",
@@ -1682,7 +1682,7 @@
       "fragments": [
         "syntax/select/_ydb/unique_distinct_hints-01.md"
       ],
-      "hooked_sha256": "d79c0c9078acc034d50c3ef2ef3f755c92730f300e5355b595a60ebcb6b29ba5"
+      "hooked_sha256": "1c522e6f1adf12e37ce3f2bd878d51a4a618ed307aa669ba09cec6a4bdfbdb61"
     },
     {
       "lang": "en",
@@ -1695,7 +1695,7 @@
         "syntax/select/_ydb/where-01.md",
         "syntax/select/_ydb/where-02.md"
       ],
-      "hooked_sha256": "43f2a8857d173f2604d46a336feaa89f2ea8aacde2d3b127a88290ad7770f820"
+      "hooked_sha256": "b512695e445547c9ff7b87bba6c74f045583214f5b6a24b64152592ddff2aca2"
     },
     {
       "lang": "en",
@@ -1707,7 +1707,7 @@
       "fragments": [
         "syntax/select/_ydb/with-01.md"
       ],
-      "hooked_sha256": "e3a93d3296d178e20a4fedd5091f09ae130d2cbc064e2aa256eef51b179b8fec"
+      "hooked_sha256": "9b537c2cb819e6bbc299f72918577ec94e68f74e663c35d11801ebad09c4222b"
     },
     {
       "lang": "en",
@@ -1730,7 +1730,7 @@
         "syntax/_ydb/subquery-02.md",
         "syntax/_ydb/subquery-03.md"
       ],
-      "hooked_sha256": "ac80a1924e349ad4c48d20a254c9d4d496a66de4d6ed732cce4a06b9c9febf8b"
+      "hooked_sha256": "cf8812a1e4b0fcb688e3311167e0461023423789c19ec5788c0d095b52e55371"
     },
     {
       "lang": "en",
@@ -1743,7 +1743,7 @@
         "syntax/_ydb/use-01.md",
         "syntax/_ydb/use-02.md"
       ],
-      "hooked_sha256": "c4ede756527eb17f5732938a70e3b9bfc1ea16be193607c4f9ad69a332eaee43"
+      "hooked_sha256": "0d71f8dc9ddcd81f5b920800c0b7152c089a0a4d3663bbe6fdd9a41c39d8f838"
     },
     {
       "lang": "en",
@@ -1769,7 +1769,7 @@
         "syntax/select/_ydb/window-05.md",
         "syntax/select/_ydb/window-06.md"
       ],
-      "hooked_sha256": "3bbce8081af8eef989ed802d70ec20f4937212be4a5cfadf4d640a3bc7ef9e23"
+      "hooked_sha256": "7a021d836fffe26a4a2a55e3f01e6e5de85e343736132cd343402e23296154ac"
     },
     {
       "lang": "en",
@@ -1789,7 +1789,7 @@
       "fragments": [
         "types/_ydb/containers-01.md"
       ],
-      "hooked_sha256": "c86e3fe719b96ce2ee26d76ad572ec892f0ece5098f511908a4bcb5f12e989d8"
+      "hooked_sha256": "bc27c36fda8f560de916251cf66b4754716211c5a7cf4b6c7342d1ab9408bfba"
     },
     {
       "lang": "en",
@@ -1801,7 +1801,7 @@
       "fragments": [
         "types/_ydb/index-01.md"
       ],
-      "hooked_sha256": "949177662b7db7c913d88d314aeed9497a663b46ff210c991a6560f883082979"
+      "hooked_sha256": "1fdc396ec58ebcc4d20f430c96041ffb4066aeba87ab5a1a1667810c6c104177"
     },
     {
       "lang": "en",
@@ -1823,7 +1823,7 @@
         "types/_ydb/optional-01.md",
         "types/_ydb/optional-02.md"
       ],
-      "hooked_sha256": "447e1b4e459396a0a3234df4c10f41b1e6606a00b03bacb56c0b0157c3713dc0"
+      "hooked_sha256": "4c530b0c89e3cf8a171d6308967bedc8be0830709820440beade3d2f139e2eac"
     },
     {
       "lang": "en",
@@ -1844,7 +1844,7 @@
       "fragments": [
         "types/_ydb/special-01.md"
       ],
-      "hooked_sha256": "e3c20c524183cf7e91f1dc32b8749f3bed96f04a6782f52451363171af25beee"
+      "hooked_sha256": "4e10d52ef26834b6ed2e7c58976b34750a3b26f8e0f94dd575b76a5a4df4c93c"
     },
     {
       "lang": "en",
@@ -1873,7 +1873,7 @@
       "fragments": [
         "udf/list/_ydb/digest-01.md"
       ],
-      "hooked_sha256": "4d8bd3d33551dde1b87fd755d8758b24aca9cbbbd11a1aad537414df2ca44b16"
+      "hooked_sha256": "8db3b86795d4292e18fe93e0a586ee3903a64e7574167a96ae7428f035c4cbe8"
     },
     {
       "lang": "en",
@@ -1885,7 +1885,7 @@
       "fragments": [
         "udf/list/_ydb/histogram-01.md"
       ],
-      "hooked_sha256": "fc8d776f29c8f6a3fbd825a25a93dbc7545c1a392a067ce04c3ff052f673dc6e"
+      "hooked_sha256": "c3f924ebb0988de6189141063bcc8b5ec8d42cfb6f358691624db83d744f949f"
     },
     {
       "lang": "en",
@@ -1906,7 +1906,7 @@
       "fragments": [
         "udf/list/_ydb/index-01.md"
       ],
-      "hooked_sha256": "4e75de278a43f6bf590e8188be638d34cbc89bb57a3dc9ef493879521ed7f34d"
+      "hooked_sha256": "ab9932aea34e8a0a534b04dd3319adbf216f655469b91a9f26f6e0bc9209b946"
     },
     {
       "lang": "en",
@@ -1936,7 +1936,7 @@
       "fragments": [
         "udf/list/_ydb/pcre-01.md"
       ],
-      "hooked_sha256": "a0d73a2005eba6de67bcb0023a445242d4f5f6f181edd797f5abcee724d917e2"
+      "hooked_sha256": "3eaa18618449b53b987d3ba8446c8c95fd1452469e0dbc0bc64e1924c6cd5943"
     },
     {
       "lang": "en",
@@ -1949,7 +1949,7 @@
         "udf/list/_ydb/pire-01.md",
         "udf/list/_ydb/pire-02.md"
       ],
-      "hooked_sha256": "311be006af118afe13ff9729d9b444368144ea6553e75191387b4224b505ff64"
+      "hooked_sha256": "3c2098e01eb80fc1e8e0ef3aff9df3b6b050df1fb27c865237b2cd74a2acdc71"
     },
     {
       "lang": "en",
@@ -1965,7 +1965,7 @@
         "udf/list/_ydb/re2-04.md",
         "udf/list/_ydb/re2-05.md"
       ],
-      "hooked_sha256": "272c13dbc6680ff90f0315c72d9d3dde79befb15638a2f373f9c57150c10d748"
+      "hooked_sha256": "8ea8e24e8e33cd94d91b4813b05d0651813efb798aa7211a574f9a929d56acd4"
     },
     {
       "lang": "en",

@@ -575,7 +575,8 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("FulltextAnalyze",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 3, "FulltextAnalyze should have 3 arguments: text, settings and mode");
+            YQL_ENSURE(node.ChildrenSize() == 3 || node.ChildrenSize() == 5,
+                "FulltextAnalyze should have 3 or 5 arguments");
 
             auto textArg = MkqlBuildExpr(*node.Child(0), buildCtx);
             auto settingsArg = MkqlBuildExpr(*node.Child(1), buildCtx);
@@ -585,6 +586,12 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             ui32 modeValue = FromString<ui32>(modeNode->Content());
             auto modeArg = ctx.PgmBuilder().NewDataLiteral<ui32>(modeValue);
 
+            if (node.ChildrenSize() == 5) {
+                YQL_ENSURE(node.Child(3)->IsAtom(), "FulltextAnalyze pattern mode should be an atom");
+                auto patternModeArg = ctx.PgmBuilder().NewDataLiteral<NUdf::EDataSlot::String>(node.Child(3)->Content());
+                auto escapeArg = MkqlBuildExpr(*node.Child(4), buildCtx);
+                return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg, modeArg, patternModeArg, escapeArg);
+            }
             return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg, modeArg);
         });
 

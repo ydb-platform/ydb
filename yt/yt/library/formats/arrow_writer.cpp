@@ -2409,7 +2409,8 @@ public:
         NConcurrency::IAsyncOutputStreamPtr output,
         bool enableContextSaving,
         TControlAttributesConfigPtr controlAttributesConfig,
-        int keyColumnCount)
+        int keyColumnCount,
+        TArrowWriterStatisticsPtr statistics)
         : TSchemalessFormatWriterBase(
             std::move(nameTable),
             std::move(output),
@@ -2417,6 +2418,7 @@ public:
             std::move(controlAttributesConfig),
             keyColumnCount)
         , ArrowConfig_(std::move(config))
+        , Statistics_(std::move(statistics))
     {
         YT_VERIFY(tableSchemas.size() > 0);
         YT_VERIFY(columns.size() == tableSchemas.size() || columns.size() == 0);
@@ -2584,6 +2586,15 @@ private:
 
         WritePayload(output);
         MaybeFlushBuffer(/*force*/ true);
+        if (Statistics_) {
+            ++Statistics_->RecordBatchCount;
+            for (const auto& typedColumn : TypedColumns_) {
+                auto encoding = IsDictionaryEncodedColumn(*typedColumn.Column)
+                    ? EArrowEncoding::Dictionary
+                    : EArrowEncoding::Dense;
+                ++Statistics_->ColumnBatchCounts[encoding];
+            }
+        }
     }
 
     i64 GetEncodedRowBatchCount() const override
@@ -2598,6 +2609,7 @@ private:
 
 private:
     const TArrowFormatConfigPtr ArrowConfig_;
+    const TArrowWriterStatisticsPtr Statistics_;
 
     int TableCount_ = 0;
     bool IsFirstBatch_ = true;
@@ -3019,7 +3031,8 @@ ISchemalessFormatWriterPtr CreateWriterForArrow(
     NConcurrency::IAsyncOutputStreamPtr output,
     bool enableContextSaving,
     TControlAttributesConfigPtr controlAttributesConfig,
-    int keyColumnCount)
+    int keyColumnCount,
+    TArrowWriterStatisticsPtr statistics)
 {
     return New<TArrowWriter>(
         std::move(config),
@@ -3029,7 +3042,8 @@ ISchemalessFormatWriterPtr CreateWriterForArrow(
         std::move(output),
         enableContextSaving,
         std::move(controlAttributesConfig),
-        keyColumnCount);
+        keyColumnCount,
+        std::move(statistics));
 }
 
 ISchemalessFormatWriterPtr CreateWriterForArrow(
@@ -3040,7 +3054,8 @@ ISchemalessFormatWriterPtr CreateWriterForArrow(
     NConcurrency::IAsyncOutputStreamPtr output,
     bool enableContextSaving,
     TControlAttributesConfigPtr controlAttributesConfig,
-    int keyColumnCount)
+    int keyColumnCount,
+    TArrowWriterStatisticsPtr statistics)
 {
     TArrowFormatConfigPtr arrowConfig;
     try {
@@ -3056,7 +3071,8 @@ ISchemalessFormatWriterPtr CreateWriterForArrow(
         std::move(output),
         enableContextSaving,
         std::move(controlAttributesConfig),
-        keyColumnCount);
+        keyColumnCount,
+        std::move(statistics));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

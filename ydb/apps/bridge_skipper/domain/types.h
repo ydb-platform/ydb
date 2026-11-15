@@ -82,6 +82,10 @@ struct TConnectivity {
 
 enum class EPileVerdict { Healthy, Failed, Lost, Replicating, Unknown };
 
+// Failure sources have separate confirmation windows. Storage is the narrow
+// fallback proof based on reported PDisk DeviceIoError, independent of quorum.
+enum class EFailureEvidence { Ordinary, Fallback, Storage };
+
 struct TPileVerdict {
     EPileVerdict Verdict = EPileVerdict::Unknown;
     std::vector<TString> Reasons;
@@ -92,8 +96,7 @@ struct TPileVerdict {
     TMonotonic NewestEvidenceSentAt;
     // A complete fresh fallback reply from this pile; not proof of disk health.
     bool OwnFallback = false;
-    // Failed established by the restricted outside-fallback rule, not by BSC.
-    bool FallbackFailure = false;
+    EFailureEvidence FailureEvidence = EFailureEvidence::Ordinary;
 };
 
 enum class EBlockerReason {

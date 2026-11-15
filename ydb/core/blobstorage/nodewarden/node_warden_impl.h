@@ -11,6 +11,7 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/blobstorage/incrhuge/incrhuge.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -21,7 +22,7 @@
 namespace NKikimr {
     struct TNodeWardenConfig;
 
-    namespace NBridge {
+    namespace NGroupSyncer {
         struct TSyncerDataStats;
     }
 }
@@ -890,7 +891,7 @@ namespace NKikimr::NStorage {
         void ApplyReplBrokerConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TReplBrokerConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Bridge syncer operation
+        // Group syncer operation
 
         struct TWorkingSyncer {
             const TGroupId BridgeProxyGroupId;
@@ -906,7 +907,7 @@ namespace NKikimr::NStorage {
             ui32 NumFinishOK = 0;
             ui32 NumFinishError = 0;
             std::optional<TString> LastErrorReason;
-            std::shared_ptr<NBridge::TSyncerDataStats> SyncerDataStats;
+            std::shared_ptr<NGroupSyncer::TSyncerDataStats> SyncerDataStats;
 
             ui64 ReportedBytesDone = 0;
             ui64 ReportedBytesTotal = 0;
@@ -914,6 +915,7 @@ namespace NKikimr::NStorage {
             ui64 ReportedBlobsDone = 0;
             ui64 ReportedBlobsTotal = 0;
             ui64 ReportedBlobsError = 0;
+            ui64 ReportedScannedItems = 0;
             ui64 ReportedBytesToCopy = 0;
             ui64 ReportedBytesCopied = 0;
             bool ReportedScanFinished = false;
@@ -932,6 +934,18 @@ namespace NKikimr::NStorage {
         ui64 SyncRateConfigLimit = 0; // BridgeSyncRateBytesPerSecond, 0 means no limit
         ui64 SyncRateControllerLimit = 0; // the share of the node in the limit for the cluster, 0 means no limit
         ui32 ControllerGeneration = 0; // the newest tablet generation of BSC that has told the node its syncers and share
+
+        struct TRepairSyncer {
+            ui32 Generation;
+            TActorId ActorId;
+            TActorId Requester;
+            ui64 Cookie;
+        };
+        THashMap<ui32, TRepairSyncer> RepairSyncers;
+        THashMap<TActorId, ui32> RepairSyncerGroups;
+
+        void Handle(NGroupSyncer::TEvRunMirror3dcRepair::TPtr& ev);
+        void Handle(NGroupSyncer::TEvMirror3dcRepairScanResult::TPtr& ev);
 
         void UpdateSyncRateQuoter();
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);

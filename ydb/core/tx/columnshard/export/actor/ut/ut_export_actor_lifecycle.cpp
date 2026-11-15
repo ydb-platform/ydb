@@ -266,6 +266,8 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        // S3 replies arrive on real HTTP threads while actor timers use simulated time.
+        runtime.SetFastSimulatedTime(false);
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = {
             NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),

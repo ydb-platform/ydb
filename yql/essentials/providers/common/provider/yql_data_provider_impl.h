@@ -46,6 +46,7 @@ public:
     ~TDataProviderBase() override = default;
 
     bool Initialize(TExprContext& ctx) override;
+    bool AcceptsProjectSetting(const TProjectSettings::TPragma&) const override;
     IGraphTransformer& GetConfigurationTransformer() override;
     TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override;
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override;

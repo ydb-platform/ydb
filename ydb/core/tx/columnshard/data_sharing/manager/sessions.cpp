@@ -14,6 +14,11 @@ void TSessionsManager::Start(NColumnShard::TColumnShard& shard) const {
     YDB_LOG_CREATE_CONTEXT(
         {"sessions", "start"},
         {"tabletId", shard.TabletID()});
+    if (!shard.GetIndexAs<TColumnEngineForLogs>().AreAllPortionsLoaded(std::nullopt)) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"skipReason", "portions_not_loaded"});
+        return;
+    }
     for (auto&& i : SourceSessions) {
         if (i.second->IsReadyForStarting()) {
             i.second->PrepareToStart(shard);
@@ -24,7 +29,6 @@ void TSessionsManager::Start(NColumnShard::TColumnShard& shard) const {
             i.second->PrepareToStart(shard);
         }
     }
-
     for (auto&& i : SourceSessions) {
         if (i.second->IsPrepared()) {
             TConclusionStatus status = i.second->TryStart(shard);

@@ -289,13 +289,16 @@ void TColumnEngineForLogs::RegisterSchemaVersion(
     AFL_VERIFY(DataAccessorsManager);
     bool switchOptimizer = false;
     bool switchAccessorsManager = false;
+    bool switchTieringActualization = indexInfo->GetTieringNeedActualization();
     TVersionedIndex& vIndex = VersionedSchemas.MutableVersionedIndex(indexInfo->GetPresetId());
     if (!vIndex.IsEmpty()) {
         const NOlap::TIndexInfo& lastIndexInfo = vIndex.GetLastSchema()->GetIndexInfo();
         lastIndexInfo.CheckCompatible(*indexInfo).Validate();
         switchOptimizer = !indexInfo->GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
         switchAccessorsManager = !indexInfo->GetMetadataManagerConstructor()->IsEqualTo(*lastIndexInfo.GetMetadataManagerConstructor());
+        switchTieringActualization = indexInfo->GetTieringNeedActualization() != lastIndexInfo.GetTieringNeedActualization();
     }
+
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "new_schema"},
         {"snapshot", snapshot.DebugString()},
@@ -304,7 +307,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(
 
     const bool isCriticalScheme = indexInfo->GetSchemeNeedActualization();
     auto* indexInfoActual = vIndex.AddIndex(snapshot, std::move(indexInfo));
-    if (isCriticalScheme) {
+    if (isCriticalScheme || switchTieringActualization) {
         StartActualization({});
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
@@ -815,13 +818,18 @@ bool TColumnEngineForLogs::ArePortionsLoaded(const TInternalPathId pathId, const
     return !granule || granule->GetLoadedKeyRanges().Covers(ranges);
 }
 
+bool TColumnEngineForLogs::ArePortionsLoadedFrom(const TInternalPathId pathId, const NArrow::TSimpleRow& key) const {
+    const auto granule = GetGranuleOptional(pathId);
+    return !granule || granule->GetLoadedKeyRanges().CoversFrom(key);
+}
+
 bool TColumnEngineForLogs::AreAllPortionsLoaded(const std::optional<TInternalPathId> pathId) const {
     if (pathId) {
         const auto granule = GetGranuleOptional(*pathId);
-        return !granule || granule->GetLoadedKeyRanges().IsEverythingLoaded();
+        return !granule || granule->GetLoadedKeyRanges().CoversAll();
     }
     return std::all_of(GetTables().begin(), GetTables().end(), [](const auto& table) {
-        return table.second->GetLoadedKeyRanges().IsEverythingLoaded();
+        return table.second->GetLoadedKeyRanges().CoversAll();
     });
 }
 

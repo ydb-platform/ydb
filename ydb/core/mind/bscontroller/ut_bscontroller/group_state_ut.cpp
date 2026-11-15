@@ -1,5 +1,7 @@
 #include <ydb/core/mind/bscontroller/group_state.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/syncer/syncer.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -24,14 +26,21 @@ public:
     TTestBasicRuntime Runtime;
     TActorId Controller;
     TActorId Actor;
+    TActorId Warden;
+    TActorId WardenService;
     TGroupReplicationInfo Info;
 
     TGroupStateFixture() {
         TAppPrepare app;
         Runtime.Initialize(app.Unwrap());
         Controller = Runtime.AllocateEdgeActor();
+        Warden = Runtime.AllocateEdgeActor();
+        WardenService = MakeBlobStorageNodeWardenID(Warden.NodeId());
+        Runtime.RegisterService(WardenService, Warden);
         Actor = Runtime.Register(CreateGroupStateActor(Controller));
         Runtime.EnableScheduleForActor(Actor);
+        Info.Topology = std::make_shared<TBlobStorageGroupInfo::TTopology>(
+            TBlobStorageGroupType(TBlobStorageGroupType::ErasureMirror3dc), 3, 3, 1, true);
         for (ui32 realm = 0; realm < 3; ++realm) {
             for (ui32 domain = 0; domain < 3; ++domain) {
                 Info.VDisks.push_back({TVDiskID(42, 1, realm, domain, 0), Runtime.AllocateEdgeActor()});
@@ -39,14 +48,14 @@ public:
         }
     }
 
-    void Update(ui32 generation, EMirror3dcGroupState state, const TFailRealmStates& states) {
+    void Update(ui32 generation, EMirror3dcGroupState state, const TFailRealmStates& states, ui32 groupId = 42) {
         Info.Generation = generation;
         Info.States = states;
         Info.GroupState = state;
         for (TGroupReplicationInfo::TVDisk& disk : Info.VDisks) {
-            disk.Id.GroupGeneration = generation;
+            disk.Id = TVDiskID(groupId, generation, disk.Id.FailRealm, disk.Id.FailDomain, 0);
         }
-        std::unique_ptr<TEvGroupState::TEvUpdate> event = std::make_unique<TEvGroupState::TEvUpdate>(42);
+        std::unique_ptr<TEvGroupState::TEvUpdate> event = std::make_unique<TEvGroupState::TEvUpdate>(groupId);
         event->Info = Info;
         Runtime.Send(new IEventHandle(Actor, Controller, event.release()), 0, true);
     }
@@ -62,7 +71,7 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(disk.GroupGeneration, Info.Generation);
             const bool available = (!status.FailSecondRealm || disk.FailRealm != 1 || disk.FailDomain != 0)
                 && (!status.UnreplicatedRealm || disk.FailRealm != *status.UnreplicatedRealm);
-            if (status.ObsoleteGeneration) {
+            if (!available || status.ObsoleteGeneration) {
                 --disk.GroupGeneration;
             }
             std::unique_ptr<TEvBlobStorage::TEvVStatusResult> result =
@@ -80,6 +89,37 @@ public:
         for (const TGroupReplicationInfo::TVDisk& disk : Info.VDisks) {
             UNIT_ASSERT(Runtime.CaptureMailboxEvents(disk.ActorId.Hint(), disk.ActorId.NodeId()).empty());
         }
+    }
+
+    NGroupSyncer::TEvRunMirror3dcRepair::TPtr GetRepair() {
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr request =
+            Runtime.GrabEdgeEventRethrow<NGroupSyncer::TEvRunMirror3dcRepair>(Warden);
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.GetGroupId(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.GetGeneration(), Info.Generation);
+        UNIT_ASSERT(!request->Get()->Record.GetCancel());
+        return request;
+    }
+
+    void ReplyRepair(const NGroupSyncer::TEvRunMirror3dcRepair::TPtr& request, NKikimrProto::EReplyStatus status) {
+        std::unique_ptr<NGroupSyncer::TEvRunMirror3dcRepairResult> result =
+            std::make_unique<NGroupSyncer::TEvRunMirror3dcRepairResult>();
+        result->Record.SetGroupId(request->Get()->Record.GetGroupId());
+        result->Record.SetGeneration(request->Get()->Record.GetGeneration());
+        result->Record.SetStatus(status);
+        Runtime.Send(new IEventHandle(request->Sender, Warden, result.release(), 0, request->Cookie), 0, true);
+    }
+
+    void AssertNoProposal() {
+        UNIT_ASSERT(Runtime.CaptureMailboxEvents(Controller.Hint(), Controller.NodeId()).empty());
+    }
+
+    void AssertNoRepair() {
+        TEventsList events = Runtime.CaptureMailboxEvents(Warden.Hint(), Warden.NodeId());
+        for (const TAutoPtr<IEventHandle>& event : events) {
+            UNIT_ASSERT_C(event->GetTypeRewrite() != NGroupSyncer::TEvRunMirror3dcRepair::EventType,
+                event->GetTypeRewrite());
+        }
+        Runtime.PushMailboxEventsFront(Warden.Hint(), Warden.NodeId(), events);
     }
 
     TMirror3dcGroupConfiguration GetProposal() {
@@ -108,90 +148,144 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         TGroupStateFixture fixture;
         fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_FAILURE, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED});
         fixture.AssertNoRequests();
+        fixture.AssertNoRepair();
     }
-    Y_UNIT_TEST(PendingWaitsForAllTargetRealms) {
+
+    Y_UNIT_TEST(ConfigQuorumThenRepairThenTransition) {
         TGroupStateFixture fixture;
         fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED});
         TVDiskReplicationStatus status;
-        status.FailSecondRealm = true;
+        status.UnreplicatedRealm = 1;
         fixture.ReplyRound(6, status);
+        fixture.AssertNoRepair();
+        fixture.AssertNoProposal();
+        // Ordinary and durability replication flags no longer drive this transition.
+        status.UnreplicatedRealm.reset();
+        status.Replicated = false;
+        status.DurabilityReplicated = false;
+        fixture.ReplyRound(3, status);
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr repair = fixture.GetRepair();
+        fixture.AssertNoProposal();
+        fixture.ReplyRepair(repair, NKikimrProto::OK);
+        UNIT_ASSERT(fixture.GetProposal().State == NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
+    }
+
+    Y_UNIT_TEST(FailedRepairRetriesWithoutTransition) {
+        TGroupStateFixture fixture;
+        fixture.Update(2, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED});
+        fixture.ReplyRound(3);
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr repair = fixture.GetRepair();
+        fixture.ReplyRepair(repair, NKikimrProto::ERROR);
+        fixture.AssertNoProposal();
+        repair = fixture.GetRepair();
         fixture.AssertNoRequests();
-        fixture.ReplyRound(6);
-        const auto next = fixture.GetProposal();
-        UNIT_ASSERT(next.State == NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
-        UNIT_ASSERT((next.Realms == TFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}));
-    }
-    Y_UNIT_TEST(RecoveryPendingChangesPolicyWithoutChangingRealmTuple) {
-        TGroupStateFixture fixture;
-        fixture.Update(2, NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING, {TFailRealm::EXCLUDED, TFailRealm::INCLUDED, TFailRealm::RECOVERING});
-        fixture.ReplyRound(3);
-        const auto next = fixture.GetProposal();
-        UNIT_ASSERT(next.State == NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2);
-        UNIT_ASSERT(next.Realms == fixture.Info.States);
-    }
-    Y_UNIT_TEST(RecoveryQueriesOnlyR) {
-        TGroupStateFixture fixture;
-        fixture.Update(3, NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::INCLUDED});
-        fixture.ReplyRound(3);
-        const auto next = fixture.GetProposal();
-        UNIT_ASSERT(next.State == NKikimrBlobStorage::TGroupState::NORMAL);
-        UNIT_ASSERT((next.Realms == TFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::INCLUDED}));
-    }
-    Y_UNIT_TEST(StaleOrIncompleteStatusCannotFinishTransition) {
-        for (unsigned mode = 0; mode < 3; ++mode) {
-            TGroupStateFixture fixture;
-            fixture.Update(4, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED});
-            TVDiskReplicationStatus status;
-            if (mode == 0) {
-                status.ObsoleteGeneration = true;
-            } else if (mode == 1) {
-                status.DurabilityReplicated.reset();
-            } else {
-                status.DurabilityReplicated = false;
-            }
-            fixture.ReplyRound(3, status);
-            fixture.AssertNoRequests();
-        }
-    }
-    Y_UNIT_TEST(GroupUpdateKeepsOtherGroupsQueries) {
-        TGroupStateFixture fixture;
-        const TFailRealmStates initial{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED};
-        fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING, initial);
-        TGroupReplicationInfo other = fixture.Info;
-        for (TGroupReplicationInfo::TVDisk& disk : other.VDisks) {
-            disk.Id.GroupID = TGroupId::FromValue(43);
-            disk.ActorId = fixture.Runtime.AllocateEdgeActor();
-        }
-        std::unique_ptr<TEvGroupState::TEvUpdate> update = std::make_unique<TEvGroupState::TEvUpdate>(43);
-        update->Info = other;
-        fixture.Runtime.Send(new IEventHandle(fixture.Actor, fixture.Controller, update.release()), 0, true);
-        TVector<TEvBlobStorage::TEvVStatus::TPtr> requests;
-        for (const TGroupReplicationInfo* info : {&fixture.Info, &other}) {
-            for (const TGroupReplicationInfo::TVDisk& disk : info->VDisks) {
-                if (disk.Id.FailRealm != 2) {
-                    requests.push_back(fixture.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVStatus>(disk.ActorId));
-                }
-            }
-        }
-        fixture.Update(2, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING, initial);
-        // Late replies for group 42 are ignored; current replies for group 43 must still complete it.
-        for (const TEvBlobStorage::TEvVStatus::TPtr& request : requests) {
-            const TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
-            std::unique_ptr<TEvBlobStorage::TEvVStatusResult> result =
-                std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, disk, true, true, false, 1);
-            result->Record.SetDurabilityReplicated(true);
-            fixture.Runtime.Send(new IEventHandle(request->Sender, request->Recipient,
-                result.release(), 0, request->Cookie), 0, true);
-        }
-        TEvBlobStorage::TEvControllerConfigRequest::TPtr proposal =
-            fixture.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigRequest>(fixture.Controller);
-        const NKikimrBlobStorage::TDefineGroupState::TGroupDefinition& definition =
-            proposal->Get()->Record.GetRequest().GetCommand(0).GetDefineGroupState().GetGroups(0);
-        UNIT_ASSERT_VALUES_EQUAL(definition.GetGroupId(), 43);
-        UNIT_ASSERT_VALUES_EQUAL(definition.GetExpectedGroupGeneration(), 1);
-        fixture.ReplyRound(6);
-        UNIT_ASSERT((fixture.GetProposal().Realms == TFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}));
+        fixture.ReplyRepair(repair, NKikimrProto::OK);
+        UNIT_ASSERT(fixture.GetProposal().State == NKikimrBlobStorage::TGroupState::DC_SOLO_INV2);
     }
 
+    Y_UNIT_TEST(ConfirmedConfigWaitsForRepairSlotWithoutPollingAgain) {
+        TGroupStateFixture fixture;
+        for (ui32 groupId = 42; groupId < 59; ++groupId) {
+            fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING,
+                {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}, groupId);
+        }
+        fixture.ReplyRound(17 * 3);
+        TVector<NGroupSyncer::TEvRunMirror3dcRepair::TPtr> repairs;
+        for (ui32 index = 0; index < 16; ++index) {
+            repairs.push_back(fixture.Runtime.GrabEdgeEventRethrow<NGroupSyncer::TEvRunMirror3dcRepair>(fixture.Warden));
+        }
+        fixture.Runtime.Send(new IEventHandle(fixture.Actor, {}, new TEvents::TEvWakeup), 0, true);
+        fixture.AssertNoRepair();
+        fixture.AssertNoRequests();
+        fixture.ReplyRepair(repairs.front(), NKikimrProto::OK);
+        fixture.GetProposal();
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr next =
+            fixture.Runtime.GrabEdgeEventRethrow<NGroupSyncer::TEvRunMirror3dcRepair>(fixture.Warden);
+        for (const NGroupSyncer::TEvRunMirror3dcRepair::TPtr& repair : repairs) {
+            UNIT_ASSERT(next->Get()->Record.GetGroupId() != repair->Get()->Record.GetGroupId());
+        }
+        fixture.AssertNoRequests();
+    }
 
+    Y_UNIT_TEST(ZeroGuaranteeWaitsForRecoveringRealmConfig) {
+        TGroupStateFixture fixture;
+        fixture.Update(3, NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED});
+        TVDiskReplicationStatus status;
+        status.UnreplicatedRealm = 1;
+        fixture.ReplyRound(6, status);
+        fixture.AssertNoRepair();
+        fixture.ReplyRound(3);
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr repair = fixture.GetRepair();
+        fixture.AssertNoProposal();
+        fixture.ReplyRepair(repair, NKikimrProto::OK);
+        UNIT_ASSERT(fixture.GetProposal().State == NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING);
+    }
+
+    Y_UNIT_TEST(GroupUpdateCancelsRepairAndIgnoresOldSuccess) {
+        TGroupStateFixture fixture;
+        TFailRealmStates realms{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED};
+        fixture.Update(4, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING, realms);
+        fixture.ReplyRound(6);
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr oldRepair = fixture.GetRepair();
+        fixture.Update(5, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING, realms);
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr cancel =
+            fixture.Runtime.GrabEdgeEventRethrow<NGroupSyncer::TEvRunMirror3dcRepair>(fixture.Warden);
+        UNIT_ASSERT(cancel->Get()->Record.GetCancel());
+        UNIT_ASSERT_VALUES_EQUAL(cancel->Cookie, oldRepair->Cookie);
+        UNIT_ASSERT_VALUES_EQUAL(cancel->Get()->Record.GetGeneration(), 4);
+        fixture.ReplyRepair(oldRepair, NKikimrProto::OK);
+        fixture.AssertNoProposal();
+        fixture.ReplyRound(6);
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr repair = fixture.GetRepair();
+        fixture.ReplyRepair(repair, NKikimrProto::OK);
+        UNIT_ASSERT(fixture.GetProposal().State == NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2);
+    }
+
+    Y_UNIT_TEST(DisconnectedRepairCannotFinishTransition) {
+        TGroupStateFixture fixture;
+        fixture.Update(8, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED});
+        fixture.ReplyRound(3);
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr repair = fixture.GetRepair();
+        fixture.Runtime.Send(new IEventHandle(fixture.Actor, {},
+            new TEvInterconnect::TEvNodeDisconnected(fixture.Warden.NodeId()), 0, repair->Cookie), 0, true);
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr cancel =
+            fixture.Runtime.GrabEdgeEventRethrow<NGroupSyncer::TEvRunMirror3dcRepair>(fixture.Warden);
+        UNIT_ASSERT(cancel->Get()->Record.GetCancel());
+        fixture.ReplyRepair(repair, NKikimrProto::OK);
+        fixture.AssertNoProposal();
+    }
+
+    Y_UNIT_TEST(UndeliveredRepairIsRetried) {
+        TGroupStateFixture fixture;
+        fixture.Update(9, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED});
+        fixture.ReplyRound(3);
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr repair = fixture.GetRepair();
+        fixture.Runtime.Send(new IEventHandle(fixture.Actor, {},
+            new TEvents::TEvUndelivered(NGroupSyncer::TEvRunMirror3dcRepair::EventType, TEvents::TEvUndelivered::ReasonActorUnknown),
+            0, repair->Cookie), 0, true);
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr cancel =
+            fixture.Runtime.GrabEdgeEventRethrow<NGroupSyncer::TEvRunMirror3dcRepair>(fixture.Warden);
+        UNIT_ASSERT(cancel->Get()->Record.GetCancel());
+        fixture.AssertNoProposal();
+        repair = fixture.GetRepair();
+        fixture.AssertNoRequests();
+        fixture.ReplyRepair(repair, NKikimrProto::OK);
+        UNIT_ASSERT(fixture.GetProposal().State == NKikimrBlobStorage::TGroupState::DC_SOLO_INV2);
+    }
+
+    Y_UNIT_TEST(NormalDoesNotStartRepair) {
+        TGroupStateFixture fixture;
+        fixture.Update(7, NKikimrBlobStorage::TGroupState::NORMAL, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::INCLUDED});
+        fixture.AssertNoRequests();
+        fixture.AssertNoRepair();
+    }
+
+    Y_UNIT_TEST(RecoveryCompletesAfterRepair) {
+        TGroupStateFixture fixture;
+        fixture.Update(6, NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::INCLUDED});
+        fixture.ReplyRound(9);
+        NGroupSyncer::TEvRunMirror3dcRepair::TPtr repair = fixture.GetRepair();
+        fixture.ReplyRepair(repair, NKikimrProto::OK);
+        UNIT_ASSERT(fixture.GetProposal().State == NKikimrBlobStorage::TGroupState::NORMAL);
+    }
 }

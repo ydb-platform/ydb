@@ -2172,7 +2172,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
 
                         TExprNode::TPtr left;
                         TExprNode::TPtr right;
-                        if (!IsMemberEquality(andTerm, predicate->Head().Head(), left, right)) {
+                        if (!IsMemberEquality(andTerm, predicate->Head().Head(), left, right, IsAggrEqualsJoinKeysEnabled(*optCtx.Types))) {
                             bad = true;
                             break;
                         }

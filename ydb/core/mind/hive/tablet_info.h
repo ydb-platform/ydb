@@ -194,6 +194,7 @@ public:
     bool IsBackup = false;
     TNodeId FailedNodeId = 0; // last time we tried to start the tablet, we failed on this node
     TInstant BootTime;
+    ui64 BootAttemptId = 0;
     TNodeFilter NodeFilter;
     bool InWaitQueue = false;
     bool UpdateMetricsEnqueued = false;
@@ -280,6 +281,10 @@ public:
     bool IsPinnedToNode() const;
 
     void UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics);
+    // Named resources describe the current incarnation of the tablet: on restart the work follows the tablet,
+    // but its values become an estimate until the new incarnation reports them
+    void CarryOverNamedResources();
+    void DropExpiredNamedResourceEstimates();
     TResourceRawValues GetResourceCurrentValues() const;
     TResourceRawValues GetResourceMaximumValues() const;
     i64 GetCounterValue() const;

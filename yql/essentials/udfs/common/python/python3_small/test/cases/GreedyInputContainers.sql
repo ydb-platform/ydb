@@ -1,5 +1,4 @@
 --sanitizer ignore memory
-/* syntax version 1 */
 $s = @@
 def list_func(lst):
   return lst.count(1)

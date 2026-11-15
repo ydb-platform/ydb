@@ -1,4 +1,5 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/tx/datashard/ut_common/database_freeze.h>
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -404,6 +405,39 @@ Y_UNIT_TEST(ShouldSucceedOnRawCsv) {
     UNIT_ASSERT_VALUES_EQUAL(result.GetRowsProcessed(), 1u);
 
     UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), ExpectedUtf8TableState(1));
+}
+
+Y_UNIT_TEST(DatabaseFreezeRejectsAlreadyDownloadedPartAttachment) {
+    TTestEnv env;
+    auto [shards, tableId] = env.CreateUtf8Table();
+    const auto desc = env.TableDescription(shards[0], tableId);
+    env.StartS3(MakeCsv(1));
+    bool fenceSent = false;
+    bool fenceObserved = false;
+    TBlockEvents<TEvDataShard::TEvS3DirectWriteFinish> finish(env.Runtime, [&](const auto&) {
+        if (!fenceSent) {
+            fenceSent = true;
+            auto request = MakeHolder<TEvDataShard::TEvDatabaseFreeze>();
+            request->Record.SetEpoch(1);
+            request->Record.SetSchemeShardId(tableId.PathId.OwnerId);
+            request->Record.SetDomainOwnerId(tableId.PathId.OwnerId);
+            request->Record.SetDomainLocalPathId(1);
+            request->Record.SetStage(NKikimrTxDataShard::TDatabaseFreezeState::FENCE_WRITES);
+            env.Runtime.SendToPipe(shards[0], env.Sender, request.Release(), 0, GetPipeConfigWithRetries());
+        }
+        return true;
+    });
+    auto observeFence = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreezeResult>([&](auto& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), ui32(Ydb::StatusIds::SUCCESS));
+        fenceObserved = true;
+        finish.Stop().Unblock();
+    });
+    const auto result = env.ProposeAndPlanRestore(shards[0], tableId, desc);
+    UNIT_ASSERT(fenceSent && fenceObserved);
+    UNIT_ASSERT(!result.GetSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), "");
+    NDataShard::NTest::FreezeDatabaseShard(env.Runtime, shards[0], tableId.PathId.OwnerId,
+        TPathId(tableId.PathId.OwnerId, 1), 1);
 }
 
 Y_UNIT_TEST_QUAD(EmptyZstdRestoreSurvivesRestart, direct, populated) {

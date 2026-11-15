@@ -38,12 +38,12 @@ Y_UNIT_TEST(NotOptSingularNullTest) {
 
 Y_UNIT_TEST(NotOptTaggedTest) {
     // Test with non-optional tagged values
-    auto input = TagVector<TTag::A>(TVector<ui32>{1, 2, 3, 4});
-    TVector<TMaybe<TTagged<ui32, TTag::A>>> expected{
-        TTagged<ui32, TTag::A>(1),
-        TTagged<ui32, TTag::A>(2),
-        TTagged<ui32, TTag::A>(3),
-        TTagged<ui32, TTag::A>(4)};
+    auto input = TagVector<ETag::A>(TVector<ui32>{1, 2, 3, 4});
+    TVector<TMaybe<TTagged<ui32, ETag::A>>> expected{
+        TTagged<ui32, ETag::A>(1),
+        TTagged<ui32, ETag::A>(2),
+        TTagged<ui32, ETag::A>(3),
+        TTagged<ui32, ETag::A>(4)};
     TestJustKernelFuzzied(input, expected);
 }
 
@@ -86,17 +86,17 @@ Y_UNIT_TEST(OptSingularNullTest) {
 
 Y_UNIT_TEST(OptTaggedTest) {
     // Test with optional tagged values
-    TVector<TMaybe<TTagged<ui32, TTag::A>>> input{
-        TMaybe<TTagged<ui32, TTag::A>>{TTagged<ui32, TTag::A>(1)},
-        TMaybe<TTagged<ui32, TTag::A>>{TTagged<ui32, TTag::A>(2)},
+    TVector<TMaybe<TTagged<ui32, ETag::A>>> input{
+        TMaybe<TTagged<ui32, ETag::A>>{TTagged<ui32, ETag::A>(1)},
+        TMaybe<TTagged<ui32, ETag::A>>{TTagged<ui32, ETag::A>(2)},
         Nothing(),
-        TMaybe<TTagged<ui32, TTag::A>>{TTagged<ui32, TTag::A>(4)}};
+        TMaybe<TTagged<ui32, ETag::A>>{TTagged<ui32, ETag::A>(4)}};
     // The top level TMaybe should always be defined when BlockJust adds a level of optionality
-    TVector<TMaybe<TMaybe<TTagged<ui32, TTag::A>>>> expected{
-        TMaybe<TMaybe<TTagged<ui32, TTag::A>>>{TMaybe<TTagged<ui32, TTag::A>>{TTagged<ui32, TTag::A>(1)}},
-        TMaybe<TMaybe<TTagged<ui32, TTag::A>>>{TMaybe<TTagged<ui32, TTag::A>>{TTagged<ui32, TTag::A>(2)}},
-        TMaybe<TMaybe<TTagged<ui32, TTag::A>>>{TMaybe<TTagged<ui32, TTag::A>>()},
-        TMaybe<TMaybe<TTagged<ui32, TTag::A>>>{TMaybe<TTagged<ui32, TTag::A>>{TTagged<ui32, TTag::A>(4)}}};
+    TVector<TMaybe<TMaybe<TTagged<ui32, ETag::A>>>> expected{
+        TMaybe<TMaybe<TTagged<ui32, ETag::A>>>{TMaybe<TTagged<ui32, ETag::A>>{TTagged<ui32, ETag::A>(1)}},
+        TMaybe<TMaybe<TTagged<ui32, ETag::A>>>{TMaybe<TTagged<ui32, ETag::A>>{TTagged<ui32, ETag::A>(2)}},
+        TMaybe<TMaybe<TTagged<ui32, ETag::A>>>{TMaybe<TTagged<ui32, ETag::A>>()},
+        TMaybe<TMaybe<TTagged<ui32, ETag::A>>>{TMaybe<TTagged<ui32, ETag::A>>{TTagged<ui32, ETag::A>(4)}}};
     TestJustKernelFuzzied(input, expected);
 }
 
@@ -108,13 +108,13 @@ Y_UNIT_TEST(PgIntTest) {
 }
 
 Y_UNIT_TEST(TaggedOptTest) {
-    // Test with tagged optional values (TTagged<TMaybe<ui32>, TTag::A>)
-    auto input = TagVector<TTag::A>(TVector<TMaybe<ui32>>{1, 2, Nothing(), 4});
+    // Test with tagged optional values (TTagged<TMaybe<ui32>, ETag::A>)
+    auto input = TagVector<ETag::A>(TVector<TMaybe<ui32>>{1, 2, Nothing(), 4});
 
     // Expected: tagged optional values wrapped in Maybe
-    TVector<TMaybe<TTagged<TMaybe<ui32>, TTag::A>>> expected;
+    TVector<TMaybe<TTagged<TMaybe<ui32>, ETag::A>>> expected;
     for (const auto& item : input) {
-        expected.push_back(TMaybe<TTagged<TMaybe<ui32>, TTag::A>>(item));
+        expected.push_back(TMaybe<TTagged<TMaybe<ui32>, ETag::A>>(item));
     }
 
     TestJustKernelFuzzied(input, expected);

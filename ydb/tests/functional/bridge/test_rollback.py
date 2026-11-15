@@ -210,14 +210,17 @@ class TestBridgeNamedNodesRollback(BridgeRollbackBase):
     and the pile names go away in a single change of the configuration, as the pile names are refused without bridge
     config. The rollback status is queried through a dynamic node, which forwards it to a static one."""
 
-    def query_status_through(self, endpoint_node, database):
+    def call_through(self, endpoint_node, database, call):
         client = BridgeClient(endpoint_node.host, endpoint_node.port)
         client.set_auth_token('root@builtin')
         client.set_database(database)
         try:
-            return client.get_rollback_status_result()
+            return call(client)
         finally:
             client.close()
+
+    def query_status_through(self, endpoint_node, database):
+        return self.call_through(endpoint_node, database, lambda client: client.get_rollback_status_result())
 
     def test_rollback_with_named_static_nodes(self):
         table_path = '/Root/mydb/bridge_named_rollback'
@@ -240,6 +243,12 @@ class TestBridgeNamedNodesRollback(BridgeRollbackBase):
             logger.debug("GetRollbackStatus through dynamic node result# %s", result)
             return result is not None and set(result.bridge_config_node_ids) == set(node_ids)
         assert_that(wait_for(lambda: status_through_dynamic_node_lists(static_node_ids), timeout_seconds=60))
+
+        # the rollback requested through the dynamic node reaches the root too (the cluster is not converted, so it is
+        # refused there)
+        operation = self.call_through(slot, database, lambda client: client.rollback().operation)
+        assert_that(operation.status != StatusIds.SUCCESS, str(operation))
+        assert_that(any("not converted" in issue.message for issue in operation.issues), str(operation))
 
         # the bridge config alone can't go away while hosts have pile names
         def drop_bridge_config_only(cfg):

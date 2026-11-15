@@ -6,6 +6,8 @@ SRCS(
     yql_result_format_data.cpp
     yql_codec_results.cpp
     yql_restricted_yson.cpp
+    yql_result_format_common.cpp
+    yql_result_format_impl.cpp
 )
 
 PEERDIR(

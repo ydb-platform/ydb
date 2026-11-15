@@ -3,6 +3,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
@@ -73,6 +74,70 @@ bool CompatibleSort(TOptimizerStatistics::TSortColumns& existingOrder, const TCo
 }
 
 } // anonymous namespace
+
+TExprBase KqpReadOlapWithMerge(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!kqpCtx.Config->OptEnableOlapSortedRead.Get().GetOrElse(false)) {
+        return node;
+    }
+
+    const auto merge = node.Cast<TDqCnMerge>();
+    const auto stage = merge.Output().Stage();
+    const auto body = stage.Program().Body();
+    const auto sort = body.Maybe<TCoSort>();
+    const auto top = body.Maybe<TCoTopSort>();
+    if (!sort && !top) {
+        return node;
+    }
+
+    auto input = sort ? sort.Cast().Input() : top.Cast().Input();
+    const auto selector = sort ? sort.Cast().KeySelectorLambda() : top.Cast().KeySelectorLambda();
+    const auto directions = sort ? sort.Cast().SortDirections() : top.Cast().SortDirections();
+    const auto direction = GetSortDirection(directions);
+    if (direction != ESortDirection::Forward && direction != ESortDirection::Reverse) {
+        return node;
+    }
+
+    const auto sortKeys = ExtractSortingKeys(selector);
+    TVector<TCoFlatMapBase> flatmaps;
+    while (const auto flatmap = input.Maybe<TCoFlatMapBase>()) {
+        TMaybe<THashSet<TStringBuf>> passthroughFields;
+        if (!IsPassthroughFlatMap(flatmap.Cast(), &passthroughFields) ||
+            (passthroughFields && !AllOf(sortKeys, [&](const auto& key) { return passthroughFields->contains(key); }))) {
+            return node;
+        }
+        flatmaps.push_back(flatmap.Cast());
+        input = flatmap.Cast().Input();
+    }
+    const auto read = input.Maybe<TKqpReadOlapTableRanges>();
+    if (!read || !OlapProcessPreservesSorting(read.Cast().Process().Ptr(), THashSet<TString>(sortKeys.begin(), sortKeys.end()))) {
+        return node;
+    }
+    auto settings = TKqpReadTableSettings::Parse(read.Cast());
+    const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Cast().Table().Path());
+    if (!IsSortKeyPrimary(selector, table)) {
+        return node;
+    }
+
+    settings.RequireSortedRead = true;
+    settings.SetSorting(direction == ESortDirection::Forward ? ERequestSorting::ASC : ERequestSorting::DESC);
+    input = BuildReadNode(input.Pos(), ctx, input, settings);
+    for (auto it = flatmaps.rbegin(); it != flatmaps.rend(); ++it) {
+        // Preserve the reader order through filters and projections; the limit stays above them.
+        input = Build<TCoOrderedFlatMap>(ctx, it->Pos())
+            .Input(input)
+            .Lambda(it->Lambda())
+            .Done();
+    }
+    if (top) {
+        input = Build<TCoTake>(ctx, top.Cast().Pos()).Input(input).Count(top.Cast().Count()).Done();
+    }
+
+    const auto program = Build<TCoLambda>(ctx, stage.Program().Pos())
+        .Args(stage.Program().Args()).Body(input).Done();
+    const auto newStage = ctx.ChangeChild(stage.Ref(), TDqStageBase::idx_Program, program.Ptr());
+    return Build<TDqCnMerge>(ctx, merge.Pos()).InitFrom(merge)
+        .Output().InitFrom(merge.Output()).Stage(newStage).Build().Done();
+}
 
 TExprBase KqpRemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     auto maybeSort = node.Maybe<TCoSortBase>();

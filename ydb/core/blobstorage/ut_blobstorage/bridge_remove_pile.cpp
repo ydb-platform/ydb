@@ -1158,4 +1158,93 @@ Y_UNIT_TEST_SUITE(BridgeRemovePile) {
         checker.CheckAll();
         CheckPileData(env, checker, 2, FirstThirdPileNodeId);
     }
+
+    // the syncer of a part being synced takes its source in another pile; that pile is disconnected and removed while the
+    // syncer still runs (its completion is held, as a long sync would keep it running), and the node of the syncer
+    // registers again after BS_CONTROLLER restarts; BS_CONTROLLER is not to abort on the source part that is gone
+    Y_UNIT_TEST(SyncerSourceRemovedBeforeNodeRegisters) {
+        TEnvironmentSetup env{{
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const std::vector<ui32> parts = GetPileGroups(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 3u);
+
+        auto switchClusterState = [&](const std::function<void(NKikimrBridge::TClusterState&)>& change) {
+            const TInstant deadline = env.Runtime->GetClock() + TDuration::Minutes(2);
+            for (;;) {
+                auto clusterState = QueryStorageConfig(env).GetClusterState();
+                clusterState.SetGeneration(clusterState.GetGeneration() + 1);
+                change(clusterState);
+                const auto res = InvokeDistconf(env, [&](auto& record) {
+                    record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(clusterState);
+                });
+                if (res.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                    break;
+                }
+                UNIT_ASSERT_C(env.Runtime->GetClock() < deadline, res.DebugString());
+                env.Sim(TDuration::Seconds(1));
+            }
+            env.Sim(TDuration::Seconds(30));
+        };
+
+        // pile_2 becomes the primary one, so that syncers take their sources there
+        switchClusterState([](auto& state) {
+            TBridgePileId::FromPileIndex(1).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPrimaryPile);
+            TBridgePileId::FromPileIndex(1).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPromotedPile);
+        });
+
+        // pile_3 goes out and gets back; the syncers of its parts keep running, as their completions are held
+        TSyncerTracker tracker;
+        std::vector<std::tuple<ui32, ui32, ui32>> assigned; // node, source and target of the syncers of the group
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                for (const auto& syncer : record.GetSyncers()) {
+                    if (syncer.GetBridgeProxyGroupId() == groupId) {
+                        assigned.emplace_back(nodeId, syncer.GetSourceGroupId(), syncer.GetTargetGroupId());
+                    }
+                }
+            }
+            return tracker.OnEvent(nodeId, ev);
+        };
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
+        WaitForPileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
+        tracker.Hold = true;
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitUntil(env, [&] { return !tracker.Held.empty(); }, "held syncer completion");
+        UNIT_ASSERT(!assigned.empty());
+        const auto [syncerNodeId, sourceGroupId, targetGroupId] = assigned.front();
+        Cerr << "*** syncer NodeId# " << syncerNodeId << " SourceGroupId# " << sourceGroupId << " TargetGroupId# "
+            << targetGroupId << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(sourceGroupId, parts[1]);
+        UNIT_ASSERT_VALUES_EQUAL(targetGroupId, parts[2]);
+
+        // pile_1 becomes the primary one again, and pile_2 with the source part is disconnected and removed
+        switchClusterState([](auto& state) {
+            TBridgePileId::FromPileIndex(0).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPrimaryPile);
+            TBridgePileId::FromPileIndex(0).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPromotedPile);
+            state.SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
+        });
+        RemovePileAndWait(env, "pile_2");
+        {
+            const auto baseConfig = env.FetchBaseConfig();
+            for (const auto& group : baseConfig.GetGroup()) {
+                UNIT_ASSERT_C(group.GetGroupId() != sourceGroupId, "the source part is still there");
+            }
+        }
+        Cerr << "*** source part removed, held syncer completions# " << tracker.Held.size() << Endl;
+
+        // BS_CONTROLLER restarts, and the node of the syncer registers again, reporting the syncer still running
+        env.RebootTablet(env.TabletId);
+        env.Sim(TDuration::Seconds(30));
+        const auto baseConfig = env.FetchBaseConfig();
+        env.Runtime->FilterFunction = {};
+        Cerr << "*** BS_CONTROLLER is alive, groups# " << baseConfig.GroupSize() << Endl;
+    }
 }

@@ -3,6 +3,14 @@ PROGRAM(kqprun)
 IF (PROFILE_MEMORY_ALLOCATIONS)
     MESSAGE("Enabled profile memory allocations")
     ALLOCATOR(LF_DBG)
+ELSE()
+    IF (OS_LINUX)
+        ALLOCATOR(TCMALLOC_256K)
+    ENDIF()
+ENDIF()
+
+IF (OS_LINUX)
+    LINKER_SCRIPT(strip_debug.ld)
 ENDIF()
 
 SRCS(

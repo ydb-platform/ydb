@@ -6,21 +6,21 @@ SELECT
     s_name,
     s_address
 FROM
-    `/Root/supplier` as supplier
+    `supplier` as supplier
 ,
-    `/Root/nation` as nation
+    `nation` as nation
 WHERE
     s_suppkey IN (
         SELECT
             ps_suppkey
         FROM
-            `/Root/partsupp` as partsupp
+            `partsupp` as partsupp
         WHERE
             ps_partkey IN (
                 SELECT
                     p_partkey
                 FROM
-                    `/Root/part` as part
+                    `part` as part
                 WHERE
                     p_name LIKE 'forest%'
             )
@@ -28,7 +28,7 @@ WHERE
                 SELECT
                     $to_decimal_max_precision("0.5") * Sum(l_quantity)
                 FROM
-                    `/Root/lineitem` as lineitem
+                    `lineitem` as lineitem
                 WHERE
                     l_partkey == ps_partkey
                     AND l_suppkey == ps_suppkey

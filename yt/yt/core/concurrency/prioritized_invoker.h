@@ -36,8 +36,6 @@ IPrioritizedInvokerPtr CreateFakePrioritizedInvoker(
 
 //! Creates a wrapper around IPrioritizedInvoker turning it into a regular IInvoker.
 //! All callbacks are propagated with a given fixed #priority.
-//! The resulting invoker is installed as the current invoker while executing callbacks,
-//! so callbacks scheduled after a context switch retain the same priority.
 IInvokerPtr CreateFixedPriorityInvoker(
     IPrioritizedInvokerPtr underlyingInvoker,
     i64 priority);

@@ -1613,6 +1613,17 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         testDescribe();
     }
 
+    Y_UNIT_TEST(TestQuoterResourceDescribeCounter) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        ctx.AddQuoterResource("/Root", 10.0);
+        ctx.DescribeQuoterResources({}, {}, true);
+        ctx.DescribeQuoterResources({}, {"/Root"}, false);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetTabletCumulativeCounter(*ctx.Runtime, ctx.TabletId, "Kesus/Requests/QuoterResourceDescribe"), 2);
+    }
+
     Y_UNIT_TEST(TestQuoterResourceCreation) {
         TTestContext ctx;
         ctx.Setup();

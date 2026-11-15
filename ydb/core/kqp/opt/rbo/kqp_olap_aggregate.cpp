@@ -115,14 +115,6 @@ bool IsOlapAverageCast(const TTypeAnnotationNode& columnType) {
     return RemoveOptionality(columnType).Cast<TDataExprType>()->GetSlot() != EDataSlot::Double;
 }
 
-bool HasOlapAverageCast(const TOlapAggregate& aggregate, TExprContext& ctx) {
-    for (const auto& aggregation : aggregate.Aggregations) {
-        if (aggregation.Function == "avg" && IsOlapAverageCast(*aggregate.Read->GetIUType(*aggregation.Column, ctx))) {
-            return true;
-        }
-    }
-    return false;
-}
 
 std::optional<TOlapAggregate> MatchOlapAggregate(const TOpAggregate& aggregate, TExprContext& ctx) {
     const auto& aggregations = aggregate.GetAggregationTraits();
@@ -222,6 +214,37 @@ std::optional<TOlapDistinct> MatchOlapDistinct(const TOpAggregate& aggregate, co
         }
     }
     return TOlapDistinct{read, *column};
+}
+
+std::optional<TOlapComputeSharding> MatchOlapComputeSharding(const TOpAggregate& aggregate,
+                                                             const TInfoUnitRegistry& registry) {
+    const auto& keys = aggregate.GetKeyColumns().Items();
+    if (aggregate.GetAggregationPhase() != EOpPhase::Intermediate || keys.empty()) {
+        return std::nullopt;
+    }
+    auto* input = aggregate.GetInput().Get();
+    if (input->Kind == EOperator::Map) {
+        input = CastOperator<TOpMap>(input)->GetInput().Get();
+    }
+    if (input->Kind != EOperator::Source || input->Props.StageId != aggregate.Props.StageId) {
+        return std::nullopt;
+    }
+    auto* read = CastOperator<TOpRead>(input);
+    if (read->GetTableStorageType() != NYql::EStorageType::ColumnStorage) {
+        return std::nullopt;
+    }
+
+    TOlapComputeSharding result{read, {}};
+    for (const auto key : keys) {
+        if (!read->GetColumns().Contains(key)) {
+            return std::nullopt;
+        }
+        const auto& column = registry.Get(key).GetColumnName();
+        if (std::find(result.Columns.begin(), result.Columns.end(), column) == result.Columns.end()) {
+            result.Columns.push_back(column);
+        }
+    }
+    return result;
 }
 
 } // namespace NKikimr::NKqp

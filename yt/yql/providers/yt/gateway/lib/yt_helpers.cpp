@@ -717,15 +717,14 @@ bool GetIntegerConstraints(const EDataSlot dataSlot, bool& isSigned, ui64& minVa
 
 void QuoteColumnForQL(const TStringBuf& columnName, TStringBuilder& result) {
     result << '`';
-    if (!columnName.Contains('`')) {
+    if (!columnName.Contains('`') && !columnName.Contains('\\')) {
         result << columnName;
     } else {
         for (const auto c : columnName) {
-            if (c == '`') {
-                result << "\\`";
-            } else {
-                result << c;
+            if (c == '`' || c == '\\') {
+                result << '\\';
             }
+            result << c;
         }
     }
     result << '`';
@@ -839,14 +838,13 @@ TMaybe<ui32> GenerateInputQueryComparison(const TStringBuf& opName, const TExprN
         // Value is in the range, comparison is not constant.
         bool addNullComparison = false;
         if (columnIsOptional) {
-            const bool isLess = opName == "<" || opName == "<=";
-            if (isLess && !nullValue.GetRef()) {
-                // QL will handle 'x [operation] NULL' as TRUE here, but we need FALSE.
+            // QL orders NULL below every non-NULL value.
+            const bool comparisonResultForNull = opName == "<" || opName == "<=" || opName == "!=";
+            if (comparisonResultForNull && !nullValue.GetRef()) {
                 QuoteColumnForQL(columnName, result);
                 result << " != NULL AND ";
                 addNullComparison = true;
-            } else if (!isLess && nullValue.GetRef()) {
-                // QL will handle 'x [operation] NULL' as FALSE here, but we need TRUE.
+            } else if (!comparisonResultForNull && nullValue.GetRef()) {
                 QuoteColumnForQL(columnName, result);
                 result << " = NULL OR ";
                 addNullComparison = true;

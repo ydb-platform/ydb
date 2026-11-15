@@ -147,6 +147,7 @@ public:
         const TInternalPathId pathId, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index);
 
     void Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext);
+    void RefreshScheme(const TAddExternalContext& externalContext);
 
     TTieringActualizer(
         const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)

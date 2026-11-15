@@ -1049,8 +1049,10 @@ new AsyncFunction('github', 'context', 'core', input.script)(
         self.assertNotIn("parent_sha", action)
         self.assertNotIn("PARENT_SHA", action)
         self.assertNotIn("--parent-sha", action)
-        self.assertIn("--disable-search", action)
-        self.assertIn("--plugin noop", action)
+        uploader = (CODECOV_DIR / "upload_coverage.py").read_text(encoding="utf-8")
+        self.assertIn("upload_coverage.py", action)
+        self.assertIn('"--disable-search"', uploader)
+        self.assertIn('"--plugin", "noop"', uploader)
         self.assertIn('--name "${SUITE}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"', action)
         self.assertIn('--mute-file "${MUTED_TESTS_FILE}"', action)
         self.assertNotIn("--test-blacklist-path", action)
@@ -1077,7 +1079,7 @@ new AsyncFunction('github', 'context', 'core', input.script)(
         upload = next(step for step in steps if step.get("name") == "Upload to Codecov")
         receipt = next(step for step in steps if step.get("name") == "Save Codecov upload receipt")
         self.assertGreater(steps.index(receipt), steps.index(upload))
-        self.assertLess(upload["run"].index("codecovcli upload-coverage"),
+        self.assertLess(upload["run"].index("upload_coverage.py"),
                         upload["run"].index("path.write_text"))
         self.assertEqual(receipt["if"], "inputs.pr_number != ''")
         self.assertEqual(receipt["with"]["name"], "codecov-upload-${{ inputs.suite }}-${{ github.run_id }}")
@@ -1096,8 +1098,12 @@ new AsyncFunction('github', 'context', 'core', input.script)(
             for upload_result in (0, 7):
                 with self.subTest(suite=suite, upload_result=upload_result), tempfile.TemporaryDirectory() as tmp:
                     arguments = Path(tmp) / "arguments.txt"
-                    source = SUITES[suite]["lcov_prefixes"][0] + "example.cpp"
-                    (Path(tmp) / "coverage.lcov").write_text(f"TN:\nSF:{Path.cwd()}/{source}\nDA:1,1\nLF:1\nend_of_record\n")
+                    source = {
+                        "cli": "ydb/apps/ydb/main.cpp",
+                        "cpp_sdk": "ydb/public/sdk/cpp/src/client/driver/driver.cpp",
+                        "cli_workload": "ydb/library/workload/tpc_base/tpc_base.cpp",
+                    }[suite]
+                    (Path(tmp) / "coverage.lcov").write_text(f"TN:\nSF:{GITHUB_DIR.parent}/{source}\nDA:1,1\nLF:1\nend_of_record\n")
                     env = {**os.environ, "SUITE": suite, "FLAG": suite,
                            "CODECOV_TOKEN": "test-token", "COMMIT_SHA": "a" * 40,
                            "BRANCH": "test-branch", "PR_NUMBER": "123",
@@ -1105,9 +1111,22 @@ new AsyncFunction('github', 'context', 'core', input.script)(
                            "GITHUB_RUN_ID": "456", "GITHUB_RUN_ATTEMPT": "2",
                            "RUNNER_TEMP": tmp, "UPLOAD_ARGUMENTS": str(arguments),
                            "UPLOAD_RESULT": str(upload_result)}
-                    script = ('codecovcli() { printf "%s\\n" "$@" > "$UPLOAD_ARGUMENTS"; '
-                              'return "$UPLOAD_RESULT"; }\n' + upload["run"])
-                    result = subprocess.run(["bash", "-c", script], env=env,
+                    fake_cli = Path(tmp) / "fake-codecovcli"
+                    fake_cli.write_text(
+                        f"#!{sys.executable}\n"
+                        "import os, sys\nfrom pathlib import Path\n"
+                        "Path(os.environ['UPLOAD_ARGUMENTS']).write_text('\\n'.join(sys.argv[1:]))\n"
+                        "sys.exit(int(os.environ['UPLOAD_RESULT']))\n",
+                        encoding="utf-8",
+                    )
+                    fake_cli.chmod(0o755)
+                    # Replace only the network client; exercise the actual
+                    # staging helper, YAML shell and receipt writer together.
+                    script = upload["run"].replace(
+                        "python3 .github/scripts/codecov/upload_coverage.py",
+                        f"python3 .github/scripts/codecov/upload_coverage.py --cli {fake_cli}",
+                    )
+                    result = subprocess.run(["bash", "-c", script], env=env, cwd=GITHUB_DIR.parent,
                                             text=True, capture_output=True)
                     self.assertEqual(result.returncode, upload_result, result.stderr)
                     receipt_path = Path(tmp) / f"codecov-upload-{suite}.json"
@@ -1118,7 +1137,7 @@ new AsyncFunction('github', 'context', 'core', input.script)(
                         uploaded = arguments.read_text().splitlines()
                         self.assertEqual(uploaded[uploaded.index("--name") + 1], pin.name)
                         report_path = Path(tmp) / f"codecov-upload-{suite}.lcov"
-                        self.assertEqual(uploaded[uploaded.index("--file") + 1], str(report_path))
+                        self.assertEqual(Path(uploaded[uploaded.index("--file") + 1]).resolve(), report_path.resolve())
                         self.assertEqual(set(load_lcov(report_path, pin, suite)), {source})
 
     def test_landing_revalidates_pr_head_before_s3_upload(self) -> None:

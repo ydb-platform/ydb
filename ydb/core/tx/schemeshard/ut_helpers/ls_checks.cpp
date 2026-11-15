@@ -1107,6 +1107,18 @@ TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed) {
     };
 }
 
+TCheckFunc StreamHeartbeatMode(NKikimrSchemeOp::ECdcStreamHeartbeatMode mode) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetHeartbeatMode(), mode);
+    };
+}
+
+TCheckFunc StreamHasAggregatorTabletId(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().HasAggregatorTabletId(), value);
+    };
+}
+
 TCheckFunc RetentionPeriod(const TDuration& value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(value.Seconds(), record.GetPathDescription().GetPersQueueGroup()

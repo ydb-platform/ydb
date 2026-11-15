@@ -683,6 +683,7 @@ struct TEvPQ {
         TActorId Sender;
         bool Force;
         bool RegisterIfNotExists;
+        TDuration WriteSessionQuotaWaitTime = TDuration::Zero();
     };
 
     struct TEvPipeDisconnected : public TEventLocal<TEvPipeDisconnected, EvPipeDisconnected> {
@@ -2020,6 +2021,77 @@ struct TEvPQ {
 
     struct TEvTopicSqsActionMetrics : TEventPB<TEvTopicSqsActionMetrics, NKikimrPQ::TEvTopicSqsActionMetrics, EvTopicSqsActionMetrics> {
         TEvTopicSqsActionMetrics() = default;
+    };
+};
+
+struct TEvWriteSessionsQuoter {
+    enum EEv {
+        EvNotify = InternalEventSpaceBegin(NPQ::NEvents::EServices::WRITE_SESSIONS_QUOTER),
+        EvAcquireQuota,
+        EvQuotaAcquired,
+        EvRemove,
+        EvQuotaDeclined,
+        EvEnd,
+    };
+
+    static_assert(EvEnd <= InternalEventSpaceBegin(NPQ::NEvents::EServices::END));
+
+    struct TEvNotify : TEventLocal<TEvNotify, EvNotify> {
+        TEvNotify(const TString& database, const TString& topic, ui32 partition, ui32 generation)
+            : Database(database)
+            , Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Database;
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
+    };
+
+    struct TEvAcquireQuota : TEventLocal<TEvAcquireQuota, EvAcquireQuota> {
+        TEvAcquireQuota(const TString& database, const TString& topic, ui32 partition, ui32 generation)
+            : Database(database)
+            , Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Database;
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
+    };
+
+    struct TEvQuotaAcquired : TEventLocal<TEvQuotaAcquired, EvQuotaAcquired> {
+        TEvQuotaAcquired(TDuration quotaWaitTime)
+            : QuotaWaitTime(quotaWaitTime)
+        {
+        }
+
+        const TDuration QuotaWaitTime;
+    };
+
+    struct TEvQuotaDeclined : TEventLocal<TEvQuotaDeclined, EvQuotaDeclined> {
+        TEvQuotaDeclined() = default;
+    };
+
+    struct TEvRemove : TEventLocal<TEvRemove, EvRemove> {
+        TEvRemove(const TString& database, const TString& topic, ui32 partition, ui32 generation)
+            : Database(database)
+            , Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Database;
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
     };
 };
 

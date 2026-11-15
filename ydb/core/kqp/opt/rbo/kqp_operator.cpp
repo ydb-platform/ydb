@@ -256,7 +256,8 @@ TIntrusivePtr<TOpRead> TOpRead::FromExpr(TExprNode::TPtr node, TInfoUnitRegistry
 
 TOpRead::TOpRead(const TString& alias, TUnorderedIUs columns, const NYql::EStorageType storageType,
                  const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, std::optional<TRangeInfo> ranges,
-                 const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos)
+                 const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos,
+                 bool requireSortedRead)
     : IOperator(EOperator::Source, pos, props)
     , Alias(alias)
     , StorageType(storageType)
@@ -265,6 +266,7 @@ TOpRead::TOpRead(const TString& alias, TUnorderedIUs columns, const NYql::EStora
     , Limit(limit)
     , OriginalPredicate(originalPredicate)
     , SortDir(sortDir)
+    , RequireSortedRead(requireSortedRead)
     , RangeInfo(std::move(ranges))
     , Columns_(std::move(columns)) {
 }

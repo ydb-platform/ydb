@@ -390,7 +390,7 @@ private:
     TFuzzerHolder FuzzerHolder_;
 };
 
-template <NTest::TTag Tag, typename T>
+template <NTest::ETag Tag, typename T>
 TVector<NTest::TTagged<T, Tag>> TagVector(const TVector<T>& values) {
     TVector<NTest::TTagged<T, Tag>> result;
     result.reserve(values.size());

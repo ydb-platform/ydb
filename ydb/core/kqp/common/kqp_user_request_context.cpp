@@ -26,6 +26,9 @@ void TUserRequestContext::Out(IOutputStream& o) const {
     if (UseBatchPool) {
         o << ", UseBatchPool: 1";
     }
+    if (ReadHints) {
+        o << ", ReadHints: " << ReadHints;
+    }
 
     o << "}";
 }

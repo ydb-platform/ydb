@@ -2358,6 +2358,19 @@ Y_UNIT_TEST(Analyze) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(ChecksumTable) {
+    TCases cases = {
+        {"checkSUM table my_table", "CHECKSUM TABLE my_table;\n"},
+        {"checksum table plato.`some/path` with(ALGORITHM=\"Sha256\")",
+         "CHECKSUM TABLE plato.`some/path` WITH (ALGORITHM = 'Sha256');\n"},
+        {"checksum table $table with (algorithm='CityHash128',)",
+         "CHECKSUM TABLE $table WITH (algorithm = 'CityHash128',\n);\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(ResourcePoolClassifierOperations) {
     TCases cases = {
         {"creAte reSourCe poOl ClaSsiFIer naMe With (a = \"b\")",

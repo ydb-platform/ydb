@@ -263,7 +263,7 @@ void RunPerf_YqlTest(const EBenchType type, const bool columnStore, std::set<ui3
 
         const auto expectedStatus = queriesStatus.empty() ? true : queriesStatus.contains(qId);
         queriesExpectedStatus.push_back(expectedStatus);
-        TString q = GetFullPath(BenchmarkQueryPath[type], ToString(qId) + ".yql");
+        TString q = ReadBenchmarkQuery(type, qId);
         const TString toDecimal = R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
         const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
         const TString round = R"($round = ($x,$y) -> {return $x;};)";
@@ -346,7 +346,7 @@ void RunPerf_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore
     CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
 
     {
-        TString q = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+        TString q = ReadBenchmarkQuery(type, queryId);
         const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
         const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
         const TString round = R"($round = ($x,$y) -> {return $x;};)";
@@ -384,7 +384,7 @@ void TimePerf_YqlTest(const EBenchType type, ui32 queryId, const bool columnStor
     CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
 
     {
-        TString q = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+        TString q = ReadBenchmarkQuery(type, queryId);
         const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
         const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
         const TString round = R"($round = ($x,$y) -> {return $x;};)";
@@ -502,7 +502,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         RunPerf_YqlTest(EBenchType::TPCH, /*columnstore=*/true, {
                         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
                         /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
-                        /*queriesWithoutCboCheck=*/{13});
+                        /*queriesWithoutCboCheck=*/{13, 22});
     }
 
     // Compiled 97 from 99.

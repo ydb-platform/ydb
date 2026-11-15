@@ -5082,6 +5082,57 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(InsertIntoNullablePKAfterFlagDisabled) {
+        // The flag gates table creation only: a table created with nullable key columns keeps accepting NULL keys
+        // after the flag is turned off, while NOT NULL key columns still reject NULL.
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
+        TTestHelper testHelper(settings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("pk1").SetType(NScheme::NTypeIds::Int64).SetNullable(true),
+            TTestHelper::TColumnSchema().SetName("pk2").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::String).SetNullable(true),
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ttt").SetPrimaryKey({ "pk1", "pk2" }).SetSharding({ "pk1" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        testHelper.GetKikimr().GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetAllowNullableColumnsInPK(false);
+
+        auto client = testHelper.GetKikimr().GetQueryClient();
+        {
+            const auto result = client
+                .ExecuteQuery(
+                    R"(INSERT INTO `/Root/ttt` (pk1, pk2, value) VALUES (null, 1, "a"), (2, 2, "b"))",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto result = client
+                .ExecuteQuery(
+                    R"(INSERT INTO `/Root/ttt` (pk1, pk2, value) VALUES (3, null, "c"))",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), "NULL in a NOT NULL key column must be rejected");
+        }
+        {
+            const auto resultSelect = client
+                .ExecuteQuery("SELECT * FROM `/Root/ttt` ORDER BY pk1, pk2", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+            NYdb::TResultSetParser parser(resultSelect.GetResultSet(0));
+            UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 2);
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT(!parser.ColumnParser("pk1").GetOptionalInt64());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("pk2").GetInt32(), 1);
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser("pk1").GetOptionalInt64(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("pk2").GetInt32(), 2);
+        }
+    }
+
     Y_UNIT_TEST(BulkUpserPredefinedData) {   //test for https://github.com/ydb-platform/ydb/issues/20003
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

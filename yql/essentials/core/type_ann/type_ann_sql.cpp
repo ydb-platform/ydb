@@ -559,15 +559,7 @@ bool ScanColumns(
     bool allowProjection)
 {
     bool isError = false;
-    VisitExpr(root, [&](const TExprNode::TPtr& input) {
-        const auto node = input->IsCallable("YqlColumnOrAccess")
-            ? BuildYqlColumnOrAccessRef(input, possibleAliases, ctx.Expr)
-            : input;
-        if (!node) {
-            isError = true;
-            return false;
-        }
-
+    VisitExpr(root, [&](const TExprNode::TPtr& node) {
         if (node->IsCallable({"PgSubLink", "YqlSubLink"})) {
             return false;
         } else if (allowProjection && node->IsCallable({"YqlAgg", "PgAgg", "YqlGrouping", "PgGrouping"})) {
@@ -1554,46 +1546,27 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
             return argNode;
         }
 
-        if (node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "YqlColumnOrAccess", "PgColumnRef"})) {
-            auto columnRef = node;
-            TExprNode::TPtr columnAccess;
-            if (node->IsCallable("YqlColumnOrAccess")) {
-                if (!node->Head().IsCallable("Void")) {
-                    return node;
-                }
-                auto reference = BuildYqlColumnOrAccessRef(node, possibleAliases, ctx.Expr);
-                if (!reference) {
-                    return nullptr;
-                }
-                if (reference->ChildrenSize() == 1) {
-                    columnAccess = node;
-                }
-                columnRef = std::move(reference);
-            }
-
-            const bool columnOrType = columnRef->IsCallable("YqlColumnRefOrType");
+        if (node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "PgColumnRef"})) {
+            const bool columnOrType = node->IsCallable("YqlColumnRefOrType");
             const auto wrapColumn = [&](TExprNode::TPtr column) {
-                if (columnAccess) {
-                    return ctx.Expr.ChangeChild(*columnAccess, 0, std::move(column));
-                }
                 return columnOrType
-                    ? ctx.Expr.NewCallable(node->Pos(), "YqlColumnOrType", {std::move(column), columnRef->TailPtr()})
+                    ? ctx.Expr.NewCallable(node->Pos(), "YqlColumnOrType", {std::move(column), node->TailPtr()})
                     : column;
             };
             const auto columnError = [&](const TString& message) {
                 const auto* type = ctx.Expr.MakeType<TErrorExprType>(TIssue(ctx.Expr.GetPosition(node->Pos()), message));
                 return wrapColumn(ctx.Expr.NewCallable(node->Pos(), "Error", {ExpandType(node->Pos(), *type, ctx.Expr)}));
             };
-            const auto match = ResolveSqlColumnRef(*columnRef, inputs, possibleAliases, /*scanColumnsOnly=*/false, projectionRefsResolved);
-            if (const auto* column = FindUniqueUsingColumn(usedInUsing, columnRef->Tail().Content());
-                columnRef->ChildrenSize() == 1 && column &&
-                (column->Type || usedInUsing.contains(columnRef->Tail().Content())) &&
+            const auto match = ResolveSqlColumnRef(*node, inputs, possibleAliases, /*scanColumnsOnly=*/false, projectionRefsResolved);
+            if (const auto* column = FindUniqueUsingColumn(usedInUsing, node->Tail().Content());
+                node->ChildrenSize() == 1 && column &&
+                (column->Type || usedInUsing.contains(node->Tail().Content())) &&
                 IsUsingColumnMatch(match, *column)) {
                 // clang-format off
                 return wrapColumn(ctx.Expr.Builder(node->Pos())
                             .Callable("Member")
                                 .Add(0, argNode)
-                                .Atom(1, column->Type ? column->PhysicalName : TString(columnRef->Tail().Content()))
+                                .Atom(1, column->Type ? column->PhysicalName : TString(node->Tail().Content()))
                             .Seal()
                             .Build());
                 // clang-format on
@@ -1646,7 +1619,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
             }
 
             if (columnOrType) {
-                return columnError(ColumnRefErrorMessage(*columnRef, match.Status));
+                return columnError(ColumnRefErrorMessage(*node, match.Status));
             }
 
             YQL_ENSURE(false, "Missing input");

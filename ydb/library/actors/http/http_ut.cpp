@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/http/ut/tls_client_connection.h>
+#include <library/cpp/monlib/consumers/collecting_consumer.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/resource/resource.h>
@@ -980,6 +981,59 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
 
         UNIT_ASSERT_EQUAL(response->Response->Status, "200");
         UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
+    }
+
+    Y_UNIT_TEST(SensorsKeepOnlyTimeMs) {
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+
+        auto registry = std::make_shared<NMonitoring::TMetricRegistry>();
+        NActors::TActorId proxyId = actorSystem.Register(NHttp::CreateHttpProxy(registry));
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        UNIT_ASSERT(actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle, TDuration::Seconds(10)));
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://127.0.0.1:" + ToString(port) + "/test");
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle, TDuration::Seconds(10));
+        UNIT_ASSERT(request);
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nContent-Length: 6\r\n\r\npassed");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+        auto* response = GrabHttpReply<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(actorSystem, clientId, handle);
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+
+        // Both connections report their sensors to the proxy once the reply is built.
+        THolder<NMonitoring::TCollectingConsumer> sensors;
+        for (TInstant deadline = TInstant::Now() + TDuration::Seconds(10); TInstant::Now() < deadline; Sleep(TDuration::MilliSeconds(10))) {
+            sensors = MakeHolder<NMonitoring::TCollectingConsumer>();
+            registry->Accept(TInstant::Zero(), sensors.Get());
+            if (sensors->Metrics.size() >= 2) {
+                break;
+            }
+        }
+        // One time_ms histogram per direction, counting the one request: it replaces the count rate.
+        UNIT_ASSERT_VALUES_EQUAL(sensors->Metrics.size(), 2);
+        THashSet<TString> directions;
+        for (const auto& metric : sensors->Metrics) {
+            const auto name = metric.Labels.Find("sensor");
+            const auto direction = metric.Labels.Find("direction");
+            UNIT_ASSERT(name && direction);
+            UNIT_ASSERT_VALUES_EQUAL(name->Value(), "time_ms");
+            directions.insert(TString(direction->Value()));
+            const auto* histogram = (*metric.Values)[0].GetValue().AsHistogram();
+            ui64 requests = 0;
+            for (ui32 i = 0; i < histogram->Count(); ++i) {
+                requests += histogram->Value(i);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(requests, 1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(directions.size(), 2);
     }
 
     Y_UNIT_TEST(BasicRunning6) {

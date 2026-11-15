@@ -8,6 +8,10 @@ namespace {
 
 class TDummyTranslator: public ITranslator {
 public:
+    bool AcceptsProjectSetting(const NYql::TProjectSettings::TPragma&) const final {
+        return false;
+    }
+
     explicit TDummyTranslator(TString name)
         : Name_(std::move(name))
     {

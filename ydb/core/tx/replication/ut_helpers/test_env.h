@@ -93,6 +93,7 @@ class TEnv {
         Sender = Server.GetRuntime()->AllocateEdgeActor();
     }
 
+public:
     Ydb::StatusIds::StatusCode LoginStatus(const TString& database, const TString& user, const TString& password) {
         Ydb::Auth::LoginRequest request;
         request.set_user(user);
@@ -116,6 +117,7 @@ class TEnv {
         return operation.status();
     }
 
+private:
     void Login(const TString& database, const TString& user, const TString& password) {
         UNIT_ASSERT_VALUES_EQUAL(LoginStatus(database, user, password), Ydb::StatusIds::SUCCESS);
     }
@@ -207,6 +209,12 @@ public:
             Server.GetRuntime()->Send(new IEventHandle(MakeTicketParserID(), Sender,
                 new TEvTicketParser::TEvUpdateLoginSecurityState(secState)));
         }
+    }
+
+    ~TEnv() {
+        RunCall([&] {
+            Server.ShutdownGRpc();
+        });
     }
 
     void RotatePassword(const TString& user, const TString& newPassword, const TString& oldPassword) {

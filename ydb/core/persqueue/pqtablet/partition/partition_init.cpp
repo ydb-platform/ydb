@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 #include <ydb/core/protos/pqdata_mlp.pb.h>
 
 #include <memory>
@@ -43,6 +44,7 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitMessageDeduplicatorStep>(this));
     Steps.push_back(MakeHolder<TDeleteKeysStep>(this));
     Steps.push_back(MakeHolder<TInitFieldsStep>(this));
+    Steps.push_back(MakeHolder<TNotifyWriteSessionsQuoterStep>(this));
 
     CurrentStep = Steps.begin();
 }
@@ -1205,6 +1207,27 @@ void TInitFieldsStep::Execute(const TActorContext &ctx) {
     }
 
     return Done(ctx);
+}
+
+//
+// TNotifyWriteSessionsQuoterStep
+//
+
+TNotifyWriteSessionsQuoterStep::TNotifyWriteSessionsQuoterStep(TInitializer* initializer)
+    : TInitializerStep(initializer, "TNotifyWriteSessionsQuoterStep", false) {
+}
+
+void TNotifyWriteSessionsQuoterStep::Execute(const TActorContext& ctx) {
+    if (Partition()->IsSupportive()) {
+        return Done(ctx);
+    }
+
+    auto actorId = MakeWriteSessionsQuoterId();
+
+    Partition()->WriteSessionsQuoterNotified = true;
+    ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvNotify(
+        Partition()->Config.GetYdbDatabasePath(), TopicName(), PartitionId().OriginalPartitionId, Partition()->TabletGeneration));
+    Done(ctx);
 }
 
 //

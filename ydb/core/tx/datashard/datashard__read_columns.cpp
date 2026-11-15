@@ -18,7 +18,7 @@ public:
         , SnapshotKey(snapshotKey)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_READ_COLUMNS; }
+    TTxType GetTxType() const override { return TXTYPE_RELEASE_SNAPSHOT_REFERENCE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Self->GetSnapshotManager().ReleaseReference(SnapshotKey, txc.DB, ctx.Now());

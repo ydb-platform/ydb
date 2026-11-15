@@ -29,9 +29,6 @@ TIntrusivePtr<IOperator> TPushOlapAggregateRule::SimpleMatchAndApply(const TIntr
     if (olapAggregate->Read->Parents.size() != 1 || (olapAggregate->Map && olapAggregate->Map->Parents.size() != 1)) {
         return input;
     }
-    if (!ctx.KqpCtx.Config->GetEnableOlapScalarApply() && HasOlapAverageCast(*olapAggregate, ctx.ExprCtx)) {
-        return input;
-    }
 
     auto pushed = MakeIntrusive<TOpAggregate>(aggregate->GetInput(), aggregate->GetAggregationTraits(), aggregate->GetKeyColumns(),
                                               EOpPhase::Intermediate, aggregate->IsDistinctAll(), aggregate->Props, aggregate->Pos);

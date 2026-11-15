@@ -345,10 +345,6 @@ TString THttpHeader::GetHeaderAsString(const TString& hostName, const TString& r
 
     GetHeader(HostPort_.empty() ? hostName : HostPort_, requestId, includeParameters).Get()->WriteTo(&result);
 
-    if (ShouldAcceptFraming()) {
-        result << "X-YT-Accept-Framing: 1\r\n";
-    }
-
     result << "\r\n";
 
     return result.Str();
@@ -421,7 +417,9 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     if (includeParameters) {
         printYTHeader("X-YT-Parameters", NodeToYsonString(Parameters_));
     }
-
+    if (ShouldAcceptFraming()) {
+        headers->Add("X-YT-Accept-Framing", "1");
+    }
     return NHttp::THeadersPtrWrapper(std::move(headers));
 }
 

@@ -82,6 +82,7 @@ JOIN_SRCS(
     decorrelation/dependent_join_pushdown.cpp
     decorrelation/pull_up_correlated_predicate.cpp
     disable_blocks_on_columns_limit.cpp
+    eliminate_duplicate_aggregations.cpp
     eliminate_left_join.cpp
     fuse_filters.cpp
 )

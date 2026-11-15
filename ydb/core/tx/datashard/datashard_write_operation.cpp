@@ -15,6 +15,8 @@
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/util/memory_track.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
@@ -89,6 +91,36 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
 TValidatedWriteTx::~TValidatedWriteTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
+}
+
+bool TValidatedWriteTx::IsReadOnlyPrepare(const TSysLocks& sysLocks) const {
+    if (!Ready() || IsImmediate || HasOperations() || LockTxId != 0) {
+        return false;
+    }
+    if (!KqpLocks || KqpLocks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit || KqpLocks->LocksSize() == 0) {
+        return true;
+    }
+
+    const auto& sendingShards = KqpLocks->GetSendingShards();
+    if (std::find(sendingShards.begin(), sendingShards.end(), sysLocks.SelfShardId()) == sendingShards.end()) {
+        return false;
+    }
+    const auto& receivingShards = KqpLocks->GetReceivingShards();
+    if (std::find(receivingShards.begin(), receivingShards.end(), sysLocks.SelfShardId()) != receivingShards.end()) {
+        return false;
+    }
+
+    const bool allowAncestorLocks = AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+    for (const auto& lockProto : KqpLocks->GetLocks()) {
+        if (lockProto.GetDataShard() != sysLocks.SelfShardId() && !allowAncestorLocks) {
+            return false;
+        }
+        const auto lock = sysLocks.GetRawLock(lockProto.GetLockId());
+        if (lockProto.GetHasWrites() || (lock && lock->IsWriteLock())) {
+            return false;
+        }
+    }
+    return true;
 }
 
 std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperation::ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator, const NWilson::TTraceId& traceId) {

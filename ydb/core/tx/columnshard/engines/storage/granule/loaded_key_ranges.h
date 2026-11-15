@@ -10,41 +10,52 @@ class TPKRangesFilter;
 
 class TLoadedKeyRanges {
 private:
-    enum class EState {
-        Nothing,
-        From,
-        Everything,
+    enum class ECoverage {
+        None,
+        FromKey,
+        All,
     };
 
-    EState State;
-    // EState::From: every portion whose last key is >= this key is in memory
-    std::optional<NArrow::NMerger::TSortableBatchPosition> From;
+    ECoverage Coverage;
+    // ECoverage::FromKey: every portion whose last key is >= this key is in memory
+    std::optional<NArrow::TSimpleRow> FromKey;
+    // FromKey, in the form the ranges of a scan compare with
+    std::optional<NArrow::NMerger::TSortableBatchPosition> FromKeyPosition;
 
-    TLoadedKeyRanges(const EState state, std::optional<NArrow::NMerger::TSortableBatchPosition>&& from)
-        : State(state)
-        , From(std::move(from))
+    explicit TLoadedKeyRanges(const ECoverage coverage)
+        : Coverage(coverage)
+    {
+    }
+
+    explicit TLoadedKeyRanges(const NArrow::TSimpleRow& from)
+        : Coverage(ECoverage::FromKey)
+        , FromKey(from)
+        , FromKeyPosition(from.BuildSortablePosition())
     {
     }
 
 public:
     static TLoadedKeyRanges BuildNothing() {
-        return TLoadedKeyRanges(EState::Nothing, std::nullopt);
+        return TLoadedKeyRanges(ECoverage::None);
     }
 
     static TLoadedKeyRanges BuildFrom(const NArrow::TSimpleRow& from) {
-        return TLoadedKeyRanges(EState::From, from.BuildSortablePosition());
+        return TLoadedKeyRanges(from);
     }
 
     static TLoadedKeyRanges BuildEverything() {
-        return TLoadedKeyRanges(EState::Everything, std::nullopt);
+        return TLoadedKeyRanges(ECoverage::All);
     }
 
-    bool IsEverythingLoaded() const {
-        return State == EState::Everything;
+    bool CoversAll() const {
+        return Coverage == ECoverage::All;
     }
 
     // Whether every row the ranges select lies in a portion that is in memory.
     bool Covers(const TPKRangesFilter& ranges) const;
+
+    // Whether every row >= key lies in a portion that is in memory.
+    bool CoversFrom(const NArrow::TSimpleRow& key) const;
 };
 
 }   // namespace NKikimr::NOlap

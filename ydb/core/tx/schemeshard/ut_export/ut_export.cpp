@@ -5115,6 +5115,7 @@ partitioning_settings {
 mode: MODE_UPDATES
 format: FORMAT_JSON
 state: STATE_ENABLED
+compression: COMPRESSION_NONE
 )", i));
 
                 auto* topic = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb");

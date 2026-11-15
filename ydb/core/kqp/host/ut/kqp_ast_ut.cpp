@@ -567,16 +567,27 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         UNIT_ASSERT_VALUES_EQUAL(std::get<TLiteral>(hint.Values[0].Value).Spelling, "'a''b'");
     }
 
+    Y_UNIT_TEST(DeleteStatementsRemainInScript) {
+        for (const TString& prefix : {TString("SELECT 1;"), TString("PRAGMA OrderedColumns;")}) {
+            auto ast = Parse(prefix + " DELETE FROM t;");
+            UNIT_ASSERT_VALUES_EQUAL(ast->Statements.size(), 2);
+            const auto& statement = std::get<TWriteStatement>(ast->Statements[1].Value);
+            UNIT_ASSERT(statement.Kind == EWriteKind::Delete);
+            UNIT_ASSERT(statement.Target);
+            UNIT_ASSERT(!statement.Where);
+        }
+    }
+
     // Each rejected alternative must request whole-script fallback; returning
     // a partial AST with the unsupported clause removed would change semantics.
     Y_UNIT_TEST(UnsupportedSyntaxDoesNotDisappear) {
         const TVector<TString> queries = {
-            "SELECT 1; DELETE FROM t;",
+            "SELECT 1; SELECT * WITHOUT id FROM t;",
             "SELECT * WITHOUT id FROM t;",
             "SELECT x = y = z;",
             "SELECT * FROM t OUTER JOIN u;",
             "SELECT * FROM t WITH SCHEMA Callable<() -> Int32>;",
-            "PRAGMA OrderedColumns; DELETE FROM t;",
+            "PRAGMA OrderedColumns; SELECT * WITHOUT id FROM t;",
             "SELECT * FROM ANY t;",
         };
         for (const auto& query : queries) {

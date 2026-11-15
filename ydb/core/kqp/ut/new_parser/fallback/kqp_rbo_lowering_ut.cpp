@@ -79,6 +79,21 @@ struct TFixture : NTests::TIdTestContext {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
+    Y_UNIT_TEST(InSubplansRetainAnnotatedNullability) {
+        TFixture f;
+        auto root = f.Run("SELECT value IN (SELECT value FROM t), id IN (SELECT id FROM t) FROM t;");
+        ui32 optionalResults = 0;
+        ui32 requiredResults = 0;
+        for (const auto id : root->PlanProps.Subplans.Bindings()) {
+            const auto& entry = root->PlanProps.Subplans.At(id);
+            UNIT_ASSERT(entry.Type == ESubplanType::IN_SUBPLAN);
+            if (entry.OptionalResult) { ++optionalResults; }
+            else { ++requiredResults; }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(optionalResults, 1);
+        UNIT_ASSERT_VALUES_EQUAL(requiredResults, 1);
+    }
+
     Y_UNIT_TEST(DeclarationsAndParameterTablesLowerDirectly) {
         for (const TString sql : {
             "DECLARE $x AS Decimal(22,9)?; DECLARE $s AS String; SELECT $x AS x, $s AS s;",

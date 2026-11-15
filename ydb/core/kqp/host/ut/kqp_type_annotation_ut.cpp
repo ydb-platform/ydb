@@ -125,6 +125,19 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         UNIT_ASSERT_VALUES_EQUAL(negated.Result->Expressions.at(&comparison).Inputs.size(), 1);
     }
 
+    Y_UNIT_TEST(InSubqueriesPreserveNullableResultTypes) {
+        for (const bool ansi : {false, true}) {
+            TFixture f;
+            f.Settings.Expressions.AnsiIn = ansi;
+            f.Ok("SELECT id IN (SELECT id FROM t), score IN (SELECT id FROM t), "
+                "id NOT IN (SELECT score FROM t), EXISTS (SELECT score FROM t) FROM t;");
+            UNIT_ASSERT_VALUES_EQUAL(f.Output(0), "Bool");
+            UNIT_ASSERT_VALUES_EQUAL(f.Output(1), "Optional<Bool>");
+            UNIT_ASSERT_VALUES_EQUAL(f.Output(2), ansi ? "Optional<Bool>" : "Bool");
+            UNIT_ASSERT_VALUES_EQUAL(f.Output(3), "Bool");
+        }
+    }
+
     Y_UNIT_TEST(ScalarSubqueryInputsStayLocalToEachExpression) {
         TFixture f;
         f.Ok("SELECT l.id + (SELECT MAX(r.id) FROM t AS r WHERE r.id = l.id) "

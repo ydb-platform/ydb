@@ -55,22 +55,32 @@ EXCLUDED = {
     },
 }
 
-# Cases previously omitted from the frontend driver, outside the effects target.
-# Prefix their IDs with effects/ so one filter runs the complete imported set.
+# Preserve registration checks for effect cases that moved between binaries.
+# Prefix cases outside the effects target with effects/ for one complete filter.
 EFFECTS = {
-    "": (
+    "effects": (
         "KqpRboCopy::SequencerIsAnAllocationBarrier",
         "KqpRboCopy::CopiesEffectBindingsWithoutChangingStorageNames",
         "KqpRboCopy::ReplicateExpansionDoesNotDuplicateEffects",
+        "KqpRboIdLowering::UpsertKeepsDefaultColumnsThroughLowering",
+        "KqpRboYql::PGInsertUpdate",
+        "KqpRboYql::InsertSelectColumnOrder*",
+        "KqpRboYql::InsertUpdate",
     ),
-    "basic": ("KqpRboYql::PGInsertUpdate", "KqpRboYql::InsertSelectColumnOrder*", "KqpRboYql::InsertUpdate"),
     "fallback": (
         "KqpRboYql::FallbackToYqlEnabled",
         "KqpRboYql::FallbackToYqlDisabled",
         "KqpRboYql::FallbackToYqlEnabledExecute",
         "KqpRboYql::FallbackToYqlDisabledExecute",
     ),
-    "physical": ("KqpRboIdLowering::UpsertKeepsDefaultColumnsThroughLowering",),
+}
+# These cases construct operators directly. Run them, but do not require parser
+# log records from tests that never submit SQL to the frontend.
+OPERATOR_EFFECTS = {
+    "KqpRboCopy::SequencerIsAnAllocationBarrier",
+    "KqpRboCopy::CopiesEffectBindingsWithoutChangingStorageNames",
+    "KqpRboCopy::ReplicateExpansionDoesNotDuplicateEffects",
+    "KqpRboIdLowering::UpsertKeepsDefaultColumnsThroughLowering",
 }
 NATIVE_EFFECTS = {
     "KqpNewYqlParserFallback::NativeValuesWriteModesAndReturning",
@@ -88,7 +98,9 @@ RESTORED_EFFECTS = {
 
 
 def is_effect_case(module, name):
-    if module == f"{RBO_ROOT}/effects" or name in NATIVE_EFFECTS:
+    if module == f"{RBO_ROOT}/effects":
+        return name not in OPERATOR_EFFECTS
+    if name in NATIVE_EFFECTS:
         return True
     group = module[len(RBO_ROOT) :].lstrip("/")
     return any(fnmatch.fnmatchcase(name, pattern) for pattern in EFFECTS.get(group, ()))
@@ -163,6 +175,9 @@ def test_rbo_frontend_compatibility(module, name):
     suffix = hashlib.sha256(f"{module}/{name}".encode()).hexdigest()[:16]
     trace = yatest.common.output_path(f"rbo-{suffix}.trace")
     effects = is_effect_case(module, name)
+    # These twins/control cases explicitly disable RBO, which also disables the
+    # fixture's new-frontend override. Keep executing their result assertions.
+    legacy_baseline = "-NewRbo" in name or name.endswith("LegacyWithoutStreamIndex")
     command = [binary_for(module), "--trace-path", trace]
     if effects:
         command += ["--test-param", "KQP_LOG_KQP_YQL=INFO"]
@@ -196,6 +211,7 @@ def test_rbo_frontend_compatibility(module, name):
             frontend_attempts=attempts,
             native_contracts=log.count("New YQL native execution contract built"),
             direct_native_assertions=name in NATIVE_EFFECTS,
+            legacy_baseline=legacy_baseline,
             fallback_reasons=dict(reasons),
         )
         Path(yatest.common.output_path(f"rbo-{suffix}.frontend.json")).write_text(json.dumps(audit, indent=2) + "\n")
@@ -208,5 +224,5 @@ def test_rbo_frontend_compatibility(module, name):
     case = finished[0]
     assert f"{case['class']}::{case['subtest']}" == name, case
     assert case["status"] == "good", case
-    if module == f"{RBO_ROOT}/effects":
+    if effects and module == f"{RBO_ROOT}/effects" and not legacy_baseline:
         assert attempts > 0, f"Effects case did not exercise the enabled frontend: {audit}"

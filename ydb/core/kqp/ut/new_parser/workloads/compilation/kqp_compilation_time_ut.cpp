@@ -46,7 +46,7 @@ TString QueryText(EBenchType type, ui32 id) {
         + R"($round = ($x,$y) -> {return $x;};)" + "\n"
         + R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)" + "\n"
         + R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)" + "\n"
-        + GetFullPath(BenchmarkQueryPath[type], ToString(id) + ".yql");
+        + ReadBenchmarkQuery(type, id);
 }
 
 // A successful new-RBO compile alone does not establish native frontend use.

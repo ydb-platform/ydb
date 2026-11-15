@@ -217,7 +217,9 @@ private:
                 if (!comparison.IsColumnAccess()) { Unsupported(range, "computed IN subquery input"); }
                 tuple.Append(*comparison.GetRawInputIUs().begin());
             }
-            Props.Subplans.Add(id, producer.Op, kind, std::move(tuple), result);
+            const bool optionalResult = kind == ESubplanType::IN_SUBPLAN
+                && Annotations.Columns[column]->IsOptionalOrNull();
+            Props.Subplans.Add(id, producer.Op, kind, std::move(tuple), result, optionalResult);
             subqueryBindings[column] = id;
         }
         auto row = Ctx.NewArgument(pos, "row");

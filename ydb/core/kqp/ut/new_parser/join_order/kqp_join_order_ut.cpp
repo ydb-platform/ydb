@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/rbo/kqp_rbo_yql_workload_helpers.h>
 
 #include <library/cpp/json/writer/json.h>
 #include <yql/essentials/public/langver/yql_langver.h>
@@ -18,7 +19,7 @@ namespace {
 // so profile selection must stay aligned with the original canonization suite.
 struct TBenchmark {
     TString Name;
-    TString QueryDirectory;
+    NYqlTests::EBenchType Type;
     TString Schema;
     TString NormalStatistics;
     TString SmallStatistics;
@@ -197,7 +198,7 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
                 $to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
                 $to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };
                 $round = ($x,$y) -> {return $x;};
-            )" + ReadRboData(benchmark.QueryDirectory + "/q" + ToString(id) + ".yql");
+            )" + NYqlTests::ReadBenchmarkQuery(benchmark.Type, id);
             // Bind frontend evidence to this request. A previous query or a
             // background metadata query must never satisfy the native guard.
             const TString traceId = TStringBuilder() << "new-parser-join-order-" << benchmark.Name << '-' << profile << "-q" << id;
@@ -244,13 +245,13 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
 
 Y_UNIT_TEST_SUITE(KqpJoinOrderNewParser) {
     Y_UNIT_TEST(TPCH) {
-        RunJoinOrderBenchmark({"TPCH", "yql-tpch", "tpch", "tpch1000s", "tpch100s", 22}, {});
+        RunJoinOrderBenchmark({"TPCH", NYqlTests::TPCH, "tpch", "tpch1000s", "tpch100s", 22}, {});
     }
 
     Y_UNIT_TEST(TPCDS) {
         // Retain the original canonization suite's exclusions (17/44).
         // Q14/Q23/Q39 have two result statements and are outside this path.
-        RunJoinOrderBenchmark({"TPCDS", "yql-tpcds", "tpcds", "tpcds1000s", "tpcds10s", 99}, {17, 44}, {14, 23, 39});
+        RunJoinOrderBenchmark({"TPCDS", NYqlTests::TPCDS, "tpcds", "tpcds1000s", "tpcds10s", 99}, {17, 44}, {14, 23, 39});
     }
 }
 

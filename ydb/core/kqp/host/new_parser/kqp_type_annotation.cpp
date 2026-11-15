@@ -456,6 +456,14 @@ private:
             if (kind != EAstSubquery::Exists && outputs.size() != 1) { Error(node.Range, "A scalar/IN subquery must return one column"); }
             auto type = kind == EAstSubquery::Scalar ? Optional(outputs.front())
                 : Ctx.MakeType<TDataExprType>(EDataSlot::Bool);
+            if (kind == EAstSubquery::In) {
+                const auto* lookupType = Result.Expressions.at(comparison).GetType();
+                if (lookupType->HasOptionalOrNull()
+                    || (Settings.Expressions.AnsiIn.value_or(false)
+                        && IsSqlInCollectionItemsNullable(lookupType, outputs.front()))) {
+                    type = Optional(type);
+                }
+            }
             const auto id = Value(type);
             Result.Values[&node] = id;
             Result.Subqueries.emplace(id, TAnnotatedSubquery{query, kind, comparison});
@@ -677,6 +685,12 @@ private:
         const auto pos = Pos(range);
         const auto scope = Source(*write.Target);
         const auto& table = *Names.Tables.at(write.Target.get());
+        // Generated expressions must be evaluated from the final written row.
+        // Until native writes carry that contract, retain the legacy frontend's
+        // generated-column validation and recomputation (including indexes).
+        if (write.Kind != EWriteKind::Delete && table.HasGeneratedColumns) {
+            Unsupported(range, "writes with generated columns");
+        }
         THashMap<TString, TColumnId> targetColumns;
         for (const auto& [id, type] : scope) { Y_UNUSED(type); targetColumns[Names.Columns[id].Name] = id; }
         THashSet<TString> returned;

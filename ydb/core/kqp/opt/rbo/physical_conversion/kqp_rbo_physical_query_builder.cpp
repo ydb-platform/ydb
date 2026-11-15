@@ -172,17 +172,25 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::LowerPhysicalStageCompatibility(
 
     TOptimizeExprSettings settings(&RBOCtx.TypeCtx);
     settings.CustomInstantTypeTransformer = RBOCtx.TypeCtx.CustomInstantTypeTransformer.Get();
+    // Revisit newly built nodes on later passes, while keeping unchanged,
+    // already typed subgraphs out of the rewrite traversal.
+    TProcessedNodesSet processedNodes;
+    settings.ProcessedNodes = &processedNodes;
     constexpr size_t MaxPasses = 64;
     for (size_t pass = 0; pass < MaxPasses && NeedsRboCompatibilityLowering(root); ++pass) {
         TExprNode::TPtr output;
-        const auto status = OptimizeExpr(
-            root,
-            output,
-            [&](const TExprNode::TPtr& node, TExprContext& ctx) {
-                return RewriteRboCompatibilityNode(node, ctx, RBOCtx.TypeCtx);
-            },
-            RBOCtx.ExprCtx,
-            settings);
+        const auto status = [&] {
+            TCompileTraceScope scope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Step,
+                "Rewrite incompatible callables");
+            return OptimizeExpr(
+                root,
+                output,
+                [&](const TExprNode::TPtr& node, TExprContext& ctx) {
+                    return RewriteRboCompatibilityNode(node, ctx, RBOCtx.TypeCtx);
+                },
+                RBOCtx.ExprCtx,
+                settings);
+        }();
         YQL_ENSURE(status != IGraphTransformer::TStatus::Error,
             "Failed to lower execution-incompatible callables in new RBO physical stages");
         if (status == IGraphTransformer::TStatus::Ok) {
@@ -786,6 +794,14 @@ void TPhysicalQueryBuilder::KeepTypeAnnotationForStageAndFirstLevelChilds(TDqPhy
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PreparePhysicalStages(TVector<TExprNode::TPtr>&& physicalStages, bool enableWideChannels) {
     Y_ENSURE(physicalStages.size());
     auto root = physicalStages.back();
+    if (!enableWideChannels) {
+        // The graph already connects the finalized stages. Only widening
+        // changes those connections and requires rebuilding the consumers.
+        TypeAnnotate(root);
+        TVector<TExprNode::TPtr> stagesTopSorted;
+        TopologicalSort(TDqPhyStage(root), stagesTopSorted);
+        return stagesTopSorted;
+    }
     if (!root->GetTypeAnn() && enableWideChannels) {
         TypeAnnotate(root);
     }
@@ -1012,7 +1028,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
 }
 
 void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
-    TCompileTraceScope traceScope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Detail,
+    TCompileTraceScope traceScope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Step,
         "Annotate physical stage");
     RBOCtx.TypeAnnTransformer.Rewind();
     TExprNode::TPtr output;

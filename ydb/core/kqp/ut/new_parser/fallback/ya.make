@@ -3,6 +3,12 @@
 # without allowing a host fallback to hide a lowering failure.
 UNITTEST_FOR(ydb/core/kqp)
 
+# This executable's debug information exceeds DWARF32 relocation limits in
+# relwithdebinfo builds. Keep stripping local to this test executable.
+IF (OS_LINUX)
+    LDFLAGS(-Wl,--strip-debug)
+ENDIF()
+
 FORK_SUBTESTS()
 SPLIT_FACTOR(16)
 

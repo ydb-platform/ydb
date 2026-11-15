@@ -274,6 +274,35 @@ using namespace NYdb::NTable;
 using namespace NYqlTests;
 
 Y_UNIT_TEST_SUITE(KqpRboYql) {
+    Y_UNIT_TEST(QueryAstFormattingPreservesSharedExpressionsAndEscapedAtoms) {
+        TString text;
+        {
+            NYql::TExprContext ctx;
+            const NYql::TPositionHandle pos;
+            auto value = ctx.NewCallable(pos, "String", {
+                ctx.NewAtom(pos, "quote\" slash\\ newline\n", NYql::TNodeFlags::ArbitraryContent)});
+            auto argument = ctx.NewArgument(pos, "item");
+            auto root = ctx.NewCallable(pos, "Map", {
+                ctx.NewCallable(pos, "AsList", {value, value}),
+                ctx.NewLambda(pos, ctx.NewArguments(pos, {argument}),
+                    ctx.NewCallable(pos, "AsTuple", {argument, value}))});
+            text = NYql::KqpExprToPrettyString(*root, ctx);
+
+            auto ast = NYql::ParseAst(text);
+            UNIT_ASSERT_C(ast.IsOk(), ast.Issues.ToString());
+            NYql::TExprContext restoredCtx;
+            NYql::TExprNode::TPtr restored;
+            UNIT_ASSERT_C(NYql::CompileExpr(*ast.Root, restored, restoredCtx, nullptr, nullptr),
+                restoredCtx.IssueManager.GetIssues().ToString());
+            const auto* originalNode = root.Get();
+            const auto* restoredNode = restored.Get();
+            UNIT_ASSERT(NYql::CompareExprTrees(originalNode, restoredNode));
+        }
+        // The returned text must own its contents after the source context and
+        // the temporary conversion arena have both been destroyed.
+        UNIT_ASSERT(NYql::ParseAst(text).IsOk());
+    }
+
 
     Y_UNIT_TEST_TWIN(ExplainPlanRenderers, NewRbo) {
         using NYdb::NConsoleClient::EDataFormat;

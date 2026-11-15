@@ -13,6 +13,9 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    library/cpp/json
+    library/cpp/logger
+    library/cpp/string_utils/base64
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
@@ -39,6 +42,7 @@ SRCS(
     ut_scan_snapshot_guard_integration.cpp
     ut_normalizer.cpp
     ut_leaked_operations_normalizer.cpp
+    ut_stale_backup_transactions_normalizer.cpp
     ut_backup.cpp
     ut_flow_control_manager.cpp
     ut_blob_cache.cpp

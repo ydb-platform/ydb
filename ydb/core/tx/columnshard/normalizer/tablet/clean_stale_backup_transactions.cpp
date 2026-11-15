@@ -1,5 +1,6 @@
 #include "clean_stale_backup_transactions.h"
 
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 #include <library/cpp/json/writer/json.h>
@@ -18,6 +19,47 @@ struct TStaleBackupTransaction {
     const char* Reason;
     TString TxInfoJson;
 };
+
+void ClearBackupSecrets(NKikimrSchemeOp::TBackupTask* task) {
+    if (task->HasS3Settings()) {
+        auto* settings = task->MutableS3Settings();
+        settings->ClearAccessKey();
+        settings->ClearSecretKey();
+        if (settings->GetSecretableAccessKey().HasValue()) {
+            settings->MutableSecretableAccessKey()->MutableValue()->ClearData();
+        }
+        if (settings->GetSecretableSecretKey().HasValue()) {
+            settings->MutableSecretableSecretKey()->MutableValue()->ClearData();
+        }
+    }
+    if (task->HasYTSettings()) {
+        task->MutableYTSettings()->ClearToken();
+    }
+    if (task->HasEncryptionSettings()) {
+        task->MutableEncryptionSettings()->ClearKey();
+    }
+}
+
+template <class TRowset>
+void WriteSanitizedTxBody(NJsonWriter::TBuf& json, const TRowset& rowset) {
+    using TTxBody = NColumnShard::Schema::TxInfo::TxBody;
+    json.WriteKey("TxBodyBase64");
+    if (!rowset.template HaveValue<TTxBody>()) {
+        json.WriteNull();
+        return;
+    }
+    NKikimrTxColumnShard::TBackupTxBody body;
+    if (!body.ParseFromString(rowset.template GetValue<TTxBody>())) {
+        // Never fall back to logging unparsed data that may contain secrets.
+        json.WriteNull();
+        json.WriteKey("TxBodyParseError").WriteBool(true);
+        return;
+    }
+    if (body.HasBackupTask()) {
+        ClearBackupSecrets(body.MutableBackupTask());
+    }
+    json.WriteString(Base64Encode(body.SerializeAsString()));
+}
 
 template <class TColumn, class TRowset>
 void WriteTxInfoColumn(NJsonWriter::TBuf& json, const TRowset& rowset, const TStringBuf name) {
@@ -42,8 +84,8 @@ void WriteTxInfoColumn(NJsonWriter::TBuf& json, const TRowset& rowset, const TSt
 template <class TRowset>
 TString SerializeTxInfo(const TRowset& rowset, const ui64 tabletId) {
     using TTxInfo = NColumnShard::Schema::TxInfo;
-    // Recovery format v1: JSON with base64 encoding only for binary columns;
-    // nulls and both raw ActorId words are preserved to allow an exact row restore.
+    // Preserve TxBody except for secrets. Keep nulls and both raw ActorId words;
+    // only binary columns (TxBody and SeqNo) are encoded in base64.
     NJsonWriter::TBuf json;
     json.BeginObject();
     json.WriteKey("Version").WriteInt(1);
@@ -51,7 +93,7 @@ TString SerializeTxInfo(const TRowset& rowset, const ui64 tabletId) {
     json.WriteKey("TxInfo").BeginObject();
     WriteTxInfoColumn<TTxInfo::TxId>(json, rowset, "TxId");
     WriteTxInfoColumn<TTxInfo::TxKind>(json, rowset, "TxKind");
-    WriteTxInfoColumn<TTxInfo::TxBody>(json, rowset, "TxBodyBase64");
+    WriteSanitizedTxBody(json, rowset);
     WriteTxInfoColumn<TTxInfo::MaxStep>(json, rowset, "MaxStep");
     WriteTxInfoColumn<TTxInfo::PlanStep>(json, rowset, "PlanStep");
     WriteTxInfoColumn<TTxInfo::Source>(json, rowset, "Source");

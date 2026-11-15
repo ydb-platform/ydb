@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 
 #include <ydb/library/actors/struct_log/text_writer.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/logger/stream.h>
@@ -188,7 +189,7 @@ Y_UNIT_TEST_SUITE(StaleBackupTransactionsNormalizer) {
         const auto& row = snapshot["TxInfo"];
         UNIT_ASSERT_VALUES_EQUAL(row.GetMapSafe().size(), 8);
         UNIT_ASSERT_VALUES_EQUAL(row["TxId"].GetUInteger(), 111);
-        UNIT_ASSERT_VALUES_EQUAL(row["TxKind"].GetUInteger(), NKikimrTxColumnShard::TX_KIND_BACKUP);
+        UNIT_ASSERT_VALUES_EQUAL(row["TxKind"].GetUInteger(), static_cast<ui64>(NKikimrTxColumnShard::TX_KIND_BACKUP));
         UNIT_ASSERT_VALUES_EQUAL(Base64Decode(row["TxBodyBase64"].GetString()), body);
         UNIT_ASSERT_VALUES_EQUAL(row["MaxStep"].GetUInteger(), Max<ui64>());
         if (withMetadata) {

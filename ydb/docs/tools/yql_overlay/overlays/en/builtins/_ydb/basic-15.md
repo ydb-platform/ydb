@@ -1,0 +1,5 @@
+### Examples
+
+```yql
+SELECT Version();
+```

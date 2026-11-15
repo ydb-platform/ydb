@@ -1,0 +1,10 @@
+```yql
+SELECT key FROM my_table
+WHERE value > 0;
+```
+
+{% note warning %}
+
+Коррелированные подзапросы в `WHERE` не поддерживаются: подзапрос не может обращаться к колонкам или псевдонимам таблиц из внешнего запроса. Для отбора строк, у которых есть совпадающие строки в другой таблице, используйте [`LEFT SEMI JOIN`](../../correlated-subqueries.md#exists). Для отбора строк без совпадений используйте [`LEFT ONLY JOIN`](../../correlated-subqueries.md#not-exists).
+
+{% endnote %}

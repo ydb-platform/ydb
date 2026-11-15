@@ -1,0 +1,1 @@
+Unlike [aggregate functions](../../../builtins/aggregation.md), window functions don't group rows into one output row: the number of rows in the resulting table is always the same as in the source table.

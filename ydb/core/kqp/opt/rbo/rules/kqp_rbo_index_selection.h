@@ -43,14 +43,6 @@ TIndexScore ScoreKeyOrder(const TKeyMatch& result, size_t keyLen, const TVector<
 
 void SetTableSize(TReadCandidate& candidate, const NYql::TKikimrTableMetadata& mainMeta);
 
-// In the units of the join costs: a byte read costs as much as a byte of join input
-struct TAccessPathCostConstants {
-    static constexpr double Seek = 5000.0;
-    static constexpr double Byte = 1.0;
-    static constexpr double MainLookup = 10000.0;
-    static constexpr double ResidualRow = 5.0;
-};
-
 double EstimateAccessPathCost(const TReadCandidate& candidate, double mainRows);
 
 // Fills the selectivities and costs of the candidates.

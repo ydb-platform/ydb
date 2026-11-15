@@ -265,6 +265,7 @@ std::optional<TOpRead::TPointPrefix> ExtractPointPrefix(size_t pointPrefixLen, c
 
     THashSet<TString> keys = possibleKeys;
     auto extractor = MakePredicateRangeExtractor(settings);
+
     if (!extractor->Prepare(lambda, *schemeType, keys, ctx, rboCtx.TypeCtx)) {
         return std::nullopt;
     }
@@ -519,17 +520,16 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     std::shared_ptr<TTreeNode> normalizedPredicate;
     if (costBasedSelection) {
         normalizedPredicate = TPredicateTreeBuilder::Normalize(TPredicateTreeBuilder(nullptr).Build(lambda.Body()));
-        if (normalizedPredicate) {
-            YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Normalized predicate of a read of " << tablePath << ":\n"
-                                         << normalizedPredicate->ToString();
-        }
+        YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Normalized predicate of a read of " << tablePath << ":\n"
+                                        << (normalizedPredicate ? normalizedPredicate->ToString() : TString("<none>"));
     }
 
     // The extractor results of the candidates, by candidate: every one when rule-based, those built for point prefixes otherwise
     TVector<std::optional<IPredicateRangeExtractor::TBuildResult>> built;
     auto matchKey = [&](const TVector<TString>& keyColumns, std::optional<IPredicateRangeExtractor::TBuildResult>& result) {
         if (costBasedSelection) {
-            return MatchKey(normalizedPredicate, keyColumns, settings.MaxRanges);
+            auto match = MatchKey(normalizedPredicate, keyColumns, settings.MaxRanges);
+            return match;
         }
         result = extractor->BuildComputeNode(keyColumns, ctx, typeCtx);
         return TKeyMatch{
@@ -545,12 +545,13 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     // Point lookups are only applicable to row storage tables.
     const bool allPointPrefixes = kqpCtx.Config->GetEnableLookupJoinPointPrefixes();
     TVector<TOpRead::TPointPrefix> pointPrefixes;
+
     auto addPointPrefix = [&](const TKikimrTableMetadata& tableMeta, size_t pointPrefixLen, const TVector<TString>& exposedKeyColumns) {
         if (read->GetTableStorageType() != NYql::EStorageType::RowStorage) {
             return;
         }
-        if (auto prefix = ExtractPointPrefix(pointPrefixLen, lambda.Ptr(), schemeType, possibleKeys, exposedKeyColumns,
-                                             tableMeta, settings, rboCtx)) {
+        auto prefix = ExtractPointPrefix(pointPrefixLen, lambda.Ptr(), schemeType, possibleKeys, exposedKeyColumns, tableMeta, settings, rboCtx);
+        if (prefix) {
             pointPrefixes.push_back(std::move(*prefix));
         }
     };
@@ -566,6 +567,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
     std::optional<IPredicateRangeExtractor::TBuildResult> mainBuilt;
     auto mainMatch = matchKey(mainKeyColumns, mainBuilt);
+
     if (allPointPrefixes) {
         addPointPrefix(mainMeta, extractedPointPrefixLen(mainKeyColumns, mainBuilt), mainKeyColumns);
     }
@@ -698,6 +700,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         for (const auto id : filter->GetFilterIUs(props)) {
             substitutions.Add(id, indexIds.at(props.InfoUnitRegistry.Get(id).GetColumnName()));
         }
+
         TIntrusivePtr<IOperator> indexFilter = std::move(indexRead);
         if (!IsPrunedToTrue(lookupResult.PrunedLambda)) {
             auto indexPredicate = TExpression(lookupResult.PrunedLambda, &ctx, &props).ApplyRenames(substitutions);
@@ -711,6 +714,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
         auto lookup = MakeIntrusive<TOpTableLookup>(std::move(indexFilter), read->Pos, read->GetTable(), read->GetColumns(),
                                                     std::move(lookupKeys));
+
         // Keep the read predicate and the point prefixes, so a lookup join can still probe the main table
         // or an index instead of this subtree.
         if (allPointPrefixes && read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
@@ -725,6 +729,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     if (!chosen.ComputeNode) {
         return input;
     }
+
     const auto& chosenKeyColumns = winner.KeyColumns;
     const auto& chosenIndexMeta = winner.IndexMeta;
 
@@ -761,6 +766,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     const auto sortDir = chosenIndexMeta ? ESortDir::None : read->SortDir;
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), storageType, tableCallable, read->OlapFilterLambda,
                                           read->Limit, std::move(rangeInfo), TExpression(originalLambda, &ctx, &props), sortDir, read->Props, read->Pos);
+
     // An always true filter would stand between the read and its consumers, e.g. an OLAP aggregate.
     if (IsPrunedToTrue(chosen.PrunedLambda)) {
         return newRead;

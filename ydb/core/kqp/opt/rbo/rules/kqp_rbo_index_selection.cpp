@@ -73,14 +73,13 @@ void SetTableSize(TReadCandidate& candidate, const TKikimrTableMetadata& mainMet
 }
 
 double EstimateAccessPathCost(const TReadCandidate& candidate, double mainRows) {
-    using K = TAccessPathCostConstants;
     const double rowsRead = candidate.TableRows * candidate.SelRange;
     const double rowBytes = candidate.TableRows > 0 ? candidate.TableBytes / candidate.TableRows : 0.0;
     const double probes = candidate.Match.ExpectedMaxRanges ? static_cast<double>(*candidate.Match.ExpectedMaxRanges) : 1.0;
 
     const double mainLookups = candidate.Covering ? 0.0 : mainRows * candidate.SelTotal;
     const double residualRows = candidate.Match.HasResidual ? rowsRead : 0.0;
-    return K::Seek * probes + K::Byte * rowsRead * rowBytes + K::MainLookup * mainLookups + K::ResidualRow * residualRows;
+    return 5000.0 * probes + 1.0 * rowsRead * rowBytes + 10000.0 * mainLookups + 5.0 * residualRows;
 }
 
 bool EstimateCandidateCosts(TVector<TReadCandidate>& candidates, TOpRead& read, const std::shared_ptr<TTreeNode>& predicate,
@@ -126,13 +125,13 @@ void LogCandidates(const TVector<TReadCandidate>& candidates, const TVector<size
         const auto& score = candidate.Score;
         TStringBuilder line;
         line << "\n[NEW RBO] Access path #" << rank << " " << (candidate.IndexName.empty() ? "main" : candidate.IndexName)
-             << ": score (" << score.SortMatchesAndNoResidual << ", " << score.PointCoversKey << ", " << score.PointPrefixLen
-             << ", " << score.UsedCoversKey << ", " << score.UsedPrefixLen << "), covering " << candidate.Covering
-             << ", sort matches " << score.SortMatches << ", points " << match.PointPrefixLen << ", used " << match.UsedPrefixLen
+             << ": score (Sort+NoRes " << score.SortMatchesAndNoResidual << ", PCover " << score.PointCoversKey << ", PPrefix " << score.PointPrefixLen
+             << ", UCover " << score.UsedCoversKey << ", UPrefix " << score.UsedPrefixLen << ", SortMatches " << score.SortMatches << ")"
+             << ", covering " << candidate.Covering << ", points " << match.PointPrefixLen << ", used " << match.UsedPrefixLen
              << ", ranges " << (match.ExpectedMaxRanges ? ToString(*match.ExpectedMaxRanges) : "?") << ", residual " << match.HasResidual;
         if (costBased) {
-            line << ", rows " << candidate.TableRows << ", sel range " << candidate.SelRange << ", sel total " << candidate.SelTotal
-                 << ", cost " << candidate.Cost;
+            line << ", rows " << candidate.TableRows << ", bytes " << candidate.TableBytes
+                 << ", sel range " << candidate.SelRange << ", sel total " << candidate.SelTotal << ", cost " << candidate.Cost;
         }
         YQL_CLOG(TRACE, ProviderKqp) << line;
     }
@@ -147,6 +146,7 @@ TVector<size_t> OrderCandidates(const TVector<TReadCandidate>& candidates, bool 
         if (!costBased) {
             return IsBetterCandidate(candidates[lhs], candidates[rhs]);
         }
+
         // A read in the order of a consuming TopSort, with no filter between them,
         // takes the TopSort and stops early, so it goes first
         const auto& left = candidates[lhs];

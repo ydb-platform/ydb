@@ -383,6 +383,7 @@ TString ToShortString(const TExprBase& expr) {
     if (const auto attribute = IsAttribute(expr)) {
         return *attribute;
     }
+
     if (const auto literal = ExtractLiteral(expr)) {
         return TStringBuilder() << "'" << *literal << "'";
     }
@@ -420,6 +421,7 @@ TString TTreeNode::ToString(ui32 indent) const {
     }
 
     out << " " << NKikimr::NKqp::ToString(Kind);
+
     if (!Attribute.empty()) {
         out << " attr=" << Attribute;
         if (TableAlias.Defined()) {
@@ -443,13 +445,15 @@ TString TTreeNode::ToString(ui32 indent) const {
             break;
         default:
             if (Left.Defined() && Right.Defined()) {
-                out << " expr=" << ToShortString(Left.GetRef()) << " " << NKikimr::NKqp::ToString(Sign) << " " << ToShortString(Right.GetRef());
+                out << " expr=(" << ToShortString(Left.GetRef()) << " " << NKikimr::NKqp::ToString(Sign) << " " << ToShortString(Right.GetRef()) << ")";
             }
             break;
     }
+
     if (UnderNot) {
         out << " NOT";
     }
+
     if (Range.LeftBound.Defined() || Range.RightBound.Defined()) {
         out << " range=" << NKikimr::NKqp::ToString(Range);
     }
@@ -507,6 +511,7 @@ std::shared_ptr<TTreeNode> TPredicateTreeBuilder::CreateLeafNode(
 
     TString ref = attribute.GetRef();
     node->Attribute = ref;
+
     size_t dotPos = ref.find('.');
     if (dotPos != TString::npos) {
         node->TableAlias = ref.substr(0, dotPos);
@@ -531,6 +536,7 @@ void TPredicateTreeBuilder::CollectColumnStatsUsedMember(const TExprBase& attrib
     if (!CollectColumnsStatUsedMembers || (Stats && Stats->ColumnStatistics)) {
         return;
     }
+
     if (auto maybeMember = IsMember(attribute)) {
         if (equality) {
             ColumnStatsUsedMembers.AddEquality(maybeMember.GetRef());
@@ -1222,6 +1228,7 @@ std::optional<TColumnConstraint> ClassifyColumnConstraint(const TTreeNode& node)
 
     TColumnConstraint result;
     for (const auto& child : node.Children) {
+
         const auto constraint = ClassifyColumnConstraint(*child);
         if (!constraint || (!result.Attribute.empty() && constraint->Attribute != result.Attribute)) {
             return std::nullopt;
@@ -1243,6 +1250,7 @@ std::shared_ptr<TTreeNode> MakeLogicalNode(ELogicalOperator op, TVector<std::sha
     auto node = std::make_shared<TTreeNode>();
     node->Operator = op;
     node->Children = std::move(children);
+
     return node;
 }
 
@@ -1262,7 +1270,8 @@ TKeyMatch MatchDisjunction(const TTreeNode& node, const TVector<TString>& keyCol
     TVector<TKeyMatch> matches;
     size_t ranges = 0;
 
-    for (const auto& child : node.Children) {
+    for (size_t i = 0; i < node.Children.size(); ++i) {
+        const auto& child = node.Children[i];
         auto match = MatchKey(child, keyColumns, maxRanges);
         if (match.UsedPrefixLen == 0) {
             return {};
@@ -1281,8 +1290,7 @@ TKeyMatch MatchDisjunction(const TTreeNode& node, const TVector<TString>& keyCol
     TVector<std::shared_ptr<TTreeNode>> consumed;
     for (auto& match : matches) {
         // A disjunct restricting more key columns than the others is widened to the common prefix
-        result.HasResidual = result.HasResidual || match.HasResidual || match.UsedPrefixLen != result.UsedPrefixLen
-            || match.PointPrefixLen != result.PointPrefixLen;
+        result.HasResidual = result.HasResidual || match.HasResidual || match.UsedPrefixLen != result.UsedPrefixLen || match.PointPrefixLen != result.PointPrefixLen;
         consumed.push_back(std::move(match.Consumed));
     }
 
@@ -1311,6 +1319,7 @@ TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts,
         bool isPoint = false;
         size_t pointRanges = Max<size_t>();
         size_t rangeRanges = 0;
+
         TVector<size_t> onColumn;
 
         for (size_t i = 0; i < conjuncts.size(); ++i) {
@@ -1318,6 +1327,7 @@ TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts,
             if (!constraint || constraint->Attribute != keyColumn) {
                 continue;
             }
+
             onColumn.push_back(i);
 
             if (constraint->IsPoint) {
@@ -1352,8 +1362,7 @@ TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts,
 
     bool consumedHasResidual = false;
     if (result.UsedPrefixLen == 0) {
-        // No conjunct on the first key column: one of the conjuncts may be a disjunction over several columns,
-        // e.g. (a = 1 AND b = 2) OR (a = 3 AND b = 4)
+        // No conjunct on the first key column: one of the conjuncts may be a disjunction over several columns
         size_t best = conjuncts.size();
         for (size_t i = 0; i < conjuncts.size(); ++i) {
             if (constraints[i] || conjuncts[i]->Operator != ELogicalOperator::Or) {
@@ -1361,8 +1370,7 @@ TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts,
             }
 
             auto match = MatchDisjunction(*conjuncts[i], keyColumns, maxRanges);
-            if (match.UsedPrefixLen > result.UsedPrefixLen
-                || (match.UsedPrefixLen == result.UsedPrefixLen && match.PointPrefixLen > result.PointPrefixLen)) {
+            if (match.UsedPrefixLen > result.UsedPrefixLen || (match.UsedPrefixLen == result.UsedPrefixLen && match.PointPrefixLen > result.PointPrefixLen)) {
                 result = std::move(match);
                 best = i;
             }
@@ -1381,6 +1389,7 @@ TKeyMatch MatchConjunction(const TVector<std::shared_ptr<TTreeNode>>& conjuncts,
     result.ExpectedMaxRanges = ranges;
     result.HasResidual = consumedHasResidual || std::find(consumed.begin(), consumed.end(), false) != consumed.end();
     result.Consumed = MakeLogicalNode(ELogicalOperator::And, std::move(consumedNodes));
+
     return result;
 }
 

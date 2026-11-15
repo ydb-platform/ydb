@@ -1,5 +1,0 @@
-### Examples
-
-```yql
-SELECT Version();
-```

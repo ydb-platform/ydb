@@ -1,1 +1,0 @@
-Serializing a type {% if feature_codegen %} or a handle type{% endif %} to a human-readable string. This helps at debugging and will also be used in the next examples of this section. [Documentation for the format](../../types/type_string.md).

@@ -1,64 +1,72 @@
 # YDB additions to common YQL documentation
 
-`prepare.py` builds a disposable copy of `ydb/docs` using the common YQL sources
-and YDB additions from the **same checkout**. It does not edit either source tree.
-The existing documentation build and release workflows use this copy only when
-`ydb/docs/tools/yql_overlay/enabled` exists in the checked-out revision.
-This change deliberately does not add that activation file.
+`prepare.py` composes a disposable copy of `ydb/docs` from the common YQL sources
+and YDB additions in the **same checkout**. Existing build and release workflows
+use this copy when `ydb/docs/tools/yql_overlay/enabled` exists in that revision.
+This PR does not add the activation file.
 
-## File ownership
+The migration deliberately accepts common wording and common library updates.
+It does not preserve every historical textual difference. See
+[the reconciliation inventory](RECONCILIATION.md) for accepted changes and unresolved
+pages that remain local. This is a partial migration, not a claim that all YQL
+pages are now synchronized.
 
-`manifest.json` records the baseline commit and the source-to-destination mapping
-for both locales. Paths are relative to `yql/essentials/docs/<locale>` and
-`ydb/docs/<locale>/core/yql/reference`, respectively.
+## Ownership
 
-- `import`: copy the common page unchanged.
-- `include`: copy the common page containing optional `YDB` branches
-  and install the corresponding files from `overlays/<locale>` beside it.
-  The preparer enables the variable in the **output** presets. Ordinary YQL builds
-  leave it unset and use the original text without requiring the YDB fragments.
-- `keep`: retain the complete YDB page. The reason is recorded per page. An upstream
-  hash change stops preparation so the override cannot silently hide a new update.
+`manifest.json` maps paths relative to `yql/essentials/docs/<locale>` to paths
+relative to `ydb/docs/<locale>/core/yql/reference`:
 
-All other YDB pages, includes, navigation, images and configuration stay in the
-copied tree. New upstream paths are not automatically published: extend the manifest
-and review their applicability and navigation first.
+- `import`: use the common article.
+- `include`: use the common article plus additive `if YDB / include / endif`
+  extension points. There are no alternative common/YDB paragraphs and no `else`.
+  Install files from `overlays/<locale>` and enable `YDB` in the output presets.
+- `keep`: retain the complete existing YDB article. Each entry explains why.
+  An upstream hash change fails preparation and requires reconciliation. These
+  entries include unresolved common corrections, not only permanent YDB differences.
 
-The initial migration preserves the existing output, including local editorial
-changes and previously unimported upstream changes. These fragments are therefore
-not all permanent product differences. Content reconciliation is a separate change.
+All other YDB articles, images, navigation and configuration remain in the copied
+tree. New common paths require an explicit mapping and navigation review.
 
-The target hash on imported pages prevents overwriting edits made directly to the
-old YDB copy after extraction. Edit the corresponding fragment instead, or explicitly
-reconcile and revalidate the page before updating the hash. Missing or changed hook
-inventories and missing fragments fail before any output is written.
+Relative links follow the source-to-target mapping. Explicit aliases handle
+consumer anchors and links to common release notes at the reviewed source revision.
+The latter describe YQL language versions, not YDB server versions. New release-note
+references must be reviewed and added to the aliases. Legacy incoming anchors are
+preserved at explicit markers; marker drift is an error. Heading-level gaps and
+missing spacing before headings are normalized in the output, outside code fences.
+These layout adaptations do not require conditional paragraphs in the common docs.
+
+Target hashes prevent overwriting direct edits to imported YDB copies after the
+reviewed baseline. Missing fragments, replacement or unguarded hooks, and changed
+hook inventories fail before writing output. Edit a YDB addition in its fragment;
+reconcile direct edits before refreshing a target hash. Updating a `keep` source
+hash is an explicit review decision, not an automatic way to silence CI.
 
 ## Rollout
 
-1. Merge the Arcadia YQL extension points and wait for their normal export to the
-   GitHub branch. Do not copy an entire newer rightlib into stable for this purpose.
-2. Merge this manifest, fragments and preparer. Existing builds remain unchanged.
-3. Verify the composed build against the pinned baseline. Merge the separate CI and
-   activation change last. Stable branches opt in independently after compatible
-   hooks and additions have been backported through `cherry_pick_v2.yml`.
+1. Merge the Arcadia hooks and wait for normal export to GitHub. Confirm the mapped
+   sources contain exactly the additive hooks listed in the manifest.
+2. Merge the manifest, fragments and preparer. Existing builds remain unchanged.
+3. Build baseline and composed documentation with identical Diplodoc configuration.
+   Review the expected changes and remaining exclusions in the reconciliation report.
+4. Merge the separate CI/activation PR last. An enabled but incomplete installation
+   fails; a revision without the marker keeps the existing build path.
 
-The common workflows are referenced at `@main`, but activation and all content
-belong to the checkout being built. A missing activation file retains the old build;
-an enabled but incomplete installation is an error.
+The common workflows are referenced at `@main`, while activation and content belong
+to the checked-out revision. Stable branches opt in independently through
+`cherry_pick_v2.yml`, after compatible hooks and additions are present. Do not import
+an entire newer rightlib just to obtain documentation hooks.
 
 ## Local verification
 
-Use a disposable checkout containing both PRs' inputs. Without merging activation:
+In a disposable checkout containing both PRs' inputs:
 
 ```bash
 python3 ydb/docs/tools/yql_overlay/prepare.py \
   --output /tmp/ydb-docs-overlay-preview --preview
 ```
 
-The output directory must not exist and must be outside the checkout. Build the
-baseline and prepared trees with the same Diplodoc version, configuration and
-presets. Compare rendered content, headings, links, navigation and warnings for
-RU and EN. Normalize only demonstrated generated random HTML IDs. Also build the
-common YQL source without YDB files and compare its output before and after hooks.
-
-Tests and comparison artifacts are maintained locally, outside these PRs.
+The output directory must not exist and must be outside the checkout. Compare HTML,
+headings, links, incoming anchors, navigation and build warnings for RU and EN.
+Identical old YDB output is no longer the acceptance criterion: intentional common
+updates are listed in the report. Build common YQL without YDB files as well; its
+rendered output must remain unchanged. Tests and build artifacts stay outside PRs.

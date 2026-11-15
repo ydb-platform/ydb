@@ -4,8 +4,65 @@ import argparse
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import posixpath
 import re
 import shutil
+
+
+def adapt_links(content, page, pages, aliases):
+    """Translate relative Markdown links from the common to the consumer layout.
+
+    Do not change code examples, prose, conditions or YDB include paths.
+    Anchor aliases are explicit reviewed entries, not guessed from headings.
+    """
+    mapping = {p['source']: p['target'] for p in pages if p['lang'] == page['lang']}
+
+    def replace(match):
+        href = match[1]
+        if href.startswith(('/', '_ydb/', '{')) or re.match(r'\w+:', href):
+            return match[0]
+        path, separator, anchor = href.partition('#')
+        source = posixpath.normpath(posixpath.join(posixpath.dirname(page['source']), path)) if path else page['source']
+        resolved = aliases.get(source + separator + anchor)
+        if resolved:
+            if re.match(r'\w+:', resolved):
+                return '](' + resolved + ')'
+            destination, separator, anchor = resolved.partition('#')
+        else:
+            destination = mapping.get(source, source)
+        relative = posixpath.relpath(destination, posixpath.dirname(page['target']) or '.')
+        if not path and destination == page['target']:
+            relative = ''
+        return '](' + relative + separator + anchor + ')'
+
+    result, fence, heading_level = [], None, 0
+    for line in content.splitlines(keepends=True):
+        marker = re.match(r'^\s*(`{3,}|~{3,})', line)
+        if marker:
+            if fence is None:
+                fence = marker[1][0]
+            elif fence == marker[1][0]:
+                fence = None
+            result.append(line)
+        else:
+            if not fence:
+                heading = re.match(r'^(#{1,6}) (.*)', line)
+                if heading:
+                    # Common fragments often skip from H2 to H4. Normalize the
+                    # consumer layout without forking their text or anchors.
+                    level = min(len(heading[1]), heading_level + 1) if heading_level else len(heading[1])
+                    heading_level = level
+                    line = '#' * level + ' ' + heading[2] + '\n'
+                    if result and result[-1].strip():
+                        result.append('\n')
+                line = re.sub(r'\]\(([^\s)]+)\)', replace, line)
+            result.append(line)
+    result = ''.join(result)
+    for anchor, marker in page.get('legacy_anchors', {}).items():
+        if not re.fullmatch(r'[a-z0-9_-]+', anchor) or result.count(marker) != 1:
+            raise ValueError(f'Cannot preserve consumer anchor {anchor}: {page["source"]}')
+        result = result.replace(marker, f'<a id="{anchor}"></a>\n\n' + marker)
+    return result
 
 
 def child(root, relative):
@@ -35,7 +92,7 @@ def prepare(repo_root, output, preview=False):
         raise ValueError('Unsupported YQL overlay manifest version')
     if not (config / 'enabled').exists() and not preview:
         raise ValueError('YQL overlay has not been enabled for this revision')
-    copies, destinations = [], set()
+    copies, destinations, rendered = [], set(), []
     for page in manifest['pages']:
         lang = page['lang']
         if lang not in ('ru', 'en'):
@@ -63,9 +120,12 @@ def prepare(repo_root, output, preview=False):
                     for p in page.get('fragments', [])]
         if sorted(actual) != sorted(required):
             raise ValueError(f'Incompatible upstream extension points: {source}')
-        if required and 'if YDB' not in content:
-            raise ValueError(f'Missing consumer condition: {source}')
-        copies.append((source, target.relative_to(docs)))
+        guarded = re.findall(r'{% if YDB %}\s*{% include \[YDB\]\((_ydb/[^)]+)\) %}\s*{% endif %}', content)
+        if sorted(guarded) != sorted(required):
+            raise ValueError(f'Expected additive consumer conditions without else: {source}')
+        aliases = {**manifest.get('link_aliases', {}), **page.get('link_aliases', {})}
+        rendered.append((adapt_links(content, page, manifest['pages'], aliases),
+                         target.relative_to(docs)))
         for relative in page.get('fragments', []):
             fragment = child(config / 'overlays' / lang, relative)
             if not fragment.is_file():
@@ -83,6 +143,8 @@ def prepare(repo_root, output, preview=False):
         destination = output / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
+    for content, relative in rendered:
+        (output / relative).write_text(content)
     (output / 'presets.yaml').write_text(presets.replace('default:\n', 'default:\n  YDB: true\n', 1))
 
 

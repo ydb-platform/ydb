@@ -8,11 +8,8 @@
       "target": "_includes/cast_examples.md",
       "target_sha256": "6017cb04d86a5bf8eeb6666144ce0e894bed139deeed5c166ee6a5f79eff3135",
       "upstream_sha256": "a31dc865b2cdc2e60b90dabc40222e8abcd05fdc7ebe9cb901882d7741579adf",
-      "mode": "include",
-      "fragments": [
-        "_includes/_ydb/cast_examples-01.md"
-      ],
-      "hooked_sha256": "df0943f510a13cd64706e07aa189bce3b73102aa6fa49993d1444be716a8e004"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -20,7 +17,8 @@
       "target": "_includes/decimal_args.md",
       "target_sha256": "1f6162e4d01987411f86c0c672ec4232d43b7396f3d91b896656eea87bfab3d5",
       "upstream_sha256": "1f6162e4d01987411f86c0c672ec4232d43b7396f3d91b896656eea87bfab3d5",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -28,7 +26,8 @@
       "target": "_includes/frompg.md",
       "target_sha256": "44c8af472a69b4814e13cef3ae8d5db5d7c019fffe607bb1f5e041945df41a8e",
       "upstream_sha256": "44c8af472a69b4814e13cef3ae8d5db5d7c019fffe607bb1f5e041945df41a8e",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -36,11 +35,8 @@
       "target": "_includes/topg.md",
       "target_sha256": "93585761dd082873e2f5de4a3979404cfbd35df07109d5bdcd1364e01b13a396",
       "upstream_sha256": "21fe8dcdd1e73d37aa3af78862cc71e0ae54c7f08247778e43aedc2de6b7e01b",
-      "mode": "include",
-      "fragments": [
-        "_includes/_ydb/topg-01.md"
-      ],
-      "hooked_sha256": "873076f3498433a98b44320eccbf2a965a19caa07b87a136966b1ced09b92c13"
+      "mode": "keep",
+      "reason": "Local correction removes a fourth cell from three-column PostgreSQL conversion rows (TzDate32/TzDatetime64/TzTimestamp64). Import would silently lose pgtext cells. Common documentation needs the same correction, not an YDB conditional."
     },
     {
       "lang": "ru",
@@ -48,34 +44,11 @@
       "target": "builtins/aggregation.md",
       "target_sha256": "b1f9380ec0f18d3ac60ed693facc7c2359ed64638e7b24564be620c95506b635",
       "upstream_sha256": "c201e8c211cba7dc6acbf4094ca2fb480ec274b6b833a8d21ed67d487b95c7bc",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/aggregation-01.md",
-        "builtins/_ydb/aggregation-02.md",
-        "builtins/_ydb/aggregation-03.md",
-        "builtins/_ydb/aggregation-04.md",
-        "builtins/_ydb/aggregation-05.md",
-        "builtins/_ydb/aggregation-06.md",
-        "builtins/_ydb/aggregation-07.md",
-        "builtins/_ydb/aggregation-08.md",
-        "builtins/_ydb/aggregation-09.md",
-        "builtins/_ydb/aggregation-10.md",
-        "builtins/_ydb/aggregation-11.md",
-        "builtins/_ydb/aggregation-12.md",
-        "builtins/_ydb/aggregation-13.md",
-        "builtins/_ydb/aggregation-14.md",
-        "builtins/_ydb/aggregation-15.md",
-        "builtins/_ydb/aggregation-16.md",
-        "builtins/_ydb/aggregation-17.md",
-        "builtins/_ydb/aggregation-18.md",
-        "builtins/_ydb/aggregation-19.md",
-        "builtins/_ydb/aggregation-20.md",
-        "builtins/_ydb/aggregation-21.md",
-        "builtins/_ydb/aggregation-22.md",
-        "builtins/_ydb/aggregation-23.md",
-        "builtins/_ydb/aggregation-24.md"
-      ],
-      "hooked_sha256": "d7cae95dceadee4327fe9cfbd83b1aaa9e7509f2569dc2facdc176e632867837"
+      "mode": "keep",
+      "reason": "YDB OLAP restriction on AGGREGATE_BY plus provider-specific histogram and SessionWindow visibility. Generic COUNT_IF examples overlap common documentation.",
+      "link_aliases": {
+        "changelog/2025.04.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.04.md"
+      }
     },
     {
       "lang": "ru",
@@ -83,59 +56,15 @@
       "target": "builtins/basic.md",
       "target_sha256": "032acb902e3e2c462b33ea4d3345eb28fd07fca22aae58af2ce71edc0aad0508",
       "upstream_sha256": "2ef65f33761c9804353b8133abe5d569c842c2e5e769d580221dbdbc7a1cd04d",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/basic-01.md",
-        "builtins/_ydb/basic-02.md",
-        "builtins/_ydb/basic-03.md",
-        "builtins/_ydb/basic-04.md",
-        "builtins/_ydb/basic-05.md",
-        "builtins/_ydb/basic-06.md",
-        "builtins/_ydb/basic-07.md",
-        "builtins/_ydb/basic-08.md",
-        "builtins/_ydb/basic-09.md",
-        "builtins/_ydb/basic-10.md",
-        "builtins/_ydb/basic-11.md",
-        "builtins/_ydb/basic-12.md",
-        "builtins/_ydb/basic-13.md",
-        "builtins/_ydb/basic-14.md",
-        "builtins/_ydb/basic-15.md",
-        "builtins/_ydb/basic-16.md",
-        "builtins/_ydb/basic-17.md",
-        "builtins/_ydb/basic-18.md",
-        "builtins/_ydb/basic-19.md",
-        "builtins/_ydb/basic-20.md",
-        "builtins/_ydb/basic-21.md",
-        "builtins/_ydb/basic-22.md",
-        "builtins/_ydb/basic-23.md",
-        "builtins/_ydb/basic-24.md",
-        "builtins/_ydb/basic-25.md",
-        "builtins/_ydb/basic-26.md",
-        "builtins/_ydb/basic-27.md",
-        "builtins/_ydb/basic-28.md",
-        "builtins/_ydb/basic-29.md",
-        "builtins/_ydb/basic-30.md",
-        "builtins/_ydb/basic-31.md",
-        "builtins/_ydb/basic-32.md",
-        "builtins/_ydb/basic-33.md",
-        "builtins/_ydb/basic-34.md",
-        "builtins/_ydb/basic-35.md",
-        "builtins/_ydb/basic-36.md",
-        "builtins/_ydb/basic-37.md",
-        "builtins/_ydb/basic-38.md",
-        "builtins/_ydb/basic-39.md",
-        "builtins/_ydb/basic-40.md",
-        "builtins/_ydb/basic-41.md",
-        "builtins/_ydb/basic-42.md",
-        "builtins/_ydb/basic-43.md",
-        "builtins/_ydb/basic-44.md",
-        "builtins/_ydb/basic-45.md",
-        "builtins/_ydb/basic-46.md",
-        "builtins/_ydb/basic-47.md",
-        "builtins/_ydb/basic-48.md",
-        "builtins/_ydb/basic-49.md"
-      ],
-      "hooked_sha256": "c0ddba0ee0045662939dfbb4a12ff6eaaa5ffedd6f720f828a8fc4545c65ff35"
+      "mode": "keep",
+      "reason": "Unresolved Random execution-phase wording; ToBytes(123) example is corrected locally; provider-specific FileContent/ParseFile/TablePath and codegen visibility. Do not replace these with an assumed shared behavior.",
+      "link_aliases": {
+        "changelog/2025.04.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.04.md",
+        "changelog/2025.03.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.03.md",
+        "changelog/2025.05.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.05.md",
+        "changelog/2026.02.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2026.02.md",
+        "changelog/2026.01.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2026.01.md"
+      }
     },
     {
       "lang": "ru",
@@ -143,20 +72,11 @@
       "target": "builtins/codegen.md",
       "target_sha256": "0cf531175677622f01343d866f3e4ae47f3a93218903b8c6016a86985f252323",
       "upstream_sha256": "36f09e08ebdf48c21ddce982fbbd7c1d35081d11e263b9ba8bf758d8b66953a7",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/codegen-01.md",
-        "builtins/_ydb/codegen-02.md",
-        "builtins/_ydb/codegen-03.md",
-        "builtins/_ydb/codegen-04.md",
-        "builtins/_ydb/codegen-05.md",
-        "builtins/_ydb/codegen-06.md",
-        "builtins/_ydb/codegen-07.md",
-        "builtins/_ydb/codegen-08.md",
-        "builtins/_ydb/codegen-09.md",
-        "builtins/_ydb/codegen-10.md"
-      ],
-      "hooked_sha256": "e4e30aaca2209faf8d998545d491d87d55a82e237db415a20c4de4a1580d8081"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes.",
+      "link_aliases": {
+        "changelog/2026.01.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2026.01.md"
+      }
     },
     {
       "lang": "ru",
@@ -164,26 +84,11 @@
       "target": "builtins/dict.md",
       "target_sha256": "677d2c5cc1bcbc0b15b39e8535839344ab14ac25b6d7213f41508600b0ba48b9",
       "upstream_sha256": "451f60c4b20aaf894abee36a3a5dfeb2e4e3c68ff6be89e21741aa38e92a8b5b",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/dict-01.md",
-        "builtins/_ydb/dict-02.md",
-        "builtins/_ydb/dict-03.md",
-        "builtins/_ydb/dict-04.md",
-        "builtins/_ydb/dict-05.md",
-        "builtins/_ydb/dict-06.md",
-        "builtins/_ydb/dict-07.md",
-        "builtins/_ydb/dict-08.md",
-        "builtins/_ydb/dict-09.md",
-        "builtins/_ydb/dict-10.md",
-        "builtins/_ydb/dict-11.md",
-        "builtins/_ydb/dict-12.md",
-        "builtins/_ydb/dict-13.md",
-        "builtins/_ydb/dict-14.md",
-        "builtins/_ydb/dict-15.md",
-        "builtins/_ydb/dict-16.md"
-      ],
-      "hooked_sha256": "2e3cc55d9811bfaf65e2564fcb1ceceaf5bdd7ee6827a1fe5143835a4e94325f"
+      "mode": "keep",
+      "reason": "Examples using container-valued stored columns are hidden in YDB. Reconcile examples with table variables before importing.",
+      "link_aliases": {
+        "changelog/2025.04.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.04.md"
+      }
     },
     {
       "lang": "ru",
@@ -191,11 +96,8 @@
       "target": "builtins/index.md",
       "target_sha256": "134557711c3e7fb616ed0908419aaecb8168c2bf6ec4b662f1745281b81456ce",
       "upstream_sha256": "00a707b6ac6dd198383622d6e6ca801de15a7f67c2d7c74c8c678e49994e5722",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/index-01.md"
-      ],
-      "hooked_sha256": "5b42c3a788dda5811d50c7e0e52d344013d047d37afc9949ede38d5d5aaa9077"
+      "mode": "keep",
+      "reason": "YDB availability filters for library groups."
     },
     {
       "lang": "ru",
@@ -203,8 +105,8 @@
       "target": "builtins/json.md",
       "target_sha256": "2c88e5f2b95bd46f0d8b9a7fc9bbf89bad4381c12089187b1ac24d700d5dc2dc",
       "upstream_sha256": "96fb10088771569c4eca5ef425d9ad8a17ebca0a091bc9426df22261d607c182",
-      "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -212,47 +114,11 @@
       "target": "builtins/list.md",
       "target_sha256": "5d97c6f66d7f575da0fe59123bff5c02b380f98ca9e0f85d3eeba65d9d97c746",
       "upstream_sha256": "119942ff08bef2d696cb349a2774302c63be70c2ea56f6942707f502e295d249",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/list-01.md",
-        "builtins/_ydb/list-02.md",
-        "builtins/_ydb/list-03.md",
-        "builtins/_ydb/list-04.md",
-        "builtins/_ydb/list-05.md",
-        "builtins/_ydb/list-06.md",
-        "builtins/_ydb/list-07.md",
-        "builtins/_ydb/list-08.md",
-        "builtins/_ydb/list-09.md",
-        "builtins/_ydb/list-10.md",
-        "builtins/_ydb/list-11.md",
-        "builtins/_ydb/list-12.md",
-        "builtins/_ydb/list-13.md",
-        "builtins/_ydb/list-14.md",
-        "builtins/_ydb/list-15.md",
-        "builtins/_ydb/list-16.md",
-        "builtins/_ydb/list-17.md",
-        "builtins/_ydb/list-18.md",
-        "builtins/_ydb/list-19.md",
-        "builtins/_ydb/list-20.md",
-        "builtins/_ydb/list-21.md",
-        "builtins/_ydb/list-22.md",
-        "builtins/_ydb/list-23.md",
-        "builtins/_ydb/list-24.md",
-        "builtins/_ydb/list-25.md",
-        "builtins/_ydb/list-26.md",
-        "builtins/_ydb/list-27.md",
-        "builtins/_ydb/list-28.md",
-        "builtins/_ydb/list-29.md",
-        "builtins/_ydb/list-30.md",
-        "builtins/_ydb/list-31.md",
-        "builtins/_ydb/list-32.md",
-        "builtins/_ydb/list-33.md",
-        "builtins/_ydb/list-34.md",
-        "builtins/_ydb/list-35.md",
-        "builtins/_ydb/list-36.md",
-        "builtins/_ydb/list-37.md"
-      ],
-      "hooked_sha256": "d7007efb1488c89da06538784bdc48f0b52d21f644676c1ff2cba209a046397c"
+      "mode": "keep",
+      "reason": "Examples using container-valued stored columns are hidden in YDB. Shared list operations are not a YDB-specific implementation.",
+      "link_aliases": {
+        "changelog/2026.02.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2026.02.md"
+      }
     },
     {
       "lang": "ru",
@@ -260,26 +126,8 @@
       "target": "builtins/struct.md",
       "target_sha256": "1ee543135a45db85707f945ffe5afd2dbb46efcfe2c146dc01ff867d788dcf66",
       "upstream_sha256": "2cb74262a1d70f8b31a21580a80a25db31dd86097648714d4ed8d473b3af9e77",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/struct-01.md",
-        "builtins/_ydb/struct-02.md",
-        "builtins/_ydb/struct-03.md",
-        "builtins/_ydb/struct-04.md",
-        "builtins/_ydb/struct-05.md",
-        "builtins/_ydb/struct-06.md",
-        "builtins/_ydb/struct-07.md",
-        "builtins/_ydb/struct-08.md",
-        "builtins/_ydb/struct-09.md",
-        "builtins/_ydb/struct-10.md",
-        "builtins/_ydb/struct-11.md",
-        "builtins/_ydb/struct-12.md",
-        "builtins/_ydb/struct-13.md",
-        "builtins/_ydb/struct-14.md",
-        "builtins/_ydb/struct-15.md",
-        "builtins/_ydb/struct-16.md"
-      ],
-      "hooked_sha256": "228aef984ec08d1c02d748c4e19ce499ad9e7ccdff14e28c86c1156ed19c22f4"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -287,31 +135,12 @@
       "target": "builtins/types.md",
       "target_sha256": "79a95c25a96195a26a3f8e27c5eff0b3d458937d976a6ad17087e38cd37bc00a",
       "upstream_sha256": "b9fe2dc8e692e246f12cce5b4b30a0005eaa4cb6cd3112fc810a0a1ae5c110df",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/types-01.md",
-        "builtins/_ydb/types-02.md",
-        "builtins/_ydb/types-03.md",
-        "builtins/_ydb/types-04.md",
-        "builtins/_ydb/types-05.md",
-        "builtins/_ydb/types-06.md",
-        "builtins/_ydb/types-07.md",
-        "builtins/_ydb/types-08.md",
-        "builtins/_ydb/types-09.md",
-        "builtins/_ydb/types-10.md",
-        "builtins/_ydb/types-11.md",
-        "builtins/_ydb/types-12.md",
-        "builtins/_ydb/types-13.md",
-        "builtins/_ydb/types-14.md",
-        "builtins/_ydb/types-15.md",
-        "builtins/_ydb/types-16.md",
-        "builtins/_ydb/types-17.md",
-        "builtins/_ydb/types-18.md",
-        "builtins/_ydb/types-19.md",
-        "builtins/_ydb/types-20.md",
-        "builtins/_ydb/types-21.md"
-      ],
-      "hooked_sha256": "855bddaec20cdda6eda46137565dd81eac141787c3dce34e682fee7f3ab6b977"
+      "mode": "keep",
+      "reason": "Codegen and container-column example visibility. Retain until examples are provider-neutral.",
+      "link_aliases": {
+        "changelog/2026.01.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2026.01.md",
+        "changelog/2025.04.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.04.md"
+      }
     },
     {
       "lang": "ru",
@@ -319,18 +148,8 @@
       "target": "builtins/window.md",
       "target_sha256": "abce3e7605aa650f50b9c8b25f8700c73173c3ec264ba9a654de02fb2c31619d",
       "upstream_sha256": "daf8c3ddb505221c379eaf031a2c06a53b073f4cdd09288b0810a0a32c9d1b46",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/window-01.md",
-        "builtins/_ydb/window-02.md",
-        "builtins/_ydb/window-03.md",
-        "builtins/_ydb/window-04.md",
-        "builtins/_ydb/window-05.md",
-        "builtins/_ydb/window-06.md",
-        "builtins/_ydb/window-07.md",
-        "builtins/_ydb/window-08.md"
-      ],
-      "hooked_sha256": "9a9dc089b9ec43ec2d67d943eb4e9b452460676847d76a9134f56073e6568599"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -339,7 +158,10 @@
       "target_sha256": "b8fcce3c03837d3b0bcc10cb296995a75d4a2e2e504d421042999c49f3f8bce2",
       "upstream_sha256": "8049fcd1ce2de43193431bd35474352c4f7f264832b0e3b0639b923ff83c8909",
       "mode": "keep",
-      "reason": "Substantial divergence or YDB-owned navigation; retain complete YDB page"
+      "reason": "YDB landing page and navigation.",
+      "link_aliases": {
+        "changelog/index.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/index.md"
+      }
     },
     {
       "lang": "ru",
@@ -347,11 +169,8 @@
       "target": "recipes/accessing-json.md",
       "target_sha256": "48b6818bc615cfeb92f55ea601d7ba5d590d8e87248fe8edc0dd222394da4a98",
       "upstream_sha256": "a0628ef35e21bea25a432942a64ef3c1726ce26230d2cef8f419406d7bb59733",
-      "mode": "include",
-      "fragments": [
-        "recipes/_ydb/accessing-json-01.md"
-      ],
-      "hooked_sha256": "2aa4f0e41a27845d3679183ee44a95dc5fb72fba1263bb48dc5bb9ea870588a1"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -359,11 +178,8 @@
       "target": "recipes/index.md",
       "target_sha256": "be3c8e70a039d089315871b50f07f010385e0af65a58a43f7180412a477be48f",
       "upstream_sha256": "c6477c30f84bcfad5c29f7f0392ab2f696ba3e68daa947b271739176eaf4f71e",
-      "mode": "include",
-      "fragments": [
-        "recipes/_ydb/index-01.md"
-      ],
-      "hooked_sha256": "d34383ffefeca11882c7b243a3459127650ecef1ea684e006f15183fe30d03e8"
+      "mode": "keep",
+      "reason": "YDB navigation and visibility of recipe pages."
     },
     {
       "lang": "ru",
@@ -371,7 +187,8 @@
       "target": "recipes/modifying-json.md",
       "target_sha256": "cef51687bbc7bf6f2956f9b76d7bae9b32c5f7d3a6196660c0b769c5fac68214",
       "upstream_sha256": "cef51687bbc7bf6f2956f9b76d7bae9b32c5f7d3a6196660c0b769c5fac68214",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -379,13 +196,8 @@
       "target": "syntax/action.md",
       "target_sha256": "9971f5da9f0f8bc8f63793a58e6378bb27b2f5fc91c4febe2904077607b1e933",
       "upstream_sha256": "4c14a5da9aa20f019e8c0016572ae01ef4f655318a258cce7dbb86382d272cb6",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/action-01.md",
-        "syntax/_ydb/action-02.md",
-        "syntax/_ydb/action-03.md"
-      ],
-      "hooked_sha256": "1e242e5e04da6d216cac12827871604b223525818ed3cc43ae8c59fe437f7210"
+      "mode": "keep",
+      "reason": "Provider-specific EVALUATE and metaprogram execution visibility; common-library availability alone does not prove YDB API support."
     },
     {
       "lang": "ru",
@@ -393,7 +205,8 @@
       "target": "syntax/commit.md",
       "target_sha256": "630cd5d343012ce762f775b64934acdd660c8ddfb117557f1857ba198812a33b",
       "upstream_sha256": "630cd5d343012ce762f775b64934acdd660c8ddfb117557f1857ba198812a33b",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -401,8 +214,8 @@
       "target": "syntax/declare.md",
       "target_sha256": "30c8f373c850baca7bd96f6c5ae96c3cbeb57269da5cb7ff29d4a7930935e2e3",
       "upstream_sha256": "95c21d66783d7a0b6c898cafc17ec6a07959ae4c4a4c5bcffad8fc0cd3d89692",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -410,11 +223,8 @@
       "target": "syntax/discard.md",
       "target_sha256": "36a34e0746c74e6c555b379efc01cafa5aa63e9532504f859853e06783b6905f",
       "upstream_sha256": "328fd59bb29d8bc07d95b4069ed890fd4179c1504290e01a86a696d293f35642",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/discard-01.md"
-      ],
-      "hooked_sha256": "e6379d9fb0f8c918cc19f42625d61b7c83eee43d4cfd1d6c33b4d32db047fd1d"
+      "mode": "keep",
+      "reason": "Query Service since 26.2 executes DISCARD; Table and Scan API ignore it for compatibility. Confirmed by KQP Discard tests. Also reconcile common INTO RESULT prohibition."
     },
     {
       "lang": "ru",
@@ -422,11 +232,8 @@
       "target": "syntax/export_import.md",
       "target_sha256": "659a7ca3149f2d2fe97882d335f928b450d4b1e535bc3a5eba004cd9bcea09a0",
       "upstream_sha256": "a3afd361397e5838ccf317f07434b16b4515d9bb67757de59de4eb0fb60b2b1e",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/export_import-01.md"
-      ],
-      "hooked_sha256": "11cc766bc7d5ab30ed4746a7814ce006e7942f1c3db5037e653de54b12e2359d"
+      "mode": "keep",
+      "reason": "Common module examples link to provider-specific SUBQUERY and file pragmas; YDB feature combinations leave SUBQUERY unpublished. Preserve until availability and navigation are reconciled."
     },
     {
       "lang": "ru",
@@ -434,26 +241,11 @@
       "target": "syntax/expressions.md",
       "target_sha256": "3b0f9ca08cc9290a8776cc749093f0e28f1068b3403606b9b57b3413ada8f2f9",
       "upstream_sha256": "0bfc780763e0137e53f95c4f6db92d29c7e3ab37b363d768de3ca45578850b3c",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/expressions-01.md",
-        "syntax/_ydb/expressions-02.md",
-        "syntax/_ydb/expressions-03.md",
-        "syntax/_ydb/expressions-04.md",
-        "syntax/_ydb/expressions-05.md",
-        "syntax/_ydb/expressions-06.md",
-        "syntax/_ydb/expressions-07.md",
-        "syntax/_ydb/expressions-08.md",
-        "syntax/_ydb/expressions-09.md",
-        "syntax/_ydb/expressions-10.md",
-        "syntax/_ydb/expressions-11.md",
-        "syntax/_ydb/expressions-12.md",
-        "syntax/_ydb/expressions-13.md",
-        "syntax/_ydb/expressions-14.md",
-        "syntax/_ydb/expressions-15.md",
-        "syntax/_ydb/expressions-16.md"
-      ],
-      "hooked_sha256": "b9ad1641809c282d977a2bc7f3f412c6874d4a05cf31d9b4d09806ae015ae2c6"
+      "mode": "keep",
+      "reason": "YDB fulltext-index LIKE/ILIKE example must survive; other differences hide provider-only ParseFile/EVALUATE/PROCESS. Needs independent reconciliation of availability.",
+      "link_aliases": {
+        "changelog/2026.02.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2026.02.md"
+      }
     },
     {
       "lang": "ru",
@@ -462,12 +254,13 @@
       "target_sha256": "d7d93a87d9791988c017a2de4cefda1d52b5e4afbdfc1340e06de5e8ec991313",
       "upstream_sha256": "9215e60c9780a16607a3988672c5211807453006cfce7be72d5a5372d63ebbab",
       "mode": "include",
+      "reason": "Shared article plus additive YDB integration examples or storage notes.",
       "fragments": [
-        "syntax/select/_ydb/flatten-01.md",
-        "syntax/select/_ydb/flatten-02.md",
-        "syntax/select/_ydb/flatten-03.md"
+        "syntax/select/_ydb/flatten-storage.md"
       ],
-      "hooked_sha256": "e9e250ff881dddf42f242931ca54a0d36d8fb4bbfd17253e49379bc28c8a5f34"
+      "link_aliases": {
+        "changelog/2025.03.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.03.md"
+      }
     },
     {
       "lang": "ru",
@@ -475,8 +268,14 @@
       "target": "syntax/select/group-by.md",
       "target_sha256": "ab9966a63b5b0a28b66ae20bdfb0fbb7598dae39ac8847f4228fc3fb219d1823",
       "upstream_sha256": "20035ef4b4a6128fb978a885d6984bddb52abf75cfed6a39cb0a1ede1d1f505d",
-      "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "mode": "include",
+      "reason": "Shared article plus additive YDB integration examples or storage notes.",
+      "fragments": [
+        "syntax/select/_ydb/group-by-hopping.md"
+      ],
+      "link_aliases": {
+        "changelog/2025.02.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.02.md"
+      }
     },
     {
       "lang": "ru",
@@ -485,7 +284,7 @@
       "target_sha256": "0a35a276df1b2468c4e87139a74211abec75c11155b8e05b9106ff1d99c8cde5",
       "upstream_sha256": "d5dcb57266328fe13c9e5890010ee2b6e97644407690450514d88529d4ada412",
       "mode": "keep",
-      "reason": "Substantial divergence or YDB-owned navigation; retain complete YDB page"
+      "reason": "YDB statements and DDL navigation, not a common language article."
     },
     {
       "lang": "ru",
@@ -494,7 +293,7 @@
       "target_sha256": "5f35863a38833fc423d4ebcc9cdb6516257b0abd8b2b5c364fb41cf126ab516d",
       "upstream_sha256": "06237a5b45ca733f315656426ccc7be6450ad4688e3ea4d96dfee8115acfcf23",
       "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "reason": "YDB primary-key conflicts, PRECONDITION_FAILED, RETURNING, external sinks and row/column-table transaction constraints."
     },
     {
       "lang": "ru",
@@ -502,11 +301,8 @@
       "target": "syntax/into_result.md",
       "target_sha256": "ba11235bfcc480e0fd4621c9dec0b4382de7031f379b2fe811596fff6550ecf8",
       "upstream_sha256": "41acb75765f55baaffde7755d984dec4f1aaf581a176464f7c2c38155ed88575",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/into_result-01.md"
-      ],
-      "hooked_sha256": "99ee0b9b05ec4c4d3a058ee9d8c6cfeb836874c104e26c28a07c4bbf6e0463c1"
+      "mode": "keep",
+      "reason": "Common text prohibits combination with DISCARD; YDB page omits this prohibition. Do not silently choose either claim without a combined-query test."
     },
     {
       "lang": "ru",
@@ -514,13 +310,8 @@
       "target": "syntax/select/join.md",
       "target_sha256": "0221afb6cb9873952e3e5bd6c3806248d49ed40e5ad44e955862f472e073d8cf",
       "upstream_sha256": "d22d68e985bbcf7e47b4b40001ee907e1a19cfeef4d9472276cab64b62fa8031",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/join-01.md",
-        "syntax/select/_ydb/join-02.md",
-        "syntax/select/_ydb/join-03.md"
-      ],
-      "hooked_sha256": "2a46bf910f09e18f512b40851d627ec0d76cc206dcc30cdf63b2efbbf5724c8d"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -529,7 +320,7 @@
       "target_sha256": "cd00400ec69758f4c0d82ec9c2330380bf187306703f30f8176b9a4998e87e18",
       "upstream_sha256": "0c44a5665bd69207f689e94886a078f2a40e8368e98bad012611bac5b7222003",
       "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "reason": "Useful generic query-parameter compilation restrictions absent upstream. Candidate for common documentation, not a YDB-only hook; retained rather than discarded."
     },
     {
       "lang": "ru",
@@ -537,12 +328,8 @@
       "target": "syntax/not_yet_supported.md",
       "target_sha256": "9183d8222c0165b363704f7210ddccb80031f3b563d8b4f04bb1050bbc3a0e0d",
       "upstream_sha256": "4064241378348539800da0862cb1d5c5f8534ff69d490d8c969a691f8a7da175",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/not_yet_supported-01.md",
-        "syntax/_ydb/not_yet_supported-02.md"
-      ],
-      "hooked_sha256": "d36d1f67d8167970dd9928164d0f41c273a3422cae1621cbb6af5f2bc66a8826"
+      "mode": "keep",
+      "reason": "YDB correlated-subquery and INTERSECT/EXCEPT restrictions versus removed upstream restrictions. Preserve until KQP support is verified."
     },
     {
       "lang": "ru",
@@ -550,11 +337,8 @@
       "target": "syntax/process.md",
       "target_sha256": "d046f41aa334c385b20443293cd247401a5f9384a13d829ed45bc27e3786c300",
       "upstream_sha256": "cdb34a53de8b43b985f672aa02c86edf1f2f25064474846d82274d1413caba10",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/process-01.md"
-      ],
-      "hooked_sha256": "f3b4a4fe22a8fb83850535410fb1754c7798b6d5b3c654e9371d556eafe7be6c"
+      "mode": "keep",
+      "reason": "YDB PROCESS command naming/availability differs from MapReduce provider documentation."
     },
     {
       "lang": "ru",
@@ -562,7 +346,8 @@
       "target": "syntax/reduce.md",
       "target_sha256": "e1f6bf95e29ae793a1ea5dd87113975225d4408f223422fb2d02cd7f4197c023",
       "upstream_sha256": "e1f6bf95e29ae793a1ea5dd87113975225d4408f223422fb2d02cd7f4197c023",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -570,7 +355,8 @@
       "target": "syntax/select/assume_order_by.md",
       "target_sha256": "165aecaeda4edd80a3b0f9383893dc2e965aa9fdb3d87fbb07b4f159bd98510e",
       "upstream_sha256": "165aecaeda4edd80a3b0f9383893dc2e965aa9fdb3d87fbb07b4f159bd98510e",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -579,7 +365,7 @@
       "target_sha256": "b994ed51b333b734b4b13d9ef4659069d9dae454d296d4095abca5ee85695b51",
       "upstream_sha256": "c06f195c489bc2ef84c3bdd7b7152688a0c9fb067c3bacc183fbbe817c90fe8e",
       "mode": "keep",
-      "reason": "Retain page with legacy block structure during migration"
+      "reason": "Provider-specific folder traversal, table ranges and examples. No inference of YDB support from common syntax."
     },
     {
       "lang": "ru",
@@ -587,12 +373,8 @@
       "target": "syntax/select/distinct.md",
       "target_sha256": "ca0eaab91a0983c5b262bc45a1f4bb17d21b7cb062f63c66405aa2f289271e96",
       "upstream_sha256": "8b0025b4aa219fb7cd11d0df607b7c7d0eda6915b3aaa59079dc0c0cb7d0ca80",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/distinct-01.md",
-        "syntax/select/_ydb/distinct-02.md"
-      ],
-      "hooked_sha256": "901e4f99c5110bff53a84e069741a934c96090fc9b103b73dbfc682dfd4ae870"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -600,11 +382,8 @@
       "target": "syntax/select/from.md",
       "target_sha256": "6735174449e98a4173d0ff8a6c2dccd7ab4911dce6c7d6fd97eb14747bfd5612",
       "upstream_sha256": "1042529dedb84b04f9fd777049112cd16469329b03ccec9bff48c56ea5b3df31",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/from-01.md"
-      ],
-      "hooked_sha256": "c0730a7f60b8e094fde5739df4fa234a5025a27be7686a85d8b0c24edcc1c632"
+      "mode": "keep",
+      "reason": "Provider-specific CONCAT/table discovery and USE references. Old YT folder prose should be removed only together with provider-neutral replacement."
     },
     {
       "lang": "ru",
@@ -613,11 +392,10 @@
       "target_sha256": "43515b70e3d69f3551ccc386bac6a5e09eeb3bf560a3a81cc936a7a54dc9afc2",
       "upstream_sha256": "b710faf714d82dd5b8d2c6d87536f8f3bc31ffc7334bdb46c514fc5f9bd55d93",
       "mode": "include",
+      "reason": "Shared article plus additive YDB integration examples or storage notes.",
       "fragments": [
-        "syntax/select/_ydb/from_as_table-01.md",
-        "syntax/select/_ydb/from_as_table-02.md"
-      ],
-      "hooked_sha256": "2ec3683c5f4397ccb39a23af54830a41d5613b2e5798f6e340775b35113b82f9"
+        "syntax/select/_ydb/as-table-write.md"
+      ]
     },
     {
       "lang": "ru",
@@ -625,7 +403,8 @@
       "target": "syntax/select/from_select.md",
       "target_sha256": "2a834f92fced4e44b24bb071afcc2d4fd5860df728fba14f1f44ecac9f51c32b",
       "upstream_sha256": "2a834f92fced4e44b24bb071afcc2d4fd5860df728fba14f1f44ecac9f51c32b",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -634,7 +413,10 @@
       "target_sha256": "a59bf7b11f9492db8ff6d90c2486f5c569f9da05e2c1c7b1e8766db1f7808dee",
       "upstream_sha256": "9ec30865a7be58f3398f97d2984831f524fe0f6af06bed562efd74c3dbc20730",
       "mode": "keep",
-      "reason": "Retain page with legacy block structure during migration"
+      "reason": "YDB execution order, SQL examples and navigation to separate SELECT articles.",
+      "link_aliases": {
+        "changelog/2025.02.md#group-by-expr-alias-where": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.02.md#group-by-expr-alias-where"
+      }
     },
     {
       "lang": "ru",
@@ -642,7 +424,8 @@
       "target": "syntax/select/limit_offset.md",
       "target_sha256": "5aa021418fcb9b42c0f717c3ad2ddb4cdf9cf35094c52b0ac9735c6b625ac6f0",
       "upstream_sha256": "5aa021418fcb9b42c0f717c3ad2ddb4cdf9cf35094c52b0ac9735c6b625ac6f0",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -650,12 +433,8 @@
       "target": "syntax/select/order_by.md",
       "target_sha256": "20f4cef1138a102506613d62c8e2664da127d41298278ebe684720eda342bdd2",
       "upstream_sha256": "4a5ede2b4aedff4b4e0ff1c8ae956f59a632eb454778fd014d2a37a99d898a4a",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/order_by-01.md",
-        "syntax/select/_ydb/order_by-02.md"
-      ],
-      "hooked_sha256": "cafb45d6e809eac88319dc673056153a1ed2bc6a3555e1bc5902db7336ae27fd"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -663,11 +442,8 @@
       "target": "syntax/select/sample.md",
       "target_sha256": "50fffb8711439f39d71ae321b46ee282010c39343a7c1bb7505e9df63c2e8e94",
       "upstream_sha256": "9a85ca1c26a897a60527426b92157343aecab462a3f76aeb25eaf0c927f2308a",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/sample-01.md"
-      ],
-      "hooked_sha256": "a545c5422a4b43afcd4bb370da6f0930016e66d9d6071e52a3d2e568d79c9e51"
+      "mode": "keep",
+      "reason": "YDB OLAP limitation and TABLESAMPLE feature gate; old YT sampling pragmas need separate provider reconciliation."
     },
     {
       "lang": "ru",
@@ -675,11 +451,8 @@
       "target": "syntax/select/unique_distinct_hints.md",
       "target_sha256": "ead03112c3d9effad4902e6e47f250e3ad208c1a1a28e228978406b1a29bb5a2",
       "upstream_sha256": "df094f115edede5b8b2c76ccc386b504b3458fb08150f3dd5a7c1af21dca0ee5",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/unique_distinct_hints-01.md"
-      ],
-      "hooked_sha256": "8819117879234ac53da84e0cdccb2f8bfde91e1634d8ccfb3a7ae95d1cff40e9"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -687,12 +460,8 @@
       "target": "syntax/select/where.md",
       "target_sha256": "5944f389a8824c2b6a0b74be2b8ac909a5f772b2cd585da62ac65d56b213eb6e",
       "upstream_sha256": "48c42535f6a7c9fbc35efc11c9e376d3104d9e543870586cb8ec05efb9368a1e",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/where-01.md",
-        "syntax/select/_ydb/where-02.md"
-      ],
-      "hooked_sha256": "19f7084fabb5a363c578f35265856e673a4115d496b47ee2e688d683a833276b"
+      "mode": "keep",
+      "reason": "Correlated-subquery restriction and link to YDB alternatives. Must be reconciled with provider support, not just upstream deletion."
     },
     {
       "lang": "ru",
@@ -701,11 +470,13 @@
       "target_sha256": "9e8f984443fbbc2e5423179cf1c4ceb6654f85f729ae67b5ced7f03f35163ecb",
       "upstream_sha256": "cbf237b49c6b90f23735f15dc47852cb947e0cdbeb843f923d26263fdf536134",
       "mode": "include",
+      "reason": "Keep common hint list and examples. Remove obsolete local YT hints INFER_SCHEMA/FORCE_INFER_SCHEMA/DIRECT_READ/XLOCK/IGNORETYPEV3 and their examples; add only external-source parameters and topic watermarks.",
       "fragments": [
-        "syntax/select/_ydb/with-01.md",
-        "syntax/select/_ydb/with-02.md"
+        "syntax/select/_ydb/with-sources.md"
       ],
-      "hooked_sha256": "317834bcf920e22c441f3b7381a8a50d545d371dbb4422fa8355df093bb72363"
+      "link_aliases": {
+        "syntax/select/with.md#each": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/syntax/select/concat.md"
+      }
     },
     {
       "lang": "ru",
@@ -713,8 +484,8 @@
       "target": "syntax/select/without.md",
       "target_sha256": "fa2a9a46ccad239e603838b9489bc3f96e6371fd29ae5209549e764873012f9a",
       "upstream_sha256": "276f2f2f5e3bff74e601466578bcf35f146dc135c53281a3180b5bfc2f8e627e",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -722,13 +493,8 @@
       "target": "syntax/subquery.md",
       "target_sha256": "e977991b01ac141347cc4072b8a1bf28f35fb5e479e823681ae55b90a9b9abe0",
       "upstream_sha256": "f9f3aca535c5d4a22f1cbaab2b80b30060bb82b5c51b0bca7a6d93d45d86fad8",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/subquery-01.md",
-        "syntax/_ydb/subquery-02.md",
-        "syntax/_ydb/subquery-03.md"
-      ],
-      "hooked_sha256": "e82591151a348c3d8b26985caaf29ca5ce660496e8356e914f1991c7166cbca3"
+      "mode": "keep",
+      "reason": "Provider/metaprogram visibility and SUBQUERY name resolution. Requires provider-neutral examples."
     },
     {
       "lang": "ru",
@@ -736,12 +502,8 @@
       "target": "syntax/use.md",
       "target_sha256": "cb95e34ae23b1beb59c51482ce7ca52784c87635b66645d32a6943e1c2384652",
       "upstream_sha256": "24c46afbe9e4f73122134be61ce5ea09f79765a5e3372254fe714a7f237702b1",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/use-01.md",
-        "syntax/_ydb/use-02.md"
-      ],
-      "hooked_sha256": "641c13096662a3aeba144af535b59944ae61cce4307cce2eb9ca62d90aff4456"
+      "mode": "keep",
+      "reason": "Cluster/service naming is consumer configuration, not language semantics."
     },
     {
       "lang": "ru",
@@ -749,8 +511,8 @@
       "target": "syntax/values.md",
       "target_sha256": "df18e097bfaeaa96e7da2df4de33ba89dfa358b63587c7c2436fdfffdb3b3022",
       "upstream_sha256": "bcb85f52d37ba17d547d1f1c4d615ac4b34fd64615042f4ea77f3359560f1952",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -758,15 +520,8 @@
       "target": "syntax/select/window.md",
       "target_sha256": "7a3496c6730b6505aa68bcd8da6abbe0eb36bd0ca7714a00f7055c4e47dd13b2",
       "upstream_sha256": "336647d374473785ed11fd79d2f500755cc37c320edf94128c94272dc6b97418",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/window-01.md",
-        "syntax/select/_ydb/window-02.md",
-        "syntax/select/_ydb/window-03.md",
-        "syntax/select/_ydb/window-04.md",
-        "syntax/select/_ydb/window-05.md"
-      ],
-      "hooked_sha256": "ccc20bb5b976905c71ea287eee06c81c6d4f96fb233b7ded4ca96e3c7a1282a8"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -774,7 +529,8 @@
       "target": "types/cast.md",
       "target_sha256": "7adb103ab11bbbb0ce2dfe02994d691fed87b3c0641a6f400011d1d66abddc83",
       "upstream_sha256": "7adb103ab11bbbb0ce2dfe02994d691fed87b3c0641a6f400011d1d66abddc83",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -783,10 +539,10 @@
       "target_sha256": "dbaa49d3b0f7c2e92241029cf657180c5caeb99a21712c8d668988e560d530ba",
       "upstream_sha256": "1bbb28909fb07ce8ce6817206603ed3c2adf374b94747577d87ec5097d96b4f2",
       "mode": "include",
+      "reason": "Shared article plus additive YDB integration examples or storage notes.",
       "fragments": [
-        "types/_ydb/containers-01.md"
-      ],
-      "hooked_sha256": "51c52037dc50673adb351d7741111763e09cfdedf13006f9eb954a9ba1b1549d"
+        "types/_ydb/containers-storage.md"
+      ]
     },
     {
       "lang": "ru",
@@ -794,11 +550,8 @@
       "target": "types/index.md",
       "target_sha256": "0c5b09ecf6988a35b9c9034d563be7b6a79b5531f52b47813ec5ae44f10db04c",
       "upstream_sha256": "88ff0dd5ed396e4d8bc7f8bb0de64dfd772f2c9a8505a2c480ba1961053a74b1",
-      "mode": "include",
-      "fragments": [
-        "types/_ydb/index-01.md"
-      ],
-      "hooked_sha256": "eed58033d69d9e7c5a3c080085a9bb8af8775d3bec9485dbface7fe5b2b23d10"
+      "mode": "keep",
+      "reason": "YDB type catalog; common Linear/Tagged navigation includes unpublished pages."
     },
     {
       "lang": "ru",
@@ -806,8 +559,8 @@
       "target": "types/json.md",
       "target_sha256": "293b49f417b7ec470026c28f6db0f06c80efaf3f5252c5a89e4c80877cb9b26b",
       "upstream_sha256": "f7215336ea0e5604847c3c6c87d0478361547b740687ddffd53ff4c6f68dd78d",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -816,11 +569,10 @@
       "target_sha256": "9f40d0875d4c3d1a0087ff3c9a7451458fc84e334a9a029a9f219c30f7b01ae7",
       "upstream_sha256": "2364aaf6d0a8fca6d20cfed46ca4f3f69fa252bc45c47cd4fb49eda0f1fd299a",
       "mode": "include",
+      "reason": "Shared article plus additive YDB integration examples or storage notes.",
       "fragments": [
-        "types/_ydb/optional-01.md",
-        "types/_ydb/optional-02.md"
-      ],
-      "hooked_sha256": "2f021cc3a4852d2d3cfe63faa9068e1aa60c18f3b56833716d47dec6ca0c0b66"
+        "types/_ydb/optional-storage.md"
+      ]
     },
     {
       "lang": "ru",
@@ -829,7 +581,7 @@
       "target_sha256": "9577098d40e653d4b7f1ded6f73a233ba38611d111fb18eef42a2aae010e132e",
       "upstream_sha256": "364cb6255230c02fff7a3d508bd64c001c96894c08119d7445d0495588283cf4",
       "mode": "keep",
-      "reason": "Substantial divergence or YDB-owned navigation; retain complete YDB page"
+      "reason": "YDB primary/index-key constraints, 8 MB storage limit and extended type/Interval examples. Storage limits must remain distinct from language-level type ranges."
     },
     {
       "lang": "ru",
@@ -837,11 +589,8 @@
       "target": "types/special.md",
       "target_sha256": "ad252aacfdbf9e283bdb082843f49e4d16e9462ba410026591be254f68726b5d",
       "upstream_sha256": "85d9d2be536915fdaa4d6608b104a5309135bff3b8ab3897f9037a866bac7438",
-      "mode": "include",
-      "fragments": [
-        "types/_ydb/special-01.md"
-      ],
-      "hooked_sha256": "7dca3bf172039e0f63dab09dd021d2c5056edaaa59ac97bc846ca608d44069b5"
+      "mode": "keep",
+      "reason": "Callable S-expression explanation is hidden for YDB. Requires provider-neutral replacement."
     },
     {
       "lang": "ru",
@@ -849,7 +598,8 @@
       "target": "types/type_string.md",
       "target_sha256": "5de32be61d13aff5614e51daf79ef681e2eaf08197aa9ca5ba061f1c66c218ee",
       "upstream_sha256": "5de32be61d13aff5614e51daf79ef681e2eaf08197aa9ca5ba061f1c66c218ee",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -857,7 +607,8 @@
       "target": "types/yson.md",
       "target_sha256": "487507674a350b365d34320e590138a77991395a5d9d4f23808098f64f6360c8",
       "upstream_sha256": "487507674a350b365d34320e590138a77991395a5d9d4f23808098f64f6360c8",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -866,7 +617,12 @@
       "target_sha256": "3b5322a39e91c9ecf15743353a437b0b1d47ff71837f290dcc547b1a272be889",
       "upstream_sha256": "1b73d2e14ce78f59dd4f44f10e8373411c349b85de321550b6d288e63d523418",
       "mode": "keep",
-      "reason": "Substantial divergence or YDB-owned navigation; retain complete YDB page"
+      "reason": "Generic introductory/resource guidance and interval literal restrictions are useful; upstream has newer Init/Init64 APIs and YQL-version changelog references. Reconcile in common docs rather than conditional replacement.",
+      "link_aliases": {
+        "changelog/2026.03.md#datetime-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2026.03.md#datetime-module",
+        "changelog/2025.03.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.03.md",
+        "changelog/2025.05.md#datetime-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.05.md#datetime-module"
+      }
     },
     {
       "lang": "ru",
@@ -874,11 +630,12 @@
       "target": "udf/list/digest.md",
       "target_sha256": "58742eacc1cdc1f1150c430f51faa3a0e18dd0e9396f78688933bf9e1ac65bd1",
       "upstream_sha256": "060da55535499f9d5f6a51bba2683887094af733da7d3714215859f03bd86ff7",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/digest-01.md"
-      ],
-      "hooked_sha256": "d155ea1d475339b42a22e3fb6388adf2cf9135d698ad976f7ba7aa3e9584185a"
+      "mode": "keep",
+      "reason": "Named Init seed arguments are documented locally but absent upstream signatures. This is a common-library documentation correction, not YDB-specific behavior.",
+      "link_aliases": {
+        "changelog/2026.03.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2026.03.md",
+        "changelog/2025.03.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.03.md"
+      }
     },
     {
       "lang": "ru",
@@ -886,11 +643,8 @@
       "target": "udf/list/histogram.md",
       "target_sha256": "f637a8825ff5165a34f071ce83bc1ee92c707743f2b8b00e4f7a82108bd82f3e",
       "upstream_sha256": "6826830813f0b4961b19224223879e10acf43c0ef6a6a852a33c42b32d493728",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/histogram-01.md"
-      ],
-      "hooked_sha256": "5e862ef8dcb0c0f34f26ca89f9a774e68f54964134bf63b1a949ea9328dd8b59"
+      "mode": "keep",
+      "reason": "Links to provider-specific web visualization. Preserve until a consumer-neutral description is agreed."
     },
     {
       "lang": "ru",
@@ -898,8 +652,8 @@
       "target": "udf/list/hyperscan.md",
       "target_sha256": "62bdd0c65e4229c5d1ec9359a83fec7e10a0d6aa31e90954070c2b1070e33743",
       "upstream_sha256": "5bfd5a24ccd57f5495df0bd32ade07277ce4e528885d11fe603b71c33568c33c",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -907,11 +661,8 @@
       "target": "udf/list/index.md",
       "target_sha256": "2ba097ff77922aa1abdfc4836ba0002fbc2bb7c6b0f59acdc69ce82b0de5095f",
       "upstream_sha256": "c95b6c1a450213f3de868b1e47dac789c8e6d46c472b4e9bc24932933bc40044",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/index-01.md"
-      ],
-      "hooked_sha256": "3b465f9ddf7d5e1cb61ca63273f629c4cc973cb67b768c6821b406006cae15c2"
+      "mode": "keep",
+      "reason": "YDB module catalog includes Knn and Roaring; availability is not inferred from library membership."
     },
     {
       "lang": "ru",
@@ -919,8 +670,8 @@
       "target": "udf/list/ip.md",
       "target_sha256": "27d442daaa1a97b26cb55b1366abdb1988e3626d1418c8a7a6e92a9cfedd1884",
       "upstream_sha256": "cc2e00bdb907945d4cae6b48d9e5d5fefafecf5163fc916399983415ba610cb0",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -928,8 +679,11 @@
       "target": "udf/list/math.md",
       "target_sha256": "54b8196672fa100f6651a1e0b4c3c978d138e92bd264a73881878d902358a13d",
       "upstream_sha256": "a81bd6114fde7727b466a585747fe754dc2c93c237dadb60d0bc1ec12806e91f",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes.",
+      "link_aliases": {
+        "changelog/2026.03.md#math-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2026.03.md#math-module"
+      }
     },
     {
       "lang": "ru",
@@ -937,11 +691,8 @@
       "target": "udf/list/pcre.md",
       "target_sha256": "83a13d2caf066818bb87931efac071395b4366cd4f9a87efc6fdd908d84d5d62",
       "upstream_sha256": "c63b153d38fc1fbb2c8e674c7aed314c30eb786e18d4aec5ed0f877084fe1c51",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/pcre-01.md"
-      ],
-      "hooked_sha256": "b9fa9776c53ed79f405087fec6d4400c62b7764bfb8eafbb8dd3421c9f76e93b"
+      "mode": "keep",
+      "reason": "Recommendation about switching regex engines is hidden for YDB; API compatibility guidance requires confirmation."
     },
     {
       "lang": "ru",
@@ -949,11 +700,8 @@
       "target": "udf/list/pire.md",
       "target_sha256": "cf918388e7b78e4f3eb2c2d10b8e63a4c3635e6ccda004dfe90887532af4f396",
       "upstream_sha256": "2e7a803ebab46061306438057db490c34a3043f98b728defe999dbbd1368cb3b",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/pire-01.md"
-      ],
-      "hooked_sha256": "963d568ef3617a1f950be62b8153925f1c3fcf5bce081f552929f23fa80b7c0e"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -961,17 +709,8 @@
       "target": "udf/list/postgres.md",
       "target_sha256": "2a26ce8443ef71e38b2b005f121e02dcc91026671b25b0bee621bf2d7d16e698",
       "upstream_sha256": "dd915a2128304a480a93314d48c1591ef63188066f1dbe2dbf0ede0335e09cc6",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/postgres-01.md",
-        "udf/list/_ydb/postgres-02.md",
-        "udf/list/_ydb/postgres-03.md",
-        "udf/list/_ydb/postgres-04.md",
-        "udf/list/_ydb/postgres-05.md",
-        "udf/list/_ydb/postgres-06.md",
-        "udf/list/_ydb/postgres-07.md"
-      ],
-      "hooked_sha256": "b030385f2a79db9c0d8af32300b8a4d68154b366693c7bff62f7201c3817590e"
+      "mode": "keep",
+      "reason": "Local correction removes a fourth cell from three-column PostgreSQL conversion rows (TzDate32/TzDatetime64/TzTimestamp64). Import would silently lose pgtext cells. Common documentation needs the same correction, not an YDB conditional."
     },
     {
       "lang": "ru",
@@ -979,14 +718,11 @@
       "target": "udf/list/re2.md",
       "target_sha256": "179d99b8b94016be0ca1e1a830cda1264f9666cfeaee26ab58d4a372e98d20b8",
       "upstream_sha256": "d6f445b1b45f372ed8bd075c5652091c406e7129e54f1d5e6676f78247b17f70",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/re2-01.md",
-        "udf/list/_ydb/re2-02.md",
-        "udf/list/_ydb/re2-03.md",
-        "udf/list/_ydb/re2-04.md"
-      ],
-      "hooked_sha256": "ddfcad5575ba281d388bf34fb057f02dae8e04461d00200bfecc3c348dc57e7b"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes.",
+      "link_aliases": {
+        "changelog/2025.03.md#re2-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.03.md#re2-module"
+      }
     },
     {
       "lang": "ru",
@@ -994,8 +730,15 @@
       "target": "udf/list/string.md",
       "target_sha256": "093a224557b423b6f7cf392d166df4c90bfc3a10194438e3dca6f3ae9d525176",
       "upstream_sha256": "74be2f762c415c6e5fda280b191f34a4d49942d14d731ed7d4547884cc22da1e",
-      "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes.",
+      "link_aliases": {
+        "changelog/2025.02.md#string-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.02.md#string-module",
+        "changelog/2026.03.md#string-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2026.03.md#string-module"
+      },
+      "legacy_anchors": {
+        "splittolist": "* `String::SplitToList("
+      }
     },
     {
       "lang": "ru",
@@ -1003,8 +746,8 @@
       "target": "udf/list/unicode.md",
       "target_sha256": "a69c51d127f9f8b3ef5dcd12cc2ba2bc23a0aa62caf5f2ee47358548d195df85",
       "upstream_sha256": "9cc2081808b0499b15d74c74d071afecf38ec061f5b5e173fe70e6c5b39f26e9",
-      "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -1012,8 +755,8 @@
       "target": "udf/list/url.md",
       "target_sha256": "0a84ec150f8c88f4e9a59fed9b2298f502fbdc67ae38e7672e319572af88c904",
       "upstream_sha256": "adbcae799236237926c4b72b2843ebed020e701db805a779f633283b11ea0912",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "ru",
@@ -1022,7 +765,11 @@
       "target_sha256": "84d1febc175ab0fe97ada44b9b5914aa86620435dc03fa2b3c1e7f8ea235b6df",
       "upstream_sha256": "2fb89a0b6723162d582916748d4b198653ec1a82a53be63bffc82297f974cfb0",
       "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "reason": "Consumer recipe visibility and pragma anchors. Preserve until the recipe catalog is reconciled.",
+      "link_aliases": {
+        "changelog/2026.01.md#yson-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2026.01.md#yson-module",
+        "changelog/2025.05.md#yson-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/ru/changelog/2025.05.md#yson-module"
+      }
     },
     {
       "lang": "en",
@@ -1030,11 +777,8 @@
       "target": "_includes/cast_examples.md",
       "target_sha256": "5394e22d30c3561aee1e9f70e6d66411e70d5611ac6c2da09bf79f88706bdf52",
       "upstream_sha256": "9581a1e52c5a5b3e60ad1007563774f4023b6ebd63f9d9ffb0ec62ddfdc787bb",
-      "mode": "include",
-      "fragments": [
-        "_includes/_ydb/cast_examples-01.md"
-      ],
-      "hooked_sha256": "784d89b3f1d73903c641c14fbfd003e2d407b1513eeaf9ea34fc70ef0a180be8"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1042,7 +786,8 @@
       "target": "_includes/decimal_args.md",
       "target_sha256": "9af43bfa22e8bc6003bfa070ec16502b7c045a8010dae36fa271a1089636603b",
       "upstream_sha256": "9af43bfa22e8bc6003bfa070ec16502b7c045a8010dae36fa271a1089636603b",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1050,34 +795,11 @@
       "target": "builtins/aggregation.md",
       "target_sha256": "806df2810031be6ebbbfaa936095336c2c4978f5f6406515d2e1bab79392e59c",
       "upstream_sha256": "8259210f1111e3b6e9b7c465805337d63b2b41fe59ed46a66c2b1dfcbd330e2b",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/aggregation-01.md",
-        "builtins/_ydb/aggregation-02.md",
-        "builtins/_ydb/aggregation-03.md",
-        "builtins/_ydb/aggregation-04.md",
-        "builtins/_ydb/aggregation-05.md",
-        "builtins/_ydb/aggregation-06.md",
-        "builtins/_ydb/aggregation-07.md",
-        "builtins/_ydb/aggregation-08.md",
-        "builtins/_ydb/aggregation-09.md",
-        "builtins/_ydb/aggregation-10.md",
-        "builtins/_ydb/aggregation-11.md",
-        "builtins/_ydb/aggregation-12.md",
-        "builtins/_ydb/aggregation-13.md",
-        "builtins/_ydb/aggregation-14.md",
-        "builtins/_ydb/aggregation-15.md",
-        "builtins/_ydb/aggregation-16.md",
-        "builtins/_ydb/aggregation-17.md",
-        "builtins/_ydb/aggregation-18.md",
-        "builtins/_ydb/aggregation-19.md",
-        "builtins/_ydb/aggregation-20.md",
-        "builtins/_ydb/aggregation-21.md",
-        "builtins/_ydb/aggregation-22.md",
-        "builtins/_ydb/aggregation-23.md",
-        "builtins/_ydb/aggregation-24.md"
-      ],
-      "hooked_sha256": "066d0bcf9c23ec81e08cbe7927d563c875dc9bf1d34ca2fd8957b37f847336ef"
+      "mode": "keep",
+      "reason": "YDB OLAP restriction on AGGREGATE_BY plus provider-specific histogram and SessionWindow visibility. Generic COUNT_IF examples overlap common documentation.",
+      "link_aliases": {
+        "changelog/2025.04.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.04.md"
+      }
     },
     {
       "lang": "en",
@@ -1085,55 +807,15 @@
       "target": "builtins/basic.md",
       "target_sha256": "74377e4452c7cf156c968077d64215437f869287ede2653cb1ededa14ee65640",
       "upstream_sha256": "8c0087c424cebdb3bd96da16190a83bb5c32db201f7b48ddf7300df5fa4e79fe",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/basic-01.md",
-        "builtins/_ydb/basic-02.md",
-        "builtins/_ydb/basic-03.md",
-        "builtins/_ydb/basic-04.md",
-        "builtins/_ydb/basic-05.md",
-        "builtins/_ydb/basic-06.md",
-        "builtins/_ydb/basic-07.md",
-        "builtins/_ydb/basic-08.md",
-        "builtins/_ydb/basic-09.md",
-        "builtins/_ydb/basic-10.md",
-        "builtins/_ydb/basic-11.md",
-        "builtins/_ydb/basic-12.md",
-        "builtins/_ydb/basic-13.md",
-        "builtins/_ydb/basic-14.md",
-        "builtins/_ydb/basic-15.md",
-        "builtins/_ydb/basic-16.md",
-        "builtins/_ydb/basic-17.md",
-        "builtins/_ydb/basic-18.md",
-        "builtins/_ydb/basic-19.md",
-        "builtins/_ydb/basic-20.md",
-        "builtins/_ydb/basic-21.md",
-        "builtins/_ydb/basic-22.md",
-        "builtins/_ydb/basic-23.md",
-        "builtins/_ydb/basic-24.md",
-        "builtins/_ydb/basic-25.md",
-        "builtins/_ydb/basic-26.md",
-        "builtins/_ydb/basic-27.md",
-        "builtins/_ydb/basic-28.md",
-        "builtins/_ydb/basic-29.md",
-        "builtins/_ydb/basic-30.md",
-        "builtins/_ydb/basic-31.md",
-        "builtins/_ydb/basic-32.md",
-        "builtins/_ydb/basic-33.md",
-        "builtins/_ydb/basic-34.md",
-        "builtins/_ydb/basic-35.md",
-        "builtins/_ydb/basic-36.md",
-        "builtins/_ydb/basic-37.md",
-        "builtins/_ydb/basic-38.md",
-        "builtins/_ydb/basic-39.md",
-        "builtins/_ydb/basic-40.md",
-        "builtins/_ydb/basic-41.md",
-        "builtins/_ydb/basic-42.md",
-        "builtins/_ydb/basic-43.md",
-        "builtins/_ydb/basic-44.md",
-        "builtins/_ydb/basic-45.md"
-      ],
-      "hooked_sha256": "1e51b713f867dc8cece25643eaedb99fe1866c098b8d191d0ea4825265d0637b"
+      "mode": "keep",
+      "reason": "Unresolved Random execution-phase wording; ToBytes(123) example is corrected locally; provider-specific FileContent/ParseFile/TablePath and codegen visibility. Do not replace these with an assumed shared behavior.",
+      "link_aliases": {
+        "changelog/2025.04.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.04.md",
+        "changelog/2025.03.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.03.md",
+        "changelog/2025.05.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.05.md",
+        "changelog/2026.02.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2026.02.md",
+        "changelog/2026.01.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2026.01.md"
+      }
     },
     {
       "lang": "en",
@@ -1141,20 +823,11 @@
       "target": "builtins/codegen.md",
       "target_sha256": "b0b16447a766323fad2b313702f17472f02531d7856a57628b5c2525523380b7",
       "upstream_sha256": "93718d36f9ec5e3afabe296097f7851abb55f932f1a74c1c40e156ad4e1d7b5e",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/codegen-01.md",
-        "builtins/_ydb/codegen-02.md",
-        "builtins/_ydb/codegen-03.md",
-        "builtins/_ydb/codegen-04.md",
-        "builtins/_ydb/codegen-05.md",
-        "builtins/_ydb/codegen-06.md",
-        "builtins/_ydb/codegen-07.md",
-        "builtins/_ydb/codegen-08.md",
-        "builtins/_ydb/codegen-09.md",
-        "builtins/_ydb/codegen-10.md"
-      ],
-      "hooked_sha256": "f2b1023b8848e0478eb23f0281ee5baf1442852e0966fa8704c07b3201eec947"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes.",
+      "link_aliases": {
+        "changelog/2026.01.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2026.01.md"
+      }
     },
     {
       "lang": "en",
@@ -1162,26 +835,11 @@
       "target": "builtins/dict.md",
       "target_sha256": "3e0a592ff78438b3005bf202e58a63fe5909845ae365a8b4b06894a8bc884ee6",
       "upstream_sha256": "35847a24ba27c0396dd64baebfbd17c63343f9d732ccd3a636e416f6934c924b",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/dict-01.md",
-        "builtins/_ydb/dict-02.md",
-        "builtins/_ydb/dict-03.md",
-        "builtins/_ydb/dict-04.md",
-        "builtins/_ydb/dict-05.md",
-        "builtins/_ydb/dict-06.md",
-        "builtins/_ydb/dict-07.md",
-        "builtins/_ydb/dict-08.md",
-        "builtins/_ydb/dict-09.md",
-        "builtins/_ydb/dict-10.md",
-        "builtins/_ydb/dict-11.md",
-        "builtins/_ydb/dict-12.md",
-        "builtins/_ydb/dict-13.md",
-        "builtins/_ydb/dict-14.md",
-        "builtins/_ydb/dict-15.md",
-        "builtins/_ydb/dict-16.md"
-      ],
-      "hooked_sha256": "4a932e10f026d42b0d1faedcffc4444c1295470e9c491da8f30464fd71bac11c"
+      "mode": "keep",
+      "reason": "Examples using container-valued stored columns are hidden in YDB. Reconcile examples with table variables before importing.",
+      "link_aliases": {
+        "changelog/2025.04.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.04.md"
+      }
     },
     {
       "lang": "en",
@@ -1189,11 +847,8 @@
       "target": "builtins/index.md",
       "target_sha256": "3126ee9d6f49a72076496795e8e2067ac7a0fb6fac0da0217c1465c541f4cd75",
       "upstream_sha256": "da4d8bcc4078140532269a4f842559e0f2c8b3ee43ddc00a9a50fcffdf11e14d",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/index-01.md"
-      ],
-      "hooked_sha256": "106c0e1209faf24549bd76032a2932f9742f37054125a44d0572e18bd42d318b"
+      "mode": "keep",
+      "reason": "YDB availability filters for library groups."
     },
     {
       "lang": "en",
@@ -1201,8 +856,8 @@
       "target": "builtins/json.md",
       "target_sha256": "db931ea4174fd021a1b61c35c3b289e627c254fed1681f87efaa8e0c0b89320a",
       "upstream_sha256": "79a483f9510ac12a5c0db0813577fc112e81294052ac607aaec68cf5e449a0e4",
-      "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1210,44 +865,11 @@
       "target": "builtins/list.md",
       "target_sha256": "a8eb1f581d0658b9f87dd2b26a6e6379b4f43305fdc83870d6ba12708ca9483f",
       "upstream_sha256": "eb643abd528690448140f0e1ac217e105d37489e4f4c884ec07a9bb9f1f21594",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/list-01.md",
-        "builtins/_ydb/list-02.md",
-        "builtins/_ydb/list-03.md",
-        "builtins/_ydb/list-04.md",
-        "builtins/_ydb/list-05.md",
-        "builtins/_ydb/list-06.md",
-        "builtins/_ydb/list-07.md",
-        "builtins/_ydb/list-08.md",
-        "builtins/_ydb/list-09.md",
-        "builtins/_ydb/list-10.md",
-        "builtins/_ydb/list-11.md",
-        "builtins/_ydb/list-12.md",
-        "builtins/_ydb/list-13.md",
-        "builtins/_ydb/list-14.md",
-        "builtins/_ydb/list-15.md",
-        "builtins/_ydb/list-16.md",
-        "builtins/_ydb/list-17.md",
-        "builtins/_ydb/list-18.md",
-        "builtins/_ydb/list-19.md",
-        "builtins/_ydb/list-20.md",
-        "builtins/_ydb/list-21.md",
-        "builtins/_ydb/list-22.md",
-        "builtins/_ydb/list-23.md",
-        "builtins/_ydb/list-24.md",
-        "builtins/_ydb/list-25.md",
-        "builtins/_ydb/list-26.md",
-        "builtins/_ydb/list-27.md",
-        "builtins/_ydb/list-28.md",
-        "builtins/_ydb/list-29.md",
-        "builtins/_ydb/list-30.md",
-        "builtins/_ydb/list-31.md",
-        "builtins/_ydb/list-32.md",
-        "builtins/_ydb/list-33.md",
-        "builtins/_ydb/list-34.md"
-      ],
-      "hooked_sha256": "14dc7b34d442ec61fb3c74c753017875d59b0563dd2b9c8ab36c4b1da0b39f19"
+      "mode": "keep",
+      "reason": "Examples using container-valued stored columns are hidden in YDB. Shared list operations are not a YDB-specific implementation.",
+      "link_aliases": {
+        "changelog/2026.02.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2026.02.md"
+      }
     },
     {
       "lang": "en",
@@ -1255,25 +877,8 @@
       "target": "builtins/struct.md",
       "target_sha256": "a738203ee3c7e67bbaa4f0381bd46b4db54ac6f2997406fadf6ad418be910687",
       "upstream_sha256": "ad57e14b6a0f368c2414dc5666951c22334171c91c210a50f412504cddff3484",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/struct-01.md",
-        "builtins/_ydb/struct-02.md",
-        "builtins/_ydb/struct-03.md",
-        "builtins/_ydb/struct-04.md",
-        "builtins/_ydb/struct-05.md",
-        "builtins/_ydb/struct-06.md",
-        "builtins/_ydb/struct-07.md",
-        "builtins/_ydb/struct-08.md",
-        "builtins/_ydb/struct-09.md",
-        "builtins/_ydb/struct-10.md",
-        "builtins/_ydb/struct-11.md",
-        "builtins/_ydb/struct-12.md",
-        "builtins/_ydb/struct-13.md",
-        "builtins/_ydb/struct-14.md",
-        "builtins/_ydb/struct-15.md"
-      ],
-      "hooked_sha256": "696556754e5f444d002604de4cf6761f59ecfab2397730c8255609caa552ebc4"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1281,29 +886,12 @@
       "target": "builtins/types.md",
       "target_sha256": "4291c3685f82feb1d3b04875da4bb19deaf358121e9b5168fccbf46c93ea4375",
       "upstream_sha256": "c6546a500d6fdf97b8964b8bbc75038c2aa7375aefc8bc489cbe5bc90aabb70e",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/types-01.md",
-        "builtins/_ydb/types-02.md",
-        "builtins/_ydb/types-03.md",
-        "builtins/_ydb/types-04.md",
-        "builtins/_ydb/types-05.md",
-        "builtins/_ydb/types-06.md",
-        "builtins/_ydb/types-07.md",
-        "builtins/_ydb/types-08.md",
-        "builtins/_ydb/types-09.md",
-        "builtins/_ydb/types-10.md",
-        "builtins/_ydb/types-11.md",
-        "builtins/_ydb/types-12.md",
-        "builtins/_ydb/types-13.md",
-        "builtins/_ydb/types-14.md",
-        "builtins/_ydb/types-15.md",
-        "builtins/_ydb/types-16.md",
-        "builtins/_ydb/types-17.md",
-        "builtins/_ydb/types-18.md",
-        "builtins/_ydb/types-19.md"
-      ],
-      "hooked_sha256": "53d65a7b7687924a1d795586730e8460f419518c6ab11d037203e4f9171fbbea"
+      "mode": "keep",
+      "reason": "Codegen and container-column example visibility. Retain until examples are provider-neutral.",
+      "link_aliases": {
+        "changelog/2026.01.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2026.01.md",
+        "changelog/2025.04.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.04.md"
+      }
     },
     {
       "lang": "en",
@@ -1311,18 +899,8 @@
       "target": "builtins/window.md",
       "target_sha256": "449714b5a6fcb09591ea9d7d34f8b3d99a3dfb59d294798f2503b0447515c8e5",
       "upstream_sha256": "3088c853d0996853c08b19df3ff22785f4c9f69256a9f5aa6c7f78dd64da5dc5",
-      "mode": "include",
-      "fragments": [
-        "builtins/_ydb/window-01.md",
-        "builtins/_ydb/window-02.md",
-        "builtins/_ydb/window-03.md",
-        "builtins/_ydb/window-04.md",
-        "builtins/_ydb/window-05.md",
-        "builtins/_ydb/window-06.md",
-        "builtins/_ydb/window-07.md",
-        "builtins/_ydb/window-08.md"
-      ],
-      "hooked_sha256": "dc8f7ed9146ba680f18b5b79df36e90aedd5b1d2f772402b148c7a713fc0f539"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1331,7 +909,10 @@
       "target_sha256": "43607aabeab63210e4890b24b6e79282c787199a81ec8f096f6d99871d187d13",
       "upstream_sha256": "af7d62afea00a888aa8ee165012a608bf8e4470ff6b1a61bc05efd31d5ad84b9",
       "mode": "keep",
-      "reason": "Substantial divergence or YDB-owned navigation; retain complete YDB page"
+      "reason": "YDB landing page and navigation.",
+      "link_aliases": {
+        "changelog/index.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/index.md"
+      }
     },
     {
       "lang": "en",
@@ -1339,11 +920,8 @@
       "target": "recipes/accessing-json.md",
       "target_sha256": "229a942ea5f87940ea589273f0ffa0555415061e94052ad505831b4d6e2660b1",
       "upstream_sha256": "d47d9391dc39a68f152b057b0eb4b09597df7b48b3fc6a65b3bb7940f3df1952",
-      "mode": "include",
-      "fragments": [
-        "recipes/_ydb/accessing-json-01.md"
-      ],
-      "hooked_sha256": "796fa7ffc5df70c438a58b771c50d52ed76e46cd8840ab31b5778f4a44fa1300"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1351,11 +929,8 @@
       "target": "recipes/index.md",
       "target_sha256": "364d2e8c465dd491dae4e388e47ecfb007a7e92eb4c6da3b62b4c21839b57ce8",
       "upstream_sha256": "98652d65fcdbdd32f397f2f4d71822999b7ad12e22a9ad44bfdca17f0d0a4374",
-      "mode": "include",
-      "fragments": [
-        "recipes/_ydb/index-01.md"
-      ],
-      "hooked_sha256": "a9b4b144d86ae64d98a826d82336100bb6627d7de59adaaece359de44841f1c9"
+      "mode": "keep",
+      "reason": "YDB navigation and visibility of recipe pages."
     },
     {
       "lang": "en",
@@ -1363,7 +938,8 @@
       "target": "recipes/modifying-json.md",
       "target_sha256": "ef6f785acc558ad00dc4a634608f1761569168bf92860be1bcb5527d0711e4d3",
       "upstream_sha256": "ef6f785acc558ad00dc4a634608f1761569168bf92860be1bcb5527d0711e4d3",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1371,13 +947,8 @@
       "target": "syntax/action.md",
       "target_sha256": "f1166bbc8be5926c03e5a924f8e5850fc15ced80745b57e5997677d3db12454c",
       "upstream_sha256": "2770dff69e5a82941bb54141d74ec0dafd672a6dbb46f13d9f061d99e23a7d3d",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/action-01.md",
-        "syntax/_ydb/action-02.md",
-        "syntax/_ydb/action-03.md"
-      ],
-      "hooked_sha256": "bdd4b725886834e20c8ae95985403f9acf7de2287fd9e066c20bad9953660681"
+      "mode": "keep",
+      "reason": "Provider-specific EVALUATE and metaprogram execution visibility; common-library availability alone does not prove YDB API support."
     },
     {
       "lang": "en",
@@ -1385,7 +956,8 @@
       "target": "syntax/commit.md",
       "target_sha256": "ce2aa8db237ecf4430fde9d09916cd10d85b57557603c471a251d4e4cc8674e2",
       "upstream_sha256": "ce2aa8db237ecf4430fde9d09916cd10d85b57557603c471a251d4e4cc8674e2",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1393,8 +965,8 @@
       "target": "syntax/declare.md",
       "target_sha256": "4ae82da213b3b982c051ee5bafcac5f23a24edf6211934c054c3027c6a3b4d16",
       "upstream_sha256": "e94f7dd7d8a9775aed6ca6e822f7ff225052b3f07df33e1dbf7863cff1e6f4f7",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1402,11 +974,8 @@
       "target": "syntax/discard.md",
       "target_sha256": "49df083b9090f30195edc5a3f88c3e00cbadd6c63bae1a404b0c0b1efa862dc3",
       "upstream_sha256": "36f28ec97ea110f0ba5b058a5e2ca9e285d729d0e73e9a5d32e788a432603a84",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/discard-01.md"
-      ],
-      "hooked_sha256": "71f05afebd8f4201fd0c1bf9f12b59f61948158120477d4453d5ffc3d2402dc2"
+      "mode": "keep",
+      "reason": "Query Service since 26.2 executes DISCARD; Table and Scan API ignore it for compatibility. Confirmed by KQP Discard tests. Also reconcile common INTO RESULT prohibition."
     },
     {
       "lang": "en",
@@ -1414,11 +983,8 @@
       "target": "syntax/export_import.md",
       "target_sha256": "bef6dea787f0b3afb92e83d0e2a39a06a0829719628cca81e5c515433141fa9d",
       "upstream_sha256": "1f430784ff4e02e3a0d22ee2383b044d81956938fa4950e4642b386ead1ca093",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/export_import-01.md"
-      ],
-      "hooked_sha256": "403bc76be843c0d5b05725ba492a3ee2b9de4ad964e8ba54fe4a2ddb2aa1a444"
+      "mode": "keep",
+      "reason": "Common module examples link to provider-specific SUBQUERY and file pragmas; YDB feature combinations leave SUBQUERY unpublished. Preserve until availability and navigation are reconciled."
     },
     {
       "lang": "en",
@@ -1426,25 +992,11 @@
       "target": "syntax/expressions.md",
       "target_sha256": "217ced31da340019f2d5c3bff6009c4b82b6c6dce827bc6d8163cbcce2a0dec4",
       "upstream_sha256": "e963ba6f7f97a238affc9d25071ce7af7cef830193e62562d868db97f6662cbb",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/expressions-01.md",
-        "syntax/_ydb/expressions-02.md",
-        "syntax/_ydb/expressions-03.md",
-        "syntax/_ydb/expressions-04.md",
-        "syntax/_ydb/expressions-05.md",
-        "syntax/_ydb/expressions-06.md",
-        "syntax/_ydb/expressions-07.md",
-        "syntax/_ydb/expressions-08.md",
-        "syntax/_ydb/expressions-09.md",
-        "syntax/_ydb/expressions-10.md",
-        "syntax/_ydb/expressions-11.md",
-        "syntax/_ydb/expressions-12.md",
-        "syntax/_ydb/expressions-13.md",
-        "syntax/_ydb/expressions-14.md",
-        "syntax/_ydb/expressions-15.md"
-      ],
-      "hooked_sha256": "e620d2e7aec03e8e55ff0a248173d597e20aa98564b211954dbcc43693afebef"
+      "mode": "keep",
+      "reason": "YDB fulltext-index LIKE/ILIKE example must survive; other differences hide provider-only ParseFile/EVALUATE/PROCESS. Needs independent reconciliation of availability.",
+      "link_aliases": {
+        "changelog/2026.02.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2026.02.md"
+      }
     },
     {
       "lang": "en",
@@ -1453,12 +1005,13 @@
       "target_sha256": "df3b238d0307e1cd0bd2f2c72a755e79704da7225288159d05883b485e6b32e5",
       "upstream_sha256": "8836854eb78cbdb96dc060c6ef99b6eb0c281c9a04f8e4d9abb28463649ea021",
       "mode": "include",
+      "reason": "Shared article plus additive YDB integration examples or storage notes.",
       "fragments": [
-        "syntax/select/_ydb/flatten-01.md",
-        "syntax/select/_ydb/flatten-02.md",
-        "syntax/select/_ydb/flatten-03.md"
+        "syntax/select/_ydb/flatten-storage.md"
       ],
-      "hooked_sha256": "ebd4e7f1aefc3f8a74693c1f9c9d1f276e3f4982dfec415aa27cf67da7a8a759"
+      "link_aliases": {
+        "changelog/2025.03.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.03.md"
+      }
     },
     {
       "lang": "en",
@@ -1466,8 +1019,14 @@
       "target": "syntax/select/group-by.md",
       "target_sha256": "8b220f05e2f2513599eabecb50980db83bfdc5b547cf243d7aec6ba16fa66db9",
       "upstream_sha256": "c7b6b1c0fb43916505e0c33ccaa222b0d4dedad29775c336179bea88d2e9a026",
-      "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "mode": "include",
+      "reason": "Shared article plus additive YDB integration examples or storage notes.",
+      "fragments": [
+        "syntax/select/_ydb/group-by-hopping.md"
+      ],
+      "link_aliases": {
+        "changelog/2025.02.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.02.md"
+      }
     },
     {
       "lang": "en",
@@ -1476,7 +1035,7 @@
       "target_sha256": "b0162e91f8e59e3fe582bd7bf60596f8aa944a1d8a2b1ba908792e9e765b3e53",
       "upstream_sha256": "fd015964aeee83806e773a55a3b05115975e93c24f8b60b32b86df71580bfdbb",
       "mode": "keep",
-      "reason": "Substantial divergence or YDB-owned navigation; retain complete YDB page"
+      "reason": "YDB statements and DDL navigation, not a common language article."
     },
     {
       "lang": "en",
@@ -1485,7 +1044,7 @@
       "target_sha256": "51ad1bb8b59cec18242ffba697a7d67cc9f82707c48b11acfbdc1da6aff72065",
       "upstream_sha256": "18c67b9f26da428fe282a44060a0335327498622ed5f95b1bfbd3eb0d9215f7e",
       "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "reason": "YDB primary-key conflicts, PRECONDITION_FAILED, RETURNING, external sinks and row/column-table transaction constraints."
     },
     {
       "lang": "en",
@@ -1493,11 +1052,8 @@
       "target": "syntax/into_result.md",
       "target_sha256": "2b5f8623a03a307997902cdf42f703d9399530ae80477e344fed95fc538c866f",
       "upstream_sha256": "bf333eb054d67e4bf9fd3cbc5b33e07a0c8f62ed23f33cec467e83ea47a10f33",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/into_result-01.md"
-      ],
-      "hooked_sha256": "2397daa3be975f55ba2ea116dc89241143ec0ca8773137d3f5c8dd484936555b"
+      "mode": "keep",
+      "reason": "Common text prohibits combination with DISCARD; YDB page omits this prohibition. Do not silently choose either claim without a combined-query test."
     },
     {
       "lang": "en",
@@ -1505,12 +1061,8 @@
       "target": "syntax/select/join.md",
       "target_sha256": "a5074c749a207816c543bb0cb19691865417c88a25c599998d9cbe4a2c0dd656",
       "upstream_sha256": "b58a83a8fc8073136dffee0f83c488ff10a47aed844842a056cbe04b331e19ed",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/join-01.md",
-        "syntax/select/_ydb/join-02.md"
-      ],
-      "hooked_sha256": "6376157319976cb109a62bdd598b66f710aa6f58a0383f80d6945a9862fe39b9"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1519,7 +1071,7 @@
       "target_sha256": "55c95f9a4f9dcebbfaca3542545074defbb70bd28a4a2e9ebf5dbc6e31c258d0",
       "upstream_sha256": "e1148c7f7efe477fc1dd4acb604c1e5781985b87839774164a8ad837c081f323",
       "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "reason": "Useful generic query-parameter compilation restrictions absent upstream. Candidate for common documentation, not a YDB-only hook; retained rather than discarded."
     },
     {
       "lang": "en",
@@ -1527,12 +1079,8 @@
       "target": "syntax/not_yet_supported.md",
       "target_sha256": "029fd3342ccad45f568e819e8edc515ffccb8bc5dd8a9a6e17a0e2258f18ba61",
       "upstream_sha256": "083f049b5dac23f92e855bd849ae415856353192efbe53b45f955f38a27f4565",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/not_yet_supported-01.md",
-        "syntax/_ydb/not_yet_supported-02.md"
-      ],
-      "hooked_sha256": "26a464dd3c7c0d91ded51cb9109f3269078d88b32ec8b100640ba7064cb4c90a"
+      "mode": "keep",
+      "reason": "YDB correlated-subquery and INTERSECT/EXCEPT restrictions versus removed upstream restrictions. Preserve until KQP support is verified."
     },
     {
       "lang": "en",
@@ -1540,11 +1088,8 @@
       "target": "syntax/process.md",
       "target_sha256": "69c5eb37675a1fe03c4ae0bd0679c4e763bac76d91697da17638d0e196cb372e",
       "upstream_sha256": "d3812e9e5aef4eddccef1e2ae99e987ff3c984962af6ea45eb724c3e31cd8402",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/process-01.md"
-      ],
-      "hooked_sha256": "280b9d98ed6bc19421ce0413c17b8df0e92d92f60959a5b7bbedd9363af2a266"
+      "mode": "keep",
+      "reason": "YDB PROCESS command naming/availability differs from MapReduce provider documentation."
     },
     {
       "lang": "en",
@@ -1552,7 +1097,8 @@
       "target": "syntax/reduce.md",
       "target_sha256": "ef4de46de352624b7de124995cccc042333d8ae88067922cf8990bbdccca28d0",
       "upstream_sha256": "ef4de46de352624b7de124995cccc042333d8ae88067922cf8990bbdccca28d0",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1560,7 +1106,8 @@
       "target": "syntax/select/assume_order_by.md",
       "target_sha256": "92d2e209fe48a5957bf5be57352e22963ff3fdf1b0944feff17b5a9124953213",
       "upstream_sha256": "92d2e209fe48a5957bf5be57352e22963ff3fdf1b0944feff17b5a9124953213",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1569,7 +1116,7 @@
       "target_sha256": "078ef5fd6c1f146f4c4c2b53de2939b320feaf9f1df844372cf1ed71fc6937ae",
       "upstream_sha256": "63cf344bd40e801588c614e4aaef3e4fa62a8caf4d58dbf860187ba8ba6ac898",
       "mode": "keep",
-      "reason": "Retain page with legacy block structure during migration"
+      "reason": "Provider-specific folder traversal, table ranges and examples. No inference of YDB support from common syntax."
     },
     {
       "lang": "en",
@@ -1577,12 +1124,8 @@
       "target": "syntax/select/distinct.md",
       "target_sha256": "f9f931bc26125d46cc6129fbe0f398dc70f585267d7874da06c3cfae949e27c3",
       "upstream_sha256": "2d935377563ba310e6bad6eaf1eb3b8dd38e5791d310f59fc761933d85b0e4ea",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/distinct-01.md",
-        "syntax/select/_ydb/distinct-02.md"
-      ],
-      "hooked_sha256": "5f3c4f2444ba3dfb6adacc4df5e79a345b0710b89d5aa0b107f55796edefcac3"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1590,11 +1133,8 @@
       "target": "syntax/select/from.md",
       "target_sha256": "4bf4af937d2dab30ccb9cf1aa11925f9349e17a7e113d3ef32dd84aba36fd548",
       "upstream_sha256": "867817ebcbfd63f4e3baa1a601ddf069c6c141ebdf84aa9cf5d151743b03a847",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/from-01.md"
-      ],
-      "hooked_sha256": "de8360e926b66674c54788202dfd706b9be25159738949df99bc980d61074acd"
+      "mode": "keep",
+      "reason": "Provider-specific CONCAT/table discovery and USE references. Old YT folder prose should be removed only together with provider-neutral replacement."
     },
     {
       "lang": "en",
@@ -1603,10 +1143,10 @@
       "target_sha256": "700bfae3d69c2d0e3396f54f9489c6524ad5edd2601c520fcc5fe0e53d33ffb2",
       "upstream_sha256": "8d22fd6005551937a94f79ec1ea483f5d7e778d0730d41e79269be06adb4bfbd",
       "mode": "include",
+      "reason": "Shared article plus additive YDB integration examples or storage notes.",
       "fragments": [
-        "syntax/select/_ydb/from_as_table-01.md"
-      ],
-      "hooked_sha256": "9f4b00359d7a35abf05bd161b7f28a95f36ed9cc1606b552b8d8c51f1f82d756"
+        "syntax/select/_ydb/as-table-write.md"
+      ]
     },
     {
       "lang": "en",
@@ -1614,8 +1154,8 @@
       "target": "syntax/select/from_select.md",
       "target_sha256": "6afb394fb75ff90461b101cc740dee9a3056a55f307ec7dea64eefeeb2f33bf2",
       "upstream_sha256": "9e05acd8e0cb585af7f8fb96222d70abf9a2098c3d5e223bf7ac4b791c1e07cd",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1624,7 +1164,10 @@
       "target_sha256": "06ebf7f9c06fc8d1d1d6618b544eeeff83421e205658efe33f831bc5d77872ae",
       "upstream_sha256": "0f01f00098be9a489fdbb191813243cb1e21cec224aefb3cb954f98e3191c945",
       "mode": "keep",
-      "reason": "Substantial divergence or YDB-owned navigation; retain complete YDB page"
+      "reason": "YDB execution order, SQL examples and navigation to separate SELECT articles.",
+      "link_aliases": {
+        "changelog/2025.02.md#group-by-expr-alias-where": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.02.md#group-by-expr-alias-where"
+      }
     },
     {
       "lang": "en",
@@ -1632,7 +1175,8 @@
       "target": "syntax/select/limit_offset.md",
       "target_sha256": "d790ea84deccc753d6fa751267d133c6d8800e14b8a032dc2d6a3078dd78b623",
       "upstream_sha256": "d790ea84deccc753d6fa751267d133c6d8800e14b8a032dc2d6a3078dd78b623",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1640,12 +1184,8 @@
       "target": "syntax/select/order_by.md",
       "target_sha256": "010271d53e8974f844cfabb2213750aca485a15bc675b919678b1b7a7afc6a76",
       "upstream_sha256": "64f1952e117cdb4d91640413dce41d96a4a3a53dc9e6853919ffc3632cc4dc70",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/order_by-01.md",
-        "syntax/select/_ydb/order_by-02.md"
-      ],
-      "hooked_sha256": "1888685b06d7e93d6238d86f704c1696559acd3a737f56c77ddd98a55dc1b538"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1653,11 +1193,8 @@
       "target": "syntax/select/sample.md",
       "target_sha256": "dafe5cf15859f6f23d55657ed63d034fb558aa9234f671c1a901c74d03273e7f",
       "upstream_sha256": "c7cacf99944c0c688a8004ac38d982cd9d23c879d8c2c866c3724b51d4ae9a36",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/sample-01.md"
-      ],
-      "hooked_sha256": "a4e1f1ba949079cab9c002f5bf9d5b766d833d82300288881ce240487b021fb6"
+      "mode": "keep",
+      "reason": "YDB OLAP limitation and TABLESAMPLE feature gate; old YT sampling pragmas need separate provider reconciliation."
     },
     {
       "lang": "en",
@@ -1665,12 +1202,8 @@
       "target": "syntax/select/union.md",
       "target_sha256": "05e48cbbcc1ce4110f800cb6e94c49314a6a29176f467f606357b654d7f70374",
       "upstream_sha256": "b267442b56df31c80a23290a20beed0285e35fa0651d6dadc29474e70378d318",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/union-01.md",
-        "syntax/select/_ydb/union-02.md"
-      ],
-      "hooked_sha256": "829f99625b73d99bc77f8a7b617d28506065985999c4ad3e57faef9ca57e25f0"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1678,11 +1211,8 @@
       "target": "syntax/select/unique_distinct_hints.md",
       "target_sha256": "59560e1beef833d70e4dbdeb8d8da04b42d350b3347883c3b73bf157d1174057",
       "upstream_sha256": "220e4496e46b1d9765c2ecd0f4ad3bb83fe8c23205f2efdf2483e9e65420190b",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/unique_distinct_hints-01.md"
-      ],
-      "hooked_sha256": "1c522e6f1adf12e37ce3f2bd878d51a4a618ed307aa669ba09cec6a4bdfbdb61"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1690,12 +1220,8 @@
       "target": "syntax/select/where.md",
       "target_sha256": "4921aa030bd9ae5386f9f2839f34da0638885fdb30d8b2a7d37e5725226d5deb",
       "upstream_sha256": "31a5dca5c3338726b151cae55f787f59d579131efba5eaeb7f28d28942790348",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/where-01.md",
-        "syntax/select/_ydb/where-02.md"
-      ],
-      "hooked_sha256": "b512695e445547c9ff7b87bba6c74f045583214f5b6a24b64152592ddff2aca2"
+      "mode": "keep",
+      "reason": "Correlated-subquery restriction and link to YDB alternatives. Must be reconciled with provider support, not just upstream deletion."
     },
     {
       "lang": "en",
@@ -1704,10 +1230,13 @@
       "target_sha256": "bd56ee1b01277873f497d70720d325b4336bb3ea370f5fdf5f35c7918a08114c",
       "upstream_sha256": "bbbb36f48e8517f1937bd613395f38de91f1acf6c71229ba4bbb179960fa69bb",
       "mode": "include",
+      "reason": "Keep common hint list and examples. Remove obsolete local YT hints INFER_SCHEMA/FORCE_INFER_SCHEMA/DIRECT_READ/XLOCK/IGNORETYPEV3 and their examples; add only external-source parameters and topic watermarks.",
       "fragments": [
-        "syntax/select/_ydb/with-01.md"
+        "syntax/select/_ydb/with-sources.md"
       ],
-      "hooked_sha256": "9b537c2cb819e6bbc299f72918577ec94e68f74e663c35d11801ebad09c4222b"
+      "link_aliases": {
+        "syntax/select/concat.md#each": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/syntax/select/concat.md"
+      }
     },
     {
       "lang": "en",
@@ -1715,8 +1244,8 @@
       "target": "syntax/select/without.md",
       "target_sha256": "9eb4b95ae5a40b9b0b27a41fca57e4e9c0e9a61829cc87498c38e35205dbae02",
       "upstream_sha256": "ed5964fbd931e606948a540e7e33383b76f8f061903ea6ce703d22d1277db0e1",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1724,13 +1253,8 @@
       "target": "syntax/subquery.md",
       "target_sha256": "38d07ddae9cc48b44183b5c4e25059877b3dce7b2daafc2db6158423bd78caf9",
       "upstream_sha256": "410476f67c9ef668149158cbac75c414241d027bcfb302574614e3d4abd77bf0",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/subquery-01.md",
-        "syntax/_ydb/subquery-02.md",
-        "syntax/_ydb/subquery-03.md"
-      ],
-      "hooked_sha256": "cf8812a1e4b0fcb688e3311167e0461023423789c19ec5788c0d095b52e55371"
+      "mode": "keep",
+      "reason": "Provider/metaprogram visibility and SUBQUERY name resolution. Requires provider-neutral examples."
     },
     {
       "lang": "en",
@@ -1738,12 +1262,8 @@
       "target": "syntax/use.md",
       "target_sha256": "58aa7ccfbb1ba53ce2a9e945839a38d9d4bbfe01fc151fd967de609cadc8073d",
       "upstream_sha256": "28e4a4f14fcae36eb56ea09a3ad03d2287dc023f0c04d0ada4710a304715905f",
-      "mode": "include",
-      "fragments": [
-        "syntax/_ydb/use-01.md",
-        "syntax/_ydb/use-02.md"
-      ],
-      "hooked_sha256": "0d71f8dc9ddcd81f5b920800c0b7152c089a0a4d3663bbe6fdd9a41c39d8f838"
+      "mode": "keep",
+      "reason": "Cluster/service naming is consumer configuration, not language semantics."
     },
     {
       "lang": "en",
@@ -1751,8 +1271,8 @@
       "target": "syntax/values.md",
       "target_sha256": "9dfe019266e874c56389acd7b016e5addde75cf637c7d124cb037838b313a1ee",
       "upstream_sha256": "b616e71c6d0678cc59d10babe3735d749d1efcad57dc528965c644a872317ae0",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1760,16 +1280,8 @@
       "target": "syntax/select/window.md",
       "target_sha256": "57be0f5a6f477ceb652c51c9e21a97f1520811c83448a7215f31110865066ced",
       "upstream_sha256": "0c86eb0cbd5a1a935cb16fd04c9c166741106522dd91fea6c289793e3868e593",
-      "mode": "include",
-      "fragments": [
-        "syntax/select/_ydb/window-01.md",
-        "syntax/select/_ydb/window-02.md",
-        "syntax/select/_ydb/window-03.md",
-        "syntax/select/_ydb/window-04.md",
-        "syntax/select/_ydb/window-05.md",
-        "syntax/select/_ydb/window-06.md"
-      ],
-      "hooked_sha256": "7a021d836fffe26a4a2a55e3f01e6e5de85e343736132cd343402e23296154ac"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1777,7 +1289,8 @@
       "target": "types/cast.md",
       "target_sha256": "c4f33a88b40a8a31fe0a84a824f3c1cfb8f705a5f07e2a366368ac522dc854cd",
       "upstream_sha256": "c4f33a88b40a8a31fe0a84a824f3c1cfb8f705a5f07e2a366368ac522dc854cd",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1786,10 +1299,10 @@
       "target_sha256": "ed2e378deb41796cc664eba5b9fb5fd66a55718b05dcc2fe2f4e0b927aa300ef",
       "upstream_sha256": "3b36d41005ba421d1c8e62e5a81ea4ef52cb358c0145d06c7d84b292219d128a",
       "mode": "include",
+      "reason": "Shared article plus additive YDB integration examples or storage notes.",
       "fragments": [
-        "types/_ydb/containers-01.md"
-      ],
-      "hooked_sha256": "bc27c36fda8f560de916251cf66b4754716211c5a7cf4b6c7342d1ab9408bfba"
+        "types/_ydb/containers-storage.md"
+      ]
     },
     {
       "lang": "en",
@@ -1797,11 +1310,8 @@
       "target": "types/index.md",
       "target_sha256": "e0d91bfb1be906c3e48cd8d7d4169a54f46fc5326a12a68899fece28fe8f2b97",
       "upstream_sha256": "0185ccdbf1c2df58a63ff6f14d454ca44d22bd53239130b2db16d105a0d08f8e",
-      "mode": "include",
-      "fragments": [
-        "types/_ydb/index-01.md"
-      ],
-      "hooked_sha256": "1fdc396ec58ebcc4d20f430c96041ffb4066aeba87ab5a1a1667810c6c104177"
+      "mode": "keep",
+      "reason": "YDB type catalog; common Linear/Tagged navigation includes unpublished pages."
     },
     {
       "lang": "en",
@@ -1809,8 +1319,8 @@
       "target": "types/json.md",
       "target_sha256": "7180d99d0e9531524ce46be7283054ef530cded20cdb32cab662b15bdb4724bd",
       "upstream_sha256": "4b9c83f19860a67007f3208deda927c90c60e138694e04ffcc039be127275673",
-      "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1819,11 +1329,10 @@
       "target_sha256": "9f2ba9c055773b9de5d11e2eab4bf112d08bbc8294cb9a0dcb634f7755be59b6",
       "upstream_sha256": "334a91173247e48fc634fc13301a5f0a69b8e27e6bd323a89d906c14297d580e",
       "mode": "include",
+      "reason": "Shared article plus additive YDB integration examples or storage notes.",
       "fragments": [
-        "types/_ydb/optional-01.md",
-        "types/_ydb/optional-02.md"
-      ],
-      "hooked_sha256": "4c530b0c89e3cf8a171d6308967bedc8be0830709820440beade3d2f139e2eac"
+        "types/_ydb/optional-storage.md"
+      ]
     },
     {
       "lang": "en",
@@ -1832,7 +1341,7 @@
       "target_sha256": "1782250e02ab30565a18a8d6ef4952120c77166dca75e6cdff05d2042a821a9c",
       "upstream_sha256": "e2bac389b26e8ae1bd63ac8c459579acffab2ab032b1ddce3742d5afb858bb76",
       "mode": "keep",
-      "reason": "Substantial divergence or YDB-owned navigation; retain complete YDB page"
+      "reason": "YDB primary/index-key constraints, 8 MB storage limit and extended type/Interval examples. Storage limits must remain distinct from language-level type ranges."
     },
     {
       "lang": "en",
@@ -1840,11 +1349,8 @@
       "target": "types/special.md",
       "target_sha256": "385b3541b785fd3289827379345ff775d3e84bf20771d43e6755e454462167f4",
       "upstream_sha256": "83508438d725e0ad77da1f084b9f1041c8cf180f30e46b0564c7fd023f85335f",
-      "mode": "include",
-      "fragments": [
-        "types/_ydb/special-01.md"
-      ],
-      "hooked_sha256": "4e10d52ef26834b6ed2e7c58976b34750a3b26f8e0f94dd575b76a5a4df4c93c"
+      "mode": "keep",
+      "reason": "Callable S-expression explanation is hidden for YDB. Requires provider-neutral replacement."
     },
     {
       "lang": "en",
@@ -1852,7 +1358,8 @@
       "target": "types/type_string.md",
       "target_sha256": "67b2519e9a1829400ec828938a532634b0b1ffd6699695ba0b3e572e06e51e0b",
       "upstream_sha256": "67b2519e9a1829400ec828938a532634b0b1ffd6699695ba0b3e572e06e51e0b",
-      "mode": "import"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1861,7 +1368,12 @@
       "target_sha256": "5d292fc753d9a20abe47cba9ef14b176567fed26c611246e9767d26e1100d8a3",
       "upstream_sha256": "ec48e68ba259d2f11b62bc50155f7b1308470b7daf0b33d1cd7851ed6429957e",
       "mode": "keep",
-      "reason": "Substantial divergence or YDB-owned navigation; retain complete YDB page"
+      "reason": "Generic introductory/resource guidance and interval literal restrictions are useful; upstream has newer Init/Init64 APIs and YQL-version changelog references. Reconcile in common docs rather than conditional replacement.",
+      "link_aliases": {
+        "changelog/2026.03.md#datetime-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2026.03.md#datetime-module",
+        "changelog/2025.03.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.03.md",
+        "changelog/2025.05.md#datetime-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.05.md#datetime-module"
+      }
     },
     {
       "lang": "en",
@@ -1869,11 +1381,12 @@
       "target": "udf/list/digest.md",
       "target_sha256": "dcd10142f895165e6812f9ed4b5097bb0acc29f879ddca94836d1b3544456695",
       "upstream_sha256": "2bded9aa34196aa496416bdaeef923d289318bb3f104193037d28c5b6445f940",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/digest-01.md"
-      ],
-      "hooked_sha256": "8db3b86795d4292e18fe93e0a586ee3903a64e7574167a96ae7428f035c4cbe8"
+      "mode": "keep",
+      "reason": "Named Init seed arguments are documented locally but absent upstream signatures. This is a common-library documentation correction, not YDB-specific behavior.",
+      "link_aliases": {
+        "changelog/2026.03.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2026.03.md",
+        "changelog/2025.03.md": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.03.md"
+      }
     },
     {
       "lang": "en",
@@ -1881,11 +1394,8 @@
       "target": "udf/list/histogram.md",
       "target_sha256": "0f0f7a234d395cbf6f5212256ae2a16202ce231539596b9df0518889922b1283",
       "upstream_sha256": "c4ac82cb0b720804b98a8554aac39809ba1526eafdc17a9700b8b037fc34bfe3",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/histogram-01.md"
-      ],
-      "hooked_sha256": "c3f924ebb0988de6189141063bcc8b5ec8d42cfb6f358691624db83d744f949f"
+      "mode": "keep",
+      "reason": "Links to provider-specific web visualization. Preserve until a consumer-neutral description is agreed."
     },
     {
       "lang": "en",
@@ -1893,8 +1403,8 @@
       "target": "udf/list/hyperscan.md",
       "target_sha256": "d7af9d4c990a3a0a02b273a1f4a30520517b99c1fd1fc5d8c3042a42c94f4156",
       "upstream_sha256": "60b39c616da081fbeddd0dae136a0a72e877ae274f300096133ed92d50ea7758",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1902,11 +1412,8 @@
       "target": "udf/list/index.md",
       "target_sha256": "7937d58d1c14b55f6aab97941721cff1c48a8550618b1083343099ac8f90ad6d",
       "upstream_sha256": "d355f2c69493e1bebdd8f681495c83b1d5b8267da35de59d12d1378b0609d770",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/index-01.md"
-      ],
-      "hooked_sha256": "ab9932aea34e8a0a534b04dd3319adbf216f655469b91a9f26f6e0bc9209b946"
+      "mode": "keep",
+      "reason": "YDB module catalog includes Knn and Roaring; availability is not inferred from library membership."
     },
     {
       "lang": "en",
@@ -1914,8 +1421,8 @@
       "target": "udf/list/ip.md",
       "target_sha256": "a6eb73a05449ae1278813d24fd2543120b31b97e9dee18410ff50e1c5fc67f57",
       "upstream_sha256": "149afad283edee5bc7465971b5ce563c09a187b8f5a054daaa9bc9a87f1a78eb",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1923,8 +1430,11 @@
       "target": "udf/list/math.md",
       "target_sha256": "de304a1a05224d412ec0cd034af446d32bc5977b46a392ca0c0f31818f7df53f",
       "upstream_sha256": "72a4dba05e8f664259b6a1d2f2ca0b734e4916b81a13e4bc6b7a45ccb7e114a4",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes.",
+      "link_aliases": {
+        "changelog/2026.03.md#math-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2026.03.md#math-module"
+      }
     },
     {
       "lang": "en",
@@ -1932,11 +1442,8 @@
       "target": "udf/list/pcre.md",
       "target_sha256": "00be4e36f2024e0882828f972a4925ccf41c1df3c733a5b7428a392a397c71f1",
       "upstream_sha256": "b13407eb069f2ea2631c6395b538aa24f0a7abcb7526d346f3e370c170a31a98",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/pcre-01.md"
-      ],
-      "hooked_sha256": "3eaa18618449b53b987d3ba8446c8c95fd1452469e0dbc0bc64e1924c6cd5943"
+      "mode": "keep",
+      "reason": "Recommendation about switching regex engines is hidden for YDB; API compatibility guidance requires confirmation."
     },
     {
       "lang": "en",
@@ -1944,12 +1451,8 @@
       "target": "udf/list/pire.md",
       "target_sha256": "fad0166d9408dc10e5338356bcc527928ec10072e0d459ca71cf3c5e78c5c711",
       "upstream_sha256": "eaf6e8d44f58e3a5dc8789df6116194b3fbd2ecbe9c0ad6dcf2a2b871ffa4870",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/pire-01.md",
-        "udf/list/_ydb/pire-02.md"
-      ],
-      "hooked_sha256": "3c2098e01eb80fc1e8e0ef3aff9df3b6b050df1fb27c865237b2cd74a2acdc71"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1957,15 +1460,11 @@
       "target": "udf/list/re2.md",
       "target_sha256": "af85a792d03939ecd74c49f2044f2f6f9944ea7ba5757bb3d2c2b90c38d1d226",
       "upstream_sha256": "2fc5db9fbd397cc216c8056f97186cf647a34a6ce077b92c49e9430ddc0ace99",
-      "mode": "include",
-      "fragments": [
-        "udf/list/_ydb/re2-01.md",
-        "udf/list/_ydb/re2-02.md",
-        "udf/list/_ydb/re2-03.md",
-        "udf/list/_ydb/re2-04.md",
-        "udf/list/_ydb/re2-05.md"
-      ],
-      "hooked_sha256": "8ea8e24e8e33cd94d91b4813b05d0651813efb798aa7211a574f9a929d56acd4"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes.",
+      "link_aliases": {
+        "changelog/2025.03.md#re2-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.03.md#re2-module"
+      }
     },
     {
       "lang": "en",
@@ -1973,8 +1472,15 @@
       "target": "udf/list/string.md",
       "target_sha256": "5cbcc603887d2ea90850086d73d2d75e0b7b2e5816d063f17f5625037f1f1092",
       "upstream_sha256": "6c7b56d3d8c9c082feb7ae24777e5daf97ef5252f90b2e7c93a3bc8a2d691394",
-      "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes.",
+      "link_aliases": {
+        "changelog/2025.02.md#string-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.02.md#string-module",
+        "changelog/2026.03.md#string-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2026.03.md#string-module"
+      },
+      "legacy_anchors": {
+        "splittolist": "* `String::SplitToList("
+      }
     },
     {
       "lang": "en",
@@ -1982,8 +1488,8 @@
       "target": "udf/list/unicode.md",
       "target_sha256": "854bcc73de2fbf6b3770c24508a0106b97ce4cef46d28fc6d3a3fe8ff78f441f",
       "upstream_sha256": "65505cd056f4528968cc82534c4e3651e0d466d118077f11b489d22b2d4dd916",
-      "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -1991,8 +1497,8 @@
       "target": "udf/list/url.md",
       "target_sha256": "d60d6f2a362f5ba792712405d9b0a7eeb7fa8fe9fa8619238ff38213abd0eff0",
       "upstream_sha256": "3dde2809ba86c7631ba423d2b502985889660854f7895025544808536a4cdb87",
-      "mode": "keep",
-      "reason": "Upstream content update deferred until after identical migration"
+      "mode": "import",
+      "reason": "Use current common text; discard local formatting, redundant explanations and link-layout differences. Links are adapted to the YDB layout, not extracted into includes."
     },
     {
       "lang": "en",
@@ -2001,7 +1507,22 @@
       "target_sha256": "001e7cecb6de1b22c13ff01fe09d77cacdb1c53b21ba45e661feeaa4362d21a7",
       "upstream_sha256": "b5922e5951f61a4fa57df6c6ec02afc489933714a12b13c46c4d80dbe48ebd2e",
       "mode": "keep",
-      "reason": "Preserve rendered list structure, headings and anchors; include expansion is not equivalent"
+      "reason": "Consumer recipe visibility and pragma anchors. Preserve until the recipe catalog is reconciled.",
+      "link_aliases": {
+        "changelog/2026.01.md#yson-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2026.01.md#yson-module",
+        "changelog/2025.05.md#yson-module": "https://github.com/ydb-platform/ydb/blob/55de5036c7957e2d0f9185393450e15de33513d1/yql/essentials/docs/en/changelog/2025.05.md#yson-module"
+      }
     }
-  ]
+  ],
+  "link_aliases": {
+    "syntax/expressions.md#regexp": "syntax/expressions.md#check-match",
+    "syntax/expressions.md#escape": "syntax/lexer.md#keywords-and-ids",
+    "syntax/expressions.md#multiline-string-literals": "syntax/lexer.md#multiline-string-literals",
+    "syntax/select/index.md#unionall": "syntax/select/union.md#union-all",
+    "builtins/basic.md#unwrap": "builtins/basic.md#optional-ops",
+    "builtins/aggregation.md#aggregateby": "builtins/aggregation.md#aggregate-by",
+    "syntax/pragma.md#UnicodeLiterals": "syntax/pragma.md#unicodeliterals",
+    "syntax/pragma/global.md#positionalunionall": "syntax/pragma.md#positionalunionall",
+    "builtins/basic.md#asstruct": "builtins/basic.md#as-container"
+  }
 }

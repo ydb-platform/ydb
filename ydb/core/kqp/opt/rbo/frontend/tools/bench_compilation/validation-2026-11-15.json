@@ -1,0 +1,396 @@
+{
+  "date": "2026-11-15",
+  "production_commit": "2a5a3b0d9940a33c9ece79b3720a90c2c4a82baf",
+  "baseline_commit": "d11af71c6d026b84c3e72650813372f3ffa979c2",
+  "binary_sha256": {
+    "before": "3b3c646b7776cc5bb1e938e29c734a44a2c895d42828b576392c9b5a15c6dc27",
+    "after": "b41e78a1041bf593ae199a1dd983f09c27fdeadabc8239f365ba803f2b7553ad"
+  },
+  "scope": "Agreed native SQL frontend/expression migration and native-read-v1 execution profile; this is not a claim of complete SQL dialect support.",
+  "constraints": {
+    "native_scalar_expressions_until_emission": true,
+    "yql_scalar_typing_or_peepholes_before_emission": false,
+    "yql_source_changes": 0,
+    "optimizer_schedule_byte_identical": true,
+    "optimizer_schedule_entries": 91,
+    "rbo_cbo_algorithm_and_cost_policy_changes": false,
+    "postgresql_excluded": true,
+    "remaining_shared_infrastructure": "Existing catalog/session services, logging/context interfaces, physical compiler and runtime; native logical rules do not invoke the YQL scalar compiler."
+  },
+  "tests": {
+    "frontend": {
+      "passed": 401,
+      "seconds": 25.99
+    },
+    "native_boundaries": {
+      "passed": 86,
+      "seconds": 167.099
+    },
+    "integration": {
+      "registered_cases_with_passing_evidence": 243,
+      "initial_passed": 237,
+      "corrected_cases_passed_on_targeted_reruns": 6,
+      "additional_affected_cases_rechecked": 2,
+      "qualification": "Evidence combines the broad integration run and targeted correction reruns. Three opt-in timing cases are gated in the ordinary integration run; the independent full-corpus benchmark below supplies performance coverage."
+    },
+    "reference_contracts": {
+      "passed": 293,
+      "excluded_pg": 2
+    },
+    "saved_oracles": {
+      "validated": 104,
+      "available_operator_admission_comparisons": 103,
+      "result_or_error_comparisons": 62,
+      "unexpected_differences": 0,
+      "qualification": "Operator counts/admission are compared, not whole AST bytes. One expected checked error occurs before the native final AST is available; native phase proof and the matching error are checked separately."
+    },
+    "membership": {
+      "native_correct": 48,
+      "valid_old_result_matches": 36,
+      "old_extractor_failures": 12,
+      "unexpected_differences": 0
+    },
+    "mixed_numeric": {
+      "runtime_cases": 560,
+      "plan_cases": 1680,
+      "exact_matches": 1632,
+      "approved_lossy_float_differences": 48,
+      "unexpected_differences": 0
+    }
+  },
+  "explicit_differences": [
+    "Approved correctness exception: integer-to-floating conversions that collapse distinct keys retain native scalar filtering instead of losing matching rows through an unsound range.",
+    "Earlier native constant folding turns one required-key NOT IN(NULL) input into TRUE. Results agree; independently compiling explicit TRUE produces the same optimizer admission in both revisions.",
+    "Q51 join-order baseline retains required-key null predicates and only shares identical window definitions. Its expected plan was recaptured independently from the frozen pre-PR binary."
+  ],
+  "reference_pr": {
+    "url": "https://github.com/ydb-platform/ydb/pull/58587",
+    "reviewed_head": "a880d5da2b097ba6b0d547e1323c4f741d87d097",
+    "adopted": [
+      "Owning syntax and explicit column identities",
+      "Immutable catalog and asynchronous binding boundary",
+      "Owning native RBO handoff",
+      "Boundary type/nullability/identity tests"
+    ],
+    "newly_covered": [
+      "InSubqueriesPreserveNullableResultTypes",
+      "InSubplansRetainAnnotatedNullability"
+    ],
+    "not_adopted": [
+      "YQL scalar typing dependencies",
+      "Benchmark fallback",
+      "Optimizer policy changes"
+    ]
+  },
+  "benchmark": {
+    "queries": 6992,
+    "warmups": 3,
+    "measured_passes": 3,
+    "native_measured_compilations": 20976,
+    "native_failures": 0,
+    "native_fallbacks": 0,
+    "common_successful_queries": 6641,
+    "cpu_affinity": [
+      32,
+      33,
+      34,
+      35
+    ],
+    "traced_seconds": 2838.464,
+    "untraced_control_queries": 435,
+    "untraced_control_selection": "256 evenly spaced 1C input ordinals plus all 179 queries from other workloads; no success filtering.",
+    "untraced_seconds": 666.395,
+    "monitor_checks": [
+      922,
+      218
+    ],
+    "interference_events": 0,
+    "ratio_method": "Geometric mean of after/before ratios of each common successful query median over three repeats. Frontend phase data uses medians of per-query medians. Phase medians are not additive. Untraced controls measure request duration, whereas traced speed ratios measure the compiler span; the two absolute scopes differ.",
+    "coverage_limit": "Full corpus establishes native compilation without fallback; populated result parity is established by the execution and boundary tests, not by EXPLAIN benchmarks.",
+    "workloads": {
+      "1c": {
+        "queries": 6813,
+        "baseline_successful_queries": 6466,
+        "native_successful_queries": 6813,
+        "compile_after_over_before": 0.2648326948443143,
+        "frontend_median_us": 229.0,
+        "median_frontend_over_rbo": 0.6231884057971016,
+        "median_frontend_over_compile": 0.03464383028415726,
+        "native_phase_median_us": {
+          "Native parse": 47.0,
+          "Native table discovery": 16.0,
+          "Native binding and scalar typing": 85.0,
+          "Native operator translation": 66.0,
+          "Native plan formatting": 9.0,
+          "New RBO optimization": 348.0,
+          "Native operator typing": 41.0,
+          "Constant folding stage": 33.0,
+          "Emit native physical plan": 1169.0,
+          "Compile query": 6268.0
+        },
+        "untraced_common_queries": 242,
+        "untraced_request_after_over_before": 0.277141225358984,
+        "traced_same_control_cohort_compile_after_over_before": 0.27273546266153353
+      },
+      "tpch": {
+        "queries": 22,
+        "baseline_successful_queries": 22,
+        "native_successful_queries": 22,
+        "compile_after_over_before": 0.5509087659326076,
+        "frontend_median_us": 390.5,
+        "median_frontend_over_rbo": 0.2513442080194327,
+        "median_frontend_over_compile": 0.010666318132615725,
+        "native_phase_median_us": {
+          "Native parse": 80.5,
+          "Native table discovery": 29.0,
+          "Native binding and scalar typing": 160.5,
+          "Native operator translation": 93.0,
+          "Native plan formatting": 13.0,
+          "New RBO optimization": 1589.9999999999998,
+          "Native operator typing": 340.00000000000006,
+          "Constant folding stage": 58.0,
+          "Emit native physical plan": 3346.5,
+          "Compile query": 36812.5
+        },
+        "untraced_common_queries": 22,
+        "untraced_request_after_over_before": 0.610329931206162,
+        "traced_same_control_cohort_compile_after_over_before": 0.5509087659326076
+      },
+      "tpch-perf": {
+        "queries": 13,
+        "baseline_successful_queries": 13,
+        "native_successful_queries": 13,
+        "compile_after_over_before": 0.4932132563847119,
+        "frontend_median_us": 436.0,
+        "median_frontend_over_rbo": 0.34695244474212994,
+        "median_frontend_over_compile": 0.01564593821303104,
+        "native_phase_median_us": {
+          "Native parse": 107.0,
+          "Native table discovery": 33.0,
+          "Native binding and scalar typing": 184.0,
+          "Native operator translation": 113.0,
+          "Native plan formatting": 11.0,
+          "New RBO optimization": 1485.0,
+          "Native operator typing": 272.00000000000006,
+          "Constant folding stage": 69.0,
+          "Emit native physical plan": 2868.0,
+          "Compile query": 29880.0
+        },
+        "untraced_common_queries": 13,
+        "untraced_request_after_over_before": 0.4542885878730808,
+        "traced_same_control_cohort_compile_after_over_before": 0.4932132563847119
+      },
+      "tpcds": {
+        "queries": 99,
+        "baseline_successful_queries": 99,
+        "native_successful_queries": 99,
+        "compile_after_over_before": 0.6215767038679106,
+        "frontend_median_us": 603.0,
+        "median_frontend_over_rbo": 0.1694299341358165,
+        "median_frontend_over_compile": 0.007682378153472108,
+        "native_phase_median_us": {
+          "Native parse": 112.0,
+          "Native table discovery": 38.0,
+          "Native binding and scalar typing": 278.0,
+          "Native operator translation": 165.0,
+          "Native plan formatting": 21.0,
+          "New RBO optimization": 3716.0,
+          "Native operator typing": 847.0000000000006,
+          "Constant folding stage": 80.0,
+          "Emit native physical plan": 7068.0,
+          "Compile query": 80934.0
+        },
+        "untraced_common_queries": 99,
+        "untraced_request_after_over_before": 0.6807464955919165,
+        "traced_same_control_cohort_compile_after_over_before": 0.6215767038679106
+      },
+      "medium": {
+        "queries": 1,
+        "baseline_successful_queries": 1,
+        "native_successful_queries": 1,
+        "compile_after_over_before": 0.4888964308973665,
+        "frontend_median_us": 565.0,
+        "median_frontend_over_rbo": 0.17636363636363636,
+        "median_frontend_over_compile": 0.010223098775037543,
+        "native_phase_median_us": {
+          "Native parse": 114.0,
+          "Native table discovery": 33.0,
+          "Native binding and scalar typing": 204.0,
+          "Native operator translation": 177.0,
+          "Native plan formatting": 17.0,
+          "New RBO optimization": 3075.0,
+          "Native operator typing": 1044.0000000000002,
+          "Constant folding stage": 124.0,
+          "Emit native physical plan": 9311.0,
+          "Compile query": 53299.0
+        },
+        "untraced_common_queries": 1,
+        "untraced_request_after_over_before": 0.5282774180367913,
+        "traced_same_control_cohort_compile_after_over_before": 0.4888964308973665
+      },
+      "tiny": {
+        "queries": 1,
+        "baseline_successful_queries": 1,
+        "native_successful_queries": 1,
+        "compile_after_over_before": 0.20406091370558374,
+        "frontend_median_us": 41.0,
+        "median_frontend_over_rbo": 0.33333333333333337,
+        "median_frontend_over_compile": 0.022664455500276397,
+        "native_phase_median_us": {
+          "Native parse": 6.0,
+          "Native table discovery": 3.0,
+          "Native binding and scalar typing": 13.0,
+          "Native operator translation": 17.0,
+          "Native plan formatting": 2.0,
+          "New RBO optimization": 125.0,
+          "Native operator typing": 8.0,
+          "Constant folding stage": 9.0,
+          "Emit native physical plan": 327.0,
+          "Compile query": 1809.0
+        },
+        "untraced_common_queries": 1,
+        "untraced_request_after_over_before": 0.17420603627500178,
+        "traced_same_control_cohort_compile_after_over_before": 0.20406091370558374
+      },
+      "clickbench": {
+        "queries": 43,
+        "baseline_successful_queries": 39,
+        "native_successful_queries": 43,
+        "compile_after_over_before": 0.40488677744054574,
+        "frontend_median_us": 321.0,
+        "median_frontend_over_rbo": 0.6546310832025118,
+        "median_frontend_over_compile": 0.018378378378378378,
+        "native_phase_median_us": {
+          "Native parse": 62.0,
+          "Native table discovery": 22.0,
+          "Native binding and scalar typing": 123.0,
+          "Native operator translation": 88.0,
+          "Native plan formatting": 14.0,
+          "New RBO optimization": 499.0,
+          "Native operator typing": 62.0,
+          "Constant folding stage": 32.0,
+          "Emit native physical plan": 1768.0,
+          "Compile query": 16351.0
+        },
+        "untraced_common_queries": 39,
+        "untraced_request_after_over_before": 0.4409429412479486,
+        "traced_same_control_cohort_compile_after_over_before": 0.40488677744054574
+      }
+    }
+  },
+  "artifacts": {
+    "raw_directory": "/tmp/yqlv2-goal",
+    "full_comparison": "native-final-6992-comparison/comparison.html",
+    "matched_comparison": "native-final-6992-comparison-paired/comparison.html",
+    "manifest_sha256": "4d634700a7ec42c44b0fe4125355af256ee182f534161d661b962e036e263ca1",
+    "control_manifest_sha256": "de57c7dda6f48b80d9e5550ab1c99bc9a754af6674d6319b3309f9db58ab0bb0",
+    "reference_inventory_sha256": "545645601737feb1b3153824ec6a1642c310d2b0efbe0c0c4e89ce52f92cbb4a",
+    "architecture_audit_sha256": "a63572b416b1e11a59e98d020971360424b595cc67c736f9a26243d4c2ed2024"
+  },
+  "native_checkpoint_control": {
+    "scope": "40-query 1C paired native checkpoint control in both execution orders; this does not replace the full 6,992-query pre-PR comparison.",
+    "before_commit": "10fd4fedb43c1aabac8b61ac11446551b3608510",
+    "after_commit": "2a5a3b0d9940a33c9ece79b3720a90c2c4a82baf",
+    "orders": {
+      "forward": {
+        "queries": 40,
+        "native_measured_successes": 240,
+        "seconds": 12.537,
+        "after_over_before": {
+          "frontend_ms": 0.818296940338529,
+          "rbo_ms": 0.8886351369460558,
+          "ms": 0.896514847766171,
+          "Native parse": 0.8488287509625481,
+          "Native table discovery": 0.7913434744928265,
+          "Native binding and scalar typing": 0.8214035403948363,
+          "Native operator translation": 0.7994644484712947,
+          "Emit native physical plan": 0.8511815915914006
+        },
+        "median_ms": {
+          "frontend_ms": {
+            "before": 0.204,
+            "after": 0.172
+          },
+          "rbo_ms": {
+            "before": 0.296,
+            "after": 0.2575
+          },
+          "ms": {
+            "before": 4.4815000000000005,
+            "after": 4.055
+          },
+          "Native parse": {
+            "before": 0.0415,
+            "after": 0.0365
+          },
+          "Native table discovery": {
+            "before": 0.014,
+            "after": 0.011
+          },
+          "Native binding and scalar typing": {
+            "before": 0.082,
+            "after": 0.0635
+          },
+          "Native operator translation": {
+            "before": 0.0545,
+            "after": 0.045
+          },
+          "Emit native physical plan": {
+            "before": 0.847,
+            "after": 0.7355
+          }
+        }
+      },
+      "reverse": {
+        "queries": 40,
+        "native_measured_successes": 240,
+        "seconds": 12.559,
+        "after_over_before": {
+          "frontend_ms": 1.0603689457675967,
+          "rbo_ms": 1.1243262451365297,
+          "ms": 1.081049476688402,
+          "Native parse": 1.0965423196439663,
+          "Native table discovery": 1.020474592446743,
+          "Native binding and scalar typing": 1.056984282452288,
+          "Native operator translation": 1.0856592965423664,
+          "Emit native physical plan": 1.0607071518527493
+        },
+        "median_ms": {
+          "frontend_ms": {
+            "before": 0.196,
+            "after": 0.2115
+          },
+          "rbo_ms": {
+            "before": 0.262,
+            "after": 0.2775
+          },
+          "ms": {
+            "before": 4.3445,
+            "after": 4.9325
+          },
+          "Native parse": {
+            "before": 0.041,
+            "after": 0.045
+          },
+          "Native table discovery": {
+            "before": 0.0135,
+            "after": 0.014
+          },
+          "Native binding and scalar typing": {
+            "before": 0.07050000000000001,
+            "after": 0.0795
+          },
+          "Native operator translation": {
+            "before": 0.058499999999999996,
+            "after": 0.064
+          },
+          "Emit native physical plan": {
+            "before": 0.867,
+            "after": 0.9425
+          }
+        }
+      }
+    },
+    "interpretation": "The apparent roughly twofold frontend increase across separate historical runs did not reproduce in this 40-query cohort. Frontend after/before ratios of 0.818 forward and 1.060 reverse change direction with execution order; no stable checkpoint speedup or regression is established."
+  }
+}

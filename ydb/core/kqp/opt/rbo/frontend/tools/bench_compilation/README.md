@@ -124,3 +124,41 @@ python3 ydb/core/kqp/opt/rbo/frontend/tools/bench_compilation/paired.py \
 
 This removes a query from the paired report if any measured compilation failed
 in either variant. The original traces and coverage report remain intact.
+
+## Validation snapshot: 2026-11-15
+
+[The validation record](validation-2026-11-15.json) pins production revision
+`2a5a3b0d994` against pre-migration `d11af71c6d`. All 6,992 queries compiled
+natively in all three measured passes: 20,976 successes, zero fallback. Three
+untraced warmups preceded measurement. Both query caches and optimizer fallback
+were disabled. Speed ratios use the 6,641 queries successful in both revisions;
+the 351 pre-migration failures remain in the coverage results.
+
+| Workload | Compiler speedup | Frontend median | Frontend / compiler | Frontend / RBO |
+| --- | ---: | ---: | ---: | ---: |
+| 1C | 3.78x | 0.229 ms | 3.46% | 62.3% |
+| TPCH | 1.82x | 0.391 ms | 1.07% | 25.1% |
+| TPCDS | 1.61x | 0.603 ms | 0.77% | 16.9% |
+
+Speedup is the geometric mean of paired per-query median ratios. Phase values
+and shares are medians of per-query medians; phase medians are not additive.
+Operator typing belongs to RBO. A separate untraced control used 256 evenly
+spaced 1C queries and all 179 queries from the other workloads, with no success
+filtering. All 435 native queries passed. Its matched request-duration speedups
+were 3.61x, 1.64x and 1.47x respectively; request durations and compiler spans
+have different scopes. Both runs used CPUs 32–35 and recorded no interference
+from monitored builds, tests or profiles.
+
+The record also describes frontend, operator-boundary and populated execution
+tests, independent pre-PR admission oracles, the approved lossy-float correctness
+exception, and reference-PR coverage. Full benchmark admission establishes
+compilation coverage; populated tests establish result/error parity. Raw traces,
+full and matched-cohort Violinoscope reports, manifests and test evidence are
+retained in the artifact directory recorded in the JSON.
+
+A separate 40-query 1C control compared native checkpoint `10fd4fedb43` with
+this revision in both execution orders. The frontend after/before ratios were
+0.818 and 1.060. Their direction changes with execution order, so this sample
+does not establish a checkpoint speedup or regression. It did not reproduce
+the roughly twofold frontend increase suggested by comparing absolute timings
+from separate historical runs.

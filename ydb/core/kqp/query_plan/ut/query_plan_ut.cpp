@@ -18,6 +18,54 @@ NJson::TJsonValue ParsePlan(const TString& text) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpQueryPlanSerialization) {
+    Y_UNIT_TEST(RboExplainPreservesPlanStructureAndSource) {
+        const auto source = ParsePlan(R"({
+            "SimplifiedPlan": {
+                "PlanNodeId": 1,
+                "Operators": [{"Name": "Join", "OperatorId": 7}],
+                "OptimizerStats": {"CBOTreesOptimized": 0},
+                "Plans": [
+                    {"PlanNodeId": 2, "Operators": [{"Name": "Read", "OperatorId": 8}]},
+                    {"PlanNodeId": 3, "Operators": [{"Name": "Read", "OperatorId": 8}]}
+                ]
+            },
+            "Plans": [{
+                "StageGuid": "stage",
+                "Operators": [{"Name": "Join", "OperatorId": 7, "RuntimeStatsType": "Join", "UseStageStats": true}],
+                "Plans": [{"CTE Name": "shared"}]
+            }],
+            "Stats": {"TotalDurationUs": 123}
+        })");
+        const auto original = source;
+        const auto expected = ParsePlan(R"({
+            "meta": {"version": "0.2", "type": "query"},
+            "SimplifiedPlan": {
+                "PlanNodeId": 1,
+                "Operators": [{"Name": "Join"}],
+                "OptimizerStats": {"CBOTreesOptimized": 0},
+                "Plans": [
+                    {"PlanNodeId": 2, "Operators": [{"Name": "Read"}]},
+                    {"PlanNodeId": 3, "Operators": [{"Name": "Read"}]}
+                ]
+            },
+            "Plan": {
+                "Node Type": "Query",
+                "PlanNodeType": "Query",
+                "Plans": [{
+                    "StageGuid": "stage",
+                    "Operators": [{"Name": "Join"}],
+                    "Plans": [{"CTE Name": "shared"}]
+                }],
+                "Stats": {"TotalDurationUs": 123}
+            }
+        })");
+
+        UNIT_ASSERT(ParsePlan(SerializeRBOExplainPlan(source)) == expected);
+        UNIT_ASSERT(source == original);
+        auto consumed = source;
+        UNIT_ASSERT(ParsePlan(SerializeRBOExplainPlan(std::move(consumed))) == expected);
+    }
+
     Y_UNIT_TEST(RboAnalyzePopulatesEverySharedJoinOccurrence) {
         const TString txPlan = R"({
             "SimplifiedPlan": {

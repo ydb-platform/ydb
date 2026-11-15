@@ -7,6 +7,12 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 TIMEOUT(3600)
 REQUIREMENTS(cpu:2)
 
+# This executable's debug information exceeds DWARF32 relocation limits in
+# relwithdebinfo builds. Keep stripping local to this test executable.
+IF (OS_LINUX)
+    LDFLAGS(-Wl,--strip-debug)
+ENDIF()
+
 SRCS(kqp_compilation_time_ut.cpp)
 
 PEERDIR(

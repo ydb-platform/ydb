@@ -39,6 +39,8 @@ constexpr std::array<TPipeline, 3> Pipelines = {{
     {"native", true, true},
 }};
 
+constexpr ui32 Warmups = 1;
+
 // Preserve the original timing workload, including its helper preamble and
 // exclusions. Do not simplify queries to make them acceptable to the frontend.
 TString QueryText(EBenchType type, ui32 id) {
@@ -123,6 +125,8 @@ void SaveTrace(TTestActorRuntime& runtime, const NWilson::TTraceId& parent, cons
             spans.AppendValue(std::move(item));
         }
         if (compiled && released && replied) {
+            UNIT_ASSERT_VALUES_EQUAL_C(counts["Load statistics"], 0, name);
+            UNIT_ASSERT_VALUES_EQUAL_C(counts["Load column statistics"], 0, name);
             UNIT_ASSERT_VALUES_EQUAL_C(counts["Create transformer pipelines"], 1, name);
             UNIT_ASSERT_VALUES_EQUAL_C(counts["Create legacy runner pipeline"], !pipeline.NewRbo, name);
             UNIT_ASSERT_VALUES_EQUAL_C(counts["Create new RBO runner pipeline"], pipeline.NewRbo, name);
@@ -165,9 +169,9 @@ void Measure(EBenchType type, TStringBuf benchmark, ui32 id, const TPipeline& pi
     config->SetEnableFallbackToYqlOptimizer(false);
     config->SetEnableFallbackOnMultipleStatements(false);
     config->SetAllowOlapDataQuery(true);
-    // The query pragma must override an enabled default in every pipeline.
-    // CheckCboDisabled verifies the resulting plan outside the timed interval.
-    config->SetDefaultCostBasedOptimizationLevel(4);
+    // Disable CBO both by default and in the query. CheckCboDisabled verifies
+    // the resulting plan outside the timed interval.
+    config->SetDefaultCostBasedOptimizationLevel(0);
     config->SetDefaultLangVer(NYql::GetMaxLangVersion());
     config->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     config->SetEnableAstCache(false);
@@ -175,6 +179,10 @@ void Measure(EBenchType type, TStringBuf benchmark, ui32 id, const TPipeline& pi
 
     TCapturedLog logs(true);
     auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false).SetLogCapture(logs);
+    // Statistics requests are enabled independently of the CBO level.
+    // Keep schema metadata loading, but exclude optimizer statistics fetching.
+    settings.FeatureFlags.SetEnableStatistics(false);
+    settings.FeatureFlags.SetEnableColumnStatistics(false);
     settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_INFO);
     settings.LogSettings->DefaultLogPriority = NActors::NLog::PRI_CRIT;
     TKikimrRunner kikimr(settings);
@@ -192,10 +200,10 @@ void Measure(EBenchType type, TStringBuf benchmark, ui32 id, const TPipeline& pi
     auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
     const auto query = QueryText(type, id);
 
-    // Warm the parser DFA and compilation machinery repeatedly in this process.
+    // Warm the parser DFA and compilation machinery once in this process.
     // Validate the warmup like every measured request, but exclude it from both
     // timing samples and exported traces. Query and AST caches remain disabled.
-    constexpr ui32 warmups = 5;
+    constexpr ui32 warmups = Warmups;
     for (ui32 iteration = 0; iteration < warmups + iterations; ++iteration) {
         const bool warmup = iteration < warmups;
         const TString traceId = TStringBuilder() << "compilation-time-" << benchmark << '-' << id << '-'
@@ -236,7 +244,7 @@ void Measure(EBenchType type, TStringBuf benchmark, ui32 id, const TPipeline& pi
 
 void RunBenchmark(EBenchType type, TStringBuf benchmark, const TVector<ui32>& queries) {
     if (GetTestParam("ENABLE_PERF_COMPILATION").empty()) { return; }
-    ui32 iterations = 2; // Measured repeats after five unmeasured warmups.
+    ui32 iterations = 2; // Measured repeats after one unmeasured warmup.
     const auto count = GetTestParam("PERF_COMPILATION_ITERATIONS");
     if (!count.empty()) {
         UNIT_ASSERT_C(TryFromString(count, iterations) && iterations > 0 && iterations <= 100,
@@ -269,7 +277,8 @@ void RunBenchmark(EBenchType type, TStringBuf benchmark, const TVector<ui32>& qu
     }
     Cout << "PERF_COMPILATION_CONFIG," << benchmark
         << ",storage=" << (type == EBenchType::CLICKBENCH ? "column" : "row")
-        << ",physical_stage_peephole=false,iterations=" << iterations << ",warmup=5,pipelines="
+        << ",cbo=0,table_statistics=false,column_statistics=false"
+        << ",physical_stage_peephole=false,iterations=" << iterations << ",warmup=" << Warmups << ",pipelines="
         << (pipelineSelection.empty() ? TString("all") : pipelineSelection) << Endl;
     Cout << "PERF_COMPILATION_HEADER,benchmark,query,pipeline,iteration,explain_wall_us,process_cpu_us" << Endl;
     TString errors;

@@ -654,7 +654,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
     // rather than replacing differently shaped result/effect tuples in place.
     output = RBO.Optimize(Roots, rboCtx);
     traceOutput.Flush();
-    AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
+    AddPlans(std::move(rboCtx.ExecutionJson), std::move(rboCtx.ExplainJson));
     TransformCtx->CacheOutput = std::move(KqpCtx.CacheOutput);
     return TStatus::Ok;
 } catch (const std::exception& e) {
@@ -693,12 +693,12 @@ void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, 
 
     auto planJson = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
     auto plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    plans.AppendValue(execPlan.value());
-    planJson["Plans"] = plans;
-    planJson["SimplifiedPlan"] = explainPlan.value();
+    plans.AppendValue(std::move(execPlan.value()));
+    planJson["Plans"] = std::move(plans);
+    planJson["SimplifiedPlan"] = std::move(explainPlan.value());
     planJson["SimplifiedPlan"]["OptimizerStats"] = MakeNewRBOOptimizerStats(KqpCtx);
 
-    TransformCtx->PlanJson = planJson;
+    TransformCtx->PlanJson = std::move(planJson);
 }
 
 void TKqpNewRBOTransformer::Rewind() {

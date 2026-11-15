@@ -91,7 +91,7 @@ NJson::TJsonValue GetExplainJsonRec(IOperator* op, TExplainJsonContext& ctx) {
         operatorJson["OperatorId"] = operatorId->second;
     }
     operatorList.AppendValue(std::move(operatorJson));
-    result["Operators"] = operatorList;
+    result["Operators"] = std::move(operatorList);
 
     auto getChildJson = [&](const auto& child, ui32 childIndex) {
         auto childJson = GetExplainJsonRec(child, ctx);
@@ -104,8 +104,8 @@ NJson::TJsonValue GetExplainJsonRec(IOperator* op, TExplainJsonContext& ctx) {
             connectionJson["PlanNodeId"] = ctx.NextNodeId();
 
             NJson::TJsonValue plans(NJson::EJsonValueType::JSON_ARRAY);
-            plans.AppendValue(childJson);
-            connectionJson["Plans"] = plans;
+            plans.AppendValue(std::move(childJson));
+            connectionJson["Plans"] = std::move(plans);
 
             return connectionJson;
         }
@@ -118,7 +118,7 @@ NJson::TJsonValue GetExplainJsonRec(IOperator* op, TExplainJsonContext& ctx) {
         for (ui32 i = 0; i < op->GetChildren().size(); ++ i) {
             plans.AppendValue(getChildJson(op->GetChildren()[i], i));
         }
-        result["Plans"] = plans;
+        result["Plans"] = std::move(plans);
     }
 
     return result;
@@ -189,7 +189,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
         if (!stages.contains(stageId)) {
             continue;
         }
-        auto ops = stageOpMap.at(stageId);
+        const auto& ops = stageOpMap.at(stageId);
         TString stageName;
 
         // First, build the list of operators in the stage
@@ -226,7 +226,8 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
         }
         const auto& stageInputs = PlanProps.StageGraph.IncomingEdges(*graphStage);
         for (const auto* edge : stageInputs) {
-            planList.AppendValue(processedStages.at(edge->Id()));
+            // Each edge has one consumer, so its subtree can be transferred.
+            planList.AppendValue(std::move(processedStages.at(edge->Id())));
         }
         const auto& stageOutputs = PlanProps.StageGraph.OutgoingEdges(*graphStage);
 
@@ -235,10 +236,10 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
             finalStage["Node Type"] = stageName;
             finalStage["StageGuid"] = graphStage->Guid();
             if (ops.size()) {
-                finalStage["Operators"] = operatorList;
+                finalStage["Operators"] = std::move(operatorList);
             }
             if (!planList.GetArraySafe().empty()) {
-                finalStage["Plans"] = planList;
+                finalStage["Plans"] = std::move(planList);
             }
         }
 
@@ -257,10 +258,10 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
                     stage["StageGuid"] = graphStage->Guid();
 
                     if (ops.size()) {
-                        stage["Operators"] = operatorList;
+                        stage["Operators"] = std::move(operatorList);
                     }
                     if (!planList.GetArraySafe().empty()) {
-                        stage["Plans"] = planList;
+                        stage["Plans"] = std::move(planList);
                     }
                     if (stageOutputs.size() > 1) {
                         cteName = TStringBuilder() << stageName << "_" << stageId;
@@ -277,8 +278,8 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
         }
     }
 
-    plans.AppendValue(finalStage);
-    result["Plans"] = plans;
+    plans.AppendValue(std::move(finalStage));
+    result["Plans"] = std::move(plans);
 
     return result;
 }
@@ -293,7 +294,7 @@ NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOpe
     NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
     TExplainJsonContext ctx{PlanProps, PlanProps.InfoUnitRegistry, nodeCounter, operatorIds, explainFlags};
     plans.AppendValue(GetExplainJsonRec(GetInput().Get(), ctx));
-    result["Plans"] = plans;
+    result["Plans"] = std::move(plans);
 
     return result;
 }

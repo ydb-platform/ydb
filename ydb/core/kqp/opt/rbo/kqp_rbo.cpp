@@ -77,14 +77,14 @@ std::pair<NJson::TJsonValue, NJson::TJsonValue> BuildPlans(const TVector<TIntrus
         }
         executionJsons.push_back(std::move(execution));
         if (const auto& name = rootPtr->PlanProps.MaterializedResult) {
-            materializedInputs.emplace(*name, explain["Plans"].GetArraySafe().front());
+            materializedInputs.emplace(*name, std::move(explain["Plans"].GetArraySafe().front()));
         } else {
             explainJsons.push_back(std::move(explain));
         }
     }
 
     if (roots.size()==1) {
-        return std::make_pair(executionJsons[0], explainJsons[0]);
+        return std::make_pair(std::move(executionJsons[0]), std::move(explainJsons[0]));
     } else {
         NJson::TJsonValue execResult;
         execResult["PlanNodeId"] = counter++;
@@ -93,27 +93,27 @@ std::pair<NJson::TJsonValue, NJson::TJsonValue> BuildPlans(const TVector<TIntrus
 
         auto execList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
         for (auto & execJson : executionJsons) {
-            execList.AppendValue(execJson);
+            execList.AppendValue(std::move(execJson));
         }
-        execResult["Plans"] = execList;
+        execResult["Plans"] = std::move(execList);
 
         NJson::TJsonValue explainResult;
         explainResult["PlanNodeId"] = counter++;
         explainResult["PlanNodeType"] = "ResultSets";
         explainResult["Node Type"] = "ResultSets";
 
-        auto explainList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-        for (auto & explainJson : explainJsons) {
-            explainList.AppendValue(explainJson);
-        }
         // A materialized input may leave only one externally visible root.
         if (explainJsons.size() == 1) {
             explainResult = std::move(explainJsons.front());
         } else {
-            explainResult["Plans"] = explainList;
+            auto explainList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+            for (auto & explainJson : explainJsons) {
+                explainList.AppendValue(std::move(explainJson));
+            }
+            explainResult["Plans"] = std::move(explainList);
         }
 
-        return std::make_pair(execResult, explainResult);
+        return std::make_pair(std::move(execResult), std::move(explainResult));
     }
 }
 } // namespace
@@ -350,8 +350,8 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
     {
         TCompileTraceScope traceScope(trace, TCompileTraceLevels::Step, "Build plan JSON");
         auto [execJson, explainJson] = BuildPlans(roots);
-        rboCtx.ExecutionJson = execJson;
-        rboCtx.ExplainJson = explainJson;
+        rboCtx.ExecutionJson = std::move(execJson);
+        rboCtx.ExplainJson = std::move(explainJson);
     }
 
     return ConvertToPhysical(roots, rboCtx);

@@ -1074,6 +1074,26 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         )");
     }
 
+    Y_UNIT_TEST_TWIN(ExplainDoesNotExecuteLiteralTransactions, NewParser) {
+        auto config = CreateExplainPlanTestAppConfig();
+        config.MutableTableServiceConfig()->SetEnableNewYqlParser(NewParser);
+        config.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
+        TKikimrRunner kikimr(TKikimrSettings(config).SetWithSampleTables(false));
+        auto session = CreateQuerySession(kikimr);
+        // The volatile value keeps this check out of constant folding. It must
+        // fail during execution, while EXPLAIN only constructs the plan.
+        const TString query = "SELECT Ensure(RandomNumber(1), false, 'literal execution') AS value;";
+        const auto explained = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)).GetValueSync();
+        UNIT_ASSERT_C(explained.IsSuccess(), explained.GetIssues().ToString());
+        UNIT_ASSERT(explained.GetStats() && explained.GetStats()->GetPlan());
+        UNIT_ASSERT(!explained.GetStats()->GetPlan()->empty());
+
+        const auto executed = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(!executed.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(executed.GetIssues().ToString(), "literal execution");
+    }
+
     Y_UNIT_TEST_TWIN(ExplainSharedMaterializedInput, Analyze) {
         auto config = CreateExplainPlanTestAppConfig();
         config.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);

@@ -1,5 +1,6 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
@@ -31,14 +32,16 @@ struct TIndexedExportTable {
     const TString Table = "/MyRoot/Table";
     const TString Index = Table + "/ByValue";
     const EExportIndex Kind;
+    const bool PerAzReplicas;
     TTestBasicRuntime Runtime;
     TTestEnv Env;
     ui64 TxId = 100;
     TMap<TString, TVector<TString>> IndexRows;
     TMap<TString, ui64> IndexRowCounts;
 
-    explicit TIndexedExportTable(EExportIndex kind)
+    explicit TIndexedExportTable(EExportIndex kind, bool perAzReplicas = false)
         : Kind(kind)
+        , PerAzReplicas(perAzReplicas)
         , Env(Runtime, TTestEnvOptions().EnableCompactFulltextIndex(false).EnableIndexMaterialization(true))
     {
         Runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
@@ -99,6 +102,11 @@ struct TIndexedExportTable {
             settings->mutable_partitioning_settings()->set_min_partitions_count(1);
             settings->mutable_partitioning_settings()->set_max_partitions_count(4);
             settings->mutable_partitioning_settings()->set_partition_size_mb(64);
+            if (PerAzReplicas) {
+                settings->mutable_read_replicas_settings()->set_per_az_read_replicas_count(1);
+            } else {
+                settings->mutable_read_replicas_settings()->set_any_az_read_replicas_count(1);
+            }
         }
         return index;
     }
@@ -224,6 +232,16 @@ void CheckExport(TIndexedExportTable& table, const TFsPath& basePath, const TStr
     UNIT_ASSERT_VALUES_EQUAL(settings->partitioning_settings().min_partitions_count(), 1);
     UNIT_ASSERT_VALUES_EQUAL(settings->partitioning_settings().max_partitions_count(), 4);
     UNIT_ASSERT_VALUES_EQUAL(settings->partitioning_settings().partition_size_mb(), 64);
+    UNIT_ASSERT(settings->has_read_replicas_settings());
+    if (table.PerAzReplicas) {
+        UNIT_ASSERT_VALUES_EQUAL(settings->read_replicas_settings().settings_case(),
+            Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount);
+        UNIT_ASSERT_VALUES_EQUAL(settings->read_replicas_settings().per_az_read_replicas_count(), 1);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(settings->read_replicas_settings().settings_case(),
+            Ydb::Table::ReadReplicasSettings::kAnyAzReadReplicasCount);
+        UNIT_ASSERT_VALUES_EQUAL(settings->read_replicas_settings().any_az_read_replicas_count(), 1);
+    }
 
     const TString metadata = ReadExportFile(path / "metadata.json");
     UNIT_ASSERT_C(!metadata.Contains("__ydb_rebuild_"), metadata);
@@ -305,6 +323,14 @@ void ExportDuringRepeatedRebuild(EExportIndex kind, bool materialized) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardRebuildExportTests) {
+    Y_UNIT_TEST_FLAGS(ExportPreservesIndexReadReplicas, Materialized, PerAz) {
+        TTempDir tempDir;
+        for (auto kind : {EExportIndex::Global, EExportIndex::Unique, EExportIndex::Fulltext}) {
+            TIndexedExportTable table(kind, PerAz);
+            CheckExport(table, tempDir.Path(), ToString(static_cast<ui32>(kind)), Materialized);
+        }
+    }
+
     Y_UNIT_TEST_FLAG(ExportDuringRepeatedGlobalIndexRebuild, Materialized) {
         ExportDuringRepeatedRebuild(EExportIndex::Global, Materialized);
     }
@@ -317,7 +343,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardRebuildExportTests) {
         ExportDuringRepeatedRebuild(EExportIndex::Fulltext, Materialized);
     }
 
-    Y_UNIT_TEST(MaterializedExportFinishesAfterFulltextIndexReplacement) {
+    Y_UNIT_TEST_FLAG(MaterializedExportFinishesAfterFulltextIndexReplacement, Reboot) {
         TTempDir tempDir;
         TIndexedExportTable table(EExportIndex::Fulltext);
         NACLib::TDiffACL acl;
@@ -347,6 +373,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardRebuildExportTests) {
         auto index = table.Request(false);
         index.mutable_global_fulltext_plain_index()->mutable_fulltext_settings()->mutable_columns(0)
             ->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
+        index.mutable_global_fulltext_plain_index()->mutable_settings()->mutable_read_replicas_settings()
+            ->set_any_az_read_replicas_count(0);
         const ui64 buildId = table.Start(index);
         table.Runtime.WaitFor("fulltext rebuild scan before export", [&] { return !scan.empty(); });
 
@@ -359,6 +387,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardRebuildExportTests) {
                 source.GetPathDescription().GetSelf().GetOwner());
             UNIT_ASSERT_VALUES_EQUAL(snapshot.GetPathDescription().GetSelf().GetACL(),
                 source.GetPathDescription().GetSelf().GetACL());
+            const TString snapshotImpl = TStringBuilder() << "/MyRoot/export-" << table.TxId
+                << "/0/ByValue/indexImplTable";
+            const auto snapshotTable = DescribePrivatePath(table.Runtime, snapshotImpl, true);
+            const auto& snapshotConfig = snapshotTable.GetPathDescription().GetTable().GetPartitionConfig();
+            for (const auto& group : snapshotConfig.GetFollowerGroups()) {
+                UNIT_ASSERT_VALUES_EQUAL(group.GetFollowerCount(), 0);
+            }
             scan.Stop().Unblock();
             table.Env.TestWaitNotification(table.Runtime, buildId);
             const auto result = TestGetBuildIndex(table.Runtime, table.SchemeShard, "/MyRoot", buildId);
@@ -366,8 +401,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardRebuildExportTests) {
                 result.DebugString());
             UNIT_ASSERT(DescribePrivatePath(table.Runtime, table.Index).GetPathDescription().GetSelf().GetPathId() != liveId);
             UNIT_ASSERT_VALUES_EQUAL(CountRows(table.Runtime, table.SchemeShard, table.Index + "/indexImplTable"), 3);
+            const auto rebuilt = DescribePrivatePath(table.Runtime, table.Index + "/indexImplTable", true);
+            for (const auto& group : rebuilt.GetPathDescription().GetTable().GetPartitionConfig().GetFollowerGroups()) {
+                UNIT_ASSERT_VALUES_EQUAL(group.GetFollowerCount(), 0);
+            }
             TestDescribeResult(DescribePrivatePath(table.Runtime, table.TemporaryIndex(buildId)), {NLs::PathNotExist});
             TestForgetBuildIndex(table.Runtime, ++table.TxId, table.SchemeShard, "/MyRoot", buildId);
+            if (Reboot) {
+                RebootTablet(table.Runtime, table.SchemeShard, table.Runtime.AllocateEdgeActor());
+            }
             copied.Stop().Unblock();
         });
         Ydb::Scheme::ModifyPermissionsRequest permissions;

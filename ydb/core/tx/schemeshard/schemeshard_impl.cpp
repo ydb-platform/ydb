@@ -3612,6 +3612,13 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
         Y_PROTOBUF_SUPPRESS_NODISCARD statisticsHolder.SerializeToString(&statistics);
     }
 
+    TString backupSourceIndexes;
+    if (tableInfo->TableDescription.BackupSourceIndexesSize()) {
+        NKikimrSchemeOp::TTableDescription snapshot;
+        snapshot.MutableBackupSourceIndexes()->CopyFrom(tableInfo->TableDescription.GetBackupSourceIndexes());
+        Y_PROTOBUF_SUPPRESS_NODISCARD snapshot.SerializeToString(&backupSourceIndexes);
+    }
+
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::Tables::NextColId>(tableInfo->NextColumnId),
@@ -3627,7 +3634,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
             NIceDb::TUpdate<Schema::Tables::IncrementalBackupConfig>(incrementalBackupConfig),
             NIceDb::TUpdate<Schema::Tables::DetailedMetricsSettings>(detailedMetricsSettings),
-            NIceDb::TUpdate<Schema::Tables::MultiColumnStatistics>(statistics)
+            NIceDb::TUpdate<Schema::Tables::MultiColumnStatistics>(statistics),
+            NIceDb::TUpdate<Schema::Tables::BackupSourceIndexes>(backupSourceIndexes)
         );
     } else {
         db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
@@ -3644,7 +3652,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
             NIceDb::TUpdate<Schema::MigratedTables::IncrementalBackupConfig>(incrementalBackupConfig),
             NIceDb::TUpdate<Schema::MigratedTables::DetailedMetricsSettings>(detailedMetricsSettings),
-            NIceDb::TUpdate<Schema::MigratedTables::MultiColumnStatistics>(statistics)
+            NIceDb::TUpdate<Schema::MigratedTables::MultiColumnStatistics>(statistics),
+            NIceDb::TUpdate<Schema::MigratedTables::BackupSourceIndexes>(backupSourceIndexes)
         );
     }
 

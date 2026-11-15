@@ -152,7 +152,7 @@ struct TRebuildTest {
     TMap<TString, ui32> LiveRows;
     TVector<TString> SecondaryRows;
 
-    explicit TRebuildTest(EKind kind, Ydb::Table::TableIndex initialIndex = {})
+    explicit TRebuildTest(EKind kind, Ydb::Table::TableIndex initialIndex = {}, bool storageConfig = false)
         : Kind(kind)
         , Env(Runtime, TTestEnvOptions().EnableCompactFulltextIndex(IsCompact(kind)))
     {
@@ -160,7 +160,7 @@ struct TRebuildTest {
             Runtime.GetAppData().FeatureFlags.SetEnableOnlineAddUniqueIndex(false);
             Reboot(); // This feature flag is cached by SchemeShard at activation.
         }
-        TestCreateTable(Runtime, ++TxId, "/MyRoot", R"(
+        TestCreateTable(Runtime, ++TxId, "/MyRoot", TStringBuilder() << R"(
             Name: "Table"
             Columns { Name: "id" Type: "Uint64" }
             Columns { Name: "value" Type: "Uint64" }
@@ -170,7 +170,19 @@ struct TRebuildTest {
             Columns { Name: "prefix" Type: "Uint32" }
             Columns { Name: "payload" Type: "String" }
             KeyColumnNames: ["id"]
-        )");
+        )" << (storageConfig ? R"(
+            PartitionConfig {
+                ColumnFamilies {
+                    Id: 0
+                    ColumnCodec: ColumnCodecPlain
+                    StorageConfig {
+                        SysLog { PreferredPoolKind: "hdd-1" }
+                        Log { PreferredPoolKind: "hdd-1" }
+                        Data { PreferredPoolKind: "hdd-1" }
+                    }
+                }
+            }
+        )" : ""));
         Env.TestWaitNotification(Runtime, TxId);
         for (ui64 id = 1; id <= RowCount; ++id) {
             const ui64 value = id * 10;
@@ -367,6 +379,36 @@ void PreservesPartitioning(EKind kind) {
             newPartitions.Get(i).GetEndOfRangeKeyPrefix());
     }
 
+    // Partial policy overrides must not replace the inherited minimum with a creation default.
+    for (bool byLoad : {false, true}) {
+        auto partial = MakeIndex(kind, true);
+        settings = kind == EKind::Sync ? partial.mutable_global_index()->mutable_settings()
+            : kind == EKind::Async ? partial.mutable_global_async_index()->mutable_settings()
+            : partial.mutable_global_unique_index()->mutable_settings();
+        if (byLoad) {
+            settings->mutable_partitioning_settings()->set_partitioning_by_load(Ydb::FeatureFlag::ENABLED);
+        } else {
+            settings->mutable_partitioning_settings()->set_partition_size_mb(32);
+        }
+        const ui64 partialId = test.Start(partial);
+        test.Wait(partialId, Ydb::Table::IndexBuildState::STATE_DONE);
+        test.Reboot();
+        CheckPartitioning(test, "indexImplTable", 3, 3, 32, 1);
+        const auto description = DescribePrivatePath(test.Runtime, test.IndexPath + "/indexImplTable", true, true);
+        const auto& partitions = description.GetPathDescription().GetTablePartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), oldPartitions.size());
+        for (int i = 0; i < partitions.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(partitions.Get(i).GetEndOfRangeKeyPrefix(),
+                oldPartitions.Get(i).GetEndOfRangeKeyPrefix());
+        }
+        if (byLoad) {
+            UNIT_ASSERT(description.GetPathDescription().GetTable().GetPartitionConfig()
+                .GetPartitioningPolicy().GetSplitByLoadSettings().GetEnabled());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(test.Runtime, test.SchemeShard, test.IndexPath + "/indexImplTable"), test.RowCount);
+        TestDescribeResult(DescribePrivatePath(test.Runtime, test.TemporaryPath(partialId)), {NLs::PathNotExist});
+    }
+
     // Explicit settings must replace inherited boundaries and may remove read replicas.
     auto override = MakeIndex(kind, true);
     settings = kind == EKind::Sync ? override.mutable_global_index()->mutable_settings()
@@ -397,6 +439,49 @@ void PreservesPartitioning(EKind kind) {
     CheckPartitioning(test, "indexImplTable", 1, 1, 0, 0);
     UNIT_ASSERT_VALUES_EQUAL(CountRows(test.Runtime, test.SchemeShard, test.IndexPath + "/indexImplTable"), test.RowCount);
     TestDescribeResult(DescribePrivatePath(test.Runtime, test.TemporaryPath(single)), {NLs::PathNotExist});
+}
+
+void PreservesColumnFamilies(EKind kind) {
+    TRebuildTest test(kind, {}, true);
+    TMap<TString, NKikimrSchemeOp::TFamilyDescription> families;
+    for (const auto& [name, rows] : test.LiveRows) {
+        Y_UNUSED(rows);
+        TestAlterTable(test.Runtime, ++test.TxId, test.IndexPath, TStringBuilder() << R"(
+            Name: ")" << name << R"("
+            PartitionConfig {
+                ColumnFamilies {
+                    Id: 0
+                    ColumnCodec: ColumnCodecLZ4
+                    StorageConfig { Data { PreferredPoolKind: "hdd-2" } }
+                }
+            }
+        )");
+        test.Env.TestWaitNotification(test.Runtime, test.TxId);
+        const auto description = DescribePrivatePath(test.Runtime, test.IndexPath + "/" + name, true);
+        const auto& family = description.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies(0);
+        UNIT_ASSERT_VALUES_EQUAL(family.GetColumnCodec(), NKikimrSchemeOp::ColumnCodecLZ4);
+        UNIT_ASSERT_VALUES_EQUAL(family.GetStorageConfig().GetData().GetPreferredPoolKind(), "hdd-2");
+        families.emplace(name, family);
+    }
+    for (ui32 round = 0; round != 2; ++round) {
+        const ui64 id = test.Start();
+        test.Wait(id, Ydb::Table::IndexBuildState::STATE_DONE);
+        test.Reboot();
+        TestDescribeResult(DescribePrivatePath(test.Runtime, test.TemporaryPath(id)), {NLs::PathNotExist});
+        test.CheckMetadata(DescribePrivatePath(test.Runtime, test.IndexPath).GetPathDescription().GetTableIndex());
+        for (const auto& [name, expected] : families) {
+            const auto description = DescribePrivatePath(test.Runtime, test.IndexPath + "/" + name, true);
+            const auto& config = description.GetPathDescription().GetTable().GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(config.ColumnFamiliesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(config.GetColumnFamilies(0).SerializeAsString(), expected.SerializeAsString(), name);
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(test.Runtime, test.SchemeShard, test.IndexPath + "/" + name),
+                test.LiveRows.at(name));
+        }
+    }
+    const auto base = DescribePath(test.Runtime, test.Table, true);
+    const auto& family = base.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies(0);
+    UNIT_ASSERT_VALUES_EQUAL(family.GetColumnCodec(), NKikimrSchemeOp::ColumnCodecPlain);
+    UNIT_ASSERT_VALUES_EQUAL(family.GetStorageConfig().GetData().GetPreferredPoolKind(), "hdd-1");
 }
 
 void Lifecycle(EKind kind) {
@@ -558,11 +643,12 @@ void Rejection(EKind kind, bool finalized = true) {
 Y_UNIT_TEST_SUITE(RebuildIndexLifecycle) {
 
 // Each kind runs the same public invariants, with real scans and all its implementation tables.
-// There is one success, one early cancellation and one post-finalization rejection per kind.
+// Each kind also retains implementation-table family settings over repeated rebuilds.
 #define REBUILD_INDEX_TESTS(Name) \
     Y_UNIT_TEST(Name##StagesAndReboots) { Lifecycle(EKind::Name); } \
     Y_UNIT_TEST(Name##CancelFilling) { Cancellation(EKind::Name); } \
-    Y_UNIT_TEST(Name##RejectReplacement) { Rejection(EKind::Name); }
+    Y_UNIT_TEST(Name##RejectReplacement) { Rejection(EKind::Name); } \
+    Y_UNIT_TEST(Name##PreservesColumnFamilies) { PreservesColumnFamilies(EKind::Name); }
 
     REBUILD_INDEX_TESTS(Sync)
     REBUILD_INDEX_TESTS(Async)

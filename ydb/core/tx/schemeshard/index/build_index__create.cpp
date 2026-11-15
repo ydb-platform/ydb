@@ -652,9 +652,16 @@ private:
                 const auto& oldConfig = implInfo.PartitionConfig();
                 auto& description = buildInfo.ImplTableDescriptions.at(position);
                 auto& config = *description.MutablePartitionConfig();
+                config.MutableColumnFamilies()->CopyFrom(oldConfig.GetColumnFamilies());
                 if (oldConfig.HasPartitioningPolicy()) {
+                    auto changes = config.GetPartitioningPolicy();
+                    if (!requested->partitioning_settings().min_partitions_count()
+                        && requested->partitions_case() == Ydb::Table::GlobalIndexSettings::PARTITIONS_NOT_SET) {
+                        // Creation defaults must not overwrite an omitted rebuild setting.
+                        changes.ClearMinPartitionsCount();
+                    }
                     auto policy = oldConfig.GetPartitioningPolicy();
-                    policy.MergeFrom(config.GetPartitioningPolicy());
+                    policy.MergeFrom(changes);
                     config.MutablePartitioningPolicy()->CopyFrom(policy);
                 }
                 if (!config.FollowerGroupsSize()) {

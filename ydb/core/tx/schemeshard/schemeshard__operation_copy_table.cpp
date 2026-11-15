@@ -696,6 +696,18 @@ public:
         PrepareScheme(&schema, name, srcTableInfo, context);
         schema.SetIsBackup(isBackup);
 
+        if (isBackup && omitFollowers) {
+            for (const auto& [indexName, indexPathId] : srcPath.Base()->GetChildren()) {
+                const auto indexPath = srcPath.Child(indexName);
+                if (indexPath.IsDeleted() || !indexPath.IsTableIndex()
+                    || context.SS->Indexes.at(indexPathId)->State != NKikimrSchemeOp::EIndexStateReady) {
+                    continue;
+                }
+                context.SS->DescribeTableIndex(indexPathId, indexName, true, false,
+                    *schema.AddBackupSourceIndexes());
+            }
+        }
+
         if (omitFollowers) {
             schema.MutablePartitionConfig()->AddFollowerGroups()->Clear();
         }

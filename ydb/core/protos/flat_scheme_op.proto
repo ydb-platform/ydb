@@ -437,6 +437,9 @@ message TTableDescription {
     // Actual number of table partitions (shards), always filled in describe
     // results, so clients don't need to request the TablePartitions list.
     optional uint64 PartitionCount = 55;
+
+    // Source index settings captured before backup copies omit their read replicas.
+    repeated TIndexDescription BackupSourceIndexes = 56;
 }
 
 message TCompressionOptions {

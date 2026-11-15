@@ -220,6 +220,25 @@ void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription
     }
 }
 
+static void RestoreIndexReadReplicas(NKikimrSchemeOp::TIndexDescription& index,
+    const NKikimrSchemeOp::TIndexDescription& source)
+{
+    // Both descriptions list implementation tables in child-name order.
+    for (int i = 0; i < index.IndexImplTableDescriptionsSize() && i < source.IndexImplTableDescriptionsSize(); ++i) {
+        auto& config = *index.MutableIndexImplTableDescriptions(i)->MutablePartitionConfig();
+        const auto& original = source.GetIndexImplTableDescriptions(i).GetPartitionConfig();
+        config.MutableFollowerGroups()->CopyFrom(original.GetFollowerGroups());
+        config.ClearFollowerCount();
+        config.ClearCrossDataCenterFollowerCount();
+        if (original.HasFollowerCount()) {
+            config.SetFollowerCount(original.GetFollowerCount());
+        }
+        if (original.HasCrossDataCenterFollowerCount()) {
+            config.SetCrossDataCenterFollowerCount(original.GetCrossDataCenterFollowerCount());
+        }
+    }
+}
+
 void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath) {
     if (!exportItemPath.IsResolved() && (!sourcePath.IsResolved() || !sourcePath->IsColumnTable())) {
         return;
@@ -244,8 +263,18 @@ void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, 
         for (auto& index : *table.MutableTableIndexes()) {
             for (const auto& copiedIndex : copiedTable.GetTableIndexes()) {
                 if (index.GetName() == copiedIndex.GetName()) {
+                    auto originalIndex = index;
                     // Materialized rows must retain their snapshot's analyzer and partitioning.
                     index = copiedIndex;
+                    const auto& snapshot = ss->Tables.at(exportItemPath.Base()->PathId)->TableDescription;
+                    for (const auto& savedIndex : snapshot.GetBackupSourceIndexes()) {
+                        if (savedIndex.GetName() == index.GetName()) {
+                            originalIndex = savedIndex;
+                            break;
+                        }
+                    }
+                    // Older snapshots fall back to the source description.
+                    RestoreIndexReadReplicas(index, originalIndex);
                     break;
                 }
             }

@@ -80,6 +80,72 @@ void PrepareJoinKeys(TOpJoin& join, TPlanProps& props) {
     join.JoinFilters = std::move(remaining);
 }
 
+TIntrusivePtr<IOperator> BuildGroupingSetBranches(const NFrontend::TRelation& relation,
+    const std::vector<NFrontend::TColumn>& columns, const TIntrusivePtr<IOperator>& input,
+    TPlanProps& props, NYql::TPositionHandle pos) {
+    const auto& arena = props.NativeExpressions;
+    const auto expression = [&](NFrontend::TExprId value) {
+        return TExpression::FromNative(arena, value, &props, pos);
+    };
+    // Lower once to executable branches. A GroupingSets wrapper
+    // requires an untouched aggregate child; expanding DISTINCT
+    // below it would change that child's meaning and structure.
+    const bool multiple = relation.GroupingSets.size() > 1;
+    auto& registry = props.InfoUnitRegistry;
+    auto hub = multiple ? TReplicate::Create(input, pos, registry) : TIntrusivePtr<TReplicate>{};
+    TVector<TIntrusivePtr<IOperator>> branches;
+    TMappedIUs<TUnionInputRow> rows;
+    for (auto output : relation.Columns) rows.Add(output);
+    for (const auto& set : relation.GroupingSets) {
+        auto port = hub ? hub->AddOutput() : nullptr;
+        const auto* renames = port && !port->IsPrimary() ? &port->GetRebindings() : nullptr;
+        auto rebind = [&](TInfoUnitId source) { return renames ? renames->At(source) : source; };
+        const std::unordered_set<NFrontend::TColumnId> present(set.begin(), set.end());
+        TOrderedIUs<> branchKeys;
+        TMappedIUs<TInfoUnitId> values;
+        std::unordered_map<NFrontend::TColumnId, NFrontend::TType> types;
+        for (auto key : set) {
+            branchKeys.Append(rebind(key)); values.Add(key, rebind(key));
+            types.emplace(key, columns[key].Type);
+        }
+        TAggregationIUs traits;
+        for (const auto& aggregate : relation.Aggregates) {
+            const auto value = registry.AddCopy(aggregate.Output);
+            values.Add(aggregate.Output, value);
+            auto type = columns[aggregate.Output].Type;
+            if (set.empty() && aggregate.Function != "count") type = type.Optional();
+            traits.Add(value, TOpAggregationTraits{rebind(aggregate.Input), AggregateName(aggregate.Function), aggregate.Distinct, false,
+                aggregate.Function == "avg" ? std::optional{type} : std::nullopt});
+            types.emplace(aggregate.Output, type);
+        }
+        TIntrusivePtr<IOperator> branch = MakeIntrusive<TOpAggregate>(port ? port : input,
+            std::move(traits), std::move(branchKeys), EOpPhase::Undefined, false, pos);
+        TMapIUs padding;
+        auto add = [&](TInfoUnitId output, NFrontend::TExprId value) {
+            const auto column = multiple ? registry.AddCopy(output) : output;
+            padding.Add(column, TMapElement(expression(value)));
+            rows.At(output).Inputs.push_back(column);
+        };
+        for (const auto& [output, source] : relation.GroupingColumns) {
+            const auto type = columns[output].Type;
+            const auto* value = values.Find(source);
+            auto scalar = value ? arena->Column(*value, types.at(source), relation.Position)
+                : arena->Literal(type, std::monostate{}, relation.Position);
+            add(output, arena->Convert(scalar, type, relation.Position));
+        }
+        for (const auto& [output, key] : relation.GroupingIndicators)
+            add(output, arena->Literal({NFrontend::ETypeKind::Uint64}, std::uint64_t{present.contains(key) ? 0u : 1u}, relation.Position));
+        if (!padding.Keys().Empty()) branch = MakeIntrusive<TOpMap>(branch, pos, std::move(padding));
+        branches.push_back(std::move(branch));
+    }
+    if (multiple) {
+        TUnionAllIUs outputs(TUnionInputPolicy{branches.size()});
+        for (auto output : relation.Columns) outputs.Add(output, std::move(rows.At(output)));
+        return MakeIntrusive<TOpUnionAll>(std::move(branches), pos, std::move(outputs), false);
+    }
+    return std::move(branches.front());
+}
+
 void ApplyPlannerSettings(const std::vector<NFrontend::TPlannerSetting>& settings, NYql::TKikimrConfiguration* config) {
     using S = NFrontend::EPlannerSetting;
     if (settings.empty()) return;
@@ -408,62 +474,7 @@ TNativeQuery ConvertNativeToRbo(NFrontend::TCompiledProgram compiled,
                         op = MakeIntrusive<TOpAggregate>(input(), std::move(aggregates), std::move(keys), EOpPhase::Undefined, relation.DistinctAll, pos);
                         break;
                     }
-                    // Lower once to executable branches. A GroupingSets wrapper
-                    // requires an untouched aggregate child; expanding DISTINCT
-                    // below it would change that child's meaning and structure.
-                    const bool multiple = relation.GroupingSets.size() > 1;
-                    auto& registry = props.InfoUnitRegistry;
-                    auto hub = multiple ? TReplicate::Create(input(), pos, registry) : TIntrusivePtr<TReplicate>{};
-                    TVector<TIntrusivePtr<IOperator>> branches;
-                    TMappedIUs<TUnionInputRow> rows;
-                    for (auto output : relation.Columns) rows.Add(output);
-                    for (const auto& set : relation.GroupingSets) {
-                        auto port = hub ? hub->AddOutput() : nullptr;
-                        const auto* renames = port && !port->IsPrimary() ? &port->GetRebindings() : nullptr;
-                        auto rebind = [&](TInfoUnitId source) { return renames ? renames->At(source) : source; };
-                        const std::unordered_set<NFrontend::TColumnId> present(set.begin(), set.end());
-                        TOrderedIUs<> branchKeys;
-                        TMappedIUs<TInfoUnitId> values;
-                        std::unordered_map<NFrontend::TColumnId, NFrontend::TType> types;
-                        for (auto key : set) {
-                            branchKeys.Append(rebind(key)); values.Add(key, rebind(key));
-                            types.emplace(key, program.Columns[key].Type);
-                        }
-                        TAggregationIUs traits;
-                        for (const auto& aggregate : relation.Aggregates) {
-                            const auto value = registry.AddCopy(aggregate.Output);
-                            values.Add(aggregate.Output, value);
-                            auto type = program.Columns[aggregate.Output].Type;
-                            if (set.empty() && aggregate.Function != "count") type = type.Optional();
-                            traits.Add(value, TOpAggregationTraits{rebind(aggregate.Input), AggregateName(aggregate.Function), aggregate.Distinct, false,
-                                aggregate.Function == "avg" ? std::optional{type} : std::nullopt});
-                            types.emplace(aggregate.Output, type);
-                        }
-                        TIntrusivePtr<IOperator> branch = MakeIntrusive<TOpAggregate>(port ? port : input(),
-                            std::move(traits), std::move(branchKeys), EOpPhase::Undefined, false, pos);
-                        TMapIUs padding;
-                        auto add = [&](TInfoUnitId output, NFrontend::TExprId value) {
-                            const auto column = multiple ? registry.AddCopy(output) : output;
-                            padding.Add(column, TMapElement(expression(value)));
-                            rows.At(output).Inputs.push_back(column);
-                        };
-                        for (const auto& [output, source] : relation.GroupingColumns) {
-                            const auto type = program.Columns[output].Type;
-                            const auto* value = values.Find(source);
-                            auto scalar = value ? arena->Column(*value, types.at(source), relation.Position)
-                                : arena->Literal(type, std::monostate{}, relation.Position);
-                            add(output, arena->Convert(scalar, type, relation.Position));
-                        }
-                        for (const auto& [output, key] : relation.GroupingIndicators)
-                            add(output, arena->Literal({NFrontend::ETypeKind::Uint64}, std::uint64_t{present.contains(key) ? 0u : 1u}, relation.Position));
-                        if (!padding.Keys().Empty()) branch = MakeIntrusive<TOpMap>(branch, pos, std::move(padding));
-                        branches.push_back(std::move(branch));
-                    }
-                    if (multiple) {
-                        TUnionAllIUs outputs(TUnionInputPolicy{branches.size()});
-                        for (auto output : relation.Columns) outputs.Add(output, std::move(rows.At(output)));
-                        op = MakeIntrusive<TOpUnionAll>(std::move(branches), pos, std::move(outputs), false);
-                    } else op = std::move(branches.front());
+                    op = BuildGroupingSetBranches(relation, program.Columns, input(), props, pos);
                     break;
                 }
                 case R::Sort: {

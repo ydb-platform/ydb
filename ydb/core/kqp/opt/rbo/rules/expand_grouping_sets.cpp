@@ -1,22 +1,11 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 
-#include <yql/essentials/core/yql_expr_type_annotation.h>
-
 namespace NKikimr::NKqp {
 
 namespace {
 
-using namespace NYql;
-using namespace NYql::NNodes;
-
-// Makes a null column.
-
-
-// Makes an optional column.
-
-
-TExpression BuildGroupingIndicatorColumn(bool aggregatedAway, TPositionHandle pos, TPlanProps& props) {
+TExpression BuildGroupingIndicatorColumn(bool aggregatedAway, NYql::TPositionHandle pos, TPlanProps& props) {
     return MakeConstant("Uint64", aggregatedAway ? "1" : "0", pos, &props);
 }
 
@@ -100,24 +89,23 @@ TIntrusivePtr<IOperator> TExpandGroupingSetsRule::SimpleMatchAndApply(const TInt
             return TExpression::FromNative(arena, arena->Convert(value, type.Optional()), &props, aggregate->Pos);
         };
         for (const auto key : groupByKeys.Items()) {
-
-                const auto type = sourceInput->GetNativeIUType(key);
-                if (!groupKeys.Contains(key)) {
-                    const auto& arena = props.NativeExpressions;
-                    addValue(key, TExpression::FromNative(arena, arena->Literal(type.Optional(), std::monostate{}), &props, aggregate->Pos));
-                } else if (!commonKeys.Contains(key) && !type.OptionalDepth) addValue(key, nativeOptional(values.At(key), type));
-
+            const auto type = sourceInput->GetNativeIUType(key);
+            if (!groupKeys.Contains(key)) {
+                const auto& arena = props.NativeExpressions;
+                addValue(key, TExpression::FromNative(arena, arena->Literal(type.Optional(), std::monostate{}), &props, aggregate->Pos));
+            } else if (!commonKeys.Contains(key) && !type.OptionalDepth) {
+                addValue(key, nativeOptional(values.At(key), type));
+            }
         }
         if (!groupKeys.Empty()) {
             for (const auto& [output, source] : groupingSetsOp->GetColumns().Items()) {
                 if (!aggregate->GetAggregationTraits().Keys().Contains(source)) {
                     continue;
                 }
-
-                    const auto sourceType = aggregate->GetNativeIUType(source);
-                    if (!sourceType.OptionalDepth && groupingSetsOp->GetNativeIUType(output).OptionalDepth)
-                        addValue(source, nativeOptional(values.At(source), sourceType));
-
+                const auto sourceType = aggregate->GetNativeIUType(source);
+                if (!sourceType.OptionalDepth && groupingSetsOp->GetNativeIUType(output).OptionalDepth) {
+                    addValue(source, nativeOptional(values.At(source), sourceType));
+                }
             }
         }
         for (const auto& [output, key] : groupingSetsOp->GetGroupingIndicators().Items()) {

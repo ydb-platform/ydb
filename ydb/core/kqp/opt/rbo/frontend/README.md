@@ -102,6 +102,13 @@ semantics. Preparation preserves evaluation order: for example, the left operand
 of AND keeps its FALSE-versus-NULL distinction because that controls evaluation
 of the right operand. Nullable membership bounds become visible to the existing
 range rules without a YQL scalar rewrite or a change to range-selection policy.
+Legacy IN keeps lookup-null propagation as one native `InResult` operation,
+shared by fixed collections and subqueries. It evaluates the lookup before its
+match and preserves the distinction between a NULL lookup and NULL collection
+items. The range adapter exposes a direct scalar-column membership only in a
+positive predicate context; scalar results and membership under NOT retain the
+original operation. General IF expressions retain their control flow. Only
+`IF(condition, true, false/NULL)` reduces to its condition at a filter boundary.
 Filters require `Bool` or `Bool?`; a present optional wrapper around a required
 Boolean can be removed here. Constant folding tracks conservative totality in
 its existing traversal, so Boolean identities and known null checks can simplify

@@ -224,7 +224,7 @@ static void RestoreIndexReadReplicas(NKikimrSchemeOp::TIndexDescription& index,
     const NKikimrSchemeOp::TIndexDescription& source)
 {
     // Both descriptions list implementation tables in child-name order.
-    for (int i = 0; i < index.IndexImplTableDescriptionsSize() && i < source.IndexImplTableDescriptionsSize(); ++i) {
+    for (size_t i = 0; i < index.IndexImplTableDescriptionsSize() && i < source.IndexImplTableDescriptionsSize(); ++i) {
         auto& config = *index.MutableIndexImplTableDescriptions(i)->MutablePartitionConfig();
         const auto& original = source.GetIndexImplTableDescriptions(i).GetPartitionConfig();
         config.MutableFollowerGroups()->CopyFrom(original.GetFollowerGroups());

@@ -176,9 +176,9 @@ struct TRebuildTest {
                     Id: 0
                     ColumnCodec: ColumnCodecPlain
                     StorageConfig {
-                        SysLog { PreferredPoolKind: "hdd-1" }
-                        Log { PreferredPoolKind: "hdd-1" }
-                        Data { PreferredPoolKind: "hdd-1" }
+                        SysLog { PreferredPoolKind: "pool-kind-1" }
+                        Log { PreferredPoolKind: "pool-kind-1" }
+                        Data { PreferredPoolKind: "pool-kind-1" }
                     }
                 }
             }
@@ -452,36 +452,35 @@ void PreservesColumnFamilies(EKind kind) {
                 ColumnFamilies {
                     Id: 0
                     ColumnCodec: ColumnCodecLZ4
-                    StorageConfig { Data { PreferredPoolKind: "hdd-2" } }
+                    StorageConfig { Data { PreferredPoolKind: "pool-kind-2" } }
                 }
             }
         )");
         test.Env.TestWaitNotification(test.Runtime, test.TxId);
         const auto description = DescribePrivatePath(test.Runtime, test.IndexPath + "/" + name, true);
         const auto& family = description.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies(0);
-        UNIT_ASSERT_VALUES_EQUAL(family.GetColumnCodec(), NKikimrSchemeOp::ColumnCodecLZ4);
-        UNIT_ASSERT_VALUES_EQUAL(family.GetStorageConfig().GetData().GetPreferredPoolKind(), "hdd-2");
+        UNIT_ASSERT_C(family.GetColumnCodec() == NKikimrSchemeOp::ColumnCodecLZ4, family.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(family.GetStorageConfig().GetData().GetPreferredPoolKind(), "pool-kind-2");
         families.emplace(name, family);
     }
     for (ui32 round = 0; round != 2; ++round) {
         const ui64 id = test.Start();
         test.Wait(id, Ydb::Table::IndexBuildState::STATE_DONE);
         test.Reboot();
-        TestDescribeResult(DescribePrivatePath(test.Runtime, test.TemporaryPath(id)), {NLs::PathNotExist});
-        test.CheckMetadata(DescribePrivatePath(test.Runtime, test.IndexPath).GetPathDescription().GetTableIndex());
+        test.CheckFinished(id, true);
         for (const auto& [name, expected] : families) {
             const auto description = DescribePrivatePath(test.Runtime, test.IndexPath + "/" + name, true);
             const auto& config = description.GetPathDescription().GetTable().GetPartitionConfig();
             UNIT_ASSERT_VALUES_EQUAL(config.ColumnFamiliesSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL_C(config.GetColumnFamilies(0).SerializeAsString(), expected.SerializeAsString(), name);
-            UNIT_ASSERT_VALUES_EQUAL(CountRows(test.Runtime, test.SchemeShard, test.IndexPath + "/" + name),
-                test.LiveRows.at(name));
+            UNIT_ASSERT_VALUES_EQUAL_C(config.GetColumnFamilies(0).SerializeAsString(), expected.SerializeAsString(),
+                name << ": actual " << config.GetColumnFamilies(0).ShortDebugString()
+                    << "; expected " << expected.ShortDebugString());
         }
     }
     const auto base = DescribePath(test.Runtime, test.Table, true);
     const auto& family = base.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies(0);
-    UNIT_ASSERT_VALUES_EQUAL(family.GetColumnCodec(), NKikimrSchemeOp::ColumnCodecPlain);
-    UNIT_ASSERT_VALUES_EQUAL(family.GetStorageConfig().GetData().GetPreferredPoolKind(), "hdd-1");
+    UNIT_ASSERT_C(family.GetColumnCodec() == NKikimrSchemeOp::ColumnCodecPlain, family.ShortDebugString());
+    UNIT_ASSERT_VALUES_EQUAL(family.GetStorageConfig().GetData().GetPreferredPoolKind(), "pool-kind-1");
 }
 
 void Lifecycle(EKind kind) {

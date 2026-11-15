@@ -234,12 +234,10 @@ void CheckExport(TIndexedExportTable& table, const TFsPath& basePath, const TStr
     UNIT_ASSERT_VALUES_EQUAL(settings->partitioning_settings().partition_size_mb(), 64);
     UNIT_ASSERT(settings->has_read_replicas_settings());
     if (table.PerAzReplicas) {
-        UNIT_ASSERT_VALUES_EQUAL(settings->read_replicas_settings().settings_case(),
-            Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount);
+        UNIT_ASSERT_C(settings->read_replicas_settings().has_per_az_read_replicas_count(), scheme);
         UNIT_ASSERT_VALUES_EQUAL(settings->read_replicas_settings().per_az_read_replicas_count(), 1);
     } else {
-        UNIT_ASSERT_VALUES_EQUAL(settings->read_replicas_settings().settings_case(),
-            Ydb::Table::ReadReplicasSettings::kAnyAzReadReplicasCount);
+        UNIT_ASSERT_C(settings->read_replicas_settings().has_any_az_read_replicas_count(), scheme);
         UNIT_ASSERT_VALUES_EQUAL(settings->read_replicas_settings().any_az_read_replicas_count(), 1);
     }
 

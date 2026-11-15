@@ -61,3 +61,25 @@ def _FILTER_PY_COVERAGE(unit: Unit):
     filters = get_coverage_filters(unit)
     if should_be_covered(unit, filters):
         unit.on_enable_python_coverage()
+
+
+@macro
+def _FILTER_JAVA_COVERAGE(unit: Unit):
+    """
+    Decide what a jar module emits for Java coverage.
+    Without JAVA_COVERAGE_SOURCE_FILTER every module emits the .cpsf source list and every class is
+    covered. With the filter only the modules whose path matches it emit .cpsf and, in addition, the
+    .covcls class list that narrows the jacoco agent and the coverage report down to their classes;
+    the other modules keep the regular build command, so their outputs stay cache-compatible with
+    a build without coverage.
+    The filter is separate from COVERAGE_TARGET_REGEXP, which for Java is also used as a package
+    prefix of the report, so a path cannot be told from a package there.
+    """
+    if unit.get("JAVA_COVERAGE") != "yes":
+        return
+    source_filter = unit.get("JAVA_COVERAGE_SOURCE_FILTER")
+    if not source_filter:
+        unit.on_enable_java_coverage_srclist()
+    elif re.match(get_coverage_filter_regexp(source_filter), _common.get_norm_unit_path(unit)):
+        unit.on_enable_java_coverage_srclist()
+        unit.on_enable_java_coverage_classlist()

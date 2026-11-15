@@ -29,7 +29,9 @@ CANON_RESULT_FILE_NAME = "result.json"
 CANONIZATION_RESULT_FILE_NAME = "canonization_res.json"
 COMMON_CONTEXT_FILE_NAME = "common_test.context"
 CONSOLE_SNIPPET_LIMIT = 5000
-FAKE_OUTPUT_EXTS = frozenset([".mf", ".fake", ".cpf", ".cpsf"])
+# Lists the class files compiled by a jar module that passed the coverage filters, lies next to the jar
+JAVA_COVERAGE_CLASSES_EXT = ".covcls"
+FAKE_OUTPUT_EXTS = frozenset([".mf", ".fake", ".cpf", ".cpsf", JAVA_COVERAGE_CLASSES_EXT])
 LIST_NODE_LOG_FILE = "test_list.log"
 LIST_NODE_RESULT_FILE = "test_list.json"
 LIST_RESULT_NODE_LOG_FILE = "list_result.log"

@@ -21,7 +21,7 @@ inline TString LoadBenchmarkQuery(EBenchType type, ui32 queryId) {
     const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
     const TString round = R"($round = ($x,$y) -> {return $x;};)";
     return toDecimal + "\n" + toDecimalMax + "\n" + round + "\n"
-        + GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+        + ReadBenchmarkQuery(type, queryId);
 }
 
 // Expand the same table placeholders and header as the original performance

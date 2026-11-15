@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/rbo/effects/kqp_effects_guard_helpers.h>
+#include <ydb/core/kqp/ut/rbo/kqp_rbo_yql_query_helpers.h>
 
 namespace NKikimr::NKqp {
 
@@ -8,27 +9,28 @@ using namespace NEffectsGuardTests;
 
 Y_UNIT_TEST_SUITE(KqpRboEffectsGuardsFallback) {
     Y_UNIT_TEST(SelectAndWriteSharedRandomInput) {
-        // A result and an effect consume the same random row producer. The guard
-        // must detect sharing across these root kinds and route to legacy planning.
-        TKikimrRunner kikimr(TKikimrSettings(GuardConfig()).SetWithSampleTables(false));
+        // A result and an effect consume the same random row producer. RBO must
+        // materialize it once so the returned and stored values agree.
+        TKikimrRunner kikimr(TKikimrSettings(GuardConfig(false)).SetWithSampleTables(false));
         CreateTables(kikimr);
         auto client = kikimr.GetQueryClient();
+        const auto before = NYqlTests::GetNewRBOCompileCounters(kikimr);
         auto result = client.ExecuteQuery(R"(
             $rows = SELECT 1ul AS k, RandomNumber(1) AS v;
             SELECT k, v FROM $rows;
             UPSERT INTO A SELECT k, v FROM $rows;
         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "shared non-repeatable input");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto after = NYqlTests::GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT(after.first > before.first);
+        UNIT_ASSERT_VALUES_EQUAL(after.second, before.second);
         auto stored = client.ExecuteQuery("SELECT k, Unwrap(v) AS v FROM A;", TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(stored.IsSuccess(), stored.GetIssues().ToString());
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Compilation with the new RBO failed");
         UNIT_ASSERT_VALUES_EQUAL(stored.GetResultSet(0).RowsCount(), 1);
-        // Legacy reads and writes can evaluate the input in separate phases.
-        // Check routing and both results without requiring equal random values.
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
         UNIT_ASSERT(!FormatResultSetYson(result.GetResultSet(0)).Contains("#"));
-        UNIT_ASSERT(!FormatResultSetYson(stored.GetResultSet(0)).Contains("#"));
+        CompareYson(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(stored.GetResultSet(0)),
+            "the result and effect must share the same random value");
     }
 
     Y_UNIT_TEST(GeneratedPartialUpsert) {

@@ -30,6 +30,7 @@ struct TTableMetadata {
     TVector<TString> KeyColumns;
     bool HasWriteIndexes = false;
     bool HasDefaults = false;
+    bool HasGeneratedColumns = false;
 };
 
 using TTableMetadataPtr = std::shared_ptr<const TTableMetadata>;

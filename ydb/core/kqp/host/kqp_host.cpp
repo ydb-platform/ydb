@@ -2766,6 +2766,7 @@ private:
                         || bool(column.DefaultExpression);
                     snapshot->Columns.push_back({column.Name, column.Id, FormatType(type), column.NotNull, hasDefault});
                     snapshot->HasDefaults |= hasDefault;
+                    snapshot->HasGeneratedColumns |= bool(column.DefaultExpression);
                 };
                 // Catalog order determines native star expansion and result columns.
                 if (metadata.ColumnOrder.empty()) {

@@ -197,12 +197,18 @@ public:
         for (ui32 i = 0, e = (ui32)record.ResultSize(); i != e; ++i) {
             const NKikimrBlobStorage::TQueryResult &result = record.GetResult(i);
             Y_ABORT_UNLESS(result.HasStatus());
-            NKikimrProto::EReplyStatus replyStatus = result.GetStatus();
+            const NKikimrProto::EReplyStatus replyStatus = result.GetStatus();
             Y_ABORT_UNLESS(result.HasBlobID());
             const TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(result.GetBlobID());
 
             TRope resultBuffer = ev.GetBlobData(result);
             ui32 resultShift = result.HasShift() ? result.GetShift() : 0;
+
+            vgetResult.AddSubrequestResult(blobId, replyStatus, resultShift, resultBuffer.size());
+
+            if (ReportDetailedPartMap) {
+                Blackboard.ReportPartMapStatus(blobId, result.GetCookie(), ResponseIndex, replyStatus);
+            }
 
             // Currently CRC can be checked only if blob part is fully read
             if (resultShift == 0 && resultBuffer.size() == Info->Type.PartSize(blobId)) {
@@ -211,15 +217,8 @@ public:
                     DSP_LOG_ERROR_SX(logCtx, "BPG66", "Error in CheckCrcAtTheEnd on TEvVGetResult, blobId# " << blobId
                             << " resultShift# " << resultShift << " resultBuffer.Size()# " << resultBuffer.size());
                     NKikimrBlobStorage::TQueryResult *mutableResult = ev.Record.MutableResult(i);
-                    replyStatus = NKikimrProto::ERROR;
-                    mutableResult->SetStatus(replyStatus);
+                    mutableResult->SetStatus(NKikimrProto::ERROR);
                 }
-            }
-
-            vgetResult.AddSubrequestResult(blobId, replyStatus, resultShift, resultBuffer.size());
-
-            if (ReportDetailedPartMap) {
-                Blackboard.ReportPartMapStatus(blobId, result.GetCookie(), ResponseIndex, replyStatus);
             }
 
             if (result.HasKeep() || result.HasDoNotKeep()) {

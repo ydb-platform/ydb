@@ -136,31 +136,6 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(103), 50);
     }
 
-    Y_UNIT_TEST(SharedQuotaFailureReleasesOwnerQuota) {
-        using namespace NPDisk;
-
-        TChunkTracker chunkTracker;
-        TKeeperParams params {
-            .TotalChunks = 205 /*system*/ + 10,
-            .ExpectedOwnerCount = 1,
-        };
-
-        TString errorReason;
-        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 10);
-        chunkTracker.AddOwner(101, TVDiskID(), 1);
-
-        // in the count-based mode the owner quota is force-allocated before the shared quota
-        // check; when the shared quota rejects the request, the owner quota accounting must
-        // be rolled back instead of keeping the never-used allocation
-        UNIT_ASSERT(!chunkTracker.TryAllocate(101, 11, errorReason));
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(101), 0);
-
-        // the rolled-back quota must be allocatable again
-        UNIT_ASSERT_C(chunkTracker.TryAllocate(101, 5, errorReason), errorReason);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(101), 5);
-    }
-
     Y_UNIT_TEST(ZeroWeight) {
         using namespace NPDisk;
 

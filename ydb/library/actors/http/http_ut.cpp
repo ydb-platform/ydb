@@ -993,7 +993,8 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT(request);
         NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nContent-Length: 6\r\n\r\npassed");
         actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
-        auto* response = GrabHttpReply<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(actorSystem, clientId, handle);
+        auto* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle, TDuration::Seconds(10));
+        UNIT_ASSERT(response);
         UNIT_ASSERT_EQUAL(response->Response->Status, "200");
 
         // Both connections report their sensors to the proxy once the reply is built.

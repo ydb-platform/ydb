@@ -1027,6 +1027,51 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(SiblingVolatileFulltextQueriesKeepOwnValues, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        for (bool reverse : {false, true}) {
+            const TString first = reverse ? "$right" : "$left";
+            const TString second = reverse ? "$left" : "$right";
+            const TString query = SearchPragma + R"sql(
+                $base = IF(Random(true) < 0.5, "cats"u, "dogs"u);
+                $left = $base || " "u;
+                $right = " "u || $base;
+                SELECT Key, $left AS LeftQuery, $right AS RightQuery FROM `/Root/Docs`
+                ORDER BY HybridRank(
+            )sql" + "FullTextScore(Text, " + first + "), FullTextScore(Text, " + second
+                + "), (4, 4) AS Limits) LIMIT 4;";
+            for (ui32 iteration = 0; iteration < 16; ++iteration) {
+                const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                TResultSetParser parser(result.GetResultSet(0));
+                std::vector<ui64> keys;
+                TString left;
+                TString right;
+                while (parser.TryNextRow()) {
+                    keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
+                    const TString currentLeft(parser.ColumnParser("LeftQuery").GetUtf8());
+                    const TString currentRight(parser.ColumnParser("RightQuery").GetUtf8());
+                    if (left.empty()) {
+                        left = currentLeft;
+                        right = currentRight;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(currentLeft, left);
+                    UNIT_ASSERT_VALUES_EQUAL(currentRight, right);
+                }
+                UNIT_ASSERT_C(left == "cats " || left == "dogs ", left);
+                UNIT_ASSERT_C(right == " cats" || right == " dogs", right);
+                // Neither sibling is the shared base itself. Both correlated and
+                // independent base evaluations are legal; each root must stay coherent.
+                const std::set<ui64> expected = left == "cats " && right == " cats"
+                    ? std::set<ui64>{1u, 3u}
+                    : left == "dogs " && right == " dogs" ? std::set<ui64>{2u} : std::set<ui64>{1u, 2u, 3u};
+                AssertKeySet(keys, expected);
+            }
+        }
+    }
+
     Y_UNIT_TEST(ReadBackedFulltextQueryPreservesPrefixedResiduals) {
         auto kikimr = MakeRunnerWithCompact(/*compact=*/true, /*enableFulltextPrefix=*/true);
         auto db = kikimr.GetQueryClient();
@@ -1064,6 +1109,106 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         AssertKeySet(RunKeys(db, query, params(1, "a", 2), true), {});
         AssertKeySet(RunKeys(db, query, params(1, "missing"), true), {});
         AssertKeySet(RunKeys(db, query, params(4, "a"), true), {1u});
+    }
+
+    Y_UNIT_TEST(SharedFulltextQueryRespectsPrefixValueRestrictions) {
+        auto kikimr = MakeRunnerWithCompact(/*compact=*/true, /*enableFulltextPrefix=*/true);
+        auto db = kikimr.GetQueryClient();
+        CreateDocs(db);
+        UpsertDocs(db);
+        ExecOk(db, R"sql(
+            UPSERT INTO `/Root/Docs` (Key, Category) VALUES
+                (1u, "cats"u), (2u, "dogs"u), (3u, "cats"u), (4u, "birds"u);
+        )sql");
+        AddPrefixedFulltextIndex(db);
+        AddPrefixedVectorIndex(db);
+        const auto params = [](const TString& term) {
+            return TParamsBuilder()
+                .AddParam("$term").Utf8(term).Build()
+                .AddParam("$filter").BeginStruct()
+                    .AddMember("Term").Utf8(term)
+                .EndStruct().Build()
+                .Build();
+        };
+        const auto queryFor = [](const TString& expression) {
+            return TargetDeclWith(R"sql(
+                DECLARE $term AS Utf8;
+                DECLARE $filter AS Struct<Term: Utf8>;
+            )sql") + "$search = " + expression + ";" + R"sql(
+                SELECT Key FROM `/Root/Docs`
+                WHERE Category = $search AND Text LIKE ("%"u || $search || "%"u)
+                ORDER BY HybridRank(
+                    FullTextScore(Text, $search), Knn::CosineDistance(Embedding, $target),
+                    ("ft_idx", "vp_idx") AS Indexes, (4, 4) AS Limits)
+                LIMIT 4;
+            )sql";
+        };
+        for (const TString& expression : {TString("$term"), TString("$filter.Term")}) {
+            const TString query = queryFor(expression);
+            AssertKeySet(RunKeys(db, query, params("cats"), false), {1u, 3u});
+            AssertKeySet(RunKeys(db, query, params("dogs"), true), {2u});
+            AssertKeySet(RunKeys(db, query, params("absent"), true), {});
+        }
+        AssertKeySet(RunKeys(db, queryFor("\"cats\"u"), params("dogs")), {1u, 3u});
+        // A raw volatile expression is not a supported prefix binding. It must
+        // fail validation instead of becoming a second, independently evaluated key.
+        UNIT_ASSERT_STRING_CONTAINS(RunBadRequestIssues(db,
+            queryFor("IF(Random(true) < 0.5, $term, \"dogs\"u)"), params("cats")),
+            "requires equality predicates on every prefix column");
+    }
+
+    Y_UNIT_TEST_TWIN(FulltextDerivedLimitsRespectEvaluationPhases, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        const auto queryFor = [](const TString& expression, bool explicitLimits) {
+            return TargetDeclWith("DECLARE $term AS Utf8;") + "$search = " + expression + ";" + R"sql(
+                $limit = IF(LENGTH($search) > 4ul, 2ul, 1ul);
+                SELECT Key, $search AS Search FROM `/Root/Docs`
+                ORDER BY HybridRank(
+                    FullTextScore(Text, $search), Knn::CosineDistance(Embedding, $target)
+            )sql" + (explicitLimits ? ", (4, 4) AS Limits" : "") + ") LIMIT $limit;";
+        };
+        for (const TString& expression : {TString("\"cats\"u"), TString("$term"),
+                TString("IF(Random(true) < 0.5, \"cats\"u, \"dogs run\"u)")}) {
+            const bool volatileQuery = expression.StartsWith("IF(");
+            const TString query = queryFor(expression, true);
+            for (ui32 iteration = 0; iteration < (volatileQuery ? 16u : 2u); ++iteration) {
+                const TString term = iteration % 2 == 0 ? "cats" : "dogs run";
+                const auto params = TParamsBuilder().AddParam("$term").Utf8(term).Build().Build();
+                const auto result = db.ExecuteQuery(query, TTxControl::NoTx(), params).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                TResultSetParser parser(result.GetResultSet(0));
+                std::vector<ui64> keys;
+                TString search;
+                while (parser.TryNextRow()) {
+                    keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
+                    const TString current(parser.ColumnParser("Search").GetUtf8());
+                    if (search.empty()) {
+                        search = current;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(current, search);
+                }
+                UNIT_ASSERT_C(search == "cats" || search == "dogs run", search);
+                if (volatileQuery) {
+                    // The count can evaluate its named expression in another phase.
+                    // Both legal counts must still retain the correct ranking prefix.
+                    UNIT_ASSERT_C(keys.size() == 1 || keys.size() == 2, keys.size());
+                } else {
+                    const TString expected = expression == "$term" ? term : "cats";
+                    UNIT_ASSERT_VALUES_EQUAL(search, expected);
+                    UNIT_ASSERT_VALUES_EQUAL(keys.size(), search == "cats" ? 1 : 2);
+                }
+                std::vector<ui64> expected = search == "cats"
+                    ? std::vector<ui64>{1u, 3u} : std::vector<ui64>{2u, 1u};
+                expected.resize(keys.size());
+                UNIT_ASSERT_VALUES_EQUAL(keys, expected);
+            }
+        }
+        const auto params = TParamsBuilder().AddParam("$term").Utf8("cats").Build().Build();
+        UNIT_ASSERT_STRING_CONTAINS(RunBadRequestIssues(db,
+            queryFor("IF(Random(true) < 0.5, \"cats\"u, \"dogs run\"u)", false), params),
+            "requires a literal LIMIT");
     }
 
     Y_UNIT_TEST_TWIN(ReadBackedFulltextQueriesWithDynamicPagination, Compact) {

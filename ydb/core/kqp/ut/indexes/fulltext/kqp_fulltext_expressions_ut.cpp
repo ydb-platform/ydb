@@ -620,6 +620,49 @@ Y_UNIT_TEST_TWIN(DependentSearchExpressionsSharePrecompute, Compact) {
     }
 }
 
+Y_UNIT_TEST_TWIN(SharedVolatileDescendantsKeepQueryRootsConsistent, Compact) {
+    TExpressionFixture fixture({.Compact = Compact});
+    for (bool reverse : {false, true}) {
+        const TString first = reverse ? "$right" : "$left";
+        const TString second = reverse ? "$left" : "$right";
+        const TString query = fixture.Declarations() + R"sql(
+            $base = IF(Random($choose) < 0.5, $q, $other);
+            $left = $base || " "u;
+            $right = " "u || $base;
+            SELECT Id, $left AS LeftQuery, $right AS RightQuery
+            FROM `/Root/Docs` VIEW fulltext_idx WHERE
+        )sql" + "FulltextMatch(Text, " + first + ") AND FulltextMatch(Text, " + second + ") ORDER BY Id;";
+        for (ui32 iteration = 0; iteration < 16; ++iteration) {
+            const auto result = fixture.Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                fixture.Parameters()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            TVector<ui64> ids;
+            TString left;
+            TString right;
+            while (parser.TryNextRow()) {
+                ids.push_back(parser.ColumnParser("Id").GetUint64());
+                const TString currentLeft(parser.ColumnParser("LeftQuery").GetUtf8());
+                const TString currentRight(parser.ColumnParser("RightQuery").GetUtf8());
+                if (left.empty()) {
+                    left = currentLeft;
+                    right = currentRight;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(currentLeft, left);
+                UNIT_ASSERT_VALUES_EQUAL(currentRight, right);
+            }
+            UNIT_ASSERT_C(left == "alpha " || left == "beta ", left);
+            UNIT_ASSERT_C(right == " alpha" || right == " beta", right);
+            // The shared descendant is not itself a query root. Its evaluations may
+            // differ, but each materialized root must agree with its own consumers.
+            const TVector<ui64> expected = left == "alpha " && right == " alpha"
+                ? TVector<ui64>{1, 3, 5}
+                : left == "beta " && right == " beta" ? TVector<ui64>{2, 5} : TVector<ui64>{5};
+            UNIT_ASSERT_VALUES_EQUAL_C(ids, expected, query);
+        }
+    }
+}
+
 Y_UNIT_TEST_QUAD(WildcardPostfilter, Compact, Utf8) {
     for (bool edge : {false, true}) {
         TExpressionFixture fixture({.Compact = Compact, .Utf8 = Utf8, .Prefixed = true, .Ngram = !edge, .EdgeNgram = edge});
@@ -1011,12 +1054,88 @@ Y_UNIT_TEST_QUAD(SharedReadAndMultipleResults, Compact, Score) {
         $search = COALESCE((SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo), $other);
         SELECT $search AS Pattern;
     )sql" + fixture.Select("$search", Score) + fixture.Select("$search", Score, "", "Id = 1ul");
-    const auto result = fixture.Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), fixture.Parameters()).ExtractValueSync();
+    const auto settings = NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full);
+    const auto result = fixture.Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+        fixture.Parameters(), settings).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
     CompareYson(R"([["alpha"]])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     TExpressionFixture::CheckIds(result.GetResultSet(1), {1, 5}, query);
     TExpressionFixture::CheckIds(result.GetResultSet(2), {1}, query);
+    // Stable values alone cannot expose duplicated source work. Count the actual
+    // lookup rows, including work done by every precompute phase and result.
+    AssertTableStats(result, "/Root/Patterns", {.ExpectedReads = 1});
+
+    const TString ordinary = fixture.Declarations() + R"sql(
+        $search = COALESCE((SELECT Pattern FROM `/Root/Patterns` WHERE Id = $lo), $other);
+        SELECT $search AS Pattern;
+        SELECT Id FROM `/Root/Docs` VIEW PRIMARY KEY
+        WHERE Scope = $scope AND (Text = $search OR Text = "alpha beta"u) ORDER BY Id;
+        SELECT Id FROM `/Root/Docs` VIEW PRIMARY KEY
+        WHERE Scope = $scope AND (Text = $search OR Text = "alpha beta"u) AND Id = 1ul ORDER BY Id;
+    )sql";
+    const auto control = fixture.Db.ExecuteQuery(ordinary, NYdb::NQuery::TTxControl::NoTx(),
+        fixture.Parameters(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(control.GetStatus(), NYdb::EStatus::SUCCESS, control.GetIssues().ToString());
+    TExpressionFixture::CheckIds(control.GetResultSet(1), {1, 5}, ordinary);
+    TExpressionFixture::CheckIds(control.GetResultSet(2), {1}, ordinary);
+    AssertTableStats(control, "/Root/Patterns", {.ExpectedReads = 1});
+}
+
+Y_UNIT_TEST_QUAD(SeparateResultsKeepOwnVolatileSearchesConsistent, Compact, Score) {
+    TExpressionFixture fixture({.Compact = Compact, .Relevance = Score});
+    for (bool indexed : {false, true}) {
+        for (bool volatileQuery : {false, true}) {
+            const TString setup = volatileQuery
+                ? "$search = IF(Random($choose) < 0.5, $q, $other);"
+                : "$search = IF($choose, $q, $other);";
+            const TString predicate = indexed
+                ? (Score ? "FulltextScore(Text, $search) > 0" : "FulltextMatch(Text, $search)")
+                : "(Text = $search OR Text = \"alpha beta\"u)";
+            const TString source = indexed ? "`/Root/Docs` VIEW fulltext_idx" : "`/Root/Docs` VIEW PRIMARY KEY";
+            const TString query = fixture.Declarations() + setup + "SELECT $search AS Search;"
+                + "SELECT Id, $search AS Search FROM " + source + " WHERE " + predicate + " ORDER BY Id;"
+                + "SELECT Id, $search AS Search FROM " + source + " WHERE " + predicate + " AND Id >= 3ul ORDER BY Id;";
+            for (ui32 iteration = 0; iteration < (volatileQuery ? 16u : 2u); ++iteration) {
+                const bool choose = iteration % 2 == 0;
+                const auto result = fixture.Db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                    fixture.Parameters("alpha", "beta", choose)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
+                for (ui32 index = 0; index < 3; ++index) {
+                    NYdb::TResultSetParser parser(result.GetResultSet(index));
+                    TString search;
+                    TVector<ui64> ids;
+                    ui32 rows = 0;
+                    while (parser.TryNextRow()) {
+                        ++rows;
+                        const TString current(parser.ColumnParser("Search").GetUtf8());
+                        if (search.empty()) {
+                            search = current;
+                        }
+                        UNIT_ASSERT_VALUES_EQUAL(current, search);
+                        if (index != 0) {
+                            ids.push_back(parser.ColumnParser("Id").GetUint64());
+                        }
+                    }
+                    UNIT_ASSERT_C(search == "alpha" || search == "beta", search);
+                    if (!volatileQuery) {
+                        UNIT_ASSERT_VALUES_EQUAL(search, choose ? "alpha" : "beta");
+                    }
+                    if (index == 0) {
+                        UNIT_ASSERT_VALUES_EQUAL(rows, 1);
+                    } else {
+                        const TVector<ui64> expected = index == 1
+                            ? (search == "alpha" ? TVector<ui64>{1, 3, 5} : TVector<ui64>{2, 5})
+                            : (search == "alpha" ? TVector<ui64>{3, 5} : TVector<ui64>{5});
+                        UNIT_ASSERT_VALUES_EQUAL_C(ids, expected, query);
+                    }
+                    // Named volatile expressions may be evaluated in different phases.
+                    // Compare consumers within this result, not values across results.
+                }
+            }
+        }
+    }
 }
 
 Y_UNIT_TEST_QUAD(InvalidSearchTypes, Utf8, Score) {

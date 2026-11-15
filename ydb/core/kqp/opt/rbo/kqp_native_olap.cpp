@@ -53,12 +53,6 @@ bool OlapNodeSupported(const NFrontend::TExpressionArena& arena, const NFrontend
         if (!temporal) return false;
     }
     if (!OlapBinaryName(node.Op).empty()) {
-        // Storage string kernels return a required Bool and map NULL to false.
-        // A WHERE predicate and its positive AND/OR operands only distinguish
-        // true from non-true. Value-sensitive contexts (NOT, COALESCE, etc.)
-        // must retain NULL and use the scalar evaluator instead.
-        if (!filterTruth && node.Type.OptionalDepth &&
-            (node.Op == O::Contains || node.Op == O::StartsWith || node.Op == O::EndsWith)) return false;
         if (node.Arguments.size() != 2) return false;
         // The existing storage kernels cannot consume the same column twice.
         auto column = [&](NFrontend::TExprId id) -> std::optional<NFrontend::TColumnId> {
@@ -70,7 +64,12 @@ bool OlapNodeSupported(const NFrontend::TExpressionArena& arena, const NFrontend
     }
     switch (node.Op) {
         case O::Literal: return !std::holds_alternative<std::monostate>(node.Value);
-        case O::Column: case O::Parameter: case O::And: case O::Or: case O::Not: case O::If:
+        case O::Not:
+            // The storage NOT kernel takes a required Boolean. At a filter
+            // truth boundary emission coalesces its operand to true; scalar
+            // uses must preserve a NULL result through scalar apply.
+            return filterTruth || !node.Type.OptionalDepth;
+        case O::Column: case O::Parameter: case O::And: case O::Or: case O::If:
             return true;
         case O::Negate: case O::Abs: return node.Type.IsNumeric();
         case O::IsNull: case O::IsNotNull: return arena[node.Arguments[0]].Op == O::Column;
@@ -88,7 +87,7 @@ bool OlapScalarNodeSupported(const NFrontend::TExprNode& node) {
         case O::IsNull: case O::IsNotNull: case O::Abs: case O::Length: case O::OptionalWrap:
         case O::Find: case O::Substring: case O::Concat: case O::Like: case O::ILike:
         case O::RegexMatch: case O::RegexGrep:
-        case O::Lower: case O::Upper:
+        case O::Lower: case O::Upper: case O::InResult:
             return true;
         default: return false;
     }
@@ -162,6 +161,83 @@ bool CanLowerNativeOlapPredicate(const NFrontend::TExpressionArena& arena, NFron
     return supported.at(root).HasColumn;
 }
 
+
+namespace {
+
+// The storage splitter's strictness barrier is independent of whether a
+// particular scalar operation can be executed in storage. Checked operations
+// and runtime UDF contracts without strictness stop first-pass reordering.
+bool IsStrictNativeOlapExpression(const NFrontend::TExpressionArena& arena, NFrontend::TExprId root,
+    std::unordered_map<NFrontend::TExprId, bool>& strict) {
+    std::vector<std::pair<NFrontend::TExprId, bool>> pending{{root, false}};
+    while (!pending.empty()) {
+        const auto [id, ready] = pending.back(); pending.pop_back();
+        if (strict.contains(id)) continue;
+        const auto& node = arena[id];
+        switch (node.Op) {
+            case O::Ensure: case O::Unwrap:
+            case O::Like: case O::ILike: case O::RegexMatch: case O::RegexGrep:
+            case O::UrlHost: case O::UrlCutWWW: case O::JsonValue:
+                strict.emplace(id, false);
+                continue;
+            default: break;
+        }
+        if (!ready) {
+            pending.emplace_back(id, true);
+            for (const auto arg : node.Arguments) pending.emplace_back(arg, false);
+            continue;
+        }
+        bool value = true;
+        for (const auto arg : node.Arguments) value &= strict.at(arg);
+        strict.emplace(id, value);
+    }
+    return strict.at(root);
+}
+
+} // namespace
+
+TNativeOlapPredicateParts SplitNativeOlapPredicate(const NFrontend::TExpressionArena& arena,
+    NFrontend::TExprId root, bool allowScalarApply, bool allowRegexp) {
+    TNativeOlapPredicateParts result;
+    if (CanPushNativeOlapPredicate(arena, root, false, allowRegexp)) {
+        result.Pushed.push_back(root);
+        return result;
+    }
+
+    bool blocked = false;
+    std::unordered_map<NFrontend::TExprId, bool> strict;
+    std::vector<NFrontend::TExprId> pending{root};
+    while (!pending.empty()) {
+        const auto id = pending.back(); pending.pop_back();
+        const auto& node = arena[id];
+        // Common scalar normalization presents conjunctions in source order.
+        // Flatten the native binary representation without exposing OR/IF arms.
+        if (node.Op == O::And) {
+            pending.push_back(node.Arguments[1]);
+            pending.push_back(node.Arguments[0]);
+            continue;
+        }
+        if (!blocked && CanPushNativeOlapPredicate(arena, id, false, allowRegexp)) {
+            result.Pushed.push_back(id);
+        } else {
+            blocked |= !IsStrictNativeOlapExpression(arena, id, strict);
+            result.Remaining.push_back(id);
+        }
+    }
+    if (allowScalarApply) {
+        // The previous rule retries each remaining conjunct independently;
+        // its first-pass strictness barrier does not span these retries.
+        std::vector<NFrontend::TExprId> remaining;
+        remaining.reserve(result.Remaining.size());
+        for (const auto id : result.Remaining) {
+            if (CanPushNativeOlapPredicate(arena, id, true, allowRegexp)) result.Pushed.push_back(id);
+            else remaining.push_back(id);
+        }
+        result.Remaining = std::move(remaining);
+    }
+    return result;
+}
+
 bool CanLowerNativeOlapProjection(const NFrontend::TExpressionArena& arena, NFrontend::TExprId root) {
     const auto& node = arena[root];
     if (node.Op != O::JsonValue || arena[node.Arguments[0]].Op != O::Column) return false;
@@ -199,7 +275,8 @@ bool CanPushNativeOlapPredicate(const NFrontend::TExpressionArena& arena, NFront
         const auto& node = arena[id];
         bool childPredicates = false;
         if (node.Op == O::RegexMatch || node.Op == O::RegexGrep || node.Op == O::Like || node.Op == O::ILike) {
-            if (!allowScalarApply || !allowRegexp) return false;
+            const bool like = node.Op == O::Like || node.Op == O::ILike;
+            if (!allowScalarApply || (!like && !allowRegexp)) return false;
         } else if (OlapIdentityConversion(arena, node)) childPredicates = predicate;
         else if (predicate) {
             if (comparison(node.Op)) { /* Comparison operands are scalar values. */ }
@@ -238,6 +315,12 @@ bool CanPushNativeOlapPredicate(const NFrontend::TExpressionArena& arena, NFront
                     // capability check above still validates every descendant.
                     continue;
                 case O::Convert: case O::Cast: if (!allowScalarApply) return false; break;
+                case O::Lower: case O::Upper:
+                    // Optional String UDF arguments use the existing
+                    // collector's IfPresent scalar-apply operand contract.
+                    // Required UDF operands remain outside that admission.
+                    if (!allowScalarApply || !node.Type.OptionalDepth) return false;
+                    continue;
                 case O::Negate: case O::Abs: case O::Length:
                 case O::Add: case O::Subtract: case O::Multiply: case O::Divide: case O::Modulo: break;
                 default: return false;

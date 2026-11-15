@@ -891,10 +891,39 @@ NYql::TExprNode::TPtr LowerRowExpressionLambda(const NFrontend::TRowExpression& 
     return TLowerer(expression.Expressions, ctx, pos, expression.Columns).Run(expression.Root);
 }
 
-NYql::TExprNode::TPtr LowerNativeOlapPredicate(const NFrontend::TExpressionArena& arena, NFrontend::TExprId root,
+namespace {
+
+TExprNode::TPtr RequiredOlapBoolean(TExprNode::TPtr value, bool missing,
+    TExprContext& ctx, TPositionHandle pos) {
+    const auto boolean = ExportNativeType({K::Bool}, ctx);
+    auto literal = ctx.NewAtom(pos, missing ? "true" : "false");
+    literal->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+    auto otherwise = ctx.NewCallable(pos, "Bool", {literal});
+    otherwise->SetTypeAnn(boolean);
+    return ctx.NewList(pos, {
+        ctx.NewAtom(pos, "??"), std::move(value), otherwise, ExpandType(pos, *boolean, ctx)});
+}
+
+TExprNode::TPtr LowerNativeOlapCondition(const NFrontend::TExpressionArena& arena, NFrontend::TExprId root,
     NYql::TExprContext& ctx, NYql::TPositionHandle pos) {
-    Y_ENSURE(CanLowerNativeOlapPredicate(arena, root, true), "Unsupported native OLAP predicate");
     if (!CanLowerNativeOlapPredicate(arena, root)) {
+        if (arena[root].Op == O::And) {
+            // The rule has already selected and ordered these conjuncts.
+            // Keep ordinary storage kernels beside scalar-apply predicates.
+            TExprNode::TListType conditions;
+            std::vector<NFrontend::TExprId> pending{root};
+            while (!pending.empty()) {
+                const auto id = pending.back(); pending.pop_back();
+                const auto& node = arena[id];
+                if (node.Op == O::And) {
+                    pending.push_back(node.Arguments[1]);
+                    pending.push_back(node.Arguments[0]);
+                } else {
+                    conditions.push_back(LowerNativeOlapCondition(arena, id, ctx, pos));
+                }
+            }
+            return ctx.NewCallable(pos, "KqpOlapAnd", std::move(conditions));
+        }
         // Emit the existing scalar storage kernel only after native optimization.
         // One argument per column also avoids duplicate storage-kernel inputs.
         const auto scalar = LowerNativeLambda(arena, root, ctx, pos);
@@ -923,11 +952,9 @@ NYql::TExprNode::TPtr LowerNativeOlapPredicate(const NFrontend::TExpressionArena
                 replacements.emplace(node.Get(), argument);
             }
         }
-        auto apply = ctx.NewCallable(pos, "KqpOlapApply", {
+        return ctx.NewCallable(pos, "KqpOlapApply", {
             ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(arguments)), ctx.ReplaceNodes(scalar->TailPtr(), replacements)),
             ctx.NewList(pos, std::move(values)), ctx.NewAtom(pos, "")});
-        auto input = ctx.NewArgument(pos, "native_olap_rows");
-        return ctx.NewLambda(pos, ctx.NewArguments(pos, {input}), ctx.NewCallable(pos, "KqpOlapFilter", {input, std::move(apply)}));
     }
     std::unordered_map<NFrontend::TExprId, TExprNode::TPtr> lowered;
     std::vector<std::pair<NFrontend::TExprId, bool>> pending{{root, false}};
@@ -956,18 +983,17 @@ NYql::TExprNode::TPtr LowerNativeOlapPredicate(const NFrontend::TExpressionArena
             value = ctx.NewList(pos, std::move(args));
         } else if (node.Op == O::If) {
             if (arena[node.Arguments[0]].Type.OptionalDepth) {
-                const auto boolean = ExportNativeType({K::Bool}, ctx);
-                auto literal = ctx.NewAtom(pos, "false");
-                literal->SetTypeAnn(ctx.MakeType<TUnitExprType>());
-                auto otherwise = ctx.NewCallable(pos, "Bool", {literal});
-                otherwise->SetTypeAnn(boolean);
-                args[0] = ctx.NewList(pos, {
-                    ctx.NewAtom(pos, "??"), args[0], otherwise, ExpandType(pos, *boolean, ctx)});
+                args[0] = RequiredOlapBoolean(args[0], false, ctx, pos);
             }
             args.insert(args.begin(), ctx.NewAtom(pos, "if"));
             args.push_back(ExpandType(pos, *ExportNativeType(node.Type, ctx, &arena), ctx));
             value = ctx.NewList(pos, std::move(args));
         } else if (node.Op == O::And || node.Op == O::Or || node.Op == O::Not) {
+            if (node.Op == O::Not && arena[node.Arguments[0]].Type.OptionalDepth) {
+                // Capability checking permits nullable NOT here only where
+                // the filter observes true versus rejected. NULL must reject.
+                args[0] = RequiredOlapBoolean(args[0], true, ctx, pos);
+            }
             value = ctx.NewCallable(pos, node.Op == O::And ? "KqpOlapAnd" : node.Op == O::Or ? "KqpOlapOr" : "KqpOlapNot", std::move(args));
         } else {
             args.insert(args.begin(), ctx.NewAtom(pos, node.Op == O::IsNull ? "empty" : node.Op == O::IsNotNull ? "exists" :
@@ -976,10 +1002,18 @@ NYql::TExprNode::TPtr LowerNativeOlapPredicate(const NFrontend::TExpressionArena
         }
         lowered.emplace(id, std::move(value));
     }
+    return lowered.at(root);
+}
+
+} // namespace
+
+NYql::TExprNode::TPtr LowerNativeOlapPredicate(const NFrontend::TExpressionArena& arena, NFrontend::TExprId root,
+    NYql::TExprContext& ctx, NYql::TPositionHandle pos) {
+    Y_ENSURE(CanLowerNativeOlapPredicate(arena, root, true), "Unsupported native OLAP predicate");
     auto input = ctx.NewArgument(pos, "native_olap_rows");
     // The storage filter entry point accepts operations, including a one-item
     // conjunction, but not a bare Boolean column atom.
-    auto condition = ctx.NewCallable(pos, "KqpOlapAnd", {lowered.at(root)});
+    auto condition = ctx.NewCallable(pos, "KqpOlapAnd", {LowerNativeOlapCondition(arena, root, ctx, pos)});
     auto filter = ctx.NewCallable(pos, "KqpOlapFilter", {input, std::move(condition)});
     return ctx.NewLambda(pos, ctx.NewArguments(pos, {input}), std::move(filter));
 }

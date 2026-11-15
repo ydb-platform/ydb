@@ -6,6 +6,69 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpNativeOlapPolicy) {
+    Y_UNIT_TEST(NullableStringPredicatesKeepKernelNullSemantics) {
+        using namespace NFrontend;
+        for (const auto op : {EOpcode::Contains, EOpcode::StartsWith, EOpcode::EndsWith}) {
+            TExpressionArena arena;
+            const auto input = arena.Column(1, {ETypeKind::String, true});
+            const auto pattern = arena.Literal({ETypeKind::String}, std::string{"a"});
+            const auto match = arena.Binary(op, input, pattern);
+            const auto negated = arena.Unary(EOpcode::Not, match);
+            const auto yes = arena.Literal({ETypeKind::Bool}, true);
+            const TExprId alternatives[]{match, yes};
+            for (const auto predicate : {negated, arena.Coalesce(alternatives)}) {
+                UNIT_ASSERT(CanPushNativeOlapPredicate(arena, predicate, false, false));
+                NYql::TExprContext ctx;
+                const auto lowered = LowerNativeOlapPredicate(arena, predicate, ctx, {});
+                UNIT_ASSERT(NYql::FindNodes(lowered, [](const auto& node) {
+                    return node->IsCallable("KqpOlapApply");
+                }).empty());
+                for (const auto& node : NYql::FindNodes(lowered, [](const auto& node) {
+                    return node->IsCallable("KqpOlapNot");
+                })) {
+                    const auto& truth = node->Head();
+                    UNIT_ASSERT(truth.IsList() && truth.Head().IsAtom("??"));
+                    UNIT_ASSERT(truth.Child(2)->IsCallable("Bool"));
+                    UNIT_ASSERT_VALUES_EQUAL(truth.Child(2)->Head().Content(), "true");
+                }
+            }
+            // A value-sensitive parent observes NULL from NOT, so it retains
+            // scalar evaluation instead of the filter-only truth adaptation.
+            const TExprId scalarAlternatives[]{negated, yes};
+            const auto scalar = arena.Coalesce(scalarAlternatives);
+            UNIT_ASSERT(!CanLowerNativeOlapPredicate(arena, scalar));
+            UNIT_ASSERT(CanLowerNativeOlapPredicate(arena, scalar, true));
+        }
+    }
+
+    Y_UNIT_TEST(MixedConjunctionKeepsScalarApplyLocalToItsColumns) {
+        using namespace NFrontend;
+        using O = EOpcode;
+        using K = ETypeKind;
+        TExpressionArena arena;
+        const auto text = arena.Column(1, {K::String, true});
+        const auto stringPredicate = arena.Binary(O::Equal, arena.Unary(O::Lower, text),
+            arena.Literal({K::String}, std::string{"abc"}));
+        const auto numericPredicate = arena.Binary(O::Greater, arena.Column(2, {K::Int32, true}),
+            arena.Literal({K::Int32}, std::int64_t{0}));
+        for (const bool reverse : {false, true}) {
+            const auto predicate = arena.Binary(O::And, reverse ? numericPredicate : stringPredicate,
+                reverse ? stringPredicate : numericPredicate);
+            NYql::TExprContext ctx;
+            const auto lowered = LowerNativeOlapPredicate(arena, predicate, ctx, {});
+            const auto calls = NYql::FindNodes(lowered, [](const auto& node) { return node->IsCallable("KqpOlapApply"); });
+            UNIT_ASSERT_VALUES_EQUAL(calls.size(), 1);
+            const auto columns = NYql::FindNodes(calls.front(), [](const auto& node) {
+                return node->IsCallable("KqpOlapApplyColumnArg");
+            });
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(columns.front()->Tail().Content(), "1");
+            UNIT_ASSERT_VALUES_EQUAL(NYql::FindNodes(lowered, [](const auto& node) {
+                return node->IsList() && node->ChildrenSize() && node->Head().IsAtom("gt");
+            }).size(), 1);
+        }
+    }
+
     Y_UNIT_TEST(ColumnNullChecksMatchExistingCollector) {
         using namespace NFrontend;
         using namespace NYql;

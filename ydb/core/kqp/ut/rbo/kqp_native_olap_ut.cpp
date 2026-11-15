@@ -1,32 +1,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/opt/rbo/frontend_lowering.h>
-#include <ydb/core/kqp/opt/rbo/kqp_native_olap.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
 
 namespace NKikimr::NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpNativeOlap) {
-    Y_UNIT_TEST(NullableStringPredicatesRequireScalarStorageEvaluation) {
-        using namespace NFrontend;
-        for (const auto op : {EOpcode::Contains, EOpcode::StartsWith, EOpcode::EndsWith}) {
-            TExpressionArena arena;
-            const auto input = arena.Column(1, {ETypeKind::String, true});
-            const auto pattern = arena.Literal({ETypeKind::String}, std::string{"a"});
-            const auto predicate = arena.Unary(EOpcode::Not, arena.Binary(op, input, pattern));
-            UNIT_ASSERT(!CanLowerNativeOlapPredicate(arena, predicate));
-            UNIT_ASSERT(CanLowerNativeOlapPredicate(arena, predicate, true));
-            NYql::TExprContext ctx;
-            const auto lowered = LowerNativeOlapPredicate(arena, predicate, ctx, {});
-            UNIT_ASSERT_VALUES_EQUAL(NYql::FindNodes(lowered, [](const auto& node) {
-                return node->IsCallable("KqpOlapApply");
-            }).size(), 1);
-            const auto required = arena.Binary(op, arena.Column(2, {ETypeKind::String}), pattern);
-            UNIT_ASSERT(CanLowerNativeOlapPredicate(arena, required));
-        }
-    }
-
     Y_UNIT_TEST_TWIN(NullableStringFiltersMatchComputeSemantics, ScalarApply) {
         NKikimrConfig::TAppConfig config;
         auto* service = config.MutableTableServiceConfig();

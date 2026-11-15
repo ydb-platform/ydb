@@ -48,27 +48,15 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     // Both the executable program and its saved statistics predicate must
     // bind entirely to this read's row.
     if (!expression.GetRawInputIUs().IsSubsetOf(read->GetColumns())) return input;
-    const auto& arena = *expression.GetNativeArena();
-    THashSet<NFrontend::TExprId> seen;
-    TVector<NFrontend::TExprId> pending{expression.GetNativeRoot()};
-    while (!pending.empty()) {
-        const auto id = pending.back(); pending.pop_back();
-        if (!seen.insert(id).second) continue;
-        const auto& node = arena[id];
-        // A storage filter discards NULL. A nullable conjunct followed by
-        // a checked expression still evaluates that expression in SQL,
-        // so even pushing a leading conjunct could suppress its error.
-        if (node.Op == NFrontend::EOpcode::Ensure || node.Op == NFrontend::EOpcode::Unwrap) return input;
-        pending.insert(pending.end(), node.Arguments.begin(), node.Arguments.end());
-    }
+    const auto parts = SplitNativeOlapPredicate(*expression.GetNativeArena(), expression.GetNativeRoot(),
+        ctx.KqpCtx.Config->GetEnableOlapScalarApply(), ctx.KqpCtx.Config->GetEnableOlapPushdownRegexp());
     TVector<TExpression> pushed, remaining;
-    for (const auto& term : filter->GetFilterExpression().SplitConjunct()) {
-        // The checked-expression guard above makes reordering these total
-        // conjuncts safe, including a pushable term after a compute term.
-        if (CanPushNativeOlapPredicate(*term.GetNativeArena(), term.GetNativeRoot(),
-            ctx.KqpCtx.Config->GetEnableOlapScalarApply(), ctx.KqpCtx.Config->GetEnableOlapPushdownRegexp())) pushed.push_back(term);
-        else remaining.push_back(term);
-    }
+    pushed.reserve(parts.Pushed.size());
+    remaining.reserve(parts.Remaining.size());
+    for (const auto id : parts.Pushed)
+        pushed.push_back(TExpression::FromNative(expression.GetNativeArena(), id, expression.PlanProps, input->Pos));
+    for (const auto id : parts.Remaining)
+        remaining.push_back(TExpression::FromNative(expression.GetNativeArena(), id, expression.PlanProps, input->Pos));
     if (pushed.empty()) return input;
     const auto predicate = MakeConjunction(pushed);
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), read->StorageType, read->TableRef,

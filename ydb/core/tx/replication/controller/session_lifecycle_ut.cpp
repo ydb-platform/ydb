@@ -1075,11 +1075,11 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         TSetup s;
         const auto memory = s.Monitoring();
         for (TStringBuf expected : {"Replication controller", "In memory", "Persisted tables",
-                "/Root/replica", "Workers", "Sessions", "Pipeline", "Schema barriers", "Index builds"}) {
+                "/Root/replica", "Workers", "Sessions", "Pipeline", "Transactions", "Processed source offsets"}) {
             UNIT_ASSERT_C(memory.Contains(expected), expected);
         }
         for (const TString table : {"Replications", "Targets", "SrcStreams", "Workers", "TxIds",
-                "SysParams", "SchemaBarrierWorkers", "IndexBuildWorkers"}) {
+                "SysParams", "ProcessedSourceOffsets"}) {
             const auto storage = s.Monitoring({{"view", "storage"}, {"table", table}});
             UNIT_ASSERT_C(storage.Contains("<h3>" + table + "</h3>"), storage);
             UNIT_ASSERT_C(storage.Contains("Read-only snapshot"), storage);

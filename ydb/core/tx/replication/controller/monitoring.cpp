@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/mon_auth.h>
-#include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
 #include <ydb/core/util/proto_duration.h>
 
 #include <library/cpp/html/pcdata/pcdata.h>
@@ -232,35 +231,6 @@ void Header(IOutputStream& out, ui64 tabletId, ui32 nodeId, ui32 generation,
         << " placeholder='Path, worker, state...'></label></div>";
 }
 
-template <typename TProto>
-TString ProtoText(const TString& value) {
-    if (value.empty()) {
-        return {};
-    }
-    TProto proto;
-    if (!proto.ParseFromString(value)) {
-        return "Cannot decode persisted protobuf";
-    }
-    return proto.ShortDebugString();
-}
-
-// Only explicitly selected non-secret columns can reach the storage renderer.
-template <typename TColumn>
-auto StorageValue(const typename TColumn::Type& value) {
-    using S = TControllerSchema;
-    if constexpr (std::is_same_v<TColumn, S::Targets::SchemaBarrierChange>) {
-        return ProtoText<NKikimrReplication::TSchemaChange>(value);
-    } else if constexpr (std::is_same_v<TColumn, S::Targets::SchemaBarrierFlushTxIds>) {
-        return ProtoText<NKikimrReplicationController::TSchemaBarrierFlushTxIds>(value);
-    } else if constexpr (std::is_same_v<TColumn, S::Targets::IndexBuild>) {
-        return ProtoText<NKikimrReplication::TIndexBuildState>(value);
-    } else if constexpr (std::is_same_v<TColumn, S::IndexBuildWorkers::Progress>) {
-        return ProtoText<NKikimrReplication::TIndexBuildProgress>(value);
-    } else {
-        return value;
-    }
-}
-
 } // anonymous namespace
 
 TStringBuf TController::GetMonitoringBootStatus(const TWorkerId& id) const {
@@ -285,14 +255,6 @@ TStringBuf TController::GetMonitoringBootStatus(const TWorkerId& id) const {
     const auto replication = Find(id.ReplicationId());
     if (!replication->IsCredentialsReady()) {
         return "waiting for credentials";
-    }
-    const auto* target = replication->FindTarget(id.TargetId());
-    const auto* base = replication->FindBaseTableTarget(*target);
-    if (base && base->GetStreamState() == TReplication::EStreamState::Creating) {
-        return "waiting for base stream";
-    }
-    if (base && !base->GetStreamSchemaChanges().has_value()) {
-        return "waiting for base stream capabilities";
     }
     const auto& tenant = replication->GetDatabase();
     if (tenant.empty()) {
@@ -356,7 +318,6 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
     Metric(out, "Replications with unavailable lag", unavailableLag);
     Metric(out, "Stopping workers", StoppingWorkers.size());
     Metric(out, "Boot / stop / remove queued", BootQueue.size() + StopQueue.size() + RemoveQueue.size());
-    Metric(out, "Schema barriers", SchemaBarriers.size());
     out << "</div>";
     if (replicationId && !Find(replicationId)) {
         out << "<p class='rc-error'>Replication " << replicationId << " is not present in memory.</p>";
@@ -365,26 +326,24 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
     {
         auto table = makeTable("Replications", {"ID", "Path ID", "Database", "State", "Desired state",
             "Credentials ready", "Availability period", "Source offset mismatch", "Lag",
-            "Targets", "Next target ID", "Committed version", "Deferred alter", "DB resolve attempts left", "Issue"});
+            "Targets", "Next target ID", "DB resolve attempts left", "Issue"});
         for (auto id : SortedKeys(Replications)) {
             if (!matches(id)) {
                 continue;
             }
             const auto& replication = *Replications.at(id);
-            auto committed = CommittedVersions.find(id);
             auto unresolved = UnresolvedDatabaseReplications.find(id);
             table.Row(id, replication.GetPathId(), replication.GetDatabase(), replication.GetState(),
                 replication.GetDesiredState(), replication.IsCredentialsReady(), AvailabilityPeriod(replication.GetConfig()),
                 ReplicationsWithSourceOffsetMismatch.contains(id), Lag(replication.GetLag()), replication.GetTargets().size(),
-                replication.GetNextTargetId(), committed == CommittedVersions.end() ? "unknown" : ToString(committed->second),
-                DeferredAlters.contains(id), unresolved == UnresolvedDatabaseReplications.end() ? "resolved" : ToString(ui32(unresolved->second)),
+                replication.GetNextTargetId(),
+                unresolved == UnresolvedDatabaseReplications.end() ? "resolved" : ToString(ui32(unresolved->second)),
                 replication.GetIssue());
         }
     }
     {
         auto table = makeTable("Targets", {"Replication", "Target", "Kind", "Source", "Destination", "Destination state",
-            "Path ID", "Pending path ID", "Stream", "Stream state", "Consumer", "Schema changes", "Lag", "Workers",
-            "Worker set complete", "Issue"});
+            "Path ID", "Stream", "Stream state", "Consumer", "Lag", "Workers", "Issue"});
         for (auto rid : SortedKeys(Replications)) {
             if (!matches(rid)) {
                 continue;
@@ -392,18 +351,16 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
             auto targets = Replications.at(rid)->GetTargets();
             Sort(targets, [](const auto* a, const auto* b) { return a->GetId() < b->GetId(); });
             for (const auto* target : targets) {
-                const auto schemaChanges = target->GetStreamSchemaChanges();
                 table.Row(rid, target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
-                    target->GetDstState(), target->GetDstPathId(), target->GetPendingDstPathId(), target->GetStreamName(),
-                    target->GetStreamState(), target->GetStreamConsumerName(),
-                    schemaChanges ? (*schemaChanges ? "enabled" : "disabled") : "unknown", Lag(target->GetLag()),
-                    target->GetWorkers().size(), CompleteWorkerSets.contains(std::make_pair(rid, target->GetId())), target->GetIssue());
+                    target->GetDstState(), target->GetDstPathId(), target->GetStreamName(),
+                    target->GetStreamState(), target->GetStreamConsumerName(), Lag(target->GetLag()),
+                    target->GetWorkers().size(), target->GetIssue());
             }
         }
     }
     {
         auto table = makeTable("Workers", {"Replication", "Target", "Worker / partition", "Node", "Data ended",
-            "Heartbeat", "Pending heartbeat", "Quorum participant", "Boot queued", "Boot status", "Stopping", "Remove queued"});
+            "Heartbeat", "Pending heartbeat", "Boot queued", "Boot status", "Stopping", "Remove queued"});
         for (const auto& id : SortedKeys(Workers)) {
             if (!matches(id.ReplicationId())) {
                 continue;
@@ -412,7 +369,7 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
             auto pending = PendingHeartbeats.find(id);
             table.Row(id.ReplicationId(), id.TargetId(), id.WorkerId(), worker.HasSession() ? ToString(worker.GetSession()) : "unassigned",
                 worker.IsDataEnded(), worker.HasHeartbeat() ? ToString(worker.GetHeartbeat()) : "unknown",
-                pending == PendingHeartbeats.end() ? "none" : ToString(pending->second), IsHeartbeatParticipant(id),
+                pending == PendingHeartbeats.end() ? "none" : ToString(pending->second),
                 BootQueue.contains(id), GetMonitoringBootStatus(id), StoppingWorkers.contains(id), RemoveQueue.contains(id));
         }
     }
@@ -430,9 +387,9 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
         table.Row("Allocation in flight", AllocateTxIdInFlight);
         table.Row("Assignment in flight", AssignTxIdInFlight);
         table.Row("Heartbeat processing in flight", ProcessHeartbeatsInFlight);
-        table.Row("Index build transaction in flight", IndexBuildTxInFlight);
         table.Row("Workers with heartbeat", WorkersWithHeartbeat.size());
-        table.Row("Heartbeat participants", CountHeartbeatParticipants());
+        // The heartbeat quorum includes every registered worker.
+        table.Row("Heartbeat participants", Workers.size());
         table.Row("Pending heartbeats", PendingHeartbeats.size());
         table.Row("Queue processing scheduled", ProcessQueuesScheduled);
         table.Row("Processed source offsets", ProcessedSourceOffsets.size());
@@ -447,14 +404,6 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
         table.Row("Create stream: in flight", InflightCreateStream.size());
         table.Row("Drop stream: queued", RequestedDropStream.size());
         table.Row("Drop stream: in flight", InflightDropStream.size());
-        table.Row("Pending index progress", PendingIndexBuildProgress.size());
-        table.Row("Pending index transaction requests", PendingIndexTxIds.size());
-        table.Row("Index commits in flight", IndexCommits.size());
-        table.Row("Completed index commits", CompletedIndexCommits.size());
-        table.Row("Schema destination alterers", SchemaChangeDstAlterers.size());
-        table.Row("Schema target flushes", SchemaTargetFlushes.size());
-        table.Row("Active schema target flush", ActiveSchemaTargetFlush
-            ? TStringBuilder() << ActiveSchemaTargetFlush->first << "/" << ActiveSchemaTargetFlush->second : TString("none"));
     }
     {
         auto table = makeTable("Worker queues", {"Queue", "Replication", "Target", "Worker", "Node", "Boot status"});
@@ -503,61 +452,6 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
             table.Row(version, "pending", nodes.size());
         }
     }
-    {
-        auto table = makeTable("Schema barriers", {"Replication", "Target", "Phase", "Schema version", "Record version", "Expected",
-            "Reported", "Index metadata", "Applied", "Completed", "Destination alter tx", "Target flush progress", "Blocks commit"});
-        for (const auto& [key, barrier] : SchemaBarriers) {
-            if (!matches(key.first)) {
-                continue;
-            }
-            TString phase;
-            switch (barrier.Phase) {
-            case ESchemaBarrierPhase::Collecting: phase = "Collecting"; break;
-            case ESchemaBarrierPhase::Altering: phase = "Altering"; break;
-            case ESchemaBarrierPhase::Applied: phase = "Applied"; break;
-            case ESchemaBarrierPhase::Error: phase = "Error"; break;
-            case ESchemaBarrierPhase::FlushingTarget: phase = "FlushingTarget"; break;
-            case ESchemaBarrierPhase::Verifying: phase = "Verifying"; break;
-            }
-            table.Row(key.first, key.second, phase, barrier.Schema.GetSourceSchemaVersion(),
-                barrier.Schema.GetVersion().ShortDebugString(), barrier.ExpectedWorkers.size(), barrier.ReportedWorkers.size(),
-                barrier.IndexMetadataWorkers.size(), barrier.AppliedWorkers.size(), barrier.CompletedWorkers.size(), barrier.DstAlterTxId,
-                TStringBuilder() << barrier.NextTargetFlushTxId << "/" << barrier.TargetFlushTxIds.size(), BlocksGlobalCommit(barrier));
-        }
-    }
-    {
-        auto table = makeTable("Schema barrier workers", {"Replication", "Target", "Worker", "Reported", "Index metadata", "Applied", "Completed", "Offset"});
-        for (const auto& [key, barrier] : SchemaBarriers) {
-            if (!matches(key.first)) {
-                continue;
-            }
-            auto workers = TVector<TWorkerId>(barrier.ExpectedWorkers.begin(), barrier.ExpectedWorkers.end());
-            Sort(workers);
-            for (const auto& id : workers) {
-                auto offset = barrier.WorkerOffsets.find(id);
-                table.Row(key.first, key.second, id.WorkerId(), barrier.ReportedWorkers.contains(id),
-                    barrier.IndexMetadataWorkers.contains(id), barrier.AppliedWorkers.contains(id), barrier.CompletedWorkers.contains(id),
-                    offset == barrier.WorkerOffsets.end() ? "unknown" : ToString(offset->second));
-            }
-        }
-    }
-    {
-        auto table = makeTable("Index builds", {"Replication", "Target", "Phase", "Join version", "Ready tx ID", "Snapshot tx ID", "Assignments"});
-        for (const auto& [key, build] : IndexBuilds) {
-            if (matches(key.first)) {
-                table.Row(key.first, key.second, NKikimrReplication::TIndexBuildState::EPhase_Name(build.GetPhase()),
-                    build.GetJoinVersion().ShortDebugString(), build.GetReadyTxId(), build.GetSnapshotTxId(), build.AssignmentsSize());
-            }
-        }
-    }
-    {
-        auto table = makeTable("Index build workers", {"Replication", "Target", "Worker", "Checkpoint"});
-        for (const auto& id : SortedKeys(IndexBuildProgress)) {
-            if (matches(id.ReplicationId())) {
-                table.Row(id.ReplicationId(), id.TargetId(), id.WorkerId(), IndexBuildProgress.at(id).ShortDebugString());
-            }
-        }
-    }
     return hasMore;
 }
 
@@ -576,6 +470,7 @@ public:
         return TXTYPE_DESCRIBE_REPLICATION;
     }
 
+    // Only explicitly selected non-secret columns can reach the storage renderer.
     template <typename TSchema, typename... TColumns>
     bool ReadTable(NIceDb::TNiceDb& db, std::initializer_list<TStringBuf> columns) {
         typename TSchema::TKey::KeyValuesType from{};
@@ -608,7 +503,7 @@ public:
                 }, next);
                 break;
             }
-            table.Row(StorageValue<TColumns>(rows.template GetValueOrDefault<TColumns>())...);
+            table.Row(rows.template GetValueOrDefault<TColumns>()...);
             if (!rows.Next()) {
                 return false;
             }
@@ -627,28 +522,23 @@ public:
             return ReadTable<S::Replications, S::Replications::Id, S::Replications::PathOwnerId,
                 S::Replications::PathLocalId, S::Replications::Database, S::Replications::State,
                 S::Replications::DesiredState, S::Replications::Issue, S::Replications::NextTargetId,
-                S::Replications::DeferredAlter, S::Replications::CommittedStep, S::Replications::CommittedTxId,
                 S::Replications::SourceOffsetMismatch>(db,
                 {"ID", "Path owner", "Path local ID", "Database", "State", "Desired state", "Issue", "Next target ID",
-                    "Deferred alter", "Committed step", "Committed tx ID", "Source offset mismatch"});
+                    "Source offset mismatch"});
         } else if (TableName == "Targets") {
             return ReadTable<S::Targets, S::Targets::ReplicationId, S::Targets::Id, S::Targets::Kind,
                 S::Targets::SrcPath, S::Targets::DstPath, S::Targets::DstState, S::Targets::DstPathOwnerId,
                 S::Targets::DstPathLocalId, S::Targets::PendingDstPathOwnerId, S::Targets::PendingDstPathLocalId,
-                S::Targets::Issue, S::Targets::WorkerSetComplete, S::Targets::SchemaBarrierPhase,
-                S::Targets::SchemaBarrierChange, S::Targets::DstAlterTxId, S::Targets::SchemaBarrierFlushTxIds,
-                S::Targets::IndexBuild>(db, {"Replication", "Target", "Kind", "Source", "Destination", "Destination state",
-                    "Path owner", "Path local ID", "Pending path owner", "Pending path local ID", "Issue", "Worker set complete",
-                    "Barrier phase (1 collecting, 2 altering, 3 applied, 4 error, 5 flushing, 6 verifying)", "Schema change",
-                    "Destination alter tx", "Flush tx IDs", "Index build"});
+                S::Targets::Issue>(db, {"Replication", "Target", "Kind", "Source", "Destination", "Destination state",
+                    "Path owner", "Path local ID", "Pending path owner", "Pending path local ID", "Issue"});
         } else if (TableName == "Workers") {
             return ReadTable<S::Workers, S::Workers::ReplicationId, S::Workers::TargetId, S::Workers::WorkerId,
                 S::Workers::HeartbeatVersionStep, S::Workers::HeartbeatVersionTxId>(db,
                 {"Replication", "Target", "Worker", "Heartbeat step", "Heartbeat tx ID"});
         } else if (TableName == "SrcStreams") {
             return ReadTable<S::SrcStreams, S::SrcStreams::ReplicationId, S::SrcStreams::TargetId, S::SrcStreams::Name,
-                S::SrcStreams::State, S::SrcStreams::ConsumerName, S::SrcStreams::SchemaChanges>(db,
-                {"Replication", "Target", "Name", "State", "Consumer", "Schema changes"});
+                S::SrcStreams::State, S::SrcStreams::ConsumerName>(db,
+                {"Replication", "Target", "Name", "State", "Consumer"});
         } else if (TableName == "ProcessedSourceOffsets") {
             return ReadTable<S::ProcessedSourceOffsets, S::ProcessedSourceOffsets::ReplicationId,
                 S::ProcessedSourceOffsets::TargetId, S::ProcessedSourceOffsets::WorkerId, S::ProcessedSourceOffsets::NextOffset>(db,
@@ -659,15 +549,7 @@ public:
         } else if (TableName == "SysParams") {
             return ReadTable<S::SysParams, S::SysParams::Id, S::SysParams::IntValue>(db,
                 {"Parameter ID (1 = next replication ID)", "Integer value"});
-        } else if (TableName == "SchemaBarrierWorkers") {
-            return ReadTable<S::SchemaBarrierWorkers, S::SchemaBarrierWorkers::ReplicationId,
-                S::SchemaBarrierWorkers::TargetId, S::SchemaBarrierWorkers::WorkerId, S::SchemaBarrierWorkers::Reported,
-                S::SchemaBarrierWorkers::IndexMetadata, S::SchemaBarrierWorkers::Applied, S::SchemaBarrierWorkers::Completed,
-                S::SchemaBarrierWorkers::Offset>(db, {"Replication", "Target", "Worker", "Reported", "Index metadata", "Applied", "Completed", "Offset"});
-        } else if (TableName == "IndexBuildWorkers") {
-            return ReadTable<S::IndexBuildWorkers, S::IndexBuildWorkers::ReplicationId, S::IndexBuildWorkers::TargetId,
-                S::IndexBuildWorkers::WorkerId, S::IndexBuildWorkers::Progress>(db,
-                {"Replication", "Target", "Worker", "Progress"});
+
         }
         Error = "Unknown persisted table. Select a table above.";
         return true;
@@ -681,7 +563,7 @@ public:
             << " rows per page. Runtime sessions and queues are not persisted. Configurations, credentials "
             << "and arbitrary binary system parameters are omitted.</p><nav class='rc-nav'>";
         for (TStringBuf name : {"Replications", "Targets", "SrcStreams", "Workers", "TxIds", "SysParams",
-                "SchemaBarrierWorkers", "IndexBuildWorkers", "ProcessedSourceOffsets"}) {
+                "ProcessedSourceOffsets"}) {
             out << "<a class='rc-button " << (name == TableName ? "rc-active" : "") << "' href='"
                 << Url(Self->TabletID(), "storage", 0, false, name) << "'>" << name << "</a>";
         }

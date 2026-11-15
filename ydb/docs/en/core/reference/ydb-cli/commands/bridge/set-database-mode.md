@@ -9,7 +9,7 @@ Use the `admin cluster bridge set-database-mode` command to switch all storage p
 General command syntax:
 
 ```bash
-{{ ydb-cli }} [global options...] admin cluster bridge set-database-mode <mode> --target-database <path> [options...]
+{{ ydb-cli }} [global options...] admin cluster bridge set-database-mode <mode> --database-path <path> [options...]
 ```
 
 - `global options` — [global parameters](../global-options.md) for the CLI;
@@ -27,7 +27,7 @@ View command help:
 
 | Name | Description |
 | --- | --- |
-| `--target-database <path>` | Required absolute path of the database to change. It does not change the connection or authentication database set by the global `--database` option. |
+| `--database-path <path>` | Required absolute path of the database to change. It does not change the connection or authentication database set by the global `--database` option. |
 | `--retain-pile <pile>` | Only when switching to `ordinary`: retain parts of all converted groups in the specified pile. For details, see [Choosing retained copies](#retain-pile). |
 
 ## Requirements {#requirements}
@@ -39,7 +39,7 @@ View command help:
 - `--retain-pile` can be used only with `ordinary`.
 - The pile selected with `--retain-pile` must contain synchronized parts of every group being converted to `ordinary`.
 
-For a serverless database, specify its shared database as `--target-database`. The change applies to the shared database and all its serverless databases.
+For a serverless database, specify its shared database as `--database-path`. The change applies to the shared database and all its serverless databases.
 
 All database pools are switched atomically: if validation fails, no pool mode is changed. After a successful switch to `ordinary`, group parts outside the retained piles are deleted in the background.
 
@@ -60,17 +60,29 @@ Before switching, check the state of the group parts as described in [Verifying 
 Switch database `/Root/db1` to bridged storage:
 
 ```bash
-{{ ydb-cli }} -y admin cluster bridge set-database-mode bridged --target-database /Root/db1
+{{ ydb-cli }} -y admin cluster bridge set-database-mode bridged --database-path /Root/db1
 ```
 
 Switch database `/Root/db1` to ordinary storage and retain data in `pile-a`:
 
 ```bash
-{{ ydb-cli }} -y admin cluster bridge set-database-mode ordinary --target-database /Root/db1 --retain-pile pile-a
+{{ ydb-cli }} -y admin cluster bridge set-database-mode ordinary --database-path /Root/db1 --retain-pile pile-a
 ```
 
 ### Verifying the result {#verify}
 
-Successful completion of the command confirms the atomic mode change of all database pools, not the completion of background synchronization or cleanup. The `bridge list` command does not show these operations, and pile states may remain unchanged.
+Successful completion of the command confirms the atomic mode change of all database pools, not the completion of background synchronization or cleanup. Pile states may remain unchanged.
 
-To verify synchronization of bridged group parts or deletion of redundant parts after switching to ordinary storage, use the `.sys/ds_groups` system view as described in [Verifying a database mode change](../../../../devops/deployment-options/manual/bridge-management.md#verify-database-mode).
+To view the storage mode and synchronization summary by pile, use [list databases](list.md#databases):
+
+```bash
+{{ ydb-cli }} admin cluster bridge list databases --database-path /Root/db1 --detailed
+```
+
+To inspect individual group parts, use [list groups](list.md#groups):
+
+```bash
+{{ ydb-cli }} admin cluster bridge list groups --database-path /Root/db1 --detailed
+```
+
+Use `--not-synced` instead of `--detailed` to show only incomplete synchronization. For verification criteria, see [Verifying a database mode change](../../../../devops/deployment-options/manual/bridge-management.md#verify-database-mode).

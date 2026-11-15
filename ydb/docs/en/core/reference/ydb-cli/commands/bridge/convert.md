@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-Use the `admin cluster bridge convert` command to convert a non-bridged cluster into a [bridge cluster](../../../../concepts/bridge.md) with one pile. Conversion preserves existing data and is irreversible.
+Use the `admin cluster bridge convert` command to convert a non-bridged cluster into a [bridge cluster](../../../../concepts/bridge.md) with one pile. Conversion preserves existing data. Subject to the rollback requirements, the cluster can be [returned to ordinary mode](rollback.md).
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -52,4 +52,4 @@ Convert system storage and leave existing database pools ordinary:
 
 ### Verifying the result {#verify}
 
-Use [list](list.md) to wait until conversion is complete. While the output contains `Conversion from non-bridged cluster is in progress, piles can't be added yet`, the pile list cannot be changed. After completion, the single pile is shown as `PRIMARY`.
+Use [list piles](list.md#piles) to wait until conversion is complete. While the output contains `Conversion from non-bridged cluster is in progress, piles can't be added yet`, the pile list cannot be changed. After completion, the single pile is shown as `PRIMARY`. To diagnose synchronization of individual databases, use `admin cluster bridge list databases --not-synced`.

@@ -8,7 +8,7 @@ Below are typical operations for converting a cluster to [bridge mode](../../../
 
 ### Convert an ordinary cluster to a single-pile bridge {#convert}
 
-Conversion enables bridge mode for system storage and, by default, for all existing database storage pools. It preserves existing data and is irreversible.
+Conversion enables bridge mode for system storage and, by default, for all existing database storage pools. It preserves existing data. Subject to the rollback requirements, the cluster can be [returned to ordinary mode](#rollback).
 
 1. Make sure the cluster uses configuration V2 with `self_management_config.enabled: true` and that every static and dynamic node runs a build that supports bridge conversion. For configuration V1, first complete the [migration to V2](../../configuration-management/migration/migration-to-v2.md).
 
@@ -51,9 +51,89 @@ Conversion enables bridge mode for system storage and, by default, for all exist
 
     The second scenario requires `bridge_config.enable_non_uniform_storage: true` from step 3. Existing databases can later be [switched to bridged storage](#database-mode) individually.
 
-6. Use [bridge list](#list) to wait until conversion completes. While the output contains `Conversion from non-bridged cluster is in progress, piles can't be added yet`, do not change the pile list. After completion, the single pile is `PRIMARY`.
+6. Use [bridge list piles](#list) to wait until conversion completes:
+
+    ```bash
+    {{ ydb-cli }} admin cluster bridge list piles
+    ```
+
+    While the output contains `Conversion from non-bridged cluster is in progress, piles can't be added yet`, do not change the pile list. After completion, the single pile is `PRIMARY`. To diagnose synchronization of individual databases, use `admin cluster bridge list databases --not-synced`.
 
 Conversion puts all existing nodes into one pile; it does not create a separate pile for each existing data center. For command details, see [admin cluster bridge convert](../../../reference/ydb-cli/commands/bridge/convert.md).
+
+### Return a converted cluster to ordinary mode (rollback) {#rollback}
+
+The `admin cluster bridge rollback` command can roll back conversion of an ordinary cluster to bridge mode while preserving data, including after partial or stuck conversion. Rollback is supported only when the cluster still has its original pile. It does not undo migration to configuration V2 or roll back the {{ ydb-short-name }} version.
+
+{% note info %}
+
+If you only added `bridge_config` and restarted nodes but did not run [convert](#convert), `rollback` is unnecessary and returns an error. In this case, go directly to step 5: remove the bridge settings and restart the nodes without them.
+
+{% endnote %}
+
+1. Make sure the original pile is the only pile remaining in the cluster and in `bridge_config`. In this state, the pile can only be `PRIMARY` and is therefore synchronized. If other piles remain, [remove them](#remove-pile) first. Rollback is impossible if the original pile was removed or the cluster was originally deployed in bridge mode with multiple piles.
+
+    Check the cluster state:
+
+    ```bash
+    {{ ydb-cli }} admin cluster bridge list
+    ```
+
+    No pile operations or pile synchronization can be pending. The other conditions are listed in the [command requirements](../../../reference/ydb-cli/commands/bridge/rollback.md#requirements).
+
+2. If `blob_storage_config.storage_pool_pile_overrides` contains rules for the original pile, fetch the configuration, remove those rules, and apply the change before continuing:
+
+    ```bash
+    {{ ydb-cli }} -e grpc://<node>:2135 admin cluster config fetch > config.yaml
+    # Remove the rules for the original pile from config.yaml.
+    {{ ydb-cli }} -e grpc://<node>:2135 -y admin cluster config replace -f config.yaml
+    ```
+
+3. Start rollback:
+
+    ```bash
+    {{ ydb-cli }} -y admin cluster bridge rollback
+    ```
+
+    Without `-y`, the command asks for confirmation. A successful call makes static groups ordinary and starts rollback of dynamic groups and pools; it does not complete the whole procedure.
+
+    If the storage controller cannot start after conversion because it depends on static groups, use `--skip-bsc-validation`. This option skips only preliminary validation; it does not disable validation during rollback.
+
+4. Wait for storage rollback to complete:
+
+    ```bash
+    {{ ydb-cli }} admin cluster bridge list piles
+    ```
+
+    While the output contains `Rollback: storage in progress`, the operation is still running. If an attempt fails, the output contains `Last attempt has failed (being retried): <error>`; resolve the cause, and the storage controller retries automatically. During rollback, do not change the pile list or database storage modes and do not start decommissioning bridged groups.
+
+    When the bridge cluster state is removed, the output changes to `Bridge configuration still in use` and shows the nodes still running with `bridge_config`. Running nodes continue serving groups; the command does not restart them automatically.
+
+5. Fetch the current configuration:
+
+    ```bash
+    {{ ydb-cli }} -e grpc://<node>:2135 admin cluster config fetch > config.yaml
+    ```
+
+    Remove the entire `bridge_config` section and the `location.bridge_pile_name` field from every host in `hosts` in a single configuration change. Preserve `metadata`, the other `location` fields, and all unrelated settings.
+
+6. Apply the configuration and perform a [rolling restart](../../../maintenance/manual/node_restarting.md) of all static and dynamic nodes without bridge settings:
+
+    ```bash
+    {{ ydb-cli }} -e grpc://<node>:2135 -y admin cluster config replace -f config.yaml
+    ```
+
+    Remove `--bridge-pile-name` from the `ydbd server` startup options for dynamic nodes. Nodes that were disconnected must also be restarted without these settings before reconnecting.
+
+7. Verify rollback completion:
+
+    ```bash
+    {{ ydb-cli }} admin cluster bridge list
+    ```
+
+    The final output must be `Cluster mode: ordinary`, with no nodes running with `bridge_config` and no static nodes that have not reported. The report covers static and connected dynamic nodes.
+
+For command details and limitations, see [admin cluster bridge rollback](../../../reference/ydb-cli/commands/bridge/rollback.md).
 
 ### Add a pile {#add-pile}
 
@@ -225,13 +305,13 @@ Choose one of the two commands according to the required storage mode. These are
 
 ```bash
 # Replicate the database across all provisioned piles:
-{{ ydb-cli }} -y admin cluster bridge set-database-mode bridged --target-database /Root/db1
+{{ ydb-cli }} -y admin cluster bridge set-database-mode bridged --database-path /Root/db1
 
 # Retain copies in pile-a and delete redundant copies in other piles in the background:
-{{ ydb-cli }} -y admin cluster bridge set-database-mode ordinary --target-database /Root/db1 --retain-pile pile-a
+{{ ydb-cli }} -y admin cluster bridge set-database-mode ordinary --database-path /Root/db1 --retain-pile pile-a
 ```
 
-`--target-database` must be the absolute path of the database and is independent of the global `--database` connection option. For a serverless database, specify its shared database; the change applies to that shared database and all its serverless databases.
+`--database-path` must be the absolute path of the database and is independent of the global `--database` connection option. For a serverless database, specify its shared database; the change applies to that shared database and all its serverless databases.
 
 When switching to ordinary storage, `--retain-pile` selects the pile in which parts of all converted groups are retained. It does not disconnect the pile or change its role: you can specify `PRIMARY` or another pile in the `SYNCHRONIZED` state. The selected pile must already contain a `SYNCED` part of every group being converted; otherwise, the command returns an error without changing any pool modes.
 
@@ -243,46 +323,31 @@ The command changes all database pool modes atomically: if validation fails, no 
 
 ### Verify a database mode change {#verify-database-mode}
 
-Successful completion of `set-database-mode` confirms the atomic mode change of all database pools, not the completion of background synchronization or cleanup. The `bridge list` command does not show these operations on the database's storage groups; pile states may remain unchanged.
+Successful completion of `set-database-mode` confirms the atomic mode change of all database pools, not the completion of background synchronization or cleanup. Pile states may remain unchanged.
 
-For diagnostics, use the [`.sys/ds_groups` system view](../../../devops/observability/system-views.md#ds_groups). First, find the database's storage pool IDs:
-
-```bash
-{{ ydb-cli }} sql -s '
-SELECT BoxId, StoragePoolId, Name
-FROM `/Root/.sys/ds_storage_pools`
-WHERE Name LIKE "/Root/db1:%";
-'
-```
-
-Then inspect the groups in each pool:
+To view the storage mode and synchronization summary by pile, use [list databases](../../../reference/ydb-cli/commands/bridge/list.md#databases):
 
 ```bash
-{{ ydb-cli }} sql -s '
-SELECT
-    GroupId,
-    ProxyGroupId,
-    BridgePileId,
-    BridgeSyncStage,
-    BridgeDataSyncProgress,
-    BridgeSyncRunning,
-    BridgeSyncLastError
-FROM `/Root/.sys/ds_groups`
-WHERE BoxId = <box-id>
-  AND StoragePoolId = <storage-pool-id>
-ORDER BY GroupId;
-'
+{{ ydb-cli }} admin cluster bridge list databases --database-path /Root/db1 --detailed
 ```
 
-Here, `<box-id>` and `<storage-pool-id>` are the IDs returned by the first query. Inspect physical group-part rows with `BridgePileId` set; synchronization fields can be empty for logical proxy groups. `ProxyGroupId` associates a physical part with its logical group. For an original inline part, this field can be empty while its `GroupId` matches the logical group ID.
+`SYNCED` means that all required groups are synchronized. Ordinary storage does not require synchronization and is shown as `NOT_REQUIRED`. The detailed output also contains group counters and the last synchronization error.
+
+To inspect individual group parts, use [list groups](../../../reference/ydb-cli/commands/bridge/list.md#groups):
+
+```bash
+{{ ydb-cli }} admin cluster bridge list groups --database-path /Root/db1 --detailed
+```
+
+The output contains the state of each part by pile; with `--detailed`, it also shows the physical group ID, phase, and last synchronization error. To show only incomplete synchronization, use `--not-synced` instead of `--detailed`.
 
 Completion criteria depend on the selected mode:
 
-- **Full transition to bridged storage:** every participating pile is `PRIMARY` or `SYNCHRONIZED`, and all its physical parts of every logical group are `SYNCED`.
-- **Readiness to switch to ordinary storage with `--retain-pile`:** the selected pile is `PRIMARY` or `SYNCHRONIZED`, and its part in every logical group being converted is already `SYNCED`.
-- **Cleanup after switching to ordinary storage:** redundant part rows first show `BLOCKS` and then disappear, leaving only the retained physical parts.
+- **Full transition to bridged storage:** every participating pile is `PRIMARY` or `SYNCHRONIZED`, every part of every group is `SYNCED`, and the output with `--not-synced` is empty.
+- **Readiness to switch to ordinary storage with `--retain-pile`:** the selected pile is `PRIMARY` or `SYNCHRONIZED`, and its part of every group being converted is already `SYNCED`. To inspect only this pile, add `--pile <pile>` to the `list groups` command.
+- **Cleanup after switching to ordinary storage:** redundant part rows disappear, and retained parts are shown as `NOT_REQUIRED`.
 
-`BridgeSyncLastError` contains the most recent synchronization error. `BridgeDataSyncProgress` covers only the data-copy stage, not the entire conversion. Do not use `BridgeSyncRunning = false` as the sole completion indicator: synchronization may still be waiting to start.
+Do not treat the absence of `SYNCING` as completion: synchronization may be `PENDING` or `UNKNOWN`.
 
 ## Switching piles {#switching}
 

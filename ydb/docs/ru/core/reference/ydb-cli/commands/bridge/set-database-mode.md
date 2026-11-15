@@ -9,7 +9,7 @@
 Общий вид команды:
 
 ```bash
-{{ ydb-cli }} [global options...] admin cluster bridge set-database-mode <mode> --target-database <path> [options...]
+{{ ydb-cli }} [global options...] admin cluster bridge set-database-mode <mode> --database-path <path> [options...]
 ```
 
 - `global options` — [глобальные параметры](../global-options.md) CLI;
@@ -27,7 +27,7 @@
 
 | Имя | Описание |
 | --- | --- |
-| `--target-database <path>` | Обязательный абсолютный путь к изменяемой базе данных. Не изменяет базу данных подключения и аутентификации, заданную глобальным параметром `--database`. |
+| `--database-path <path>` | Обязательный абсолютный путь к изменяемой базе данных. Не изменяет базу данных подключения и аутентификации, заданную глобальным параметром `--database`. |
 | `--retain-pile <pile>` | Только при переключении в `ordinary`: сохранить части всех преобразуемых групп в указанном pile. Подробнее см. в разделе [Выбор сохраняемых копий](#retain-pile). |
 
 ## Требования {#requirements}
@@ -39,7 +39,7 @@
 - Параметр `--retain-pile` можно использовать только с `ordinary`.
 - Выбранный с помощью `--retain-pile` pile должен содержать синхронизированные части всех групп, переводимых в `ordinary`.
 
-Для serverless-базы данных укажите её коммунальную базу данных в `--target-database`. Изменение применяется к коммунальной базе и всем её serverless-базам.
+Для serverless-базы данных укажите её коммунальную базу данных в `--database-path`. Изменение применяется к коммунальной базе и всем её serverless-базам.
 
 Переключение всех пулов базы данных выполняется атомарно: если проверка не пройдена, режим ни одного пула не изменяется. После успешного переключения в `ordinary` части групп вне сохраняемых pile удаляются в фоновом режиме.
 
@@ -60,17 +60,29 @@
 Переключить базу данных `/Root/db1` в режим bridge:
 
 ```bash
-{{ ydb-cli }} -y admin cluster bridge set-database-mode bridged --target-database /Root/db1
+{{ ydb-cli }} -y admin cluster bridge set-database-mode bridged --database-path /Root/db1
 ```
 
 Переключить базу данных `/Root/db1` в обычный режим и сохранить данные в `pile-a`:
 
 ```bash
-{{ ydb-cli }} -y admin cluster bridge set-database-mode ordinary --target-database /Root/db1 --retain-pile pile-a
+{{ ydb-cli }} -y admin cluster bridge set-database-mode ordinary --database-path /Root/db1 --retain-pile pile-a
 ```
 
 ### Проверка результата {#verify}
 
-Успешное завершение команды подтверждает атомарное изменение режима всех пулов базы данных, но не завершение фоновой синхронизации или очистки. Команда `bridge list` не показывает состояние этих операций, а состояния pile могут не измениться.
+Успешное завершение команды подтверждает атомарное изменение режима всех пулов базы данных, но не завершение фоновой синхронизации или очистки. Состояния pile могут не измениться.
 
-Чтобы проверить синхронизацию частей групп в режиме bridge или удаление избыточных частей после переключения в обычный режим, используйте системное представление `.sys/ds_groups`, как описано в разделе [Проверка переключения режима хранения](../../../../devops/deployment-options/manual/bridge-management.md#verify-database-mode).
+Для просмотра режима хранения и сводки синхронизации по pile используйте [list databases](list.md#databases):
+
+```bash
+{{ ydb-cli }} admin cluster bridge list databases --database-path /Root/db1 --detailed
+```
+
+Для проверки отдельных частей групп используйте [list groups](list.md#groups):
+
+```bash
+{{ ydb-cli }} admin cluster bridge list groups --database-path /Root/db1 --detailed
+```
+
+С `--not-synced` вместо `--detailed` команда покажет только незавершённую синхронизацию. Критерии проверки приведены в разделе [Проверка переключения режима хранения](../../../../devops/deployment-options/manual/bridge-management.md#verify-database-mode).

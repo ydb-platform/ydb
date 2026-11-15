@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-С помощью команды `admin cluster bridge convert` можно преобразовать обычный кластер в [кластер bridge](../../../../concepts/bridge.md) с одним pile. Существующие данные сохраняются. Преобразование необратимо.
+С помощью команды `admin cluster bridge convert` можно преобразовать обычный кластер в [кластер bridge](../../../../concepts/bridge.md) с одним pile. Существующие данные сохраняются. При соблюдении условий кластер можно [вернуть в обычный режим](rollback.md).
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -52,4 +52,4 @@
 
 ### Проверка результата {#verify}
 
-С помощью [list](list.md) дождитесь завершения преобразования. Пока вывод содержит `Conversion from non-bridged cluster is in progress, piles can't be added yet`, список pile изменять нельзя. После завершения единственный pile отображается как `PRIMARY`.
+С помощью [list piles](list.md#piles) дождитесь завершения преобразования. Пока вывод содержит `Conversion from non-bridged cluster is in progress, piles can't be added yet`, список pile изменять нельзя. После завершения единственный pile отображается как `PRIMARY`. Для диагностики синхронизации отдельных баз данных используйте `admin cluster bridge list databases --not-synced`.

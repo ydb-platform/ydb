@@ -26,7 +26,7 @@ Piles are not standalone {{ ydb-short-name }} clusters; they are parts of a sing
 
 ## Converting an ordinary cluster {#conversion}
 
-You can [convert an existing cluster that initially ran without bridge mode](../devops/deployment-options/manual/bridge-management.md#convert) while preserving its data. Initially, all its nodes are combined into a single pile. System storage always switches to bridge mode. Existing database pools also switch by default, but you can leave them ordinary and convert them later.
+You can [convert an existing cluster that initially ran without bridge mode](../devops/deployment-options/manual/bridge-management.md#convert) while preserving its data. Initially, all its nodes are combined into a single pile. System storage always switches to bridge mode. Existing database pools also switch by default, but you can leave them ordinary and convert them later. Subject to the rollback requirements, a converted cluster can be [returned to ordinary mode](../devops/deployment-options/manual/bridge-management.md#rollback).
 
 A single-pile configuration is an intermediate stage: data remains only in the original part of the cluster, so this configuration provides no additional resilience to a data center failure. To obtain fault tolerance across data centers, [add and synchronize more piles](../devops/deployment-options/manual/bridge-management.md#add-pile). Databases using bridged storage are then replicated between piles, while databases on ordinary storage are not converted automatically and may remain in the original pile without bridge replication.
 

@@ -1,11 +1,7 @@
 #include "kqp_compute_scheduler_service.h"
 
 #include "kqp_schedulable_base.h"
-<<<<<<< HEAD
-=======
-#include "kqp_schedulable_memory.h"
 #include "kqp_schedulable_read.h"
->>>>>>> 167ed23681b ([Compute Scheduler] Make consistent Datashard EvRead interruption (#59371))
 #include "kqp_schedulable_task.h"
 #include "tree/dynamic.h"
 #include "tree/snapshot.h"
@@ -106,7 +102,7 @@ Y_UNIT_TEST_SUITE(KqpReadQuotaRegression) {
 
         f.Factory.CleanupReadsCache();
         UNIT_ASSERT_C(previousRead.expired(), "Retaining debt must not retain the schedulable reader");
-        UNIT_ASSERT_VALUES_EQUAL(query->CpuMaxDemand.load(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(query->CpuDemand.load(), 0u);
         UNIT_ASSERT_VALUES_EQUAL(query->CpuUsage.load(), 0u);
 
         auto next = f.Read();

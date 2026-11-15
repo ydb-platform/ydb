@@ -2070,25 +2070,6 @@ public:
             }
         }
 
-<<<<<<< HEAD
-=======
-        if (state.Sampling) {
-            if (state.IsHeadRead) {
-                if (auto status = upgradeToRepeatableRead()) {
-                    return *status;
-                }
-            }
-            // Wait before building the initial layout; TEvReadContinue skips this wait.
-            if (Self->VolatileTxManager.HasVolatileTxsAtSnapshot(state.ReadVersion)) {
-                // Register the parked request so TEvReadCancel can cancel its replay.
-                Self->Pipeline.RegisterWaitingReadIterator(state.ReadId, state.Ev->Get());
-                Self->VolatileTxManager.AttachWaitingSnapshotEvent(
-                    state.ReadVersion,
-                    std::unique_ptr<IEventHandle>(state.Ev.Release()));
-                return abortRescheduled();
-            }
-        }
-
         const auto schedulableRead = state.SchedulableRead;
         if (schedulableRead) {
             // Admission happened before entering the pipeline. Do not prolong
@@ -2102,7 +2083,6 @@ public:
             }
         };
 
->>>>>>> 167ed23681b ([Compute Scheduler] Make consistent Datashard EvRead interruption (#59371))
         TDataShardLocksDb locksDb(*Self, txc);
         TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QuerySpanId, *Self, &locksDb);
 
@@ -2142,14 +2122,8 @@ public:
         }
 
         LWTRACK(ReadExecute, state.Request->Orbit);
-<<<<<<< HEAD
-=======
-        if (state.Sampling) {
-            state.SamplingStats.SetExecutions(state.SamplingStats.GetExecutions() + 1);
-        }
         // A preparation error must not leave a reader from an earlier attempt.
         Reader.reset();
->>>>>>> 167ed23681b ([Compute Scheduler] Make consistent Datashard EvRead interruption (#59371))
         bool readResult = Read(txc, ctx, state);
 
         if (schedulableRead && Reader) {

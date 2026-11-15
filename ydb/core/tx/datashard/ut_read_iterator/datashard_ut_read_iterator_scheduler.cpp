@@ -513,24 +513,6 @@ Y_UNIT_TEST_SUITE(DataShardReadQuotaRegression) {
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SCHEME_ERROR);
     }
 
-    Y_UNIT_TEST(SamplingKeepsCheckpointAcrossInitialThrottle) {
-        TSchedulerTestHelper helper;
-        helper.UpsertMany(1, 2);
-        auto request = helper.MakeRangeReadRequest(1, 1, 2, 1);
-        request->Record.SetMaxRows(1);
-        auto* sampling = request->Record.MutableSampling();
-        sampling->SetRate(1.0);
-        sampling->SetSeed(42);
-        auto first = helper.ThrottleAndResume(std::move(request));
-        UNIT_ASSERT_VALUES_EQUAL(first->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-        NKikimrTxDataShard::TReadContinuationToken token;
-        UNIT_ASSERT(token.ParseFromString(first->Record.GetContinuationToken()));
-        UNIT_ASSERT(token.HasSampling());
-        helper.SendAck(first->Record, 10, 50_MB);
-        auto second = helper.WaitResult();
-        UNIT_ASSERT_VALUES_EQUAL(second->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(first->GetRowsCount() + second->GetRowsCount(), 2u);
-    }
 }
 
 } // namespace NKikimr

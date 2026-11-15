@@ -11,13 +11,9 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
-#include <ydb/core/memory_controller/consumer_collection.h>
->>>>>>> 167ed23681b ([Compute Scheduler] Make consistent Datashard EvRead interruption (#59371))
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
@@ -29,15 +25,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
-<<<<<<< HEAD
-=======
 #include <util/generic/scope.h>
-#include <util/system/env.h>
-#include <util/string/hex.h>
-#include <sys/resource.h>
-#include <thread>
 
->>>>>>> 167ed23681b ([Compute Scheduler] Make consistent Datashard EvRead interruption (#59371))
 #include <algorithm>
 #include <map>
 

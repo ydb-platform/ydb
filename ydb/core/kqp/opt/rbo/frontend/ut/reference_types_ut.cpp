@@ -63,6 +63,39 @@ struct TFixture {
 }
 
 Y_UNIT_TEST_SUITE(KqpNativeReferenceTypes) {
+    Y_UNIT_TEST(EmptyInTuplesPreserveLegacyAndAnsiNullSemantics) {
+        for (const auto parser : {EParser::Fast, EParser::Grammar})
+        for (const bool ansi : {false, true}) {
+            TFixture f; f.Settings.Parser = parser; f.Settings.Binding.AnsiIn = ansi;
+            f.Ok("SELECT score IN (), score NOT IN (), id IN (), id NOT IN () FROM t;");
+            f.Types({ansi ? "Bool" : "Bool?", ansi ? "Bool" : "Bool?", "Bool", "Bool"});
+            for (const bool missing : {false, true}) {
+                TEvaluationContext context;
+                context.Column = [&](TColumnId column) {
+                    const auto type = f.Program.Columns.at(column).Type;
+                    return TValue{type, missing && type.OptionalDepth ? TScalar{} : TScalar{std::int64_t{1}}};
+                };
+                for (unsigned index = 0; index < 4; ++index) {
+                    const auto value = Evaluate(f.Program.Expressions, f.Projection(index), context);
+                    UNIT_ASSERT_VALUES_EQUAL(value.IsNull(), !ansi && missing && index < 2);
+                    if (!value.IsNull()) UNIT_ASSERT_VALUES_EQUAL(std::get<bool>(value.Data), bool(index % 2));
+                }
+            }
+        }
+    }
+
+    // PR #58587 at a880d5da2b09: lookup and item nullability have different
+    // result contracts in legacy and ANSI IN modes.
+    Y_UNIT_TEST(InSubqueriesPreserveNullableResultTypes) {
+        for (const auto parser : {EParser::Fast, EParser::Grammar})
+        for (const bool ansi : {false, true}) {
+            TFixture f; f.Settings.Parser = parser; f.Settings.Binding.AnsiIn = ansi;
+            f.Ok("SELECT id IN (SELECT id FROM t), score IN (SELECT id FROM t), "
+                "id NOT IN (SELECT score FROM t), EXISTS (SELECT score FROM t) FROM t;");
+            f.Types({"Bool", "Bool?", ansi ? "Bool?" : "Bool", "Bool"});
+        }
+    }
+
     Y_UNIT_TEST(StringEscapesAndAnsiQuoting) {
         for (const auto parser : {EParser::Fast, EParser::Grammar}) {
             TFixture f; f.Settings.Parser = parser;

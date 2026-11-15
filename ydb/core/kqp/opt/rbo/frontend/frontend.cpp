@@ -2269,22 +2269,6 @@ private:
             Program.Expressions.Unary(EOpcode::Negate, literal, syntax.Position);
     }
 
-    TExprId InResult(TExprId lookup, TExprId result, TSourcePosition pos, bool ansi) {
-        if (ansi) return result;
-        auto& arena = Program.Expressions;
-        // Legacy SQL treats a NULL lookup as unknown even for an empty set;
-        // NULL items alone never make a non-NULL lookup unknown.
-        if (arena[result].Type.OptionalDepth) {
-            const TExprId args[]{result, arena.Literal({ETypeKind::Bool}, false, pos)};
-            result = arena.Coalesce(args, pos);
-        }
-        if (arena.CanContainNull(arena[lookup].Type)) {
-            const auto missing = arena.Unary(arena[lookup].Type.IsCollection() ? EOpcode::HasNull : EOpcode::IsNull, lookup, pos);
-            result = arena.If(missing, arena.Literal({ETypeKind::Bool, true}, std::monostate{}, pos), result, pos);
-        }
-        return result;
-    }
-
     TExprId Expr(TSyntaxId id, TExprContext& context) {
         if (auto it = context.Cache.find(id); it != context.Cache.end()) return it->second;
         const auto& syntax = Syntax.Expressions.at(id);
@@ -2475,7 +2459,7 @@ private:
                     const auto root = Map(query.Root, std::move(conversions), syntax.Position);
                     const auto binding = Column("in", {}, type, syntax.Position);
                     Program.Subplans.emplace(binding, TSubplan{root, resultColumn, ESubquery::In, lookup});
-                    result = InResult(Access(ScopeColumn(lookup), syntax.Position), Access(ScopeColumn(binding), syntax.Position), syntax.Position, Bindings.Uses(id, TGlobalBindings::AnsiIn));
+                    result = arena.InResult(Access(ScopeColumn(lookup), syntax.Position), Access(ScopeColumn(binding), syntax.Position), Bindings.Uses(id, TGlobalBindings::AnsiIn), syntax.Position);
                     break;
                 }
                 if (syntax.Text == "collection") {
@@ -2495,7 +2479,7 @@ private:
                     const auto equal = arena.Binary(EOpcode::Equal, value, item, syntax.Position);
                     result = arena.Binary(EOpcode::Or, result, equal, syntax.Position);
                 }
-                result = InResult(value, result, syntax.Position, Bindings.Uses(id, TGlobalBindings::AnsiIn));
+                result = arena.InResult(value, result, Bindings.Uses(id, TGlobalBindings::AnsiIn), syntax.Position);
                 break;
             }
             case ESyntaxKind::Lambda:

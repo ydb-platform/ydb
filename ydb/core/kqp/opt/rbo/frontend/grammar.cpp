@@ -491,8 +491,9 @@ private:
                     if (Has(lambda, "->")) Unsupported(in, EFeature::Expression, "IN does not accept a lambda");
                     auto* paren = Child(lambda, "smart_parenthesis");
                     auto* sub = Child(paren, "select_subexpr");
-                    if (!sub) Unsupported(in, EFeature::Expression, "empty IN list");
-                    if (Name(Unwrap(sub)) == "tuple_or_expr") {
+                    if (!sub) {
+                        left = Add(ESyntaxKind::In, condition, {}, std::move(args));
+                    } else if (Name(Unwrap(sub)) == "tuple_or_expr") {
                         auto list = TupleItems(sub);
                         std::shared_ptr<TSelect> query;
                         if (list.size() == 1 && !Has(Unwrap(sub), ",") && Result.Expressions[list[0]].Kind == ESyntaxKind::ScalarSubquery)

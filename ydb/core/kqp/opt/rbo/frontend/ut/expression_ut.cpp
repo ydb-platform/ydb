@@ -446,26 +446,294 @@ Y_UNIT_TEST_SUITE(KqpNativeExpressions) {
         }
     }
 
-    Y_UNIT_TEST(FilterPreparationExposesFixedMembershipWithoutChangingScalarNulls) {
+    Y_UNIT_TEST(FilterPreparationKeepsLegacyMembershipDistinctFromConjunctions) {
         TExpressionArena arena;
         const auto key = arena.Column(1, {K::Uint64, true});
         const auto a = arena.Parameter("a", {K::Uint64}), b = arena.Parameter("b", {K::Uint64});
         const std::array items{a, b};
         const auto scalar = arena.InCollection(key, arena.Collection(items, true), false);
         const auto predicate = PrepareFilterPredicate(arena, scalar);
-        UNIT_ASSERT(arena[scalar].Op == O::If);
-        UNIT_ASSERT(arena[predicate].Op == O::And);
-        const auto alternatives = arena[predicate].Arguments[1];
-        UNIT_ASSERT(arena[alternatives].Op == O::Or);
-        for (const auto term : arena[alternatives].Arguments) {
-            UNIT_ASSERT(arena[term].Op == O::Equal);
-        }
+        UNIT_ASSERT(arena[scalar].Op == O::InResult);
+        UNIT_ASSERT_VALUES_EQUAL(predicate, scalar);
         TEvaluationContext context;
         context.Column = [](TColumnId) { return TValue{{K::Uint64, true}, {}}; };
         context.Parameter = [](std::string_view) { UNIT_FAIL("NULL guard must skip membership items"); return TValue{}; };
         UNIT_ASSERT(Evaluate(arena, scalar, context).IsNull());
-        UNIT_ASSERT_VALUES_EQUAL(FormatValue(Evaluate(arena, predicate, context)), "false");
+        UNIT_ASSERT(Evaluate(arena, predicate, context).IsNull());
     }
+
+    Y_UNIT_TEST(FilterTruthDropsRejectedOrOperandsWithoutSkippingEvaluation) {
+        TExpressionArena arena;
+        const auto value = arena.Parameter("value", {K::Bool, true});
+        const auto check = arena.Parameter("check", {K::Bool});
+        const auto observed = arena.Ensure(value, check, "observed check");
+        const auto no = arena.Literal({K::Bool}, false);
+        const auto absent = arena.Literal({K::Bool, true}, {});
+        std::vector<std::string> calls;
+        TEvaluationContext context;
+        for (const auto& supplied : std::vector<TScalar>{false, true, std::monostate{}})
+        for (const bool pass : {false, true}) {
+            context.Parameter = [&](std::string_view name) -> TValue {
+                calls.emplace_back(name);
+                return name == "value" ? TValue{{K::Bool, true}, supplied} : TValue{{K::Bool}, pass};
+            };
+            const auto run = [&](TExprId id) {
+                calls.clear();
+                try {
+                    const auto result = Evaluate(arena, id, context);
+                    return std::holds_alternative<bool>(result.Data) && std::get<bool>(result.Data) ? std::string{"true"} : std::string{"rejected"};
+                } catch (const TFrontendError& error) { return std::string{error.what()}; }
+            };
+            for (const auto rejected : {no, absent}) for (const bool reverse : {false, true}) {
+                const auto root = reverse ? arena.Binary(O::Or, rejected, observed) : arena.Binary(O::Or, observed, rejected);
+                const auto prepared = PrepareFilterPredicate(arena, root);
+                UNIT_ASSERT_VALUES_EQUAL(prepared, observed);
+                const auto expected = run(root);
+                const auto expectedCalls = calls;
+                UNIT_ASSERT_VALUES_EQUAL(run(prepared), expected);
+                UNIT_ASSERT(calls == expectedCalls);
+                const auto scalar = arena.Unary(O::Not, root);
+                UNIT_ASSERT_VALUES_EQUAL(PrepareFilterPredicate(arena, scalar), scalar);
+                const auto guarded = arena.Binary(O::And, root, arena.Ensure(no, no, "right check"));
+                UNIT_ASSERT_VALUES_EQUAL(PrepareFilterPredicate(arena, guarded), guarded);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NegatedNullTestsKeepNativeMeaningAndChecks) {
+        for (const bool nullable : {false, true}) {
+            TExpressionArena arena;
+            const TType type{K::Int64, nullable};
+            const auto input = arena.Parameter("input", type);
+            const auto checked = arena.Ensure(input, arena.Literal({K::Bool}, false), "null check");
+            for (const auto value : {input, checked}) for (const bool exists : {false, true}) {
+                const auto root = arena.Unary(O::Not, arena.Unary(exists ? O::IsNull : O::IsNotNull, value));
+                UNIT_ASSERT(arena[root].Op == (exists ? O::IsNotNull : O::IsNull));
+                TEvaluationContext context;
+                context.Parameter = [&](std::string_view) { return TValue{type, std::int64_t{7}}; };
+                if (value == checked) UNIT_ASSERT_EXCEPTION(Evaluate(arena, root, context), TFrontendError);
+                else UNIT_ASSERT_VALUES_EQUAL(std::get<bool>(Evaluate(arena, root, context).Data), exists);
+                if (nullable) {
+                    context.Parameter = [&](std::string_view) { return TValue{type, {}}; };
+                    if (value == checked) UNIT_ASSERT_EXCEPTION(Evaluate(arena, root, context), TFrontendError);
+                    else UNIT_ASSERT_VALUES_EQUAL(std::get<bool>(Evaluate(arena, root, context).Data), !exists);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(FilterPreparationRetainsOrdinaryConditionalStructure) {
+        TExpressionArena arena;
+        const auto condition = arena.Parameter("condition", {K::Bool, true});
+        const auto predicate = arena.Parameter("predicate", {K::Bool, true});
+        const auto no = arena.Literal({K::Bool}, false);
+        const auto absent = arena.Literal({K::Bool, true}, {});
+        for (const auto rejected : {no, absent}) {
+            for (const auto root : {arena.If(condition, predicate, rejected), arena.If(condition, rejected, predicate)}) {
+                const auto prepared = PrepareFilterPredicate(arena, root);
+                UNIT_ASSERT(arena[prepared].Op == O::If);
+                UNIT_ASSERT_VALUES_EQUAL(arena[prepared].Arguments[0], condition);
+                const std::array<TScalar, 3> values{TScalar{}, TScalar{false}, TScalar{true}};
+                for (const auto& test : values) for (const auto& value : values) {
+                    std::vector<std::string> calls;
+                    TEvaluationContext context;
+                    context.Parameter = [&](std::string_view name) {
+                        calls.emplace_back(name);
+                        return TValue{{K::Bool, true}, name == "condition" ? test : value};
+                    };
+                    const auto expected = Evaluate(arena, root, context);
+                    const auto expectedCalls = calls;
+                    calls.clear();
+                    UNIT_ASSERT(Evaluate(arena, prepared, context).Data == expected.Data);
+                    UNIT_ASSERT(calls == expectedCalls);
+                }
+                const auto negated = arena.Unary(O::Not, root);
+                UNIT_ASSERT_VALUES_EQUAL(PrepareFilterPredicate(arena, negated), negated);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(FilterBooleanConditionalPreservesTruthAndCheckedEvaluation) {
+        TExpressionArena arena;
+        const auto value = arena.Parameter("value", {K::Bool, true});
+        const auto guard = arena.Parameter("guard", {K::Bool});
+        const auto condition = arena.Ensure(value, guard, "checked condition");
+        const auto yes = arena.Literal({K::Bool}, true);
+        const auto no = arena.Literal({K::Bool}, false);
+        const auto absent = arena.Literal({K::Bool, true}, {});
+        const std::array<TScalar, 3> values{TScalar{}, TScalar{false}, TScalar{true}};
+        for (const auto rejected : {no, absent}) {
+            const auto root = arena.If(condition, yes, rejected);
+            const auto prepared = PrepareFilterPredicate(arena, root);
+            UNIT_ASSERT_VALUES_EQUAL(prepared, condition);
+            const auto negated = arena.Unary(O::Not, root);
+            UNIT_ASSERT_VALUES_EQUAL(PrepareFilterPredicate(arena, negated), negated);
+            for (const auto& input : values) for (const bool valid : {false, true}) {
+                std::vector<std::string> calls;
+                TEvaluationContext context;
+                context.Parameter = [&](std::string_view name) {
+                    calls.emplace_back(name);
+                    return name == "value" ? TValue{{K::Bool, true}, input} : TValue{{K::Bool}, valid};
+                };
+                const auto selects = [&](TExprId id) {
+                    const auto result = Evaluate(arena, id, context);
+                    return std::holds_alternative<bool>(result.Data) && std::get<bool>(result.Data);
+                };
+                if (valid) {
+                    const bool expected = selects(root);
+                    const auto expectedCalls = calls;
+                    calls.clear();
+                    UNIT_ASSERT_VALUES_EQUAL(selects(prepared), expected);
+                    UNIT_ASSERT(calls == expectedCalls);
+                } else {
+                    UNIT_ASSERT_EXCEPTION(selects(root), TFrontendError);
+                    const auto expectedCalls = calls;
+                    calls.clear();
+                    UNIT_ASSERT_EXCEPTION(selects(prepared), TFrontendError);
+                    UNIT_ASSERT(calls == expectedCalls);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(InResultPreservesNullsErrorsAndObservableEvaluationOrder) {
+        TExpressionArena arena;
+        const auto lookup = arena.Parameter("lookup", {K::Int32, true});
+        const auto match = arena.Parameter("match", {K::Bool, true});
+        const auto checked = arena.Ensure(match, arena.Parameter("check", {K::Bool}), "match check");
+        const auto random = arena.Call("RandomUuid", {});
+        const auto randomMatch = arena.Binary(O::Equal, random, arena.Literal({K::Uuid}, std::string(16, 'x')));
+        const auto no = arena.Literal({K::Bool}, false);
+        for (const auto input : {match, checked, arena.Binary(O::And, randomMatch, checked)}) {
+            const auto root = arena.InResult(lookup, input, false);
+            const auto expected = arena.If(arena.Unary(O::IsNull, lookup), arena.Literal({K::Bool, true}, {}),
+                arena.Coalesce(std::array{input, no}));
+            UNIT_ASSERT(arena[root].Op == O::InResult);
+            UNIT_ASSERT_VALUES_EQUAL(arena.InResult(lookup, input, true), input);
+            const auto prepared = PrepareFilterPredicate(arena, root);
+            const auto negated = arena.Unary(O::Not, root);
+            UNIT_ASSERT_VALUES_EQUAL(PrepareFilterPredicate(arena, negated), negated);
+            const auto folded = arena.FoldConstants(std::array{root}).front();
+            const std::array<TScalar, 3> matches{TScalar{}, TScalar{false}, TScalar{true}};
+            for (const bool missing : {false, true}) for (const auto& value : matches) for (const bool pass : {false, true}) {
+                std::vector<std::string> calls;
+                TEvaluationContext context;
+                context.Parameter = [&](std::string_view name) {
+                    calls.emplace_back(name);
+                    if (name == "lookup") return TValue{{K::Int32, true}, missing ? TScalar{} : TScalar{std::int64_t{7}}};
+                    if (name == "check") return TValue{{K::Bool}, pass};
+                    return TValue{{K::Bool, true}, value};
+                };
+                context.RandomUuid = [&] { calls.emplace_back("random"); return std::string(16, 'x'); };
+                const auto run = [&](TExprId id, bool filter) {
+                    calls.clear();
+                    try {
+                        const auto result = Evaluate(arena, id, context);
+                        if (filter && result.IsNull()) return std::string{"false"};
+                        return FormatValue(result);
+                    } catch (const TFrontendError& error) { return std::string{error.what()}; }
+                };
+                for (const auto& [actual, filter] : std::array{std::pair{root, false}, std::pair{folded, false}, std::pair{prepared, true}}) {
+                    const auto expectedValue = run(expected, filter);
+                    const auto expectedCalls = calls;
+                    UNIT_ASSERT_VALUES_EQUAL(run(actual, filter), expectedValue);
+                    UNIT_ASSERT(calls == expectedCalls);
+                }
+            }
+        }
+        const auto required = arena.Parameter("required", {K::Int32});
+        const auto yes = arena.Literal({K::Bool}, true);
+        UNIT_ASSERT_VALUES_EQUAL(arena.InResult(required, yes, false), yes);
+        UNIT_ASSERT_EXCEPTION(arena.InResult(lookup, required, false), TFrontendError);
+        const auto knownNull = arena.Ensure(arena.Null(), no, "statically Null lookup");
+        const auto nullResult = arena.InResult(knownNull, checked, false);
+        UNIT_ASSERT(arena[nullResult].Op == O::Literal);
+        UNIT_ASSERT(Evaluate(arena, nullResult).IsNull());
+    }
+
+    Y_UNIT_TEST(InResultEvaluatesAllLookupFieldsBeforeTestingForNull) {
+        TExpressionArena arena;
+        const auto key = arena.Parameter("key", {K::Int32, true});
+        const auto second = arena.Ensure(arena.Parameter("second", {K::Int32}), arena.Parameter("check", {K::Bool}), "lookup check");
+        const auto tuple = arena.Collection(std::array{key, second}, false);
+        const auto match = arena.Parameter("match", {K::Bool});
+        const auto root = arena.InResult(tuple, match, false);
+        const auto expected = arena.If(arena.Unary(O::HasNull, tuple), arena.Literal({K::Bool, true}, {}), match);
+        const auto prepared = PrepareFilterPredicate(arena, root);
+        for (const bool missing : {false, true}) for (const bool pass : {false, true}) {
+            std::vector<std::string> calls;
+            TEvaluationContext context;
+            context.Parameter = [&](std::string_view name) {
+                calls.emplace_back(name);
+                if (name == "key") return TValue{{K::Int32, true}, missing ? TScalar{} : TScalar{std::int64_t{7}}};
+                if (name == "second") return TValue{{K::Int32}, std::int64_t{8}};
+                return TValue{{K::Bool}, name == "check" ? pass : true};
+            };
+            const auto run = [&](TExprId id, bool filter) {
+                calls.clear();
+                try {
+                    const auto result = Evaluate(arena, id, context);
+                    return filter && result.IsNull() ? std::string{"false"} : FormatValue(result);
+                } catch (const TFrontendError& error) { return std::string{error.what()}; }
+            };
+            for (const auto& [actual, filter] : std::array{std::pair{root, false}, std::pair{prepared, true}}) {
+                const auto expectedValue = run(expected, filter);
+                const auto expectedCalls = calls;
+                UNIT_ASSERT_VALUES_EQUAL(run(actual, filter), expectedValue);
+                UNIT_ASSERT(calls == expectedCalls);
+            }
+            const std::vector<std::string> expectedCalls = !pass ? std::vector<std::string>{"key", "check"} : missing
+                ? std::vector<std::string>{"key", "check", "second"}
+                : std::vector<std::string>{"key", "check", "second", "match"};
+            UNIT_ASSERT(calls == expectedCalls);
+        }
+    }
+
+    Y_UNIT_TEST(InResultImportRebindingAndFoldingRetainGuardedErrors) {
+        TExpressionArena arena;
+        const auto lookup = arena.Column(1, {K::Int32, true});
+        const auto match = arena.Ensure(arena.Literal({K::Bool}, true), arena.Literal({K::Bool}, false), "deferred membership");
+        const auto root = arena.InResult(lookup, match, false);
+        TExpressionArena copy;
+        const auto imported = copy.Import(arena, root, [&](auto id, auto type, auto pos) { return copy.Column(id + 1, type, pos); });
+        UNIT_ASSERT(copy[imported].Op == O::InResult);
+        for (const bool missing : {false, true}) {
+            const auto rewritten = copy.RewriteColumns(imported, [&](auto, auto id, auto type, auto pos) {
+                UNIT_ASSERT_VALUES_EQUAL(id, 2);
+                return copy.Literal(type, missing ? TScalar{} : TScalar{std::int64_t{7}}, pos);
+            });
+            const auto folded = copy.FoldConstants(std::array{rewritten}).front();
+            UNIT_ASSERT(copy[folded].Type == (TType{K::Bool, true}));
+            if (missing) {
+                UNIT_ASSERT(copy[folded].Op == O::Literal);
+                UNIT_ASSERT(Evaluate(copy, folded).IsNull());
+            } else UNIT_ASSERT_EXCEPTION_CONTAINS(Evaluate(copy, folded), TFrontendError, "deferred membership");
+        }
+    }
+
+    Y_UNIT_TEST(FixedInCollectionsRetainEmptyAndShortCircuitContracts) {
+        for (const bool ansi : {false, true}) {
+            TExpressionArena arena;
+            const auto lookup = arena.Parameter("key", {K::Int32, true});
+            const auto item = arena.Ensure(arena.Literal({K::Int32}, std::int64_t{9}), arena.Literal({K::Bool}, false), "later item");
+            const auto first = arena.Literal({K::Int32, true}, std::int64_t{7});
+            const auto null = arena.Literal({K::Int32, true}, {});
+            const auto empty = arena.InCollection(lookup, arena.Collection({}, true), ansi);
+            const auto match = arena.InCollection(lookup, arena.Collection(std::array{null, first, item}, true), ansi);
+            unsigned calls = 0;
+            TEvaluationContext context;
+            context.Parameter = [&](auto) { ++calls; return TValue{{K::Int32, true}, {}}; };
+            const auto emptyValue = Evaluate(arena, empty, context);
+            UNIT_ASSERT_VALUES_EQUAL(emptyValue.IsNull(), !ansi);
+            UNIT_ASSERT_VALUES_EQUAL(calls, ansi ? 0 : 1);
+            if (!ansi) UNIT_ASSERT(Evaluate(arena, match, context).IsNull());
+            context.Parameter = [&](auto) { ++calls; return TValue{{K::Int32, true}, std::int64_t{7}}; };
+            UNIT_ASSERT_VALUES_EQUAL(FormatValue(Evaluate(arena, match, context)), "true");
+            context.Parameter = [&](auto) { ++calls; return TValue{{K::Int32, true}, std::int64_t{8}}; };
+            UNIT_ASSERT_EXCEPTION_CONTAINS(Evaluate(arena, match, context), TFrontendError, "later item");
+        }
+    }
+
 
     Y_UNIT_TEST(LikeCaseModeSurvivesNativeRebindingAndFolding) {
         for (const bool caseSensitive : {false, true}) {

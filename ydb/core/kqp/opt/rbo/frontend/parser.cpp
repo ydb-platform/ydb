@@ -868,9 +868,8 @@ private:
                     std::vector<TSyntaxId> args{left};
                     bool comma = false;
                     if (list && Take(",")) Expect(end);
-                    else if (list && Take(end)) {}
+                    else if (Take(end)) {}
                     else {
-                        if (Is(end)) Fail("empty IN list");
                         do {
                             args.push_back(Expression());
                             if (!Take(",")) break;

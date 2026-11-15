@@ -1,6 +1,5 @@
 #include "predicate.h"
 
-#include <array>
 #include <unordered_map>
 
 namespace NKikimr::NKqp::NFrontend {
@@ -62,22 +61,23 @@ TExprId PrepareFilterPredicate(TExpressionArena& arena, TExprId root) {
         } else if (node.Op == O::And || node.Op == O::Or) {
             const auto left = node.Op == O::And ? node.Arguments[0] : prepared.at(node.Arguments[0]);
             const auto right = prepared.at(node.Arguments[1]);
-            if (left != node.Arguments[0] || right != node.Arguments[1])
+            // In a TRUE-versus-rejected context, a FALSE or NULL operand
+            // of OR contributes no selected rows. The other operand still
+            // runs exactly when it did before, including checks and calls.
+            if (node.Op == O::Or && IsRejectedLiteral(arena[left])) result = right;
+            else if (node.Op == O::Or && IsRejectedLiteral(arena[right])) result = left;
+            else if (left != node.Arguments[0] || right != node.Arguments[1])
                 result = arena.Binary(node.Op, left, right, node.Position);
         } else if (node.Op == O::If) {
             const auto left = prepared.at(node.Arguments[1]), right = prepared.at(node.Arguments[2]);
-            const bool rejectLeft = IsRejectedLiteral(arena[left]), rejectRight = IsRejectedLiteral(arena[right]);
-            if (rejectLeft || rejectRight) {
-                auto condition = node.Arguments[0];
-                if (arena[condition].Type.OptionalDepth) {
-                    const std::array alternatives{condition, arena.Literal({K::Bool}, false, node.Position)};
-                    condition = arena.Coalesce(alternatives, node.Position);
-                }
-                if (rejectLeft) condition = arena.Unary(O::Not, condition, node.Position);
-                result = arena.Binary(O::And, condition, rejectLeft ? right : left, node.Position);
-            } else if (left != node.Arguments[1] || right != node.Arguments[2]) {
+            // IF(condition, true, rejected) observes exactly the filter's
+            // truth test. Keep the condition's evaluation, including errors.
+            // Other conditionals retain their distinct optimizer admission.
+            if (arena[left].Op == O::Literal && std::holds_alternative<bool>(arena[left].Value) &&
+                std::get<bool>(arena[left].Value) && IsRejectedLiteral(arena[right]))
+                result = node.Arguments[0];
+            else if (left != node.Arguments[1] || right != node.Arguments[2])
                 result = arena.If(node.Arguments[0], left, right, node.Position);
-            }
         }
         prepared.emplace(id, result);
     }

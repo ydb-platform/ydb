@@ -1390,16 +1390,10 @@ TExprId TExpressionArena::InCollection(TExprId lookup, TExprId collection, bool 
         const auto items = (*this)[collection].Arguments;
         auto result = Literal({K::Bool}, false, position);
         for (auto id : items) {
-            auto equal = Binary(O::Equal, lookup, id, position);
-            if (!ansi && (*this)[equal].Type.OptionalDepth) {
-                const std::array alternatives{equal, Literal({K::Bool}, false, position)};
-                equal = Coalesce(alternatives, position);
-            }
+            const auto equal = Binary(O::Equal, lookup, id, position);
             result = Binary(O::Or, result, equal, position);
         }
-        if (!ansi && (value.OptionalDepth || value.Kind == K::Null))
-            result = If(Unary(O::IsNull, lookup, position), Literal(resultType, {}, position), result, position);
-        return Convert(result, resultType, position);
+        return Convert(InResult(lookup, result, ansi, position), resultType, position);
     }
     const bool exactKey = value.Required() == item.Required() &&
         (item.IsDate() || item.IsInterval() || item.Kind == K::Uuid || item.Kind == K::Decimal);
@@ -1408,6 +1402,23 @@ TExprId TExpressionArena::InCollection(TExprId lookup, TExprId collection, bool 
          !(value.IsIntegral() || value.IsString() || value.Kind == K::Double || value.Kind == K::Bool || value.Kind == K::Null))))
         throw TUnsupportedFeature(EFeature::Type, position, "unsupported scalar types for runtime IN dictionary lookup");
     return Append({O::InCollection, resultType, position, {lookup, collection}, {}, ansi ? "ansi" : "legacy", 0});
+}
+
+TExprId TExpressionArena::InResult(TExprId lookup, TExprId match, bool ansi, TSourcePosition position) {
+    const auto matchType = (*this)[match].Type;
+    if (matchType.Kind != K::Bool || matchType.OptionalDepth > 1)
+        Fail(position, "IN match requires Bool or Bool?");
+    (void)(*this)[lookup];
+    if (ansi) return match;
+    // Preserve SQL's type-level Null propagation, including discarded checks
+    // inside a statically Null operand. A typed nullable lookup is evaluated.
+    if ((*this)[lookup].Type.Kind == K::Null) return Literal({K::Bool, true}, {}, position);
+    if (matchType.OptionalDepth) {
+        const TExprId alternatives[]{match, Literal({K::Bool}, false, position)};
+        match = Coalesce(alternatives, position);
+    }
+    if (!CanContainNull((*this)[lookup].Type)) return match;
+    return Append({O::InResult, {K::Bool, true}, position, {lookup, match}, {}, {}, 0});
 }
 
 TType TExpressionArena::ImportType(const TExpressionArena& source, TType type) {
@@ -1644,6 +1655,9 @@ TExprId TExpressionArena::Unary(O op, TExprId input, TSourcePosition position) {
     } else if (op == O::IsNull || op == O::IsNotNull || op == O::HasNull) {
         type = {K::Bool};
     } else if (op == O::Not) {
+        const auto& value = (*this)[input];
+        if (value.Op == O::IsNull || value.Op == O::IsNotNull)
+            return Unary(value.Op == O::IsNull ? O::IsNotNull : O::IsNull, value.Arguments[0], position);
         if (type.Kind != K::Bool && type.Kind != K::Null) {
             Fail(position, "NOT expects Bool");
         }
@@ -2254,6 +2268,7 @@ TExprId TExpressionArena::Rebuild(TExprNode node) {
         case O::TupleElement: return TupleElement(node.Arguments[0], std::get<std::uint64_t>(node.Value), node.Position);
         case O::ListElement: return ListElement(node.Arguments[0], node.Arguments[1], node.Position);
         case O::InCollection: return InCollection(node.Arguments[0], node.Arguments[1], node.Name == "ansi", node.Position);
+        case O::InResult: return InResult(node.Arguments[0], node.Arguments[1], false, node.Position);
         case O::Literal: return Literal(node.Type, std::move(node.Value), node.Position);
         case O::Column: return Column(node.ColumnId, node.Type, node.Position);
         case O::Parameter: return Parameter(std::move(node.Name), node.Type, node.Position);
@@ -2600,6 +2615,15 @@ std::uint64_t IntegralRangeSize(const TValue& begin, const TValue& end, const TV
     return static_cast<std::uint64_t>(distance / magnitude + (distance % magnitude != 0));
 }
 
+bool HasNullValue(const TValue& value) {
+    if (value.IsNull()) return true;
+    if (const auto* optional = std::get_if<TOptionalValue>(&value.Data)) return HasNullValue(**optional);
+    if (const auto* collection = std::get_if<TTuple>(&value.Data)) {
+        for (const auto& item : (*collection)->Items) if (HasNullValue(item)) return true;
+    }
+    return false;
+}
+
 TValue Execute(const TExpressionArena& arena, const TExprNode& node, const std::vector<std::optional<TValue>>& values) {
     auto argument = [&](std::size_t index) -> const TValue& { return *values[node.Arguments[index]]; };
     if (node.Op == O::ListFromRange) {
@@ -2709,17 +2733,9 @@ TValue Execute(const TExpressionArena& arena, const TExprNode& node, const std::
     if (node.Op == O::IsNull || node.Op == O::IsNotNull) {
         return {node.Type, argument(0).IsNull() == (node.Op == O::IsNull)};
     }
-    if (node.Op == O::HasNull) {
-        const auto hasNull = [&](auto&& self, const TValue& value) -> bool {
-            if (value.IsNull()) return true;
-            if (const auto* optional = std::get_if<TOptionalValue>(&value.Data)) return self(self, **optional);
-            if (const auto* collection = std::get_if<TTuple>(&value.Data)) {
-                for (const auto& item : (*collection)->Items) if (self(self, item)) return true;
-            }
-            return false;
-        };
-        return {node.Type, hasNull(hasNull, argument(0))};
-    }
+    if (node.Op == O::HasNull) return {node.Type, HasNullValue(argument(0))};
+    if (node.Op == O::InResult)
+        return HasNullValue(argument(0)) ? NullValue(node.Type) : TValue{node.Type, argument(1).Data};
     if (node.Op == O::StablePickle) {
         return {node.Type, StablePickle(argument(0))};
     }
@@ -3026,6 +3042,17 @@ TValue Evaluate(const TExpressionArena& arena, TExprId root, const TEvaluationCo
             finish(*values[value]);
             continue;
         }
+        if (node.Op == O::InResult) {
+            const auto lookup = node.Arguments[0], match = node.Arguments[1];
+            if (!values[lookup]) { stack.push_back({lookup}); continue; }
+            if (!stack.back().Next) {
+                if (HasNullValue(*values[lookup])) { finish(NullValue(node.Type)); continue; }
+                stack.back().Next = 1;
+            }
+            if (!values[match]) { stack.push_back({match}); continue; }
+            finish(*values[match]);
+            continue;
+        }
         if (node.Op == O::If) {
             const auto condition = node.Arguments[0];
             if (!values[condition]) {
@@ -3142,7 +3169,7 @@ std::vector<TExprId> TExpressionArena::FoldConstants(std::span<const TExprId> ro
             case O::Literal: case O::Column: case O::Parameter:
             case O::Negate: case O::Not: case O::Add: case O::Subtract: case O::Multiply: case O::Divide: case O::Modulo:
             case O::Equal: case O::NotEqual: case O::Less: case O::LessEqual: case O::Greater: case O::GreaterEqual:
-            case O::And: case O::Or: case O::If: case O::Coalesce: case O::OptionalWrap:
+            case O::And: case O::Or: case O::If: case O::Coalesce: case O::OptionalWrap: case O::InResult:
             case O::IsNull: case O::IsNotNull: case O::IsNotDistinct: case O::HasNull:
                 return true;
             default: return false;
@@ -3161,6 +3188,11 @@ std::vector<TExprId> TExpressionArena::FoldConstants(std::span<const TExprId> ro
         // including invalid-path errors and NULL inputs. Never invoke it here.
         if (node.Op == O::JsonValue || node.Op == O::RandomUuid || node.Op == O::RandomNumber ||
             node.Op == O::Like || node.Op == O::ILike || node.Op == O::RegexMatch || node.Op == O::RegexGrep) return retain();
+        if (node.Op == O::InResult && (*this)[node.Arguments[0]].Op == O::Literal) {
+            const auto& lookup = (*this)[node.Arguments[0]];
+            return HasNullValue({lookup.Type, lookup.Value}) ? literal(std::monostate{})
+                : Convert(node.Arguments[1], node.Type, node.Position);
+        }
         if (node.Op == O::If && (*this)[node.Arguments[0]].Op == O::Literal) {
             const auto& condition = (*this)[node.Arguments[0]].Value;
             return node.Arguments[std::holds_alternative<bool>(condition) && std::get<bool>(condition) ? 1 : 2];

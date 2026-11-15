@@ -113,7 +113,7 @@ enum class EOpcode : std::uint8_t {
     Unwrap, UnicodeLower, UnicodeUpper, JsonValue, OptionalWrap, Collection, InCollection, RandomUuid, RandomNumber, Like, ILike, TupleElement, ListElement,
     ListFromRange, ListConcat, ListLength, ListHasItems, Minimum, Maximum,
     BitNot, BitAnd, BitOr, BitXor, ShiftLeft, ShiftRight, IsNotDistinct,
-    BitCast, HasNull, RegexMatch, RegexGrep, Member,
+    BitCast, HasNull, RegexMatch, RegexGrep, Member, InResult,
 };
 
 struct TExprNode {
@@ -166,6 +166,12 @@ public:
     TExprId TupleElement(TExprId tuple, std::uint32_t index, TSourcePosition position = {});
     TExprId ListElement(TExprId list, TExprId index, TSourcePosition position = {});
     TExprId InCollection(TExprId lookup, TExprId collection, bool ansi, TSourcePosition position = {});
+    // Apply SQL IN's result null semantics to a native membership match.
+    // ANSI retains the match. Legacy IN returns NULL for a NULL-containing
+    // lookup without evaluating the match, and treats an unknown match as false.
+    // A statically Null lookup reduces to NULL, as in native comparisons.
+    // Fixed comparisons and scalar-subquery matches share this operation.
+    TExprId InResult(TExprId lookup, TExprId match, bool ansi, TSourcePosition position = {});
     TExprId Literal(TType type, TScalar value, TSourcePosition position = {});
     TExprId Null(TSourcePosition position = {});
     TExprId Column(TColumnId column, TType type, TSourcePosition position = {});

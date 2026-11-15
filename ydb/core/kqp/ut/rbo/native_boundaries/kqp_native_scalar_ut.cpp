@@ -43,6 +43,58 @@ Y_UNIT_TEST_SUITE(KqpNativeScalarBoundaries) {
         }
     }
 
+    Y_UNIT_TEST(InResultNullSemanticsExecuteWithoutSemanticPasses) {
+        using namespace NFrontend;
+        using K = ETypeKind;
+        const std::array<TScalar, 3> matches{TScalar{}, TScalar{false}, TScalar{true}};
+        for (const bool missing : {false, true}) for (const auto& value : matches) for (const bool tuple : {false, true}) {
+            TExpressionArena arena;
+            auto lookup = arena.Literal({K::Int32, true}, missing ? TScalar{} : TScalar{std::int64_t{7}});
+            if (tuple) lookup = arena.Collection(std::array{arena.Literal({K::String}, std::string{"key"}), lookup}, false);
+            const auto match = arena.Literal({K::Bool, true}, value);
+            for (const bool ansi : {false, true}) {
+                const auto root = arena.InResult(lookup, match, ansi);
+                CheckScalar(arena, root, "IN nullable scalar/tuple result");
+                CheckScalar(arena, arena.FoldConstants(std::array{root}).front(), "folded IN result");
+            }
+            if (missing) {
+                const auto checked = arena.Ensure(arena.Literal({K::Bool}, true), arena.Literal({K::Bool}, false), "unreached match");
+                CheckScalar(arena, arena.InResult(lookup, checked, false), "NULL lookup skips checked match");
+            }
+        }
+        for (const auto* sql : {
+                "PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections; SELECT Just(1) IN (NULL, 1, Ensure(2, FALSE, 'unreached item'))",
+                "PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections; SELECT CAST(NULL AS Int32) IN (Ensure(2, FALSE, 'unreached item'), 3)",
+                "PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections; SELECT Just(1) NOT IN (2, NULL)",
+                "PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections; SELECT Ensure(NULL, FALSE, 'discarded Null check') IN (1, 2)",
+                "PRAGMA AnsiInForEmptyOrNullableItemsCollections; SELECT Just(1) NOT IN (2, NULL)"})
+            CheckScalar(sql);
+    }
+
+    Y_UNIT_TEST(InResultLookupErrorsSurviveTerminalEmission) {
+        using namespace NFrontend;
+        using K = ETypeKind;
+        TExpressionArena arena;
+        const auto missing = arena.Literal({K::Int32, true}, {});
+        const auto checked = arena.Ensure(arena.Literal({K::Int32}, std::int64_t{7}), arena.Literal({K::Bool}, false), "checked tuple lookup");
+        const auto tuple = arena.Collection(std::array{missing, checked}, false);
+        const auto root = arena.InResult(tuple, arena.Literal({K::Bool}, true), false);
+        for (const auto expression : {root, arena.FoldConstants(std::array{root}).front()}) {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(Evaluate(arena, expression), TFrontendError, "checked tuple lookup");
+            NYql::TExprContext ctx;
+            const auto lambda = LowerNativeLambda(arena, expression, ctx, {});
+            UNIT_ASSERT(AreAllNodesTypeAnnotated(*lambda));
+            UNIT_ASSERT(!NeedsRboCompatibilityLowering(lambda));
+            NMiniKQL::TSetup<false> setup(NMiniKQL::GetBuiltinFactory());
+            NYql::NCommon::TMkqlCommonCallableCompiler compiler;
+            NYql::NCommon::TMkqlBuildContext build(compiler, *setup.PgmBuilder, ctx);
+            const auto runtime = NYql::NCommon::MkqlBuildLambda(*lambda, build, {setup.PgmBuilder->NewEmptyStruct()});
+            auto graph = setup.BuildGraph(runtime);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(graph->GetValue(), yexception, "checked tuple lookup");
+        }
+    }
+
+
     Y_UNIT_TEST(StructuralNullChecksExecuteWithoutSemanticPasses) {
         using namespace NFrontend;
         for (const bool missing : {false, true}) {

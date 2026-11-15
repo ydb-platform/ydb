@@ -682,6 +682,12 @@ private:
                 // early NULL determines the answer. Checked/volatile members
                 // remain observable, matching native scalar evaluation.
                 return Call("Seq", {args[0], HasNull(args[0], types[0])}, {K::Bool});
+            case O::InResult: {
+                // The lookup is evaluated in full before testing its nulls;
+                // a NULL tuple member must not hide another checked member.
+                const auto missing = Call("Seq", {args[0], HasNull(args[0], types[0])}, {K::Bool});
+                return Call("If", {missing, Nothing(type), Lift(args[1], type)}, type);
+            }
             case O::If: {
                 if (Arena[node.Arguments[0]].Type.OptionalDepth) args[0] = Call("Coalesce", {args[0], Literal({K::Bool}, false)}, {K::Bool});
                 return Call("If", std::move(args), type);

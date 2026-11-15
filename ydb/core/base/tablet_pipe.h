@@ -42,14 +42,7 @@ namespace NKikimr {
         struct TEvConnect : public TEventPB<TEvConnect, NKikimrTabletPipe::TEvConnect, EvConnect> {
             TEvConnect() {}
 
-            TEvConnect(ui64 tabletId, const TActorId& clientId, ui32 features = 0)
-            {
-                Record.SetTabletId(tabletId);
-                ActorIdToProto(clientId, Record.MutableClientId());
-                if (features) {
-                    Record.SetFeatures(features);
-                }
-            }
+            TEvConnect(ui64 tabletId, const TActorId& clientId, ui32 features = 0);
         };
 
         struct TEvConnectResult : public TEventPB<TEvConnectResult, NKikimrTabletPipe::TEvConnectResult, EvConnectResult> {
@@ -58,38 +51,14 @@ namespace NKikimr {
             TEvConnectResult(NKikimrProto::EReplyStatus status, ui64 tabletId,
                     const TActorId& clientId, const TActorId& serverId,
                     bool leader, ui32 generation,
-                    TString&& versionInfo)
-            {
-                Record.SetStatus(status);
-                Record.SetTabletId(tabletId);
-                ActorIdToProto(clientId, Record.MutableClientId());
-                ActorIdToProto(serverId, Record.MutableServerId());
-                Record.SetLeader(leader);
-                Record.SetSupportsDataInPayload(true);
-                Record.SetGeneration(generation);
-                if (!versionInfo.empty()) {
-                    Record.SetVersionInfo(std::move(versionInfo));
-                }
-            }
+                    TString&& versionInfo);
         };
 
         struct TEvPush : public TEventPB<TEvPush, NKikimrTabletPipe::TEvPush, EvPush> {
             TEvPush() {}
 
             TEvPush(ui64 tabletId, ui32 type, const TActorId& sender, const TIntrusivePtr<TEventSerializedData>& buffer,
-                ui64 cookie, const TEventSerializationInfo& serializationInfo, bool supportsDataInPayload)
-            {
-                Record.SetTabletId(tabletId);
-                Record.SetType(type);
-                ActorIdToProto(sender, Record.MutableSender());
-                if (supportsDataInPayload) {
-                    AddPayload(buffer->GetRope());
-                } else {
-                    Record.SetBuffer(buffer->GetString());
-                }
-                Record.SetCookie(cookie);
-                Record.SetExtendedFormat(serializationInfo.IsExtendedFormat);
-            }
+                ui64 cookie, const TEventSerializationInfo& serializationInfo, bool supportsDataInPayload);
 
             void SetSeqNo(ui64 seqNo) {
                 Record.SetSeqNo(seqNo);
@@ -99,32 +68,15 @@ namespace NKikimr {
         struct TEvPeerClosed : public TEventPB<TEvPeerClosed, NKikimrTabletPipe::TEvPeerClosed, EvPeerClosed> {
             TEvPeerClosed() {}
 
-            TEvPeerClosed(ui64 tabletId, const TActorId& clientId, const TActorId& serverId)
-            {
-                Record.SetTabletId(tabletId);
-                ActorIdToProto(clientId, Record.MutableClientId());
-                ActorIdToProto(serverId, Record.MutableServerId());
-            }
+            TEvPeerClosed(ui64 tabletId, const TActorId& clientId, const TActorId& serverId);
         };
 
         struct TEvPeerShutdown : public TEventPB<TEvPeerShutdown, NKikimrTabletPipe::TEvPeerShutdown, EvPeerShutdown> {
             TEvPeerShutdown() {}
 
-            TEvPeerShutdown(ui64 tabletId, const TActorId& clientId, const TActorId& serverId, ui64 maxForwardedSeqNo)
-            {
-                Record.SetTabletId(tabletId);
-                ActorIdToProto(clientId, Record.MutableClientId());
-                ActorIdToProto(serverId, Record.MutableServerId());
-                Record.SetMaxForwardedSeqNo(maxForwardedSeqNo);
-            }
+            TEvPeerShutdown(ui64 tabletId, const TActorId& clientId, const TActorId& serverId, ui64 maxForwardedSeqNo);
 
-            ui64 GetMaxForwardedSeqNo() const {
-                if (Record.HasMaxForwardedSeqNo()) {
-                    return Record.GetMaxForwardedSeqNo();
-                } else {
-                    return Max<ui64>();
-                }
-            }
+            ui64 GetMaxForwardedSeqNo() const;
         };
 
         struct TEvClientConnected : public TEventLocal<TEvClientConnected, EvClientConnected> {
@@ -142,17 +94,7 @@ namespace NKikimr {
                 , VersionInfo(std::move(versionInfo))
             {}
 
-            TString ToString() const override {
-                return TStringBuilder() << ToStringHeader() << " {"
-                    << " TabletId: " << TabletId
-                    << " Status: " << Status
-                    << " ServerId: " << ServerId
-                    << " Leader: " << Leader
-                    << " Dead: " << Dead
-                    << " Generation: " << Generation
-                    << " VersionInfo: " << VersionInfo
-                << " }";
-            }
+            TString ToString() const override;
 
             const ui64 TabletId;
             const NKikimrProto::EReplyStatus Status;
@@ -186,13 +128,7 @@ namespace NKikimr {
                 , ServerId(serverId)
             {}
 
-            TString ToString() const override {
-                return TStringBuilder() << ToStringHeader() << " {"
-                    << " TabletId: " << TabletId
-                    << " ClientId: " << ClientId
-                    << " ServerId: " << ServerId
-                << " }";
-            }
+            TString ToString() const override;
 
             const ui64 TabletId;
             const TActorId ClientId;
@@ -387,15 +323,7 @@ namespace NKikimr {
                 return RetryLimitCount != 0;
             }
 
-            static TClientRetryPolicy WithoutRetries() {
-                return {
-                    .RetryLimitCount = {},
-                    .MinRetryTime = {},
-                    .MaxRetryTime = {},
-                    .BackoffMultiplier = {},
-                    .DoFirstRetryInstantly = {},
-                    };
-            }
+            static TClientRetryPolicy WithoutRetries();
 
             static TClientRetryPolicy WithRetries() {
                 return {};

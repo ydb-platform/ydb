@@ -1,4 +1,5 @@
 #include "columnshard_impl.h"
+#include <google/protobuf/util/message_differencer.h>
 
 #include "bg_tasks/manager/manager.h"
 #include "blobs_reader/actor.h"

@@ -1,4 +1,5 @@
 #include "node_broker_impl.h"
+#include <google/protobuf/util/message_differencer.h>
 #include "node_broker__scheme.h"
 
 #include <ydb/core/protos/counters_node_broker.pb.h>

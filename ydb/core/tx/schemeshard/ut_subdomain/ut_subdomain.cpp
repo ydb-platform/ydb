@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
+#include <google/protobuf/util/message_differencer.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>

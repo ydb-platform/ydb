@@ -1,4 +1,6 @@
 #include "proxy.h"
+#include <ydb/core/scheme/protos/key_range.pb.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>

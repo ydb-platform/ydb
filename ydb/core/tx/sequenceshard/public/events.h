@@ -41,11 +41,7 @@ namespace NSequenceShard {
         {
             TEvMarkSchemeShardPipe() = default;
 
-            TEvMarkSchemeShardPipe(ui64 schemeShardId, ui64 generation, ui64 round) {
-                Record.SetSchemeShardId(schemeShardId);
-                Record.SetGeneration(generation);
-                Record.SetRound(round);
-            }
+            TEvMarkSchemeShardPipe(ui64 schemeShardId, ui64 generation, ui64 round);
         };
 
         struct TEvCreateSequence
@@ -57,54 +53,26 @@ namespace NSequenceShard {
                 SetPathId(pathId);
             }
 
-            void SetPathId(const TPathId& pathId) {
-                auto* p = Record.MutablePathId();
-                p->SetOwnerId(pathId.OwnerId);
-                p->SetLocalId(pathId.LocalPathId);
-            }
+            void SetPathId(const TPathId& pathId);
 
-            TPathId GetPathId() const {
-                const auto& p = Record.GetPathId();
-                return TPathId(p.GetOwnerId(), p.GetLocalId());
-            }
+            TPathId GetPathId() const;
 
             struct TBuilder {
                 THolder<TEvCreateSequence> Msg;
 
-                TBuilder&& SetMinValue(i64 minValue) && {
-                    Msg->Record.SetMinValue(minValue);
-                    return std::move(*this);
-                }
+                TBuilder&& SetMinValue(i64 minValue) &&;
 
-                TBuilder&& SetMaxValue(i64 maxValue) && {
-                    Msg->Record.SetMaxValue(maxValue);
-                    return std::move(*this);
-                }
+                TBuilder&& SetMaxValue(i64 maxValue) &&;
 
-                TBuilder&& SetStartValue(i64 startValue) && {
-                    Msg->Record.SetStartValue(startValue);
-                    return std::move(*this);
-                }
+                TBuilder&& SetStartValue(i64 startValue) &&;
 
-                TBuilder&& SetCache(ui64 cache) && {
-                    Msg->Record.SetCache(cache);
-                    return std::move(*this);
-                }
+                TBuilder&& SetCache(ui64 cache) &&;
 
-                TBuilder&& SetIncrement(i64 increment) && {
-                    Msg->Record.SetIncrement(increment);
-                    return std::move(*this);
-                }
+                TBuilder&& SetIncrement(i64 increment) &&;
 
-                TBuilder&& SetCycle(bool cycle) && {
-                    Msg->Record.SetCycle(cycle);
-                    return std::move(*this);
-                }
+                TBuilder&& SetCycle(bool cycle) &&;
 
-                TBuilder&& SetFrozen(bool frozen) && {
-                    Msg->Record.SetFrozen(frozen);
-                    return std::move(*this);
-                }
+                TBuilder&& SetFrozen(bool frozen) &&;
 
                 THolder<TEvCreateSequence> Done() && {
                     return std::move(Msg);
@@ -123,10 +91,7 @@ namespace NSequenceShard {
 
             TEvCreateSequenceResult() = default;
 
-            TEvCreateSequenceResult(EStatus status, ui64 origin) {
-                Record.SetStatus(status);
-                Record.SetOrigin(origin);
-            }
+            TEvCreateSequenceResult(EStatus status, ui64 origin);
         };
 
         struct TEvAllocateSequence
@@ -134,21 +99,11 @@ namespace NSequenceShard {
         {
             TEvAllocateSequence() = default;
 
-            explicit TEvAllocateSequence(const TPathId& pathId, ui64 cache = 0) {
-                SetPathId(pathId);
-                Record.SetCache(cache);
-            }
+            explicit TEvAllocateSequence(const TPathId& pathId, ui64 cache = 0);
 
-            void SetPathId(const TPathId& pathId) {
-                auto* p = Record.MutablePathId();
-                p->SetOwnerId(pathId.OwnerId);
-                p->SetLocalId(pathId.LocalPathId);
-            }
+            void SetPathId(const TPathId& pathId);
 
-            TPathId GetPathId() const {
-                const auto& p = Record.GetPathId();
-                return TPathId(p.GetOwnerId(), p.GetLocalId());
-            }
+            TPathId GetPathId() const;
         };
 
         struct TEvAllocateSequenceResult
@@ -158,10 +113,7 @@ namespace NSequenceShard {
 
             TEvAllocateSequenceResult() = default;
 
-            TEvAllocateSequenceResult(EStatus status, ui64 origin) {
-                Record.SetStatus(status);
-                Record.SetOrigin(origin);
-            }
+            TEvAllocateSequenceResult(EStatus status, ui64 origin);
         };
 
         struct TEvDropSequence
@@ -173,16 +125,9 @@ namespace NSequenceShard {
                 SetPathId(pathId);
             }
 
-            void SetPathId(const TPathId& pathId) {
-                auto* p = Record.MutablePathId();
-                p->SetOwnerId(pathId.OwnerId);
-                p->SetLocalId(pathId.LocalPathId);
-            }
+            void SetPathId(const TPathId& pathId);
 
-            TPathId GetPathId() const {
-                const auto& p = Record.GetPathId();
-                return TPathId(p.GetOwnerId(), p.GetLocalId());
-            }
+            TPathId GetPathId() const;
         };
 
         struct TEvDropSequenceResult
@@ -192,10 +137,7 @@ namespace NSequenceShard {
 
             TEvDropSequenceResult() = default;
 
-            TEvDropSequenceResult(EStatus status, ui64 origin) {
-                Record.SetStatus(status);
-                Record.SetOrigin(origin);
-            }
+            TEvDropSequenceResult(EStatus status, ui64 origin);
         };
 
         struct TEvUpdateSequence
@@ -207,59 +149,28 @@ namespace NSequenceShard {
                 SetPathId(pathId);
             }
 
-            void SetPathId(const TPathId& pathId) {
-                auto* p = Record.MutablePathId();
-                p->SetOwnerId(pathId.OwnerId);
-                p->SetLocalId(pathId.LocalPathId);
-            }
+            void SetPathId(const TPathId& pathId);
 
-            TPathId GetPathId() const {
-                const auto& p = Record.GetPathId();
-                return TPathId(p.GetOwnerId(), p.GetLocalId());
-            }
+            TPathId GetPathId() const;
 
             struct TBuilder {
                 THolder<TEvUpdateSequence> Msg;
 
-                TBuilder&& SetMinValue(i64 minValue) && {
-                    Msg->Record.SetMinValue(minValue);
-                    return std::move(*this);
-                }
+                TBuilder&& SetMinValue(i64 minValue) &&;
 
-                TBuilder&& SetMaxValue(i64 maxValue) && {
-                    Msg->Record.SetMaxValue(maxValue);
-                    return std::move(*this);
-                }
+                TBuilder&& SetMaxValue(i64 maxValue) &&;
 
-                TBuilder&& SetStartValue(i64 startValue) && {
-                    Msg->Record.SetStartValue(startValue);
-                    return std::move(*this);
-                }
+                TBuilder&& SetStartValue(i64 startValue) &&;
 
-                TBuilder&& SetNextValue(i64 nextValue) && {
-                    Msg->Record.SetNextValue(nextValue);
-                    return std::move(*this);
-                }
+                TBuilder&& SetNextValue(i64 nextValue) &&;
 
-                TBuilder&& SetNextUsed(bool nextUsed) && {
-                    Msg->Record.SetNextUsed(nextUsed);
-                    return std::move(*this);
-                }
+                TBuilder&& SetNextUsed(bool nextUsed) &&;
 
-                TBuilder&& SetCache(ui64 cache) && {
-                    Msg->Record.SetCache(cache);
-                    return std::move(*this);
-                }
+                TBuilder&& SetCache(ui64 cache) &&;
 
-                TBuilder&& SetIncrement(i64 increment) && {
-                    Msg->Record.SetIncrement(increment);
-                    return std::move(*this);
-                }
+                TBuilder&& SetIncrement(i64 increment) &&;
 
-                TBuilder&& SetCycle(bool cycle) && {
-                    Msg->Record.SetCycle(cycle);
-                    return std::move(*this);
-                }
+                TBuilder&& SetCycle(bool cycle) &&;
 
                 THolder<TEvUpdateSequence> Done() && {
                     return std::move(Msg);
@@ -278,10 +189,7 @@ namespace NSequenceShard {
 
             TEvUpdateSequenceResult() = default;
 
-            TEvUpdateSequenceResult(EStatus status, ui64 origin) {
-                Record.SetStatus(status);
-                Record.SetOrigin(origin);
-            }
+            TEvUpdateSequenceResult(EStatus status, ui64 origin);
         };
 
         struct TEvFreezeSequence
@@ -293,16 +201,9 @@ namespace NSequenceShard {
                 SetPathId(pathId);
             }
 
-            void SetPathId(const TPathId& pathId) {
-                auto* p = Record.MutablePathId();
-                p->SetOwnerId(pathId.OwnerId);
-                p->SetLocalId(pathId.LocalPathId);
-            }
+            void SetPathId(const TPathId& pathId);
 
-            TPathId GetPathId() const {
-                const auto& p = Record.GetPathId();
-                return TPathId(p.GetOwnerId(), p.GetLocalId());
-            }
+            TPathId GetPathId() const;
         };
 
         struct TEvFreezeSequenceResult
@@ -312,10 +213,7 @@ namespace NSequenceShard {
 
             TEvFreezeSequenceResult() = default;
 
-            TEvFreezeSequenceResult(EStatus status, ui64 origin) {
-                Record.SetStatus(status);
-                Record.SetOrigin(origin);
-            }
+            TEvFreezeSequenceResult(EStatus status, ui64 origin);
         };
 
         struct TEvRestoreSequence
@@ -337,38 +235,13 @@ namespace NSequenceShard {
                 InitFrom(record);
             }
 
-            void SetPathId(const TPathId& pathId) {
-                auto* p = Record.MutablePathId();
-                p->SetOwnerId(pathId.OwnerId);
-                p->SetLocalId(pathId.LocalPathId);
-            }
+            void SetPathId(const TPathId& pathId);
 
-            TPathId GetPathId() const {
-                const auto& p = Record.GetPathId();
-                return TPathId(p.GetOwnerId(), p.GetLocalId());
-            }
+            TPathId GetPathId() const;
 
-            void InitFrom(const NKikimrTxSequenceShard::TEvFreezeSequenceResult& record) {
-                Record.SetMinValue(record.GetMinValue());
-                Record.SetMaxValue(record.GetMaxValue());
-                Record.SetStartValue(record.GetStartValue());
-                Record.SetNextValue(record.GetNextValue());
-                Record.SetNextUsed(record.GetNextUsed());
-                Record.SetCache(record.GetCache());
-                Record.SetIncrement(record.GetIncrement());
-                Record.SetCycle(record.GetCycle());
-            }
+            void InitFrom(const NKikimrTxSequenceShard::TEvFreezeSequenceResult& record);
 
-            void InitFrom(const NKikimrTxSequenceShard::TEvGetSequenceResult& record) {
-                Record.SetMinValue(record.GetMinValue());
-                Record.SetMaxValue(record.GetMaxValue());
-                Record.SetStartValue(record.GetStartValue());
-                Record.SetNextValue(record.GetNextValue());
-                Record.SetNextUsed(record.GetNextUsed());
-                Record.SetCache(record.GetCache());
-                Record.SetIncrement(record.GetIncrement());
-                Record.SetCycle(record.GetCycle());
-            }
+            void InitFrom(const NKikimrTxSequenceShard::TEvGetSequenceResult& record);
         };
 
         struct TEvRestoreSequenceResult
@@ -378,10 +251,7 @@ namespace NSequenceShard {
 
             TEvRestoreSequenceResult() = default;
 
-            TEvRestoreSequenceResult(EStatus status, ui64 origin) {
-                Record.SetStatus(status);
-                Record.SetOrigin(origin);
-            }
+            TEvRestoreSequenceResult(EStatus status, ui64 origin);
         };
 
         struct TEvRedirectSequence
@@ -389,21 +259,11 @@ namespace NSequenceShard {
         {
             TEvRedirectSequence() = default;
 
-            TEvRedirectSequence(const TPathId& pathId, ui64 redirectTo) {
-                SetPathId(pathId);
-                Record.SetRedirectTo(redirectTo);
-            }
+            TEvRedirectSequence(const TPathId& pathId, ui64 redirectTo);
 
-            void SetPathId(const TPathId& pathId) {
-                auto* p = Record.MutablePathId();
-                p->SetOwnerId(pathId.OwnerId);
-                p->SetLocalId(pathId.LocalPathId);
-            }
+            void SetPathId(const TPathId& pathId);
 
-            TPathId GetPathId() const {
-                const auto& p = Record.GetPathId();
-                return TPathId(p.GetOwnerId(), p.GetLocalId());
-            }
+            TPathId GetPathId() const;
         };
 
         struct TEvRedirectSequenceResult
@@ -413,10 +273,7 @@ namespace NSequenceShard {
 
             TEvRedirectSequenceResult() = default;
 
-            TEvRedirectSequenceResult(EStatus status, ui64 origin) {
-                Record.SetStatus(status);
-                Record.SetOrigin(origin);
-            }
+            TEvRedirectSequenceResult(EStatus status, ui64 origin);
         };
 
         struct TEvGetSequence
@@ -428,16 +285,9 @@ namespace NSequenceShard {
                 SetPathId(pathId);
             }
 
-            void SetPathId(const TPathId& pathId) {
-                auto* p = Record.MutablePathId();
-                p->SetOwnerId(pathId.OwnerId);
-                p->SetLocalId(pathId.LocalPathId);
-            }
+            void SetPathId(const TPathId& pathId);
 
-            TPathId GetPathId() const {
-                const auto& p = Record.GetPathId();
-                return TPathId(p.GetOwnerId(), p.GetLocalId());
-            }
+            TPathId GetPathId() const;
         };
 
         struct TEvGetSequenceResult
@@ -447,10 +297,7 @@ namespace NSequenceShard {
 
             TEvGetSequenceResult() = default;
 
-            TEvGetSequenceResult(EStatus status, ui64 origin) {
-                Record.SetStatus(status);
-                Record.SetOrigin(origin);
-            }
+            TEvGetSequenceResult(EStatus status, ui64 origin);
         };
 
         struct TEvAdvanceSequence
@@ -462,25 +309,14 @@ namespace NSequenceShard {
                 SetPathId(pathId);
             }
 
-            void SetPathId(const TPathId& pathId) {
-                auto* p = Record.MutablePathId();
-                p->SetOwnerId(pathId.OwnerId);
-                p->SetLocalId(pathId.LocalPathId);
-            }
+            void SetPathId(const TPathId& pathId);
 
-            TPathId GetPathId() const {
-                const auto& p = Record.GetPathId();
-                return TPathId(p.GetOwnerId(), p.GetLocalId());
-            }
+            TPathId GetPathId() const;
 
             struct TBuilder {
                 THolder<TEvAdvanceSequence> Msg;
 
-                TBuilder&& SetObserved(i64 observedMin, i64 observedMax) && {
-                    Msg->Record.SetObservedMin(observedMin);
-                    Msg->Record.SetObservedMax(observedMax);
-                    return std::move(*this);
-                }
+                TBuilder&& SetObserved(i64 observedMin, i64 observedMax) &&;
 
                 THolder<TEvAdvanceSequence> Done() && {
                     return std::move(Msg);
@@ -499,10 +335,7 @@ namespace NSequenceShard {
 
             TEvAdvanceSequenceResult() = default;
 
-            TEvAdvanceSequenceResult(EStatus status, ui64 origin) {
-                Record.SetStatus(status);
-                Record.SetOrigin(origin);
-            }
+            TEvAdvanceSequenceResult(EStatus status, ui64 origin);
         };
 
     };

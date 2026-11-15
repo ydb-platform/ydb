@@ -1,4 +1,5 @@
 #include "long_tx_write_flow_control.h"
+#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/kqp/predictor/kqp_predictor.h>

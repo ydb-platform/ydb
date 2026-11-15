@@ -1,10 +1,10 @@
 #pragma once
+#include <util/string/builder.h>
 
 #include "iface.h"
 #include "request_paths.h"
 
 #include <grpcpp/support/byte_buffer.h>
-#include <grpcpp/support/slice.h>
 
 #include <ydb/library/grpc/server/grpc_request_base.h>
 #include <library/cpp/string_utils/quote/quote.h>
@@ -34,8 +34,6 @@
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 
-#include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <util/stream/str.h>
 
 namespace NKikimrScheme {
     class TEvDescribeSchemeResult;
@@ -61,73 +59,17 @@ namespace NGRpcService {
 
 using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
 
-inline void EndGrpcRequestSpanWithStatus(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status) {
-    if (!span) {
-        return;
-    }
-
-    if (status == Ydb::StatusIds::SUCCESS) {
-        span.EndOk();
-    } else {
-        span.Attribute("ydb_status", static_cast<int>(status));
-        span.Attribute("ydb_status_name", Ydb::StatusIds_StatusCode_Name(status));
-        span.EndError(Ydb::StatusIds_StatusCode_Name(status));
-    }
-}
+void EndGrpcRequestSpanWithStatus(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status);
 
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
 TString DatabaseFromDomain(const TAppData* appdata);
 
-inline grpc::ByteBuffer MakeByteBufferFromSerializedResult(TString&& serializedResult) {
-    // res->data() pointer is used inside grpc code.
-    // So this object should be destroyed during grpc_slice destroying routine
-    auto* res = new TString;
-    res->swap(serializedResult);
+grpc::ByteBuffer MakeByteBufferFromSerializedResult(TString&& serializedResult);
 
-    static auto freeResult = [](void* p) -> void {
-        TString* toDelete = reinterpret_cast<TString*>(p);
-        delete toDelete;
-    };
+grpc::ByteBuffer MakeByteBufferFromSerializedResult(TRope&& serializedResult);
 
-    grpc_slice slice = grpc_slice_new_with_user_data(
-        const_cast<char*>(res->data()), res->size(), freeResult, res);
-    grpc::Slice sl(slice, grpc::Slice::STEAL_REF);
-    return grpc::ByteBuffer(&sl, 1);
-}
-
-inline grpc::ByteBuffer MakeByteBufferFromSerializedResult(TRope&& serializedResult) {
-    TStackVec<grpc::Slice, 8> slices;
-    size_t chunkCount = 0;
-    for (auto it = serializedResult.Begin(); it != serializedResult.End(); ++it) {
-        ++chunkCount;
-    }
-    slices.reserve(chunkCount);
-
-    static auto freeChunk = [](void* p) -> void {
-        TRcBuf* toDelete = reinterpret_cast<TRcBuf*>(p);
-        delete toDelete;
-    };
-
-    for (auto it = serializedResult.Begin(); it != serializedResult.End(); ++it) {
-        auto* owner = new TRcBuf(it.GetChunk());
-
-        grpc_slice slice = grpc_slice_new_with_user_data(
-            const_cast<char*>(it.ContiguousData()), it.ContiguousSize(), freeChunk, owner);
-        slices.emplace_back(slice, grpc::Slice::STEAL_REF);
-    }
-    return grpc::ByteBuffer(slices.data(), slices.size());
-}
-
-inline TActorId CreateGRpcRequestProxyId(int n = 0) {
-    if (n == 0) {
-        const auto actorId = TActorId(0, "GRpcReqProxy");
-        return actorId;
-    }
-
-    const auto actorId = TActorId(0, TStringBuilder() << "GRpcReqPro" << n);
-    return actorId;
-}
+TActorId CreateGRpcRequestProxyId(int n = 0);
 
 struct TRpcServices {
     enum EServiceId {
@@ -863,28 +805,11 @@ inline TMaybe<TString> ToMaybe(const TVector<TStringBuf>& vec) {
     return TString{vec[0]};
 }
 
-inline const TMaybe<TString> ExtractYdbToken(const TVector<TStringBuf>& authHeadValues) {
-    if (authHeadValues.empty()) {
-        return {};
-    }
-    return TString{authHeadValues[0]};
-}
+const TMaybe<TString> ExtractYdbToken(const TVector<TStringBuf>& authHeadValues);
 
-inline const TMaybe<TString> ExtractDatabaseName(const TVector<TStringBuf>& dbHeaderValues) {
-    if (dbHeaderValues.empty()) {
-        return {};
-    }
-    return CGIUnescapeRet(dbHeaderValues[0]);
-}
+const TMaybe<TString> ExtractDatabaseName(const TVector<TStringBuf>& dbHeaderValues);
 
-inline TString MakeAuthError(const TString& in, NYql::TIssueManager& issues) {
-    TStringStream out;
-    out << "unauthenticated"
-        << (in ? ", " : "") << in
-        << (issues.GetIssues() ? ": " : "");
-    issues.GetIssues().PrintTo(out, true /* one line */);
-    return out.Str();
-}
+TString MakeAuthError(const TString& in, NYql::TIssueManager& issues);
 
 // Policy class that provides common access to method's request and response types.
 template <typename TReq, typename TResp, bool IsOperation>
@@ -2002,37 +1927,9 @@ public:
         return AuthState;
     }
 
-    void ReplyUnauthenticated(const TString& msg = "") override {
-        if (msg) {
-            IssueManager.RaiseIssue(NYql::TIssue{msg});
-        }
-        ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
-    }
+    void ReplyUnauthenticated(const TString& msg = "") override;
 
-    void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
-        const NActors::TActorContext& ctx = NActors::TActivationContext::AsActorContext();
-        FinishSpan();
-        if (status == Ydb::StatusIds::SUCCESS) {
-            ctx.Send(Sender,
-                new TEvRequestAuthAndCheckResult(
-                    Database,
-                    YdbToken,
-                    UserToken,
-                    GetAuditLogParts(),
-                    DatabaseAccessVerdict
-                )
-            );
-        } else {
-            ctx.Send(Sender,
-                new TEvRequestAuthAndCheckResult(
-                    status,
-                    IssueManager.GetIssues(),
-                    GetAuditLogParts(),
-                    DatabaseAccessVerdict
-                )
-            );
-        }
-    }
+    void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override;
 
     void RaiseIssue(const NYql::TIssue& issue) override {
         IssueManager.RaiseIssue(issue);
@@ -2049,11 +1946,7 @@ public:
     void StartTracing(NWilson::TSpan&& span) override {
         Span = std::move(span);
     }
-    void FinishSpan() override {
-        if (Span) {
-            Span.End();
-        }
-    }
+    void FinishSpan() override;
 
     bool* IsTracingDecided() override {
         return nullptr;
@@ -2124,13 +2017,7 @@ public:
         return UserToken;
     }
 
-    const TString& GetSerializedToken() const override {
-        if (UserToken) {
-            return UserToken->GetSerializedToken();
-        }
-
-        return EmptySerializedTokenMessage;
-    }
+    const TString& GetSerializedToken() const override;
 
     bool IsClientLost() const override {
         return false;

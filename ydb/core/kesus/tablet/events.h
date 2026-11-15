@@ -142,22 +142,14 @@ namespace TEvKesus {
     struct TEvSetConfig : public TEventPB<TEvSetConfig, NKikimrKesus::TEvSetConfig, EvSetConfig> {
         TEvSetConfig() = default;
 
-        TEvSetConfig(ui64 txId, const Ydb::Coordination::Config& config, ui64 version) {
-            Record.SetTxId(txId);
-            Record.MutableConfig()->CopyFrom(config);
-            Record.SetVersion(version);
-        }
+        TEvSetConfig(ui64 txId, const Ydb::Coordination::Config& config, ui64 version);
 
     };
 
     struct TEvSetConfigResult : public TEventPB<TEvSetConfigResult, NKikimrKesus::TEvSetConfigResult, EvSetConfigResult> {
         TEvSetConfigResult() = default;
 
-        TEvSetConfigResult(ui64 txId, ui64 tabletId) {
-            Record.SetTxId(txId);
-            Record.SetTabletId(tabletId);
-            Record.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
-        }
+        TEvSetConfigResult(ui64 txId, ui64 tabletId);
 
         void SetError(Ydb::StatusIds::StatusCode status, const TString& reason) {
             FillError(Record.MutableError(), status, reason);
@@ -199,10 +191,7 @@ namespace TEvKesus {
     struct TEvDescribeSemaphore : public TEventPB<TEvDescribeSemaphore, NKikimrKesus::TEvDescribeSemaphore, EvDescribeSemaphore> {
         TEvDescribeSemaphore() = default;
 
-        explicit TEvDescribeSemaphore(const TString& kesusPath, const TString& name) {
-            Record.SetKesusPath(kesusPath);
-            Record.SetName(name);
-        }
+        explicit TEvDescribeSemaphore(const TString& kesusPath, const TString& name);
     };
 
     struct TEvDescribeSemaphoreResult : public TResultBase<TEvDescribeSemaphoreResult, NKikimrKesus::TEvDescribeSemaphoreResult, EvDescribeSemaphoreResult> {
@@ -212,12 +201,7 @@ namespace TEvKesus {
     struct TEvCreateSemaphore : public TEventPB<TEvCreateSemaphore, NKikimrKesus::TEvCreateSemaphore, EvCreateSemaphore> {
         TEvCreateSemaphore() = default;
 
-        TEvCreateSemaphore(const TString& kesusPath, const TString& name, ui64 limit, const TString& data = TString()) {
-            Record.SetKesusPath(kesusPath);
-            Record.SetName(name);
-            Record.SetLimit(limit);
-            Record.SetData(data);
-        }
+        TEvCreateSemaphore(const TString& kesusPath, const TString& name, ui64 limit, const TString& data = TString());
     };
 
     struct TEvDescribeSemaphores : public TEventPB<TEvDescribeSemaphores, NKikimrKesus::TEvDescribeSemaphores, EvDescribeSemaphores> {};
@@ -231,11 +215,7 @@ namespace TEvKesus {
     struct TEvUpdateSemaphore : public TEventPB<TEvUpdateSemaphore, NKikimrKesus::TEvUpdateSemaphore, EvUpdateSemaphore> {
         TEvUpdateSemaphore() = default;
 
-        TEvUpdateSemaphore(const TString& kesusPath, const TString& name, const TString& data) {
-            Record.SetKesusPath(kesusPath);
-            Record.SetName(name);
-            Record.SetData(data);
-        }
+        TEvUpdateSemaphore(const TString& kesusPath, const TString& name, const TString& data);
     };
 
     struct TEvUpdateSemaphoreResult : public TResultBase<TEvUpdateSemaphoreResult, NKikimrKesus::TEvUpdateSemaphoreResult, EvUpdateSemaphoreResult> {
@@ -245,11 +225,7 @@ namespace TEvKesus {
     struct TEvDeleteSemaphore : public TEventPB<TEvDeleteSemaphore, NKikimrKesus::TEvDeleteSemaphore, EvDeleteSemaphore> {
         TEvDeleteSemaphore() = default;
 
-        explicit TEvDeleteSemaphore(const TString& kesusPath, const TString& name, bool force = false) {
-            Record.SetKesusPath(kesusPath);
-            Record.SetName(name);
-            Record.SetForce(force);
-        }
+        explicit TEvDeleteSemaphore(const TString& kesusPath, const TString& name, bool force = false);
     };
 
     struct TEvDeleteSemaphoreResult : public TResultBase<TEvDeleteSemaphoreResult, NKikimrKesus::TEvDeleteSemaphoreResult, EvDeleteSemaphoreResult> {
@@ -259,10 +235,7 @@ namespace TEvKesus {
     struct TEvRegisterProxy : public TEventPB<TEvRegisterProxy, NKikimrKesus::TEvRegisterProxy, EvRegisterProxy> {
         TEvRegisterProxy() = default;
 
-        TEvRegisterProxy(const TString& kesusPath, ui64 generation) {
-            Record.SetKesusPath(kesusPath);
-            Record.SetProxyGeneration(generation);
-        }
+        TEvRegisterProxy(const TString& kesusPath, ui64 generation);
     };
 
     struct TEvRegisterProxyResult : public TResultBase<TEvRegisterProxyResult, NKikimrKesus::TEvRegisterProxyResult, EvRegisterProxyResult> {
@@ -272,10 +245,7 @@ namespace TEvKesus {
     struct TEvUnregisterProxy : public TEventPB<TEvUnregisterProxy, NKikimrKesus::TEvUnregisterProxy, EvUnregisterProxy> {
         TEvUnregisterProxy() = default;
 
-        TEvUnregisterProxy(const TString& kesusPath, ui64 generation) {
-            Record.SetKesusPath(kesusPath);
-            Record.SetProxyGeneration(generation);
-        }
+        TEvUnregisterProxy(const TString& kesusPath, ui64 generation);
     };
 
     struct TEvUnregisterProxyResult : public TResultBase<TEvUnregisterProxyResult, NKikimrKesus::TEvUnregisterProxyResult, EvUnregisterProxyResult> {
@@ -292,16 +262,7 @@ namespace TEvKesus {
                 ui64 timeoutMillis,
                 const TString& description,
                 ui64 seqNo = 0,
-                const TString& protectionKey = TString())
-        {
-            Record.SetKesusPath(kesusPath);
-            Record.SetProxyGeneration(generation);
-            Record.SetSessionId(sessionId);
-            Record.SetTimeoutMillis(timeoutMillis);
-            Record.SetDescription(description);
-            Record.SetSeqNo(seqNo);
-            Record.SetProtectionKey(protectionKey);
-        }
+                const TString& protectionKey = TString());
     };
 
     struct TEvAttachSessionResult : public TResultBase<TEvAttachSessionResult, NKikimrKesus::TEvAttachSessionResult, EvAttachSessionResult> {
@@ -323,11 +284,7 @@ namespace TEvKesus {
     struct TEvDetachSession : public TEventPB<TEvDetachSession, NKikimrKesus::TEvDetachSession, EvDetachSession> {
         TEvDetachSession() = default;
 
-        TEvDetachSession(const TString& kesusPath, ui64 generation, ui64 sessionId) {
-            Record.SetKesusPath(kesusPath);
-            Record.SetProxyGeneration(generation);
-            Record.SetSessionId(sessionId);
-        }
+        TEvDetachSession(const TString& kesusPath, ui64 generation, ui64 sessionId);
     };
 
     struct TEvDetachSessionResult : public TResultBase<TEvDetachSessionResult, NKikimrKesus::TEvDetachSessionResult, EvDetachSessionResult> {
@@ -337,11 +294,7 @@ namespace TEvKesus {
     struct TEvDestroySession : public TEventPB<TEvDestroySession, NKikimrKesus::TEvDestroySession, EvDestroySession> {
         TEvDestroySession() = default;
 
-        TEvDestroySession(const TString& kesusPath, ui64 generation, ui64 sessionId) {
-            Record.SetKesusPath(kesusPath);
-            Record.SetProxyGeneration(generation);
-            Record.SetSessionId(sessionId);
-        }
+        TEvDestroySession(const TString& kesusPath, ui64 generation, ui64 sessionId);
     };
 
     struct TEvDestroySessionResult : public TResultBase<TEvDestroySessionResult, NKikimrKesus::TEvDestroySessionResult, EvDestroySessionResult> {
@@ -353,17 +306,7 @@ namespace TEvKesus {
 
         TEvAcquireSemaphore(
                 const TString& kesusPath, ui64 generation, ui64 sessionId, const TString& name, ui64 count,
-                ui64 timeoutMillis = 0, const TString& data = TString(), bool ephemeral = false)
-        {
-            Record.SetKesusPath(kesusPath);
-            Record.SetProxyGeneration(generation);
-            Record.SetSessionId(sessionId);
-            Record.SetName(name);
-            Record.SetCount(count);
-            Record.SetTimeoutMillis(timeoutMillis);
-            Record.SetData(data);
-            Record.SetEphemeral(ephemeral);
-        }
+                ui64 timeoutMillis = 0, const TString& data = TString(), bool ephemeral = false);
     };
 
     struct TEvAcquireSemaphorePending : public TEventPB<TEvAcquireSemaphorePending, NKikimrKesus::TEvAcquireSemaphorePending, EvAcquireSemaphorePending> {
@@ -392,12 +335,7 @@ namespace TEvKesus {
     struct TEvReleaseSemaphore : public TEventPB<TEvReleaseSemaphore, NKikimrKesus::TEvReleaseSemaphore, EvReleaseSemaphore> {
         TEvReleaseSemaphore() = default;
 
-        TEvReleaseSemaphore(const TString& kesusPath, ui64 generation, ui64 sessionId, const TString& name) {
-            Record.SetKesusPath(kesusPath);
-            Record.SetProxyGeneration(generation);
-            Record.SetSessionId(sessionId);
-            Record.SetName(name);
-        }
+        TEvReleaseSemaphore(const TString& kesusPath, ui64 generation, ui64 sessionId, const TString& name);
     };
 
     struct TEvReleaseSemaphoreResult : public TResultBase<TEvReleaseSemaphoreResult, NKikimrKesus::TEvReleaseSemaphoreResult, EvReleaseSemaphoreResult> {
@@ -430,20 +368,13 @@ namespace TEvKesus {
     struct TEvSessionStolen : public TEventPB<TEvSessionStolen, NKikimrKesus::TEvSessionStolen, EvSessionStolen> {
         TEvSessionStolen() = default;
 
-        TEvSessionStolen(ui64 generation, ui64 sessionId) {
-            Record.SetProxyGeneration(generation);
-            Record.SetSessionId(sessionId);
-        }
+        TEvSessionStolen(ui64 generation, ui64 sessionId);
     };
 
     struct TEvDescribeSemaphoreChanged : public TEventPB<TEvDescribeSemaphoreChanged, NKikimrKesus::TEvDescribeSemaphoreChanged, EvDescribeSemaphoreChanged> {
         TEvDescribeSemaphoreChanged() = default;
 
-        explicit TEvDescribeSemaphoreChanged(ui64 generation, bool dataChanged, bool ownersChanged) {
-            Record.SetProxyGeneration(generation);
-            Record.SetDataChanged(dataChanged);
-            Record.SetOwnersChanged(ownersChanged);
-        }
+        explicit TEvDescribeSemaphoreChanged(ui64 generation, bool dataChanged, bool ownersChanged);
     };
 
     // Quoter API

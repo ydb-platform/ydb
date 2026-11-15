@@ -101,3 +101,122 @@ void TEvTablet::TEvTabletDead::Out(IOutputStream& os, EReason x) {
 Y_DECLARE_OUT_SPEC(, NKikimr::TEvTablet::TEvTabletStop::EReason, o, x) {
     o << NKikimrTabletBase::TEvTabletStop::EReason_Name(x);
 }
+
+namespace NKikimr {
+
+void TEvTablet::TDependencyGraph::Describe(IOutputStream &out) const noexcept {
+    out
+        << "Deps{" << Snapshot.first << ":" << Snapshot.second
+        << " entries " << Entries.size() << "}";
+}
+
+TEvTablet::TEvPing::TEvPing(ui64 tabletId, ui64 flags)
+{
+    Record.SetTabletID(tabletId);
+    Record.SetFlags(flags);
+}
+
+TEvTablet::TEvPong::TEvPong(ui64 tabletId, ui64 flags)
+{
+    Record.SetTabletID(tabletId);
+    Record.SetFlags(flags);
+}
+
+TEvTablet::TEvReadLocalBase::TEvReadLocalBase(const TString& rootKey, bool saveScheme)
+{
+    if (!rootKey.empty())
+        Record.SetRootKey(rootKey);
+    if (saveScheme)
+        Record.SetSaveScheme(true);
+}
+
+TEvTablet::TEvReadLocalBaseResult::TEvReadLocalBaseResult(ui64 origin, const TString& rootKey, bool isError, const TString& docBuffer, const TString* schemeBuffer)
+{
+    Record.SetOrigin(origin);
+    Record.SetRootKey(rootKey);
+    Record.SetIsError(isError);
+    Record.SetDocBuffer(docBuffer);
+    if (schemeBuffer)
+        Record.SetScheme(*schemeBuffer);
+}
+
+TEvTablet::TEvFollowerAttach::TEvFollowerAttach(ui64 tabletId, ui32 followerAttempt)
+{
+    Record.SetTabletId(tabletId);
+    Record.SetFollowerAttempt(followerAttempt);
+}
+
+TEvTablet::TEvFollowerUpdate::TEvFollowerUpdate(ui64 tabletId, ui32 followerAttempt, ui64 streamCounter)
+{
+    Record.SetTabletId(tabletId);
+    Record.SetFollowerAttempt(followerAttempt);
+    Record.SetStreamCounter(streamCounter);
+}
+
+TEvTablet::TEvFollowerAuxUpdate::TEvFollowerAuxUpdate(ui64 tabletId, ui32 followerAttempt, ui64 streamCounter)
+{
+    Record.SetTabletId(tabletId);
+    Record.SetFollowerAttempt(followerAttempt);
+    Record.SetStreamCounter(streamCounter);
+}
+
+TEvTablet::TEvFollowerDetach::TEvFollowerDetach(ui64 tabletId, ui32 followerAttempt)
+{
+    Record.SetTabletId(tabletId);
+    Record.SetFollowerAttempt(followerAttempt);
+}
+
+TEvTablet::TEvFollowerDisconnect::TEvFollowerDisconnect(ui64 tabletId, ui32 followerAttempt)
+{
+    Record.SetTabletId(tabletId);
+    Record.SetFollowerAttempt(followerAttempt);
+}
+
+TEvTablet::TEvFollowerRefresh::TEvFollowerRefresh(ui64 tabletId, ui32 generation)
+{
+    Record.SetTabletId(tabletId);
+    Record.SetGeneration(generation);
+}
+
+TEvTablet::TEvFollowerGcAck::TEvFollowerGcAck(ui64 tabletId, ui32 followerAttempt, ui32 generation, ui32 step)
+{
+    Record.SetTabletId(tabletId);
+    Record.SetFollowerAttempt(followerAttempt);
+    Record.SetGeneration(generation);
+    Record.SetStep(step);
+}
+
+TEvTablet::TFUpdateBody::TFUpdateBody(const TEvFollowerUpdate &upd)
+    : IsSnapshot(upd.Record.GetIsSnapshot())
+    , Step(upd.Record.GetStep())
+    , NeedFollowerGcAck(upd.Record.HasNeedGCApplyAck() ? upd.Record.GetNeedGCApplyAck() : false)
+{
+    const auto &r = upd.Record;
+    if (r.HasBody())
+        EmbeddedBody = r.GetBody();
+    if (r.HasAuxPayload())
+        AuxPayload = r.GetAuxPayload();
+
+    References.reserve(r.ReferencesIdsSize());
+    for (ui32 i = 0, end = r.ReferencesIdsSize(); i != end; ++i) {
+        const TLogoBlobID &id = LogoBlobIDFromLogoBlobID(r.GetReferencesIds(i));
+        References.emplace_back(std::make_pair(id, r.GetReferences(i)));
+    }
+}
+
+TEvTablet::TEvTabletStop::TEvTabletStop(ui64 tabletId, EReason reason) {
+    Record.SetTabletID(tabletId);
+    Record.SetReason(reason);
+}
+
+TEvTablet::TEvTabletStateSubscribe::TEvTabletStateSubscribe(ui64 tabletId, ui64 seqNo) {
+    Record.SetTabletId(tabletId);
+    Record.SetSeqNo(seqNo);
+}
+
+TEvTablet::TEvTabletStateUnsubscribe::TEvTabletStateUnsubscribe(ui64 tabletId, ui64 seqNo) {
+    Record.SetTabletId(tabletId);
+    Record.SetSeqNo(seqNo);
+}
+
+} // namespace NKikimr

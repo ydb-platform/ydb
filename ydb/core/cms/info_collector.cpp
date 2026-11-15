@@ -1,4 +1,5 @@
 #include "cms_impl.h"
+#include <google/protobuf/util/message_differencer.h>
 #include "info_collector.h"
 
 #include <ydb/core/base/tablet_pipe.h>

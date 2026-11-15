@@ -1,4 +1,5 @@
 #include "tiering_test_enums.h"
+#include <google/protobuf/util/message_differencer.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tablet_resolver.h>

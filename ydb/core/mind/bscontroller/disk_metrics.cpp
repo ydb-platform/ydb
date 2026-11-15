@@ -1,4 +1,5 @@
 #include "impl.h"
+#include <google/protobuf/util/message_differencer.h>
 
 #include <util/generic/algorithm.h>
 

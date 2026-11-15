@@ -1,4 +1,5 @@
 #include "shard_writer.h"
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include "common/error_codes.h"
 
 #include <ydb/core/base/appdata_fwd.h>

@@ -1,4 +1,5 @@
 #include "plain_auth_actor.h"
+#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <library/cpp/digest/argonish/argon2.h>
 #include <library/cpp/string_utils/base64/base64.h>

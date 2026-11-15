@@ -1,4 +1,5 @@
 #include "impl.h"
+#include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 
 #include <ydb/core/blobstorage/base/utility.h>
 #include "config.h"

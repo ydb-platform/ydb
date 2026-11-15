@@ -1,4 +1,5 @@
 #include <library/cpp/svnversion/svnversion.h>
+#include <ydb/core/base/subdomain.h>
 #include <util/system/getpid.h>
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>

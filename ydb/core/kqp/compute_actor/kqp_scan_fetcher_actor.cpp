@@ -1,4 +1,5 @@
 #include "kqp_scan_fetcher_actor.h"
+#include <ydb/core/scheme/protos/key_range.pb.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>

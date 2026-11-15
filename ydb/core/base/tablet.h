@@ -170,11 +170,7 @@ struct TEvTablet {
             : Snapshot(snap)
         {}
 
-        void Describe(IOutputStream &out) const noexcept {
-            out
-                << "Deps{" << Snapshot.first << ":" << Snapshot.second
-                << " entries " << Entries.size() << "}";
-        }
+        void Describe(IOutputStream &out) const noexcept;
 
         TEntry& AddEntry(const std::pair<ui32, ui32> &id, TVector<TLogoBlobID> &&refs, bool isSnapshot,
                 TVector<TLogoBlobID> &&gcDiscovered, TVector<TLogoBlobID> &&gcLeft,
@@ -489,11 +485,7 @@ struct TEvTablet {
         TEvPing()
         {}
 
-        TEvPing(ui64 tabletId, ui64 flags)
-        {
-            Record.SetTabletID(tabletId);
-            Record.SetFlags(flags);
-        }
+        TEvPing(ui64 tabletId, ui64 flags);
     };
 
     struct TEvPong : public TEventPB<TEvPong, NKikimrTabletBase::TEvPong, EvPong> {
@@ -506,24 +498,14 @@ struct TEvTablet {
         TEvPong()
         {}
 
-        TEvPong(ui64 tabletId, ui64 flags)
-        {
-            Record.SetTabletID(tabletId);
-            Record.SetFlags(flags);
-        }
+        TEvPong(ui64 tabletId, ui64 flags);
     };
 
     struct TEvReadLocalBase : public TEventPB<TEvReadLocalBase, NKikimrTabletBase::TEvReadLocalBase, EvReadLocalBase> {
         TEvReadLocalBase()
         {}
 
-        TEvReadLocalBase(const TString& rootKey, bool saveScheme)
-        {
-            if (!rootKey.empty())
-                Record.SetRootKey(rootKey);
-            if (saveScheme)
-                Record.SetSaveScheme(true);
-        }
+        TEvReadLocalBase(const TString& rootKey, bool saveScheme);
     };
 
     struct TEvReadLocalBaseResult : public TEventPB<TEvReadLocalBaseResult, NKikimrTabletBase::TEvReadLocalBaseResult, TEvTablet::EvReadLocalBaseResult> {
@@ -535,15 +517,7 @@ struct TEvTablet {
         TEvReadLocalBaseResult()
         {}
 
-        TEvReadLocalBaseResult(ui64 origin, const TString& rootKey, bool isError, const TString& docBuffer, const TString* schemeBuffer)
-        {
-            Record.SetOrigin(origin);
-            Record.SetRootKey(rootKey);
-            Record.SetIsError(isError);
-            Record.SetDocBuffer(docBuffer);
-            if (schemeBuffer)
-                Record.SetScheme(*schemeBuffer);
-        }
+        TEvReadLocalBaseResult(ui64 origin, const TString& rootKey, bool isError, const TString& docBuffer, const TString* schemeBuffer);
     };
 
     struct TEvLocalMKQL : public TEventPB<TEvLocalMKQL, NKikimrTabletTxBase::TEvLocalMKQL, TEvTablet::EvLocalMKQL> {
@@ -580,45 +554,27 @@ struct TEvTablet {
         TEvFollowerAttach()
         {}
 
-        TEvFollowerAttach(ui64 tabletId, ui32 followerAttempt)
-        {
-            Record.SetTabletId(tabletId);
-            Record.SetFollowerAttempt(followerAttempt);
-        }
+        TEvFollowerAttach(ui64 tabletId, ui32 followerAttempt);
     };
 
     struct TEvFollowerUpdate : public TEventPB<TEvFollowerUpdate, NKikimrTabletBase::TEvFollowerUpdate, EvFollowerUpdate> {
         TEvFollowerUpdate()
         {}
 
-        TEvFollowerUpdate(ui64 tabletId, ui32 followerAttempt, ui64 streamCounter)
-        {
-            Record.SetTabletId(tabletId);
-            Record.SetFollowerAttempt(followerAttempt);
-            Record.SetStreamCounter(streamCounter);
-        }
+        TEvFollowerUpdate(ui64 tabletId, ui32 followerAttempt, ui64 streamCounter);
     };
 
     struct TEvFollowerAuxUpdate : public TEventPB<TEvFollowerAuxUpdate, NKikimrTabletBase::TEvFollowerAuxUpdate, EvFollowerAuxUpdate> {
         TEvFollowerAuxUpdate() = default;
 
-        TEvFollowerAuxUpdate(ui64 tabletId, ui32 followerAttempt, ui64 streamCounter)
-        {
-            Record.SetTabletId(tabletId);
-            Record.SetFollowerAttempt(followerAttempt);
-            Record.SetStreamCounter(streamCounter);
-        }
+        TEvFollowerAuxUpdate(ui64 tabletId, ui32 followerAttempt, ui64 streamCounter);
     };
 
     struct TEvFollowerDetach : public TEventPB<TEvFollowerDetach, NKikimrTabletBase::TEvFollowerDetach, EvFollowerDetach> {
         TEvFollowerDetach()
         {}
 
-        TEvFollowerDetach(ui64 tabletId, ui32 followerAttempt)
-        {
-            Record.SetTabletId(tabletId);
-            Record.SetFollowerAttempt(followerAttempt);
-        }
+        TEvFollowerDetach(ui64 tabletId, ui32 followerAttempt);
     };
 
     struct TEvFollowerListRefresh : public TEventLocal<TEvFollowerListRefresh, EvFollowerListRefresh> {
@@ -633,35 +589,21 @@ struct TEvTablet {
         TEvFollowerDisconnect()
         {}
 
-        TEvFollowerDisconnect(ui64 tabletId, ui32 followerAttempt)
-        {
-            Record.SetTabletId(tabletId);
-            Record.SetFollowerAttempt(followerAttempt);
-        }
+        TEvFollowerDisconnect(ui64 tabletId, ui32 followerAttempt);
     };
 
     struct TEvFollowerRefresh : public TEventPB<TEvFollowerRefresh, NKikimrTabletBase::TEvFollowerRefresh, EvFollowerRefresh> {
         TEvFollowerRefresh()
         {}
 
-        TEvFollowerRefresh(ui64 tabletId, ui32 generation)
-        {
-            Record.SetTabletId(tabletId);
-            Record.SetGeneration(generation);
-        }
+        TEvFollowerRefresh(ui64 tabletId, ui32 generation);
     };
 
     struct TEvFollowerGcAck : public TEventPB<TEvFollowerGcAck, NKikimrTabletBase::TEvFollowerGcAck, EvFollowerGcAck> {
         TEvFollowerGcAck()
         {}
 
-        TEvFollowerGcAck(ui64 tabletId, ui32 followerAttempt, ui32 generation, ui32 step)
-        {
-            Record.SetTabletId(tabletId);
-            Record.SetFollowerAttempt(followerAttempt);
-            Record.SetGeneration(generation);
-            Record.SetStep(step);
-        }
+        TEvFollowerGcAck(ui64 tabletId, ui32 followerAttempt, ui32 generation, ui32 step);
     };
 
     struct TFUpdateBody {
@@ -673,23 +615,7 @@ struct TEvTablet {
 
         bool NeedFollowerGcAck;
 
-        TFUpdateBody(const TEvFollowerUpdate &upd)
-            : IsSnapshot(upd.Record.GetIsSnapshot())
-            , Step(upd.Record.GetStep())
-            , NeedFollowerGcAck(upd.Record.HasNeedGCApplyAck() ? upd.Record.GetNeedGCApplyAck() : false)
-        {
-            const auto &r = upd.Record;
-            if (r.HasBody())
-                EmbeddedBody = r.GetBody();
-            if (r.HasAuxPayload())
-                AuxPayload = r.GetAuxPayload();
-
-            References.reserve(r.ReferencesIdsSize());
-            for (ui32 i = 0, end = r.ReferencesIdsSize(); i != end; ++i) {
-                const TLogoBlobID &id = LogoBlobIDFromLogoBlobID(r.GetReferencesIds(i));
-                References.emplace_back(std::make_pair(id, r.GetReferences(i)));
-            }
-        }
+        TFUpdateBody(const TEvFollowerUpdate &upd);
 
         TFUpdateBody(TString auxUpdate)
             : IsSnapshot(false)
@@ -884,10 +810,7 @@ struct TEvTablet {
 
         TEvTabletStop() = default;
 
-        explicit TEvTabletStop(ui64 tabletId, EReason reason) {
-            Record.SetTabletID(tabletId);
-            Record.SetReason(reason);
-        }
+        explicit TEvTabletStop(ui64 tabletId, EReason reason);
 
         ui64 GetTabletID() const { return Record.GetTabletID(); }
         EReason GetReason() const { return Record.GetReason(); }
@@ -938,19 +861,13 @@ struct TEvTablet {
     struct TEvTabletStateSubscribe : TEventPB<TEvTabletStateSubscribe, NKikimrTabletBase::TEvTabletStateSubscribe, EvTabletStateSubscribe> {
         TEvTabletStateSubscribe() = default;
 
-        TEvTabletStateSubscribe(ui64 tabletId, ui64 seqNo) {
-            Record.SetTabletId(tabletId);
-            Record.SetSeqNo(seqNo);
-        }
+        TEvTabletStateSubscribe(ui64 tabletId, ui64 seqNo);
     };
 
     struct TEvTabletStateUnsubscribe : TEventPB<TEvTabletStateUnsubscribe, NKikimrTabletBase::TEvTabletStateUnsubscribe, EvTabletStateUnsubscribe> {
         TEvTabletStateUnsubscribe() = default;
 
-        TEvTabletStateUnsubscribe(ui64 tabletId, ui64 seqNo) {
-            Record.SetTabletId(tabletId);
-            Record.SetSeqNo(seqNo);
-        }
+        TEvTabletStateUnsubscribe(ui64 tabletId, ui64 seqNo);
     };
 
     struct TEvTabletStateUpdate : TEventPB<TEvTabletStateUpdate, NKikimrTabletBase::TEvTabletStateUpdate, EvTabletStateUpdate> {

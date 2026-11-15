@@ -1,4 +1,5 @@
 #include "aggregator_impl.h"
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/core/statistics/aggregator/analyze_actor.h>
 #include <ydb/core/statistics/database/database.h>

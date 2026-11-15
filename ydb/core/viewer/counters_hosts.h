@@ -1,5 +1,6 @@
 #pragma once
 #include "viewer.h"
+#include <ydb/core/base/appdata_fwd.h>
 #include <library/cpp/json/json_writer.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>

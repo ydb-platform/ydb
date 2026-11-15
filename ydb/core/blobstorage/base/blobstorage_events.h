@@ -5,10 +5,8 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/bridge.h>
 #include <ydb/core/blobstorage/base/blobstorage_host_record.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
-#include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimrBlobStorage {
@@ -26,41 +24,12 @@ namespace NKikimr {
         TEvControllerUpdateDiskStatus(const TVDiskID& vDiskId, ui32 nodeId, ui32 pdiskId, ui32 vslotId,
                 std::optional<ui32> satisfactionRankPercent, NKikimrWhiteboard::EVDiskState state, bool replicated,
                 NKikimrWhiteboard::EFlag diskSpace,
-                std::optional<bool> isThrottling, std::optional<ui32> throttlingRate) {
-            NKikimrBlobStorage::TVDiskMetrics* metric = Record.AddVDisksMetrics();
-            VDiskIDFromVDiskID(vDiskId, metric->MutableVDiskId());
-            if (satisfactionRankPercent) {
-                metric->SetSatisfactionRank(*satisfactionRankPercent);
-            }
-            metric->SetState(state);
-            metric->SetReplicated(replicated);
-            metric->SetDiskSpace(diskSpace);
-            if (isThrottling) {
-                metric->SetIsThrottling(*isThrottling);
-            }
-            if (throttlingRate) {
-                metric->SetThrottlingRate(*throttlingRate);
-            }
-            auto *p = metric->MutableVSlotId();
-            p->SetNodeId(nodeId);
-            p->SetPDiskId(pdiskId);
-            p->SetVSlotId(vslotId);
-        }
+                std::optional<bool> isThrottling, std::optional<ui32> throttlingRate);
 
         // VDisk's report of a change of its chunk space color, see VDiskSpaceSequence; group generation is not set
         // (the same way PDisk reports VDisk metrics), NodeWarden fills in the current one
         TEvControllerUpdateDiskStatus(const TVDiskID& vDiskId, ui32 nodeId, ui32 pdiskId, ui32 vslotId, ui32 statusFlags,
-                ui64 vdiskSpaceSequence) {
-            Record.SetVDiskSpaceSequence(vdiskSpaceSequence);
-            NKikimrBlobStorage::TVDiskMetrics* metric = Record.AddVDisksMetrics();
-            VDiskIDFromVDiskID(vDiskId, metric->MutableVDiskId());
-            metric->MutableVDiskId()->ClearGroupGeneration();
-            metric->SetStatusFlags(statusFlags);
-            auto *p = metric->MutableVSlotId();
-            p->SetNodeId(nodeId);
-            p->SetPDiskId(pdiskId);
-            p->SetVSlotId(vslotId);
-        }
+                ui64 vdiskSpaceSequence);
     };
 
     struct TEvBlobStorage::TEvControllerRegisterNode : public TEventPB<
@@ -72,25 +41,9 @@ namespace NKikimr {
         {}
 
         TEvControllerRegisterNode(ui32 nodeID, const TVector<ui32>& startedDynamicGroups,
-                const TVector<ui32>& groupGenerations, const TVector<NPDisk::TDriveData>& drivesData) {
-            Record.SetNodeID(nodeID);
-            for (auto groupId: startedDynamicGroups) {
-                Record.AddGroups(groupId);
-            }
-            for (auto generation : groupGenerations) {
-                Record.AddGroupGenerations(generation);
-            }
-            for (const auto& data : drivesData) {
-                DriveDataToDriveData(data, Record.AddDrivesData());
-            }
-        }
+                const TVector<ui32>& groupGenerations, const TVector<NPDisk::TDriveData>& drivesData);
 
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvRegisterNode Record# " << Record.DebugString();
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const override;
     };
 
     struct TEvBlobStorage::TEvControllerUpdateNodeDrives : public TEventPB<
@@ -101,19 +54,9 @@ namespace NKikimr {
         TEvControllerUpdateNodeDrives()
         {}
 
-        TEvControllerUpdateNodeDrives(ui32 nodeId, const TVector<NPDisk::TDriveData>& drivesData) {
-            Record.SetNodeId(nodeId);
-            for (const auto& data : drivesData) {
-                DriveDataToDriveData(data, Record.AddDrivesData());
-            }
-        }
+        TEvControllerUpdateNodeDrives(ui32 nodeId, const TVector<NPDisk::TDriveData>& drivesData);
 
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvControllerUpdateNodeDrives Record# " << Record.DebugString();
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const override;
     };
 
     struct TEvBlobStorage::TEvControllerNodeServiceSetUpdate : public TEventPB<
@@ -124,18 +67,9 @@ namespace NKikimr {
         TEvControllerNodeServiceSetUpdate()
         {}
 
-        TEvControllerNodeServiceSetUpdate(NKikimrProto::EReplyStatus status, ui32 nodeID) {
-            Record.SetStatus(status);
-            Record.SetNodeID(nodeID);
-        }
+        TEvControllerNodeServiceSetUpdate(NKikimrProto::EReplyStatus status, ui32 nodeID);
 
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvControllerNodeServiceSetUpdate";
-            str << " Record# " << Record.DebugString();
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const override;
     };
 
     struct TEvBlobStorage::TEvControllerGetGroup : public TEventPB<
@@ -146,10 +80,7 @@ namespace NKikimr {
         TEvControllerGetGroup()
         {}
 
-        TEvControllerGetGroup(ui32 nodeID, ui32 groupID) {
-            Record.SetNodeID(nodeID);
-            Record.AddGroupIDs(groupID);
-        }
+        TEvControllerGetGroup(ui32 nodeID, ui32 groupID);
 
         template<typename TBeginIter, typename TEndIter = TBeginIter>
         TEvControllerGetGroup(ui32 nodeID, TBeginIter beginIter, TEndIter&& endIter) {
@@ -159,20 +90,7 @@ namespace NKikimr {
             }
         }
 
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvControllerGetGroup NodeID# " << Record.GetNodeID();
-            str << " GroupIDs.size()# " << Record.GroupIDsSize();
-            if (Record.GroupIDsSize()) {
-                str << "{";
-                for (size_t i = 0; i < Record.GroupIDsSize(); ++i) {
-                    str << "GroupID# " << Record.GetGroupIDs((int)i);
-                }
-                str << "}";
-            }
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const override;
     };
 
     struct TEvBlobStorage::TEvControllerSelectGroups : public TEventPB<
@@ -183,11 +101,7 @@ namespace NKikimr {
         TEvControllerSelectGroups()
         {}
 
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvControllerSelectGroups}";
-            return str.Str();
-        }
+        TString ToString() const override;
     };
 
     struct TEvBlobStorage::TEvControllerSelectGroupsResult : public TEventPB<
@@ -198,12 +112,7 @@ namespace NKikimr {
         TEvControllerSelectGroupsResult()
         {}
 
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvControllerSelectGroupsResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const override;
     };
 
     struct TEvBlobStorage::TEvRequestControllerInfo :
@@ -261,22 +170,9 @@ namespace NKikimr {
         {}
 
         TEvControllerProposeGroupKey(ui32 nodeId, ui32 groupId, ui32 lifeCyclePhase,
-                const TString& mainKeyId, const TString& encryptedGroupKey, ui64 mainKeyVersion, ui64 groupKeyNonce) {
-            Record.SetNodeId(nodeId);
-            Record.SetGroupId(groupId);
-            Record.SetLifeCyclePhase(lifeCyclePhase);
-            Record.SetMainKeyId(mainKeyId);
-            Record.SetEncryptedGroupKey(encryptedGroupKey);
-            Record.SetMainKeyVersion(mainKeyVersion);
-            Record.SetGroupKeyNonce(groupKeyNonce);
-        }
+                const TString& mainKeyId, const TString& encryptedGroupKey, ui64 mainKeyVersion, ui64 groupKeyNonce);
 
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvControllerProposeGroupKey Record# " << Record.DebugString();
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const override;
     };
 
     struct TEvBlobStorage::TEvControllerUpdateGroupStat : TEventPB<
@@ -316,25 +212,9 @@ namespace NKikimr {
         TEvVStatusResult() = default;
 
         TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, bool joinedGroup, bool replicated, bool isReadOnly,
-                ui64 incarnationGuid)
-        {
-            Record.SetStatus(status);
-            Record.SetJoinedGroup(joinedGroup);
-            Record.SetReplicated(replicated);
-            Record.SetIsReadOnly(isReadOnly);
-            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            if (status == NKikimrProto::OK) {
-                Record.SetIncarnationGuid(incarnationGuid);
-            }
-        }
+                ui64 incarnationGuid);
 
-        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk) {
-            Y_ABORT_UNLESS(status != NKikimrProto::OK);
-            Record.SetStatus(status);
-            Record.SetJoinedGroup(false);
-            Record.SetReplicated(false);
-            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-        }
+        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk);
     };
 
     struct TEvRegisterPDiskLoadActor: public TEventLocal<TEvRegisterPDiskLoadActor,
@@ -342,12 +222,7 @@ namespace NKikimr {
         TEvRegisterPDiskLoadActor()
         {}
 
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvRegisterPDiskLoadActor";
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const override;
     };
 
     struct TEvRegisterPDiskLoadActorResult: public TEventLocal<TEvRegisterPDiskLoadActorResult,
@@ -358,13 +233,7 @@ namespace NKikimr {
             : OwnerRound(ownerRound)
         {}
 
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvRegisterPDiskLoadActorResult";
-            str << " OwnerRound# " << OwnerRound;
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const override;
     };
 
     struct TEvBlobStorage::TEvMonStreamQuery : TEventLocal<TEvMonStreamQuery, EvMonStreamQuery> {
@@ -406,12 +275,7 @@ namespace NKikimr {
     struct TEvBlobStorage::TEvBunchOfEvents : TEventLocal<TEvBunchOfEvents, EvBunchOfEvents> {
         std::vector<std::unique_ptr<IEventHandle>> Bunch;
 
-        void Process(IActor *actor) {
-            for (auto& ev : Bunch) {
-                TAutoPtr<IEventHandle> handle(ev.release());
-                actor->Receive(handle);
-            }
-        }
+        void Process(IActor *actor);
     };
 
     struct TEvBlobStorage::TEvAskWardenRestartPDisk : TEventLocal<TEvAskWardenRestartPDisk, EvAskWardenRestartPDisk> {
@@ -468,27 +332,14 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerScrubQueryStartQuantum, EvControllerScrubQueryStartQuantum> {
         TEvControllerScrubQueryStartQuantum() = default;
 
-        TEvControllerScrubQueryStartQuantum(ui32 nodeId, ui32 pdiskId, ui32 vslotId) {
-            auto *x = Record.MutableVSlotId();
-            x->SetNodeId(nodeId);
-            x->SetPDiskId(pdiskId);
-            x->SetVSlotId(vslotId);
-        }
+        TEvControllerScrubQueryStartQuantum(ui32 nodeId, ui32 pdiskId, ui32 vslotId);
     };
 
     struct TEvBlobStorage::TEvControllerScrubStartQuantum : TEventPB<TEvControllerScrubStartQuantum,
             NKikimrBlobStorage::TEvControllerScrubStartQuantum, EvControllerScrubStartQuantum> {
         TEvControllerScrubStartQuantum() = default;
 
-        TEvControllerScrubStartQuantum(ui32 nodeId, ui32 pdiskId, ui32 vslotId, std::optional<TString> state) {
-            auto *x = Record.MutableVSlotId();
-            x->SetNodeId(nodeId);
-            x->SetPDiskId(pdiskId);
-            x->SetVSlotId(vslotId);
-            if (state) {
-                Record.SetState(*state);
-            }
-        }
+        TEvControllerScrubStartQuantum(ui32 nodeId, ui32 pdiskId, ui32 vslotId, std::optional<TString> state);
     };
 
     struct TEvBlobStorage::TEvControllerScrubQuantumFinished : TEventPB<TEvControllerScrubQuantumFinished,
@@ -511,24 +362,14 @@ namespace NKikimr {
             Record.SetSuccess(success);
         }
 
-        TEvControllerScrubQuantumFinished(ui32 nodeId, ui32 pdiskId, ui32 vslotId) {
-            auto *x = Record.MutableVSlotId();
-            x->SetNodeId(nodeId);
-            x->SetPDiskId(pdiskId);
-            x->SetVSlotId(vslotId);
-        }
+        TEvControllerScrubQuantumFinished(ui32 nodeId, ui32 pdiskId, ui32 vslotId);
     };
 
     struct TEvBlobStorage::TEvControllerScrubReportQuantumInProgress : TEventPB<TEvControllerScrubReportQuantumInProgress,
             NKikimrBlobStorage::TEvControllerScrubReportQuantumInProgress, EvControllerScrubReportQuantumInProgress> {
         TEvControllerScrubReportQuantumInProgress() = default;
 
-        TEvControllerScrubReportQuantumInProgress(ui32 nodeId, ui32 pdiskId, ui32 vslotId) {
-            auto *x = Record.MutableVSlotId();
-            x->SetNodeId(nodeId);
-            x->SetPDiskId(pdiskId);
-            x->SetVSlotId(vslotId);
-        }
+        TEvControllerScrubReportQuantumInProgress(ui32 nodeId, ui32 pdiskId, ui32 vslotId);
     };
 
     struct TEvBlobStorage::TEvControllerGroupDecommittedNotify : TEventPB<TEvControllerGroupDecommittedNotify,

@@ -1,4 +1,5 @@
 #include "bridge_proxy.h"
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/util/stlog.h>

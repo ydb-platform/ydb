@@ -1,4 +1,5 @@
 #include "actors.h"
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include "common.h"
 
 #include <ydb/core/base/tablet.h>

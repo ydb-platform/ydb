@@ -1,4 +1,5 @@
 #include "node_warden.h"
+#include <library/cpp/string_utils/base64/base64.h>
 #include "node_warden_events.h"
 #include "node_warden_impl.h"
 #include "distconf.h"

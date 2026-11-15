@@ -1,6 +1,9 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/protos/tracing.pb.h>
+
+namespace NKikimrTracing {
+    class TTraceID;
+}
 
 namespace NKikimr {
 namespace NTracing {

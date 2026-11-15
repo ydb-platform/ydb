@@ -1,4 +1,5 @@
 #include "datashard_ut_common_kqp.h"
+#include <google/protobuf/util/message_differencer.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender.h>

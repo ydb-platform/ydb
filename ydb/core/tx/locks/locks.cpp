@@ -1,4 +1,5 @@
 #include "locks.h"
+#include <ydb/core/scheme/protos/key_range.pb.h>
 #include "time_counters.h"
 
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>

@@ -1,4 +1,5 @@
 #include "tenant_slot_broker_impl.h"
+#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_SLOT_BROKER
 

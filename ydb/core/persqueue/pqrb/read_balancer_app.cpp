@@ -1,4 +1,5 @@
 #include "read_balancer.h"
+#include <ydb/library/actors/protos/actors.pb.h>
 
 #include "read_balancer__balancing.h"
 #include "read_balancer__metrics.h"

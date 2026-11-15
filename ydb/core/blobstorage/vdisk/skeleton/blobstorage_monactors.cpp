@@ -1,4 +1,5 @@
 #include "blobstorage_monactors.h"
+#include <library/cpp/string_utils/base64/base64.h>
 #include "blobstorage_db.h"
 #include "skeleton_mon_dbmainpage.h"
 #include "skeleton_mon_restore_part.h"

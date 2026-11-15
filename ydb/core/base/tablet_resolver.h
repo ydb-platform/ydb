@@ -4,8 +4,6 @@
 
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/library/actors/core/event_local.h>
-#include <util/stream/str.h>
-#include <util/string/builder.h>
 
 namespace NKikimr {
 
@@ -124,14 +122,7 @@ struct TEvTabletResolver {
                     LocalNodePrio = EResolvePrio::ResPrioForce;
             }
 
-            TString ToString() const {
-                TStringStream str;
-                str << (ui32) LocalNodePrio << ':'
-                    << (ui32) LocalDcPrio << ':'
-                    << (ui32) FollowerPrio << ':'
-                    << ((FollowerId) ? ::ToString(*FollowerId) : TString("(undefined)"));
-                return str.Str();
-            }
+            TString ToString() const;
         };
 
         ///
@@ -152,14 +143,7 @@ struct TEvTabletResolver {
             , Actor(actor)
         {}
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{EvForward TabletID: " << TabletID;
-            str << " Ev: " << (Ev ? Ev->ToString() : "nullptr");
-            str << " Flags: " << ResolveFlags.ToString();
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
 
         TActorId SelectActor(const TActorId& tablet, const TActorId& sysTablet) const {
             switch (Actor) {
@@ -180,13 +164,7 @@ struct TEvTabletResolver {
             , Actor(actor)
         {}
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{EvTabletProblem TabletID: " << TabletID;
-            str << " Actor: " << Actor;
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
     };
 
     struct TEvNodeProblem : public TEventLocal<TEvNodeProblem, EvNodeProblem> {
@@ -198,12 +176,7 @@ struct TEvTabletResolver {
             , CacheEpoch(cacheEpoch)
         {}
 
-        TString ToString() const {
-            return TStringBuilder()
-                << "{EvNodeProblem NodeId: " << NodeId
-                << " CacheEpoch: " << CacheEpoch
-                << "}";
-        }
+        TString ToString() const;
     };
 
     struct TEvForwardResult : public TEventLocal<TEvForwardResult, EvForwardResult> {
@@ -228,16 +201,7 @@ struct TEvTabletResolver {
             , CacheEpoch(cacheEpoch)
         {}
 
-        TString ToString() const {
-            TStringStream str;
-            str << "{EvForwardResult Status: " << (ui32)Status;
-            str << " TabletID: " << TabletID;
-            str << " TabletActor: " << TabletActor.ToString();
-            str << " Tablet: " << Tablet.ToString();
-            str << " CacheEpoch: " << CacheEpoch;
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const;
     };
 };
 

@@ -1,11 +1,8 @@
 #pragma once
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include "defs.h"
-#include <ydb/core/base/blobstorage_tablet_types.h>
 #include <ydb/core/base/events.h>
-#include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/tablet_types.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/protos/whiteboard_disk_states.pb.h>
 #include <ydb/core/protos/whiteboard_flags.pb.h>
@@ -15,6 +12,11 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/tracing.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
+
+namespace NKikimr {
+    class TTabletStorageInfo;
+    class TBlobStorageGroupInfo;
+}
 
 namespace NKikimr::NNodeWhiteboard {
 
@@ -76,46 +78,13 @@ struct TEvWhiteboard {
     struct TEvTabletStateUpdate : TEventPB<TEvTabletStateUpdate, NKikimrWhiteboard::TTabletStateInfo, EvTabletStateUpdate> {
         TEvTabletStateUpdate() = default;
 
-        TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, const TIntrusivePtr<TTabletStorageInfo>& storageInfo, ui32 generation, bool leader) {
-            Record.SetTabletId(tabletId);
-            Record.SetFollowerId(followerId);
-            Record.SetType(storageInfo->TabletType);
-            Record.SetState(state);
-            Record.SetGeneration(generation);
-            Record.SetLeader(leader);
-            Record.MutableChannelGroupIDs()->Resize(storageInfo->Channels.size(), 0);
-            for (const auto& channel : storageInfo->Channels) {
-                const auto* latestEntry = channel.LatestEntry();
-                ui32 groupId = latestEntry != nullptr ? latestEntry->GroupID : 0;
-                Record.SetChannelGroupIDs(channel.Channel, groupId);
-            }
-            if (storageInfo->HiveId) {
-                Record.SetHiveId(storageInfo->HiveId);
-            }
-            if (storageInfo->TenantPathId) {
-                Record.MutableTenantId()->CopyFrom(TSubDomainKey(storageInfo->TenantPathId.OwnerId, storageInfo->TenantPathId.LocalPathId));
-            }
-        }
+        TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, const TIntrusivePtr<TTabletStorageInfo>& storageInfo, ui32 generation, bool leader);
 
-        TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, ui32 generation) {
-            Record.SetTabletId(tabletId);
-            Record.SetFollowerId(followerId);
-            Record.SetState(state);
-            Record.SetGeneration(generation);
-        }
+        TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, ui32 generation);
 
-        TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, ui32 generation, bool leader) {
-            Record.SetTabletId(tabletId);
-            Record.SetFollowerId(followerId);
-            Record.SetState(state);
-            Record.SetGeneration(generation);
-            Record.SetLeader(leader);
-        }
+        TEvTabletStateUpdate(TTabletId tabletId, TFollowerId followerId, NKikimrWhiteboard::TTabletStateInfo::ETabletState state, ui32 generation, bool leader);
 
-        TEvTabletStateUpdate(TTabletId tabletId, ui32 userState) {
-            Record.SetTabletId(tabletId);
-            Record.SetUserState(userState);
-        }
+        TEvTabletStateUpdate(TTabletId tabletId, ui32 userState);
     };
 
     struct TEvTabletStateRequest : public TEventPB<TEvTabletStateRequest, NKikimrWhiteboard::TEvTabletStateRequest, EvTabletStateRequest> {};
@@ -143,48 +112,24 @@ struct TEvWhiteboard {
             return result;
         }
 
-        void Fill(NKikimrWhiteboard::TTabletStateInfo& result) const {
-            result.SetTabletId(TabletId);
-            result.SetFollowerId(FollowerId);
-            result.SetGeneration(Generation);
-            result.SetType(Type);
-            result.SetState(State);
-        }
+        void Fill(NKikimrWhiteboard::TTabletStateInfo& result) const;
     } Y_PACKED;
 
     static_assert(sizeof(TEvTabletStateResponsePacked5) == 24);
 #pragma pack(pop)
 
     struct TEvTabletStateResponse : public TEventPB<TEvTabletStateResponse, NKikimrWhiteboard::TEvTabletStateResponse, EvTabletStateResponse> {
-        TEvTabletStateResponsePacked5* AllocatePackedResponse(size_t count) {
-            auto& packed5 = *Record.MutablePacked5();
-            packed5.resize(count * sizeof(TEvTabletStateResponsePacked5));
-            return reinterpret_cast<TEvTabletStateResponsePacked5*>(packed5.Detach());
-        }
+        TEvTabletStateResponsePacked5* AllocatePackedResponse(size_t count);
     };
 
     struct TEvPDiskStateUpdate : TEventPB<TEvPDiskStateUpdate, NKikimrWhiteboard::TPDiskStateInfo, EvPDiskStateUpdate> {
         TEvPDiskStateUpdate() = default;
 
-        TEvPDiskStateUpdate(ui32 pDiskId, const TString& path, ui64 guid, ui64 category) {
-            Record.SetPDiskId(pDiskId);
-            Record.SetPath(path);
-            Record.SetGuid(guid);
-            Record.SetCategory(category);
-        }
+        TEvPDiskStateUpdate(ui32 pDiskId, const TString& path, ui64 guid, ui64 category);
 
-        TEvPDiskStateUpdate(ui32 pDiskId, ui64 availableSize, ui64 totalSize, ui32 state) {
-            Record.SetPDiskId(pDiskId);
-            Record.SetAvailableSize(availableSize);
-            Record.SetTotalSize(totalSize);
-            Record.SetState(static_cast<NKikimrBlobStorage::TPDiskState::E>(state));
-        }
+        TEvPDiskStateUpdate(ui32 pDiskId, ui64 availableSize, ui64 totalSize, ui32 state);
 
-        TEvPDiskStateUpdate(ui32 pDiskId, NKikimrWhiteboard::EFlag realtime, NKikimrWhiteboard::EFlag device) {
-            Record.SetPDiskId(pDiskId);
-            Record.SetRealtime(realtime);
-            Record.SetDevice(device);
-        }
+        TEvPDiskStateUpdate(ui32 pDiskId, NKikimrWhiteboard::EFlag realtime, NKikimrWhiteboard::EFlag device);
     };
 
     struct TEvPDiskStateRequest : public TEventPB<TEvPDiskStateRequest, NKikimrWhiteboard::TEvPDiskStateRequest, EvPDiskStateRequest> {};
@@ -218,26 +163,7 @@ struct TEvWhiteboard {
         // this message is generated by NodeWarden
         explicit TEvVDiskStateUpdate(const TVDiskID& vDiskId, const TMaybe<TString>& storagePoolName, ui32 pDiskId,
                 ui32 vDiskSlotId, ui64 guid, NKikimrBlobStorage::TVDiskKind::EVDiskKind kind, bool donorMode,
-                ui64 instanceGuid, std::vector<NKikimrBlobStorage::TVSlotId>&& donors, ui32 groupSizeInUnits)
-            : Initial(true)
-        {
-            VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskId());
-            if (storagePoolName) {
-                Record.SetStoragePoolName(*storagePoolName);
-            }
-            Record.SetPDiskId(pDiskId);
-            Record.SetVDiskSlotId(vDiskSlotId);
-            Record.SetGuid(guid);
-            Record.SetKind(kind);
-            if (donorMode) {
-                Record.SetDonorMode(true);
-            }
-            Record.SetInstanceGuid(instanceGuid);
-            for (auto&& donor : donors) {
-                *Record.AddDonors() = std::move(donor);
-            }
-            Record.SetGroupSizeInUnits(groupSizeInUnits);
-        }
+                ui64 instanceGuid, std::vector<NKikimrBlobStorage::TVSlotId>&& donors, ui32 groupSizeInUnits);
 
         explicit TEvVDiskStateUpdate(NKikimrWhiteboard::TVDiskSatisfactionRank *satisfactionRank) {
             Record.MutableSatisfactionRank()->Swap(satisfactionRank);
@@ -251,17 +177,7 @@ struct TEvWhiteboard {
                                      NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E detailedReplicationStatus,
                                      ui64 unsyncedVDisks,
                                      NKikimrWhiteboard::EFlag frontQueuesLigth,
-                                     bool hasUnreadableBlobs) {
-            Record.SetVDiskState(state);
-            Record.SetDiskSpace(diskSpace);
-            Record.SetReplicated(replicated);
-            Record.SetUnreplicatedPhantoms(unreplicatedPhantoms);
-            Record.SetUnreplicatedNonPhantoms(unreplicatedNonPhantoms);
-            Record.SetDetailedReplicationStatus(detailedReplicationStatus);
-            Record.SetUnsyncedVDisks(unsyncedVDisks);
-            Record.SetFrontQueues(frontQueuesLigth);
-            Record.SetHasUnreadableBlobs(hasUnreadableBlobs);
-        }
+                                     bool hasUnreadableBlobs);
 
         static constexpr struct TUpdateIncarnationGuid {} UpdateIncarnationGuid{};
 
@@ -331,32 +247,7 @@ struct TEvWhiteboard {
     struct TEvBSGroupStateUpdate : TEventPB<TEvBSGroupStateUpdate, NKikimrWhiteboard::TBSGroupStateInfo, EvBSGroupStateUpdate> {
         TEvBSGroupStateUpdate() = default;
 
-        TEvBSGroupStateUpdate(const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo) {
-            Record.SetGroupID(groupInfo->GroupID.GetRawId());
-            Record.SetGroupGeneration(groupInfo->GroupGeneration);
-            Record.SetErasureSpecies(groupInfo->Type.ErasureSpeciesName(groupInfo->Type.GetErasure()));
-            if (ui32 numVDisks = groupInfo->GetTotalVDisksNum()) {
-                for (ui32 i = 0; i < numVDisks; ++i) {
-                    VDiskIDFromVDiskID(groupInfo->GetVDiskId(i), Record.AddVDiskIds());
-                    const TActorId& actorId = groupInfo->GetActorId(i);
-                    Record.AddVDiskNodeIds(actorId.NodeId());
-                }
-            } else {
-                Record.SetNoVDisksInGroup(true);
-            }
-            Record.SetStoragePoolName(groupInfo->GetStoragePoolName());
-            if (groupInfo->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE) {
-                Record.SetEncryption(true);
-            }
-            if (groupInfo->BlobDepotId) {
-                Record.SetBlobDepotId(*groupInfo->BlobDepotId);
-            }
-            Record.SetGroupSizeInUnits(groupInfo->GroupSizeInUnits);
-            if (const auto& bridgeProxyGroupId = groupInfo->GetBridgeProxyGroupId()) {
-                bridgeProxyGroupId->CopyToProto(&Record, &decltype(Record)::SetBridgeProxyGroupId);
-            }
-            groupInfo->GetBridgePileId().CopyToProto(&Record, &decltype(Record)::SetBridgePileId);
-        }
+        TEvBSGroupStateUpdate(const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo);
     };
 
     struct TEvBSGroupStateDelete : TEventPB<TEvBSGroupStateDelete, NKikimrWhiteboard::TBSGroupStateInfo, EvBSGroupStateDelete> {
@@ -377,34 +268,15 @@ struct TEvWhiteboard {
         TEvSystemStateUpdate(
                 TInstant startTime,
                 ui32 numberOfCpus,
-                const TString& version) {
-            Record.SetStartTime(startTime.MilliSeconds());
-            Record.SetNumberOfCpus(numberOfCpus);
-            Record.SetVersion(version);
-        }
+                const TString& version);
 
         TEvSystemStateUpdate(
                 TInstant startTime,
-                ui32 numberOfCpus) {
-            Record.SetStartTime(startTime.MilliSeconds());
-            Record.SetNumberOfCpus(numberOfCpus);
-        }
+                ui32 numberOfCpus);
 
-        TEvSystemStateUpdate(const TVector<double>& loadAverage) {
-            for (double d : loadAverage) {
-                Record.AddLoadAverage(d);
-            }
-        }
+        TEvSystemStateUpdate(const TVector<double>& loadAverage);
 
-        TEvSystemStateUpdate(const TVector<std::tuple<TString, double, ui32, ui32>>& poolStats) {
-            for (const auto& row : poolStats) {
-                auto& pb = *Record.AddPoolStats();
-                pb.SetName(std::get<0>(row));
-                pb.SetUsage(std::get<1>(row));
-                pb.SetThreads(std::get<2>(row));
-                pb.SetLimit(std::get<3>(row));
-            }
-        }
+        TEvSystemStateUpdate(const TVector<std::tuple<TString, double, ui32, ui32>>& poolStats);
 
         TEvSystemStateUpdate(const TNodeLocation& systemLocation) {
             systemLocation.Serialize(Record.MutableLocation(), false);
@@ -417,11 +289,7 @@ struct TEvWhiteboard {
 
     struct TEvMemoryStatsUpdate : TEventPB<TEvMemoryStatsUpdate, NKikimrMemory::TMemoryStats, EvMemoryStatsUpdate> {};
 
-    static TEvSystemStateUpdate *CreateTotalSessionsUpdateRequest(ui32 totalSessions) {
-        TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
-        request->Record.SetTotalSessions(totalSessions);
-        return request;
-    }
+    static TEvSystemStateUpdate *CreateTotalSessionsUpdateRequest(ui32 totalSessions);
 
     struct TEvSystemStateAddEndpoint : TEventLocal<TEvSystemStateAddEndpoint, EvSystemStateAddEndpoint> {
         TString Name;

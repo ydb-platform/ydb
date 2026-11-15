@@ -1,4 +1,5 @@
 #include "cluster_balancing.h"
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 
 #include <ydb/core/blobstorage/base/pdisk_filter.h>
 

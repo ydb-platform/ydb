@@ -1,4 +1,5 @@
 #include "cms_impl.h"
+#include <google/protobuf/util/message_differencer.h>
 #include "scheme.h"
 #include "sentinel.h"
 

@@ -38,6 +38,7 @@ SRCS(
     fulltext.h
     group_stat.cpp
     group_stat.h
+    hive.cpp
     hive.h
     http_database_param.cpp
     http_database_param.h
@@ -51,6 +52,7 @@ SRCS(
     logoblob.cpp
     logoblob.h
     memory_controller_iface.h
+    memory_stats.cpp
     mon_auth.cpp
     nameservice.h
     nodestate.h
@@ -87,14 +89,17 @@ SRCS(
     tablet.h
     tablet_history_cutter.h
     tablet_killer.cpp
+    tablet_pipe.cpp
     tablet_pipe.h
     tablet_pipecache.h
+    tablet_resolver.cpp
     tablet_resolver.h
     tablet_status_checker.cpp
     tablet_types.h
     tabletid.h
     traceid.cpp
     traceid.h
+    tracing.cpp
     tracing.h
     tx_processing.cpp
     tx_processing.h

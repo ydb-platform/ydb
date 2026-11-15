@@ -8,6 +8,7 @@ on:
       - 'stable-**'
     paths:
       - 'ydb/docs/**'
+      - 'yql/essentials/docs/**'
       - 'ydb/**/*.proto'
       - 'yql/**/*.proto'
       - 'library/**/*.proto'

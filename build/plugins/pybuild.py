@@ -302,9 +302,6 @@ def py_program(unit, py3):
     if unit.get('OS_WINDOWS') == 'yes':
         unit.onwindows_long_path_manifest()
 
-    if unit.get('MODULE_TYPE') == 'PROGRAM':  # can not check DLL
-        unit.onadd_check_py_imports()
-
 
 @ymake.macro
 def PY_SRCS(unit: ymake.Unit, *args: str):

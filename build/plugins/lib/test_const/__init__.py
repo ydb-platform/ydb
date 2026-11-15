@@ -178,7 +178,6 @@ NODEJS_RESOURCE = 'NODEJS_RESOURCE_GLOBAL'
 NYC_RESOURCE = 'NYC_RESOURCE_GLOBAL'
 # XXX: These resource keys are used in linter tools in `tools/` which are run by test_tool.
 # test_tool and `tools/` have different release cycles. Beware when modifying.
-FLAKE8_PY2_RESOURCE = 'FLAKE8_PY2_RESOURCE_GLOBAL'
 FLAKE8_PY3_RESOURCE = 'FLAKE8_PY3_RESOURCE_GLOBAL'
 RUFF_RESOURCE = 'RUFF_RESOURCE_GLOBAL'
 CLANG_FORMAT_RESOURCE = 'CLANG_FORMAT_RESOURCE_GLOBAL'
@@ -453,7 +452,6 @@ class PythonLinterName(Enum):
     Black = "black"
     DummyLinter = "dummy_linter"
     Flake8 = "flake8"
-    Py2Flake8 = "py2_flake8"
     Ruff = "ruff"
 
 
@@ -489,7 +487,6 @@ LINTER_TO_GLOBAL_RESOURCES = {
     PythonLinterName.Black: (('build/external_resources/black', BLACK_RESOURCE),),
     PythonLinterName.Ruff: (('build/external_resources/ruff', RUFF_RESOURCE),),
     PythonLinterName.Flake8: (('build/external_resources/flake8_py3', FLAKE8_PY3_RESOURCE),),
-    PythonLinterName.Py2Flake8: (('build/external_resources/flake8_py2', FLAKE8_PY2_RESOURCE),),
     CppLinterName.ClangFormat: (('build/platform/clang/clang-format', CLANG_FORMAT_RESOURCE),),
     CustomExplicitLinterName.ClangFormatJson: (('build/platform/clang/clang-format', CLANG_FORMAT_RESOURCE),),
     CustomExplicitLinterName.Yamlfmt: (('build/external_resources/yamlfmt', YAMLFMT_FORMAT_RESOURCE),),

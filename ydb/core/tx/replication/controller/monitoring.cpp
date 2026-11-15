@@ -383,7 +383,7 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
     }
     {
         auto table = makeTable("Targets", {"Replication", "Target", "Kind", "Source", "Destination", "Destination state",
-            "Path ID", "Pending path ID", "Stream", "Stream state", "Consumer", "Schema changes", "Lag", "Workers",
+            "Path ID", "Stream", "Stream state", "Consumer", "Schema changes", "Lag", "Workers",
             "Worker set complete", "Issue"});
         for (auto rid : SortedKeys(Replications)) {
             if (!matches(rid)) {
@@ -394,7 +394,7 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
             for (const auto* target : targets) {
                 const auto schemaChanges = target->GetStreamSchemaChanges();
                 table.Row(rid, target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
-                    target->GetDstState(), target->GetDstPathId(), target->GetPendingDstPathId(), target->GetStreamName(),
+                    target->GetDstState(), target->GetDstPathId(), target->GetStreamName(),
                     target->GetStreamState(), target->GetStreamConsumerName(),
                     schemaChanges ? (*schemaChanges ? "enabled" : "disabled") : "unknown", Lag(target->GetLag()),
                     target->GetWorkers().size(), CompleteWorkerSets.contains(std::make_pair(rid, target->GetId())), target->GetIssue());

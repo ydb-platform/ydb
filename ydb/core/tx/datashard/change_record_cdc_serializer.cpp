@@ -933,7 +933,10 @@ class TBinaryCdcSerializer: public TBaseSerializer {
 
     void FillDataChange(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
         const auto& index = ColumnIndexFor(record);
-        NKikimrChangeExchange::TDataChange change = record.GetDataChange();
+        // The cell bytes do not change here, so avoid copying them when this
+        // record owns the parsed body. Tag rewrite happens on that message.
+        NKikimrChangeExchange::TDataChange change;
+        record.ExtractDataChange(change);
 
         auto* key = change.MutableKey();
         Y_ENSURE(key->TagsSize() == index.KeyOrder.size(),

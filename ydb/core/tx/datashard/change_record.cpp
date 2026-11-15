@@ -16,6 +16,7 @@ const NKikimrChangeExchange::TDataChange& TChangeRecord::GetDataChange() const {
     Y_ENSURE(Kind == EKind::AsyncIndex
         || Kind == EKind::IncrementalRestore
         || Kind == EKind::CdcDataChange);
+    Y_ENSURE(!DataChangeConsumed, "Data change body was already extracted");
 
     if (!ParsedBody) {
         auto parsed = std::make_shared<NKikimrChangeExchange::TDataChange>();
@@ -26,6 +27,33 @@ const NKikimrChangeExchange::TDataChange& TChangeRecord::GetDataChange() const {
     }
 
     return *ParsedBody;
+}
+
+void TChangeRecord::ExtractDataChange(NKikimrChangeExchange::TDataChange& out) const {
+    Y_ENSURE(Kind == EKind::AsyncIndex
+        || Kind == EKind::IncrementalRestore
+        || Kind == EKind::CdcDataChange);
+    Y_ENSURE(!DataChangeConsumed, "Data change body was already extracted");
+
+    if (!ParsedBody) {
+        ParseBody(out, Body);
+        BodySize = Body.size();
+        TString().swap(Body);
+        DataChangeConsumed = true;
+        return;
+    }
+
+    // Partition routing may already have parsed this body. The actor that sends
+    // the record is its last reader, so the parsed message can be moved. A
+    // shared parsed body stays in place and is copied instead.
+    if (ParsedBody.use_count() == 1) {
+        out.Swap(ParsedBody.get());
+        ParsedBody.reset();
+        DataChangeConsumed = true;
+        return;
+    }
+
+    out.CopyFrom(*ParsedBody);
 }
 
 void TChangeRecord::Serialize(NKikimrChangeExchange::TChangeRecord& record) const {

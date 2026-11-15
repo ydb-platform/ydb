@@ -163,6 +163,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         TCmdWrite cmd;
         serializer->Serialize(cmd, *record);
         UNIT_ASSERT_STRING_CONTAINS(serializer->DebugString(*record), "binary CDC");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(record->GetDataChange(), yexception, "already extracted");
 
         const auto chunk = ParseChunk(cmd.GetData());
         UNIT_ASSERT_VALUES_EQUAL(chunk.GetCodec(), 0);
@@ -228,13 +229,15 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
     Y_UNIT_TEST(ZstdCompressesLargeRowsOfEitherFormat) {
         const auto valueBytes = MakeLargeValueBytes();
         const auto table = MakeTable();
-        const auto record = MakeRecord(
-            TChangeRecord::EKind::CdcDataChange, table, MakeUpsert(valueBytes, 3, 7).SerializeAsString());
+        const auto body = MakeUpsert(valueBytes, 3, 7).SerializeAsString();
+        auto makeRecord = [&]() {
+            return MakeRecord(TChangeRecord::EKind::CdcDataChange, table, body);
+        };
 
         std::unique_ptr<IChangeRecordSerializer> binary(CreateChangeRecordSerializer(BinaryOpts(
             NKikimrSchemeOp::ECdcStreamCompressionZstd)));
         TCmdWrite binaryCmd;
-        binary->Serialize(binaryCmd, *record);
+        binary->Serialize(binaryCmd, *makeRecord());
         const auto binaryChunk = ParseChunk(binaryCmd.GetData());
         UNIT_ASSERT_VALUES_EQUAL(binaryChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
         const auto binaryRaw = MaybeDecompress(binaryChunk);
@@ -244,15 +247,17 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         ExpectRewrittenUpsert(proto.GetCdcDataChange(), valueBytes, false);
 
         const auto smallValue = MakeValueBytes();
-        const auto small = MakeRecord(
-            TChangeRecord::EKind::CdcDataChange, table, MakeUpsert(smallValue, 3, 7).SerializeAsString());
+        const auto smallBody = MakeUpsert(smallValue, 3, 7).SerializeAsString();
+        auto makeSmall = [&]() {
+            return MakeRecord(TChangeRecord::EKind::CdcDataChange, table, smallBody);
+        };
         TCmdWrite smallPlainCmd;
-        std::unique_ptr<IChangeRecordSerializer> smallPlain(CreateChangeRecordSerializer(BinaryOpts(
+        std::unique_ptr<IChangeRecordSerializer> smallPlainSerializer(CreateChangeRecordSerializer(BinaryOpts(
             NKikimrSchemeOp::ECdcStreamCompressionNone)));
-        smallPlain->Serialize(smallPlainCmd, *small);
+        smallPlainSerializer->Serialize(smallPlainCmd, *makeSmall());
         const auto smallPlain = ParseChunk(smallPlainCmd.GetData()).GetData();
         TCmdWrite smallCmd;
-        binary->Serialize(smallCmd, *small);
+        binary->Serialize(smallCmd, *makeSmall());
         const auto smallChunk = ParseChunk(smallCmd.GetData());
         if (smallPlain.size() < CdcZstdMinPayloadBytes) {
             UNIT_ASSERT_VALUES_EQUAL(smallChunk.GetCodec(), 0);
@@ -272,7 +277,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         jsonOpts.Compression = NKikimrSchemeOp::ECdcStreamCompressionZstd;
         std::unique_ptr<IChangeRecordSerializer> json(CreateChangeRecordSerializer(jsonOpts));
         TCmdWrite jsonCmd;
-        json->Serialize(jsonCmd, *record);
+        json->Serialize(jsonCmd, *makeRecord());
         const auto jsonChunk = ParseChunk(jsonCmd.GetData());
         const auto jsonRaw = MaybeDecompress(jsonChunk);
         UNIT_ASSERT(jsonRaw.StartsWith("{"));
@@ -282,7 +287,7 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         jsonOpts.Compression = NKikimrSchemeOp::ECdcStreamCompressionNone;
         std::unique_ptr<IChangeRecordSerializer> plain(CreateChangeRecordSerializer(jsonOpts));
         TCmdWrite plainCmd;
-        plain->Serialize(plainCmd, *record);
+        plain->Serialize(plainCmd, *makeRecord());
         const auto plainChunk = ParseChunk(plainCmd.GetData());
         UNIT_ASSERT_VALUES_EQUAL(plainChunk.GetCodec(), 0);
         UNIT_ASSERT(!plainCmd.HasUncompressedSize());
@@ -291,12 +296,14 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
 
     Y_UNIT_TEST(SkipsShortPayloadsAndReusesFastContext) {
         const auto table = MakeTable();
-        const auto shortRecord = MakeRecord(
-            TChangeRecord::EKind::CdcDataChange, table,
-            MakeUpsert(MakeShortValueBytes(), 3, 7).SerializeAsString());
-        const auto longRecord = MakeRecord(
-            TChangeRecord::EKind::CdcDataChange, table,
-            MakeUpsert(MakeLargeValueBytes(), 3, 7).SerializeAsString());
+        const auto shortBody = MakeUpsert(MakeShortValueBytes(), 3, 7).SerializeAsString();
+        const auto longBody = MakeUpsert(MakeLargeValueBytes(), 3, 7).SerializeAsString();
+        auto makeShort = [&]() {
+            return MakeRecord(TChangeRecord::EKind::CdcDataChange, table, shortBody);
+        };
+        auto makeLong = [&]() {
+            return MakeRecord(TChangeRecord::EKind::CdcDataChange, table, longBody);
+        };
 
         auto rawOf = [&](const TChangeRecord& record) {
             std::unique_ptr<IChangeRecordSerializer> plain(CreateChangeRecordSerializer(BinaryOpts(
@@ -305,8 +312,8 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
             plain->Serialize(cmd, record);
             return ParseChunk(cmd.GetData()).GetData();
         };
-        const auto shortRaw = rawOf(*shortRecord);
-        const auto longRaw = rawOf(*longRecord);
+        const auto shortRaw = rawOf(*makeShort());
+        const auto longRaw = rawOf(*makeLong());
         UNIT_ASSERT_LT(shortRaw.size(), CdcZstdMinPayloadBytes);
         UNIT_ASSERT_GE(longRaw.size(), CdcZstdMinPayloadBytes);
 
@@ -315,14 +322,14 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
             NKikimrSchemeOp::ECdcStreamCompressionZstd)));
 
         TCmdWrite firstShort;
-        serializer->Serialize(firstShort, *shortRecord);
+        serializer->Serialize(firstShort, *makeShort());
         const auto firstShortChunk = ParseChunk(firstShort.GetData());
         UNIT_ASSERT_VALUES_EQUAL(firstShortChunk.GetCodec(), 0);
         UNIT_ASSERT(!firstShort.HasUncompressedSize());
         UNIT_ASSERT_VALUES_EQUAL(firstShortChunk.GetData(), shortRaw);
 
         TCmdWrite firstLong;
-        serializer->Serialize(firstLong, *longRecord);
+        serializer->Serialize(firstLong, *makeLong());
         const auto firstLongChunk = ParseChunk(firstLong.GetData());
         UNIT_ASSERT_VALUES_EQUAL(firstLongChunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
         UNIT_ASSERT_VALUES_EQUAL(
@@ -331,12 +338,12 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         UNIT_ASSERT_VALUES_EQUAL(firstLong.GetUncompressedSize(), static_cast<i32>(longRaw.size()));
 
         TCmdWrite secondLong;
-        serializer->Serialize(secondLong, *longRecord);
+        serializer->Serialize(secondLong, *makeLong());
         UNIT_ASSERT_VALUES_EQUAL(ParseChunk(secondLong.GetData()).GetData(), firstLongChunk.GetData());
         UNIT_ASSERT_VALUES_EQUAL(secondLong.GetUncompressedSize(), static_cast<i32>(longRaw.size()));
 
         TCmdWrite secondShort;
-        serializer->Serialize(secondShort, *shortRecord);
+        serializer->Serialize(secondShort, *makeShort());
         const auto secondShortChunk = ParseChunk(secondShort.GetData());
         UNIT_ASSERT_VALUES_EQUAL(secondShortChunk.GetCodec(), 0);
         UNIT_ASSERT(!secondShort.HasUncompressedSize());
@@ -346,12 +353,38 @@ Y_UNIT_TEST_SUITE(CdcBinaryFormat) {
         level3.CompressionLevel = 3;
         std::unique_ptr<IChangeRecordSerializer> slower(CreateChangeRecordSerializer(level3));
         TCmdWrite level3Cmd;
-        slower->Serialize(level3Cmd, *longRecord);
+        slower->Serialize(level3Cmd, *makeLong());
         const auto level3Chunk = ParseChunk(level3Cmd.GetData());
         UNIT_ASSERT_VALUES_EQUAL(level3Chunk.GetCodec(), static_cast<i64>(NPersQueueCommon::ZSTD));
         UNIT_ASSERT_VALUES_EQUAL(level3Chunk.GetData(), ReferenceCompress(longRaw, 3));
         UNIT_ASSERT_VALUES_EQUAL(level3Cmd.GetUncompressedSize(), static_cast<i32>(longRaw.size()));
         UNIT_ASSERT(level3Chunk.GetData() != firstLongChunk.GetData());
+    }
+
+    Y_UNIT_TEST(SharedParsedBodyIsCopied) {
+        const auto valueBytes = MakeValueBytes();
+        const auto table = MakeTable();
+        const auto record = MakeRecord(
+            TChangeRecord::EKind::CdcDataChange, table, MakeUpsert(valueBytes, 3, 7).SerializeAsString());
+        record->GetDataChange();
+        // The copy shares the parsed message, so neither serialization may consume it.
+        TChangeRecord shared = *record;
+
+        std::unique_ptr<IChangeRecordSerializer> serializer(CreateChangeRecordSerializer(BinaryOpts(
+            NKikimrSchemeOp::ECdcStreamCompressionNone)));
+        TCmdWrite first;
+        serializer->Serialize(first, *record);
+        TCmdWrite second;
+        serializer->Serialize(second, shared);
+
+        for (const auto* cmd : {&first, &second}) {
+            const auto chunk = ParseChunk(cmd->GetData());
+            NKikimrChangeExchange::TChangeRecord proto;
+            UNIT_ASSERT(proto.ParseFromString(chunk.GetData()));
+            ExpectRewrittenUpsert(proto.GetCdcDataChange(), valueBytes, false);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(record->GetDataChange().GetKey().GetTags(0), 10);
+        UNIT_ASSERT_VALUES_EQUAL(shared.GetDataChange().GetKey().GetTags(0), 10);
     }
 
     Y_UNIT_TEST(RejectsKeyAndTagMismatch) {

@@ -5067,6 +5067,67 @@ Y_UNIT_TEST_SUITE(KqpRboOlapAggregations) {
             CompareYson(getRows(aggregates + query), getRows(aggregates + sharding + query));
         }
     }
+
+    // As in the old optimizer, an aggregate computes identical aggregations once, so column shards compute one COUNT(*)
+    // for both COUNT(*) of a query.
+    Y_UNIT_TEST(AggregationComputesDuplicatesOnce) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 300, true);
+        auto client = kikimr.GetTableClient();
+
+        const TString aggregates = R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)";
+        struct TCase {
+            TString Query;
+            // The same rows, without duplicate aggregations.
+            TString Expected;
+            // The aggregation in the column shard program.
+            TString Aggregation;
+        };
+        const std::vector<TCase> cases = {
+            {"SELECT level, COUNT(*) AS c, COUNT(*) AS d FROM `/Root/olapStore/olapTable` GROUP BY level ORDER BY level",
+             "SELECT level, c, c AS d FROM (SELECT level, COUNT(*) AS c FROM `/Root/olapStore/olapTable` GROUP BY level) ORDER BY level",
+             R"('"count" '"*")"},
+            {"SELECT level, COUNT(*) AS c FROM `/Root/olapStore/olapTable` GROUP BY level HAVING COUNT(*) > 50 ORDER BY level",
+             "SELECT level, c FROM (SELECT level, COUNT(*) AS c FROM `/Root/olapStore/olapTable` GROUP BY level) WHERE c > 50 ORDER BY level",
+             R"('"count" '"*")"},
+            {"SELECT SUM(level) AS a, SUM(level) AS b, COUNT(level) AS c FROM `/Root/olapStore/olapTable`",
+             "SELECT a, a AS b, c FROM (SELECT SUM(level) AS a, COUNT(level) AS c FROM `/Root/olapStore/olapTable`)",
+             R"('"sum" '"level")"},
+        };
+
+        const auto getAst = [&](const TString& query) {
+            TStreamExecScanQuerySettings explainSettings;
+            explainSettings.Explain(true);
+            auto explain = client.StreamExecuteScanQuery(query, explainSettings).GetValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+            return TString{CollectStreamResult(explain).QueryStats->Getquery_ast()};
+        };
+        const auto getRows = [&](const TString& query) {
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return StreamResultToYson(it);
+        };
+        const auto count = [](const TString& text, const TString& part) {
+            size_t result = 0;
+            for (auto pos = text.find(part); pos != TString::npos; pos = text.find(part, pos + part.size())) {
+                ++result;
+            }
+            return result;
+        };
+        for (const auto& [query, expected, aggregation] : cases) {
+            const auto ast = getAst(aggregates + query);
+            UNIT_ASSERT_C(ast.Contains("TKqpOlapAgg"), query << ", AST: " << ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(count(ast, aggregation), 1, query << ", AST: " << ast);
+            const auto rows = getRows(expected);
+            CompareYson(rows, getRows(query));
+            CompareYson(rows, getRows(aggregates + query));
+        }
+    }
 }
 
 

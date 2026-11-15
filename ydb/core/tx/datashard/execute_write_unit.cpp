@@ -1011,9 +1011,13 @@ public:
                 }
             };
 
+            const bool requireReadOnlyLocks = op->IsReadOnly() || op->HasFlag(TTxFlags::ReadOnlyPrepare);
+
             auto [validated, brokenLocks] = op->HasVolatilePrepareFlag()
-                                                ? KqpValidateVolatileTx(sysLocks, kqpLocks, useGenericReadSets, txId, op->DelayedInReadSets(), awaitingDecisions, outReadSets, allowAncestorLocks)
-                                                : KqpValidateLocks(sysLocks, kqpLocks, useGenericReadSets, inReadSets, allowAncestorLocks);
+                ? KqpValidateVolatileTx(sysLocks, kqpLocks, useGenericReadSets, txId,
+                    op->DelayedInReadSets(), awaitingDecisions, outReadSets, allowAncestorLocks, requireReadOnlyLocks)
+                : KqpValidateLocks(sysLocks, kqpLocks, useGenericReadSets, inReadSets,
+                    allowAncestorLocks, requireReadOnlyLocks);
 
             if (!validated) {
                 YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: aborting because locks are not valid",

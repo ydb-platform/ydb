@@ -6,6 +6,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <optional>
+
 namespace NYql {
     class TExprNode;
     struct TExprContext;

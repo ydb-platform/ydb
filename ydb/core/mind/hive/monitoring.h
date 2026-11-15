@@ -1,3 +1,7 @@
+#pragma once
+
+#include "hive_log.h"
+
 #include <library/cpp/json/json_writer.h>
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -7,20 +11,9 @@
 namespace NKikimr {
 namespace NHive {
 
-class TLoggedMonTransaction {
-private:
-    ui64 Index;
-    TString User;
-    TString LogPrefix;
-
+class TLoggedMonTransaction : public TLoggedTransaction {
 protected:
     TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& evi, THive* self);
-
-    void WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op, TStringBuf description);
-
-    TString GetUserForLog() const {
-        return User.empty() ? TString("anonymous") : User;
-    }
 };
 
 TCgiParameters GetParams(const NMon::TEvRemoteHttpInfo* ev);

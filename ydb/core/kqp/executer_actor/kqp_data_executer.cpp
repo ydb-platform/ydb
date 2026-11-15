@@ -17,7 +17,7 @@
 #include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/columnshard/columnshard.h>

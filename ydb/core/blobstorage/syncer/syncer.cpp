@@ -392,6 +392,7 @@ namespace NKikimr::NGroupSyncer {
             Y_DEBUG_ABORT_UNLESS(!targetItem || targetItem->GetKey() == key);
             lastMerged.emplace(key);
             merge(sourceItem, targetItem, key);
+            ++SyncerDataStats->ScannedItems;
             if (sourceItem) {
                 source.pop_front();
             }

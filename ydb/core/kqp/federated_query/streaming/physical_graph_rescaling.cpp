@@ -1,7 +1,7 @@
 #include "physical_graph_rescaling.h"
 
 #include <ydb/core/fq/libs/state/dq_stage_state_recovery_info.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/predictor/kqp_predictor.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 
 #include <ydb/library/actors/core/log.h>

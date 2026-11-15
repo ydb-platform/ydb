@@ -523,8 +523,7 @@ private:
             static const char optimization = 0;
             static const char passes = 0;
             
-            auto newRBOPreparedExplainTransformer = traced(CreateKqpRBOExplainPreparedTransformer(
-                Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx), "Build explain plan");
+            auto newRBOPreparedExplainTransformer = traced(CreateKqpRBOExplainPreparedTransformer(TransformCtx), "Build explain plan");
 
             auto rboKqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
                 .Add(TAutoPtr<IGraphTransformer>(new TRboGcTransformer()), "GC")

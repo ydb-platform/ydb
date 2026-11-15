@@ -311,7 +311,7 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
     meta["version"] = "0.2";
     meta["type"] = "query";
 
-    queryPlan["meta"] = meta;
+    queryPlan["meta"] = std::move(meta);
 
     // Correlation metadata is internal to ANALYZE, not part of the published plan.
     RemoveOperatorMetadata(txPlan["SimplifiedPlan"]);
@@ -319,19 +319,18 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
         RemoveOperatorMetadata(plan);
     }
 
-    queryPlan["SimplifiedPlan"] = txPlan.GetMapSafe().at("SimplifiedPlan");
+    queryPlan["SimplifiedPlan"] = std::move(txPlan.GetMapSafe().at("SimplifiedPlan"));
     txPlan.EraseValue("SimplifiedPlan");
 
     NJson::TJsonValue queryNode;
     queryNode["Node Type"] = "Query";
     queryNode["PlanNodeType"] = "Query";
-    queryNode["Plans"] = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    queryNode["Plans"] = txPlan.GetMapSafe().at("Plans");
+    queryNode["Plans"] = std::move(txPlan.GetMapSafe().at("Plans"));
     if (txPlan.Has("Stats")) {
-        queryNode["Stats"] = txPlan["Stats"];
+        queryNode["Stats"] = std::move(txPlan["Stats"]);
     }
 
-    queryPlan["Plan"] = queryNode;
+    queryPlan["Plan"] = std::move(queryNode);
 
     NJsonWriter::TBuf writer;
     writer.WriteJsonValue(&queryPlan, true, PREC_NDIGITS, 17);
@@ -402,7 +401,7 @@ TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKq
         stats["QueuedTimeUs"] = queryStats.GetQueuedTimeUs();
         stats["ResourcePoolId"] = poolId;
     }
-    return SerializeRBOExplainPlan(txPlanJson);
+    return SerializeRBOExplainPlan(std::move(txPlanJson));
 }
 
 } // namespace NKikimr::NKqp

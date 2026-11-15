@@ -300,3 +300,281 @@ SELECT * FROM FILTER(
 * [VIEW json_index](json_index.md)
 
 {% endif %}
+{% if backend_name != "YDB" %}
+
+{% endif %}
+
+{% if backend_name == "YDB" %}
+
+# SELECT
+
+The `SELECT` statement retrieves data from [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) and [column-oriented](../../../../concepts/datamodel/table.md#column-oriented-tables) tables, [external tables](../../../../concepts/datamodel/external_table.md) and [data sources](../../../../concepts/datamodel/external_data_source.md), [views](../../../../concepts/datamodel/view.md), and [topics](topics.md). By default, the selected data is returned to the user, but `SELECT` can also be part of more complex constructs, such as `UPSERT INTO ... SELECT`, `CREATE TABLE ... AS SELECT ...`, and so on.
+
+A `SELECT` query can contain a single selection or multiple selections whose results are combined using `UNION`, `EXCEPT`, and `INTERSECT` operations. The schemas for both forms are shown below, followed by details of their constituent parts.
+
+## Syntax {#query-syntax}
+
+### Single query {#single-select-overview}
+
+For a query with a single `SELECT`, the general form is as follows:
+
+```yql
+[DISCARD]
+SELECT [ALL | DISTINCT] <result_list>
+[WITHOUT [IF EXISTS] <column_name> [, ...]]
+[FROM <sources_and_joins>]
+[WHERE <condition>]
+[GROUP [COMPACT] BY [ALL] <grouping_element> [, ...]]
+[HAVING <condition>]
+[WINDOW <window_name> AS (<window_specification>) [, ...]]
+[[ASSUME] ORDER BY <sort_key> [ASC | DESC] [, ...]]
+[INTO RESULT <result_name>]
+[LIMIT <row_count> [OFFSET <offset>]];
+```
+
+Only `SELECT` and `<result_list>` are required. The remaining clauses are added as needed, subject to the following rules:
+
+| Query part | Purpose |
+| --- | --- |
+| `SELECT <result_list>` | Computes the expressions that form the output columns. The list can contain columns, function calls, expressions, and asterisks. |
+| `ALL` / [`DISTINCT`](distinct.md) | `ALL` preserves duplicate rows and is the default behavior. `DISTINCT` keeps only distinct result rows. |
+| [`WITHOUT`](without.md) | Excludes the specified columns from the asterisk result. `IF EXISTS` allows the excluded column to be absent. |
+| [`FROM`](from.md) | Specifies [row sources](#select-sources-overview), their [transformations](#select-flatten-overview), and [joins](#select-joins-overview). Without `FROM`, you can compute expressions, for example `SELECT 2 + 2`, but you cannot reference input columns, filter, or group them. |
+| [`WHERE`](where.md) | Keeps input rows for which the condition is true. |
+| [`GROUP BY`](group-by.md) | Groups rows by [keys and grouping sets](#select-grouping-overview) to compute aggregate functions. |
+| [`HAVING`](group-by.md#having) | Filters aggregation results. |
+| [`WINDOW`](window.md) | Declares [named windows](#select-windows-overview) for window function calls via `OVER`. |
+| [`ORDER BY`](order_by.md) / [`ASSUME ORDER BY`](assume_order_by.md) | `ORDER BY` sorts the result; `ASSUME ORDER BY` declares an existing sort order without performing it. The `ASC` direction is used by default, `DESC` specifies the reverse order. For `ORDER BY`, `<sort_key>` can be a column or an expression. In `ASSUME ORDER BY`, output column names are specified. |
+| [`INTO RESULT`](../into_result.md) | Sets the name of the result set. The name can be an identifier, including one in backticks, or a named expression. |
+| [`LIMIT` / `OFFSET`](limit_offset.md) | Skips `<offset>` rows and returns at most `<row_count>` subsequent rows. `OFFSET` is specified together with `LIMIT`. `<row_count>` and `<offset>` are expressions. `NULL` in `LIMIT` removes the row count limit. Without `ORDER BY`, the set of selected rows is undefined. |
+| [`DISCARD`](../discard.md) | Executes the query but does not return its result to the client. In a single `SELECT`, it is not combined with `INTO RESULT`. |
+
+### Compound query {#compound-select-overview}
+
+The `UNION`, `EXCEPT`, and `INTERSECT` operations take the results of individual selections. Each selection has its own sources, filters, grouping, and windows; sorting and limiting the overall result can be specified after the last selection:
+
+```yql
+[DISCARD]
+SELECT ...
+{ UNION | EXCEPT | INTERSECT } [ALL | DISTINCT]
+SELECT ...
+[...]
+[[ASSUME] ORDER BY <sort_key> [ASC | DESC] [, ...]]
+[INTO RESULT <result_name>]
+[LIMIT <row_count> [OFFSET <offset>]];
+```
+
+Here, each `SELECT ...` is a part of the [single query schema](#single-select-overview) from `SELECT` through `WINDOW` inclusive. Common trailing clauses are written at the end of the last `SELECT` without parentheses but apply to the result of the entire combination.
+
+| Operation | Result |
+| --- | --- |
+| `UNION` | Rows that appear in at least one of the two selections. |
+| `EXCEPT` | Rows from the left selection that are absent from the right one. |
+| `INTERSECT` | Rows that appear in both selections. |
+
+By default, these operations remove duplicates, which corresponds to `DISTINCT`. The `ALL` qualifier accounts for the number of occurrences: `UNION ALL` keeps all rows from both selections, `EXCEPT ALL` subtracts the number of occurrences on the right from the number of occurrences on the left, but not below zero, and `INTERSECT ALL` keeps the smaller of the two occurrence counts. `UNION DISTINCT`, `EXCEPT`, and `INTERSECT` are available starting with YQL language version `2025.03`.
+
+`INTERSECT` has higher precedence than `UNION` and `EXCEPT`; operations of equal precedence are grouped from left to right. The rules for matching columns in `UNION` are described in the [Combining subquery results](union.md) section.
+
+`DISCARD` is placed before the first selection and applies to the entire statement. `INTO RESULT` sets the name of the overall result. To actually sort the result of the combination, use `ORDER BY`: the operations on selections do not guarantee row order by themselves.
+
+For example, the following query returns at most the first ten rows after sorting the overall result:
+
+```yql
+SELECT key FROM first_table
+UNION ALL
+SELECT key FROM second_table
+ORDER BY key
+LIMIT 10;
+```
+
+To apply sorting and limiting to only one selection, enclose that selection in parentheses. In the following query, at most ten rows are taken from the first table, and all rows are taken from the second table:
+
+```yql
+(SELECT key FROM first_table ORDER BY key LIMIT 10)
+UNION ALL
+SELECT key FROM second_table;
+```
+
+### Result list {#select-list-overview}
+
+Instead of `<result_list>`, expressions and qualified asterisks are specified separated by commas, or a single regular asterisk:
+
+| Element | Purpose |
+| --- | --- |
+| [`<expression> [[AS] <alias>]`](../expressions.md) | Computes an output column; the alias sets its name. The expression can contain calls to regular, aggregate, and window functions. |
+| `<source_alias>.*` | Selects all columns of the specified source; allowed together with other list elements. |
+| `*` | Selects all columns. A regular asterisk cannot be mixed with other list elements. |
+
+The `WITHOUT` clause is placed immediately after the result list. A column in it can be specified as `<column_name>` or `<source_alias>.<column_name>`.
+
+Hints about result properties are specified in comments after `SELECT` and are described in the [UNIQUE and DISTINCT](unique_distinct_hints.md) section.
+
+### Data sources {#select-sources-overview}
+
+In the [`FROM`](from.md) clause, you can specify a single source or join multiple sources using `JOIN`. The main forms of a single source:
+
+| Form | Purpose |
+| --- | --- |
+| `[<external_data_source_name>.]<table_name> [VIEW <index_name>]` | Reads a table, optionally via the [specified index](secondary_index.md). The table path can be enclosed in backticks. |
+| `[<external_data_source_name>.]<topic_name>` | Reads a [local or external topic](topics.md). To wait for new messages, use `WITH (STREAMING = "TRUE")`; the number of returned messages is limited by `LIMIT`. |
+| `(SELECT ...)` | The result of a subquery, including a compound one. Parentheses are required. |
+| `$<name>` | A source defined by a named expression: for example, the result of a subquery. |
+| [`AS_TABLE(<expression>)`](from_as_table.md) | A list of structures converted into a table source. |
+| `(VALUES (<expression> [, ...]) [, ...])` | Rows specified directly in the query. All rows must have the same number of values. |
+
+A source can be assigned an alias: `[AS] <alias>`. For `VALUES`, a list of column names is additionally allowed after the alias: `AS <alias> (<column_name> [, ...])`.
+
+### Source settings (`WITH`) {#select-with-overview}
+
+The [`WITH`](with.md) construct specifies source read settings. The available parameters and their value forms depend on the source type; for example, you can specify the data storage format for external sources, a schema for topics and external sources, and `WATERMARK` for streaming queries. Settings are specified before the alias:
+
+```yql
+[<external_data_source_name>.]<table_name> [VIEW <index_name>]
+[WITH (<table_hint> [, ...])]
+[[AS] <alias>]
+```
+
+Each `<table_hint>` contains a parameter name and, if required, a value in the form defined for that setting. For a single setting, parentheses after `WITH` are optional. For example, `FORMAT = <format>` specifies the data format, and `SCHEMA <struct_type>` specifies the schema when reading files from an external source or messages from a [topic](topics.md), including a local one.
+
+### Data transformation (`FLATTEN`) {#select-flatten-overview}
+
+After a source and its alias, you can specify one [`FLATTEN`](flatten.md) transformation:
+
+```yql
+FLATTEN COLUMNS
+```
+
+or one of the `FLATTEN BY` forms:
+
+```yql
+FLATTEN [OPTIONAL | LIST | DICT] BY <column_name> [AS <alias>]
+FLATTEN [OPTIONAL | LIST | DICT] BY (<column_name> [AS <alias>] [, ...])
+FLATTEN [OPTIONAL | LIST | DICT] BY (<expression> AS <alias> [, ...])
+```
+
+`FLATTEN COLUMNS` expands structure fields into separate columns, while `FLATTEN BY` expands container elements into rows. The parenthesized list can contain both columns and expressions. For an arbitrary expression, an alias is required.
+
+### Source joins {#select-joins-overview}
+
+Instead of `<sources_and_joins>` in the main schema, you can specify a source and a sequence of joins. When joining sources, `WITH`, the alias, and `FLATTEN` apply to the source after which they are written. Each [join with a condition](join.md) has the form:
+
+```yql
+FROM [ANY] <source>
+    [<join_type>] JOIN [ANY] <source>
+        { ON <join_condition> | USING (<column_name> [, ...]) }
+    [...]
+```
+
+The following variants are available for `<join_type>`:
+
+| Type | Purpose |
+| --- | --- |
+| `INNER` | Only matched rows from both sides; used by default. |
+| `LEFT [OUTER]` / `RIGHT [OUTER]` | All rows from the specified side and matched rows from the other; if there is no match, the columns of the other side are filled with `NULL`. |
+| `FULL [OUTER]` | All rows from both sides with matched rows combined. |
+| `LEFT SEMI` / `RIGHT SEMI` | Only columns from the specified side and only rows that have a match with the other side. |
+| `LEFT ONLY` / `RIGHT ONLY` | Only columns from the specified side and only rows without a match with the other side. |
+| `EXCLUSION` | Rows from both sides that have no match with the other side. |
+
+`ON` specifies the equality of key expressions, while `USING` lists same-named key columns. `ANY` before a source keeps one row for each set of join keys on that side; which specific row remains is undefined.
+
+A Cartesian product is written separately, without `ON`, `USING`, or `ANY`:
+
+```yql
+FROM <source>
+    CROSS JOIN <source>
+```
+
+Joins of different types can be interleaved by adding the next join after the previous one. `ANY` without a join is not allowed. A comma join requires `PRAGMA AnsiImplicitCrossJoin;` and corresponds to `CROSS JOIN`.
+
+### Grouping keys and sets {#select-grouping-overview}
+
+The [`GROUP BY`](group-by.md) clause contains one or more grouping elements separated by commas. The following are used as `<grouping_element>`:
+
+| Form | Purpose |
+| --- | --- |
+| `<expression> [AS <alias>]` | A grouping key: a column or the result of an expression. The alias allows referencing the computed key by name. |
+| `()` | An empty key set for a grand total. |
+| `(<expression> [, ...])` | A set of keys, for example inside `GROUPING SETS`. |
+| [`ROLLUP(<expression> [, ...])`](group-by.md#rollup) | Totals for sequential key sets and a grand total. |
+| [`CUBE(<expression> [, ...])`](group-by.md#rollup) | Totals for all key combinations. |
+| [`GROUPING SETS(<grouping_set> [, ...])`](group-by.md#rollup) | Explicitly specified key sets for computing totals. |
+| [`SessionWindow(<time_expression>, <session_timeout>) AS <alias>`](group-by.md#session-window) | Groups events into sessions. |
+| [`HoppingWindow(<time_expression>, <hop>, <interval>)`](group-by.md#group-by-hopping_window) | Groups by overlapping time windows. |
+| [`HOP(<time_expression>, <hop>, <interval>, <delay>)`](group-by.md#group-by-hop) | Groups by time windows with a delay parameter. |
+
+`<grouping_set>` specifies a key, a set of keys in parentheses, an empty set, or a nested grouping construct. `<time_expression>` is an expression for the event time; `<session_timeout>` sets the session boundary, `<hop>` and `<interval>` specify the shift period and window duration, and `<delay>` specifies the delay of its closing in streaming mode.
+
+`COMPACT` selects an aggregation strategy for a small amount of data per key. `ALL` in `GROUP BY` can be omitted; `GROUP BY DISTINCT` is not supported. The `HAVING` clause follows `GROUP BY` and allows filtering groups by aggregate function results.
+
+### Window definitions {#select-windows-overview}
+
+A [window function](window.md) computes a value over rows related to the current row while preserving individual result rows. A window definition can be specified directly after `OVER` or declared in the `WINDOW` clause and used by name:
+
+```yql
+<window_function>([<argument> [, ...]]) OVER (<window_specification>)
+<window_function>([<argument> [, ...]]) OVER <window_name>
+```
+
+The `WINDOW` clause with a `ROWS` frame has the form:
+
+```yql
+WINDOW <window_name> AS (
+    [PARTITION [COMPACT] BY <expression> [AS <alias>] [, ...]]
+    [ORDER BY <sort_key> [ASC | DESC] [, ...]]
+    [ROWS { <frame_bound> | BETWEEN <frame_start> AND <frame_end> }]
+) [, ...]
+```
+
+| Definition part | Purpose |
+| --- | --- |
+| [`PARTITION BY`](window.md#partition) | Divides rows into independent partitions. Without `PARTITION BY`, all input rows form a single partition. The key can be a column or an expression; an alias can be assigned to an expression. |
+| [`ORDER BY`](window.md#partition) | Sets the row order within a partition. The `ASC` direction is used by default, `DESC` specifies the reverse order. To order the query result, a separate `ORDER BY` is needed after the `WINDOW` clause. |
+| [`ROWS`](window.md#frame) | Sets a frame by row offsets relative to the current row. Aggregate functions, as well as `FIRST_VALUE`, `LAST_VALUE`, and `NTH_VALUE`, are computed over the frame. The `ROW_NUMBER`, `LAG`, and `LEAD` functions operate over the entire partition regardless of the frame. |
+| Default frame | If no frame is specified, `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` is used when a window `ORDER BY` is present, and `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` is used otherwise. To get the last value of the entire partition via `LAST_VALUE`, explicitly set the frame end to `UNBOUNDED FOLLOWING`. |
+| [`COMPACT`](window.md) | Selects in-memory execution for the `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` frame. Memory consumption depends on the partition size. |
+
+Instead of `<frame_bound>`, `<frame_start>`, and `<frame_end>`, one of the following forms is specified:
+
+```yql
+UNBOUNDED PRECEDING
+<frame_offset> PRECEDING
+CURRENT ROW
+<frame_offset> FOLLOWING
+UNBOUNDED FOLLOWING
+```
+
+The `PRECEDING` forms count backward, `FOLLOWING` forms count forward; `UNBOUNDED` means the partition boundary. If only one boundary is specified, it sets the start, and the end is considered `CURRENT ROW`. The start cannot be `UNBOUNDED FOLLOWING`, and the end cannot be `UNBOUNDED PRECEDING`. `<frame_offset>` is a non-negative integer. For an unambiguous row order with equal `<sort_key>` values, add a key that distinguishes those rows to the window `ORDER BY`.
+
+### Other notation forms {#select-alternative-overview}
+
+A source can be written before `SELECT` in the [`FROM ... SELECT`](from_select.md) form. The result list and remaining clauses retain their order:
+
+```yql
+[DISCARD]
+FROM <sources_and_joins>
+SELECT [ALL | DISTINCT] <result_list>
+[WITHOUT [IF EXISTS] <column_name> [, ...]]
+[WHERE <condition>]
+[GROUP [COMPACT] BY [ALL] <grouping_element> [, ...]]
+[HAVING <condition>]
+[WINDOW <window_name> AS (<window_specification>) [, ...]]
+[[ASSUME] ORDER BY <sort_key> [ASC | DESC] [, ...]]
+[INTO RESULT <result_name>]
+[LIMIT <row_count> [OFFSET <offset>]];
+```
+
+Only one `FROM` clause is allowed in a single selection.
+
+To limit the result, a comma form is also supported:
+
+```yql
+LIMIT <offset>, <row_count>
+```
+
+It is equivalent to `LIMIT <row_count> OFFSET <offset>`; the order of the two arguments is swapped.
+
+{% endif %}
+{% if backend_name != "YDB" %}
+{% endif %}

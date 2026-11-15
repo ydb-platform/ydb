@@ -8,13 +8,14 @@ def get_coverage_filter_regexp(pattern, cache={}):
     return cache[pattern] if pattern in cache else cache.setdefault(pattern, re.compile(pattern))
 
 
-def should_be_covered(unit, filters):
+def should_be_covered(unit, filters, path=None):
+    """Filters are applied to the root relative path, the module one by default."""
     if unit.get("FORCE_COVERAGE_DISABLED") == "yes":
         return False
     if unit.get("FORCE_COVERAGE_ENABLED") == "yes":
         return True
-    unit_path = _common.get_norm_unit_path(unit)
-    return not any(pred(unit_path) for pred in filters)
+    path = path or _common.get_norm_unit_path(unit)
+    return not any(pred(path) for pred in filters)
 
 
 def get_coverage_filters(unit, filters=[]):
@@ -54,7 +55,7 @@ def _FILTER_PY_COVERAGE(unit: Unit):
     if unit.get("PYTHON_COVERAGE") != "yes":
         return
 
-    if unit.get("COVERAGE_FILTER_PROGRAMS") != "yes" or unit.get("CYTHON_COVERAGE") == "yes":
+    if unit.get("COVERAGE_FILTER_PROGRAMS") != "yes":
         unit.on_enable_python_coverage()
         return
 

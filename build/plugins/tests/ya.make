@@ -9,6 +9,7 @@ TEST_SRCS(
     test_gobuild.py
     test_java.py
     test_nots_checks.py
+    test_pybuild.py
     test_requirements.py
     test_res.py
     test_yql_prebuilt.py

@@ -17,7 +17,7 @@
                       "op_name": "InnerJoin (BlockHash)",
                       "args": [
                         {
-                          "op_name": "TableFullScan",
+                          "op_name": "TableRangeScan",
                           "table": "store_sales"
                         },
                         {
@@ -45,7 +45,7 @@
                       "op_name": "InnerJoin (BlockHash)",
                       "args": [
                         {
-                          "op_name": "TableFullScan",
+                          "op_name": "TableRangeScan",
                           "table": "web_sales"
                         },
                         {

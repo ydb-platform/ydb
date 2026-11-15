@@ -1,22 +1,6 @@
 --- original.sql
 +++ normalized.sql
-@@ -25,7 +25,6 @@
-     WHERE
-         ws_sold_date_sk == d_date_sk
-         AND d_month_seq BETWEEN 1212 AND 1212 + 11
--        AND ws_item_sk IS NOT NULL
-     GROUP BY
-         ws_item_sk,
-         d_date
-@@ -49,7 +48,6 @@
-     WHERE
-         ss_sold_date_sk == d_date_sk
-         AND d_month_seq BETWEEN 1212 AND 1212 + 11
--        AND ss_item_sk IS NOT NULL
-     GROUP BY
-         ss_item_sk,
-         d_date
-@@ -63,20 +61,8 @@
+@@ -63,20 +63,8 @@
          d_date,
          web_sales,
          store_sales,
@@ -39,7 +23,7 @@
      FROM (
          SELECT
              CASE
-@@ -99,6 +85,13 @@
+@@ -99,6 +87,13 @@
                  AND web.d_date == store.d_date
              )
      ) AS x

@@ -180,6 +180,10 @@ runtime, including equal values from different computed expressions. Open upper 
 Double and Decimal stop before the NaN storage key. Physical emission constructs
 typed conditional lists directly. It does not use YQL range expansion helpers.
 Copying and expression visitors preserve these conditions with their bounds.
+Range construction deduplicates intervals selected by identical consumed source
+terms while retaining the full residual predicate. Lookup-prefix metadata follows
+the existing configuration: all eligible indexes contribute prefixes when enabled;
+otherwise only the selected read does.
 `kqp_native_range_bounds` adapts scalar bounds to the storage key's exact type.
 Total integer conversions use domain containment; narrowing conversions use a
 safe cast and guarded endpoints, including strict comparisons at integer limits.
@@ -303,14 +307,14 @@ preparation constructs existing operators before optimization and adds no RBO ru
 Defaults and generated columns in INSERT OR REVERT remain unsupported until
 their prepared values can be shared before these checks.
 Imported effects tests cover mixed reads/writes, indexes,
-shared producers and interactive transactions; their expansion is still in progress.
+shared producers and interactive transactions, alongside populated runtime checks.
 
 Named sources outside correlated contexts retain one producer with distinct
 bindings at each use. Existing RBO replication, copying and spilling rules decide
 how to execute it. OLAP predicates stay native through optimization; physical
 emission uses storage operations or the existing optional scalar-apply kernel.
-Predicates containing checked expressions remain intact when storage filtering
-could suppress their errors.
+Storage admission preserves source order around checked expressions, so predicates
+cannot move across a checked term and suppress its errors.
 
 Aggregates include COUNT/COUNT_IF, SUM, AVG, MIN/MAX, MIN_BY/MAX_BY, SOME and sample standard deviation.
 DISTINCT groups original values before accumulator conversion. Native partial

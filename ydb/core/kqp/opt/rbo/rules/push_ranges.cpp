@@ -6,6 +6,7 @@
 
 #include <utility>
 #include <limits>
+#include <set>
 
 namespace NKikimr::NKqp {
 namespace {
@@ -379,6 +380,7 @@ TIntrusivePtr<IOperator> PushNativeRanges(const TIntrusivePtr<IOperator>& input,
     struct TCandidate {
         TOpRead::TRangeInfo Info;
         THashSet<size_t> Consumed;
+        TVector<size_t> SourceBranches;
         bool AllConsumed = true;
     };
     const auto addCondition = [&](std::optional<TExpression>& condition, std::optional<TExprId> valid) {
@@ -405,6 +407,7 @@ TIntrusivePtr<IOperator> PushNativeRanges(const TIntrusivePtr<IOperator>& input,
             range.Condition = TExpression::FromNative(arena, *closedCondition, &props, read->Pos);
             return result;
         }
+        std::set<std::vector<TExprId>> rangeTerms;
         for (size_t branch = 0; branch < branches.size(); ++branch) {
             auto& range = info.NativeRanges->emplace_back();
             THashSet<size_t> consumed;
@@ -478,15 +481,30 @@ TIntrusivePtr<IOperator> PushNativeRanges(const TIntrusivePtr<IOperator>& input,
                 return result;
             }
             result.AllConsumed &= consumed.size() == branches[branch].size();
+            // Distinct residual branches can select the same key interval.
+            // Its consumed source terms identify the bounds and validity
+            // conditions without formatting or re-evaluating scalar values.
+            if (branches.size() > 1) {
+                std::vector<TExprId> terms;
+                terms.reserve(consumed.size());
+                for (const auto term : consumed) terms.push_back(branches[branch][term]);
+                std::sort(terms.begin(), terms.end());
+                if (!rangeTerms.insert(std::move(terms)).second) {
+                    info.NativeRanges->pop_back();
+                    continue;
+                }
+            }
+            result.SourceBranches.push_back(branch);
             if (branches.size() == 1) result.Consumed = std::move(consumed);
         }
+        info.ExpectedMaxRanges = info.NativeRanges->size();
         return result;
     };
     const auto sortColumns = read->StorageType == NYql::EStorageType::RowStorage ?
         FindConsumingTopSortColumns(input.Get(), ctx.ExprCtx, &props.InfoUnitRegistry) : TVector<TString>{};
     const auto score = [&](const TCandidate& candidate, bool covering) {
         const auto& info = candidate.Info;
-        return ScoreKeyOrder(info.PointPrefixLen, info.UsedPrefixLen, branches.size() == 1, candidate.AllConsumed,
+        return ScoreKeyOrder(info.PointPrefixLen, info.UsedPrefixLen, info.ExpectedMaxRanges == size_t{1}, candidate.AllConsumed,
             info.KeyColumns.size(), sortColumns, info.KeyColumns, covering);
     };
     const bool allPointPrefixes = ctx.KqpCtx.Config->GetEnableLookupJoinPointPrefixes();
@@ -521,7 +539,7 @@ TIntrusivePtr<IOperator> PushNativeRanges(const TIntrusivePtr<IOperator>& input,
             auto& point = points.Rows.emplace_back();
             point.Values.assign(range.Lower.Values.begin(), range.Lower.Values.begin() + length);
             for (const auto& column : prefix.Columns)
-                addCondition(point.Condition, branchKeys[branch].at(column).Equal->Validity);
+                addCondition(point.Condition, branchKeys[candidate.SourceBranches[branch]].at(column).Equal->Validity);
             if (points.Rows.size() > limit) return;
         }
         prefix.ExpectedMaxPoints = points.Rows.size();

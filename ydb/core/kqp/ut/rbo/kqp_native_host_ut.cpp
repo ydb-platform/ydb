@@ -4690,8 +4690,8 @@ $round = ($x,$y) -> {return $x;};
                     {"t IS NULL", true}, {"t IN ('a', 'beta', 'A')", true},
                     {"false OR x > 0", true}, {"x > 0 AND true", true}, {"x > $p", true}, {"StartsWith(t, 'a')", true}, {"EndsWith(t, 'a')", true},
                     {"StartsWith(t, 'a') AND x > 0", true}, {"StartsWith(t, 'a') OR x > 0", true},
-                    {"NOT StartsWith(t, 'a')", false}, {"COALESCE(StartsWith(t, 'a'), true)", false},
-                    {"StartsWith(t, 'a') OR NOT StartsWith(t, 'a')", false},
+                    {"NOT StartsWith(t, 'a')", true}, {"COALESCE(StartsWith(t, 'a'), true)", true},
+                    {"StartsWith(t, 'a') OR NOT StartsWith(t, 'a')", true},
                     {"t LIKE '%a%'", true}, {"Length(t) > 1u", false}, {"x = x", false}}) {
                 const TString sql = TStringBuilder() << "DECLARE $p AS Int32?; SELECT id FROM `/Root/NativeOlap` WHERE " << predicate << " ORDER BY id";
                 const auto params = TParamsBuilder().AddParam("$p").OptionalInt32(1).Build().Build();

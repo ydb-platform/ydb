@@ -182,6 +182,27 @@ Y_UNIT_TEST_SUITE(KqpNativePredicateAdmission) {
         UNIT_ASSERT_C(mismatches.empty(), mismatches);
     }
 
+    Y_UNIT_TEST(ResidualInequalityDoesNotDuplicateKeyRanges) {
+        TString mismatches;
+        for (const bool nullable : {false, true}) {
+            TPredicateRangeFixture f({K::Int64, nullable});
+            auto& arena = *f.Props.NativeExpressions;
+            const auto native = arena.Binary(O::And,
+                arena.Binary(O::Equal, arena.Column(f.Key, f.KeyType),
+                    arena.Literal({K::Int64}, std::int64_t{2})),
+                arena.Binary(O::NotEqual, arena.Column(f.Payload, {K::Int64}),
+                    arena.Literal({K::Int64}, std::int64_t{7})));
+            const auto legacy = f.ExprCtx.NewCallable(f.Pos, "And", {
+                f.ExprCtx.NewCallable(f.Pos, "==", {f.KeyNode, f.Integer(2)}),
+                f.ExprCtx.NewCallable(f.Pos, "!=", {f.PayloadNode, f.Integer(7)})});
+            f.Check(native, legacy, "key point with residual inequality", mismatches);
+            UNIT_ASSERT(f.LastRead->RangeInfo && f.LastRead->RangeInfo->NativeRanges);
+            UNIT_ASSERT_VALUES_EQUAL(f.LastRead->RangeInfo->NativeRanges->size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(*f.LastRead->RangeInfo->ExpectedMaxRanges, 1);
+        }
+        UNIT_ASSERT_C(mismatches.empty(), mismatches);
+    }
+
     Y_UNIT_TEST(LegacyMembershipMatchesPrefixesAndResidualContracts) {
         using namespace NYql;
         TString mismatches;

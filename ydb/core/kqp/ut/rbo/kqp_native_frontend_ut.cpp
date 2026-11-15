@@ -509,14 +509,19 @@ Y_UNIT_TEST_SUITE(KqpNativeFrontend) {
             const TExprId alternatives[]{string, arena.Literal({ETypeKind::Bool}, true)};
             const auto negated = arena.Unary(O::Not, string);
             const auto value = arena.Coalesce(alternatives);
-            // The same shared node can be used both as a filter and as a
-            // nullable value. Checking one context must not admit the other.
+            // String kernels preserve optional results. NOT can use a truth
+            // boundary adapter when only selected rows are observable.
             for (const auto predicate : {negated, value, arena.Binary(O::Or, string, negated),
                     arena.Binary(O::Or, negated, string), arena.Binary(O::And, string, value),
                     arena.Unary(O::Not, arena.Binary(O::Or, string, flag))}) {
-                UNIT_ASSERT(!CanLowerNativeOlapPredicate(arena, predicate));
+                UNIT_ASSERT(CanLowerNativeOlapPredicate(arena, predicate));
                 UNIT_ASSERT(CanLowerNativeOlapPredicate(arena, predicate, true));
             }
+            // A nullable NOT used as a value still requires scalar apply.
+            const TExprId scalarAlternatives[]{negated, arena.Literal({ETypeKind::Bool}, true)};
+            const auto scalarUse = arena.Coalesce(scalarAlternatives);
+            UNIT_ASSERT(!CanLowerNativeOlapPredicate(arena, scalarUse));
+            UNIT_ASSERT(CanLowerNativeOlapPredicate(arena, scalarUse, true));
         }
     }
 
@@ -1690,6 +1695,7 @@ Y_UNIT_TEST_SUITE(KqpNativeFrontend) {
         for (const bool disabled : {false, true}) for (const bool payloadPredicate : {false, true}) {
             NTests::TIdTestContext f;
             f.Config->OptDisableAutoIndexSelection = disabled;
+            f.Config->EnableLookupJoinPointPrefixes = true;
             const auto pk = f.Id("id"), group = f.Id("g"), extra = f.Id("x"), payload = f.Id("payload");
             auto metadata = MakeIntrusive<TKikimrTableMetadata>();
             metadata->Name = "/Root/table";
@@ -1780,8 +1786,17 @@ Y_UNIT_TEST_SUITE(KqpNativeFrontend) {
                 const auto restored = MatchLookupJoinRightSide(pushed);
                 UNIT_ASSERT(restored && !restored->Filter && restored->Read->RangeInfo);
                 UNIT_ASSERT(!restored->Read->RangeInfo->NativeRanges);
-                UNIT_ASSERT_VALUES_EQUAL(restored->Read->RangeInfo->PointPrefixes.size(), 1);
-                UNIT_ASSERT(restored->Read->RangeInfo->PointPrefixes.front().NativePoints);
+                // The enabled policy saves prefixes for both eligible indexes,
+                // independently of which index wins range selection.
+                TVector<TString> prefixTables;
+                for (const auto& prefix : restored->Read->RangeInfo->PointPrefixes) {
+                    UNIT_ASSERT(prefix.NativePoints);
+                    prefixTables.push_back(prefix.Table);
+                }
+                std::sort(prefixTables.begin(), prefixTables.end());
+                UNIT_ASSERT_VALUES_EQUAL(prefixTables.size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(prefixTables[0], "/Root/table/A/indexImplTable");
+                UNIT_ASSERT_VALUES_EQUAL(prefixTables[1], "/Root/table/B/indexImplTable");
                 UNIT_ASSERT(restored->Read->GetColumns() == lookup.GetColumns());
                 UNIT_ASSERT(restored->Read->OriginalPredicate->IsNative());
                 UNIT_ASSERT_VALUES_EQUAL(restored->Read->OriginalPredicate->GetNativeRoot(), predicate);
@@ -2374,7 +2389,9 @@ Y_UNIT_TEST_SUITE(KqpNativeFrontend) {
             const auto result = rule.SimpleMatchAndApply(original, context, f.Props);
             UNIT_ASSERT(result->Kind == EOperator::Filter);
             const auto& input = CastOperator<TOpRead>(*CastOperator<TOpFilter>(*result).GetInput());
-            UNIT_ASSERT_VALUES_EQUAL(bool(input.OlapProgram), !canFail);
+            // The pre-PR splitter keeps supported conjuncts before the first
+            // non-strict term, and does not move later terms across it.
+            UNIT_ASSERT_VALUES_EQUAL(bool(input.OlapProgram), !canFail || first);
         }
         const auto external = arena->Column(unused, {ETypeKind::Int32});
         auto fresh = f.Read({key, payload}); fresh->StorageType = NYql::EStorageType::ColumnStorage;

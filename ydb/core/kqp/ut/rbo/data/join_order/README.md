@@ -20,9 +20,11 @@ Four queries use equivalent SQL to isolate intentional frontend normalization:
 
 * TPCDS 29/68/73: fold arithmetic in literal `IN` elements. The old constant folder
   does not enter those expression lists; the native DAG folder does.
-* TPCDS 51: remove true `IS NOT NULL` predicates on required primary-key columns,
-  and give two identical window specifications a shared name. Native typing and
-  binding already perform these normalizations.
+* TPCDS 51: give two identical window specifications a shared name. The original
+  required-key `IS NOT NULL` predicates stay in the baseline SQL: native range
+  admission now preserves their conditional full-range metadata. The expected
+  plan was recaptured from the same frozen pre-PR binary after restoring this
+  contract; the native compiler never generates the oracle.
 
 These four expected plans were also produced by the pre-PR binary. Their exact
 SQL changes are recorded in `*-normalization.patch`, and the unmodified legacy

@@ -478,9 +478,9 @@
       "query": 51,
       "oracle": "normalized",
       "original_query_sha256": "3d20549745d0ba5b24d2fc2c3615c670d5e3703c5a0aa186addb44a11aa1cef7",
-      "expected_plan_sha256": "8691005d1918639ae13bfe6287628e3809f5f43000b546c3d6be2461fcd6162d",
-      "normalization": "Drop provably true checks on required primary keys and name the identical window specification once",
-      "normalized_query_sha256": "9bb8ab6c8140ae9e3a7b25e982e7bff8c7a495da7b59a66e31b0533bf4b67762"
+      "expected_plan_sha256": "a53f4a3f110b78ea1242d2e94ffe44a2f7adec1b792b955cd88b52a4c2a80748",
+      "normalization": "Name the identical window specification once; retain original required-key null predicates and range admission",
+      "normalized_query_sha256": "c14615c1522085bca32a6d465308c4da59a46377c0d21ec58e666eeb77d5a20a"
     },
     {
       "workload": "tpcds",

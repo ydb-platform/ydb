@@ -63,18 +63,6 @@ TString RelPathFromAbsolute(TString db, TString path) {
     return path ? path : "/";
 }
 
-TString ResolveBackupPath(const TString& basePath, const TString& path) {
-    Y_ENSURE(basePath.empty() || basePath.StartsWith('/'),
-        "absolute base path is required for backup metadata, base# " << basePath.Quote());
-    if (basePath.empty() || path.StartsWith('/')) {
-        return path;
-    }
-    if (path.empty()) {
-        return basePath;
-    }
-    return basePath + (basePath.EndsWith('/') ? "" : "/") + path;
-}
-
 namespace {
 
 template<typename T>

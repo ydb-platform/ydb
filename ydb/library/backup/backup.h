@@ -39,7 +39,7 @@ public:
 void BackupFolder(
     const TDriver& driver,
     const TString& database,
-    const TString& dbPath,
+    const TString& relDbPath,
     TFsPath folderPath,
     const TVector<TRegExMatch>& exclusionPatterns,
     bool schemaOnly,

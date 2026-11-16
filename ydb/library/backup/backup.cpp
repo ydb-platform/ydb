@@ -1380,6 +1380,18 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
 
 namespace {
 
+TString ResolveBackupPath(const TString& basePath, const TString& path) {
+    Y_ENSURE(basePath.empty() || basePath.StartsWith('/'),
+        "absolute base path is required for backup metadata, base# " << basePath.Quote());
+    if (basePath.empty() || path.StartsWith('/')) {
+        return path;
+    }
+    if (path.empty()) {
+        return basePath;
+    }
+    return basePath + (basePath.EndsWith('/') ? "" : "/") + path;
+}
+
 NCms::TListDatabasesResult ListDatabases(TDriver driver) {
     NCms::TCmsClient client(driver);
 
@@ -1667,9 +1679,9 @@ void CheckedCreateBackupFolder(const TFsPath& folderPath) {
     }
 }
 
-// dbPath - resource path to directory/table to be backed up
+// relDbPath - database-relative or absolute path to directory/table to be backed up
 // folderPath - relative path to folder in local filesystem where backup will be stored
-void BackupFolder(const TDriver& driver, const TString& database, const TString& dbPath, TFsPath folderPath,
+void BackupFolder(const TDriver& driver, const TString& database, const TString& relDbPath, TFsPath folderPath,
         const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool savePartialResult, bool preservePoolKinds, bool ordered) {
     // Resolve an explicitly specified relative database against the actual
@@ -1677,7 +1689,7 @@ void BackupFolder(const TDriver& driver, const TString& database, const TString&
     const TString canonicalDatabase = database.empty() || database.StartsWith('/')
         ? database
         : ResolveBackupPath(FindClusterRootPath(driver), database);
-    const TString dbPrefix = ResolveBackupPath(canonicalDatabase, dbPath);
+    const TString dbPrefix = ResolveBackupPath(canonicalDatabase, relDbPath);
 
     TString temporalBackupPostfix = CreateTemporalBackupName();
     if (!folderPath) {

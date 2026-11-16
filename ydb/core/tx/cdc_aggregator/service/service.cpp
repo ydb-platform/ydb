@@ -49,7 +49,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         ui64 Cookie = 0;
     };
 
-    using TSendReply = std::function<void(const TOrigin&, const TCdcAggregatorHeartbeatDeliveryReply&)>;
+    using TSendReply = std::function<void(const TOrigin&, const TCdcAggregatorHeartbeatWriteResult&)>;
 
     class TCdcAggregatorConnection {
     public:
@@ -89,9 +89,9 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             ReplyToOrigins(CdcAggregatorHeartbeatDelivery.FailBatch(error), sendReply);
         }
 
-        void ReplyToAllOrigins(const TCdcAggregatorHeartbeatDeliveryReply& reply, const TSendReply& sendReply) {
+        void ReplyToAllOrigins(const TCdcAggregatorHeartbeatWriteResult& writeResult, const TSendReply& sendReply) {
             for (const auto& [sourceDataShardId, origin] : Origins) {
-                sendReply(origin, reply);
+                sendReply(origin, writeResult);
             }
             Origins.clear();
         }
@@ -114,13 +114,13 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
 
     private:
         void ReplyToOrigins(const TCdcAggregatorHeartbeatBatchResult& batchResult, const TSendReply& sendReply) {
-            for (const auto& [sourceDataShardId, reply] : batchResult) {
+            for (const auto& [sourceDataShardId, writeResult] : batchResult) {
                 auto it = Origins.find(sourceDataShardId);
                 if (it == Origins.end()) {
                     continue;
                 }
 
-                sendReply(it->second, reply);
+                sendReply(it->second, writeResult);
                 Origins.erase(it);
             }
         }
@@ -138,7 +138,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             {"ev", msg.ToString()});
 
         if (!msg.RecipientTabletId) {
-            Reply(origin, TCdcAggregatorHeartbeatRejected{.Error = "Recipient tablet id is not set"});
+            ReplyWriteResultToDataShard(origin, TCdcAggregatorHeartbeatRejected{.Error = "Recipient tablet id is not set"});
             return;
         }
 
@@ -198,12 +198,12 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
 
         auto [writeHeartbeatsResult, error] = ProtoConverter.ParseWriteHeartbeatsResult(record);
         if (writeHeartbeatsResult) {
-            it->second.CompleteBatch(*writeHeartbeatsResult, [this](const auto& origin, const auto& reply) {
-                Reply(origin, reply);
+            it->second.CompleteBatch(*writeHeartbeatsResult, [this](const auto& origin, const auto& writeResult) {
+                ReplyWriteResultToDataShard(origin, writeResult);
             });
         } else {
-            it->second.FailBatch(error, [this](const auto& origin, const auto& reply) {
-                Reply(origin, reply);
+            it->second.FailBatch(error, [this](const auto& origin, const auto& writeResult) {
+                ReplyWriteResultToDataShard(origin, writeResult);
             });
         }
     }
@@ -218,8 +218,8 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             {"aggregator", tabletId},
             {"origins", it->second.GetOriginCount()},
             {"error", error});
-        it->second.ReplyToAllOrigins(TCdcAggregatorHeartbeatRetry{.Error = error}, [this](const auto& origin, const auto& reply) {
-            Reply(origin, reply);
+        it->second.ReplyToAllOrigins(TCdcAggregatorHeartbeatRetry{.Error = error}, [this](const auto& origin, const auto& writeResult) {
+            ReplyWriteResultToDataShard(origin, writeResult);
         });
         CdcAggregatorConnections.erase(it);
     }
@@ -249,8 +249,8 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         Schedule(TimerPeriod, new TEvPrivate::TEvTimerFired());
     }
 
-    void Reply(const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
-        auto ev = ProtoConverter.SerializeReply(reply);
+    void ReplyWriteResultToDataShard(const TOrigin& origin, const TCdcAggregatorHeartbeatWriteResult& writeResult) {
+        auto ev = ProtoConverter.SerializeWriteResult(writeResult);
         YDB_LOG_TRACE("Reply",
             {"ev", ev->ToString()},
             {"recipient", origin.Sender});

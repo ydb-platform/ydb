@@ -260,10 +260,10 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDeliveryProtoConverter) {
 
     Y_UNIT_TEST(ShouldSerializeWrittenVersionWhenReplyIsWritten) {
         // given
-        const TCdcAggregatorHeartbeatDeliveryReply reply = TCdcAggregatorHeartbeatWritten{.Version = TRowVersion(120, 0)};
+        const TCdcAggregatorHeartbeatWriteResult writeResult = TCdcAggregatorHeartbeatWritten{.Version = TRowVersion(120, 0)};
 
         // when
-        const auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeReply(reply);
+        const auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeWriteResult(writeResult);
 
         // then
         UNIT_ASSERT(ev->Status == TEvCdcAggregatorService::TEvWriteHeartbeatResult::EStatus::Written);
@@ -273,10 +273,10 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDeliveryProtoConverter) {
 
     Y_UNIT_TEST(ShouldSerializeErrorWhenReplyIsRejected) {
         // given
-        const TCdcAggregatorHeartbeatDeliveryReply reply = TCdcAggregatorHeartbeatRejected{.Error = "UNKNOWN_SOURCE"};
+        const TCdcAggregatorHeartbeatWriteResult writeResult = TCdcAggregatorHeartbeatRejected{.Error = "UNKNOWN_SOURCE"};
 
         // when
-        const auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeReply(reply);
+        const auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeWriteResult(writeResult);
 
         // then
         UNIT_ASSERT(ev->Status == TEvCdcAggregatorService::TEvWriteHeartbeatResult::EStatus::Rejected);

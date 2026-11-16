@@ -43,7 +43,7 @@ std::pair<std::optional<TCdcAggregatorWriteHeartbeatsResult>, TString> TCdcAggre
     return {std::move(writeHeartbeatsResult), TString()};
 }
 
-THolder<TEvCdcAggregatorService::TEvWriteHeartbeatResult> TCdcAggregatorHeartbeatDeliveryProtoConverter::SerializeReply(const TCdcAggregatorHeartbeatDeliveryReply& reply) const {
+THolder<TEvCdcAggregatorService::TEvWriteHeartbeatResult> TCdcAggregatorHeartbeatDeliveryProtoConverter::SerializeWriteResult(const TCdcAggregatorHeartbeatWriteResult& writeResult) const {
     using EStatus = TEvCdcAggregatorService::TEvWriteHeartbeatResult::EStatus;
 
     auto ev = MakeHolder<TEvCdcAggregatorService::TEvWriteHeartbeatResult>();
@@ -60,7 +60,7 @@ THolder<TEvCdcAggregatorService::TEvWriteHeartbeatResult> TCdcAggregatorHeartbea
             ev->Status = EStatus::Rejected;
             ev->Error = rejected.Error;
         },
-    }, reply);
+    }, writeResult);
     return ev;
 }
 

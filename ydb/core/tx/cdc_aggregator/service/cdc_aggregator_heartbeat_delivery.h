@@ -31,9 +31,9 @@ struct TCdcAggregatorHeartbeatRejected {
     TString Error;
 };
 
-using TCdcAggregatorHeartbeatDeliveryReply = std::variant<TCdcAggregatorHeartbeatWritten, TCdcAggregatorHeartbeatRetry, TCdcAggregatorHeartbeatRejected>;
+using TCdcAggregatorHeartbeatWriteResult = std::variant<TCdcAggregatorHeartbeatWritten, TCdcAggregatorHeartbeatRetry, TCdcAggregatorHeartbeatRejected>;
 
-using TCdcAggregatorHeartbeatBatchResult = THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>;
+using TCdcAggregatorHeartbeatBatchResult = THashMap<ui64, TCdcAggregatorHeartbeatWriteResult>;
 
 class TCdcAggregatorHeartbeatDelivery {
 public:

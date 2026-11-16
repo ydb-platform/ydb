@@ -80,9 +80,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsServiceSlow) {
         const TString secretName = "/Root/secret-name";
         CreateSchemaSecret(secretName, "secret-value", session);
 
-        TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = ERetryPolicy::ShortRetries;
-        auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, describeSettings);
+        auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, TDescribeSecretSettings{});
         AssertBadRequest(
             promise,
             "<main>: Error: Retry limit exceeded for secret `/Root/secret-name`\n",

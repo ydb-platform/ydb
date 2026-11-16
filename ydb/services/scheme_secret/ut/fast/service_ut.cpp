@@ -460,7 +460,6 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         CreateSchemaSecret(secretName, secretValue, session);
 
         TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = ERetryPolicy::ShortRetries;
         auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, std::move(describeSettings));
         AssertSecretValue(secretValue, promise);
     }
@@ -509,9 +508,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
             CreateSchemaSecret(secretNames[i], secretValues[i], session);
         }
 
-        TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = ERetryPolicy::ShortRetries;
-        auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, describeSettings);
+        auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, TDescribeSecretSettings{});
         AssertSecretValues(secretValues, promise);
     }
 
@@ -541,9 +538,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
             CreateSchemaSecret(secretNames.back(), secretValues.back(), session);
         }
 
-        TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = ERetryPolicy::ShortRetries;
-        auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, describeSettings);
+        auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, TDescribeSecretSettings{});
         AssertSecretValues(secretValues, promise);
     }
 
@@ -572,9 +567,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
             CreateSchemaSecret(secretNames.back(), secretValues.back(), session);
         }
 
-        TDescribeSecretSettings describeSettings;
-        describeSettings.RetryPolicy = ERetryPolicy::ShortRetries;
-        auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, describeSettings);
+        auto promise = ResolveSecrets(secretNames, kikimr, /* userToken */ nullptr, TDescribeSecretSettings{});
         AssertSecretValues(secretValues, promise);
     }
 

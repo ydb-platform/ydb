@@ -1434,6 +1434,22 @@ namespace NSchemeShardUT_Private {
         return TestGetExport(runtime, TTestTxConfig::SchemeShard, id, dbName, expectedStatus);
     }
 
+    NKikimrExport::TListExportsResponse TestListExports(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& dbName,
+            ui64 pageSize, const TString& pageToken, const TString& kind) {
+        AsyncSend(runtime, schemeshardId, new TEvExport::TEvListExportsRequest(dbName, pageSize, pageToken, kind));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvExport::TEvListExportsResponse>(handle);
+        const auto& response = ev->Record.GetResponse();
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::SUCCESS);
+        return response;
+    }
+
+    NKikimrExport::TListExportsResponse TestListExports(TTestActorRuntime& runtime, const TString& dbName,
+            ui64 pageSize, const TString& pageToken, const TString& kind) {
+        return TestListExports(runtime, TTestTxConfig::SchemeShard, dbName, pageSize, pageToken, kind);
+    }
+
     TEvExport::TEvCancelExportRequest* CancelExportRequest(ui64 txId, const TString& dbName, ui64 exportId) {
         return new TEvExport::TEvCancelExportRequest(txId, dbName, exportId);
     }
@@ -1545,6 +1561,22 @@ namespace NSchemeShardUT_Private {
     NKikimrImport::TEvGetImportResponse TestGetImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName,
             Ydb::StatusIds::StatusCode expectedStatus) {
         return TestGetImport(runtime, TTestTxConfig::SchemeShard, id, dbName, expectedStatus);
+    }
+
+    NKikimrImport::TListImportsResponse TestListImports(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& dbName,
+            ui64 pageSize, const TString& pageToken, const TString& kind) {
+        AsyncSend(runtime, schemeshardId, new TEvImport::TEvListImportsRequest(dbName, pageSize, pageToken, kind));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvImport::TEvListImportsResponse>(handle);
+        const auto& response = ev->Record.GetResponse();
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::SUCCESS);
+        return response;
+    }
+
+    NKikimrImport::TListImportsResponse TestListImports(TTestActorRuntime& runtime, const TString& dbName,
+            ui64 pageSize, const TString& pageToken, const TString& kind) {
+        return TestListImports(runtime, TTestTxConfig::SchemeShard, dbName, pageSize, pageToken, kind);
     }
 
     TEvImport::TEvCancelImportRequest* CancelImportRequest(ui64 txId, const TString& dbName, ui64 importId) {

@@ -703,26 +703,7 @@ private:
 
         bool operator<(const TDqInputBatchIterator& other) const {
             Y_DEBUG_ABORT_UNLESS(&Data_->Parent() == &other.Data_->Parent());
-            const auto& comparators = Data_->Parent().Comparators_;
-            ui32 comparatorIndex = 0;
-            for (auto& sortCol : Data_->Parent().SortCols_) {
-                ui32 idx = sortCol.Index;
-
-                TBlockItem myValue = GetItem(idx);
-                TBlockItem otherValue = other.GetItem(idx);
-
-                i64 compare = comparators[comparatorIndex++]->Compare(myValue, otherValue);
-                if (!sortCol.Ascending) {
-                    compare = -compare;
-                }
-
-                if (compare) {
-                    return compare > 0;
-                }
-            }
-            // resolve equal elements: when InputIndex()es are equal, we must first process element with smaller BlockIndex()
-            // Note: operator> here since this comparator is used together with max-heap
-            return std::tuple(InputIndex(), BlockIndex()) > std::tuple(other.InputIndex(), other.BlockIndex());
+            return Data_->Parent().ComesAfter(*Data_, InputIndex(), BlockIndex(), other);
         }
 
         TBlockItem GetItem(ui32 columnIndex) const {
@@ -790,7 +771,7 @@ private:
     }
 
     // True when (input, blockIndex) must be produced after `earlier` in merge order.
-    // Same ordering as TDqInputBatchIterator::operator<, which implements a max-heap.
+    // Shared by the max-heap comparator, run boundary search and sorted-input validation.
     bool ComesAfter(const TDqInputBatch& input, size_t inputIndex, ui64 blockIndex, const TDqInputBatchIterator& earlier) const {
         ui32 comparatorIndex = 0;
         for (const auto& sortCol : SortCols_) {
@@ -804,6 +785,7 @@ private:
                 return compare > 0;
             }
         }
+        // Resolve equal keys by input index, then by row index within the block.
         return std::tuple(inputIndex, blockIndex) > std::tuple(earlier.InputIndex(), earlier.BlockIndex());
     }
 
@@ -836,6 +818,14 @@ private:
         YQL_ENSURE(InputData_[index].IsEmpty());
         auto status = InputData_[index].FetchNext();
         if (status == NUdf::EFetchStatus::Ok) {
+#ifndef NDEBUG
+            // Validate the sorted-input assumption before copying runs from this block.
+            for (ui64 row = InputData_[index].CurrentIndex() + 1; row < InputData_[index].BlockLen(); ++row) {
+                const TDqInputBatchIterator current(index, &InputData_[index], row);
+                YQL_ENSURE(!ComesAfter(InputData_[index], index, row - 1, current),
+                    "Sort order violation on input #" << index << " between rows " << row - 1 << " and " << row);
+            }
+#endif
             if (!FirstSeenInputIndex_.Defined()) {
                 FirstSeenInputIndex_ = index;
             }

@@ -360,12 +360,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
         UNIT_ASSERT(ss);
         const ui64 txId = 100;
 
-        NKikimrSchemeOp::TModifyScheme operation;
-        operation.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
-        operation.SetWorkingDir("/MyRoot");
-        operation.MutableMkDir()->SetName("Dir");
+        THolder<TEvTx> request(MkDirRequest(txId, "/MyRoot", "Dir"));
         runtime.RunCall([&] {
-            AuditLogModifySchemeOperation(operation, NKikimrScheme::StatusInvalidParameter, {},
+            AuditLogModifySchemeOperation(request->Record.GetTransaction(0), NKikimrScheme::StatusInvalidParameter, {},
                 ss, {}, {}, {}, txId, {});
             return true;
         });

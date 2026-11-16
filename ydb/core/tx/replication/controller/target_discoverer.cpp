@@ -30,6 +30,14 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         Pending.insert(idx);
     }
 
+    void DescribeTopicParent(ui32 idx) {
+        const auto& path = Paths.at(idx).first;
+        const auto absolutePath = CanonizePath(IsStartWithSlash(path) ? path
+            : Config.GetSrcConnectionParams().GetDatabase() + "/" + path);
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribePathRequest(TString(ExtractParent(absolutePath)), {}), 0, idx);
+        TopicParents.insert(idx);
+    }
+
     void Handle(TEvYdbProxy::TEvDescribePathResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
@@ -44,12 +52,28 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         Y_ABORT_UNLESS(*it < Paths.size());
         const auto& path = Paths.at(*it);
 
+        const bool isTopicParent = TopicParents.erase(*it);
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
             YDB_LOG_DEBUG("Describe path succeeded",
                 {"path", path.first});
 
             const auto& entry = result.GetEntry();
+            if (isTopicParent) {
+                // DescribePath exposes a CDC stream as its hidden topic. Its parent is
+                // a table; the hidden topic's parent is the stream, also exposed as Topic.
+                if (entry.Type != NYdb::NScheme::ESchemeEntryType::Table
+                    && entry.Type != NYdb::NScheme::ESchemeEntryType::Topic)
+                {
+                    return DescribeTopic(ev->Cookie);
+                }
+                Pending.erase(it);
+                NYdb::NIssue::TIssues issues;
+                issues.AddIssue("CDC topics cannot be replication sources");
+                Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
+                MaybeReply();
+                return;
+            }
             switch (entry.Type) {
             case NYdb::NScheme::ESchemeEntryType::SubDomain:
             case NYdb::NScheme::ESchemeEntryType::Directory:
@@ -73,7 +97,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                         MaybeReply();
                         return;
                     }
-                    return DescribeTopic(ev->Cookie);
+                    return DescribeTopicParent(ev->Cookie);
                 }
                 if (IsTransfer()) {
                     return DescribeTopic(ev->Cookie);
@@ -204,9 +228,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
             const auto& description = result.GetTopicDescription();
             TString error;
-            if (IsReplication() && description.GetAttributes().contains("__async_replication")) {
-                error = "CDC topics cannot be replication sources";
-            } else if (IsReplication() && Config.GetConsistencySettings().GetLevelCase()
+            if (IsReplication() && Config.GetConsistencySettings().GetLevelCase()
                 != NKikimrReplication::TConsistencySettings::kRow)
             {
                 error = "Topic replication supports row consistency only";
@@ -441,6 +463,7 @@ private:
     THashMap<ui64, std::pair<TString, TString>> Listings;
 
     THashSet<ui32> Pending;
+    THashSet<ui32> TopicParents;
     THashSet<ui32> DescribeRetries;
     THashSet<ui64> ListingRetries;
     TVector<TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry> ToAdd;

@@ -1,4 +1,5 @@
 #include "private_events.h"
+#include "dst_alterer.h"
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
@@ -64,6 +65,22 @@ public:
         Wait([&] { return Config().GetPartitionConfig().HasMirrorFrom() == enabled; });
     }
 
+    void CheckMissingDestination() {
+        Exec("ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = 'PAUSED');");
+        WaitMirror(false);
+        const auto pathId = Destination.GetPathId("/Root/topic");
+        NYdb::NTopic::TTopicClient client(Destination.GetDriver());
+        const auto dropped = client.DropTopic("/Root/topic").GetValueSync();
+        UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
+        for (const auto state : {TReplication::EState::Ready, TReplication::EState::Done}) {
+            Destination.GetRuntime().Register(CreateDstAlterer(Destination.GetSender(), SchemeShard,
+                1, 1, TReplication::ETargetKind::Topic, pathId, state));
+            const auto result = Destination.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvAlterDstResult>(Destination.GetSender());
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, state == TReplication::EState::Ready
+                ? NKikimrScheme::StatusPathDoesNotExist : NKikimrScheme::StatusSuccess);
+        }
+    }
+
     void WriteAndWait(const TString& payload, ui64 endOffset) {
         NYdb::NTopic::TTopicClient sourceClient(Source.GetDriver()), destinationClient(Destination.GetDriver());
         auto writer = sourceClient.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
@@ -81,6 +98,11 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(TopicMirroring) {
+    Y_UNIT_TEST(MissingDestinationCannotResume) {
+        TTopicMirroringFixture test;
+        test.CheckMissingDestination();
+    }
+
     Y_UNIT_TEST(CopiesMessagesAcrossPauseAndResume) {
         TTopicMirroringFixture test;
         test.WriteAndWait("first", 1);

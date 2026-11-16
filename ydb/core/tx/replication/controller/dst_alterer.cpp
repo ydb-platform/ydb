@@ -60,7 +60,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     void HandleTopic(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         const auto& record = ev->Get()->GetRecord();
         if (record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
-            return Success();
+            return DestinationMissing();
         }
         if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
             return Error(record.GetStatus(), record.GetReason());
@@ -146,8 +146,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             // Concurrent DDL and SchemeShard in-flight limits are temporary.
             return Retry();
         case NKikimrScheme::StatusPathDoesNotExist:
-            // A deleted destination has nothing left to detach.
-            return Success();
+            return DestinationMissing();
         case NKikimrScheme::StatusNameConflict:
             // An already collected path id resolves to an empty path, which
             // ALTER reports as a name conflict. Confirm that it is absent.
@@ -175,7 +174,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             {"ev", ev->Get()->ToString()});
 
         if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
-            return Success();
+            return DestinationMissing();
         }
 
         return Error(NKikimrScheme::StatusNameConflict, AlterError);
@@ -212,6 +211,14 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         Retry();
+    }
+
+    void DestinationMissing() {
+        if (Kind == TReplication::ETargetKind::Topic && DesiredState == TReplication::EState::Ready) {
+            return Error(NKikimrScheme::StatusPathDoesNotExist, "Cannot resume mirroring: destination topic does not exist");
+        }
+        // PAUSE, DONE and DROP have nothing left to detach.
+        Success();
     }
 
     void Success() {
@@ -275,7 +282,7 @@ public:
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
         if (Kind == TReplication::ETargetKind::Topic) {
-            return DstPathId ? AllocateTxId() : Success();
+            return DstPathId ? AllocateTxId() : DestinationMissing();
         }
         switch (DesiredState) {
         case TReplication::EState::Done:

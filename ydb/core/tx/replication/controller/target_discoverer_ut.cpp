@@ -475,8 +475,8 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
     }
 
     Y_UNIT_TEST(TopicAdmissionRequiresFlagAndRowConsistency) {
-        const auto discover = [](TEnv<>& env, bool global, bool secret = false) {
-            auto config = CreateConfig({{"/Root/Topic", "/Root/Replica"}});
+        const auto discover = [](TEnv<>& env, bool global, bool secret = false, const TString& source = "/Root/Topic") {
+            auto config = CreateConfig({{source, "/Root/Replica"}});
             if (global) {
                 config.MutableConsistencySettings()->MutableGlobal();
             } else {
@@ -509,6 +509,20 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         UNIT_ASSERT(!result->Get()->IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(result->Get()->Failed.front().Error.GetIssues().ToOneLineString(),
             "mirrorer secrets dependency");
+
+        enabled.CreateTable("/Root", *MakeTableDescription(DummyTable()));
+        const auto created = enabled.Send<TEvYdbProxy::TEvAlterTableResponse>(enabled.GetYdbProxy(),
+            new TEvYdbProxy::TEvAlterTableRequest("/Root/Table",
+                NYdb::NTable::TAlterTableSettings().AppendAddChangefeeds(
+                    NYdb::NTable::TChangefeedDescription("Feed", NYdb::NTable::EChangefeedMode::Updates,
+                        NYdb::NTable::EChangefeedFormat::Json))));
+        UNIT_ASSERT_C(created->Get()->Result.IsSuccess(), created->Get()->Result.GetIssues().ToString());
+        result = discover(enabled, false, false, "/Root/Table/Feed");
+        UNIT_ASSERT(!result->Get()->IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Failed.front().Error.GetIssues().ToOneLineString(),
+            "CDC topics cannot be replication sources");
+        result = discover(enabled, false, false, "/Root/Table/Feed/streamImpl");
+        UNIT_ASSERT(!result->Get()->IsSuccess());
     }
 
     Y_UNIT_TEST(RetryableError) {

@@ -86,13 +86,15 @@ Y_UNIT_TEST_SUITE(DstAlterRetry) {
         TActorId Alterer;
         const TPathId PathId{1, 1};
 
-        TEnv() {
+        explicit TEnv(bool dropTopic = false) {
             Runtime.Initialize(TAppPrepare().Unwrap());
             Parent = Runtime.AllocateEdgeActor();
             Allocator = Runtime.AllocateEdgeActor();
             PipeCache = Runtime.AllocateEdgeActor();
             Runtime.RegisterService(MakeTxProxyID(), Allocator);
-            auto* alterer = CreateDstAlterer(
+            auto* alterer = dropTopic
+                ? CreateDstRemover(Parent, PathId.OwnerId, {}, 1, 1, TReplication::ETargetKind::Topic, PathId)
+                : CreateDstAlterer(
                 Parent,
                 PathId.OwnerId,
                 1,
@@ -184,6 +186,31 @@ Y_UNIT_TEST_SUITE(DstAlterRetry) {
             env.Complete(101);
             UNIT_ASSERT(env.Runtime.GrabEdgeEvent<TEvPrivate::TEvAlterDstResult>(env.Parent)->Get()->IsSuccess());
         }
+    }
+
+    Y_UNIT_TEST(TopicDropRetriesTransientRejection) {
+        for (const auto status : {NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusResourceExhausted}) {
+            TEnv env(true);
+            env.Reply(status);
+            UNIT_ASSERT_VALUES_EQUAL(env.Runtime.CaptureScheduledEvents().size(), 1);
+            env.Complete(100);
+            env.Reply(NKikimrScheme::StatusAccepted);
+            UNIT_ASSERT_C(env.Runtime.FindActor(env.Alterer), "Rejected attempt completed DROP");
+            env.Runtime.Send(env.Alterer, env.Parent, new TEvents::TEvWakeup());
+            env.Allocate(101);
+            env.Reply(NKikimrScheme::StatusAccepted, 101);
+            env.Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(env.PipeCache);
+            env.Complete(101);
+            UNIT_ASSERT(env.Runtime.GrabEdgeEvent<TEvPrivate::TEvDropDstResult>(env.Parent)->Get()->IsSuccess());
+        }
+    }
+
+    Y_UNIT_TEST(TopicDropReportsPermanentRejection) {
+        TEnv env(true);
+        env.Reply(NKikimrScheme::StatusAccessDenied);
+        const auto result = env.Runtime.GrabEdgeEvent<TEvPrivate::TEvDropDstResult>(env.Parent);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusAccessDenied);
+        UNIT_ASSERT(env.Runtime.CaptureScheduledEvents().empty());
     }
 
     Y_UNIT_TEST(PermanentRejectionRemainsError) {

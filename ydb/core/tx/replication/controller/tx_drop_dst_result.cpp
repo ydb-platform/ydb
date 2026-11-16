@@ -63,6 +63,19 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+        if (target->GetKind() == TReplication::ETargetKind::Topic && !Ev->Get()->IsSuccess()) {
+            target->SetDstState(TReplication::EDstState::Error);
+            target->SetIssue(TStringBuilder() << "Drop dst error: "
+                << NKikimrScheme::EStatus_Name(Ev->Get()->Status) << ", " << Ev->Get()->Error);
+            Self->SetReplicationError(*Replication, *target);
+            db.Table<Schema::Targets>().Key(rid, tid).Update(
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
+                NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue()));
+            db.Table<Schema::Replications>().Key(rid).Update(
+                NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+                NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue()));
+            return true;
+        }
         if (target->GetKind() == TReplication::ETargetKind::Topic
             && target->GetStreamState() != TReplication::EStreamState::Removed) {
             target->SetDstState(TReplication::EDstState::Done);

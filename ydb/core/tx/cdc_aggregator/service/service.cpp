@@ -2,10 +2,12 @@
 #include "cdc_aggregator_heartbeat_delivery_proto.h"
 #include "service.h"
 
+#include <ydb/core/base/events.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/tx/cdc_aggregator/public/events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
@@ -16,6 +18,22 @@
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CDC_AGGREGATOR
 
 namespace NKikimr::NCdcAggregator {
+
+namespace {
+
+struct TEvPrivate {
+    enum EEv {
+        EvTimerFired = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+
+    struct TEvTimerFired: public TEventLocal<TEvTimerFired, EvTimerFired> {};
+};
+
+} // namespace
 
 class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
     static constexpr ui32 MaxBatchSize = 1000;
@@ -75,7 +93,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             NTabletPipe::SendData(SelfId(), connection.PipeClient, ev.Release());
         }
 
-        Schedule(TimerPeriod, new TEvents::TEvWakeup());
+        Schedule(TimerPeriod, new TEvPrivate::TEvTimerFired());
     }
 
     void DropCdcAggregatorConnection(ui64 tabletId, const TActorId& pipeClient, const TString& error) {
@@ -158,7 +176,7 @@ public:
 
     void Bootstrap() {
         Become(&TThis::StateWork);
-        Schedule(TimerPeriod, new TEvents::TEvWakeup());
+        Schedule(TimerPeriod, new TEvPrivate::TEvTimerFired());
     }
 
     STFUNC(StateWork) {
@@ -167,7 +185,7 @@ public:
             hFunc(TEvCdcAggregator::TEvWriteHeartbeatsResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            sFunc(TEvents::TEvWakeup, SendHeartbeatBatchesPeriodically);
+            sFunc(TEvPrivate::TEvTimerFired, SendHeartbeatBatchesPeriodically);
         }
     }
 

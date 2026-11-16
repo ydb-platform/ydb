@@ -668,7 +668,7 @@ Y_UNIT_TEST_SUITE(IamDelegationSettings) {
         shared.SetEnableSsl(false);
         const auto settings = TIamDelegationSettings::FromConfig(config, defaults);
         UNIT_ASSERT(settings.ValidateForDelegation().empty());
-        UNIT_ASSERT(settings.CanResolveCloud());
+        UNIT_ASSERT_VALUES_EQUAL(settings.Config.GetResourceManagerEndpoint(), "resource-manager");
         UNIT_ASSERT_VALUES_EQUAL(settings.Config.GetTokenServiceEndpoint(), "token");
         UNIT_ASSERT_VALUES_EQUAL(settings.Config.GetServiceId(), "ydb");
         UNIT_ASSERT_VALUES_EQUAL(settings.Config.GetMicroserviceId(), "data-plane");
@@ -690,24 +690,18 @@ Y_UNIT_TEST_SUITE(IamDelegationSettings) {
         UNIT_ASSERT_VALUES_EQUAL(copy.Config.SerializeAsString(), config.SerializeAsString());
     }
 
-    Y_UNIT_TEST(ValidationAndCloudResolutionRemainSeparate) {
+    Y_UNIT_TEST(ValidationRequiresControlPlaneAndSystemToken) {
         NKikimrConfig::TIamConfig config;
-        config.SetTokenServiceEndpoint("token");
         config.SetServiceId("ydb");
         config.SetMicroserviceId("data-plane");
         config.SetResourceType("resource-manager.cloud");
         auto settings = TIamDelegationSettings::FromConfig(config);
-        UNIT_ASSERT(settings.Validate().empty());
         UNIT_ASSERT_STRING_CONTAINS(settings.ValidateForDelegation(), "ServiceControlEndpoint");
         UNIT_ASSERT_STRING_CONTAINS(settings.ValidateForDelegation(), "SystemTokenName");
-        UNIT_ASSERT(!settings.CanResolveCloud());
         config.SetServiceControlEndpoint("control");
         config.SetSystemTokenName("system-account");
         settings = TIamDelegationSettings::FromConfig(config);
         UNIT_ASSERT(settings.ValidateForDelegation().empty());
-        UNIT_ASSERT(!settings.CanResolveCloud());
-        settings.Config.SetResourceManagerEndpoint("resource-manager");
-        UNIT_ASSERT(settings.CanResolveCloud());
     }
 }
 

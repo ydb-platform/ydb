@@ -17,6 +17,8 @@ waiters recheck that version before one recovery call proceeds. Late outcomes
 cannot reset a newer failure. A finite reservation permits recovery after a
 caller disappears. This state is volatile and resets on node restart. Durable
 cluster-wide scheduling belongs to the later service-tablet implementation.
+Privileged callers own authorization and limits on request volume and payload
+size. The shared backoff does not cap healthy concurrent requests.
 
 Per-request deadlines, requests and intermediate results live in coroutine
 frames. Cancellation during cooldown sends no IAM request. Local token-provider
@@ -26,6 +28,8 @@ cooldown so rotation is observed before dispatch.
 Errors distinguish rejected credentials from missing rights and include fixed
 method-specific requirements. Remote messages, arbitrary detail types, token
 manager diagnostics and credentials are excluded from returned diagnostics.
+The existing `GRPC_CLIENT` debug logger has a separate scope and can include raw
+IAM response and error text; the returned-diagnostic guarantee does not cover it.
 
 Tests in `ut` cover request forwarding and mutation uncertainty, raw-error
 redaction, token updates, real gRPC integration, startup/config notifications,

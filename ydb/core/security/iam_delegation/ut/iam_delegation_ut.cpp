@@ -340,6 +340,12 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         UNIT_ASSERT(!TProxyNode(appConfig, true).Started());
     }
 
+    Y_UNIT_TEST(NothingWithoutTheMicroservice) {
+        auto appConfig = FullConfig();
+        appConfig.MutableIamConfig()->ClearMicroserviceId();
+        UNIT_ASSERT(!TProxyNode(appConfig, true).Started());
+    }
+
     Y_UNIT_TEST(NothingWithoutTheControlPlane) {
         auto appConfig = FullConfig();
         appConfig.MutableIamConfig()->ClearServiceControlEndpoint();

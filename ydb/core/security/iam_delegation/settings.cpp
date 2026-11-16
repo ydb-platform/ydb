@@ -53,18 +53,6 @@ void CollectMissingIdentity(const TIamDelegationSettings& settings, TStringBuild
 
 } // namespace
 
-TString TIamDelegationSettings::Validate() const {
-    TStringBuilder missing;
-    CollectMissingIdentity(*this, missing);
-    if (Config.GetTokenServiceEndpoint().empty()) {
-        missing << " TokenServiceEndpoint";
-    }
-    if (!missing.empty()) {
-        return TStringBuilder() << "IAM delegation is not configured, missing IamConfig fields:" << missing;
-    }
-    return {};
-}
-
 TString TIamDelegationSettings::ValidateForDelegation() const {
     TStringBuilder missing;
     CollectMissingIdentity(*this, missing);

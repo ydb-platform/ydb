@@ -229,7 +229,7 @@ class LoadedWrites:
             now = time.monotonic()
             return (all(count >= 4 for count in self.counts)
                     and (not require_fresh or all(at is not None and now - at <= 2
-                                                 for at in self.last_success)))
+                                                  for at in self.last_success)))
 
     def first_ack_after(self, boundary):
         self.ready()

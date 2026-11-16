@@ -21,28 +21,6 @@ ALTER TABLE `<table_name>`
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-When the [`enable_online_add_unique_index`](../../../../reference/configuration/feature_flags.md) flag is enabled, a unique secondary index can be added to an existing table without blocking writes during the build. If the flag is disabled, writes to the table are blocked until the unique index build completes.
-
-{% if feature_flags.enable_online_add_unique_index == false %}
-{% note warning "Experimental feature" %}
-
-This feature is under development and is disabled by default by the [`enable_online_add_unique_index`](../../../../reference/configuration/feature_flags.md) flag. Its behavior may change without backward compatibility, and the feature may never become generally available. Enabling the flag may cause errors, cluster instability, or make it impossible to change the YDB version. Do not enable this flag in production clusters. [Learn more](../../../../reference/configuration/feature_flags.md#experimental).
-
-{% endnote %}
-{% endif %}
-
-=======
->>>>>>> 680b0bcc1ab (docs: keep one warning before online unique index description)
-{% if backend_name == "YDB" and oss == true %}
-
-You can also add a secondary index using the [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI command.
-
-{% endif %}
-
->>>>>>> da70582f299 (docs: mark online unique index builds with feature flag warning)
 Parameters for all index types:
 
 * - maximum number of `parallel` handlers based on [partitions](../../../../concepts/glossary.md#partition) involved in index building (an integer between `1` and `MaxBuildIndexShardsInFlight` from `SchemeShardConfig`).

@@ -47,6 +47,7 @@ namespace NActors {
             TMaybe<TString> errorText;
             if (auto addr = ExtractDefaultAddr(errorText)) {
                 YDB_LOG_TRACE("CACHED",
+                    {"logPrefix", LogPrefix},
                     {"marker", "ICR01"},
                     {"host", Host},
                     {"address", DefaultAddress});
@@ -68,6 +69,7 @@ namespace NActors {
             }
 
             YDB_LOG_DEBUG("RESOLVING address",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICR02"},
                 {"host", Host});
             Send(MakeDnsResolverActorId(),
@@ -124,6 +126,7 @@ namespace NActors {
 
         void SendAddressInfoAndDie(NAddr::IRemoteAddrPtr addr) {
             YDB_LOG_DEBUG("RESOLVED address",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICR03"},
                 {"host", Host});
             auto reply = new TEvAddressInfo;
@@ -134,6 +137,7 @@ namespace NActors {
 
         void SendLocalNodeInfoAndDie(std::vector<NInterconnect::TAddress> addresses) {
             YDB_LOG_DEBUG("RESOLVED address",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICR04"},
                 {"host", Host});
             auto reply = std::make_unique<TEvLocalNodeInfo>();
@@ -145,6 +149,7 @@ namespace NActors {
 
         void SendErrorAndDie(const TString& errorText) {
             YDB_LOG_DEBUG("ERROR",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICR05"},
                 {"host", Host},
                 {"resolving", errorText});

@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 
 namespace NKikimr::NKqp {
 
@@ -55,6 +56,11 @@ public:
         const auto columns = PrintColumns(*read->GetChild(3));
         const auto* extractMembers = FindInlined(*read->GetChild(6), "TKqpOlapExtractMembers");
         return TStringBuilder() << "read " << columns << ", output " << (extractMembers ? PrintColumns(*extractMembers->GetChild(2)) : columns);
+    }
+
+    // Whether column shards compute an aggregate in the program of a read.
+    bool HasOlapAggregate() const {
+        return FindCallable(*Ast.Root, "TKqpOlapAgg");
     }
 
 private:
@@ -205,6 +211,7 @@ std::vector<TString> CanonicalRows(const TResultSet& resultSet) {
 struct TQueryOutcome {
     TString Program;
     TString ReadColumns;
+    bool OlapAggregate = false;
     std::vector<TString> Rows;
 };
 
@@ -227,14 +234,16 @@ std::vector<TQueryOutcome> RunQueries(bool newRbo, const std::function<void(TKik
             .ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), (newRbo ? "new" : "old") << " optimizer, " << query << ": " << result.GetIssues().ToString());
         TOlapProgramPrinter printer(TString{*result.GetStats()->GetAst()});
-        outcomes.push_back({printer.Print(withProjections), printer.PrintReadColumns(), CanonicalRows(result.GetResultSet(0))});
+        outcomes.push_back({printer.Print(withProjections), printer.PrintReadColumns(), printer.HasOlapAggregate(),
+                            CanonicalRows(result.GetResultSet(0))});
     }
     return outcomes;
 }
 
 // The new optimizer gives the column shard the same program as the old one, the read fetches and returns the same
-// columns, and the query returns the same rows. The projections are compared only with `withProjections`: the new
-// optimizer pushes some projections the old one does not.
+// columns, an aggregate is pushed to column shards when the old one pushes it, and the query returns the same rows.
+// The projections are compared only with `withProjections`: the new optimizer pushes some projections the old one does
+// not.
 void CheckSameAsOldOptimizer(const std::function<void(TKikimrRunner&)>& prepare, const std::vector<TString>& queries,
                              bool withProjections = false) {
     const auto oldOutcomes = RunQueries(false, prepare, queries, withProjections);
@@ -242,6 +251,7 @@ void CheckSameAsOldOptimizer(const std::function<void(TKikimrRunner&)>& prepare,
     for (size_t i = 0; i < queries.size(); ++i) {
         UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].Program, oldOutcomes[i].Program, queries[i]);
         UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].ReadColumns, oldOutcomes[i].ReadColumns, queries[i]);
+        UNIT_ASSERT_VALUES_EQUAL_C(newOutcomes[i].OlapAggregate, oldOutcomes[i].OlapAggregate, queries[i]);
         UNIT_ASSERT_VALUES_EQUAL_C(JoinSeq("\n", newOutcomes[i].Rows), JoinSeq("\n", oldOutcomes[i].Rows), queries[i]);
     }
 }
@@ -523,6 +533,45 @@ Y_UNIT_TEST_SUITE(KqpRboOlapCompat) {
             // A filter column under a projection.
             R"q(SELECT JSON_VALUE(payload, "$.a") AS a FROM `/Root/foo` WHERE level > 1 ORDER BY a)q",
         }, /*withProjections=*/true);
+    }
+
+    // As in the old optimizer, column shards compute MIN and MAX of floating-point values, ignoring NaN, the sum of a
+    // Float column without keys and the sum of an Interval column.
+    Y_UNIT_TEST(FloatAggregatesSameAsOldOptimizer) {
+        CheckSameAsOldOptimizer([](TKikimrRunner& kikimr) {
+            ExecuteSchemeQueries(kikimr, {R"(
+                CREATE TABLE `/Root/foo` (
+                    id Uint64 NOT NULL, k Int32, f Float, d Double, g Float, iv Interval, v Int64,
+                    PRIMARY KEY (id)
+                )
+                PARTITION BY HASH(id)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )"});
+            // In Float, 2^24 + 1 rounds back to 2^24, so the Float sum depends on how it is computed.
+            const double nan = std::numeric_limits<double>::quiet_NaN();
+            TValueBuilder rows;
+            rows.BeginList();
+            for (ui64 id = 1; id <= 12; ++id) {
+                const double d = id <= 2 ? 1.0 : id <= 4 ? nan : id <= 6 ? 3.0 : 2.0;
+                rows.AddListItem().BeginStruct().AddMember("id").Uint64(id).AddMember("k").OptionalInt32(id % 2)
+                    .AddMember("f").OptionalFloat(id <= 2 ? 16777216.f : 1.f).AddMember("d").OptionalDouble(d)
+                    .AddMember("g").OptionalFloat(static_cast<float>(d)).AddMember("iv").OptionalInterval(id * 1000000)
+                    .AddMember("v").OptionalInt64(id).EndStruct();
+            }
+            rows.EndList();
+            const auto result = kikimr.GetTableClient().BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }, {
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SUM(f) AS s FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT MIN(d) AS mn, MAX(d) AS mx FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT k, MIN(d) AS mn, MAX(d) AS mx FROM `/Root/foo` GROUP BY k)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT MIN(g) AS mn, MAX(g) AS mx FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT k, MIN(g) AS mn, MAX(g) AS mx FROM `/Root/foo` GROUP BY k)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT SUM(iv) AS s FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT k, SUM(iv) AS s FROM `/Root/foo` GROUP BY k)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT MIN(d) AS mn, SUM(v) AS s FROM `/Root/foo`)q",
+            R"q(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true"; SELECT k, MAX(g) AS mx, SUM(v) AS s FROM `/Root/foo` GROUP BY k)q",
+        });
     }
 }
 

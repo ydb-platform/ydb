@@ -273,9 +273,21 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").RequiredArgument("DIR").Handler1T<TString>([this](const TString& dir) {
         NKikimr::NMiniKQL::FindUdfsInDir(dir, &UdfsPaths);
     });
-    opts.AddLongOption("udf-resolver", "Path to udf_resolver").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverPath);
+    opts.AddLongOption("udf-resolver", "Path to udf_resolver").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverOptions.ResolverPath);
     opts.AddLongOption("udf-resolver-log", "Path to udf_resolver log").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverLog);
-    opts.AddLongOption("udf-resolver-filter-syscalls", "Filter syscalls in udf_resolver").Optional().NoArgument().SetFlag(&UdfResolverFilterSyscalls);
+    opts.AddLongOption("udf-resolver-filter-syscalls", "Filter syscalls in udf_resolver").Optional().NoArgument().SetFlag(&UdfResolverOptions.FilterSysCalls);
+    opts.AddLongOption("udf-resolver-porto-proxy-path", "Path to udf_resolver porto proxy script").Optional().RequiredArgument("PATH").Handler1T<TString>([this](const TString& path) {
+        if (!UdfResolverOptions.PortoConfig) {
+            UdfResolverOptions.PortoConfig.ConstructInPlace();
+        }
+        UdfResolverOptions.PortoConfig->ProxyBinaryPath = path;
+    });
+    opts.AddLongOption("udf-resolver-porto-layer", "Porto layer for udf_resolver sandbox; multiple layers are ordered from top to bottom").Optional().RequiredArgument("LAYER").Handler1T<TString>([this](const TString& layer) {
+        if (!UdfResolverOptions.PortoConfig) {
+            UdfResolverOptions.PortoConfig.ConstructInPlace();
+        }
+        UdfResolverOptions.PortoConfig->Layers.push_back(layer);
+    });
     opts.AddLongOption("scan-udfs", "Scan specified udfs with external udf_resolver to use static function registry").NoArgument().SetFlag(&ScanUdfs);
     opts.AddLongOption("udf-bridge", "Path to udf_bridge").Optional().RequiredArgument("PATH").StoreResult(&UdfBridgePath);
 
@@ -751,11 +763,11 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     IUdfResolver::TPtr udfResolver;
     TUdfIndex::TPtr udfIndex;
     if (FileStorage_ && RunOptions_.ScanUdfs) {
-        if (!RunOptions_.UdfResolverPath && EQPlayerMode::Replay != RunOptions_.QPlayerMode) {
+        if (!RunOptions_.UdfResolverOptions.ResolverPath && EQPlayerMode::Replay != RunOptions_.QPlayerMode) {
             Cerr << "udf-resolver path must be specified when use 'scan-udfs'";
             return -1;
         }
-        udfResolver = NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {});
+        udfResolver = NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverOptions);
 
         udfIndex = new TUdfIndex();
         if (EQPlayerMode::Replay != RunOptions_.QPlayerMode) {
@@ -772,8 +784,8 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
         RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " Udfs scanned");
     } else {
-        udfResolver = FileStorage_ && RunOptions_.UdfResolverPath
-                          ? NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {})
+        udfResolver = FileStorage_ && RunOptions_.UdfResolverOptions.ResolverPath
+                          ? NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverOptions)
                           : NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get(), FileStorage_, /*useFakeMD5=*/true);
         if (RunOptions_.UdfResolverLog) {
             udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FuncRegistry_.Get(), udfResolver, RunOptions_.UdfResolverLog, RunOptions_.OperationId);

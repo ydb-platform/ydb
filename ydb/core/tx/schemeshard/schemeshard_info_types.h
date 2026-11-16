@@ -1195,6 +1195,7 @@ public:
         bool EnableColumnStatistics = false;
         bool EnableGeneratedStored = false;
         bool EnableGeneratedVirtual = false;
+        bool EnableAddColumnGeneratedVirtual = false;
     };
 
     static TAlterDataPtr CreateAlterData(

@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
@@ -361,6 +362,23 @@ public:
     void MakeSchemeOperationRequest() {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
+        const auto& schemeOp = PhyTx->GetSchemeOperation();
+        if (schemeOp.HasExpectedTableSchema() && !BoundGeneratedAlter) {
+            auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            request->DatabaseName = Database;
+            if (UserToken && !UserToken->GetSerializedToken().empty()) {
+                request->UserToken = UserToken;
+            }
+            auto& entry = request->ResultSet.emplace_back();
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+            entry.Path = SplitPath(schemeOp.GetExpectedTableSchema().GetName());
+            entry.SyncVersion = true;
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()),
+                0, 0, NWilson::TTraceId(TraceId));
+            Become(&TKqpSchemeExecuter::ExecuteState);
+            return;
+        }
+
         auto ev = MakeHolder<TRequest>();
         ev->Record.SetDatabaseName(Database);
         if (UserToken) {
@@ -372,7 +390,6 @@ public:
             ev->Record.SetRequestType(*RequestType);
         }
 
-        const auto& schemeOp = PhyTx->GetSchemeOperation();
         switch (schemeOp.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kCreateTable: {
                 auto modifyScheme = schemeOp.GetCreateTable();
@@ -416,7 +433,7 @@ public:
             }
 
             case NKqpProto::TKqpSchemeOperation::kAlterTable: {
-                const auto& modifyScheme = schemeOp.GetAlterTable();
+                const auto& modifyScheme = BoundGeneratedAlter ? *BoundGeneratedAlter : schemeOp.GetAlterTable();
                 AFL_ENSURE(!IsCreateTableAs || modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
@@ -1083,6 +1100,11 @@ public:
 
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
+        if (PhyTx->GetSchemeOperation().HasExpectedTableSchema()) {
+            BindGeneratedAlter(*resp);
+            return;
+        }
+
         if (IsCreateTableAs) {
             AFL_ENSURE(std::all_of(resp->ResultSet.begin(), resp->ResultSet.end(), [](const auto& entry) {
                 return entry.Operation == NSchemeCache::TSchemeCacheNavigate::OpPath;
@@ -1411,6 +1433,65 @@ public:
         NTabletPipe::SendData(SelfId(), SchemePipeActorId_, ev.release(), 0, NWilson::TTraceId(TraceId));
     }
 
+    void BindGeneratedAlter(const NSchemeCache::TSchemeCacheNavigate& navigate) {
+        const auto& expected = PhyTx->GetSchemeOperation().GetExpectedTableSchema();
+        const auto schemaChanged = [&] {
+            ReplyErrorAndDie(Ydb::StatusIds::ABORTED, NYql::YqlIssue({},
+                NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+                "Table schema changed while adding a generated column; retry the ALTER TABLE."));
+        };
+        if (navigate.ResultSet.size() != 1) {
+            return schemaChanged();
+        }
+        const auto& entry = navigate.ResultSet.front();
+        if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied) {
+            return ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, NYql::TIssue("Unauthorized"));
+        }
+        if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
+            || entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindTable
+            || (expected.HasPathId() && TPathId::FromProto(expected.GetPathId()) != entry.TableId.PathId))
+        {
+            return schemaChanged();
+        }
+
+        THashMap<TString, const TSysTables::TTableColumnInfo*> columns;
+        size_t keyCount = 0;
+        for (const auto& [id, column] : entry.Columns) {
+            columns.emplace(column.Name, &column);
+            if (column.KeyOrder >= 0) {
+                if (static_cast<size_t>(column.KeyOrder) >= expected.KeyColumnNamesSize()
+                    || expected.GetKeyColumnNames(column.KeyOrder) != column.Name)
+                {
+                    return schemaChanged();
+                }
+                ++keyCount;
+            }
+        }
+        if (keyCount != expected.KeyColumnNamesSize()) {
+            return schemaChanged();
+        }
+        // Earlier ALTERs may change unrelated columns.
+        for (const auto& column : expected.GetColumns()) {
+            const auto* actual = columns.FindPtr(column.GetName());
+            const auto type = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
+                column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+            if (!actual || (*actual)->PType != type.TypeInfo || (*actual)->PTypeMod != type.TypeMod
+                || entry.NotNullColumns.contains(column.GetName()) != column.GetNotNull()
+                || (*actual)->IsDefaultFromExpression() != column.HasDefaultFromExpression())
+            {
+                return schemaChanged();
+            }
+        }
+
+        BoundGeneratedAlter = PhyTx->GetSchemeOperation().GetAlterTable();
+        entry.TableId.PathId.ToProto(BoundGeneratedAlter->MutableAlterTable()->MutablePathId());
+        auto& applyIf = *BoundGeneratedAlter->AddApplyIf();
+        applyIf.SetPathId(entry.TableId.PathId.LocalPathId);
+        applyIf.SetPathVersion(entry.TableId.SchemaVersion);
+        applyIf.SetCheckEntityVersion(true);
+        MakeSchemeOperationRequest();
+    }
+
     void HandleExecute(TEvPrivate::TEvResult::TPtr& ev) {
         auto& response = *ResponseEv->Record.MutableResponse();
 
@@ -1555,6 +1636,7 @@ private:
 
 private:
     TKqpPhyTxHolder::TConstPtr PhyTx;
+    TMaybe<NKikimrSchemeOp::TModifyScheme> BoundGeneratedAlter;
     const NKikimrKqp::EQueryType QueryType;
     const TQueryData::TPtr QueryData;
     const TActorId Target;

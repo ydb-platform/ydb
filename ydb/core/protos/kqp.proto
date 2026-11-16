@@ -287,6 +287,8 @@ message TKqpAlterTableRequest {
     repeated Ydb.Table.SetNotNullItem set_not_null = 23;
     repeated Ydb.Table.TableMultiColumnStatistics add_statistics = 24;
     repeated string drop_statistics = 25;
+    // Schema against which added generated expressions were validated by KQP.
+    optional TKqpTableMetadataProto table_metadata = 26;
 }
 
 message TRlPath {

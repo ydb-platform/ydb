@@ -1,6 +1,7 @@
 #include "logging.h"
 #include "private_events.h"
 #include "stream_remover.h"
+#include "stream_consumer_remover.h"
 #include "util.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -43,6 +44,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
                 0,
                 ProxyGeneration);
             break;
+        case TReplication::ETargetKind::Topic:
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("Unreachable");
         }
@@ -138,6 +140,7 @@ public:
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             return RequestPermission();
+        case TReplication::ETargetKind::Topic:
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("Unreachable");
         }
@@ -168,6 +171,9 @@ private:
 IActor* CreateStreamRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
+    if (target->GetKind() == TReplication::ETargetKind::Topic) {
+        return CreateStreamConsumerRemover(replication, targetId, ctx);
+    }
     return CreateStreamRemover(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamName());
 }

@@ -46,6 +46,9 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         tx.MutableDrop()->SetId(DstPathId.LocalPathId);
 
         switch (Kind) {
+        case TReplication::ETargetKind::Topic:
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
+            break;
         case TReplication::ETargetKind::Table:
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
             break;
@@ -174,6 +177,7 @@ public:
         } else {
             switch (Kind) {
             case TReplication::ETargetKind::Table:
+            case TReplication::ETargetKind::Topic:
                 return AllocateTxId();
             case TReplication::ETargetKind::IndexTable:
             case TReplication::ETargetKind::Transfer:

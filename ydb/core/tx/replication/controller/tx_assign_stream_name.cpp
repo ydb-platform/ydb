@@ -64,7 +64,8 @@ public:
                 consumerName = CreateGuidAsString();
             }
         } else {
-            consumerName = ReplicationConsumerName;
+            consumerName = target->GetKind() == TReplication::ETargetKind::Topic
+                ? target->GetStreamName() : ReplicationConsumerName;
         }
         target->SetStreamConsumerName(consumerName);
 

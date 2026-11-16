@@ -3,6 +3,7 @@
 #include "private_events.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -39,6 +40,53 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
+        if (Kind == TReplication::ETargetKind::Topic) {
+            Send(PipeCache, new TEvPipeCache::TEvForward(
+                new TEvSchemeShard::TEvDescribeScheme(DstPathId), SchemeShardId));
+            Become(&TThis::StateDescribeTopic);
+        } else {
+            AlterDst();
+        }
+    }
+
+    STATEFN(StateDescribeTopic) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, HandleTopic);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void HandleTopic(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        const auto& record = ev->Get()->GetRecord();
+        if (record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
+            return Success();
+        }
+        if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
+            return Error(record.GetStatus(), record.GetReason());
+        }
+        if (!record.GetPathDescription().HasPersQueueGroup()) {
+            return Error(NKikimrScheme::StatusSchemeError, "Destination is not a topic");
+        }
+        TopicTx.Clear();
+        TopicTx.SetWorkingDir(TString(ExtractParent(record.GetPath())));
+        TopicTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup);
+        auto& alter = *TopicTx.MutableAlterPersQueueGroup();
+        alter.SetName(record.GetPathDescription().GetSelf().GetName());
+        alter.SetPathId(DstPathId.LocalPathId);
+        alter.MutablePQTabletConfig()->CopyFrom(record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig());
+        auto& partition = *alter.MutablePQTabletConfig()->MutablePartitionConfig();
+        if (DesiredState == TReplication::EState::Ready) {
+            if (TopicMirror.Error) {
+                return Error(NKikimrScheme::StatusInvalidParameter, TopicMirror.Error);
+            }
+            partition.MutableMirrorFrom()->CopyFrom(TopicMirror.Config);
+        } else {
+            partition.ClearMirrorFrom();
+        }
+        auto& condition = *TopicTx.AddApplyIf();
+        condition.SetPathId(DstPathId.LocalPathId);
+        condition.SetPathVersion(record.GetPathDescription().GetSelf().GetPathVersion());
         AlterDst();
     }
 
@@ -54,6 +102,10 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             DstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
             tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
                 NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+            break;
+        case TReplication::ETargetKind::Topic:
+            tx.CopyFrom(TopicTx);
+            tx.SetInternal(true);
             break;
         case TReplication::ETargetKind::Transfer:
             break;
@@ -88,6 +140,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         case NKikimrScheme::StatusAccepted:
             WaitingForCompletion = true;
             return SubscribeTx(record.GetTxId());
+        case NKikimrScheme::StatusPreconditionFailed:
         case NKikimrScheme::StatusMultipleModifications:
         case NKikimrScheme::StatusResourceExhausted:
             // Concurrent DDL and SchemeShard in-flight limits are temporary.
@@ -205,7 +258,8 @@ public:
             ui64 tid,
             TReplication::ETargetKind kind,
             const TPathId& dstPathId,
-            const TReplication::EState desiredState)
+            const TReplication::EState desiredState,
+            const TTopicMirrorSettings& topicMirror)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , ReplicationId(rid)
@@ -213,12 +267,16 @@ public:
         , Kind(kind)
         , DstPathId(dstPathId)
         , DesiredState(desiredState)
+        , TopicMirror(topicMirror)
         , LogPrefix(CreateActorLogPrefix("DstAlterer", ReplicationId, TargetId))
     {
     }
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
+        if (Kind == TReplication::ETargetKind::Topic) {
+            return DstPathId ? AllocateTxId() : Success();
+        }
         switch (DesiredState) {
         case TReplication::EState::Done:
             if (!DstPathId) {
@@ -228,6 +286,7 @@ public:
                 case TReplication::ETargetKind::Table:
                 case TReplication::ETargetKind::IndexTable:
                     return AllocateTxId();
+                case TReplication::ETargetKind::Topic:
                 case TReplication::ETargetKind::Transfer:
                     return Success();
                 }
@@ -258,6 +317,8 @@ private:
     const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
     const TReplication::EState DesiredState;
+    const TTopicMirrorSettings TopicMirror;
+    NKikimrSchemeOp::TModifyScheme TopicTx;
     NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
@@ -272,13 +333,15 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(), replication->GetDesiredState());
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(),
+        replication->GetState() == TReplication::EState::Removing ? TReplication::EState::Done : replication->GetDesiredState(),
+        TTopicMirrorSettings(*replication, *target));
 }
 
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
-        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState)
+        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState, const TTopicMirrorSettings& topicMirror)
 {
-    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState);
+    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState, topicMirror);
 }
 
 }

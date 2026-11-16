@@ -239,11 +239,17 @@ const std::optional<TDuration> TTargetBase::GetLag() const {
 void TTargetBase::Progress(const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:
+        if (Kind == ETargetKind::Topic && Replication->GetDesiredState() == TReplication::EState::Paused) {
+            break;
+        }
         if (!DstCreator) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         }
         break;
     case EDstState::Ready:
+        if (Kind == ETargetKind::Topic) {
+            break;
+        }
         if (WorkerRegistar && WorkerRegistarProxy != Replication->GetYdbProxy()) {
             // Registration also captures connection settings for the workers.
             // Restart this read-only actor so both its proxy and settings refresh.
@@ -256,7 +262,9 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         break;
     case EDstState::Alter: {
         const bool needsCreator = !DstCreator && !DstPathId;
-        const bool canAttach = !ShouldWaitForAttachment(Replication)
+        const bool canAttach = Replication->GetState() != TReplication::EState::Removing
+            && !(Kind == ETargetKind::Topic && Replication->GetDesiredState() == TReplication::EState::Paused)
+            && !ShouldWaitForAttachment(Replication)
             && Replication->GetDesiredState() != TReplication::EState::Done;
         if (Workers) {
             RemoveWorkers(ctx);

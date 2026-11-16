@@ -474,6 +474,43 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         TerminalSourceDiscoveryError(NYdb::EStatus::BAD_REQUEST, "Invalid source settings");
     }
 
+    Y_UNIT_TEST(TopicAdmissionRequiresFlagAndRowConsistency) {
+        const auto discover = [](TEnv<>& env, bool global, bool secret = false) {
+            auto config = CreateConfig({{"/Root/Topic", "/Root/Replica"}});
+            if (global) {
+                config.MutableConsistencySettings()->MutableGlobal();
+            } else {
+                config.MutableConsistencySettings()->MutableRow();
+            }
+            if (secret) {
+                config.MutableSrcConnectionParams()->MutableOAuthToken()->SetTokenSecretName("/Root/token");
+            }
+            env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(), config));
+            return env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
+        };
+
+        TEnv disabled;
+        disabled.CreateTopic("/Root", *MakeTopicDescription(DummyTopic()));
+        auto result = discover(disabled, false);
+        UNIT_ASSERT(!result->Get()->IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Failed.front().Error.GetIssues().ToOneLineString(),
+            "EnableReplicationControllerTopicMirroring");
+
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableReplicationControllerTopicMirroring(true);
+        TEnv enabled(flags);
+        enabled.CreateTopic("/Root", *MakeTopicDescription(DummyTopic()));
+        result = discover(enabled, false);
+        UNIT_ASSERT(result->Get()->IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ToAdd.front().Kind, TReplication::ETargetKind::Topic);
+        result = discover(enabled, true);
+        UNIT_ASSERT(!result->Get()->IsSuccess());
+        result = discover(enabled, false, true);
+        UNIT_ASSERT(!result->Get()->IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Failed.front().Error.GetIssues().ToOneLineString(),
+            "mirrorer secrets dependency");
+    }
+
     Y_UNIT_TEST(RetryableError) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);

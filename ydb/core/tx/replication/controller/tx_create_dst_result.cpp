@@ -66,7 +66,9 @@ public:
         if (Ev->Get()->IsSuccess()) {
             const bool wasAltering = dstState == TReplication::EDstState::Alter;
             target->SetDstPathId(Ev->Get()->DstPathId);
-            if (Replication->GetDesiredState() == TReplication::EState::Done) {
+            if (Replication->GetDesiredState() == TReplication::EState::Done
+                || (target->GetKind() == TReplication::ETargetKind::Topic
+                    && Replication->GetDesiredState() == TReplication::EState::Paused)) {
                 target->SetDstState(TReplication::EDstState::Alter);
             } else if (Ev->Get()->WaitingImport) {
                 if (Replication->GetDesiredState() == TReplication::EState::Paused) {

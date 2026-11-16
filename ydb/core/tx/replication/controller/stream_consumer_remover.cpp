@@ -109,6 +109,7 @@ public:
         case TReplication::ETargetKind::IndexTable:
             Y_ABORT("Unreachable");
         case TReplication::ETargetKind::Transfer:
+        case TReplication::ETargetKind::Topic:
             if (NeedDrop) {
                 return RequestPermission();
             } else {

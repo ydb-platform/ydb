@@ -8,6 +8,7 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/kqp/common/events
     ydb/services/scheme_secret
+    ydb/core/persqueue/public/schema
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
@@ -51,6 +52,7 @@ SRCS(
     target_base.cpp
     target_discoverer.cpp
     target_table.cpp
+    target_topic.cpp
     target_transfer.cpp
     target_with_stream.cpp
     tenant_resolver.cpp

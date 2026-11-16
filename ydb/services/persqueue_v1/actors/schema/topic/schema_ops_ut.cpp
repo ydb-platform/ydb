@@ -1204,6 +1204,48 @@ Y_UNIT_TEST(CreateTopicUnknownCodecRejected) {
     AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "Unknown codec");
 }
 
+Y_UNIT_TEST(AlterReplicationConsumer) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
+    const TString path = "/Root/topic_replication_consumer";
+    CreateTopic(runtime, path);
+
+    auto alter = [&](Ydb::Topic::AlterTopicRequest request) {
+        request.set_path(path);
+        auto result = DoActorRequest<Ydb::Topic::AlterTopicRequest, Ydb::Topic::AlterTopicResponse>(
+            runtime, request, CreateAlterTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    };
+    auto assertReplicationConsumer = [&] {
+        const auto config = DescribeTabletConfig(runtime, path);
+        const auto* consumer = NPQ::GetConsumer(config, "replication");
+        UNIT_ASSERT(consumer);
+        UNIT_ASSERT(consumer->GetImportant());
+        UNIT_ASSERT(consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    };
+
+    Ydb::Topic::AlterTopicRequest add;
+    auto* consumer = add.add_add_consumers();
+    consumer->set_name("replication");
+    consumer->set_important(true);
+    (*add.mutable_alter_attributes())["_ydb_replication_consumer"] = "replication";
+    alter(add);
+    assertReplicationConsumer();
+
+    Ydb::Topic::AlterTopicRequest unrelated;
+    unrelated.set_set_partition_write_speed_bytes_per_second(9000);
+    alter(unrelated);
+    assertReplicationConsumer();
+
+    Ydb::Topic::AlterTopicRequest drop;
+    drop.add_drop_consumers("replication");
+    alter(drop);
+    const auto config = DescribeTabletConfig(runtime, path);
+    UNIT_ASSERT(!NPQ::GetConsumer(config, "replication"));
+    UNIT_ASSERT(NPQ::GetConsumer(config, "user"));
+}
+
 Y_UNIT_TEST(CreateTopicSharedConsumer) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();

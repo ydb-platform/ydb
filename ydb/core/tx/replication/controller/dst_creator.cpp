@@ -4,6 +4,7 @@
 #include "util.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -226,6 +227,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                     RetryGeneration);
             }
             break;
+        case TReplication::ETargetKind::Topic:
+            Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(SrcPath, {}), 0, RetryGeneration);
+            break;
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
@@ -236,6 +240,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             {"actorState", "StateDescribeSrcPath"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
+            hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
@@ -377,6 +382,52 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         AllocateTxId();
     }
 
+    void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        if (ev->Cookie != RetryGeneration) {
+            return;
+        }
+        const auto& result = ev->Get()->Result;
+        if (!result.IsSuccess()) {
+            if (IsRetryableError(result)) {
+                return Retry();
+            }
+            return Error(ConvertStatus(result.GetStatus()), result.GetIssues().ToOneLineString());
+        }
+        if (TopicMirror.Error) {
+            return Error(NKikimrScheme::StatusInvalidParameter, TopicMirror.Error);
+        }
+        Ydb::Topic::CreateTopicRequest request;
+        const auto& description = result.GetTopicDescription();
+        description.SerializeTo(request);
+        request.mutable_partitioning_settings()->set_min_active_partitions(description.GetPartitions().size());
+        const auto& source = NYdb::TProtoAccessor::GetProto(description);
+        request.set_partition_total_read_speed_bytes_per_second(source.partition_total_read_speed_bytes_per_second());
+        request.set_partition_write_burst_messages(source.partition_write_burst_messages());
+        request.set_partition_total_read_speed_messages_per_second(source.partition_total_read_speed_messages_per_second());
+        request.set_content_based_deduplication(source.content_based_deduplication());
+        request.set_partition_write_speed_messages_per_second(source.partition_write_speed_messages_per_second());
+        request.set_partition_read_without_consumer_speed_bytes_per_second(source.partition_read_without_consumer_speed_bytes_per_second());
+        request.set_partition_read_without_consumer_speed_messages_per_second(source.partition_read_without_consumer_speed_messages_per_second());
+        for (int i = request.consumers_size() - 1; i >= 0; --i) {
+            if (request.consumers(i).name() == TopicMirror.Config.GetConsumer()) {
+                request.mutable_consumers()->DeleteSubrange(i, 1);
+            }
+        }
+        std::pair<TString, TString> path;
+        TString error;
+        if (!TrySplitPathByDb(DstPath, Database, path, error)) {
+            return Error(NKikimrScheme::StatusInvalidParameter, error);
+        }
+        TxBody.Clear();
+        auto proposal = NPQ::NSchema::ProposeCreateTopic(TxBody, std::move(request), Database, path.first, path.second);
+        if (!proposal) {
+            return Error(NKikimrScheme::StatusInvalidParameter, proposal.GetErrorMessage());
+        }
+        TxBody.MutableCreatePersQueueGroup()->MutablePQTabletConfig()->MutablePartitionConfig()
+            ->MutableMirrorFrom()->CopyFrom(TopicMirror.Config);
+        AllocateTxId();
+    }
+
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
         if (CreatePlaceholder) {
@@ -408,7 +459,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         PipeCache = ev->Get()->Services.LeaderPipeCache;
         if (DropIndexTx.HasDropIndex()) {
             ExecuteSchemeTx(DropIndexTx);
-        } else if (InitialScan || CreatePlaceholder) {
+        } else if (InitialScan || CreatePlaceholder || Kind == TReplication::ETargetKind::Topic) {
             CreateDst();
         } else {
             DescribeDstPath();
@@ -573,7 +624,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return Success();
         }
         case NKikimrScheme::StatusPathDoesNotExist:
-            if (!InitialScan) {
+            if (!InitialScan && Kind != TReplication::ETargetKind::Topic) {
                 return Error(record.GetStatus(), TStringBuilder() << "`" << DstPath << "` does not exist");
             }
             return AllocateTxId();
@@ -594,6 +645,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             return CheckTableScheme(desc.GetTable(), error);
+        case TReplication::ETargetKind::Topic:
+            if (desc.HasPersQueueGroup() && desc.GetPersQueueGroup().GetPQTabletConfig()
+                .GetPartitionConfig().GetMirrorFrom().GetConsumer() == TopicMirror.Config.GetConsumer()) {
+                return true;
+            }
+            error = "Destination topic already exists with a different mirroring configuration";
+            return false;
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
@@ -839,6 +897,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::Topic:
             return;
         case TReplication::ETargetKind::Transfer:
             return Error(NKikimrScheme::EStatus::StatusPathDoesNotExist,
@@ -961,7 +1020,8 @@ public:
             EConsistencyLevel consistency,
             const TString& database,
             bool initialScan,
-            TReplication::EState desiredState)
+            TReplication::EState desiredState,
+            const TTopicMirrorSettings& topicMirror)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -974,8 +1034,10 @@ public:
         , Mode(mode)
         , Consistency(consistency)
         , InitialScan(initialScan)
-        , CreatePlaceholder(!initialScan && desiredState == TReplication::EState::Paused)
+        , CreatePlaceholder(kind != TReplication::ETargetKind::Topic
+            && !initialScan && desiredState == TReplication::EState::Paused)
         , DesiredState(desiredState)
+        , TopicMirror(topicMirror)
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
     {
@@ -985,6 +1047,7 @@ public:
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
         switch (Kind) {
         case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::Topic:
             return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
             if (!InitialScan && !CreatePlaceholder) {
@@ -1024,6 +1087,7 @@ private:
     const bool InitialScan;
     const bool CreatePlaceholder;
     const TReplication::EState DesiredState;
+    const TTopicMirrorSettings TopicMirror;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
@@ -1109,16 +1173,16 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
-        replication->GetConfig().GetInitialScan(), replication->GetDesiredState());
+        replication->GetConfig().GetInitialScan(), replication->GetDesiredState(), TTopicMirrorSettings(*replication, *target));
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
-        TReplication::EState desiredState)
+        TReplication::EState desiredState, const TTopicMirrorSettings& topicMirror)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState, topicMirror);
 }
 
 }

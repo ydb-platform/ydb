@@ -63,7 +63,13 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->RemoveTarget(db, *Replication, tid);
+        if (target->GetKind() == TReplication::ETargetKind::Topic
+            && target->GetStreamState() != TReplication::EStreamState::Removed) {
+            target->SetDstState(TReplication::EDstState::Done);
+            db.Table<Schema::Targets>().Key(rid, tid).Update<Schema::Targets::DstState>(target->GetDstState());
+        } else {
+            Self->RemoveTarget(db, *Replication, tid);
+        }
 
         return true;
     }

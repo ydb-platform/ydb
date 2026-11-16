@@ -38,6 +38,7 @@ public:
         Table,
         IndexTable,
         Transfer,
+        Topic,
     };
 
     enum class EDstState: ui8 {

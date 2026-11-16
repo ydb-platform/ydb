@@ -2,9 +2,11 @@
 #include "private_events.h"
 #include "target_discoverer.h"
 #include "target_table.h"
+#include "target_topic.h"
 #include "target_transfer.h"
 #include "util.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -62,6 +64,17 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 }
                 break;
             case NYdb::NScheme::ESchemeEntryType::Topic:
+                if (IsReplication()) {
+                    if (!AppData()->FeatureFlags.GetEnableReplicationControllerTopicMirroring()) {
+                        Pending.erase(it);
+                        NYdb::NIssue::TIssues issues;
+                        issues.AddIssue("Topic replication is disabled by EnableReplicationControllerTopicMirroring");
+                        Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
+                        MaybeReply();
+                        return;
+                    }
+                    return DescribeTopic(ev->Cookie);
+                }
                 if (IsTransfer()) {
                     return DescribeTopic(ev->Cookie);
                 }
@@ -189,12 +202,49 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             YDB_LOG_DEBUG("Describe topic succeeded",
                 {"path", path.first});
 
-            const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
-                std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, Config));
-            YDB_LOG_INFO("Add target",
-                {"srcPath", target.Config->GetSrcPath()},
-                {"dstPath", target.Config->GetDstPath()},
-                {"kind", target.Kind});
+            const auto& description = result.GetTopicDescription();
+            TString error;
+            if (IsReplication() && description.GetAttributes().contains("__async_replication")) {
+                error = "CDC topics cannot be replication sources";
+            } else if (IsReplication() && Config.GetConsistencySettings().GetLevelCase()
+                != NKikimrReplication::TConsistencySettings::kRow)
+            {
+                error = "Topic replication supports row consistency only";
+            } else if (IsReplication() && description.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()
+                != NYdb::NTopic::EAutoPartitioningStrategy::Disabled)
+            {
+                error = "Topic replication requires fixed partitions";
+            } else if (IsReplication() && !Config.GetSrcConnectionParams().GetOAuthToken().GetTokenSecretName().empty()) {
+                // TODO(KIKIMR-27673, #59067): remove after wiring mirrorer secret references.
+                error = "Topic mirroring secret references require the mirrorer secrets dependency";
+            }
+
+            if (IsReplication() && error.empty()) {
+                const auto& partitions = description.GetPartitions();
+                if (partitions.empty()) {
+                    error = "Source topic has no partitions";
+                }
+                for (const auto& partition : partitions) {
+                    if (!partition.GetActive() || partition.GetPartitionId() >= partitions.size()
+                        || !partition.GetParentPartitionIds().empty() || !partition.GetChildPartitionIds().empty())
+                    {
+                        error = "Topic replication requires unsplit contiguous partitions";
+                        break;
+                    }
+                }
+            }
+
+            if (error) {
+                NYdb::NIssue::TIssues issues;
+                issues.AddIssue(error);
+                Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
+            } else if (IsReplication()) {
+                ToAdd.emplace_back(TReplication::ETargetKind::Topic,
+                    std::make_shared<TTargetTopic::TTopicConfig>(path.first, path.second));
+            } else {
+                ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
+                    std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, Config));
+            }
         } else {
             YDB_LOG_ERROR("Describe topic failed",
                 {"path", path.first},

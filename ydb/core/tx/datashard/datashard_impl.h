@@ -284,6 +284,7 @@ class TDataShard
     friend class TScanTransactionProcessor;
     friend class TDataShardEngineHost;
     friend class TExecuteKqpScanTxUnit;
+    friend class TAlterTableUnit;
     friend class TTableScan;
     friend class TKqpScan;
 

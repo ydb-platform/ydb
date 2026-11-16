@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/security/external_idp/test_utils
     ydb/core/testlib/default
     ydb/core/testlib/audit_helpers
+    ydb/core/tx/schemeshard/ut_helpers
     ydb/library/testlib/service_mocks
     ydb/library/testlib/service_mocks/ldap_mock
     ydb/public/sdk/cpp/src/client/query

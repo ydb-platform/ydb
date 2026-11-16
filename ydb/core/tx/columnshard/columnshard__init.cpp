@@ -112,7 +112,7 @@ void TTxInit::Complete(const TActorContext& ctx) {
         {"tabletId", Self->TabletID()},
         {"process", "TTxInit::Complete"});
     Self->StartupTimeline.OnTxInitFinished();
-    AFL_VERIFY(!Self->IsTxInitFinished);
+    YDB_LOG_VERIFY(!Self->IsTxInitFinished);
     Self->IsTxInitFinished = true;
     Self->TrySwitchToWork(ctx);
     if (Self->SpaceWatcher->SubDomainPathId) {
@@ -181,7 +181,8 @@ void TTxUpdateSchema::Complete(const TActorContext& ctx) {
     YDB_LOG_INFO("",
         {"step", "TTxUpdateSchema.Complete"});
     if (NormalizerTasks.empty()) {
-        AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
+        YDB_LOG_VERIFY(Self->NormalizerController.IsNormalizationFinished(),
+            {"details", Self->NormalizerController.DebugString()});
         Self->Execute(new TTxInit(Self), ctx);
         return;
     }
@@ -244,7 +245,8 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
         {"tabletId", Self->TabletID()},
         {"event", "TTxApplyNormalizer::Complete"});
-    AFL_VERIFY(!Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
+    YDB_LOG_VERIFY(!Self->NormalizerController.IsNormalizationFinished(),
+        {"details", Self->NormalizerController.DebugString()});
     YDB_LOG_WARN("",
         {"event", "apply_normalizer_changes"},
         {"details", Self->NormalizerController.DebugString()},
@@ -265,7 +267,8 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     if (Self->NormalizerController.SwitchNormalizer()) {
         Self->Execute(new TTxUpdateSchema(Self), ctx);
     } else {
-        AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
+        YDB_LOG_VERIFY(Self->NormalizerController.IsNormalizationFinished(),
+            {"details", Self->NormalizerController.DebugString()});
         Self->Execute(new TTxInit(Self), ctx);
     }
 }

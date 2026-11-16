@@ -23,7 +23,7 @@ NKikimr::TConclusionStatus TTabletByBlob::DeserializeFromProto(const NKikimrColu
         if (!parse) {
             return parse;
         }
-        AFL_VERIFY(Data.emplace(*parse, (TTabletId)i.GetTabletId()).second);
+        YDB_LOG_VERIFY(Data.emplace(*parse, (TTabletId)i.GetTabletId()).second);
     }
     return TConclusionStatus::Success();
 }
@@ -48,7 +48,7 @@ NKikimr::TConclusionStatus TTabletsByBlob::DeserializeFromProto(const NKikimrCol
         }
         auto it = Data.emplace(*parse, THashSet<TTabletId>()).first;
         for (auto&& t : i.GetTabletIds()) {
-            AFL_VERIFY(it->second.emplace((TTabletId)t).second);
+            YDB_LOG_VERIFY(it->second.emplace((TTabletId)t).second);
             ++Size;
         }
     }

@@ -79,7 +79,7 @@ public:
     }
 
     TGenStep GetMinGenStepVerified() const {
-        AFL_VERIFY(Blobs.size());
+        YDB_LOG_VERIFY(Blobs.size());
         return TGenStep(*Blobs.begin());
     }
 
@@ -191,12 +191,12 @@ public:
         }
 
         const TUnifiedBlobId& GetBlobId() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return BlobsIterator->first;
         }
 
         TTabletId GetTabletId() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return *TabletsIterator;
         }
 
@@ -205,7 +205,7 @@ public:
         }
 
         void operator++() {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             ++TabletsIterator;
             if (TabletsIterator == BlobsIterator->second.end()) {
                 ++BlobsIterator;
@@ -225,14 +225,14 @@ public:
             return false;
         }
         auto& b = Data.begin()->second;
-        AFL_VERIFY(b.size());
+        YDB_LOG_VERIFY(b.size());
         tabletId = *b.begin();
         blobId = Data.begin()->first;
         b.erase(b.begin());
         if (b.empty()) {
             Data.erase(Data.begin());
         }
-        AFL_VERIFY(--Size >= 0);
+        YDB_LOG_VERIFY(--Size >= 0);
         return true;
     }
 
@@ -242,7 +242,7 @@ public:
         if (!ExtractFront(tabletId, blobId)) {
             return false;
         }
-        AFL_VERIFY(dest.Add(tabletId, blobId));
+        YDB_LOG_VERIFY(dest.Add(tabletId, blobId));
         return true;
     }
 
@@ -251,9 +251,9 @@ public:
         if (it == Data.end()) {
             return false;
         }
-        AFL_VERIFY(dest.Add(blobId, it->second));
+        YDB_LOG_VERIFY(dest.Add(blobId, it->second));
         Size -= it->second.size();
-        AFL_VERIFY(Size >= 0);
+        YDB_LOG_VERIFY(Size >= 0);
         Data.erase(it);
         return true;
     }
@@ -318,7 +318,7 @@ public:
             return false;
         }
         it->second.erase(itTablet);
-        AFL_VERIFY(--Size >= 0);
+        YDB_LOG_VERIFY(--Size >= 0);
         if (it->second.empty()) {
             Data.erase(it);
         }
@@ -350,12 +350,12 @@ public:
         }
 
         const TUnifiedBlobId& GetBlobId() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return *BlobsIterator;
         }
 
         TTabletId GetTabletId() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return TabletsIterator->first;
         }
 
@@ -364,7 +364,7 @@ public:
         }
 
         void operator++() {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             ++BlobsIterator;
             if (BlobsIterator == TabletsIterator->second.end()) {
                 ++TabletsIterator;
@@ -549,12 +549,12 @@ public:
         }
 
         const TUnifiedBlobId& GetBlobId() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return CurrentIterator->GetBlobId();
         }
 
         TTabletId GetTabletId() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return CurrentIterator->GetTabletId();
         }
 
@@ -563,7 +563,7 @@ public:
         }
 
         void operator++() {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             ++*CurrentIterator;
             if (!CurrentIterator->IsValid()) {
                 SwitchIterator();
@@ -576,15 +576,15 @@ public:
     }
 
     void AddDirect(const TTabletId tabletId, const TUnifiedBlobId& id) {
-        AFL_VERIFY(Direct.Add(tabletId, id));
+        YDB_LOG_VERIFY(Direct.Add(tabletId, id));
     }
 
     void AddBorrowed(const TTabletId tabletId, const TUnifiedBlobId& id) {
-        AFL_VERIFY(Borrowed.Add(tabletId, id));
+        YDB_LOG_VERIFY(Borrowed.Add(tabletId, id));
     }
 
     void AddSharing(const TTabletId tabletId, const TUnifiedBlobId& id) {
-        AFL_VERIFY(Sharing.Add(tabletId, id));
+        YDB_LOG_VERIFY(Sharing.Add(tabletId, id));
     }
 
     [[nodiscard]] bool RemoveSharing(const TTabletId tabletId, const TUnifiedBlobId& id) {

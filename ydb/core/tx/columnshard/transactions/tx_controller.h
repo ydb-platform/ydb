@@ -25,7 +25,7 @@ public:
         : TxKind(txKind)
         , TxId(txId)
     {
-        AFL_VERIFY(txKind != NKikimrTxColumnShard::TX_KIND_NONE);
+        YDB_LOG_VERIFY(txKind != NKikimrTxColumnShard::TX_KIND_NONE);
     }
 
     bool operator==(const TBasicTxInfo& item) const = default;
@@ -156,12 +156,12 @@ public:
     }
 
     const TFullTxInfo& GetFullTxInfoVerified() const {
-        AFL_VERIFY(!!FullTxInfo);
+        YDB_LOG_VERIFY(!!FullTxInfo);
         return *FullTxInfo;
     }
 
     const TBasicTxInfo& GetBaseTxInfoVerified() const {
-        AFL_VERIFY(!!BaseTxInfo);
+        YDB_LOG_VERIFY(!!BaseTxInfo);
         return *BaseTxInfo;
     }
 };
@@ -308,12 +308,12 @@ public:
         }
 
         const TTxController::TProposeResult& GetProposeStartInfoVerified() const {
-            AFL_VERIFY(!!ProposeStartInfo);
+            YDB_LOG_VERIFY(!!ProposeStartInfo);
             return *ProposeStartInfo;
         }
 
         void SetProposeStartInfo(const TTxController::TProposeResult& info) {
-            AFL_VERIFY(!ProposeStartInfo);
+            YDB_LOG_VERIFY(!ProposeStartInfo);
             ProposeStartInfo = info;
             if (IsFail()) {
                 Status = EStatus::Failed;
@@ -359,7 +359,7 @@ public:
         bool Parse(TColumnShard& owner, const TString& data, const bool onLoad = false) {
             const bool result = DoParse(owner, data);
             if (!result) {
-                AFL_VERIFY(!onLoad);
+                YDB_LOG_VERIFY(!onLoad);
                 ProposeStartInfo = TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
                     TStringBuilder() << "Error processing commit TxId# " << TxInfo.TxId << ". Parsing error");
                 SwitchStateVerified(EStatus::Created, EStatus::Failed);
@@ -379,7 +379,7 @@ public:
             if (Status == EStatus::ReplySent) {
                 return DoSendReply(owner, ctx);
             }
-            AFL_VERIFY(!!ProposeStartInfo);
+            YDB_LOG_VERIFY(!!ProposeStartInfo);
             if (ProposeStartInfo->IsFail()) {
                 SwitchStateVerified(EStatus::Failed, EStatus::ReplySent);
             } else {
@@ -389,8 +389,8 @@ public:
         }
 
         bool StartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
-            AFL_VERIFY(!ProposeStartInfo);
-            AFL_VERIFY(!IsFail());
+            YDB_LOG_VERIFY(!ProposeStartInfo);
+            YDB_LOG_VERIFY(!IsFail());
             ProposeStartInfo = DoStartProposeOnExecute(owner, txc);
             if (ProposeStartInfo->IsFail()) {
                 SwitchStateVerified(EStatus::Parsed, EStatus::Failed);
@@ -401,8 +401,8 @@ public:
         }
 
         void StartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) {
-            AFL_VERIFY(!IsFail());
-            AFL_VERIFY(IsAsync());
+            YDB_LOG_VERIFY(!IsFail());
+            YDB_LOG_VERIFY(IsAsync());
             return DoStartProposeOnComplete(owner, ctx);
         }
 
@@ -411,9 +411,9 @@ public:
             if (Status == EStatus::ReplySent) {
                 return;
             }
-            AFL_VERIFY(!IsFail());
+            YDB_LOG_VERIFY(!IsFail());
             SwitchStateVerified(EStatus::ProposeStartedOnExecute, EStatus::ProposeFinishedOnExecute);
-            AFL_VERIFY(IsAsync() || StartedAsync);
+            YDB_LOG_VERIFY(IsAsync() || StartedAsync);
             return DoFinishProposeOnExecute(owner, txc);
         }
 
@@ -423,7 +423,7 @@ public:
                 return;
             }
             if (IsFail()) {
-                AFL_VERIFY(Status == EStatus::Failed);
+                YDB_LOG_VERIFY(Status == EStatus::Failed);
             } else if (IsAsync() || StartedAsync) {
                 SwitchStateVerified(EStatus::ProposeFinishedOnExecute, EStatus::ProposeFinishedOnComplete);
             } else {
@@ -443,11 +443,12 @@ public:
         virtual bool CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) = 0;
 
         virtual void RegisterSubscriber(const TActorId&) {
-            AFL_VERIFY(false)("message", "Not implemented");
+            YDB_LOG_VERIFY(false,
+                {"message", "Not implemented"});
         };
 
         void OnTabletInit(TColumnShard& owner) {
-            AFL_VERIFY(!StartedAsync);
+            YDB_LOG_VERIFY(!StartedAsync);
             StartedAsync = true;
             DoOnTabletInit(owner);
         }
@@ -497,7 +498,8 @@ public:
             return nullptr;
         }
         auto resultClass = dynamic_pointer_cast<TExpectedTransactionOperator>(result);
-        AFL_VERIFY(resultClass)("tx_id", txId);
+        YDB_LOG_VERIFY(resultClass,
+            {"txId", txId});
         return resultClass;
     }
 

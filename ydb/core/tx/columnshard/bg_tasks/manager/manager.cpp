@@ -110,7 +110,7 @@ bool TSessionsManager::HasTask(const TTask& task) const {
 
 ISessionLogic::TStatus TSessionsManager::GetStatus(const TString& className, const TString& identifier) const {
     auto session = Storage->GetSession(className, identifier);
-    AFL_VERIFY(session);
+    YDB_LOG_VERIFY(session);
     return session->GetStatus();
 }
 

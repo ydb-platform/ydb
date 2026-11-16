@@ -6190,8 +6190,13 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            if (isYql && IsDataOrOptionalOfData(lambda->GetTypeAnn())) {
-                if (!EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx.Expr, /*allowOptional=*/true)) {
+            if (isYql) {
+                if (RemoveOptionalType(lambda->GetTypeAnn())->GetKind() == ETypeAnnotationKind::Universal) {
+                    input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                    return IGraphTransformer::TStatus::Ok;
+                }
+
+                if (!IsNull(*lambda) && !EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx.Expr, /*allowOptional=*/true)) {
                     return IGraphTransformer::TStatus::Error;
                 }
             } else {

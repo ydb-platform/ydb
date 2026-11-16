@@ -526,8 +526,13 @@ namespace {
         case EDataFormat::Default:
         case EDataFormat::Pretty:
         {
-            auto table = MakeTable(operation);
-            PrettyPrint(operation, table);
+            const TOperation& baseOperation = operation;
+            auto table = operation.HasMetadata() ? MakeTable(operation) : MakeTable(baseOperation);
+            if (operation.HasMetadata()) {
+                PrettyPrint(operation, table);
+            } else {
+                PrettyPrint(baseOperation, table);
+            }
             Cout << table << Endl;
             break;
         }

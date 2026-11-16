@@ -1,6 +1,6 @@
 * Cluster administration commands that allow omitting `--database` now reject tenant paths. Specify a root domain such as `/Root`, or omit the connection database.
 * Added `ydb admin cluster reassign-tablets` to start bulk tablet channel reassignment in the Hive selected by `--database`, with progress available through `ydb operation get` and cancellation through `ydb operation cancel`.
-* `ydb operation get` displays returned operation data even when the operation status indicates failure, while retaining a nonzero exit code.
+* `ydb operation get` displays returned operation data even when the operation status indicates failure, while retaining a nonzero exit code. When metadata is unavailable, pretty output shows only common operation fields.
 * `ydb scheme rmdir --recursive` now removes objects in parallel. Added `--in-flight` option to set the maximum number of objects removed at the same time (default: 16).
 * Workload imports with `--file-output-path` now skip database post-import actions such as index building and statistics collection.
 * Fixed a crash when searching documentation in interactive AI mode.

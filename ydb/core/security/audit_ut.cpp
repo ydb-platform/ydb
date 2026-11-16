@@ -1,4 +1,3 @@
-#include <ydb/core/audit/audit_log.h>
 #include <ydb/core/base/test_failure_injection.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ut_common.h>
@@ -15,7 +14,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/scope.h>
 
 #include <optional>
 
@@ -789,12 +787,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
         return topic;
     }
 
-    Y_UNIT_TEST_FLAG(TopicChannelErrorsHaveReason, AuditEnabled) {
+    Y_UNIT_TEST(TopicChannelErrorsHaveReason) {
         std::vector<std::string> auditLines;
         TTestBasicRuntime runtime;
-        if (AuditEnabled) {
-            runtime.AuditLogBackends = Tests::CreateTestAuditLogBackends(auditLines);
-        }
+        runtime.AuditLogBackends = Tests::CreateTestAuditLogBackends(auditLines);
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -809,10 +805,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
         for (const auto& [count, reason] : cases) {
             TestAlterPQGroup(runtime, ++txId, "/MyRoot", TopicWithChannels(count).DebugString(),
                 {{NKikimrScheme::StatusInvalidParameter, reason}});
-            if (AuditEnabled) {
-                CheckAuditRecord(runtime, auditLines, txId, "ALTER PERSISTENT QUEUE",
-                    NKikimrScheme::StatusInvalidParameter, reason);
-            }
+            CheckAuditRecord(runtime, auditLines, txId, "ALTER PERSISTENT QUEUE",
+                NKikimrScheme::StatusInvalidParameter, reason);
         }
     }
 
@@ -860,12 +854,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
         std::vector<std::string> auditLines;
         TTestBasicRuntime runtime;
         runtime.AuditLogBackends = Tests::CreateTestAuditLogBackends(auditLines);
-        TSchemeShard* ss = nullptr;
-        auto factory = [&ss](const TActorId& tablet, TTabletStorageInfo* info) {
-            ss = new TSchemeShard(tablet, info);
-            return ss;
-        };
-        TTestEnv env(runtime, TTestEnvOptions(), factory);
+        TTestEnv env(runtime);
+        auto* ss = dynamic_cast<TSchemeShard*>(runtime.FindActor(ResolveTablet(runtime, TTestTxConfig::SchemeShard)));
+        UNIT_ASSERT(ss);
         ui64 txId = 100;
 
         NKikimrSchemeOp::TModifyScheme operation;
@@ -882,26 +873,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
         }
     }
 
-    Y_UNIT_TEST_FLAG(ErrorWithoutReasonIsLogged, AuditEnabled) {
+    Y_UNIT_TEST(ErrorWithoutReasonIsLogged) {
         std::vector<std::string> logLines;
         std::vector<std::string> auditLines;
         TTestBasicRuntime runtime;
         runtime.SetLogBackend(new Tests::TMemoryLogBackend(logLines));
-        if (AuditEnabled) {
-            runtime.AuditLogBackends = Tests::CreateTestAuditLogBackends(auditLines);
-        }
-        TSchemeShard* ss = nullptr;
-        auto factory = [&ss](const TActorId& tablet, TTabletStorageInfo* info) {
-            ss = new TSchemeShard(tablet, info);
-            return ss;
-        };
-        TTestEnv env(runtime, TTestEnvOptions(), factory);
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_CRIT);
-        const auto auditWasEnabled = NAudit::AUDIT_LOG_ENABLED.exchange(AuditEnabled);
-        Y_DEFER {
-            NAudit::AUDIT_LOG_ENABLED.store(auditWasEnabled);
-        };
-        ui64 txId = 100;
+        runtime.AuditLogBackends = Tests::CreateTestAuditLogBackends(auditLines);
+        TTestEnv env(runtime, TTestEnvOptions().SchemeShardLogPriority(NLog::PRI_CRIT));
+        auto* ss = dynamic_cast<TSchemeShard*>(runtime.FindActor(ResolveTablet(runtime, TTestTxConfig::SchemeShard)));
+        UNIT_ASSERT(ss);
+        const ui64 txId = 100;
 
         NKikimrSchemeOp::TModifyScheme operation;
         operation.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
@@ -914,8 +895,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
         });
 
         const std::string message = "Scheme operation failed without a reason";
-        runtime.WaitFor("missing reason diagnostic", [&] {
-            return AnyOf(logLines, [&](const auto& line) { return line.find(message) != std::string::npos; });
+        const std::string marker = "tx_id=" + std::to_string(txId);
+        runtime.WaitFor("missing reason diagnostic and audit record", [&] {
+            return AnyOf(logLines, [&](const auto& line) { return line.find(message) != std::string::npos; })
+                && AnyOf(auditLines, [&](const auto& line) { return line.find(marker) != std::string::npos; });
         }, TDuration::Seconds(10));
         const auto diagnostic = Tests::FindAuditLine(logLines, message);
         UNIT_ASSERT_STRING_CONTAINS(diagnostic, "FLAT_TX_SCHEMESHARD CRIT");
@@ -923,21 +906,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditLog) {
         UNIT_ASSERT_STRING_CONTAINS(diagnostic, "StatusInvalidParameter");
         UNIT_ASSERT_STRING_CONTAINS(diagnostic, "txId=100");
 
-        if (AuditEnabled) {
-            const std::string marker = "tx_id=" + std::to_string(txId);
-            runtime.WaitFor("scheme audit record without reason", [&] {
-                return AnyOf(auditLines, [&](const auto& line) { return line.find(marker) != std::string::npos; });
-            }, TDuration::Seconds(10));
-            const auto line = Tests::FindAuditLine(auditLines, marker);
-            UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
-            UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=StatusInvalidParameter");
-            UNIT_ASSERT(line.find("reason=") == std::string::npos);
-        } else {
-            UNIT_ASSERT(auditLines.empty());
-        }
-
-        TestMkDir(runtime, ++txId, "/MyRoot", "AfterMissingReason");
-        env.TestWaitNotification(runtime, txId);
+        const auto line = Tests::FindAuditLine(auditLines, marker);
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, "detailed_status=StatusInvalidParameter");
+        UNIT_ASSERT(line.find("reason=") == std::string::npos);
     }
 }
 

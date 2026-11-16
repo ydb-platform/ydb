@@ -2799,6 +2799,19 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         NDump::TClient backupClient(relativeDriver);
         UNIT_ASSERT_VALUES_EQUAL(backupClient.Restore(pathToBackup, "").GetStatus(), EStatus::BAD_REQUEST);
         UNIT_ASSERT_VALUES_EQUAL(backupClient.Restore(pathToBackup, "/").GetStatus(), EStatus::BAD_REQUEST);
+
+        for (const TString database : {"/Root/tenant", "tenant"}) {
+            TTempDir rootBackup;
+            NBackup::BackupFolder(driver, database, "/", rootBackup.Path(), {}, true, false);
+            UNIT_ASSERT((TFsPath(rootBackup.Path()) / "view" / NDump::NFiles::CreateView().FileName).Exists());
+            for (const TString path : {"/", "/Root"}) {
+                const auto rejectedBackup = TFsPath(rootBackup.Path()) / "outside";
+                const auto result = backupClient.Dump(path, rejectedBackup,
+                    NDump::TDumpSettings().Database(database).SchemaOnly(true).SavePartialResult(true));
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
+                UNIT_ASSERT(!rejectedBackup.Exists());
+            }
+        }
     }
 
     Y_UNIT_TEST(RestoreViewWithNamedExpressions) {

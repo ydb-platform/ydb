@@ -1347,10 +1347,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
         UNIT_ASSERT(overrunWarnings[0].Fields);
         const auto& fields = *overrunWarnings[0].Fields;
         UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("scanType").value_or(""), "build_index");
-        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("taskId").value_or(""), ToString(taskId));
-        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("admittedBytes").value_or(""), ToString(8_KB));
-        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("retainedBytes").value_or(""), ToString(10_KB));
-        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<TString>("overrunBytes").value_or(""), ToString(2_KB));
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<ui64>("taskId").value_or(0), taskId);
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<ui64>("admittedBytes").value_or(0), 8_KB);
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<ui64>("retainedBytes").value_or(0), 10_KB);
+        UNIT_ASSERT_VALUES_EQUAL(fields.GetValue<ui64>("overrunBytes").value_or(0), 2_KB);
     }
 
     class TAdmissionReadyScan : public NTable::IScan {

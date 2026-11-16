@@ -1,5 +1,7 @@
 #include "target_topic.h"
 
+#include <ydb/core/protos/replication.pb.h>
+
 namespace NKikimr::NReplication::NController {
 
 TTargetTopic::TTargetTopic(TReplication* replication, ui64 id, const IConfig::TPtr& config)

@@ -11,12 +11,12 @@
 
 namespace NKikimr::NCdcAggregator {
 
-struct TCdcAggregatorHeartbeatBatchItem {
-    ui64 SourceDataShardId = 0;
-    NPQ::THeartbeat Heartbeat;
-};
+using TCdcAggregatorHeartbeatBatch = THashMap<ui64, NPQ::THeartbeat>;
 
-using TCdcAggregatorHeartbeatBatch = TVector<TCdcAggregatorHeartbeatBatchItem>;
+struct TCdcAggregatorHeartbeatBatchResult {
+    THashMap<ui64, TRowVersion> WrittenVersionsBySourceDataShardId;
+    THashMap<ui64, TString> RejectionErrorsBySourceDataShardId;
+};
 
 struct TCdcAggregatorHeartbeatDeliveryReply {
     enum class EStatus {
@@ -37,7 +37,7 @@ public:
 
     void AddHeartbeat(ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat);
     std::optional<TCdcAggregatorHeartbeatBatch> PrepareNextBatchIfPossible();
-    TVector<TCdcAggregatorHeartbeatDeliveryReply> CompleteBatch(const THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>& tabletRepliesBySourceDataShardId);
+    TVector<TCdcAggregatorHeartbeatDeliveryReply> CompleteBatch(const TCdcAggregatorHeartbeatBatchResult& tabletBatchResult);
     TVector<TCdcAggregatorHeartbeatDeliveryReply> FailBatch(const TString& error);
 
     bool IsIdle() const {

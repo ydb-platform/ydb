@@ -8,15 +8,16 @@ namespace {
 
 using EStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
 
-TCdcAggregatorHeartbeatBatchItem PopOldestPending(TDeque<ui64>& sourceDataShardIdQueue, THashMap<ui64, NPQ::THeartbeat>& heartbeatsBySourceDataShardId) {
-    const ui64 sourceDataShardId = sourceDataShardIdQueue.front();
-    sourceDataShardIdQueue.pop_front();
-    TCdcAggregatorHeartbeatBatchItem item{
-        .SourceDataShardId = sourceDataShardId,
-        .Heartbeat = std::move(heartbeatsBySourceDataShardId.at(sourceDataShardId)),
-    };
+ui64 PopLeft(TDeque<ui64>& queue) {
+    const ui64 front = queue.front();
+    queue.pop_front();
+    return front;
+}
+
+NPQ::THeartbeat PopHeartbeat(THashMap<ui64, NPQ::THeartbeat>& heartbeatsBySourceDataShardId, ui64 sourceDataShardId) {
+    NPQ::THeartbeat heartbeat = std::move(heartbeatsBySourceDataShardId.at(sourceDataShardId));
     heartbeatsBySourceDataShardId.erase(sourceDataShardId);
-    return item;
+    return heartbeat;
 }
 
 } // namespace
@@ -44,19 +45,21 @@ std::optional<TCdcAggregatorHeartbeatBatch> TCdcAggregatorHeartbeatDelivery::Pre
 
     TCdcAggregatorHeartbeatBatch batch;
     while (!PendingSourceDataShardIdQueue.empty() && batch.size() < MaxBatchSize) {
-        TCdcAggregatorHeartbeatBatchItem item = PopOldestPending(PendingSourceDataShardIdQueue, PendingHeartbeatsBySourceDataShardId);
-        AwaitingReplySourceDataShardIds.push_back(item.SourceDataShardId);
-        batch.push_back(std::move(item));
+        const ui64 sourceDataShardId = PopLeft(PendingSourceDataShardIdQueue);
+        batch[sourceDataShardId] = PopHeartbeat(PendingHeartbeatsBySourceDataShardId, sourceDataShardId);
+        AwaitingReplySourceDataShardIds.push_back(sourceDataShardId);
     }
 
     return batch;
 }
 
-TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::CompleteBatch(const THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>& tabletRepliesBySourceDataShardId) {
+TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::CompleteBatch(const TCdcAggregatorHeartbeatBatchResult& tabletBatchResult) {
     TVector<TCdcAggregatorHeartbeatDeliveryReply> replies;
     for (const ui64 sourceDataShardId : AwaitingReplySourceDataShardIds) {
-        if (const auto* reply = tabletRepliesBySourceDataShardId.FindPtr(sourceDataShardId)) {
-            replies.push_back(*reply);
+        if (const auto* writtenVersion = tabletBatchResult.WrittenVersionsBySourceDataShardId.FindPtr(sourceDataShardId)) {
+            replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Written, .WrittenVersion = *writtenVersion});
+        } else if (const auto* error = tabletBatchResult.RejectionErrorsBySourceDataShardId.FindPtr(sourceDataShardId)) {
+            replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Rejected, .Error = *error});
         } else {
             replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Retry, .Error = "Heartbeat is not confirmed"});
         }

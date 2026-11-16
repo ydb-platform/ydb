@@ -48,11 +48,11 @@ public:
 
         NKikimrCdcAggregator::TTrackingConfig proto;
         Y_ENSURE(proto.ParseFromString(state.GetValue<Schema::State::TrackingConfig>()), "Malformed tracking config");
-        TCdcAggregatorStreamTopic topic;
         TString error;
-        Y_ENSURE(ParseCdcAggregatorStreamTopic(proto, topic, error), "Invalid tracking config: " << error);
+        auto topic = ParseCdcAggregatorStreamTopic(proto, error);
+        Y_ENSURE(topic, "Invalid tracking config: " << error);
 
-        Self->CdcAggregatorStream.emplace(std::move(topic), std::move(sources));
+        Self->CdcAggregatorStream.emplace(std::move(*topic), std::move(sources));
         return true;
     }
 

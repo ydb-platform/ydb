@@ -43,20 +43,20 @@ public:
         Result = MakeHolder<TEvCdcAggregator::TEvConfigureTrackingResult>();
         Result->Record.SetOrigin(Self->TabletID());
 
-        TCdcAggregatorStreamConfig config;
         TString error;
-        if (!ParseCdcAggregatorStreamConfig(record.GetConfig(), config, error)) {
+        const auto config = ParseCdcAggregatorStreamConfig(record.GetConfig(), error);
+        if (!config) {
             Result->Record.SetStatus(TResult::BAD_REQUEST);
             Result->Record.SetError(error);
             return true;
         }
 
         if (!Self->CdcAggregatorStream) {
-            Self->CdcAggregatorStream.emplace(config);
+            Self->CdcAggregatorStream.emplace(*config);
             NIceDb::TNiceDb db(txc.DB);
             Self->PersistCdcAggregatorStream(db);
             Result->Record.SetStatus(TResult::SUCCESS);
-        } else if (IsSameConfig(*Self->CdcAggregatorStream, config)) {
+        } else if (IsSameConfig(*Self->CdcAggregatorStream, *config)) {
             Result->Record.SetStatus(TResult::SUCCESS);
         } else {
             Result->Record.SetStatus(TResult::CONFLICT);

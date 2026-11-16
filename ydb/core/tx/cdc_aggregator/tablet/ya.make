@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     cdc_aggregator_stream.cpp
+    cdc_aggregator_stream_proto.cpp
     tablet.cpp
     tx_configure_tracking.cpp
     tx_init.cpp

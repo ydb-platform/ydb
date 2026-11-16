@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/core/protos/cdc_aggregator.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 
 #include <util/generic/hash_set.h>
@@ -29,10 +28,6 @@ struct TCdcAggregatorStreamConfig {
     TCdcAggregatorStreamTopic Topic;
     TVector<ui64> SourceDataShardIds;
 };
-
-bool ParseCdcAggregatorStreamTopic(const NKikimrCdcAggregator::TTrackingConfig& proto, TCdcAggregatorStreamTopic& topic, TString& error);
-bool ParseCdcAggregatorStreamConfig(const NKikimrCdcAggregator::TTrackingConfig& proto, TCdcAggregatorStreamConfig& config, TString& error);
-TString SerializeCdcAggregatorStreamTopic(const TCdcAggregatorStreamTopic& topic);
 
 struct TCdcAggregatorStreamSourcesDiff {
     THashSet<ui64> Inserted;

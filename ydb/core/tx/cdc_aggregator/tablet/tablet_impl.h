@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cdc_aggregator_stream.h"
+#include "cdc_aggregator_stream_proto.h"
 #include "schema.h"
 
 #include <ydb/core/protos/counters_cdc_aggregator.pb.h>

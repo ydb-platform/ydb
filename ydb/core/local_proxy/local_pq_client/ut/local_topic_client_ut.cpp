@@ -1,9 +1,10 @@
 #include "common.h"
 
+#include <ydb/core/base/tabletid.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
 #include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/local_proxy/local_pq_client/local_topic_client.h>
-#include <ydb/core/path_aliasing/path_normalizer.h>
 
 #include <ydb/library/testlib/helpers.h>
 
@@ -20,17 +21,35 @@ public:
 
         auto& server = Kikimr->GetTestServer();
         auto& runtime = *server.GetRuntime();
-        auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-        update->Record.MutableConfig()->CopyFrom(*server.GetSettings().AppConfig);
-        auto* rule = update->Record.MutableConfig()->MutableResourcePathPrefixMapping()->AddRules();
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto dispatcher = NConsole::MakeConfigsDispatcherID(runtime.GetNodeId());
+        constexpr auto kind = NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem;
+        runtime.Send(dispatcher, sender, new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(kind));
+
+        auto configure = MakeHolder<NConsole::TEvConsole::TEvConfigureRequest>();
+        auto* item = configure->Record.AddActions()->MutableAddConfigItem()->MutableConfigItem();
+        item->SetKind(kind);
+        item->MutableUsageScope()->MutableTenantAndNodeTypeFilter();
+        auto* rule = item->MutableConfig()->MutableResourcePathPrefixMapping()->AddRules();
         rule->SetSrc("/Root/topic");
         rule->SetDst("/Root/missing-topic");
-        update->PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(
-            update->Record.GetConfig().GetResourcePathPrefixMapping(), runtime.GetAppData().Counters);
-        runtime.GetAppData().SetPathNormalizer(*update->PathNormalizer);
-        const auto sender = runtime.AllocateEdgeActor();
-        runtime.Send(NGRpcService::CreateGRpcRequestProxyId(), sender, update.Release());
-        runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender, TEST_TIMEOUT);
+        runtime.SendToPipe(MakeConsoleID(), sender, configure.Release());
+        const auto configured = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigureResponse>(sender, TEST_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL(configured->Get()->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+
+        TAutoPtr<IEventHandle> notification;
+        const auto* update = runtime.GrabEdgeEventIf<NConsole::TEvConsole::TEvConfigNotificationRequest>(notification,
+            [](const auto& event) {
+                const auto& mapping = event.Record.GetConfig().GetResourcePathPrefixMapping();
+                return mapping.RulesSize() == 1 && mapping.GetRules(0).GetSrc() == TOPIC_PATH
+                    && mapping.GetRules(0).GetDst() == "/Root/missing-topic";
+            }, TEST_TIMEOUT);
+        UNIT_ASSERT(update);
+        runtime.Send(new IEventHandle(notification->Sender, sender,
+            new NConsole::TEvConsole::TEvConfigNotificationResponse(update->Record), 0, notification->Cookie));
+        // The dispatcher must enqueue the update to every proxy before the SDK request.
+        runtime.Send(dispatcher, sender, new NConsole::TEvConfigsDispatcher::TEvGetConfigRequest(kind));
+        runtime.GrabEdgeEventRethrow<NConsole::TEvConfigsDispatcher::TEvGetConfigResponse>(sender, TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL(TopicClient->DescribeTopic(TOPIC_PATH).GetValue(TEST_TIMEOUT).GetStatus(), EStatus::SCHEME_ERROR);
     }
 };

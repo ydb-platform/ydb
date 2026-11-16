@@ -7,10 +7,10 @@ namespace NKikimr::NDataShard {
 
 namespace {
 
-const NKikimrSchemeOp::TIndexDescription* FindHnswIndexDescription(
+const NKikimrSchemeOp::TLocalHnswIndexDescription* FindLocalHnswIndexDescription(
         const NKikimrSchemeOp::TTableDescription& alter) {
-    for (const auto& index : alter.GetTableIndexes()) {
-        if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+    for (const auto& index : alter.GetLocalHnswIndexes()) {
+        if (index.HasIndexId()
                 && index.HasHnswIndexDescription()
                 && index.GetHnswIndexDescription().HasEmbeddingColumnId()
                 && index.GetHnswIndexDescription().GetSettings().has_settings()) {
@@ -34,7 +34,7 @@ bool IsHnswPostingTablePublication(const NKikimrTxDataShard::TFlatSchemeTransact
 void AddHnswIndexBuildToExecutionPlan(TActiveTransaction& tx, bool hasHnswMetadata) {
     if (!AppData()->FeatureFlags.GetEnableHnswIndex()
             || !IsHnswPostingTablePublication(tx.GetSchemeTx())
-            || (!hasHnswMetadata && !FindHnswIndexDescription(tx.GetSchemeTx().GetAlterTable()))) {
+            || (!hasHnswMetadata && !FindLocalHnswIndexDescription(tx.GetSchemeTx().GetAlterTable()))) {
         return;
     }
 

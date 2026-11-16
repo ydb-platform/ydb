@@ -17,9 +17,9 @@ Y_UNIT_TEST_SUITE(HnswIndexBuildExecutionPlan) {
         runtime.Initialize(TAppPrepare().Unwrap());
         runtime.GetAppData().FeatureFlags.SetEnableHnswIndex(Enabled);
         runtime.RunCall([&] {
-            // Drop, ordinary/metadata alters, persisted/legacy publications,
-            // and publication of a table without HNSW metadata.
-            for (ui32 kind = 0; kind < 6; ++kind) {
+            // Drop, ordinary/metadata alters, stored/new local metadata,
+            // empty publication, and a publication with only a logical index.
+            for (ui32 kind = 0; kind < 7; ++kind) {
                 NKikimrTxDataShard::TFlatSchemeTransaction scheme;
                 if (kind == 0) {
                     scheme.MutableDropTable()->SetId_Deprecated(1);
@@ -27,6 +27,14 @@ Y_UNIT_TEST_SUITE(HnswIndexBuildExecutionPlan) {
                     auto* alter = scheme.MutableAlterTable();
                     alter->SetName("posting");
                     if (kind == 2 || kind == 4) {
+                        auto* index = alter->AddLocalHnswIndexes();
+                        index->MutableIndexId()->SetOwnerId(1);
+                        index->MutableIndexId()->SetLocalId(2);
+                        auto* hnsw = index->MutableHnswIndexDescription();
+                        hnsw->SetEmbeddingColumnId(2);
+                        hnsw->MutableSettings()->mutable_settings()->set_vector_dimension(2);
+                    }
+                    if (kind == 6) {
                         auto* index = alter->AddTableIndexes();
                         index->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
                         auto* hnsw = index->MutableHnswIndexDescription();

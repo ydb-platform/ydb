@@ -164,20 +164,14 @@ public:
         }
     }
 
-    void RestoreHnswMetadata(TTransactionContext& txc) {
+    void RestoreLocalHnswMetadata(TTransactionContext& txc) {
         // Modern split initialization receives the logical schema from SchemeShard.
         // Local graph annotations belong to the source DataShard's persisted schema.
         const auto& source = Ev->Get()->Record.GetUserTableScheme();
         const ui64 tableId = source.HasPathId() ? source.GetPathId().GetLocalId() : source.GetId_Deprecated();
-        TUserTable::TPtr updated;
-        for (const auto& index : source.GetTableIndexes()) {
-            if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalHnsw) { continue; }
-            if (!updated) { updated = new TUserTable(*Self->TableInfos.at(tableId)); }
-            const TPathId id(index.GetPathOwnerId(), index.GetLocalPathId());
-            if (updated->Indexes.contains(id)) { updated->DropIndex(id); }
-            updated->AddIndex(index);
-        }
-        if (updated) {
+        if (source.LocalHnswIndexesSize()) {
+            TUserTable::TPtr updated = new TUserTable(*Self->TableInfos.at(tableId));
+            updated->UpdateLocalHnswIndexes(source);
             NIceDb::TNiceDb db(txc.DB);
             Self->PersistUserTable(db, tableId, *updated);
             Self->SetUserTable(TPathId(Self->GetPathOwnerId(), tableId), std::move(updated));
@@ -209,7 +203,7 @@ public:
         if (!Self->DstSplitSchemaInitialized) {
             LegacyInitSchema(txc);
         } else {
-            RestoreHnswMetadata(txc);
+            RestoreLocalHnswMetadata(txc);
         }
 
         bool restoreLegacyRemovedRowVersions = false;

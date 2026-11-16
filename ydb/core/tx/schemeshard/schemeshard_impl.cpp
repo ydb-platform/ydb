@@ -8420,6 +8420,9 @@ void FillHnswPostingTableDescription(const TSchemeShard& ss, TPathId tableId,
     if (indexIt == ss.Indexes.end()) {
         return;
     }
+    // This metadata is derived from the owning index. In particular, a copied
+    // posting table must not retain a graph identity from the source table.
+    tableDescr->ClearLocalHnswIndexes();
     const auto index = pendingIndex && indexIt->second->AlterData
         ? indexIt->second->AlterData : indexIt->second;
     if (index->Type != NKikimrSchemeOp::EIndexTypeGlobalHnsw || index->IndexKeys.empty()) {
@@ -8435,21 +8438,8 @@ void FillHnswPostingTableDescription(const TSchemeShard& ss, TPathId tableId,
         if (column.Name != index->IndexKeys.back() || column.IsDropped()) {
             continue;
         }
-        NKikimrSchemeOp::TIndexDescription* description = nullptr;
-        for (auto& candidate : *tableDescr->MutableTableIndexes()) {
-            if (candidate.GetPathOwnerId() == path->ParentPathId.OwnerId
-                    && candidate.GetLocalPathId() == path->ParentPathId.LocalPathId) {
-                description = &candidate;
-                break;
-            }
-        }
-        if (!description) {
-            description = tableDescr->AddTableIndexes();
-        }
-        description->SetName(ss.PathsById.at(path->ParentPathId)->Name);
-        description->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
-        description->SetPathOwnerId(path->ParentPathId.OwnerId);
-        description->SetLocalPathId(path->ParentPathId.LocalPathId);
+        auto* description = tableDescr->AddLocalHnswIndexes();
+        path->ParentPathId.ToProto(description->MutableIndexId());
         description->SetSchemaVersion(index->AlterVersion);
         *description->MutableHnswIndexDescription() = *hnsw;
         description->MutableHnswIndexDescription()->SetEmbeddingColumnId(columnId);

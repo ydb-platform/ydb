@@ -289,7 +289,8 @@ class TestTpcdsGenerator(TpcGeneratorBase):
                 path,
                 scale=scale,
                 import_args=['-t', 1],
-                generator_args=['--tables', selected_tables,
+                generator_args=[
+                    '--tables', selected_tables,
                     '--state', checkpoint,
                     '--proccess-count', part_count,
                     '--proccess-index', part_index,

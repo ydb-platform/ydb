@@ -1042,6 +1042,26 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             NYdb::NTable::TDescribeTableSettings().WithSetVal(true)).ExtractValueSync();
         UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(describe.GetTableDescription().GetTableColumns().size(), 3);
+
+        bool hasSerial = false;
+        for (const auto& column : describe.GetTableDescription().GetTableColumns()) {
+            if (column.Name == "id") {
+                UNIT_ASSERT(column.SequenceDescription.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(column.SequenceDescription->Name, "_serial_column_id");
+                UNIT_ASSERT(column.SequenceDescription->StartValue.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(*column.SequenceDescription->StartValue, 1);
+                hasSerial = true;
+                break;
+            }
+        }
+        UNIT_ASSERT(hasSerial);
+
+        auto dumpDescribe = tableSession.DescribeTable("/Root/TestTable",
+            NYdb::NTable::TDescribeTableSettings().WithSetVal(true).RequestType("dump")).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(dumpDescribe.GetStatus(), EStatus::UNSUPPORTED, dumpDescribe.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(dumpDescribe.GetIssues().ToString(), "/Root/TestTable");
+        UNIT_ASSERT_STRING_CONTAINS(dumpDescribe.GetIssues().ToString(),
+            "exporting tables with generated columns is not supported");
     }
 
     Y_UNIT_TEST(NotNull) {

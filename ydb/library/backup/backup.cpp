@@ -841,15 +841,18 @@ void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& 
 }
 
 void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, const TString& path,
-        const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered, bool isColumnTable) {
+        const TFsPath& folderPath, bool schemaOnly, bool preservePoolKinds, bool ordered, bool isColumnTable,
+        TMaybe<NTable::TTableDescription> originalTableDesc = {}) {
     Y_ENSURE(!path.empty());
     Y_ENSURE(path.back() != '/', path.Quote() << " path contains / in the end");
 
     const auto originalTablePath = JoinDatabasePath(dbPrefix, path);
-    const auto originalTableDesc = DescribeTable(driver, originalTablePath, /* forDump */ true);
-    if (auto replicaAttribute = originalTableDesc.GetAttributes().find(ATTR_ASYNC_REPLICA);
-        (replicaAttribute != originalTableDesc.GetAttributes().end() && replicaAttribute->second == "true")
-        || IsOmittedFromBackup(originalTableDesc.GetAttributes())
+    if (!originalTableDesc) {
+        originalTableDesc = DescribeTable(driver, originalTablePath, /* forDump */ true);
+    }
+    if (auto replicaAttribute = originalTableDesc->GetAttributes().find(ATTR_ASYNC_REPLICA);
+        (replicaAttribute != originalTableDesc->GetAttributes().end() && replicaAttribute->second == "true")
+        || IsOmittedFromBackup(originalTableDesc->GetAttributes())
     ) {
         LOG_D("Skip table " << originalTablePath.Quote() << ", because it is a replica table or is marked with " << ATTR_OMIT_BACKUP);
         // remove the backup folder
@@ -869,14 +872,14 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     }
 
     const auto& fullPath = schemaOnly ? originalTablePath : copyTablePath;
-    const auto& desc = schemaOnly ? originalTableDesc : *copyTableDesc;
+    const auto& desc = schemaOnly ? *originalTableDesc : *copyTableDesc;
 
     LOG_I("Backup " << (isColumnTable ? "column table " : "table ") << fullPath.Quote() << " to " << folderPath.GetPath().Quote());
 
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::TableScheme());
 
-    BackupChangefeeds(driver, originalTablePath, folderPath, originalTableDesc);
+    BackupChangefeeds(driver, originalTablePath, folderPath, *originalTableDesc);
     BackupPermissions(driver, originalTablePath, folderPath);
 
     if (!schemaOnly) {
@@ -1223,8 +1226,9 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 dbIt.Next();
                 continue;
             }
-            if (dbIt.IsTable()) {
-                DescribeTable(driver, dbIt.GetFullPath(), /* forDump */ true);
+            TMaybe<NTable::TTableDescription> tableDesc;
+            if (dbIt.IsTable() && (schemaOnly || !avoidCopy)) {
+                tableDesc = DescribeTable(driver, dbIt.GetFullPath(), /* forDump */ true);
             }
             seenItems.insert(dbIt.GetFullPath());
 
@@ -1233,7 +1237,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             if (schemaOnly) {
                 if (dbIt.IsTable()) {
                     BackupTable(driver, dbIt.GetTraverseRoot(), backupPrefix, dbIt.GetRelPath(),
-                            childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable());
+                            childFolderPath, schemaOnly, preservePoolKinds, ordered, dbIt.IsColumnTable(), std::move(tableDesc));
                     childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
                 }
             } else if (!avoidCopy) {

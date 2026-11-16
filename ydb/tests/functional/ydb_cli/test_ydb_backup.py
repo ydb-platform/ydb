@@ -433,6 +433,38 @@ class TestDumpGeneratedColumns(BaseCliTestWithDatabase):
         assert f"/Root/{table_name}" in result.stderr, result.stderr
         assert not os.path.exists(backup_files_dir)
 
+    @pytest.mark.parametrize(
+        "dump_options",
+        [[], ["--consistency-level", "table"], ["--avoid-copy"], ["--scheme-only"]],
+        ids=["database_copy", "table_copy", "avoid_copy", "scheme_only"],
+    )
+    def test_dump_accepts_serial_and_literal_defaults(self, dump_options):
+        table_name = "_".join(("default_columns", *dump_options)).replace("-", "_").lower()
+        self.execute_ydb_cli_command(["sql", "-s", f"""
+            CREATE TABLE `{table_name}` (
+                id Serial,
+                value Int32 DEFAULT 42,
+                payload String,
+                PRIMARY KEY (id)
+            );
+        """])
+        self.execute_ydb_cli_command([
+            "sql", "-s", f"INSERT INTO `{table_name}` (payload) VALUES ('value');",
+        ])
+
+        backup_files_dir = yatest.common.output_path(table_name + "_dump")
+        self.execute_ydb_cli_command([
+            "tools", "dump", "--path", f"/Root/{table_name}", "--output", backup_files_dir,
+        ] + dump_options)
+
+        table_backup_dir = os.path.join(backup_files_dir, table_name)
+        assert os.path.isfile(os.path.join(table_backup_dir, "scheme.pb"))
+        data_file = os.path.join(table_backup_dir, "data_00.csv")
+        if "--scheme-only" in dump_options:
+            assert not os.path.exists(data_file)
+        else:
+            assert os.path.getsize(data_file) > 0
+
     @pytest.mark.parametrize("generated_kind", ["STORED", "VIRTUAL"])
     @pytest.mark.parametrize(
         "dump_options",

@@ -97,7 +97,7 @@ Y_UNIT_TEST(AutoFallbackPreservesMode) {
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'auto';
-        SELECT EnsureType(Percentile(CAST(key AS Interval64), 0.5), Interval64?)
+        SELECT AggList(key)
         FROM (SELECT Interval64('P1D') AS key);
         SELECT 1;
     )sql", settings);

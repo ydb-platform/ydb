@@ -7,42 +7,30 @@
         "args":
           [
             {
-              "op_name":"HashShuffle",
-              "args":
-                [
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"item"
-                  }
-                ]
+              "op_name":"TableFullScan",
+              "table":"item"
             },
             {
-              "op_name":"HashShuffle",
+              "op_name":"LeftJoin (BlockHash)",
               "args":
                 [
                   {
-                    "op_name":"LeftJoin (BlockHash)",
+                    "op_name":"HashShuffle",
                     "args":
                       [
                         {
-                          "op_name":"HashShuffle",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"item"
-                              }
-                            ]
-                        },
+                          "op_name":"TableFullScan",
+                          "table":"item"
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"HashShuffle",
+                    "args":
+                      [
                         {
-                          "op_name":"HashShuffle",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"item"
-                              }
-                            ]
+                          "op_name":"TableFullScan",
+                          "table":"item"
                         }
                       ]
                   }

@@ -6,6 +6,14 @@ YQL_ABI_VERSION(
 
 SRCS(
     yql/essentials/udfs/common/json2/json2_udf.cpp
+    yql/essentials/udfs/common/json2/as_json_node.cpp
+    yql/essentials/udfs/common/json2/compile_path.cpp
+    yql/essentials/udfs/common/json2/parse.cpp
+    yql/essentials/udfs/common/json2/resource.cpp
+    yql/essentials/udfs/common/json2/serialize.cpp
+    yql/essentials/udfs/common/json2/sql_exists.cpp
+    yql/essentials/udfs/common/json2/sql_query.cpp
+    yql/essentials/udfs/common/json2/sql_value.cpp
 )
 
 PEERDIR(

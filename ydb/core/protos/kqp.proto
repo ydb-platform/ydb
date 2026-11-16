@@ -7,6 +7,8 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/scheme/protos/pathid.proto";
+
 import "ydb/core/protos/kqp_tablemetadata.proto";
 import "ydb/core/protos/kqp_physical.proto";
 import "ydb/core/protos/kqp_stats.proto";
@@ -1049,6 +1051,8 @@ message TReadVectorTopK {
     optional string TargetVector = 3;
     optional uint32 Limit = 4;
     repeated uint32 DistinctColumns = 5;
+    // Logical HNSW index identity on the local table. Omitted by legacy callers.
+    optional NKikimrProto.TPathID HnswIndexId = 6;
 }
 
 message TKqpStreamLookupSettings {

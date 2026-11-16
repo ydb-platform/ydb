@@ -514,7 +514,7 @@ private:
 
     void PrepareOutputProgram() {
         if (!MeasuredProgramWithOutput_) {
-            auto program = CompileBenchmarkQuery(MakeFactory(Options_, nullptr),
+            auto program = CompileBenchmarkQuery(MakeFactory(Options_, /*exprOutput=*/nullptr),
                                                  TPrintOutputSpec(NYT::TNode::CreateEntity()), Options_.MeasuredQuery);
             RunAndMeasureProgram(*program);
             MeasuredProgramWithOutput_ = std::move(program);

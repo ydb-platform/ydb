@@ -44,6 +44,7 @@ TFamilySettings TFamilySettings::FromProto(const NKikimrSchemeOp::TFamilyDescrip
             .Media = "",
             .Compression = TFamily::COMPRESSION_OFF,
             .CacheMode = TFamily::CACHE_MODE_REGULAR,
+            .CompressionLevel = std::nullopt,
         };
     }
 
@@ -54,18 +55,33 @@ TFamilySettings TFamilySettings::FromProto(const NKikimrSchemeOp::TFamilyDescrip
     const auto cacheMode = family->GetColumnCacheMode() == NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory
         ? TFamily::CACHE_MODE_IN_MEMORY
         : TFamily::CACHE_MODE_REGULAR;
+    auto compression = TFamily::COMPRESSION_UNSPECIFIED;
+    std::optional<ui32> compressionLevel;
+    switch (GetColumnCodec(*family)) {
+        case NKikimrSchemeOp::ColumnCodecPlain:
+            compression = TFamily::COMPRESSION_OFF;
+            break;
+        case NKikimrSchemeOp::ColumnCodecLZ4:
+            compression = TFamily::COMPRESSION_LZ4;
+            break;
+        case NKikimrSchemeOp::ColumnCodecZSTD:
+            compression = TFamily::COMPRESSION_ZSTD;
+            compressionLevel = family->HasColumnCodecLevel() ? ui32(family->GetColumnCodecLevel()) : 1u;
+            break;
+    }
     return {
         .Media = media,
-        .Compression = GetColumnCodec(*family) == NKikimrSchemeOp::ColumnCodecLZ4
-            ? TFamily::COMPRESSION_LZ4 : TFamily::COMPRESSION_OFF,
+        .Compression = compression,
         .CacheMode = cacheMode,
+        .CompressionLevel = compressionLevel,
     };
 }
 
 bool TFamilySettings::operator==(const TFamilySettings& other) const {
     return Media == other.Media
         && Compression == other.Compression
-        && CacheMode == other.CacheMode;
+        && CacheMode == other.CacheMode
+        && CompressionLevel == other.CompressionLevel;
 }
 
 void TFamilySettings::Out(IOutputStream& out) const {
@@ -73,6 +89,7 @@ void TFamilySettings::Out(IOutputStream& out) const {
         << " Media: '" << Media << "'"
         << " Compression: " << CompressionToString(Compression)
         << " CacheMode: " << CacheModeToString(CacheMode)
+        << " CompressionLevel: " << CompressionLevel.value_or(1)
     << " }";
 }
 
@@ -81,6 +98,8 @@ EFamilyCompression CompressionFromString(TStringBuf value) {
         return TFamily::COMPRESSION_OFF;
     } else if (value == "lz4") {
         return TFamily::COMPRESSION_LZ4;
+    } else if (value == "zstd") {
+        return TFamily::COMPRESSION_ZSTD;
     } else {
         return TFamily::COMPRESSION_UNSPECIFIED;
     }
@@ -102,6 +121,8 @@ TStringBuf CompressionToString(EFamilyCompression value) {
             return "off";
         case TFamily::COMPRESSION_LZ4:
             return "lz4";
+        case TFamily::COMPRESSION_ZSTD:
+            return "zstd";
         default:
             return {};
     }
@@ -120,7 +141,8 @@ TStringBuf CacheModeToString(EFamilyCacheMode value) {
 
 bool IsValidCompression(EFamilyCompression value) {
     return value == TFamily::COMPRESSION_OFF
-        || value == TFamily::COMPRESSION_LZ4;
+        || value == TFamily::COMPRESSION_LZ4
+        || value == TFamily::COMPRESSION_ZSTD;
 }
 
 bool IsValidCacheMode(EFamilyCacheMode value) {

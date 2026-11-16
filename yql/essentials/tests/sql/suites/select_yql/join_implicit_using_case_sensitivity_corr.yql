@@ -1,4 +1,4 @@
-/* custom error: No such column: Y */
+/* custom error: Unknown alias: Y */
 PRAGMA YqlSelect = 'force';
 
 SELECT * FROM (VALUES (1, 2)) AS x (a, cx)

@@ -2,9 +2,10 @@
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>

@@ -209,7 +209,7 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/kqp/common
     ydb/core/kqp/common/events
-    ydb/core/kqp/opt
+    ydb/core/kqp/query_plan
     ydb/core/kqp/script_executions/common
     ydb/core/local_indexes/bloom
     ydb/core/persqueue/deferred_publish

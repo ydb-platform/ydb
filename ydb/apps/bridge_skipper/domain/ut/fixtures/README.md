@@ -26,8 +26,11 @@ remain an external release gate; these synthetic fixtures do not qualify
 production automatic failover.
 
 Known limit: YELLOW and ORANGE VDisk reasons are neutral, so a throttled VDisk
-on a RED PDisk is read as neutral. The classifier does not follow VDisk-to-PDisk
-reason links.
+on a RED PDisk is read as neutral by ordinary part classification. The
+separate fallback storage-failure proof follows complete VDisk-to-PDisk reason
+links and requires every contributing VDisk to be RED with an explicitly
+reported same-node, same-pile PDisk `DeviceIoError`; it rejects replication,
+transport failures, missing/ambiguous IDs and truncation.
 
 ## Recorded primary PDisk error
 
@@ -42,7 +45,9 @@ filters or database, a 4-second operation timeout and 6-second client deadline.
 Pile names and issue IDs are normalized; hosts, ports and device paths are
 removed. Issue types, statuses and the complete reason graph are retained.
 The response contains the BSC fallback marker and a RED `STORAGE_GROUP` with
-`VDISK`/`PDISK` error reasons. Its regression test pins classification and the
-existing own-node-quorum veto: RED fallback data does not authorize primary
-failover while a fresh own report claims quorum. This recording does not
-establish disk health from node connectivity or qualify production Auto.
+`VDISK`/`PDISK` error reasons. Its regression test pins the explicit storage-failure
+proof, which can establish primary failure even while a fresh own report claims
+node quorum. Generic fallback RED retains the own-quorum veto. Negative tests
+reject mixed transport/replication reasons, missing/ambiguous IDs, wrong locations
+and incomplete replies. This recording does not establish disk health from node
+connectivity or qualify production Auto.

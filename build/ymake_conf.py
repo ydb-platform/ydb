@@ -124,7 +124,7 @@ class Platform(object):
 
         self.is_riscv32_esp32p4 = self.arch == 'riscv32_esp32p4'
         self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr or self.is_rv32imc_zicsr_zifencei or self.is_riscv32_esp32p4
-        self.is_riscv64 = self.arch == 'riscv64_aw'
+        self.is_riscv64 = self.arch in ('riscv64', 'riscv64_aw')
         self.is_riscv64_aw = self.arch == 'riscv64_aw'
 
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
@@ -207,6 +207,7 @@ class Platform(object):
         self.is_freertos = self.os == 'freertos'
         self.is_zephyr = self.os == 'zephyr'
         self.is_zephyr_armv7_cortex_a35 = self.is_zephyr and self.is_armv7 and self.is_cortex_a35
+        self.is_zephyr_riscv64 = self.is_zephyr and self.arch == 'riscv64'
 
         self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_yocto or self.is_freebsd
 
@@ -573,6 +574,7 @@ def get_target_triple(target):
             (target.is_windows and target.is_x86_64, 'x86_64-pc-win32'),
 
             (target.is_zephyr_armv7_cortex_a35, 'arm-none-eabi'),
+            (target.is_zephyr_riscv64, 'riscv64-none-elf'),
             (target.is_rv32imc_zicsr_zifencei and (target.is_none or target.is_freertos), 'riscv32-esp-elf'),
         ],
     )
@@ -1360,6 +1362,10 @@ class GnuToolchain(Toolchain):
             self.c_flags_platform.append('-march=armv8-a -mthumb -mabi=aapcs -mfpu=neon-fp-armv8 -mfloat-abi=hard')
             self.setup_zephyr()
 
+        if target.is_zephyr_riscv64:
+            self.c_flags_platform.append('-march=rv64gc -mcmodel=medany -mabi=lp64d')
+            self.setup_zephyr()
+
         if target.is_riscv32_esp32p4:
             self.c_flags_platform.extend([
                 '-march=rv32imafc_zicsr_zifencei_zaamo_zalrsc_xesploop_xespv',
@@ -1429,8 +1435,6 @@ class GnuToolchain(Toolchain):
                     if target.is_x86_64:
                         if host.is_linux and not self.tc.is_gcc:
                             self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/lib/x86_64-linux-gnu')
-                        elif host.is_macos:
-                            self.setup_tools(project='build/platform/binutils', var='$BINUTILS_ROOT_RESOURCE_GLOBAL', bin='x86_64-linux-gnu/bin', ldlibs=None)
                     elif target.is_powerpc:
                         self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/x86_64-linux-gnu/powerpc64le-linux-gnu/lib')
                     elif target.is_armv8 or target.is_armv9a:
@@ -1676,7 +1680,7 @@ class GnuCompiler(Compiler):
         if self.target.is_zephyr:
             self.c_defines.append('-D__ZEPHYR__')
 
-        if self.target.is_zephyr_armv7_cortex_a35:
+        if self.target.is_zephyr_armv7_cortex_a35 or self.target.is_zephyr_riscv64:
             self.c_defines.append('-D_LIBUNWIND_IS_BAREMETAL')
 
         if self.tc.is_clang and self.target.is_linux and self.target.is_x86_64:
@@ -1728,7 +1732,7 @@ class GnuCompiler(Compiler):
                 '-Wno-undefined-var-template',
             ]
 
-            if self.target.is_zephyr_armv7_cortex_a35:
+            if self.target.is_zephyr_armv7_cortex_a35 or self.target.is_zephyr_riscv64:
                 self.cxx_warnings.append('-Wno-missing-designated-field-initializers')
 
         elif self.tc.is_gcc and self.host.is_riscv64_aw is None and self.host.is_arm_aml403 is None:
@@ -1832,7 +1836,6 @@ class SwiftCompiler(object):
 class Linker(object):
     BFD = 'bfd'
     LLD = 'lld'
-    GOLD = 'gold'
     MOLD = 'mold'
 
     def __init__(self, tc, build):
@@ -1860,8 +1863,8 @@ class Linker(object):
             and self.build.target.is_rv32imc_zicsr_zifencei
             and (self.build.target.is_none or self.build.target.is_freertos)
         ):
-            # The ESP Clang SDK uses GNU ld, including its linker map format.
-            return Linker.BFD
+            # Use LLD shipped with the ESP Clang SDK.
+            return Linker.LLD
 
         if self.build.target.is_android:
             # Android toolchain is NDK, LLD works on all supported platforms
@@ -1928,7 +1931,7 @@ class LD(Linker):
 
         self.ld_flags = []
         if self.tc.is_clang and target.is_rv32imc_zicsr_zifencei:
-            self.ld_flags.append('--ld-path={}/esp-clang/bin/riscv32-esp-elf-clang-ld'.format(self.tc.name_marker))
+            self.ld_flags.append('--ld-path={}/esp-clang/bin/ld.lld'.format(self.tc.name_marker))
             if is_positive('NO_CXX_RTTI'):
                 self.ld_flags.append('-fno-rtti')
         if not self.build.is_release and target.is_linux:

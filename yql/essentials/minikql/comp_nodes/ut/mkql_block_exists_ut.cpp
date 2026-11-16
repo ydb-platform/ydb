@@ -88,8 +88,8 @@ Y_UNIT_TEST(TestWithStrings) {
 }
 
 Y_UNIT_TEST(TestWithTaggedTypes) {
-    using TaggedIntA = TTagged<ui32, TTag::A>;
-    using TaggedIntB = TTagged<ui32, TTag::B>;
+    using TaggedIntA = TTagged<ui32, ETag::A>;
+    using TaggedIntB = TTagged<ui32, ETag::B>;
 
     // Test with tagged types
     TestExistKernel(

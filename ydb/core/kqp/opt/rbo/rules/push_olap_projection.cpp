@@ -11,22 +11,27 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+// The input of the map without the filter the column shard could not run, which stays between the map and the read.
+IOperator* SkipRemainingFilter(IOperator* input) {
+    return input->Kind == EOperator::Filter ? input->GetChildren().front() : input;
+}
+
 bool IsSuitableToPushProjectionToColumnTables(IOperator* input) {
     if (input->Kind != EOperator::Map) {
         return false;
     }
 
-    const auto filter = CastOperator<TOpMap>(input);
-    const auto maybeRead = filter->GetInput().Get();
+    const auto map = CastOperator<TOpMap>(input);
+    const auto maybeRead = SkipRemainingFilter(map->GetInput().Get());
     return ((maybeRead->Kind == EOperator::Source) && (CastOperator<TOpRead>(maybeRead)->GetTableStorageType() == NYql::EStorageType::ColumnStorage) &&
-            filter->GetTypeAnn());
+            map->GetTypeAnn());
 }
 
 } // anonymous namespace
 
 bool TPushOlapProjectionRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Map &&
-        input->GetChildren().front()->Kind == EOperator::Source;
+        SkipRemainingFilter(input->GetChildren().front())->Kind == EOperator::Source;
 }
 
 TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
@@ -39,14 +44,24 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
     }
 
     const auto map = CastOperator<TOpMap>(input);
-    const auto read = CastOperator<TOpRead>(map->GetInput().Get());
+    TIntrusivePtr<TOpFilter> filter;
+    if (map->GetInput()->Kind == EOperator::Filter) {
+        filter = CastOperator<TOpFilter>(map->GetInput());
+    }
+    const auto read = CastOperator<TOpRead>(SkipRemainingFilter(map->GetInput().Get()));
     // Preserve the input's IU-ID atoms and row-schema fields during construction.
     const TPushdownOptions pushdownOptions(false, false, /*StripAliasPrefixForColumnName=*/false);
 
     TVector<std::pair<TString, TExprNode::TPtr>> olapOperationsForProjections;
     auto memberPred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TCoMember>(node); };
     THashSet<TString> projectionMembers;
+    // As in the old optimizer, a projection cannot overwrite a column the remaining filter still reads.
     THashSet<TString> predicateMembers;
+    if (filter) {
+        for (const auto id : filter->GetFilterExpression().GetRawInputIUs()) {
+            predicateMembers.insert(ToString(id));
+        }
+    }
     THashSet<TString> notSuitableToPushMembers;
     // OLAP projection overwrites the source field. An implicit pass-through
     // or an explicit copy still needs its original value and type.
@@ -90,8 +105,11 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
 
     ui32 projectionIndex = 0;
     TMapIUs newMapElements;
+    // The elements which read the projections, kept apart when they have to move below the remaining filter.
+    TMapIUs projectedElements;
     for (const auto output : mapElements.Keys()) {
         TMapElement mapElement = *mapElements.Find(output);
+        bool projected = false;
         if (projectionIndex < inMapIds.size() && inMapIds[projectionIndex] == output) {
             const auto& [colName, projection, replace, olapOperation] = projectionCandidates[projectionIndex++];
             Y_ENSURE(colName.find(NOpt::KqpOlapProjectionNamePrefix) == TString::npos, "Multiple projections for same column is not supported");
@@ -109,9 +127,10 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
                 .Done().Ptr();
                 // clang-format on
                 mapElement = TMapElement(TExpression(newLambda, &ctx.ExprCtx, &props));
+                projected = true;
             }
         }
-        newMapElements.Add(output, std::move(mapElement));
+        (projected && filter ? projectedElements : newMapElements).Add(output, std::move(mapElement));
     }
 
     if (olapOperationsForProjections.empty()) {
@@ -159,9 +178,17 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
 
     YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP projection: " << KqpExprToPrettyString(TExprBase(newLambda), ctx.ExprCtx);
 
-    auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), read->StorageType, read->TableCallable, newLambda, read->Limit,
-                                          read->RangeInfo, read->OriginalPredicate, read->SortDir, read->Props, read->Pos, read->RequireSortedRead);
-    return MakeIntrusive<TOpMap>(newRead, map->Pos, newMapElements);
+    TIntrusivePtr<IOperator> newInput =
+        MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), read->StorageType, read->TableCallable, newLambda, read->Limit,
+                               read->RangeInfo, read->OriginalPredicate, read->SortDir, read->Props, read->Pos, read->RequireSortedRead);
+    if (filter) {
+        // A projection replaces its source column in the read, with the type of the projection. The filter is typed over the
+        // stored column, so the elements which read the projections move below it, onto the read: as in the old optimizer,
+        // the column shard computes them before the remaining filter.
+        newInput = MakeIntrusive<TOpMap>(newInput, map->Pos, std::move(projectedElements));
+        newInput = MakeIntrusive<TOpFilter>(newInput, filter->Pos, filter->Props, filter->GetFilterExpression(), filter->PartiallyPushedDown);
+    }
+    return MakeIntrusive<TOpMap>(newInput, map->Pos, newMapElements);
 }
 
 } // namespace NKikimr::NKqp

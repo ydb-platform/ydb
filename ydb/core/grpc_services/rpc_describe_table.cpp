@@ -149,6 +149,8 @@ private:
                     selfEntry->set_name(parts.empty() ? TString("/") : parts.back());
                 }
 
+                FillAttributes(describeTableResult, pathDescription);
+
                 if (pathDescription.HasColumnTableDescription()) {
                     const auto& tableDescription = pathDescription.GetColumnTableDescription();
                     FillColumnDescription(describeTableResult, tableDescription);
@@ -230,7 +232,6 @@ private:
 
                 FillStorageSettings(describeTableResult, tableDescription);
                 FillColumnFamilies(describeTableResult, tableDescription);
-                FillAttributes(describeTableResult, pathDescription);
                 FillPartitioningSettings(describeTableResult, tableDescription);
                 FillKeyBloomFilter(describeTableResult, tableDescription);
                 FillReadReplicasSettings(describeTableResult, tableDescription);

@@ -3590,21 +3590,6 @@
           {
             "matcher": {
               "id": "byFrameRefID",
-              "options": "E"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#ffb732",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
               "options": "F"
             },
             "properties": [
@@ -3694,19 +3679,6 @@
           "legendFormat": "ActiveBytes",
           "range": true,
           "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "editorMode": "code",
-          "expr": "sum(tablets_SUM_CacheTotalExclusive_{type=\"all\", database=\"$database\", container=\"ydb-dynamic\"})",
-          "hide": false,
-          "instant": false,
-          "legendFormat": "Private cache",
-          "range": true,
-          "refId": "E"
         },
         {
           "datasource": {
@@ -4242,21 +4214,6 @@
                 }
               }
             ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "C"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#e06666",
-                  "mode": "fixed"
-                }
-              }
-            ]
           }
         ]
       },
@@ -4310,20 +4267,6 @@
           "legendFormat": "SS Cache Misses",
           "range": true,
           "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "sum(rate(tablets_TxWastedBytes{type=\"all\", category=\"executor\", database=\"$database\", container=\"ydb-dynamic\"}[$__rate_interval])) ",
-          "hide": true,
-          "interval": "",
-          "legendFormat": "Tablets Cache Wasted",
-          "range": true,
-          "refId": "C"
         }
       ],
       "title": "Cache misses",

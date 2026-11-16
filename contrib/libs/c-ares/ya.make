@@ -28,6 +28,8 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
+NO_RUNTIME()
+
 CFLAGS(
     -DCARES_BUILDING_LIBRARY
     -DHAVE_CONFIG_H=1
@@ -88,7 +90,7 @@ SRCS(
     src/lib/ares_timeout.c
     src/lib/ares_update_servers.c
     src/lib/ares_version.c
-    src/lib/atomic.cpp
+    src/lib/atomic.c
     src/lib/dsa/ares_array.c
     src/lib/dsa/ares_htable.c
     src/lib/dsa/ares_htable_asvp.c

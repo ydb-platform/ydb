@@ -2,6 +2,7 @@
 #include <ydb/core/base/nodestate.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
@@ -636,12 +637,30 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         runtime.RegisterService(MakeBlobStorageNodeWardenID(4), childId);
         UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, {keeperId}) == 3; }));
 
+        TActorId childSession;
+        TActorId childProxy;
+        ui32 removedChildDisconnects = 0;
+        UNIT_ASSERT(runtime.WrapInActorContext(keeperId, [&](IActor*) {
+            auto& nameservice = AppData()->DynamicNameserviceConfig;
+            nameservice = new TDynamicNameserviceConfig;
+            nameservice->MaxStaticNodeId = 4;
+            nameservice->MaxDynamicNodeId = 5;
+            nameservice->MinDynamicNodeId = 5;
+            childProxy = TActivationContext::InterconnectProxy(4);
+        }));
         bool pushDelivered = false;
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             if (nodeId == keeperId.NodeId() && ev->InterconnectSession
                 && ev->GetRecipientRewrite() == keeperId && ev->Sender == childId
                 && ev->GetTypeRewrite() == NStorage::TEvNodeConfigPush::EventType) {
                 pushDelivered = true;
+                childSession = ev->InterconnectSession;
+            }
+            const ui32 type = ev->GetTypeRewrite();
+            if (nodeId == keeperId.NodeId() && ((type == TEvents::TSystem::Poison && childSession
+                    && ev->GetRecipientRewrite() == childSession)
+                    || (type == TEvInterconnect::EvDisconnect && ev->GetRecipientRewrite() == childProxy))) {
+                ++removedChildDisconnects;
             }
             return true;
         };
@@ -678,6 +697,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         const std::vector keepers{keeperId, addedKeeperId};
         UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 3; }));
         CheckStaysConverged(runtime, keepers);
+        UNIT_ASSERT_C(removedChildDisconnects, "a removed static child must still be disconnected");
     }
 
     // two-pile bridged config of 4 nodes: nodes 1 and 4 are in the first pile, nodes 2 and 3 are in the second one; the
@@ -6482,6 +6502,103 @@ selector_config: []
         const auto advanced = QueryKeeper(runtime, root).GetQueryConfig().GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(advanced.GetGeneration(), 3);
         CheckDurableConfigConverges(fixture, advanced);
+    }
+
+    void CheckDynamicConfigUnsubscribeKeepsSession(bool pendingSubscription) {
+        TCommitConfirmationFixture fixture(true, 4);
+        fixture.State.RequiredRootNodeId = 1;
+        fixture.Start();
+        auto& runtime = fixture.Runtime;
+        const TActorId keeper = fixture.Keepers[1];
+        const TActorId dynamicPeer = runtime.Register(new TIgnoreActor, 4);
+        TActorId dynamicProxy;
+        UNIT_ASSERT(runtime.WrapInActorContext(keeper, [&](IActor*) {
+            auto& nameservice = AppData()->DynamicNameserviceConfig;
+            nameservice = new TDynamicNameserviceConfig;
+            nameservice->MaxStaticNodeId = 3;
+            nameservice->MaxDynamicNodeId = 4;
+            nameservice->MinDynamicNodeId = 4;
+            dynamicProxy = TActivationContext::InterconnectProxy(4);
+        }));
+
+        TActorId session;
+        bool subscribed = false;
+        bool noQuorum = false;
+        bool holdConnected = pendingSubscription;
+        bool queryDelivered = false;
+        bool queryReplied = false;
+        ui32 sessionCloses = 0;
+        ui32 disconnections = 0;
+        std::vector<std::unique_ptr<IEventHandle>> heldConnected;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            const ui32 type = ev->GetTypeRewrite();
+            if (nodeId == 2 && ev->Sender == dynamicPeer
+                    && type == TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe) {
+                session = ev->InterconnectSession;
+                UNIT_ASSERT(session);
+            }
+            if (holdConnected && nodeId == 2 && type == TEvInterconnect::TEvNodeConnected::EventType
+                    && ev->Get<TEvInterconnect::TEvNodeConnected>()->NodeId == 4) {
+                heldConnected.push_back(std::move(ev));
+                return false;
+            }
+            if (nodeId == 4 && type == NStorage::TEvNodeWardenDynamicConfigPush::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeWardenDynamicConfigPush>()->Record;
+                subscribed |= record.HasConfig();
+                noQuorum |= record.GetNoQuorum();
+            }
+            if (nodeId == 2 && ((type == TEvents::TSystem::Poison && session
+                    && ev->GetRecipientRewrite() == session)
+                    || (type == TEvInterconnect::EvDisconnect && ev->GetRecipientRewrite() == dynamicProxy))) {
+                ++sessionCloses;
+            }
+            if (nodeId == 4 && type == TEvInterconnect::TEvNodeDisconnected::EventType
+                    && ev->Get<TEvInterconnect::TEvNodeDisconnected>()->NodeId == 2) {
+                ++disconnections;
+            }
+            if (nodeId == 2 && ev->Sender == dynamicPeer
+                    && type == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->InterconnectSession, session);
+                queryDelivered = true;
+            }
+            if (nodeId == 4 && type == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                queryReplied = true;
+            }
+            return true;
+        };
+        runtime.Send(new IEventHandle(TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe,
+            IEventHandle::FlagSubscribeOnSession, keeper, dynamicPeer, nullptr, 0), 4);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return subscribed; }));
+        if (pendingSubscription) {
+            UNIT_ASSERT(SimUntil(runtime, [&] { return !heldConnected.empty(); }));
+        } else {
+            SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
+        }
+
+        // Losing the root drops distconf's dynamic-config subscription. Other
+        // users of the same interconnect session must remain connected.
+        runtime.StopNode(1);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return noQuorum; }, TDuration::Seconds(10), 2));
+        holdConnected = false;
+        ReplayDelayedEvents(runtime, heldConnected);
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(1), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sessionCloses, 0);
+        UNIT_ASSERT_VALUES_EQUAL(disconnections, 0);
+
+        auto query = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        query->Record.MutableQueryWorkingRoot();
+        runtime.Send(new IEventHandle(keeper, dynamicPeer, query.release()), 4);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return queryDelivered && queryReplied; }, TDuration::Seconds(5), 2));
+        UNIT_ASSERT_VALUES_EQUAL(sessionCloses, 0);
+        UNIT_ASSERT_VALUES_EQUAL(disconnections, 0);
+    }
+
+    Y_UNIT_TEST(DynamicConfigUnsubscribeKeepsEstablishedSession) {
+        CheckDynamicConfigUnsubscribeKeepsSession(false);
+    }
+
+    Y_UNIT_TEST(DynamicConfigUnsubscribeKeepsPendingSession) {
+        CheckDynamicConfigUnsubscribeKeepsSession(true);
     }
 
     void CheckBindingLivenessPeerCapability(bool selfManagement, bool legacyParent, bool pauseParent = false,

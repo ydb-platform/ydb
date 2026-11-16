@@ -7,6 +7,7 @@ PEERDIR(
 
 SRCS(
     error.cpp
+    issue.cpp
 )
 
 END()

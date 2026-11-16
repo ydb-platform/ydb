@@ -32,7 +32,7 @@ struct TScannedDataStats {
 
     void CompleteShard(TShardState::TPtr state) {
         auto it = ReadShardInfo.find(state->TabletId);
-        AFL_ENSURE(it != ReadShardInfo.end());
+        YDB_LOG_ENSURE(it != ReadShardInfo.end());
         auto& [currentRows, currentBytes] = it->second;
         TotalReadRows += currentRows;
         TotalReadBytes += currentBytes;

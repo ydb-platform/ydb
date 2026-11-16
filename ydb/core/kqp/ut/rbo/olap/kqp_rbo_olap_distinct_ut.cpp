@@ -2534,6 +2534,52 @@ Y_UNIT_TEST_SUITE(KqpRboOlapDistinctPushdownE2E) {
             "DISTINCT level with agg+force pragmas: force pragma on/off must match",
             ECounterOnForce::MustStay);
     }
+
+    // As in the old optimizer, only PRAGMA OptEnableOlapPushdownAggregate turns the forced DISTINCT off.
+    // With the server setting alone, the read program marks the DISTINCT key.
+    Y_UNIT_TEST(SimpleDistinct_WithServerAggPushdownAndForcePragma_PushesDistinct) {
+        auto settings = NewRboSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapPushdownAggregate(true);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        const auto ts = PickTimestampsForShard(0, 1, 100, 1);
+        const auto rids = MakeRepeatedResourceIds("dup", 10, 100);
+        TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", BuildBatchForRows(ts, rids, "u"));
+
+        auto tableClient = kikimr.GetTableClient();
+        // level values are idx % 5 in test batches → at most 5 distinct levels.
+        constexpr ui64 kCap = 5;
+
+        TStringBuilder qBase;
+        qBase << R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+        )";
+
+        TStringBuilder qOff;
+        qOff << qBase << R"(
+            SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable` LIMIT )" << kCap;
+
+        TStringBuilder qOn;
+        qOn << qBase << R"(
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "level";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = ")" << kCap << R"(";
+            SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable` LIMIT )" << kCap;
+
+        AssertQueryPlanContains(tableClient, qOn, "KqpOlapDistinct");
+
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                auto it = tableClient.StreamExecuteScanQuery(withForce ? TString(qOn) : TString(qOff)).GetValueSync();
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                return CollectStreamResult(it);
+            }),
+            kCap,
+            "DISTINCT level with server agg setting and force pragma: force pragma on/off must match",
+            ECounterOnForce::MustGrow);
+    }
 }
 
 } // namespace NKikimr::NKqp

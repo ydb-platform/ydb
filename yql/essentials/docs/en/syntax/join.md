@@ -46,6 +46,12 @@ Since columns in YQL are identified by their names, and you can't have two colum
 
 {% endnote %}
 
+{% note info %}
+
+`NaN` values in `JOIN` keys are treated as equal to each other.
+
+{% endnote %}
+
 ## Conditions for joining
 
 For `CROSS JOIN`, no join condition is specified. The result includes the Cartesian product of the left and right subquery, meaning it combines everything with everything. The number of rows in the resulting subquery is the product of the number of rows in the left and right subqueries.

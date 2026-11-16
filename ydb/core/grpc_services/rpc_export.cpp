@@ -8,6 +8,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/feature_flags.h>
+#include <ydb/core/backup/common/omit_backup.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
@@ -173,6 +174,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     }
 
     static bool IsItemSupportedInExport(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        if (NBackup::IsOmittedFromBackup(entry.Attributes)) {
+            return false;
+        }
+
         switch (entry.Kind) {
             case NSchemeCache::TSchemeCacheNavigate::KindTable: {
                 auto it = entry.Attributes.find("__async_replica");
@@ -409,6 +414,17 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 }
                 it->second.Resolved = true;
                 const NSchemeCache::TSchemeCacheNavigate::EKind kind = entry.Kind;
+                if (NBackup::IsOmittedFromBackup(entry.Attributes)) {
+                    // Older clients can expand directories without checking
+                    // attributes, so an omitted item is dropped, not refused.
+                    YDB_LOG_INFO("Skip item omitted from export",
+                        {"logPrefix", GetLogPrefix()},
+                        {"selfId", this->SelfId()},
+                        {"txId", this->TxId},
+                        {"path", path});
+                    ExportItems.erase(it);
+                    continue;
+                }
                 if (IsLikeDirectory(kind)) {
                     DirectoryItems[path] = it->second;
                 }

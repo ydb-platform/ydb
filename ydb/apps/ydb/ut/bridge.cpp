@@ -217,6 +217,7 @@ private:
 class TBridgeCliFixture : public TCliTestFixture {
 public:
     void AddServices() override {
+        EnvHomeFile("ydb/bin/config.json", R"({"check_version":false})");
         AddService<TBridgeDiscovery>(GetAddress());
         AddService<TBridgeLogin>();
         AddService<TBridgeService>();
@@ -850,6 +851,8 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
     }
 
     Y_UNIT_TEST_F(OrdinaryPileListShowsBridgeConfiguration, TBridgeCliFixture) {
+        EnvHomeFile("ydb/bin/config.json", R"({"check_version": false})");
+
         auto& status = PrepareUnbridgedStatus();
         status.add_bridge_config_node_ids(3);
         status.add_bridge_config_node_ids(5);

@@ -391,7 +391,8 @@ class TCqActor: public TInterconnectLoggingBase, public TActorBootstrapped<TCqAc
 
 public:
     TCqActor(TCqFactory cqFactory, TRdmaActorParams params, NMonitoring::TDynamicCounters* counters)
-        : TInterconnectLoggingBase("CqActor")
+        : TInterconnectLoggingBase(YDB_LOG_CREATE_MESSAGE(
+            {"selfActorKind", "CqActor"}))
         , CqFactory(std::move(cqFactory))
         , RdmaActorParams(params)
         , QpCacheCounters(std::make_shared<TQpCacheCounters>(counters))
@@ -457,6 +458,7 @@ public:
                 return;
             }
             YDB_LOG_ERROR("Unable to register",
+                {"logPrefix", LogPrefix},
                 {"marker", "ICRDMA"},
                 {"asyncFd", rdmaCtx->GetContext()->async_fd});
         } else if (it->second.index() == 0) {
@@ -476,6 +478,7 @@ public:
 
     void Handle(NActors::TEvPollerRegisterResult::TPtr& ev) {
         YDB_LOG_DEBUG("Got TEvPollerRegisterResult",
+            {"logPrefix", LogPrefix},
             {"marker", "ICRDMA"},
             {"fd", ev->Get()->Socket.Get()->GetDescriptor()});
         auto rdmaCtx = static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get())->GetContext();
@@ -614,6 +617,7 @@ private:
     void ProcessCqErr(auto it) {
         TCtxData& c = std::get<0>(it->second);
         YDB_LOG_ERROR("CQ/SRQ error issued on ctx notify all pending cq callbacks",
+            {"logPrefix", LogPrefix},
             {"marker", "ICRDMA"},
             {"rdmaCtx", it->first->ToString().data()});
         c.Cq->NotifyErr();
@@ -631,6 +635,7 @@ private:
         }
 
         YDB_LOG_ERROR("Terminal error while filling RDMA QP cache",
+            {"logPrefix", LogPrefix},
             {"marker", "ICRDMA"},
             {"rdmaCtx", ev->Get()->Ctx->ToString().data()},
             {"error", ev->Get()->Error},
@@ -665,6 +670,7 @@ private:
         Y_ABORT_UNLESS(it != CqMap.end());
 
         YDB_LOG_DEBUG("RDMA async event issued on ctx",
+            {"logPrefix", LogPrefix},
             {"marker", "ICRDMA"},
             {"rdmaCtx", rdmaCtx->ToString().data()},
             {"eventDbg", GetAsyncEventDbg(rdmaCtx, async_event).data()});

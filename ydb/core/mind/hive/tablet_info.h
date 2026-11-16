@@ -281,6 +281,10 @@ public:
     bool IsPinnedToNode() const;
 
     void UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics);
+    // Named resources describe the current incarnation of the tablet: on restart the work follows the tablet,
+    // but its values become an estimate until the new incarnation reports them
+    void CarryOverNamedResources();
+    void DropExpiredNamedResourceEstimates();
     TResourceRawValues GetResourceCurrentValues() const;
     TResourceRawValues GetResourceMaximumValues() const;
     i64 GetCounterValue() const;

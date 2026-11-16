@@ -1,8 +1,7 @@
 UNITTEST_FOR(ydb/core/tx/tiering)
 
 FORK_SUBTESTS()
-
-SPLIT_FACTOR(60)
+SPLIT_FACTOR(20)
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)

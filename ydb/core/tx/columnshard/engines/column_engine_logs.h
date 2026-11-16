@@ -200,7 +200,7 @@ public:
 
     virtual bool HasDataInPathId(const TInternalPathId pathId) const override {
         auto g = GetGranuleOptional(pathId);
-        return g && (g->GetPortions().size() || g->GetInsertedPortions().size());
+        return g && !g->IsErasable();
     }
 
     bool IsGranuleExists(const TInternalPathId pathId) const {

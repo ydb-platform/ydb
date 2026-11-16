@@ -9,17 +9,17 @@
 
 namespace NKikimr::NCdcAggregator {
 
-struct TTopicPartition {
+struct TCdcAggregatorStreamTopicPartition {
     ui32 PartitionId = 0;
     ui64 TabletId = 0;
 
-    bool operator==(const TTopicPartition&) const = default;
+    bool operator==(const TCdcAggregatorStreamTopicPartition&) const = default;
 };
 
 struct TCdcAggregatorStreamTopic {
     TPathId StreamPathId;
     TString StreamPath;
-    TVector<TTopicPartition> Partitions;
+    TVector<TCdcAggregatorStreamTopicPartition> Partitions;
 
     bool operator==(const TCdcAggregatorStreamTopic&) const = default;
 };

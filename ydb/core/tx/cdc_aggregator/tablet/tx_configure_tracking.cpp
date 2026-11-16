@@ -1,5 +1,7 @@
 #include "tablet_impl.h"
 
+#include <ydb/library/actors/core/log.h>
+
 #include <util/string/builder.h>
 
 #include <algorithm>
@@ -54,6 +56,12 @@ public:
             Self->CdcAggregatorStream.emplace(*config);
             NIceDb::TNiceDb db(txc.DB);
             Self->CdcAggregatorStreamRepository.InsertCdcAggregatorStream(db, *Self->CdcAggregatorStream);
+
+            YDB_LOG_CREATE_CONTEXT({"tabletId", Self->TabletID()});
+            YDB_LOG_INFO("Stream configured",
+                {"streamPathId", Self->CdcAggregatorStream->GetTopic().StreamPathId},
+                {"sources", Self->CdcAggregatorStream->GetSourceDataShardIds().size()});
+
             Result->Record.SetStatus(TResult::SUCCESS);
         } else if (IsSameConfig(*Self->CdcAggregatorStream, *config)) {
             Result->Record.SetStatus(TResult::SUCCESS);

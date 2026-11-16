@@ -1,6 +1,9 @@
 #include "tablet_impl.h"
 
+#include <ydb/library/actors/core/log.h>
+
 #include <util/string/builder.h>
+#include <util/string/join.h>
 
 #include <algorithm>
 
@@ -8,19 +11,23 @@
 
 namespace NKikimr::NCdcAggregator {
 
+namespace {
+
+bool IsValidPartitioningChange(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds) {
+    return parentDataShardId
+        && !childDataShardIds.empty()
+        && childDataShardIds.front() != 0
+        && std::adjacent_find(childDataShardIds.begin(), childDataShardIds.end()) == childDataShardIds.end()
+        && !std::binary_search(childDataShardIds.begin(), childDataShardIds.end(), parentDataShardId);
+}
+
+} // namespace
+
 class TCdcAggregator::TTxPartitioningChanged : public TTxBase {
     using TResult = NKikimrCdcAggregator::TEvPartitioningChangedAck;
 
     TEvCdcAggregator::TEvPartitioningChanged::TPtr Ev;
     THolder<TEvCdcAggregator::TEvPartitioningChangedAck> Result;
-
-    static bool IsValidPartitioningChange(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds) {
-        return parentDataShardId
-            && !childDataShardIds.empty()
-            && childDataShardIds.front() != 0
-            && std::adjacent_find(childDataShardIds.begin(), childDataShardIds.end()) == childDataShardIds.end()
-            && !std::binary_search(childDataShardIds.begin(), childDataShardIds.end(), parentDataShardId);
-    }
 
 public:
     explicit TTxPartitioningChanged(TCdcAggregator* self, TEvCdcAggregator::TEvPartitioningChanged::TPtr& ev)
@@ -58,12 +65,19 @@ public:
         const auto diff = Self->CdcAggregatorStream->ApplyPartitioningChange(parentDataShardId, childDataShardIds);
         if (!diff) {
             Result->Record.SetStatus(TResult::UNKNOWN_SOURCE);
-            Result->Record.SetError(TStringBuilder() << "DataShard " << parentDataShardId << " is not a source");
+            Result->Record.SetError(TStringBuilder() << "Unknown partitioning change of DataShard " << parentDataShardId);
             return true;
         }
 
         NIceDb::TNiceDb db(txc.DB);
         Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamSourcesDiff(db, *diff);
+
+        YDB_LOG_CREATE_CONTEXT({"tabletId", Self->TabletID()});
+        YDB_LOG_INFO("Partitioning change applied",
+            {"parentDataShardId", parentDataShardId},
+            {"inserted", JoinSeq(",", diff->Inserted)},
+            {"deleted", JoinSeq(",", diff->Deleted)});
+
         Result->Record.SetStatus(TResult::SUCCESS);
 
         return true;

@@ -568,7 +568,7 @@ std::vector<std::string> GetResultColumnNames(const NKikimr::NMiniKQL::TType* re
 template <class T>
 void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResultType,
     const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyOpReadOlapRanges& readProto, TExprContext &ctx,
-    TTypeAnnotationContext& typesCtx, TCompileTrace* trace)
+    TTypeAnnotationContext& typesCtx, const NMiniKQL::IFunctionRegistry& functionRegistry, TCompileTrace* trace)
 {
     if (NYql::HasSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames)) {
         auto groupByKeys = NYql::GetSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames);
@@ -580,7 +580,7 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
         }
     }
     auto resultColNames = GetResultColumnNames(miniKqlResultType);
-    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, typesCtx, trace);
+    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, typesCtx, functionRegistry, trace);
 }
 
 THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& secretNames) {
@@ -1053,7 +1053,7 @@ private:
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
                 {
                     TCompileTraceScope traceScope(OptimizeCtx.GetCompileTrace(), TCompileTraceLevels::Step, "Compile OLAP program");
-                    FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx, OptimizeCtx.GetCompileTrace());
+                    FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx, FuncRegistry, OptimizeCtx.GetCompileTrace());
                 }
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
             } else if (auto maybeReadBlockTableRanges = node.Maybe<TKqpBlockReadOlapTableRanges>()) {
@@ -1069,7 +1069,7 @@ private:
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
                 {
                     TCompileTraceScope traceScope(OptimizeCtx.GetCompileTrace(), TCompileTraceLevels::Step, "Compile OLAP program");
-                    FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx, OptimizeCtx.GetCompileTrace());
+                    FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx, FuncRegistry, OptimizeCtx.GetCompileTrace());
                 }
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);

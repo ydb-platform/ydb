@@ -8,7 +8,6 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <memory>
@@ -36,16 +35,20 @@ class TKqpOlapCompileContext {
 public:
     TKqpOlapCompileContext(const TCoArgument& row, const TKikimrTableMetadata& tableMeta,
         NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-        TExprContext &exprCtx, TTypeAnnotationContext& typesCtx)
+        TExprContext &exprCtx, TTypeAnnotationContext& typesCtx, const NMiniKQL::IFunctionRegistry& functionRegistry)
         : Row(row)
         , MaxColumnId(0)
         , ReadProto(readProto)
         , ResultColNames(resultColNames)
         , ExprContext(exprCtx)
         , TypesCtx(typesCtx)
-        , YqlKernelsFuncRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone())
+        , YqlKernelsFuncRegistry(NMiniKQL::CreateFunctionRegistry(
+            NMiniKQL::IBuiltinFunctionRegistry::TPtr(functionRegistry.GetBuiltins()))->Clone())
         , YqlKernelRequestBuilder(nullptr)
     {
+        // Built-in functions and Arrow kernel families already belong to the
+        // compiler's registry. Share those read-only tables while retaining a
+        // private mutable UDF registry for each OLAP program.
         NKikimr::NMiniKQL::FillStaticModules(*YqlKernelsFuncRegistry);
         YqlKernelRequestBuilder = std::make_unique<TKernelRequestBuilder>(*YqlKernelsFuncRegistry);
 
@@ -1256,11 +1259,11 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
 
 void CompileOlapProgram(const TCoLambda& lambda, const TKikimrTableMetadata& tableMeta,
     NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-    TExprContext &exprCtx, TTypeAnnotationContext& typesCtx, TCompileTrace* trace)
+    TExprContext &exprCtx, TTypeAnnotationContext& typesCtx, const NMiniKQL::IFunctionRegistry& functionRegistry, TCompileTrace* trace)
 {
     YQL_ENSURE(lambda.Args().Size() == 1);
 
-    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx, typesCtx);
+    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx, typesCtx, functionRegistry);
 
     {
         TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Build OLAP program");

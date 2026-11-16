@@ -8,6 +8,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <util/generic/string.h>
 
+#include <limits>
+
 namespace NKikimr::NArrow {
 
 class TSimpleRowViewV0 {
@@ -190,7 +192,10 @@ public:
             }
             if constexpr (arrow::has_c_type<typename TWrap::T>() && !std::is_base_of<arrow::HalfFloatType, typename TWrap::T>()) {
                 using CType = typename arrow::TypeTraits<typename TWrap::T>::CType;
-                if constexpr (std::is_same_v<T, CType>) {
+                if constexpr (std::is_same_v<T, CType> ||
+                    (std::is_integral_v<T> && std::is_integral_v<CType> &&
+                        std::is_signed_v<T> == std::is_signed_v<CType> &&
+                        std::numeric_limits<T>::digits == std::numeric_limits<CType>::digits)) {
                     Result = *(CType*)(data);
                     return true;
                 }

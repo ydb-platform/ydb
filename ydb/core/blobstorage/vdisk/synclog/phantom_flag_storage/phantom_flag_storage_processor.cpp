@@ -76,7 +76,7 @@ private:
         bool BuilderRunning;
     };
 
-    struct TReadFlagChunk {
+    struct TReadFlagsFromChunk {
         TActorId Requester;
         TVDiskID VDiskId;
         ui64 Cookie;
@@ -344,10 +344,6 @@ private:
                     result->Record.AddChunkIndexes(chunkIdx);
                 }
             }
-            if (result->Record.ByteSizeLong() > NActors::EventMaxByteSize) {
-                result->Record.ClearChunkIndexes();
-                result->Record.SetStatus(NKikimrProto::TRYLATER_SIZE);
-            }
         }
         SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, result.release(),
                 ev->Cookie, ev->GetChannel(), Ctx.SyncLogCtx->VCtx, {});
@@ -357,7 +353,7 @@ private:
         const auto& record = ev->Get()->Record;
         const ui32 chunkIdx = record.GetChunkIndex();
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-        const TReadFlagChunk request{ev->Sender, vdiskId, ev->Cookie, ev->GetChannel(), chunkIdx, 0};
+        const TReadFlagsFromChunk request{ev->Sender, vdiskId, ev->Cookie, ev->GetChannel(), chunkIdx, 0};
         if (!record.HasChunkIndex()) {
             ReplyToFlagChunkRead(request, NKikimrProto::ERROR);
             return;
@@ -386,7 +382,7 @@ private:
                         chunkIdx, 0, dataSize, NPriRead::SyncLog, nullptr));
     }
 
-    void ReplyToFlagChunkRead(const TReadFlagChunk& request, NKikimrProto::EReplyStatus status, TString&& keys = {}) {
+    void ReplyToFlagChunkRead(const TReadFlagsFromChunk& request, NKikimrProto::EReplyStatus status, TString&& keys = {}) {
         auto result = std::make_unique<TEvReadFlagChunkResult>(status, request.VDiskId);
         result->Record.SetChunkIndex(request.ChunkIdx);
         if (!keys.empty()) {
@@ -397,7 +393,7 @@ private:
     }
 
     void FinishFlagChunkRead(const NPDisk::TEvChunkReadResult& result) {
-        const TReadFlagChunk request = *ActiveFlagChunkRead;
+        const TReadFlagsFromChunk request = *ActiveFlagChunkRead;
         TString keys;
         NKikimrProto::EReplyStatus status = result.Status;
         if (status == NKikimrProto::OK) {
@@ -728,7 +724,7 @@ private:
     ui32 PendingWriteSize = 0;
 
     std::optional<TActiveSnapshotRequest> ActiveSnapshotRequest;
-    std::optional<TReadFlagChunk> ActiveFlagChunkRead;
+    std::optional<TReadFlagsFromChunk> ActiveFlagChunkRead;
 
     std::optional<ui32> TailChunkIdx;
     ui64 TailAvailableSize = 0;

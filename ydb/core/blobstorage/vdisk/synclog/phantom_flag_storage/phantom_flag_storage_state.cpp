@@ -1,7 +1,6 @@
 #include "phantom_flag_storage_state.h"
 #include "phantom_flag_storage_processor.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 
@@ -28,7 +27,7 @@ void TPhantomFlagStorageState::InitializePersistent(TPhantomFlagStorageData&& da
                 .SyncLogKeeperId = syncLogKeeperId,
                 .ChunkKeeperId = chunkKeeperId,
                 .AppendBlockSize = appendBlockSize,
-                .EnableReplication = AppData()->FeatureFlags.GetEnablePhantomFlagStorageReplication(),
+                .EnableReplication = SlCtx->EnablePhantomFlagStorageReplication,
             });
     ProcessorId = TActivationContext::Register(processorActor);
 

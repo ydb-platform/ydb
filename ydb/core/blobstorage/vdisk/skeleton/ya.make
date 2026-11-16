@@ -20,6 +20,7 @@ SRCS(
     blobstorage_monactors.h
     blobstorage_skeleton.cpp
     blobstorage_skeleton.h
+    blobstorage_skeletonerr.cpp
     blobstorage_skeletonerr.h
     blobstorage_skeletonfront.cpp
     blobstorage_skeletonfront.h

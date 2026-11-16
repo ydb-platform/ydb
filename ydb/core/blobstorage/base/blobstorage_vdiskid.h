@@ -87,6 +87,7 @@ struct TVDiskID {
 };
 #pragma pack(pop)
 
+bool IsCompleteVDiskID(const NKikimrBlobStorage::TVDiskID& id);
 TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x);
 void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto);
 // Takes a string in the same format as ToString output, sets isGenerationSet if second number is not '_'

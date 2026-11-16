@@ -958,15 +958,13 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
     }
 
     Y_UNIT_TEST(ReadsPublishedPhantomFlagStorageChunks) {
-        TFeatureFlags featureFlags;
-        featureFlags.SetEnablePhantomFlagStorageReplication(true);
         TTestCtxBase ctx({
             .NodeCount = 8,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .FeatureFlags = featureFlags,
             .PDiskChunkSize = 32_MB,
             .EnablePhantomFlagStorage = true,
             .EnablePersistentPhantomFlagStorage = true,
+            .EnablePhantomFlagStorageReplication = true,
         });
 
         std::unordered_map<ui32, TActorId> processors;
@@ -1039,6 +1037,21 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         const std::unique_ptr<TListResult> stale = ctx.Env->SyncQuery<TListResult, TList>(
             donor, stalePeerId, donorId);
         UNIT_ASSERT_VALUES_EQUAL(stale->Record.GetStatus(), NKikimrProto::RACE);
+
+        const std::unique_ptr<TListResult> invalidCoordinates = ctx.Env->SyncQueryFactory<TListResult>(donor, [&] {
+            std::unique_ptr<TList> request = std::make_unique<TList>(peerId, donorId);
+            request->Record.MutableSourceVDiskID()->SetRing(256);
+            return request;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(invalidCoordinates->Record.GetStatus(), NKikimrProto::ERROR);
+
+        const std::unique_ptr<TReadResult> noChunkIndex = ctx.Env->SyncQueryFactory<TReadResult>(donor, [&] {
+            std::unique_ptr<TRead> request = std::make_unique<TRead>(peerId, donorId, chunkIndex);
+            request->Record.ClearChunkIndex();
+            return request;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(noChunkIndex->Record.GetStatus(), NKikimrProto::ERROR);
+        UNIT_ASSERT(!noChunkIndex->Record.HasChunkIndex());
     }
 
     #undef TEST_PHANTOM_BLOBS

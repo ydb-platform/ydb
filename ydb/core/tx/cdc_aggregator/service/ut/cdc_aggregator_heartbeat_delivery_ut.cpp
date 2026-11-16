@@ -30,72 +30,106 @@ THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> MakeWritten(const TVector<s
     return tabletRepliesBySourceDataShardId;
 }
 
-TVector<ui64> GetSources(const TCdcAggregatorHeartbeatBatch& batch) {
-    TVector<ui64> sources;
+TVector<ui64> GetSourceDataShardIds(const TCdcAggregatorHeartbeatBatch& batch) {
+    TVector<ui64> sourceDataShardIds;
     for (const auto& item : batch) {
-        sources.push_back(item.SourceDataShardId);
+        sourceDataShardIds.push_back(item.SourceDataShardId);
     }
-    return sources;
+    return sourceDataShardIds;
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
 
-    Y_UNIT_TEST(BatchesSources) {
+    Y_UNIT_TEST(ShouldPrepareBatchInArrivalOrderWhenSourcesArePending) {
+        // given
         TCdcAggregatorHeartbeatDelivery delivery(100);
         for (ui64 sourceDataShardId : {1, 2, 3}) {
             delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100));
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(GetSources(delivery.PrepareNextBatchIfPossible().value()), TVector<ui64>({1, 2, 3}));
-        UNIT_ASSERT(!delivery.PrepareNextBatchIfPossible());
+        // when
+        const auto batch = delivery.PrepareNextBatchIfPossible();
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(GetSourceDataShardIds(batch.value()), TVector<ui64>({1, 2, 3}));
     }
 
-    Y_UNIT_TEST(KeepsNewestHeartbeatOfSource) {
+    Y_UNIT_TEST(ShouldNotPrepareBatchWhenPreviousBatchAwaitsReply) {
+        // given
+        TCdcAggregatorHeartbeatDelivery delivery(100);
+        delivery.AddHeartbeat(1, MakeHeartbeat(100));
+        delivery.PrepareNextBatchIfPossible().value();
+        delivery.AddHeartbeat(2, MakeHeartbeat(100));
+
+        // when
+        const auto batch = delivery.PrepareNextBatchIfPossible();
+
+        // then
+        UNIT_ASSERT(!batch);
+    }
+
+    Y_UNIT_TEST(ShouldSendNewestHeartbeatWhenSourceAddsSeveral) {
+        // given
         TCdcAggregatorHeartbeatDelivery delivery(100);
         delivery.AddHeartbeat(1, MakeHeartbeat(100, "a"));
         delivery.AddHeartbeat(1, MakeHeartbeat(120, "b"));
         delivery.AddHeartbeat(1, MakeHeartbeat(110, "c"));
 
+        // when
         const auto batch = delivery.PrepareNextBatchIfPossible().value();
+
+        // then
         UNIT_ASSERT_VALUES_EQUAL(batch.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(batch[0].Heartbeat.Version, TRowVersion(120, 0));
         UNIT_ASSERT_VALUES_EQUAL(batch[0].Heartbeat.Data, "b");
+    }
 
+    Y_UNIT_TEST(ShouldSendHeartbeatInNextBatchWhenAddedWhileAwaitingReply) {
+        // given
+        TCdcAggregatorHeartbeatDelivery delivery(100);
+        delivery.AddHeartbeat(1, MakeHeartbeat(100));
+        delivery.PrepareNextBatchIfPossible().value();
+        delivery.AddHeartbeat(1, MakeHeartbeat(120));
+        delivery.CompleteBatch(MakeWritten({{1, 100}}));
+
+        // when
+        const auto batch = delivery.PrepareNextBatchIfPossible().value();
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(batch.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batch[0].Heartbeat.Version, TRowVersion(120, 0));
+    }
+
+    Y_UNIT_TEST(ShouldReplyWrittenVersionWhenTabletWroteHeartbeat) {
+        // given
+        TCdcAggregatorHeartbeatDelivery delivery(100);
+        delivery.AddHeartbeat(1, MakeHeartbeat(120));
+        delivery.PrepareNextBatchIfPossible().value();
+
+        // when
         const auto replies = delivery.CompleteBatch(MakeWritten({{1, 120}}));
+
+        // then
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
         UNIT_ASSERT(replies[0].Status == EStatus::Written);
         UNIT_ASSERT_VALUES_EQUAL(replies[0].WrittenVersion, TRowVersion(120, 0));
         UNIT_ASSERT(delivery.IsIdle());
     }
 
-    Y_UNIT_TEST(SendsHeartbeatAddedWhileAwaitingReplyInNextBatch) {
-        TCdcAggregatorHeartbeatDelivery delivery(100);
-        delivery.AddHeartbeat(1, MakeHeartbeat(100));
-        delivery.PrepareNextBatchIfPossible().value();
-
-        delivery.AddHeartbeat(1, MakeHeartbeat(120));
-        UNIT_ASSERT(!delivery.PrepareNextBatchIfPossible());
-
-        const auto replies = delivery.CompleteBatch(MakeWritten({{1, 100}}));
-        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
-        UNIT_ASSERT(replies[0].Status == EStatus::Written);
-        UNIT_ASSERT_VALUES_EQUAL(replies[0].WrittenVersion, TRowVersion(100, 0));
-
-        UNIT_ASSERT_VALUES_EQUAL(delivery.PrepareNextBatchIfPossible().value()[0].Heartbeat.Version, TRowVersion(120, 0));
-    }
-
-    Y_UNIT_TEST(RetriesSourcesWithoutResult) {
+    Y_UNIT_TEST(ShouldRetrySourceWhenTabletReplyMissesIt) {
+        // given
         TCdcAggregatorHeartbeatDelivery delivery(100);
         for (ui64 sourceDataShardId : {1, 2, 3}) {
             delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100));
         }
-
         delivery.PrepareNextBatchIfPossible().value();
-        UNIT_ASSERT(!delivery.IsIdle());
 
+        // when
         const auto replies = delivery.CompleteBatch(MakeWritten({{1, 100}, {2, 100}}));
+
+        // then
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 3);
         UNIT_ASSERT(replies[0].Status == EStatus::Written);
         UNIT_ASSERT(replies[1].Status == EStatus::Written);
@@ -104,26 +138,65 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
         UNIT_ASSERT(delivery.IsIdle());
     }
 
-    Y_UNIT_TEST(LimitsBatchSize) {
+    Y_UNIT_TEST(ShouldRejectSourceWhenTabletReportsUnknownSource) {
+        // given
+        TCdcAggregatorHeartbeatDelivery delivery(100);
+        delivery.AddHeartbeat(1, MakeHeartbeat(100));
+        delivery.PrepareNextBatchIfPossible().value();
+        THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> tabletRepliesBySourceDataShardId;
+        tabletRepliesBySourceDataShardId[1] = {.SourceDataShardId = 1, .Status = EStatus::Rejected, .Error = "UNKNOWN_SOURCE"};
+
+        // when
+        const auto replies = delivery.CompleteBatch(tabletRepliesBySourceDataShardId);
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
+        UNIT_ASSERT(replies[0].Status == EStatus::Rejected);
+        UNIT_ASSERT_VALUES_EQUAL(replies[0].Error, "UNKNOWN_SOURCE");
+        UNIT_ASSERT(delivery.IsIdle());
+    }
+
+    Y_UNIT_TEST(ShouldLeaveRestInQueueWhenBatchReachesMaxSize) {
+        // given
         TCdcAggregatorHeartbeatDelivery delivery(2);
         for (ui64 sourceDataShardId : {1, 2, 3}) {
             delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100));
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(GetSources(delivery.PrepareNextBatchIfPossible().value()), TVector<ui64>({1, 2}));
-        UNIT_ASSERT(!delivery.PrepareNextBatchIfPossible());
+        // when
+        const auto batch = delivery.PrepareNextBatchIfPossible().value();
 
-        delivery.CompleteBatch(MakeWritten({{1, 100}, {2, 100}}));
-        UNIT_ASSERT_VALUES_EQUAL(GetSources(delivery.PrepareNextBatchIfPossible().value()), TVector<ui64>({3}));
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(GetSourceDataShardIds(batch), TVector<ui64>({1, 2}));
     }
 
-    Y_UNIT_TEST(RetriesAllSourcesWhenBatchFails) {
+    Y_UNIT_TEST(ShouldPrepareRestOfQueueWhenPreviousBatchCompleted) {
+        // given
+        TCdcAggregatorHeartbeatDelivery delivery(2);
+        for (ui64 sourceDataShardId : {1, 2, 3}) {
+            delivery.AddHeartbeat(sourceDataShardId, MakeHeartbeat(100));
+        }
+        delivery.PrepareNextBatchIfPossible().value();
+        delivery.CompleteBatch(MakeWritten({{1, 100}, {2, 100}}));
+
+        // when
+        const auto batch = delivery.PrepareNextBatchIfPossible().value();
+
+        // then
+        UNIT_ASSERT_VALUES_EQUAL(GetSourceDataShardIds(batch), TVector<ui64>({3}));
+    }
+
+    Y_UNIT_TEST(ShouldRetryAwaitingAndPendingSourcesWhenBatchFails) {
+        // given
         TCdcAggregatorHeartbeatDelivery delivery(100);
         delivery.AddHeartbeat(1, MakeHeartbeat(100));
         delivery.PrepareNextBatchIfPossible().value();
         delivery.AddHeartbeat(2, MakeHeartbeat(100));
 
+        // when
         const auto replies = delivery.FailBatch("NOT_READY: ");
+
+        // then
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 2);
         for (const auto& reply : replies) {
             UNIT_ASSERT(reply.Status == EStatus::Retry);
@@ -132,38 +205,33 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
         UNIT_ASSERT(delivery.IsIdle());
     }
 
-    Y_UNIT_TEST(IgnoresFailureWithoutBatchAwaitingReply) {
+    Y_UNIT_TEST(ShouldIgnoreFailureWhenNoBatchAwaitsReply) {
+        // given
         TCdcAggregatorHeartbeatDelivery delivery(100);
         delivery.AddHeartbeat(1, MakeHeartbeat(100));
 
-        UNIT_ASSERT(delivery.FailBatch("NOT_READY: ").empty());
-        UNIT_ASSERT(delivery.PrepareNextBatchIfPossible());
-    }
+        // when
+        const auto replies = delivery.FailBatch("NOT_READY: ");
 
-    Y_UNIT_TEST(RejectsUnknownSource) {
-        TCdcAggregatorHeartbeatDelivery delivery(100);
-        delivery.AddHeartbeat(1, MakeHeartbeat(100));
-        delivery.PrepareNextBatchIfPossible().value();
-
-        THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> tabletRepliesBySourceDataShardId;
-        tabletRepliesBySourceDataShardId[1] = {.SourceDataShardId = 1, .Status = EStatus::Rejected, .Error = "UNKNOWN_SOURCE"};
-
-        const auto replies = delivery.CompleteBatch(tabletRepliesBySourceDataShardId);
-        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
-        UNIT_ASSERT(replies[0].Status == EStatus::Rejected);
-        UNIT_ASSERT_VALUES_EQUAL(replies[0].Error, "UNKNOWN_SOURCE");
-        UNIT_ASSERT(delivery.IsIdle());
+        // then
+        UNIT_ASSERT(replies.empty());
+        UNIT_ASSERT(!delivery.IsIdle());
     }
 
 }
 
 Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDeliveryProtoConverter) {
 
-    Y_UNIT_TEST(SerializesBatch) {
-        const auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeBatch({
+    Y_UNIT_TEST(ShouldSerializeSourceAndHeartbeatWhenBatchHasItem) {
+        // given
+        const TCdcAggregatorHeartbeatBatch batch = {
             {.SourceDataShardId = 1, .Heartbeat = MakeHeartbeat(120, "b")},
-        });
+        };
 
+        // when
+        const auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeBatch(batch);
+
+        // then
         UNIT_ASSERT_VALUES_EQUAL(ev->Record.HeartbeatsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(ev->Record.GetHeartbeats(0).GetSourceDataShardId(), 1);
         const auto heartbeat = NPQ::THeartbeat::Parse(ev->Record.GetHeartbeats(0).GetHeartbeat());
@@ -171,7 +239,8 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDeliveryProtoConverter) {
         UNIT_ASSERT_VALUES_EQUAL(heartbeat.Data, "b");
     }
 
-    Y_UNIT_TEST(ParsesWrittenAndRejectedSources) {
+    Y_UNIT_TEST(ShouldParseWrittenAndRejectedSourcesWhenTabletProcessedBatch) {
+        // given
         TProtoResult proto;
         proto.SetStatus(TProtoResult::SUCCESS);
         auto& written = *proto.AddResults();
@@ -185,7 +254,10 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDeliveryProtoConverter) {
         withoutVersion.SetSourceDataShardId(3);
         withoutVersion.SetStatus(TProtoResult::THeartbeatResult::SUCCESS);
 
+        // when
         const auto [tabletRepliesBySourceDataShardId, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(proto);
+
+        // then
         UNIT_ASSERT_C(tabletRepliesBySourceDataShardId, error);
         UNIT_ASSERT_VALUES_EQUAL(tabletRepliesBySourceDataShardId->size(), 2);
         UNIT_ASSERT(tabletRepliesBySourceDataShardId->at(1).Status == EStatus::Written);
@@ -194,13 +266,17 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDeliveryProtoConverter) {
         UNIT_ASSERT_VALUES_EQUAL(tabletRepliesBySourceDataShardId->at(2).Error, "UNKNOWN_SOURCE");
     }
 
-    Y_UNIT_TEST(FailsBatchNotProcessedByTablet) {
+    Y_UNIT_TEST(ShouldReturnErrorWhenTabletDidNotProcessBatch) {
         for (const auto status : {TProtoResult::NOT_READY, TProtoResult::BAD_REQUEST}) {
+            // given
             TProtoResult proto;
             proto.SetStatus(status);
             proto.SetError("Stream is not configured");
 
+            // when
             const auto [tabletRepliesBySourceDataShardId, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(proto);
+
+            // then
             UNIT_ASSERT(!tabletRepliesBySourceDataShardId);
             UNIT_ASSERT_VALUES_EQUAL(error, TProtoResult::EStatus_Name(status) + ": Stream is not configured");
         }

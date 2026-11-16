@@ -7,6 +7,22 @@ import pytest
 from nots import _library_for_paths, _parse_ts_checks, _ts_check_size
 
 
+@pytest.mark.parametrize("hermetic", [None, "no", "yes"])
+@pytest.mark.parametrize("local_cli", ["no", "yes"])
+@pytest.mark.parametrize("supported", ["no", "yes"])
+def test_hermetic_node_modules_requires_explicit_enablement(hermetic, local_cli, supported):
+    values = {
+        "TS_HERMETIC_NODE_MODULES": hermetic,
+        "TS_LOCAL_CLI": local_cli,
+        "_SUPPORTS_HERMETIC_NODE_MODULES": supported,
+    }
+    unit = SimpleNamespace(get=values.get, get_subst=values.get)
+
+    assert nots._use_hermetic_node_modules(unit) == (
+        hermetic == "yes" and local_cli == "no" and supported == "yes"
+    )
+
+
 @pytest.mark.parametrize(
     ("for_mod", "expected_error"),
     [

@@ -196,9 +196,9 @@ def _use_hermetic_node_modules(unit: ymake.Unit) -> bool:
     # Deprecated builders keep their legacy node_modules installation flow.
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     module_supports_hermetic_node_modules = unit.get("_SUPPORTS_HERMETIC_NODE_MODULES") == "yes"
-    hermetic_node_modules_disabled = unit.get("TS_DISABLE_HERMETIC_NODE_MODULES") == "yes"
+    hermetic_node_modules_enabled = unit.get_subst("TS_HERMETIC_NODE_MODULES") == "yes"
 
-    return not local_cli and module_supports_hermetic_node_modules and not hermetic_node_modules_disabled
+    return not local_cli and module_supports_hermetic_node_modules and hermetic_node_modules_enabled
 
 
 def _configure_hermetic_node_modules(unit: ymake.Unit) -> None:

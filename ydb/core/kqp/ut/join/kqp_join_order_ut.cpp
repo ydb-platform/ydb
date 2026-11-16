@@ -123,6 +123,9 @@ static TKikimrRunner GetKikimrWithJoinSettings(
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
+    // These tests assert Map and BlockHash plan names. Scalar hash join replaces both names.
+    appConfig.MutableTableServiceConfig()->SetUseScalarHashJoin(false);
+    appConfig.MutableTableServiceConfig()->SetUseScalarHashJoinForMap(false);
     appConfig.MutableTableServiceConfig()->SetEnableOrderOptimizaionFSM(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
     if (!useCBO) {

@@ -1335,8 +1335,7 @@ private:
         if (in.Compact) {
             settings->Add(Q(Y(Q("isCompact"))));
         }
-        if (!ctx.AnsiInForEmptyOrNullableItemsCollections.Defined()
-            || *ctx.AnsiInForEmptyOrNullableItemsCollections || in.Compact) {
+        if (!ctx.AnsiInForEmptyOrNullableItemsCollections.Defined() || *ctx.AnsiInForEmptyOrNullableItemsCollections || in.Compact) {
             link = L(std::move(link), Q(std::move(settings)));
         }
         return link;

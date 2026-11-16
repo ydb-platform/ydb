@@ -146,9 +146,22 @@ class TestQueryFiles(unittest.TestCase):
             "LogConfig { DefaultLevel: 2 }",
         )
         result = self.run_queries(
-            "--app-config", config, "--sql", "SELECT 42;", "-C", "query", "-A", "explain",
-            "--warmup-count", "3", "--loop-count", "4", "--trace-file", trace,
-            "--trace-level-per-loop", "0,6,14",
+            "--app-config",
+            config,
+            "--sql",
+            "SELECT 42;",
+            "-C",
+            "query",
+            "-A",
+            "explain",
+            "--warmup-count",
+            "3",
+            "--loop-count",
+            "4",
+            "--trace-file",
+            trace,
+            "--trace-level-per-loop",
+            "0,6,14",
         )
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(result.stdout.count("Executing query"), 7, result.stdout)

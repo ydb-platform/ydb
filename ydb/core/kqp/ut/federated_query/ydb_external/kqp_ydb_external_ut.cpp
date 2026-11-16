@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         auto host = CreateKqpHost(gateway, cluster, database, config, moduleResolver,
             TKqpFederatedQuerySetup{ .HttpGateway = NYql::IHTTPGateway::Make() }, nullptr, std::make_shared<TGUCSettings>(), queryServiceConfig);
         // Reuse the host to exercise disposal of the previous lazy registrations.
-        for (const TString query : {"SELECT 1;", "SELECT 2;", "SELECT 3;"}) {
+        for (const TString query : { "SELECT 1;", "SELECT 2;", "SELECT 3;" }) {
             auto preparing = Script ? host->PrepareGenericScript(query, {}) : host->PrepareGenericQuery(query, {});
             while (!preparing->HasResult()) {
                 preparing->Continue().GetValueSync();

@@ -12,7 +12,6 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/persqueue/public
     ydb/library/logger
 )
 

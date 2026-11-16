@@ -579,7 +579,10 @@ void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
         Head.AddBatch(NewHead.ExtractFirstBatch());
     }
     Head.PackedSize += NewHead.PackedSize;
-    Head.TrailingOffsetDelta = NewHead.TrailingOffsetDelta;
+
+    if (NewHead.PackedSize > 0) {
+        Head.TrailingOffsetDelta = NewHead.TrailingOffsetDelta;
+    }
 
     if (Head.PackedSize > 0 && DataKeysBody.empty()) {
         startOffset = Head.Offset + (Head.PartNo > 0 ? 1 : 0);

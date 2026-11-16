@@ -1394,6 +1394,65 @@ Y_UNIT_TEST_SUITE(Head) {
         UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
     }
 
+    Y_UNIT_TEST(AddPackedBatchPreservesTrailingOffsetDelta) {
+        const TTestMaxHeaderSizeGuard guard(true);
+        const auto ts = TInstant::Seconds(1);
+        for (ui32 logicalMessageCount : {1u, 5u}) {
+            THead head;
+            head.Offset = 100;
+            head.AddBatch(TBatch(100, 0));
+            head.AddBlob(MakeSimpleBlob("src", 1, "first message"));
+
+            TBatch first(101, 0);
+            first.SetOffsetDelta(0); // Explicitly use the extended header, independently of the default flag.
+            first.AddBlob(MakeSimpleBlob("src", 2, "second message"));
+            first.AddBlob(TClientBlob(
+                TString("src"), 3, TString(512_KB, 'x'), TPartData{0, 2, 1_MB},
+                ts, ts, 1_MB, "", "", logicalMessageCount, logicalMessageCount > 1));
+            first.Pack();
+            UNIT_ASSERT(first.Blobs.empty());
+
+            head.AddBatch(first);
+            UNIT_ASSERT_VALUES_EQUAL(head.GetCount(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(head.TrailingOffsetDelta, logicalMessageCount);
+            UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 2u + logicalMessageCount);
+
+            TBatch last(102, 1);
+            last.SetOffsetDelta(0);
+            last.AddBlob(TClientBlob(
+                TString("src"), 3, TString(512_KB, 'y'), TPartData{1, 2, 1_MB},
+                ts, ts, 1_MB, "", "", logicalMessageCount, logicalMessageCount > 1));
+            last.Pack();
+
+            head.AddBatch(last);
+            UNIT_ASSERT_VALUES_EQUAL(head.GetCount(), 2u + logicalMessageCount);
+            UNIT_ASSERT_VALUES_EQUAL(head.TrailingOffsetDelta, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 2u + logicalMessageCount);
+        }
+    }
+
+    Y_UNIT_TEST(AddPackedBatchWithCompleteMultipartMessage) {
+        const TTestMaxHeaderSizeGuard guard(true);
+        const auto ts = TInstant::Seconds(1);
+        for (ui32 logicalMessageCount : {1u, 5u}) {
+            TBatch batch(100, 0);
+            batch.SetOffsetDelta(0);
+            for (ui16 partNo : {0, 1}) {
+                batch.AddBlob(TClientBlob(
+                    TString("src"), 1, TString(512_KB, 'x'), TPartData{partNo, 2, 1_MB},
+                    ts, ts, 1_MB, "", "", logicalMessageCount, logicalMessageCount > 1));
+            }
+            batch.Pack();
+
+            THead head;
+            head.Offset = 100;
+            head.AddBatch(batch);
+            UNIT_ASSERT_VALUES_EQUAL(head.GetCount(), logicalMessageCount);
+            UNIT_ASSERT_VALUES_EQUAL(head.TrailingOffsetDelta, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), logicalMessageCount);
+        }
+    }
+
     Y_UNIT_TEST(GetOffsetDeltaWithLMC) {
         THead head;
         head.Offset = 100;

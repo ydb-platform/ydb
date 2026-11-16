@@ -6,10 +6,18 @@
 #include <util/string/escape.h>
 #include <util/system/unaligned_mem.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/core/persqueue/public/config.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr {
 namespace NPQ {
+
+namespace {
+
+bool CanWriteOffsetDeltaInKeys() {
+    return HasAppData() && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys();
+}
+
+}
 
 //
 // TPartData
@@ -332,7 +340,9 @@ void THead::AddBatch(const TBatch& batch) {
     auto& b = Batches.emplace_back(batch);
     InternalPartsCount += b.GetInternalPartsCount();
 
-    if (!batch.Packed && !batch.Blobs.empty()) {
+    if (batch.HasOffsetDelta()) {
+        TrailingOffsetDelta = batch.GetOffsetDelta() - batch.GetCount();
+    } else if (!batch.Packed && !batch.Blobs.empty()) {
         const auto& lastBlob = batch.Blobs.back();
         TrailingOffsetDelta = !lastBlob.IsLastPart() ? lastBlob.LogicalMessageCount : 0;
     } else {
@@ -628,6 +638,9 @@ ui64 TPartitionedBlob::GetOffsetDelta() const {
     }
     if (newHeadIncluded) {
         offsetDelta += NewHead.GetOffsetDelta();
+        if (headIncluded) {
+            offsetDelta -= Head.TrailingOffsetDelta;
+        }
     }
 
     for (size_t i = 0; i < Blobs.size(); ++i) {

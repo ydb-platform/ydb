@@ -53,6 +53,11 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
 
     class TCdcAggregatorConnection {
     public:
+        explicit TCdcAggregatorConnection(const TActorId& pipeClient)
+            : PipeClient(pipeClient)
+        {
+        }
+
         void RegisterHeartbeat(const TOrigin& origin, ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat) {
             LastActivity = TActivationContext::Monotonic();
             Origins[sourceDataShardId] = origin;
@@ -66,13 +71,6 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
                 BatchDeadline = TActivationContext::Monotonic() + BatchTimeout;
             }
             return batch;
-        }
-
-        const TActorId& GetOrCreatePipeClient(const std::function<TActorId()>& createPipeClient) {
-            if (!PipeClient) {
-                PipeClient = createPipeClient();
-            }
-            return PipeClient;
         }
 
         bool IsAwaitingBatch(ui64 batchCookie) const {
@@ -127,9 +125,9 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             }
         }
 
+        const TActorId PipeClient;
         TCdcAggregatorHeartbeatDelivery CdcAggregatorHeartbeatDelivery{MaxBatchSize};
         THashMap<ui64, TOrigin> Origins;
-        TActorId PipeClient;
         ui64 BatchCookie = 0;
         TMonotonic BatchDeadline;
         TMonotonic LastActivity;
@@ -144,7 +142,17 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             return;
         }
 
-        CdcAggregatorConnections[msg.RecipientTabletId].RegisterHeartbeat(origin, msg.SourceDataShardId, msg.Heartbeat);
+        auto it = CdcAggregatorConnections.find(msg.RecipientTabletId);
+        if (it == CdcAggregatorConnections.end()) {
+            it = CdcAggregatorConnections.emplace(msg.RecipientTabletId, TCdcAggregatorConnection(CreatePipeClient(msg.RecipientTabletId))).first;
+        }
+        it->second.RegisterHeartbeat(origin, msg.SourceDataShardId, msg.Heartbeat);
+    }
+
+    TActorId CreatePipeClient(ui64 tabletId) {
+        NTabletPipe::TClientConfig config;
+        config.RetryPolicy = {.RetryLimitCount = PipeRetryLimit};
+        return Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
     }
 
     void SendHeartbeatBatches() {
@@ -155,18 +163,12 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
                 continue;
             }
 
-            const TActorId& pipeClient = connection.GetOrCreatePipeClient([this, tabletId = tabletId] {
-                NTabletPipe::TClientConfig config;
-                config.RetryPolicy = {.RetryLimitCount = PipeRetryLimit};
-                return Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
-            });
-
             auto ev = ProtoConverter.SerializeBatch(*batch);
             YDB_LOG_DEBUG("Send batch",
                 {"aggregator", tabletId},
                 {"batchCookie", batchCookie},
                 {"heartbeats", ev->Record.HeartbeatsSize()});
-            NTabletPipe::SendData(SelfId(), pipeClient, ev.Release(), batchCookie);
+            NTabletPipe::SendData(SelfId(), connection.GetPipeClient(), ev.Release(), batchCookie);
         }
     }
 

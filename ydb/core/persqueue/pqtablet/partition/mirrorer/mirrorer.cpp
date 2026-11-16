@@ -771,7 +771,8 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
 }
 
 void TMirrorer::AddMessagesToQueue(
-    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages
+    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages,
+    const TActorContext& ctx
 ) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
@@ -892,7 +893,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     LastReadEventTime = ctx.Now();
 
     if (auto* dataEvent = std::get_if<TPersQueueReadEvent::TDataReceivedEvent>(&event.value())) {
-        AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()));
+        AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()), ctx);
     } else if (auto* createStream = std::get_if<TPersQueueReadEvent::TStartPartitionSessionEvent>(&event.value())) {
         LOG_I(
             "Got create stream event for and will set",

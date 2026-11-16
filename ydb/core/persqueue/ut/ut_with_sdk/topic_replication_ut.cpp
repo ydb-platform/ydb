@@ -7,9 +7,12 @@
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
+#include <library/cpp/http/simple/http_client.h>
+#include <library/cpp/testing/common/network.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/future.h>
 
+#include <util/stream/str.h>
 #include <util/system/mutex.h>
 
 #include <chrono>
@@ -618,6 +621,51 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
 
     Y_UNIT_TEST(ReplicateInitialAndUpdatedConsumerOffsetsViaTopicApiAlter) {
         TestReplicateInitialAndUpdatedConsumerOffsets(true, true);
+    }
+
+    Y_UNIT_TEST(ReplicateConsumerOffsetRewindViaViewer) {
+        TPortManager ports;
+        const ui16 monPort = ports.GetPort();
+        auto settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
+        settings.InitKikimrRunConfig().SetMonitoringPortOffset(monPort, true);
+        TTopicReplicationEnv env(settings);
+        const TString source = "/Root/replication_source";
+        const TString destination = "/Root/replication_destination";
+        env.Create(source, true);
+        env.Create(destination, false);
+        env.Write(source, 0, 10);
+        env.Read(source, 0, 6, 10);
+        env.EnableMirroring(source, destination);
+        env.WaitForOffsets(destination, 6, 10);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (true) {
+            TStringStream response;
+            const auto status = httpClient.DoGet("/viewer/capabilities", &response);
+            if (status == HTTP_OK) {
+                break;
+            }
+            UNIT_ASSERT_C(TInstant::Now() < deadline, status << ": " << response.Str());
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        // Rewind the source consumer through the same endpoint as the UI.
+        // No new messages are written: offset changes must propagate on their own.
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Authorization"] = "root@builtin";
+        TStringStream response;
+        const auto status = httpClient.DoPost(TStringBuilder()
+            << "/viewer/commit_offset?database=/Root&path=" << source
+            << "&consumer=reader&partition_id=0&offset=0", "", &response, headers);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, HTTP_OK, response.Str());
+        env.WaitForOffsets(source, 0, 10);
+        env.WaitForOffsets(destination, 0, 10);
+
+        // The SDK starts reading from the beginning again, and subsequent commits
+        // below the old offset must also reach the destination.
+        env.Read(source, 0, 2, 10);
+        env.WaitForOffsets(destination, 2, 10);
     }
 
     Y_UNIT_TEST(ReplicateOffsetsWithoutMessages) {

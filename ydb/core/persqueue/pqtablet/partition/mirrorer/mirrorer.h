@@ -141,7 +141,8 @@ public:
     void RequestSourcePartitionStatus();
     void TryUpdateWriteTimetsamp(const TActorContext &ctx);
     void AddMessagesToQueue(
-        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages
+        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages,
+        const TActorContext& ctx
     );
     void StartWaitNextReaderEvent(const TActorContext& ctx);
 

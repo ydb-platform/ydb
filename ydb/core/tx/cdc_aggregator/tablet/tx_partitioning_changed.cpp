@@ -53,8 +53,8 @@ public:
             return true;
         }
 
-        TCdcAggregatorStreamChanges changes;
-        switch (Self->CdcAggregatorStream->ReplaceSourceDataShard(parentDataShardId, childDataShardIds, changes)) {
+        const auto result = Self->CdcAggregatorStream->UpdateSources(parentDataShardId, childDataShardIds);
+        switch (result.Outcome) {
             case ESourceOutcome::Success:
                 Result->Record.SetStatus(TResult::SUCCESS);
                 break;
@@ -65,7 +65,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistCdcAggregatorStreamChanges(db, changes);
+        Self->PersistCdcAggregatorStreamSourcesDiff(db, result.Diff);
 
         return true;
     }

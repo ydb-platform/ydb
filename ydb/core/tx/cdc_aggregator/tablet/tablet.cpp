@@ -68,12 +68,12 @@ void TCdcAggregator::PersistCdcAggregatorStream(NIceDb::TNiceDb& db) {
     }
 }
 
-void TCdcAggregator::PersistCdcAggregatorStreamChanges(NIceDb::TNiceDb& db, const TCdcAggregatorStreamChanges& changes) {
-    for (const auto dataShardId : changes.ErasedSourceDataShardIds) {
+void TCdcAggregator::PersistCdcAggregatorStreamSourcesDiff(NIceDb::TNiceDb& db, const TCdcAggregatorStreamSourcesDiff& diff) {
+    for (const auto dataShardId : diff.Deleted) {
         db.Table<Schema::Sources>().Key(dataShardId).Delete();
     }
 
-    for (const auto dataShardId : changes.AddedSourceDataShardIds) {
+    for (const auto dataShardId : diff.Inserted) {
         db.Table<Schema::Sources>().Key(dataShardId).Update();
     }
 }

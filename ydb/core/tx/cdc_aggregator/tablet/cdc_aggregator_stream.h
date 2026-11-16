@@ -32,14 +32,19 @@ bool ParseCdcAggregatorStreamTopic(const NKikimrCdcAggregator::TTrackingConfig& 
 bool ParseCdcAggregatorStreamConfig(const NKikimrCdcAggregator::TTrackingConfig& proto, TCdcAggregatorStreamConfig& config, TString& error);
 TString SerializeCdcAggregatorStreamTopic(const TCdcAggregatorStreamTopic& topic);
 
-struct TCdcAggregatorStreamChanges {
-    THashSet<ui64> AddedSourceDataShardIds;
-    THashSet<ui64> ErasedSourceDataShardIds;
-};
-
 enum class ESourceOutcome {
     Success,
     UnknownSource,
+};
+
+struct TCdcAggregatorStreamSourcesDiff {
+    THashSet<ui64> Inserted;
+    THashSet<ui64> Deleted;
+};
+
+struct TCdcAggregatorStreamUpdateSourcesResult {
+    ESourceOutcome Outcome = ESourceOutcome::Success;
+    TCdcAggregatorStreamSourcesDiff Diff;
 };
 
 class TCdcAggregatorStream {
@@ -56,7 +61,7 @@ public:
     }
 
     bool IsSameConfig(const TCdcAggregatorStreamConfig& config) const;
-    ESourceOutcome ReplaceSourceDataShard(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds, TCdcAggregatorStreamChanges& changes);
+    TCdcAggregatorStreamUpdateSourcesResult UpdateSources(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds);
 
 private:
     TCdcAggregatorStreamTopic Topic;

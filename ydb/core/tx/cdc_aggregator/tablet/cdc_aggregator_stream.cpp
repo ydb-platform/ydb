@@ -92,23 +92,25 @@ bool TCdcAggregatorStream::IsSameConfig(const TCdcAggregatorStreamConfig& config
         });
 }
 
-ESourceOutcome TCdcAggregatorStream::ReplaceSourceDataShard(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds, TCdcAggregatorStreamChanges& changes) {
+TCdcAggregatorStreamUpdateSourcesResult TCdcAggregatorStream::UpdateSources(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds) {
+    TCdcAggregatorStreamUpdateSourcesResult result;
     if (!SourceDataShardIds.contains(parentDataShardId)) {
         const bool applied = std::all_of(childDataShardIds.begin(), childDataShardIds.end(), [this](ui64 childDataShardId) {
             return SourceDataShardIds.contains(childDataShardId);
         });
-        return applied ? ESourceOutcome::Success : ESourceOutcome::UnknownSource;
+        result.Outcome = applied ? ESourceOutcome::Success : ESourceOutcome::UnknownSource;
+        return result;
     }
 
     SourceDataShardIds.erase(parentDataShardId);
-    changes.ErasedSourceDataShardIds.insert(parentDataShardId);
+    result.Diff.Deleted.insert(parentDataShardId);
     for (const auto childDataShardId : childDataShardIds) {
         if (SourceDataShardIds.insert(childDataShardId).second) {
-            changes.AddedSourceDataShardIds.insert(childDataShardId);
+            result.Diff.Inserted.insert(childDataShardId);
         }
     }
 
-    return ESourceOutcome::Success;
+    return result;
 }
 
 } // namespace NKikimr::NCdcAggregator

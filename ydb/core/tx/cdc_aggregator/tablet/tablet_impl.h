@@ -42,7 +42,7 @@ private:
     void SwitchToWork(const TActorContext& ctx);
 
     void PersistCdcAggregatorStream(NIceDb::TNiceDb& db);
-    void PersistCdcAggregatorStreamChanges(NIceDb::TNiceDb& db, const TCdcAggregatorStreamChanges& changes);
+    void PersistCdcAggregatorStreamSourcesDiff(NIceDb::TNiceDb& db, const TCdcAggregatorStreamSourcesDiff& diff);
 
     void Handle(TEvCdcAggregator::TEvConfigureTracking::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCdcAggregator::TEvWriteHeartbeats::TPtr& ev, const TActorContext& ctx);

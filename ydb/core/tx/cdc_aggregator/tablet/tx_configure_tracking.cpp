@@ -2,9 +2,24 @@
 
 #include <util/string/builder.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CDC_AGGREGATOR
 
 namespace NKikimr::NCdcAggregator {
+
+namespace {
+
+bool IsSameConfig(const TCdcAggregatorStream& stream, const TCdcAggregatorStreamConfig& config) {
+    const auto& sources = stream.GetSourceDataShardIds();
+    return stream.GetTopic() == config.Topic
+        && sources.size() == config.SourceDataShardIds.size()
+        && std::all_of(config.SourceDataShardIds.begin(), config.SourceDataShardIds.end(), [&sources](ui64 sourceDataShardId) {
+            return sources.contains(sourceDataShardId);
+        });
+}
+
+} // namespace
 
 class TCdcAggregator::TTxConfigureTracking : public TTxBase {
     using TResult = NKikimrCdcAggregator::TEvConfigureTrackingResult;
@@ -41,7 +56,7 @@ public:
             NIceDb::TNiceDb db(txc.DB);
             Self->PersistCdcAggregatorStream(db);
             Result->Record.SetStatus(TResult::SUCCESS);
-        } else if (Self->CdcAggregatorStream->IsSameConfig(config)) {
+        } else if (IsSameConfig(*Self->CdcAggregatorStream, config)) {
             Result->Record.SetStatus(TResult::SUCCESS);
         } else {
             Result->Record.SetStatus(TResult::CONFLICT);

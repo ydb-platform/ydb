@@ -52,7 +52,6 @@ public:
         return SourceDataShardIds;
     }
 
-    bool IsSameConfig(const TCdcAggregatorStreamConfig& config) const;
     std::optional<TCdcAggregatorStreamSourcesDiff> ApplyPartitioningChange(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds);
 
 private:

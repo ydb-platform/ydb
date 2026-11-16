@@ -84,14 +84,6 @@ TCdcAggregatorStream::TCdcAggregatorStream(TCdcAggregatorStreamTopic topic, THas
 {
 }
 
-bool TCdcAggregatorStream::IsSameConfig(const TCdcAggregatorStreamConfig& config) const {
-    return Topic == config.Topic
-        && SourceDataShardIds.size() == config.SourceDataShardIds.size()
-        && std::all_of(config.SourceDataShardIds.begin(), config.SourceDataShardIds.end(), [this](ui64 sourceDataShardId) {
-            return SourceDataShardIds.contains(sourceDataShardId);
-        });
-}
-
 std::optional<TCdcAggregatorStreamSourcesDiff> TCdcAggregatorStream::ApplyPartitioningChange(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds) {
     if (!SourceDataShardIds.contains(parentDataShardId)) {
         const bool applied = std::all_of(childDataShardIds.begin(), childDataShardIds.end(), [this](ui64 childDataShardId) {

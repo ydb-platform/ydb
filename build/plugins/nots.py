@@ -585,20 +585,32 @@ def _configure_tarballs_platform(unit):
     return platform
 
 
+def _configure_pnpm_settings(unit, pm, pj):
+    from lib.nots.package_manager.common_config import load_effective_pnpm_config
+
+    effective_config = load_effective_pnpm_config(pj, pm.sources_root)
+    config_path, _, _ = effective_config
+    if config_path:
+        __set_append(unit, "_MAKEFILE_INCLUDE_LIKE_DEPS", "${ARCADIA_ROOT}/" + config_path)
+    local_path = os.path.join(os.path.dirname(pj.path), "nots.yaml")
+    if os.path.isfile(local_path):
+        relative_path = os.path.relpath(local_path, pm.sources_root)
+        __set_append(unit, "_MAKEFILE_INCLUDE_LIKE_DEPS", "${ARCADIA_ROOT}/" + relative_path)
+    return effective_config
+
+
 def _prepare_deps_configure(unit: ymake.Unit) -> None:
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
-    from lib.nots.package_manager.common_config import common_config_inputs, load_effective_pnpm_config
+    from lib.nots.package_manager.common_config import common_config_inputs
     from lib.nots.package_manager.utils import b_rooted, build_ws_config_path, s_rooted
 
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
-    effective_config = load_effective_pnpm_config(pj, pm.sources_root)
-    config_path, _, settings = effective_config
-    if config_path:
-        __set_append(unit, "_MAKEFILE_INCLUDE_LIKE_DEPS", "${ARCADIA_ROOT}/" + config_path)
+    effective_config = _configure_pnpm_settings(unit, pm, pj)
+    _, _, settings = effective_config
     platform = _configure_tarballs_platform(unit)
     ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(
         unit.get("_TARBALLS_STORE"),
@@ -720,10 +732,12 @@ def _TS_LIBRARY_FOR_ARGS(unit: ymake.Unit, source: str) -> None:
     unit.set(["_TS_LIBRARY_FOR_BASE_ARGS", "--moddir " + source + " --build-suffix " + build[len(source) :]])
     if _use_hermetic_node_modules(unit):
         _configure_hermetic_node_modules(unit)
-    pj = _create_pm(unit).load_package_json_from_dir(unit.resolve("$S/" + source))
+    pm = _create_pm(unit)
+    pj = pm.load_package_json_from_dir(unit.resolve("$S/" + source))
+    _configure_pnpm_settings(unit, pm, pj)
     if pj.get_use_prebuilder():
         _setup_prebuilder_resource(unit)
-    peers = _create_pm(unit).get_local_peers_from_package_json()
+    peers = pm.get_local_peers_from_package_json()
     if peers:
         unit.ondepends(peers)
         __set_append(unit, "_NODE_MODULES_INOUTS", "${hide:PEERS_LATE_OUTS}")

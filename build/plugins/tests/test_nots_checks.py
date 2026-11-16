@@ -1,4 +1,6 @@
 import base64
+import json
+import sys
 from types import SimpleNamespace
 
 import nots
@@ -317,3 +319,62 @@ def test_runtime_allows_output_symlink(monkeypatch, tmp_path):
     nots._TS_RUNTIME_BIN_CONFIGURE(unit)
     assert not errors
     assert commands
+
+
+@pytest.mark.parametrize("library_for", [False, True])
+@pytest.mark.parametrize("local_yaml", [False, True])
+@pytest.mark.parametrize("common_yaml", [False, True])
+def test_settings_files_invalidate_graph_configuration(monkeypatch, tmp_path, library_for, local_yaml, common_yaml):
+    from build.plugins.lib.nots.package_manager import PackageManager, common_config, utils
+
+    # ymake loads plugin libraries under lib.*, unlike the standalone Python test binary.
+    monkeypatch.setitem(sys.modules, "lib.nots.package_manager.common_config", common_config)
+    monkeypatch.setitem(sys.modules, "lib.nots.package_manager.utils", utils)
+    source = "apps/app"
+    project = tmp_path / source
+    project.mkdir(parents=True)
+    manifest = {}
+    nots_settings = {"commonConfigPath": "../common.yaml"} if common_yaml else {}
+    if common_yaml:
+        (project.parent / "common.yaml").write_text("patchedDependencies: {common: patches/common.patch}\n")
+    if local_yaml:
+        (project / "nots.yaml").write_text(
+            "nots: " + json.dumps(nots_settings) + "\npatchedDependencies: {local: patches/local.patch}\n"
+        )
+    elif common_yaml:
+        manifest["nots"] = nots_settings
+    (project / "package.json").write_text(json.dumps(manifest))
+    pm = PackageManager("$B", "$B/" + source, str(project), module_path=source, sources_root=str(tmp_path))
+    values = {"MODDIR": source + "/storybook" if library_for else source}
+    errors = []
+    unit = SimpleNamespace(
+        get=lambda name: values.get(name, ""),
+        set=lambda pair: values.update([pair]),
+        resolve=lambda value: value.replace("$S", str(tmp_path)),
+        onpeerdir=lambda _: None,
+        ondepends=lambda _: None,
+    )
+    monkeypatch.setattr(nots, "_create_pm", lambda _: pm)
+    monkeypatch.setattr(nots, "_use_hermetic_node_modules", lambda _: False)
+    monkeypatch.setattr(nots, "_SET_TS_FOR_VARS", lambda *_: None)
+    monkeypatch.setattr(nots.ymake, "report_configure_error", errors.append, raising=False)
+
+    if library_for:
+        nots._TS_LIBRARY_FOR_ARGS(unit, source)
+    else:
+        nots._prepare_deps_configure(unit)
+
+    assert errors == []
+    dependencies = values.get("_MAKEFILE_INCLUDE_LIKE_DEPS", "").split()
+    configs = [
+        dependency
+        for dependency in dependencies
+        if dependency.endswith(".yaml") and not dependency.endswith("/pnpm-lock.yaml")
+    ]
+    expected = []
+    if local_yaml:
+        expected.append("${ARCADIA_ROOT}/apps/app/nots.yaml")
+    if common_yaml:
+        expected.append("${ARCADIA_ROOT}/apps/common.yaml")
+    assert sorted(configs) == sorted(expected)
+    assert not any(dependency.endswith(".patch") for dependency in dependencies)

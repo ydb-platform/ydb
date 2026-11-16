@@ -1,4 +1,5 @@
 #include "dst_creator.h"
+#include "dst_creator_test_env.h"
 #include "private_events.h"
 #include "stream_creator.h"
 #include "target_table.h"
@@ -323,7 +324,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
     }
 
     void Basic(const std::optional<TDuration>& resolvedTimestamps = {}, bool enableOmitBackupAttribute = false) {
-        TEnv env;
+        TDstCreatorEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         const auto tableDesc = TTestTableDescription{

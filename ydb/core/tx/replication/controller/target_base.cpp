@@ -237,6 +237,12 @@ const std::optional<TDuration> TTargetBase::GetLag() const {
 }
 
 void TTargetBase::Progress(const TActorContext& ctx) {
+    if (DstCreateRequest && DstState != EDstState::Error) {
+        if (!DstCreator) {
+            DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
+        }
+        return;
+    }
     switch (DstState) {
     case EDstState::Creating:
         if (!DstCreator) {
@@ -256,7 +262,8 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         break;
     case EDstState::Alter: {
         const bool needsCreator = !DstCreator && !DstPathId;
-        const bool canAttach = !ShouldWaitForAttachment(Replication)
+        const bool canAttach = Replication->GetState() != TReplication::EState::Removing
+            && !ShouldWaitForAttachment(Replication)
             && Replication->GetDesiredState() != TReplication::EState::Done;
         if (Workers) {
             RemoveWorkers(ctx);

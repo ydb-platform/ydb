@@ -193,6 +193,18 @@ public:
     }
 
     void Progress(const TActorContext& ctx) {
+        if (State == EState::Removing || DesiredState == EState::Done || DesiredState == EState::Paused) {
+            bool recoveringCreate = false;
+            for (auto* target : GetTargets()) {
+                if (target->DstCreateRequest && target->GetDstState() != EDstState::Error) {
+                    target->Progress(ctx);
+                    recoveringCreate = true;
+                }
+            }
+            if (recoveringCreate) {
+                return;
+            }
+        }
         if (State == EState::Done) {
             return;
         }

@@ -272,7 +272,8 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(), replication->GetDesiredState());
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(),
+        replication->GetState() == TReplication::EState::Removing ? TReplication::EState::Done : replication->GetDesiredState());
 }
 
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,

@@ -404,8 +404,21 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
 
-        TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
+        if (SavedDstCreateRequest && !RenewDstCreate) {
+            TxId = DstCreateRequest.GetTxId();
+            return SendDstCreate();
+        }
+        TxId = ev->Get()->TxId;
+        if (RenewDstCreate) {
+            return DescribeDstParent();
+        }
+        if (Kind == TReplication::ETargetKind::Table
+            && TxBody.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateTable
+            && (InitialScan || CreatePlaceholder)) {
+            CheckExistingDst = true;
+            return DescribeDstPath();
+        }
         if (DropIndexTx.HasDropIndex()) {
             ExecuteSchemeTx(DropIndexTx);
         } else if (InitialScan || CreatePlaceholder) {
@@ -413,6 +426,88 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         } else {
             DescribeDstPath();
         }
+    }
+
+    void DescribeDstParent() {
+        Send(PipeCache, new TEvPipeCache::TEvForward(
+            new TEvSchemeShard::TEvDescribeScheme(TString(ExtractParent(DstPath))), SchemeShardId));
+        Become(&TThis::StateDescribeDstParent);
+    }
+
+    STATEFN(StateDescribeDstParent) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, HandleDstParent);
+            hFunc(TEvents::TEvWakeup, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void HandleDstParent(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        const auto& record = ev->Get()->GetRecord();
+        if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
+            return Error(record.GetStatus(), record.GetReason());
+        }
+        const auto version = record.GetPathDescription().GetSelf().GetPathVersion();
+        if (SavedDstCreateRequest && !RenewDstCreate) {
+            const auto& fence = TxBody.GetApplyIf(0);
+            if (record.GetPathOwnerId() != SchemeShardId || record.GetPathId() != fence.GetPathId()) {
+                return Error(NKikimrScheme::StatusPreconditionFailed, "Destination parent was replaced");
+            }
+            if (version == fence.GetPathVersion()) {
+                return Error(NKikimrScheme::StatusPreconditionFailed, "Cannot prove that pending destination CREATE is fenced out");
+            }
+            if (DesiredState != TReplication::EState::Ready) {
+                DstCreateRequest.Clear();
+                return SaveDstCreate();
+            }
+            RenewDstCreate = true;
+            return AllocateTxId();
+        }
+        TxBody.ClearApplyIf();
+        auto& fence = *TxBody.AddApplyIf();
+        fence.SetPathId(record.GetPathId());
+        fence.SetPathVersion(version);
+        fence.SetCheckEntityVersion(false);
+        DstCreateRequest.Clear();
+        DstCreateRequest.SetTxId(TxId);
+        DstCreateRequest.SetTabletId(SchemeShardId);
+        DstCreateRequest.AddTransaction()->CopyFrom(TxBody);
+        if (Owner) {
+            DstCreateRequest.SetOwner(Owner);
+        }
+        SaveDstCreate();
+    }
+
+    void SaveDstCreate() {
+        Send(Parent, new TEvPrivate::TEvSaveDstCreateRequest(ReplicationId, TargetId,
+            SavedDstCreateRequest, DstCreateRequest.HasTxId() ? DstCreateRequest.SerializeAsString() : TString()));
+        Become(&TThis::StateSaveDstCreate);
+    }
+
+    STATEFN(StateSaveDstCreate) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvPrivate::TEvDstCreateRequestSaved, DstCreateSaved);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void DstCreateSaved() {
+        if (!DstCreateRequest.HasTxId()) {
+            Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, TPathId(), false));
+            return PassAway();
+        }
+        SavedDstCreateRequest = DstCreateRequest.SerializeAsString();
+        RenewDstCreate = false;
+        SendDstCreate();
+    }
+
+    void SendDstCreate() {
+        auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        ev->Record.CopyFrom(DstCreateRequest);
+        Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
+        Become(&TThis::StateExecuteSchemeTx);
     }
 
     void CreateDst() {
@@ -500,6 +595,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case NKikimrScheme::StatusAlreadyExists:
             return DescribeDstPath();
         case NKikimrScheme::StatusPreconditionFailed:
+            if (SavedDstCreateRequest) {
+                return DescribeDstPath();
+            }
+            [[fallthrough]];
         case NKikimrScheme::StatusPathDoesNotExist:
             if (DropIndexTx.HasDropIndex()) {
                 return DescribeDstPath();
@@ -525,7 +624,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return;
         }
 
-        if (NeedToCheck) {
+        if (NeedToCheck || SavedDstCreateRequest) {
             DescribeDstPath();
         } else {
             Success();
@@ -559,11 +658,19 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case NKikimrScheme::StatusSuccess: {
             const auto& desc = record.GetPathDescription();
 
+            if (SavedDstCreateRequest && desc.GetSelf().GetCreateTxId() != DstCreateRequest.GetTxId()) {
+                return Error(NKikimrScheme::StatusSchemeError, "Destination was not created by the saved transaction");
+            }
+            if ((SavedDstCreateRequest || CheckExistingDst) && !desc.GetSelf().GetCreateFinished()) {
+                NeedToCheck = true;
+                Become(&TThis::StateExecuteSchemeTx);
+                return SubscribeTx(desc.GetSelf().GetCreateTxId());
+            }
+
             TString error;
             if (!CheckScheme(desc, error)) {
                 return Error(NKikimrScheme::StatusSchemeError, error);
             }
-
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
             for (const auto& index : desc.GetTable().GetTableIndexes()) {
                 if (ShouldDropVectorIndex(index)) {
@@ -573,6 +680,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return Success();
         }
         case NKikimrScheme::StatusPathDoesNotExist:
+            if (SavedDstCreateRequest || CheckExistingDst) {
+                return DescribeDstParent();
+            }
             if (!InitialScan) {
                 return Error(record.GetStatus(), TStringBuilder() << "`" << DstPath << "` does not exist");
             }
@@ -910,7 +1020,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
 
         const auto state = CurrentStateFunc();
-        if (state == &TThis::StateDescribeSrcPath) {
+        if (state == &TThis::StateDescribeDstParent) {
+            DescribeDstParent();
+        } else if (SavedDstCreateRequest && state == &TThis::StateExecuteSchemeTx) {
+            SendDstCreate();
+        } else if (state == &TThis::StateDescribeSrcPath) {
             DescribeSrcPath();
         } else if (state == &TThis::StateDescribeDstPath) {
             DescribeDstPath();
@@ -961,7 +1075,7 @@ public:
             EConsistencyLevel consistency,
             const TString& database,
             bool initialScan,
-            TReplication::EState desiredState)
+            TReplication::EState desiredState, const TString& dstCreateRequest)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -976,6 +1090,7 @@ public:
         , InitialScan(initialScan)
         , CreatePlaceholder(!initialScan && desiredState == TReplication::EState::Paused)
         , DesiredState(desiredState)
+        , SavedDstCreateRequest(dstCreateRequest)
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
     {
@@ -983,6 +1098,12 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
+        if (SavedDstCreateRequest) {
+            Y_ABORT_UNLESS(DstCreateRequest.ParseFromString(SavedDstCreateRequest));
+            TxBody = DstCreateRequest.GetTransaction(0);
+            Owner = DstCreateRequest.GetOwner();
+            return AllocateTxId(); // Obtain the pipe cache, retaining the saved CREATE id.
+        }
         switch (Kind) {
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);
@@ -1024,6 +1145,10 @@ private:
     const bool InitialScan;
     const bool CreatePlaceholder;
     const TReplication::EState DesiredState;
+    bool CheckExistingDst = false;
+    TString SavedDstCreateRequest;
+    NKikimrScheme::TEvModifySchemeTransaction DstCreateRequest;
+    bool RenewDstCreate = false;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
@@ -1109,16 +1234,18 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
-        replication->GetConfig().GetInitialScan(), replication->GetDesiredState());
+        replication->GetConfig().GetInitialScan(),
+        replication->GetState() == TReplication::EState::Removing ? TReplication::EState::Done : replication->GetDesiredState(),
+        target->DstCreateRequest);
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
-        TReplication::EState desiredState)
+        TReplication::EState desiredState, const TString& dstCreateRequest)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState, dstCreateRequest);
 }
 
 }

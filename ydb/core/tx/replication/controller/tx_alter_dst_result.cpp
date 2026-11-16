@@ -62,14 +62,15 @@ public:
         }
 
         if (Ev->Get()->IsSuccess()) {
-            target->SetDstState(NextState(Replication->GetDesiredState()));
+            target->SetDstState(Replication->GetState() == TReplication::EState::Removing
+                ? TReplication::EDstState::Done : NextState(Replication->GetDesiredState()));
             target->UpdateConfig(Replication->GetConfig());
 
             YDB_LOG_NOTICE_CTX(ctx, "Target dst altered",
                 {"rid", rid},
                 {"tid", tid});
 
-            if (Replication->CheckAlterDone()) {
+            if (Replication->GetState() != TReplication::EState::Removing && Replication->CheckAlterDone()) {
                 YDB_LOG_NOTICE_CTX(ctx, "Replication altered",
                     {"rid", rid},
                     {"state", Replication->GetDesiredState()});
@@ -100,7 +101,8 @@ public:
             NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
         );
 
-        if (Replication->GetState() != TReplication::EState::Ready) {
+        if (Replication->GetState() != TReplication::EState::Ready
+            && Replication->GetState() != TReplication::EState::Removing) {
             Replication.Reset();
         }
 

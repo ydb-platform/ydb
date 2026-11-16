@@ -1,4 +1,5 @@
 #include "dst_creator.h"
+#include "dst_creator_test_env.h"
 #include "private_events.h"
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -23,6 +24,68 @@ namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(DstCreator) {
     using namespace NTestHelpers;
+
+    class TPendingCreateEnv: public TDstCreatorEnv {
+    public:
+        NKikimrScheme::TEvModifySchemeTransaction Request;
+
+        TPendingCreateEnv() {
+            const auto parent = GetDescription("/Root").GetPathDescription().GetSelf();
+            Request.SetTxId(100500);
+            Request.SetTabletId(parent.GetSchemeshardId());
+            auto& tx = *Request.AddTransaction();
+            tx.SetWorkingDir("/Root");
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+            tx.MutableCreateTable()->CopyFrom(*MakeTableDescription({
+                .Name = "Dst", .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint64"}},
+            }));
+            auto& fence = *tx.AddApplyIf();
+            fence.SetPathId(parent.GetPathId());
+            fence.SetPathVersion(parent.GetPathVersion());
+            fence.SetCheckEntityVersion(false);
+        }
+
+        TPathId Recover(TReplication::EState state) {
+            GetRuntime().Register(CreateDstCreator(GetSender(), Request.GetTabletId(), {},
+                "/Root", GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+                "/Unavailable/Source", "/Root/Dst", EReplicationMode::ReadOnly,
+                EConsistencyLevel::Row, true, state, Request.SerializeAsString()));
+            const auto result = GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(GetSender());
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSuccess, result->Get()->Error);
+            return result->Get()->DstPathId;
+        }
+
+        void Drop() {
+            auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(100501, Request.GetTabletId());
+            auto& tx = *request->Record.AddTransaction();
+            tx.SetWorkingDir("/Root");
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
+            tx.MutableDrop()->SetName("Dst");
+            auto result = Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(Request.GetTabletId(), std::move(request));
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted, result->Get()->Record.GetReason());
+            Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(Request.GetTabletId(),
+                new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(100501));
+        }
+    };
+
+    Y_UNIT_TEST(RecoverSavedCreateWithoutSource) {
+        TPendingCreateEnv env;
+        const auto pathId = env.Recover(TReplication::EState::Done);
+        UNIT_ASSERT_VALUES_EQUAL(pathId, env.GetPathId("/Root/Dst"));
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetSelf().GetCreateTxId(), 100500);
+        UNIT_ASSERT_VALUES_EQUAL(env.Recover(TReplication::EState::Done), pathId);
+    }
+
+    Y_UNIT_TEST(DelayedCreateCannotRecreateDroppedDestination) {
+        TPendingCreateEnv env;
+        env.Recover(TReplication::EState::Ready);
+        env.Drop();
+        UNIT_ASSERT_VALUES_EQUAL(env.Recover(TReplication::EState::Done), TPathId());
+        auto result = env.Send<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(env.Request.GetTabletId(),
+            new NSchemeShard::TEvSchemeShard::TEvDescribeScheme("/Root/Dst"));
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetRecord().GetStatus(), NKikimrScheme::StatusPathDoesNotExist);
+    }
 
     void SetImportState(TEnv<>& env, const TString& path,
             NKikimrSchemeOp::TTableReplicationConfig::EImportState state,
@@ -73,7 +136,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             EReplicationMode mode = EReplicationMode::ReadOnly,
             EConsistencyLevel consistency = EConsistencyLevel::Row)
     {
-        TEnv env;
+        TDstCreatorEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         const auto tableDesc = TTestTableDescription{
@@ -106,7 +169,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     // The destination of a table with a serial column has to get the sequence as well: the column
     // default references it, and the sequence position is then advanced by replication.
     void WithSerialColumn(bool withLiteralDefault) {
-        TEnv env;
+        TDstCreatorEnv env;
 
         NKikimrSchemeOp::TIndexedTableCreationConfig config;
         auto& tableDesc = *config.MutableTableDescription();
@@ -208,7 +271,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(CreateTableWithLiteralDefaults) {
-        TEnv env;
+        TDstCreatorEnv env;
         auto source = MakeTableDescription(TTestTableDescription{
             .Name = "Source",
             .KeyColumns = {"key"},
@@ -266,7 +329,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     void ExistingDstLiteralDefault(const TMaybe<ui64>& sourceDefault, const TMaybe<ui64>& destinationDefault) {
         for (const auto consistency : {EConsistencyLevel::Row, EConsistencyLevel::Global}) {
             for (const bool notNull : {false, true}) {
-                TEnv env;
+                TDstCreatorEnv env;
                 auto source = MakeTableDescription({
                     .Name = "Src",
                     .KeyColumns = {"key"},
@@ -319,7 +382,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(CreateWaitingImportTable) {
-        TEnv env;
+        TDstCreatorEnv env;
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
             .Name = "Source",
             .KeyColumns = {"key"},
@@ -346,7 +409,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         for (const auto state : {NKikimrSchemeOp::TTableReplicationConfig::IMPORT_STATE_NONE,
                 NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT,
                 NKikimrSchemeOp::TTableReplicationConfig::IMPORTING}) {
-            TEnv env;
+            TDstCreatorEnv env;
             auto table = TTestTableDescription{
                 .Name = "Source",
                 .KeyColumns = {"key"},
@@ -368,7 +431,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(AttachTable) {
-        TEnv env;
+        TDstCreatorEnv env;
         const auto table = TTestTableDescription{
             .Name = "Source",
             .KeyColumns = {"key"},
@@ -446,7 +509,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     void AttachTableWithVectorIndex(bool withSyncIndex) {
-        TEnv env;
+        TDstCreatorEnv env;
         // A backup restores the source schema, including its vector indexes.
         CreateTableWithVectorIndexes(env, "/Root/Source", withSyncIndex);
         CreateTableWithVectorIndexes(env, "/Root/Dst", withSyncIndex);
@@ -478,7 +541,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(IncompatibleAttachmentPreservesVectorIndexes) {
-        TEnv env;
+        TDstCreatorEnv env;
         CreateTableWithVectorIndexes(env, "/Root/Source");
         CreateTableWithVectorIndexes(env, "/Root/Dst");
         const auto altered = env.Send<TEvYdbProxy::TEvAlterTableResponse>(env.GetYdbProxy(),
@@ -496,7 +559,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(RecoverAttachmentAfterVectorIndexDrop) {
-        TEnv env(true, ERuntimeMode::Simulated);
+        TDstCreatorEnv env(true, ERuntimeMode::Simulated);
         CreateTableWithVectorIndexes(env, "/Root/Source");
         CreateTableWithVectorIndexes(env, "/Root/Dst");
         const auto pathId = env.GetPathId("/Root/Dst");
@@ -523,7 +586,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(StandbyDropsRestoredVectorIndexes) {
-        TEnv env(true, ERuntimeMode::Simulated);
+        TDstCreatorEnv env(true, ERuntimeMode::Simulated);
         CreateTableWithVectorIndexes(env, "/Root/Source");
         env.GetRuntime().RegisterService(MakeReplicationServiceId(env.GetRuntime().GetNodeId(0)),
             env.GetRuntime().Register(CreateReplicationMockService(env.GetSender())));
@@ -608,7 +671,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     };
 
     void RecoverAttachment(EAttachmentSchemaChange schemaChange) {
-        TEnv env;
+        TDstCreatorEnv env;
         const auto table = TTestTableDescription{
             .Name = "Source",
             .KeyColumns = {"key"},
@@ -685,7 +748,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(MissingAttachmentTable) {
-        TEnv env;
+        TDstCreatorEnv env;
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
             .Name = "Source",
             .KeyColumns = {"key"},
@@ -703,7 +766,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(IncompatibleAttachmentTable) {
-        TEnv env;
+        TDstCreatorEnv env;
         auto table = TTestTableDescription{
             .Name = "Source",
             .KeyColumns = {"key"},
@@ -731,7 +794,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     Y_UNIT_TEST_TWIN(AttachIndexTable, ConcurrentRecovery) {
         TFeatureFlags flags;
         flags.SetEnableChangefeedsOnIndexTables(true);
-        TEnv env(flags);
+        TDstCreatorEnv env(flags);
         auto table = TTestTableDescription{
             .Name = "Source",
             .KeyColumns = {"key"},
@@ -797,7 +860,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(AttachmentAlterRejectsDroppedIndexAfterRestart) {
-        TEnv env;
+        TDstCreatorEnv env;
         auto& runtime = env.GetRuntime();
         env.CreateTableWithIndex(
             "/Root",
@@ -873,7 +936,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(ColumnFamilies) {
-        TEnv env;
+        TDstCreatorEnv env;
         auto source = MakeTableDescription({
             .Name = "Table",
             .KeyColumns = {"key"},
@@ -918,7 +981,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(UnnamedNonDefaultDestinationFamily) {
-        TEnv env;
+        TDstCreatorEnv env;
         const auto table = TTestTableDescription{
             .Name = "Src",
             .KeyColumns = {"key"},
@@ -949,7 +1012,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(ImplicitDefaultFamilyFromProfile) {
-        TEnv env;
+        TDstCreatorEnv env;
 
         NKikimrConfig::TTableProfilesConfig profiles;
         auto* policy = profiles.AddStoragePolicies();
@@ -994,7 +1057,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         TFeatureFlags featureFlags;
         featureFlags.SetEnableChangefeedsOnIndexTables(true);
         featureFlags.SetEnableAsyncIndexReplication(enableAsyncIndexReplication);
-        TEnv env(featureFlags);
+        TDstCreatorEnv env(featureFlags);
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         const auto tableDesc = TTestTableDescription{
@@ -1111,7 +1174,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(SameOwner) {
-        TEnv env;
+        TDstCreatorEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         env.ModifyOwner("/", "Root", "user@builtin");
@@ -1140,7 +1203,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(SamePartitionCount) {
-        TEnv env;
+        TDstCreatorEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         env.CreateTable("/Root", *MakeTableDescription({
@@ -1173,7 +1236,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(NonExistentSrc) {
-        TEnv env;
+        TDstCreatorEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         env.GetRuntime().Register(CreateDstCreator(
@@ -1200,7 +1263,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
-        TEnv env;
+        TDstCreatorEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         env.CreateTable("/Root", *MakeTableDescription(clearConfig(changeName(desc, "Src"))));
@@ -1226,7 +1289,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     {
         TFeatureFlags flags;
         flags.FeatureFlags.SetEnableRowTableZstdCompression(codec == NKikimrSchemeOp::ColumnCodecZSTD);
-        TEnv env(flags);
+        TDstCreatorEnv env(flags);
         auto source = MakeTableDescription({
             .Name = "Src",
             .KeyColumns = {"key"},

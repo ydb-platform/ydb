@@ -3,6 +3,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/string/join.h>
 #include <util/system/tempfile.h>
 
 namespace NYdb::NConsoleClient {
@@ -49,7 +50,7 @@ void ValidateCommand(TVector<TString> args, TStringBuf profile = "{}") {
 const TVector<TVector<TString>> ClusterCommands = {
     {"bridge", "switchover", "--new-primary", "r1"},
     {"bridge", "list"},
-    {"bridge", "set-database-mode", "ordinary", "--target-database", "/Root/db"},
+    {"bridge", "set-database-mode", "ordinary", "--database-path", "/Root/db"},
     {"bootstrap", "--uuid", "test-cluster"},
     {"config", "fetch"},
     {"dump"},
@@ -70,7 +71,7 @@ Y_UNIT_TEST_SUITE(ClusterDatabaseValidation) {
         for (const auto& command : ClusterCommands) {
             TVector<TString> args = {"admin", "cluster"};
             args.insert(args.end(), command.begin(), command.end());
-            ValidateCommand(std::move(args));
+            UNIT_ASSERT_NO_EXCEPTION_C(ValidateCommand(std::move(args)), JoinSeq(" ", command));
         }
     }
 
@@ -79,7 +80,8 @@ Y_UNIT_TEST_SUITE(ClusterDatabaseValidation) {
             for (const auto& command : ClusterCommands) {
                 TVector<TString> args = {"-d", database, "admin", "cluster"};
                 args.insert(args.end(), command.begin(), command.end());
-                ValidateCommand(std::move(args));
+                UNIT_ASSERT_NO_EXCEPTION_C(ValidateCommand(std::move(args)),
+                    "Command: " << JoinSeq(" ", command) << ", database: " << database);
             }
         }
     }
@@ -89,7 +91,8 @@ Y_UNIT_TEST_SUITE(ClusterDatabaseValidation) {
             for (const auto& command : ClusterCommands) {
                 TVector<TString> args = {"-d", database, "admin", "cluster"};
                 args.insert(args.end(), command.begin(), command.end());
-                UNIT_ASSERT_EXCEPTION_CONTAINS(ValidateCommand(std::move(args)), TMisuseException, "requires a root domain");
+                UNIT_ASSERT_EXCEPTION_CONTAINS_C(ValidateCommand(std::move(args)), TMisuseException, "requires a root domain",
+                    "Command: " << JoinSeq(" ", command) << ", database: " << database);
             }
         }
     }

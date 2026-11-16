@@ -4707,8 +4707,6 @@ Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRename, TPartitionFix
     Ctx->Runtime->DispatchEvents(options);
 }
 
-<<<<<<< HEAD
-=======
 // Same Key/Header divergence as above, but through FindPos's OffsetDelta branch
 // (blob.cpp): mid-batch search returns the logical-message base in header space
 // (curOffset), not the requested offset. Must still map back to Key coordinates.
@@ -6693,7 +6691,6 @@ Y_UNIT_TEST_F(CommitWriteOperationsRenamesHeadKeysFoldedIntoBodyKeys, TPartition
     WaitCommitDone(tx);
 }
 
->>>>>>> 2ff1f3b9def (LOGBROKER-10406 Fixed bugs & add tests (#53523))
 // Empty TRequestedBlob body (retention / requested range past data): AddBlobsFromBody logs
 // "Not full answer here!", fills read result metadata and returns TReadAnswer early.
 Y_UNIT_TEST_F(AddBlobsFromBodyStopsOnEmptyBlob, TPartitionFixture) {

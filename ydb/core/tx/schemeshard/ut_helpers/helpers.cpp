@@ -1189,6 +1189,15 @@ namespace NSchemeShardUT_Private {
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
 
+    // backup collection
+    void TestCreateLongIncrementalRestoreOp(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath,
+            const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
+        auto* request = InternalTransaction(RestoreBackupCollectionRequest(txId, parentPath, scheme));
+        request->Record.MutableTransaction(0)->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
     // external table
     void AsyncCreateExternalTableOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme) {
         auto* ev = CreateExternalTableRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);

@@ -53,69 +53,6 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
 
     using EStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
 
-    void Reply(const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
-        auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeReply(reply);
-        YDB_LOG_TRACE("Reply",
-            {"ev", ev->ToString()},
-            {"recipient", origin.Sender});
-        Send(origin.Sender, ev.Release(), 0, origin.Cookie);
-    }
-
-    void Reply(TCdcAggregatorConnection& connection, const TVector<TCdcAggregatorHeartbeatDeliveryReply>& replies) {
-        for (const auto& reply : replies) {
-            auto it = connection.Origins.find(reply.SourceDataShardId);
-            if (it == connection.Origins.end()) {
-                continue;
-            }
-
-            Reply(it->second, reply);
-            connection.Origins.erase(it);
-        }
-    }
-
-    void SendHeartbeatBatchesPeriodically() {
-        for (auto& [tabletId, connection] : CdcAggregatorConnections) {
-            auto& delivery = connection.CdcAggregatorHeartbeatDelivery;
-            if (!delivery.HasBatchToSend()) {
-                continue;
-            }
-
-            if (!connection.PipeClient) {
-                NTabletPipe::TClientConfig config;
-                config.RetryPolicy = {.RetryLimitCount = PipeRetryLimit};
-                connection.PipeClient = Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
-            }
-
-            auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeBatch(delivery.TakeBatch());
-            YDB_LOG_DEBUG("Send batch",
-                {"aggregator", tabletId},
-                {"heartbeats", ev->Record.HeartbeatsSize()});
-            NTabletPipe::SendData(SelfId(), connection.PipeClient, ev.Release());
-        }
-
-        Schedule(TimerPeriod, new TEvPrivate::TEvTimerFired());
-    }
-
-    void DropCdcAggregatorConnection(ui64 tabletId, const TActorId& pipeClient, const TString& error) {
-        auto it = CdcAggregatorConnections.find(tabletId);
-        if (it == CdcAggregatorConnections.end() || it->second.PipeClient != pipeClient) {
-            return;
-        }
-
-        YDB_LOG_NOTICE("Drop connection",
-            {"aggregator", tabletId},
-            {"origins", it->second.Origins.size()},
-            {"error", error});
-        for (const auto& [sourceDataShardId, origin] : it->second.Origins) {
-            Reply(origin, TCdcAggregatorHeartbeatDeliveryReply{
-                .SourceDataShardId = sourceDataShardId,
-                .Status = EStatus::Retry,
-                .Error = error,
-            });
-        }
-        CdcAggregatorConnections.erase(it);
-    }
-
     void Handle(TEvCdcAggregatorService::TEvWriteHeartbeat::TPtr& ev) {
         const auto* msg = ev->Get();
         YDB_LOG_TRACE("Handle",
@@ -139,6 +76,29 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         auto& connection = CdcAggregatorConnections[tabletId];
         connection.Origins[msg->SourceDataShardId] = origin;
         connection.CdcAggregatorHeartbeatDelivery.AddHeartbeat(msg->SourceDataShardId, msg->Heartbeat);
+    }
+
+    void SendHeartbeatBatchesPeriodically() {
+        for (auto& [tabletId, connection] : CdcAggregatorConnections) {
+            auto& delivery = connection.CdcAggregatorHeartbeatDelivery;
+            if (!delivery.HasBatchToSend()) {
+                continue;
+            }
+
+            if (!connection.PipeClient) {
+                NTabletPipe::TClientConfig config;
+                config.RetryPolicy = {.RetryLimitCount = PipeRetryLimit};
+                connection.PipeClient = Register(NTabletPipe::CreateClient(SelfId(), tabletId, config));
+            }
+
+            auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeBatch(delivery.TakeBatch());
+            YDB_LOG_DEBUG("Send batch",
+                {"aggregator", tabletId},
+                {"heartbeats", ev->Record.HeartbeatsSize()});
+            NTabletPipe::SendData(SelfId(), connection.PipeClient, ev.Release());
+        }
+
+        Schedule(TimerPeriod, new TEvPrivate::TEvTimerFired());
     }
 
     void Handle(TEvCdcAggregator::TEvWriteHeartbeatsResult::TPtr& ev) {
@@ -167,6 +127,46 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         DropCdcAggregatorConnection(ev->Get()->TabletId, ev->Get()->ClientId, "Pipe destroyed");
+    }
+
+    void DropCdcAggregatorConnection(ui64 tabletId, const TActorId& pipeClient, const TString& error) {
+        auto it = CdcAggregatorConnections.find(tabletId);
+        if (it == CdcAggregatorConnections.end() || it->second.PipeClient != pipeClient) {
+            return;
+        }
+
+        YDB_LOG_NOTICE("Drop connection",
+            {"aggregator", tabletId},
+            {"origins", it->second.Origins.size()},
+            {"error", error});
+        for (const auto& [sourceDataShardId, origin] : it->second.Origins) {
+            Reply(origin, TCdcAggregatorHeartbeatDeliveryReply{
+                .SourceDataShardId = sourceDataShardId,
+                .Status = EStatus::Retry,
+                .Error = error,
+            });
+        }
+        CdcAggregatorConnections.erase(it);
+    }
+
+    void Reply(TCdcAggregatorConnection& connection, const TVector<TCdcAggregatorHeartbeatDeliveryReply>& replies) {
+        for (const auto& reply : replies) {
+            auto it = connection.Origins.find(reply.SourceDataShardId);
+            if (it == connection.Origins.end()) {
+                continue;
+            }
+
+            Reply(it->second, reply);
+            connection.Origins.erase(it);
+        }
+    }
+
+    void Reply(const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
+        auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeReply(reply);
+        YDB_LOG_TRACE("Reply",
+            {"ev", ev->ToString()},
+            {"recipient", origin.Sender});
+        Send(origin.Sender, ev.Release(), 0, origin.Cookie);
     }
 
 public:

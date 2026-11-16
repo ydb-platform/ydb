@@ -123,8 +123,8 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         it->second.BatchCookie = 0;
         it->second.LastActivity = TActivationContext::Monotonic();
         auto& delivery = it->second.CdcAggregatorHeartbeatDelivery;
-        auto [tabletBatchResult, error] = ProtoConverter.ParseBatchResult(record);
-        ReplyToOrigins(it->second, tabletBatchResult ? delivery.CompleteBatch(*tabletBatchResult) : delivery.FailBatch(error));
+        auto [writeHeartbeatsResult, error] = ProtoConverter.ParseWriteHeartbeatsResult(record);
+        ReplyToOrigins(it->second, writeHeartbeatsResult ? delivery.CompleteBatch(*writeHeartbeatsResult) : delivery.FailBatch(error));
     }
 
     void DropCdcAggregatorConnection(ui64 tabletId, const TActorId& pipeClient, const TString& error) {
@@ -143,7 +143,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         CdcAggregatorConnections.erase(it);
     }
 
-    void ReplyToOrigins(TCdcAggregatorConnection& connection, const THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>& repliesBySourceDataShardId) {
+    void ReplyToOrigins(TCdcAggregatorConnection& connection, const TCdcAggregatorHeartbeatBatchResult& repliesBySourceDataShardId) {
         for (const auto& [sourceDataShardId, reply] : repliesBySourceDataShardId) {
             auto it = connection.Origins.find(sourceDataShardId);
             if (it == connection.Origins.end()) {

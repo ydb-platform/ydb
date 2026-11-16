@@ -51,12 +51,12 @@ std::optional<TCdcAggregatorHeartbeatBatch> TCdcAggregatorHeartbeatDelivery::Pre
     return batch;
 }
 
-THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::CompleteBatch(const TCdcAggregatorHeartbeatBatchResult& tabletBatchResult) {
-    THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> repliesBySourceDataShardId;
+TCdcAggregatorHeartbeatBatchResult TCdcAggregatorHeartbeatDelivery::CompleteBatch(const TCdcAggregatorWriteHeartbeatsResult& writeHeartbeatsResult) {
+    TCdcAggregatorHeartbeatBatchResult repliesBySourceDataShardId;
     for (const ui64 sourceDataShardId : AwaitingReplySourceDataShardIds) {
-        if (const auto* writtenVersion = tabletBatchResult.WrittenVersionsBySourceDataShardId.FindPtr(sourceDataShardId)) {
+        if (const auto* writtenVersion = writeHeartbeatsResult.WrittenVersionsBySourceDataShardId.FindPtr(sourceDataShardId)) {
             repliesBySourceDataShardId.emplace(sourceDataShardId, TCdcAggregatorHeartbeatWritten{.Version = *writtenVersion});
-        } else if (const auto* error = tabletBatchResult.RejectionErrorsBySourceDataShardId.FindPtr(sourceDataShardId)) {
+        } else if (const auto* error = writeHeartbeatsResult.RejectionErrorsBySourceDataShardId.FindPtr(sourceDataShardId)) {
             repliesBySourceDataShardId.emplace(sourceDataShardId, TCdcAggregatorHeartbeatRejected{.Error = *error});
         } else {
             repliesBySourceDataShardId.emplace(sourceDataShardId, TCdcAggregatorHeartbeatRetry{.Error = "Heartbeat is not confirmed"});
@@ -67,12 +67,12 @@ THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDeli
     return repliesBySourceDataShardId;
 }
 
-THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::FailBatch(const TString& error) {
+TCdcAggregatorHeartbeatBatchResult TCdcAggregatorHeartbeatDelivery::FailBatch(const TString& error) {
     if (AwaitingReplySourceDataShardIds.empty()) {
         return {};
     }
 
-    THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> repliesBySourceDataShardId;
+    TCdcAggregatorHeartbeatBatchResult repliesBySourceDataShardId;
     for (const ui64 sourceDataShardId : AwaitingReplySourceDataShardIds) {
         repliesBySourceDataShardId.emplace(sourceDataShardId, TCdcAggregatorHeartbeatRetry{.Error = error});
     }

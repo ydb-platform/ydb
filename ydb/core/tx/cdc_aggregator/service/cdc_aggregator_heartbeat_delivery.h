@@ -14,7 +14,7 @@ namespace NKikimr::NCdcAggregator {
 
 using TCdcAggregatorHeartbeatBatch = THashMap<ui64, NPQ::THeartbeat>;
 
-struct TCdcAggregatorHeartbeatBatchResult {
+struct TCdcAggregatorWriteHeartbeatsResult {
     THashMap<ui64, TRowVersion> WrittenVersionsBySourceDataShardId;
     THashMap<ui64, TString> RejectionErrorsBySourceDataShardId;
 };
@@ -33,14 +33,16 @@ struct TCdcAggregatorHeartbeatRejected {
 
 using TCdcAggregatorHeartbeatDeliveryReply = std::variant<TCdcAggregatorHeartbeatWritten, TCdcAggregatorHeartbeatRetry, TCdcAggregatorHeartbeatRejected>;
 
+using TCdcAggregatorHeartbeatBatchResult = THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>;
+
 class TCdcAggregatorHeartbeatDelivery {
 public:
     explicit TCdcAggregatorHeartbeatDelivery(ui32 maxBatchSize);
 
     void AddHeartbeat(ui64 sourceDataShardId, const NPQ::THeartbeat& heartbeat);
     std::optional<TCdcAggregatorHeartbeatBatch> PrepareNextBatchIfPossible();
-    THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> CompleteBatch(const TCdcAggregatorHeartbeatBatchResult& tabletBatchResult);
-    THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> FailBatch(const TString& error);
+    TCdcAggregatorHeartbeatBatchResult CompleteBatch(const TCdcAggregatorWriteHeartbeatsResult& writeHeartbeatsResult);
+    TCdcAggregatorHeartbeatBatchResult FailBatch(const TString& error);
 
     bool IsIdle() const {
         return PendingHeartbeatsBySourceDataShardId.empty() && AwaitingReplySourceDataShardIds.empty();

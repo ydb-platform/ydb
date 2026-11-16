@@ -12,7 +12,7 @@ namespace NKikimr::NCdcAggregator {
 class TCdcAggregatorHeartbeatDeliveryProtoConverter {
 public:
     THolder<TEvCdcAggregator::TEvWriteHeartbeats> SerializeBatch(const TCdcAggregatorHeartbeatBatch& batch) const;
-    std::pair<std::optional<TCdcAggregatorHeartbeatBatchResult>, TString> ParseBatchResult(const NKikimrCdcAggregator::TEvWriteHeartbeatsResult& proto) const;
+    std::pair<std::optional<TCdcAggregatorWriteHeartbeatsResult>, TString> ParseWriteHeartbeatsResult(const NKikimrCdcAggregator::TEvWriteHeartbeatsResult& proto) const;
     THolder<TEvCdcAggregatorService::TEvWriteHeartbeatResult> SerializeReply(const TCdcAggregatorHeartbeatDeliveryReply& reply) const;
 };
 

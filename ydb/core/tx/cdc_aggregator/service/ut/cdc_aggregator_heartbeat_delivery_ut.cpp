@@ -19,12 +19,12 @@ NPQ::THeartbeat MakeHeartbeat(ui64 step, const TString& data = {}) {
     };
 }
 
-TCdcAggregatorHeartbeatBatchResult MakeWritten(const TVector<std::pair<ui64, ui64>>& written) {
-    TCdcAggregatorHeartbeatBatchResult tabletBatchResult;
+TCdcAggregatorWriteHeartbeatsResult MakeWritten(const TVector<std::pair<ui64, ui64>>& written) {
+    TCdcAggregatorWriteHeartbeatsResult writeHeartbeatsResult;
     for (const auto& [sourceDataShardId, step] : written) {
-        tabletBatchResult.WrittenVersionsBySourceDataShardId[sourceDataShardId] = TRowVersion(step, 0);
+        writeHeartbeatsResult.WrittenVersionsBySourceDataShardId[sourceDataShardId] = TRowVersion(step, 0);
     }
-    return tabletBatchResult;
+    return writeHeartbeatsResult;
 }
 
 TVector<ui64> GetSortedSourceDataShardIds(const TCdcAggregatorHeartbeatBatch& batch) {
@@ -139,11 +139,11 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
         TCdcAggregatorHeartbeatDelivery delivery(100);
         delivery.AddHeartbeat(1, MakeHeartbeat(100));
         delivery.PrepareNextBatchIfPossible().value();
-        TCdcAggregatorHeartbeatBatchResult tabletBatchResult;
-        tabletBatchResult.RejectionErrorsBySourceDataShardId[1] = "UNKNOWN_SOURCE";
+        TCdcAggregatorWriteHeartbeatsResult writeHeartbeatsResult;
+        writeHeartbeatsResult.RejectionErrorsBySourceDataShardId[1] = "UNKNOWN_SOURCE";
 
         // when
-        const auto replies = delivery.CompleteBatch(tabletBatchResult);
+        const auto replies = delivery.CompleteBatch(writeHeartbeatsResult);
 
         // then
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
@@ -248,14 +248,14 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDeliveryProtoConverter) {
         withoutVersion.SetStatus(TProtoResult::THeartbeatResult::SUCCESS);
 
         // when
-        const auto [tabletBatchResult, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(proto);
+        const auto [writeHeartbeatsResult, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseWriteHeartbeatsResult(proto);
 
         // then
-        UNIT_ASSERT_C(tabletBatchResult, error);
-        UNIT_ASSERT_VALUES_EQUAL(tabletBatchResult->WrittenVersionsBySourceDataShardId.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tabletBatchResult->WrittenVersionsBySourceDataShardId.at(1), TRowVersion(100, 0));
-        UNIT_ASSERT_VALUES_EQUAL(tabletBatchResult->RejectionErrorsBySourceDataShardId.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tabletBatchResult->RejectionErrorsBySourceDataShardId.at(2), "UNKNOWN_SOURCE");
+        UNIT_ASSERT_C(writeHeartbeatsResult, error);
+        UNIT_ASSERT_VALUES_EQUAL(writeHeartbeatsResult->WrittenVersionsBySourceDataShardId.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(writeHeartbeatsResult->WrittenVersionsBySourceDataShardId.at(1), TRowVersion(100, 0));
+        UNIT_ASSERT_VALUES_EQUAL(writeHeartbeatsResult->RejectionErrorsBySourceDataShardId.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(writeHeartbeatsResult->RejectionErrorsBySourceDataShardId.at(2), "UNKNOWN_SOURCE");
     }
 
     Y_UNIT_TEST(ShouldSerializeWrittenVersionWhenReplyIsWritten) {
@@ -291,10 +291,10 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDeliveryProtoConverter) {
             proto.SetError("Stream is not configured");
 
             // when
-            const auto [tabletBatchResult, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(proto);
+            const auto [writeHeartbeatsResult, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseWriteHeartbeatsResult(proto);
 
             // then
-            UNIT_ASSERT(!tabletBatchResult);
+            UNIT_ASSERT(!writeHeartbeatsResult);
             UNIT_ASSERT_VALUES_EQUAL(error, TProtoResult::EStatus_Name(status) + ": Stream is not configured");
         }
     }

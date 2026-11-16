@@ -15,32 +15,32 @@ THolder<TEvCdcAggregator::TEvWriteHeartbeats> TCdcAggregatorHeartbeatDeliveryPro
     return ev;
 }
 
-std::pair<std::optional<TCdcAggregatorHeartbeatBatchResult>, TString> TCdcAggregatorHeartbeatDeliveryProtoConverter::ParseBatchResult(const NKikimrCdcAggregator::TEvWriteHeartbeatsResult& proto) const {
+std::pair<std::optional<TCdcAggregatorWriteHeartbeatsResult>, TString> TCdcAggregatorHeartbeatDeliveryProtoConverter::ParseWriteHeartbeatsResult(const NKikimrCdcAggregator::TEvWriteHeartbeatsResult& proto) const {
     using TProto = NKikimrCdcAggregator::TEvWriteHeartbeatsResult;
 
     if (proto.GetStatus() != TProto::SUCCESS) {
         return {std::nullopt, TStringBuilder() << TProto::EStatus_Name(proto.GetStatus()) << ": " << proto.GetError()};
     }
 
-    TCdcAggregatorHeartbeatBatchResult tabletBatchResult;
+    TCdcAggregatorWriteHeartbeatsResult writeHeartbeatsResult;
     for (const auto& item : proto.GetResults()) {
         const ui64 sourceDataShardId = item.GetSourceDataShardId();
         switch (item.GetStatus()) {
         case TProto::THeartbeatResult::SUCCESS:
             if (item.HasWrittenVersion()) {
-                tabletBatchResult.WrittenVersionsBySourceDataShardId[sourceDataShardId] = TRowVersion::FromProto(item.GetWrittenVersion());
+                writeHeartbeatsResult.WrittenVersionsBySourceDataShardId[sourceDataShardId] = TRowVersion::FromProto(item.GetWrittenVersion());
             }
             break;
         case TProto::THeartbeatResult::UNKNOWN_SOURCE:
         case TProto::THeartbeatResult::BAD_REQUEST:
-            tabletBatchResult.RejectionErrorsBySourceDataShardId[sourceDataShardId] = TProto::THeartbeatResult::EStatus_Name(item.GetStatus());
+            writeHeartbeatsResult.RejectionErrorsBySourceDataShardId[sourceDataShardId] = TProto::THeartbeatResult::EStatus_Name(item.GetStatus());
             break;
         default:
             break;
         }
     }
 
-    return {std::move(tabletBatchResult), TString()};
+    return {std::move(writeHeartbeatsResult), TString()};
 }
 
 THolder<TEvCdcAggregatorService::TEvWriteHeartbeatResult> TCdcAggregatorHeartbeatDeliveryProtoConverter::SerializeReply(const TCdcAggregatorHeartbeatDeliveryReply& reply) const {

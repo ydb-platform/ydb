@@ -142,10 +142,10 @@ WITH (
   --s3-endpoint storage.yandexcloud.net \
   --bucket mybucket \
   --item src=replication-bootstrap/original_table,dst=replica_table \
-  --index-population-mode import
+  --index-population-mode Import
 ```
 
-Параметр `--item` сопоставляет префикс таблицы в резервной копии с целевым путём `replica_table`, указанным в `CREATE ASYNC REPLICATION`. Режим `--index-population-mode import` загружает данные индексов, сохранённые на предыдущем шаге. Для нескольких таблиц укажите отдельный `--item` для каждой пары путей.
+Параметр `--item` сопоставляет префикс таблицы в резервной копии с целевым путём `replica_table`, указанным в `CREATE ASYNC REPLICATION`. Режим `--index-population-mode Import` загружает данные индексов, сохранённые на предыдущем шаге. Для нескольких таблиц укажите отдельный `--item` для каждой пары путей.
 
 Дождитесь успешного завершения операции с помощью [`operation get`](../reference/ydb-cli/export-import/import-s3.md#status):
 

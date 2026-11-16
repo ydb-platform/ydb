@@ -8,7 +8,11 @@
 
 `--s3-endpoint HOST`: Эндпоинт S3. `HOST` - валидное имя хоста, например `storage.yandexcloud.net`
 
+`--scheme SCHEME`: Схема URL эндпоинта S3. Допустимые значения: `http`, `https`. Значение по умолчанию: `https`.
+
 `--bucket STR`: Бакет S3. `STR` - строка, содержащая имя бакета
+
+`--use-virtual-addressing BOOL`: Стиль URL бакета. Значение `true` (по умолчанию) включает [virtual-hosted-style](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html): имя бакета входит в имя хоста, например `https://<bucket>.<endpoint>/<key>`. Значение `false` включает path-style: имя бакета указывается в пути, например `https://<endpoint>/<bucket>/<key>`. Path-style нужен для S3-совместимых хранилищ, которые не поддерживают virtual-hosted-style.
 
 ## Аутентификация {#auth}
 

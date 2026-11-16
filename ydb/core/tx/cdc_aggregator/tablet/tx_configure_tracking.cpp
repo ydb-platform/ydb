@@ -28,24 +28,24 @@ public:
         Result = MakeHolder<TEvCdcAggregator::TEvConfigureTrackingResult>();
         Result->Record.SetOrigin(Self->TabletID());
 
-        TCdcStreamConfig config;
+        TCdcAggregatorStreamConfig config;
         TString error;
-        if (!ParseCdcStreamConfig(record.GetConfig(), config, error)) {
+        if (!ParseCdcAggregatorStreamConfig(record.GetConfig(), config, error)) {
             Result->Record.SetStatus(TResult::BAD_REQUEST);
             Result->Record.SetError(error);
             return true;
         }
 
-        if (!Self->CdcStream) {
-            Self->CdcStream.emplace(config);
+        if (!Self->CdcAggregatorStream) {
+            Self->CdcAggregatorStream.emplace(config);
             NIceDb::TNiceDb db(txc.DB);
-            Self->PersistCdcStream(db);
+            Self->PersistCdcAggregatorStream(db);
             Result->Record.SetStatus(TResult::SUCCESS);
-        } else if (Self->CdcStream->IsSameConfig(config)) {
+        } else if (Self->CdcAggregatorStream->IsSameConfig(config)) {
             Result->Record.SetStatus(TResult::SUCCESS);
         } else {
             Result->Record.SetStatus(TResult::CONFLICT);
-            Result->Record.SetError(TStringBuilder() << "Tracking of stream " << Self->CdcStream->GetTopic().StreamPathId
+            Result->Record.SetError(TStringBuilder() << "Tracking of stream " << Self->CdcAggregatorStream->GetTopic().StreamPathId
                 << " is already configured differently");
         }
 

@@ -59,16 +59,16 @@ void TCdcAggregator::SwitchToWork(const TActorContext& ctx) {
     Become(&TThis::StateWork);
 }
 
-void TCdcAggregator::PersistCdcStream(NIceDb::TNiceDb& db) {
+void TCdcAggregator::PersistCdcAggregatorStream(NIceDb::TNiceDb& db) {
     db.Table<Schema::State>().Key(Schema::State::Id::Value).Update(
-        NIceDb::TUpdate<Schema::State::TrackingConfig>(SerializeCdcStreamTopic(CdcStream->GetTopic())));
+        NIceDb::TUpdate<Schema::State::TrackingConfig>(SerializeCdcAggregatorStreamTopic(CdcAggregatorStream->GetTopic())));
 
-    for (const auto dataShardId : CdcStream->GetSourceDataShardIds()) {
+    for (const auto dataShardId : CdcAggregatorStream->GetSourceDataShardIds()) {
         db.Table<Schema::Sources>().Key(dataShardId).Update();
     }
 }
 
-void TCdcAggregator::PersistCdcStreamChanges(NIceDb::TNiceDb& db, const TCdcAggregatorStreamChanges& changes) {
+void TCdcAggregator::PersistCdcAggregatorStreamChanges(NIceDb::TNiceDb& db, const TCdcAggregatorStreamChanges& changes) {
     for (const auto dataShardId : changes.ErasedSourceDataShardIds) {
         db.Table<Schema::Sources>().Key(dataShardId).Delete();
     }
@@ -93,8 +93,8 @@ void TCdcAggregator::Handle(TEvCdcAggregator::TEvDescribeTracking::TPtr& ev, con
         {"ev", ev->Get()->ToString()});
 
     auto result = MakeHolder<TEvCdcAggregator::TEvDescribeTrackingResult>();
-    if (CdcStream) {
-        TVector<ui64> sources(CdcStream->GetSourceDataShardIds().begin(), CdcStream->GetSourceDataShardIds().end());
+    if (CdcAggregatorStream) {
+        TVector<ui64> sources(CdcAggregatorStream->GetSourceDataShardIds().begin(), CdcAggregatorStream->GetSourceDataShardIds().end());
         std::sort(sources.begin(), sources.end());
         for (const auto dataShardId : sources) {
             result->Record.AddSources()->SetDataShardId(dataShardId);

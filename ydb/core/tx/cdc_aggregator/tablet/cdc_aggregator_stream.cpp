@@ -1,4 +1,4 @@
-#include "cdc_stream_state.h"
+#include "cdc_aggregator_stream.h"
 
 #include <util/string/builder.h>
 
@@ -6,7 +6,7 @@
 
 namespace NKikimr::NCdcAggregator {
 
-bool ParseCdcStreamTopic(const NKikimrCdcAggregator::TTrackingConfig& proto, TCdcStreamTopic& topic, TString& error) {
+bool ParseCdcAggregatorStreamTopic(const NKikimrCdcAggregator::TTrackingConfig& proto, TCdcAggregatorStreamTopic& topic, TString& error) {
     topic.StreamPathId = TPathId::FromProto(proto.GetStreamPathId());
     if (!topic.StreamPathId.OwnerId || !topic.StreamPathId.LocalPathId) {
         error = "Stream path id is not set";
@@ -40,8 +40,8 @@ bool ParseCdcStreamTopic(const NKikimrCdcAggregator::TTrackingConfig& proto, TCd
     return true;
 }
 
-bool ParseCdcStreamConfig(const NKikimrCdcAggregator::TTrackingConfig& proto, TCdcStreamConfig& config, TString& error) {
-    if (!ParseCdcStreamTopic(proto, config.Topic, error)) {
+bool ParseCdcAggregatorStreamConfig(const NKikimrCdcAggregator::TTrackingConfig& proto, TCdcAggregatorStreamConfig& config, TString& error) {
+    if (!ParseCdcAggregatorStreamTopic(proto, config.Topic, error)) {
         return false;
     }
 
@@ -60,7 +60,7 @@ bool ParseCdcStreamConfig(const NKikimrCdcAggregator::TTrackingConfig& proto, TC
     return true;
 }
 
-TString SerializeCdcStreamTopic(const TCdcStreamTopic& topic) {
+TString SerializeCdcAggregatorStreamTopic(const TCdcAggregatorStreamTopic& topic) {
     NKikimrCdcAggregator::TTrackingConfig proto;
     topic.StreamPathId.ToProto(proto.MutableStreamPathId());
     proto.SetStreamPath(topic.StreamPath);
@@ -72,19 +72,19 @@ TString SerializeCdcStreamTopic(const TCdcStreamTopic& topic) {
     return proto.SerializeAsString();
 }
 
-TCdcAggregatorStreamState::TCdcAggregatorStreamState(const TCdcStreamConfig& config)
+TCdcAggregatorStream::TCdcAggregatorStream(const TCdcAggregatorStreamConfig& config)
     : Topic(config.Topic)
     , SourceDataShardIds(config.SourceDataShardIds.begin(), config.SourceDataShardIds.end())
 {
 }
 
-TCdcAggregatorStreamState::TCdcAggregatorStreamState(TCdcStreamTopic topic, THashSet<ui64> sourceDataShardIds)
+TCdcAggregatorStream::TCdcAggregatorStream(TCdcAggregatorStreamTopic topic, THashSet<ui64> sourceDataShardIds)
     : Topic(std::move(topic))
     , SourceDataShardIds(std::move(sourceDataShardIds))
 {
 }
 
-bool TCdcAggregatorStreamState::IsSameConfig(const TCdcStreamConfig& config) const {
+bool TCdcAggregatorStream::IsSameConfig(const TCdcAggregatorStreamConfig& config) const {
     return Topic == config.Topic
         && SourceDataShardIds.size() == config.SourceDataShardIds.size()
         && std::all_of(config.SourceDataShardIds.begin(), config.SourceDataShardIds.end(), [this](ui64 sourceDataShardId) {
@@ -92,7 +92,7 @@ bool TCdcAggregatorStreamState::IsSameConfig(const TCdcStreamConfig& config) con
         });
 }
 
-ESourceOutcome TCdcAggregatorStreamState::ReplaceSourceDataShard(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds, TCdcAggregatorStreamChanges& changes) {
+ESourceOutcome TCdcAggregatorStream::ReplaceSourceDataShard(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds, TCdcAggregatorStreamChanges& changes) {
     if (!SourceDataShardIds.contains(parentDataShardId)) {
         const bool applied = std::all_of(childDataShardIds.begin(), childDataShardIds.end(), [this](ui64 childDataShardId) {
             return SourceDataShardIds.contains(childDataShardId);

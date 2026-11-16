@@ -15,22 +15,22 @@ struct TTopicPartition {
     bool operator==(const TTopicPartition&) const = default;
 };
 
-struct TCdcStreamTopic {
+struct TCdcAggregatorStreamTopic {
     TPathId StreamPathId;
     TString StreamPath;
     TVector<TTopicPartition> Partitions;
 
-    bool operator==(const TCdcStreamTopic&) const = default;
+    bool operator==(const TCdcAggregatorStreamTopic&) const = default;
 };
 
-struct TCdcStreamConfig {
-    TCdcStreamTopic Topic;
+struct TCdcAggregatorStreamConfig {
+    TCdcAggregatorStreamTopic Topic;
     TVector<ui64> SourceDataShardIds;
 };
 
-bool ParseCdcStreamTopic(const NKikimrCdcAggregator::TTrackingConfig& proto, TCdcStreamTopic& topic, TString& error);
-bool ParseCdcStreamConfig(const NKikimrCdcAggregator::TTrackingConfig& proto, TCdcStreamConfig& config, TString& error);
-TString SerializeCdcStreamTopic(const TCdcStreamTopic& topic);
+bool ParseCdcAggregatorStreamTopic(const NKikimrCdcAggregator::TTrackingConfig& proto, TCdcAggregatorStreamTopic& topic, TString& error);
+bool ParseCdcAggregatorStreamConfig(const NKikimrCdcAggregator::TTrackingConfig& proto, TCdcAggregatorStreamConfig& config, TString& error);
+TString SerializeCdcAggregatorStreamTopic(const TCdcAggregatorStreamTopic& topic);
 
 struct TCdcAggregatorStreamChanges {
     THashSet<ui64> AddedSourceDataShardIds;
@@ -42,12 +42,12 @@ enum class ESourceOutcome {
     UnknownSource,
 };
 
-class TCdcAggregatorStreamState {
+class TCdcAggregatorStream {
 public:
-    explicit TCdcAggregatorStreamState(const TCdcStreamConfig& config);
-    TCdcAggregatorStreamState(TCdcStreamTopic topic, THashSet<ui64> sourceDataShardIds);
+    explicit TCdcAggregatorStream(const TCdcAggregatorStreamConfig& config);
+    TCdcAggregatorStream(TCdcAggregatorStreamTopic topic, THashSet<ui64> sourceDataShardIds);
 
-    const TCdcStreamTopic& GetTopic() const {
+    const TCdcAggregatorStreamTopic& GetTopic() const {
         return Topic;
     }
 
@@ -55,11 +55,11 @@ public:
         return SourceDataShardIds;
     }
 
-    bool IsSameConfig(const TCdcStreamConfig& config) const;
+    bool IsSameConfig(const TCdcAggregatorStreamConfig& config) const;
     ESourceOutcome ReplaceSourceDataShard(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds, TCdcAggregatorStreamChanges& changes);
 
 private:
-    TCdcStreamTopic Topic;
+    TCdcAggregatorStreamTopic Topic;
     THashSet<ui64> SourceDataShardIds;
 };
 

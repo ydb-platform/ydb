@@ -325,12 +325,6 @@ def validate_test(unit, kw):
             requirements_list.append(req_name + ":" + req_value)
         valid_kw['REQUIREMENTS'] = serialize_list(sorted(requirements_list))
 
-    # Mark test with ya:external tag if it requests any secret from external storages
-    # It's not stable and nonreproducible by definition
-    for x in secret_requirements:
-        if x in requirements:
-            tags.add(consts.YaTestTags.External)
-
     if valid_kw.get("FUZZ-OPTS"):
         for option in get_list("FUZZ-OPTS"):
             if not option.startswith("-"):
@@ -369,7 +363,6 @@ def validate_test(unit, kw):
                     errors.append("File '{}' specified in the YT_SPEC macro doesn't exist".format(filename))
                     continue
                 if not is_yt_spec_contain_pool_info(filename):
-                    tags.add(consts.YaTestTags.External)
                     tags.add("ya:yt_research_pool")
 
     partition = valid_kw.get('TEST_PARTITION', 'SEQUENTIAL')

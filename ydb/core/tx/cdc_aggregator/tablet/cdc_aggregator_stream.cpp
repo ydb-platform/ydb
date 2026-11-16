@@ -40,9 +40,10 @@ TCdcAggregatorStream::TCdcAggregatorStream(
 }
 
 TCdcAggregatorStreamHeartbeatsDiff TCdcAggregatorStream::WriteHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatBySourceDataShardId) {
-    auto lastHeartbeats = RegisterHeartbeats(heartbeatBySourceDataShardId);
-    auto currentHeartbeat = UpdateCurrentHeartbeatIfNeeded();
-    return {.LastHeartbeatBySourceDataShardId = std::move(lastHeartbeats), .CurrentHeartbeat = std::move(currentHeartbeat)};
+    return {
+        .LastHeartbeatBySourceDataShardId = RegisterHeartbeats(heartbeatBySourceDataShardId),
+        .CurrentHeartbeat = UpdateCurrentHeartbeatIfNeeded(),
+    };
 }
 
 THashMap<ui64, NPQ::THeartbeat> TCdcAggregatorStream::RegisterHeartbeats(const THashMap<ui64, NPQ::THeartbeat>& heartbeatBySourceDataShardId) {

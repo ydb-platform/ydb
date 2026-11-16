@@ -43,7 +43,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
                         {"internalTxStep", internalTxStep},
                         {"volatileTx", txid},
                         {"mediatorId", mediatorId},
-                        {"tabletId", tabletId},
+                        {"confirmedTabletId", tabletId},
                         {"removed", removed});
                 }
 

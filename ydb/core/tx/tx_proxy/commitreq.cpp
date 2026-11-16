@@ -105,8 +105,8 @@ public:
             : TDuration::MilliSeconds(DefaultTimeoutMs);
         if (ExecTimeoutPeriod.Minutes() > 60) {
             YDB_LOG_WARN_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Huge ExecTimeoutPeriod requested trimming to 30 min",
-                {"actor", ctx.SelfID},
-                {"txid", TxId},
+                {"tabletId", ctx.SelfID},
+                {"txId", TxId},
                 {"execTimeoutPeriod", ExecTimeoutPeriod});
             ExecTimeoutPeriod = TDuration::Minutes(30);
         }
@@ -154,8 +154,8 @@ private:
 
     void HandleResolveTimeout(const TActorContext& ctx) {
         YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "HANDLE ResolveTimeout TCommitWritesReq",
-            {"actor", ctx.SelfID},
-            {"txid", TxId});
+            {"tabletId", ctx.SelfID},
+            {"txId", TxId});
         ctx.Send(ResolveActorID, new TEvents::TEvPoison());
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout, NKikimrIssues::TStatusIds::TIMEOUT, true, ctx);
         return Die(ctx);
@@ -297,8 +297,8 @@ private:
             const TString txBody = tx.SerializeAsString();
 
             YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "SEND TEvProposeTransaction to datashard with commit writes request affected shards",
-                {"actor", ctx.SelfID},
-                {"txid", TxId},
+                {"tabletId", ctx.SelfID},
+                {"txId", TxId},
                 {"shardId", shardId},
                 {"perShardStatesSize", PerShardStates.size()},
                 {"marker", "P3"});
@@ -338,8 +338,8 @@ private:
 
     void HandleExecTimeout(const TActorContext& ctx) {
         YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "HANDLE ExecTimeout TCommitWritesReq",
-            {"actor", ctx.SelfID},
-            {"txid", TxId});
+            {"tabletId", ctx.SelfID},
+            {"txId", TxId});
         // TODO: should cancel any active transaction proposals
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout, NKikimrIssues::TStatusIds::TIMEOUT, true, ctx);
         return Die(ctx);
@@ -356,8 +356,8 @@ private:
         YDB_LOG_CTX_COMP_SAMPLED_BY(ctx, (msg->GetStatus() != NKikimrTxDataShard::TEvProposeTransactionResult::ERROR
                 ? NActors::NLog::PRI_DEBUG
                 : NActors::NLog::PRI_ERROR), NKikimrServices::TX_PROXY, TxId, "HANDLE Prepare TEvProposeTransactionResult TCommitWritesReq shard id",
-            {"actor", ctx.SelfID},
-            {"txid", TxId},
+            {"tabletId", ctx.SelfID},
+            {"txId", TxId},
             {"shardStatus", state.Status},
             {"resultStatus", msg->GetStatus()},
             {"shardId", shardId},
@@ -570,8 +570,8 @@ private:
         YDB_LOG_CTX_COMP_SAMPLED_BY(ctx, (msg->GetStatus() != NKikimrTxDataShard::TEvProposeTransactionResult::ERROR
                 ? NActors::NLog::PRI_DEBUG
                 : NActors::NLog::PRI_ERROR), NKikimrServices::TX_PROXY, TxId, "HANDLE PrepareErrors TEvProposeTransactionResult TCommitWritesReq shard id",
-            {"actor", ctx.SelfID},
-            {"txid", TxId},
+            {"tabletId", ctx.SelfID},
+            {"txId", TxId},
             {"shardStatus", state.Status},
             {"shardId", shardId});
 
@@ -610,8 +610,8 @@ private:
         }
 
         YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard delivery problem",
-            {"actor", ctx.SelfID},
-            {"txid", TxId},
+            {"tabletId", ctx.SelfID},
+            {"txId", TxId},
             {"tabletId", msg->TabletId});
 
         return MarkShardPrepareError(msg->TabletId, state, true, ctx);
@@ -643,8 +643,8 @@ private:
         }
 
         YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "SEND EvProposeTransaction Coordinator",
-            {"actor", ctx.SelfID},
-            {"txid", TxId},
+            {"tabletId", ctx.SelfID},
+            {"txId", TxId},
             {"to", SelectedCoordinator},
             {"marker", "P5"});
 
@@ -672,8 +672,8 @@ private:
             TxProxyMon->ClientTxStatusAccepted->Inc();
             // nop
             YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "HANDLE TEvProposeTransactionStatus TCommitWritesReq",
-                {"actor", ctx.SelfID},
-                {"txid", TxId},
+                {"tabletId", ctx.SelfID},
+                {"txId", TxId},
                 {"status", msg->GetStatus()},
                 {"marker", "P6"});
             break;
@@ -681,8 +681,8 @@ private:
             TxProxyMon->ClientTxStatusProcessed->Inc();
             // nop
             YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "HANDLE TEvProposeTransactionStatus TCommitWritesReq",
-                {"actor", ctx.SelfID},
-                {"txid", TxId},
+                {"tabletId", ctx.SelfID},
+                {"txId", TxId},
                 {"status", msg->GetStatus()},
                 {"marker", "P6"});
             break;
@@ -690,8 +690,8 @@ private:
             TxProxyMon->ClientTxStatusConfirmed->Inc();
             // nop
             YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "HANDLE TEvProposeTransactionStatus TCommitWritesReq",
-                {"actor", ctx.SelfID},
-                {"txid", TxId},
+                {"tabletId", ctx.SelfID},
+                {"txId", TxId},
                 {"status", msg->GetStatus()},
                 {"marker", "P6"});
             break;
@@ -701,8 +701,8 @@ private:
             PlanStep = record.GetStepId();
             // ok
             YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "HANDLE TEvProposeTransactionStatus TCommitWritesReq",
-                {"actor", ctx.SelfID},
-                {"txid", TxId},
+                {"tabletId", ctx.SelfID},
+                {"txId", TxId},
                 {"status", msg->GetStatus()},
                 {"marker", "P6"});
             if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportPlanned) {
@@ -720,8 +720,8 @@ private:
             TxProxyMon->ClientTxStatusCoordinatorDeclined->Inc();
             // smth goes wrong
             YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "HANDLE TEvProposeTransactionStatus TCommitWritesReq",
-                {"actor", ctx.SelfID},
-                {"txid", TxId},
+                {"tabletId", ctx.SelfID},
+                {"txId", TxId},
                 {"status", msg->GetStatus()},
                 {"marker", "P6"});
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorDeclined, NKikimrIssues::TStatusIds::REJECTED, true, ctx);
@@ -738,8 +738,8 @@ private:
               msg->GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA)
                 ? NActors::NLog::PRI_DEBUG
                 : NActors::NLog::PRI_ERROR), NKikimrServices::TX_PROXY, TxId, "HANDLE Plan TEvProposeTransactionResult TCommitWritesReq shard id",
-            {"actor", ctx.SelfID},
-            {"txid", TxId},
+            {"tabletId", ctx.SelfID},
+            {"txId", TxId},
             {"getStatus", msg->GetStatus()},
             {"origin", msg->GetOrigin()},
             {"marker", "P7"});
@@ -785,8 +785,8 @@ private:
         if (msg->TabletId == SelectedCoordinator) {
             if (msg->NotDelivered) {
                 YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Not delivered to coordinator coordinator id",
-                    {"actor", ctx.SelfID},
-                    {"txid", TxId},
+                    {"tabletId", ctx.SelfID},
+                    {"txId", TxId},
                     {"tabletId", msg->TabletId},
                     {"marker", "P8"});
 
@@ -797,8 +797,8 @@ private:
                 TxProxyMon->PlanCoordinatorDeclined->Inc();
             } else {
                 YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Delivery problem to coordinator coordinator id",
-                    {"actor", ctx.SelfID},
-                    {"txid", TxId},
+                    {"tabletId", ctx.SelfID},
+                    {"txId", TxId},
                     {"tabletId", msg->TabletId},
                     {"marker", "P8b"});
 
@@ -814,8 +814,8 @@ private:
 
         if (PerShardStates.contains(msg->TabletId)) {
             YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard lost pipe while waiting for reply",
-                {"actor", ctx.SelfID},
-                {"txid", TxId},
+                {"tabletId", ctx.SelfID},
+                {"txId", TxId},
                 {"tabletId", msg->TabletId});
 
             ComplainingDatashards.push_back(msg->TabletId);
@@ -830,8 +830,8 @@ private:
         }
 
         YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Lost pipe with unknown endpoint, ignoring",
-            {"actor", ctx.SelfID},
-            {"txid", TxId});
+            {"tabletId", ctx.SelfID},
+            {"txId", TxId});
     }
 
     void MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
@@ -919,8 +919,8 @@ private:
         Y_DEBUG_ABORT_UNLESS(TabletsToPrepare > 0);
         if (!--TabletsToPrepare) {
             YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "DIE TCommitWritesReq MarkShardPrepareError",
-                {"actor", ctx.SelfID},
-                {"txid", TxId},
+                {"tabletId", ctx.SelfID},
+                {"txId", TxId},
                 {"invalidateDistCache", invalidateDistCache},
                 {"tabletErrors", TabletErrors});
             TxProxyMon->MarkShardError->Inc();

@@ -1759,8 +1759,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         TxProxyMon->CacheRequestLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
         YDB_LOG_CTX_COMP_SAMPLED_BY(ctx, (navigate->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_NOTICE), NKikimrServices::TX_PROXY, TxId, "HANDLE EvNavigateKeySetResult TFlatSchemeReq",
-            {"actor", ctx.SelfID},
-            {"txid", TxId},
+            {"tabletId", ctx.SelfID},
+            {"txId", TxId},
             {"errorCount", navigate->ErrorCount},
             {"marker", "P5"});
 

@@ -1508,16 +1508,10 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         const ui64 txId = 100;
 
-        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
-        auto* operation = request->Record.AddTransaction();
-        operation->SetWorkingDir("/MyRoot");
-        operation->SetInternal(true);
-        operation->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
-        operation->MutableRestoreBackupCollection()->SetName(".backups/collections/Collection");
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, request.Release());
-
         const TString reason = "Backup collection not found: /MyRoot/.backups/collections/Collection";
-        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPathDoesNotExist, reason}});
+        TestCreateLongIncrementalRestoreOp(runtime, txId, "/MyRoot", R"(
+            Name: ".backups/collections/Collection"
+        )", {{NKikimrScheme::StatusPathDoesNotExist, reason}});
 
         const std::string marker = "tx_id=" + std::to_string(txId);
         runtime.WaitFor("scheme audit record", [&] {

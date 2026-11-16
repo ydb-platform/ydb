@@ -1157,6 +1157,14 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(BackupIncrementalBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableBackupIncrementalBackupCollection)
     GENERIC_HELPERS(RestoreBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableRestoreBackupCollection)
 
+    void TestCreateLongIncrementalRestoreOp(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath,
+            const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
+        auto* request = InternalTransaction(RestoreBackupCollectionRequest(txId, parentPath, scheme));
+        request->Record.MutableTransaction(0)->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
     // sysview
     GENERIC_HELPERS(CreateSysView, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView, &NKikimrSchemeOp::TModifyScheme::MutableCreateSysView)
     GENERIC_HELPERS(DropSysView, NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView, &NKikimrSchemeOp::TModifyScheme::MutableDrop)

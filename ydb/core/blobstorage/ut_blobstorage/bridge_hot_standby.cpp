@@ -262,6 +262,65 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::HOT_STANDBY);
     }
 
+    // An abandoned assignment must retain the missed write even with no new write or node registration to mark it again.
+    Y_UNIT_TEST(ReconciliationRetriesAfterWorkerLoss) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        env.Sim(TDuration::Minutes(2));
+
+        ui32 lostNode = 0;
+        ui64 lostAssignment = 0;
+        ui32 replacementNode = 0;
+        ui32 registrations = 0;
+        ui32 newMarks = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (lostNode) {
+                registrations += ev->GetTypeRewrite() == TEvBlobStorage::EvControllerRegisterNode;
+                newMarks += CountStandbyMarks(*ev, piles[1]);
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+                for (const auto& syncer : ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record.GetSyncers()) {
+                    if (syncer.GetReconcile() && syncer.GetTargetGroupId() == piles[1]) {
+                        if (!lostNode) {
+                            lostNode = ev->Recipient.NodeId();
+                            lostAssignment = syncer.GetAssignmentId();
+                            UNIT_ASSERT(lostAssignment);
+                            UNIT_ASSERT(syncer.GetThorough());
+                            return false; // the worker dies before receiving its assignment
+                        }
+                        if (ev->Recipient.NodeId() == lostNode) {
+                            return false; // don't deliver a repeated assignment before stopping the worker
+                        }
+                        UNIT_ASSERT_UNEQUAL(syncer.GetAssignmentId(), lostAssignment);
+                        UNIT_ASSERT(syncer.GetThorough());
+                        replacementNode = ev->Recipient.NodeId();
+                    }
+                }
+            }
+            return true;
+        };
+        SetStandbyBudget(env, 0);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        SetStandbyBudget(env, 256 << 20);
+        WaitUntil(env, [&] { return lostNode != 0; }, "reconciliation assigned", TDuration::Seconds(1), 90);
+        UNIT_ASSERT(9 <= lostNode && lostNode <= 16);
+        const auto& [writtenGroup, id, data] = checker.GetWritten().back();
+        UNIT_ASSERT_VALUES_EQUAL(writtenGroup, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 1, id, data), NKikimrProto::NODATA);
+        env.StopNode(lostNode);
+
+        WaitUntil(env, [&] { return replacementNode != 0; }, "replacement reconciliation assigned",
+            TDuration::Seconds(1), 30);
+        WaitUntil(env, [&] { return ReadFromPileGroup(env, piles[1], 1, id, data) == NKikimrProto::OK; },
+            "replacement reconciler copies the missed write", TDuration::Seconds(1), 60);
+        UNIT_ASSERT_VALUES_EQUAL(registrations, 0);
+        UNIT_ASSERT_VALUES_EQUAL(newMarks, 0);
+        UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::HOT_STANDBY);
+        env.Runtime->FilterFunction = {};
+    }
+
     // Reconciliation forwards the barrier held back by dsproxy-proxy only after the standby keeps what the source does:
     // the keep flag the standby has missed comes first, and the keep flag the source has released is released.
     Y_UNIT_TEST(ReconciliationCollectsGarbageAfterKeepFlags) {
@@ -448,6 +507,74 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
         WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
         CheckPileData(env, checker, 1, 9);
+    }
+
+    // Once a flushed seal's client write finishes, it must progress without waiting for the background reply.
+    Y_UNIT_TEST(FlushedSealProgressesAfterClientCompletion) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        env.Sim(TDuration::Minutes(2));
+
+        TActorId bridgeProxy;
+        std::unique_ptr<IEventHandle> foregroundResult;
+        std::unique_ptr<IEventHandle> backgroundResult;
+        bool holdResults = true;
+        bool flushed = false;
+        bool sealed = false;
+        ui64 sealCookie = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut &&
+                    ev->Recipient == MakeBlobStorageProxyID(piles[1])) {
+                bridgeProxy = ev->Sender;
+            }
+            if (holdResults && ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult && ev->Recipient == bridgeProxy) {
+                const auto *msg = ev->Get<TEvBlobStorage::TEvPutResult>();
+                if (msg->GroupId == piles[0] || msg->GroupId == piles[1]) {
+                    UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
+                    auto& held = msg->GroupId == piles[0] ? foregroundResult : backgroundResult;
+                    UNIT_ASSERT(!held);
+                    held = std::move(ev);
+                    return false;
+                }
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenStandbySeal::EventType && ev->Recipient == bridgeProxy &&
+                    ev->Get<NStorage::TEvNodeWardenStandbySeal>()->Flush) {
+                flushed = true;
+                sealCookie = ev->Cookie;
+            }
+            if (flushed && ev->GetTypeRewrite() == NStorage::TEvNodeWardenStandbySealed::EventType &&
+                    ev->Sender == bridgeProxy && ev->Cookie == sealCookie) {
+                sealed = true;
+            }
+            return true;
+        };
+        TDataChecker checker(env);
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        checker.SendPut(groupId, edge);
+        WaitUntil(env, [&] { return foregroundResult && backgroundResult; }, "both write replies held",
+            TDuration::Seconds(1), 10);
+        holdResults = false;
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitUntil(env, [&] { return flushed; }, "standby seal flushed", TDuration::Seconds(1), 40);
+        UNIT_ASSERT(!sealed);
+        UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+
+        env.Runtime->Send(foregroundResult.release(), 1);
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Seconds(5));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        WaitUntil(env, [&] { return sealed; }, "flushed seal completes with the client write",
+            TDuration::MilliSeconds(100), 10);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        CheckPileData(env, checker, 1, 9);
+
+        env.Runtime->FilterFunction = {};
+        env.Runtime->Send(backgroundResult.release(), 1);
+        WaitUntil(env, [&] { return GetStandbyCounter(env, "BytesInFlight", false) == 0; },
+            "late background reply releases its budget", TDuration::Seconds(1), 10);
     }
 
     // The node BSC has lost may write to the standby without telling what it misses. The part reconciled since is not

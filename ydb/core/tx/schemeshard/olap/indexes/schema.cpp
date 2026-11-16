@@ -14,12 +14,13 @@ void TOlapIndexSchema::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& 
 void TOlapIndexSchema::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& indexSchema) {
     Id = indexSchema.GetId();
     Name = indexSchema.GetName();
-    AFL_VERIFY(IndexMeta.DeserializeFromProto(indexSchema))("incorrect_proto", indexSchema.DebugString());
+    YDB_LOG_VERIFY(IndexMeta.DeserializeFromProto(indexSchema),
+        {"incorrectProto", indexSchema.DebugString()});
 }
 
 bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexUpsert& upsert, IErrorCollector& errors) {
-    AFL_VERIFY(upsert.GetName() == GetName());
-    AFL_VERIFY(!!upsert.GetIndexConstructor());
+    YDB_LOG_VERIFY(upsert.GetName() == GetName());
+    YDB_LOG_VERIFY(!!upsert.GetIndexConstructor());
     if (upsert.GetIndexConstructor().GetClassName() != IndexMeta.GetClassName()) {
         errors.AddError("different index classes: " + upsert.GetIndexConstructor().GetClassName() + " vs " + IndexMeta.GetClassName());
         return false;
@@ -56,8 +57,8 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
                 return false;
             }
 
-            AFL_VERIFY(IndexesByName.erase(rename.GetDestinationName()));
-            AFL_VERIFY(Indexes.erase(destinationIndex->GetId()));
+            YDB_LOG_VERIFY(IndexesByName.erase(rename.GetDestinationName()));
+            YDB_LOG_VERIFY(Indexes.erase(destinationIndex->GetId()));
         }
 
         NKikimrSchemeOp::TOlapIndexDescription renamedProto;
@@ -67,8 +68,8 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
         TOlapIndexSchema renamedIndex;
         renamedIndex.DeserializeFromProto(renamedProto);
 
-        AFL_VERIFY(IndexesByName.erase(rename.GetSourceName()));
-        AFL_VERIFY(Indexes.erase(sourceIndexId));
+        YDB_LOG_VERIFY(IndexesByName.erase(rename.GetSourceName()));
+        YDB_LOG_VERIFY(Indexes.erase(sourceIndexId));
         Y_ABORT_UNLESS(IndexesByName.emplace(rename.GetDestinationName(), sourceIndexId).second);
         Y_ABORT_UNLESS(Indexes.emplace(sourceIndexId, std::move(renamedIndex)).second);
     }
@@ -116,8 +117,8 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
             errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Unknown index for drop: " << name);
             return false;
         }
-        AFL_VERIFY(IndexesByName.erase(name));
-        AFL_VERIFY(Indexes.erase(info->GetId()));
+        YDB_LOG_VERIFY(IndexesByName.erase(name));
+        YDB_LOG_VERIFY(Indexes.erase(info->GetId()));
     }
 
     return true;

@@ -17,9 +17,9 @@
 #include <util/stream/zlib.h>
 
 #include <array>
+#include <chrono>
 #include <future>
 #include <memory>
-#include <thread>
 #include <utility>
 
 using namespace NYdb;
@@ -935,15 +935,11 @@ void CheckClosedReadSessions(const TReadSettings& baseSettings) {
         }
         session->Close(timeout);
         session->Close(timeout);
-        auto stopped = NThreading::NewPromise();
-        std::thread stopper([&driver, stopped]() mutable {
-            driver.Stop(true);
-            stopped.SetValue();
-        });
-        const bool ready = stopped.GetFuture().Wait(TDuration::Seconds(5));
+        auto stopped = std::async(std::launch::async, [&driver] { driver.Stop(true); });
+        const bool ready = stopped.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
         session.reset();
         client.reset();
-        stopper.join();
+        stopped.get();
         UNIT_ASSERT_C(ready, "Closed session blocks driver.Stop(true): terminal=" << terminalError << ", timeout=" << timeout);
     }
 }
@@ -966,18 +962,18 @@ public:
         auto context = MakeWithCallbackContext<TDirectReadSession>(0, "", settings, callbacks,
             std::make_shared<::TReadSessionImplTestSetup::TFakeContext>(), factory, TLog{});
         auto session = context->TryGet();
+        TDirectReadSessionManager manager("", settings, callbacks, session->ClientContext, factory, TLog{});
+        manager.NodeSessions[0] = context;
         EStatus deliveredStatus = EStatus::SUCCESS;
         EXPECT_CALL(*callbacks, AbortSession(_)).WillOnce([&](TSessionClosedEvent&& event) {
             deliveredStatus = event.GetStatus();
-            session->Close();
-            context->Cancel();
+            manager.Close();
         });
-        EXPECT_CALL(*factory, OnCreateProcessor(1)).WillOnce([&](size_t) {
-            if (failure == EFailure::Connect) {
-                factory->FailCreation(EStatus::UNAVAILABLE);
-            }
-        });
-        session->Start();
+        EXPECT_CALL(*factory, OnCreateProcessor(1));
+        manager.StartPartitionSession({.PartitionSessionId = 1, .Location = {0, 1}});
+        if (failure == EFailure::Connect) {
+            factory->FailCreation(EStatus::UNAVAILABLE);
+        }
         factory->Wait();
         if (failure != EFailure::Connect) {
             TDeferredActions<false> deferred;
@@ -992,8 +988,10 @@ public:
                     }
                 }
             }
+            manager.StartPartitionSession({.PartitionSessionId = 2, .Location = {0, 1}});
+            UNIT_ASSERT_VALUES_EQUAL(deliveredStatus, EStatus::SUCCESS);
+            UNIT_ASSERT(session->PartitionSessions.size() == 1 && manager.Locations.size() == 1);
         }
-        context->Cancel();
         factory->Validate();
         UNIT_ASSERT_VALUES_EQUAL(deliveredStatus, failure == EFailure::Read ? EStatus::TRANSPORT_UNAVAILABLE : EStatus::UNAVAILABLE);
     }

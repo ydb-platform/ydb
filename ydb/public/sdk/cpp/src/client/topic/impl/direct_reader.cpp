@@ -209,9 +209,10 @@ void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSessio
     }
     if (auto s = session->LockShared()) {
         s->Start();
-        s->AddPartitionSession(std::move(partitionSession));
+        if (s->AddPartitionSession(std::move(partitionSession))) {
+            Locations.emplace(partitionSessionId, location);
+        }
     }
-    Locations.emplace(partitionSessionId, location);
 }
 
 // Delete partition session from the node (TDirectReadSession), and if there are no more
@@ -387,17 +388,17 @@ bool TDirectReadSession::Closed() const {
     }
 }
 
-void TDirectReadSession::AddPartitionSession(TDirectReadPartitionSession&& session) {
-    TDeferredActions<false> deferred;
+bool TDirectReadSession::AddPartitionSession(TDirectReadPartitionSession&& session) {
     with_lock (Lock) {
-        Y_ABORT_UNLESS(State < EState::CLOSING);
-
+        if (State >= EState::CLOSING) {
+            return false;
+        }
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "AddPartitionSession " << session.PartitionSessionId);
         auto [it, inserted] = PartitionSessions.emplace(session.PartitionSessionId, std::move(session));
         // TODO(qyryq) Abort? Ignore new? Replace old? Anything else?
         Y_ABORT_UNLESS(inserted);
-
         SendStartRequestImpl(it->second);
+        return true;
     }
 }
 

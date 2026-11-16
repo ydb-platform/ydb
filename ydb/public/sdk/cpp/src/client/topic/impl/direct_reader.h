@@ -124,7 +124,7 @@ public:
     };
     TDirectReadIds GetDirectReadIds(TPartitionSessionId) const;
 
-    void AddPartitionSession(TDirectReadPartitionSession&&);
+    bool AddPartitionSession(TDirectReadPartitionSession&&);
     void UpdatePartitionSessionGeneration(TPartitionSessionId, TPartitionLocation);
     void SetLastDirectReadId(TPartitionSessionId, TDirectReadId);
     void DeletePartitionSession(TPartitionSessionId);
@@ -216,6 +216,7 @@ private:
 
 // TDirectReadSessionManager is NOT thread-safe. Its methods must be used under a lock.
 class TDirectReadSessionManager {
+    friend class NTests::TDirectReadSessionImplTestSetup;
 public:
     using TSelf = TDirectReadSessionManager;
     using TPtr = std::shared_ptr<TSelf>;

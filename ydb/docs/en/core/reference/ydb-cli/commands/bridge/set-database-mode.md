@@ -85,4 +85,4 @@ To inspect individual group parts, use [list groups](list.md#groups):
 {{ ydb-cli }} admin cluster bridge list groups --database-path /Root/db1 --detailed
 ```
 
-Use `--not-synced` instead of `--detailed` to show only incomplete synchronization. For verification criteria, see [Verifying a database mode change](../../../../devops/deployment-options/manual/bridge-management.md#verify-database-mode).
+Use `--not-synced` instead of `--detailed` to show only incomplete synchronization. After switching to ordinary storage, `NOT_REQUIRED` confirms the mode and retained placement, not deletion of redundant physical groups. For verification criteria and the physical-group cleanup check, see [Verifying a database mode change](../../../../devops/deployment-options/manual/bridge-management.md#verify-database-mode).

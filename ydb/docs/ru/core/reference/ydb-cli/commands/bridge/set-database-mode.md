@@ -85,4 +85,4 @@
 {{ ydb-cli }} admin cluster bridge list groups --database-path /Root/db1 --detailed
 ```
 
-С `--not-synced` вместо `--detailed` команда покажет только незавершённую синхронизацию. Критерии проверки приведены в разделе [Проверка переключения режима хранения](../../../../devops/deployment-options/manual/bridge-management.md#verify-database-mode).
+С `--not-synced` вместо `--detailed` команда покажет только незавершённую синхронизацию. После переключения в обычный режим состояние `NOT_REQUIRED` подтверждает режим и сохранённое размещение, но не удаление избыточных физических групп. Критерии проверки и проверка физической очистки приведены в разделе [Проверка переключения режима хранения](../../../../devops/deployment-options/manual/bridge-management.md#verify-database-mode).

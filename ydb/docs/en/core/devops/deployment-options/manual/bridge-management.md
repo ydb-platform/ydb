@@ -345,9 +345,37 @@ Completion criteria depend on the selected mode:
 
 - **Full transition to bridged storage:** every participating pile is `PRIMARY` or `SYNCHRONIZED`, every part of every group is `SYNCED`, and the output with `--not-synced` is empty.
 - **Readiness to switch to ordinary storage with `--retain-pile`:** the selected pile is `PRIMARY` or `SYNCHRONIZED`, and its part of every group being converted is already `SYNCED`. To inspect only this pile, add `--pile <pile>` to the `list groups` command.
-- **Cleanup after switching to ordinary storage:** redundant part rows disappear, and retained parts are shown as `NOT_REQUIRED`.
+- **Ordinary mode and retained placement:** the database view shows `ordinary` and `NOT_REQUIRED`, and the group view shows only retained placement. This confirms the mode and retained copies, but does not confirm deletion of redundant physical groups.
 
 Do not treat the absence of `SYNCING` as completion: synchronization may be `PENDING` or `UNKNOWN`.
+
+To verify deletion of redundant physical groups after switching to ordinary storage, use the [`.sys/ds_groups` system view](../../../devops/observability/system-views.md#ds_groups). First, find the database's storage pool IDs:
+
+```bash
+{{ ydb-cli }} sql -s '
+SELECT BoxId, StoragePoolId, Name
+FROM `/Root/.sys/ds_storage_pools`
+WHERE Name LIKE "/Root/db1:%";
+'
+```
+
+Then inspect the physical groups in each pool:
+
+```bash
+{{ ydb-cli }} sql -s '
+SELECT
+    GroupId,
+    ProxyGroupId,
+    BridgePileId,
+    BridgeSyncStage
+FROM `/Root/.sys/ds_groups`
+WHERE BoxId = <box-id>
+  AND StoragePoolId = <storage-pool-id>
+ORDER BY GroupId;
+'
+```
+
+Here, `<box-id>` and `<storage-pool-id>` are the IDs returned by the first query. Inspect physical group-part rows with `BridgePileId` set. Redundant rows may show `BLOCKS` before they disappear. Cleanup is complete only when no redundant physical groups remain; `NOT_REQUIRED` in `bridge list` alone does not prove this.
 
 ## Switching piles {#switching}
 

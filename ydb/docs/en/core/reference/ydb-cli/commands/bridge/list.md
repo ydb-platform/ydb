@@ -42,11 +42,11 @@ The state of each pile, conversion or rollback progress, and pending pile operat
 
 ### databases {#databases}
 
-Storage mode and group synchronization summary for each database and pile. With `--detailed`, it shows synchronization counters and the last error.
+Storage mode and group synchronization summary for each database and pile. The `mixed` mode means that the database has both ordinary and bridged storage pools. With `--detailed`, the view shows synchronization counters and the last error. For output states and completion criteria, see [Verifying a database mode change](../../../../devops/deployment-options/manual/bridge-management.md#verify-database-mode).
 
 ### groups {#groups}
 
-Synchronization state of storage-group parts by pile. With `--detailed`, it shows physical group IDs, synchronization phases, and the last error.
+Synchronization state of storage-group parts by pile. With `--detailed`, it shows physical group IDs, synchronization phases, and the last error. For output states and completion criteria, see [Verifying a database mode change](../../../../devops/deployment-options/manual/bridge-management.md#verify-database-mode).
 
 ## Examples {#examples}
 

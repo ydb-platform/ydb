@@ -16,6 +16,13 @@ THolder<TEvCdcAggregator::TEvWriteHeartbeatsResult> MakeNotReadyResult(ui64 tabl
     return result;
 }
 
+THolder<TEvCdcAggregator::TEvWriteHeartbeatsResult> MakeSuccessResult(ui64 tabletId, NKikimrCdcAggregator::TEvWriteHeartbeatsResult record) {
+    auto result = MakeHolder<TEvCdcAggregator::TEvWriteHeartbeatsResult>();
+    result->Record = std::move(record);
+    result->Record.SetOrigin(tabletId);
+    return result;
+}
+
 } // namespace
 
 class TCdcAggregator::TTxWriteHeartbeats : public TTxBase {
@@ -47,9 +54,7 @@ public:
         const auto diff = Self->CdcAggregatorStream->WriteHeartbeats(batch.HeartbeatsBySourceDataShardId);
         NIceDb::TNiceDb db(txc.DB);
         Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamHeartbeatsDiff(db, diff);
-        Result = MakeHolder<TEvCdcAggregator::TEvWriteHeartbeatsResult>();
-        Result->Record = Self->CdcAggregatorStreamProtoConverter.SerializeWriteHeartbeatsResult(batch, diff);
-        Result->Record.SetOrigin(Self->TabletID());
+        Result = MakeSuccessResult(Self->TabletID(), Self->CdcAggregatorStreamProtoConverter.SerializeWriteHeartbeatsResult(batch, diff));
 
         if (const auto& currentHeartbeat = diff.CurrentHeartbeat) {
             YDB_LOG_DEBUG("Current heartbeat advanced",

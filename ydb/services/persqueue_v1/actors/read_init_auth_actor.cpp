@@ -63,10 +63,6 @@ void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
     for (auto& [_, holder] : Topics) {
         if (holder.PipeClient)
             NTabletPipe::CloseClient(ctx, holder.PipeClient);
-
-        // In case of cdc, primary path (actual cdc stream path) was overwritten, so restore previous value
-        if (holder.CdcStreamPath)
-            holder.DiscoveryConverter->RestorePrimaryPath();
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Auth is DEAD",
@@ -163,6 +159,7 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
             const auto& topic = entry.ListNodeEntry->Children.at(0);
 
             // primary path used to re-describe
+            it->second.DiscoveryConverter = std::make_shared<NPersQueue::TDiscoveryConverter>(*it->second.DiscoveryConverter);
             it->second.DiscoveryConverter->SetPrimaryPath(JoinPath(ChildPath(entry.Path, topic.Name)));
             it->second.CdcStreamPath = CanonizePath(entry.Path);
             it->second.IsAsyncReplication = entry.Attributes.contains("__async_replication");

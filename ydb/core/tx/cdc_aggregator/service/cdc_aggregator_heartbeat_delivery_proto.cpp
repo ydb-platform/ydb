@@ -1,5 +1,6 @@
 #include "cdc_aggregator_heartbeat_delivery_proto.h"
 
+#include <util/generic/overloaded.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NCdcAggregator {
@@ -46,19 +47,20 @@ THolder<TEvCdcAggregatorService::TEvWriteHeartbeatResult> TCdcAggregatorHeartbea
     using EStatus = TEvCdcAggregatorService::TEvWriteHeartbeatResult::EStatus;
 
     auto ev = MakeHolder<TEvCdcAggregatorService::TEvWriteHeartbeatResult>();
-    switch (reply.Status) {
-    case TCdcAggregatorHeartbeatDeliveryReply::EStatus::Written:
-        ev->Status = EStatus::Written;
-        break;
-    case TCdcAggregatorHeartbeatDeliveryReply::EStatus::Retry:
-        ev->Status = EStatus::Retry;
-        break;
-    case TCdcAggregatorHeartbeatDeliveryReply::EStatus::Rejected:
-        ev->Status = EStatus::Rejected;
-        break;
-    }
-    ev->WrittenVersion = reply.WrittenVersion;
-    ev->Error = reply.Error;
+    std::visit(TOverloaded{
+        [&](const TCdcAggregatorHeartbeatWritten& written) {
+            ev->Status = EStatus::Written;
+            ev->WrittenVersion = written.Version;
+        },
+        [&](const TCdcAggregatorHeartbeatRetry& retry) {
+            ev->Status = EStatus::Retry;
+            ev->Error = retry.Error;
+        },
+        [&](const TCdcAggregatorHeartbeatRejected& rejected) {
+            ev->Status = EStatus::Rejected;
+            ev->Error = rejected.Error;
+        },
+    }, reply);
     return ev;
 }
 

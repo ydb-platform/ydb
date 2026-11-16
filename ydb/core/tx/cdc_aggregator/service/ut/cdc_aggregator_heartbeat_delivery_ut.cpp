@@ -10,7 +10,6 @@ namespace NKikimr::NCdcAggregator {
 
 namespace {
 
-using EStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
 using TProtoResult = NKikimrCdcAggregator::TEvWriteHeartbeatsResult;
 
 NPQ::THeartbeat MakeHeartbeat(ui64 step, const TString& data = {}) {
@@ -112,8 +111,7 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
 
         // then
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
-        UNIT_ASSERT(replies[0].Status == EStatus::Written);
-        UNIT_ASSERT_VALUES_EQUAL(replies[0].WrittenVersion, TRowVersion(120, 0));
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TCdcAggregatorHeartbeatWritten>(replies.at(1)).Version, TRowVersion(120, 0));
         UNIT_ASSERT(delivery.IsIdle());
     }
 
@@ -130,10 +128,9 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
 
         // then
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 3);
-        UNIT_ASSERT(replies[0].Status == EStatus::Written);
-        UNIT_ASSERT(replies[1].Status == EStatus::Written);
-        UNIT_ASSERT_VALUES_EQUAL(replies[2].SourceDataShardId, 3);
-        UNIT_ASSERT(replies[2].Status == EStatus::Retry);
+        UNIT_ASSERT(std::holds_alternative<TCdcAggregatorHeartbeatWritten>(replies.at(1)));
+        UNIT_ASSERT(std::holds_alternative<TCdcAggregatorHeartbeatWritten>(replies.at(2)));
+        UNIT_ASSERT(std::holds_alternative<TCdcAggregatorHeartbeatRetry>(replies.at(3)));
         UNIT_ASSERT(delivery.IsIdle());
     }
 
@@ -150,8 +147,7 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
 
         // then
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
-        UNIT_ASSERT(replies[0].Status == EStatus::Rejected);
-        UNIT_ASSERT_VALUES_EQUAL(replies[0].Error, "UNKNOWN_SOURCE");
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TCdcAggregatorHeartbeatRejected>(replies.at(1)).Error, "UNKNOWN_SOURCE");
         UNIT_ASSERT(delivery.IsIdle());
     }
 
@@ -197,10 +193,8 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDelivery) {
 
         // then
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 2);
-        for (const auto& reply : replies) {
-            UNIT_ASSERT(reply.Status == EStatus::Retry);
-            UNIT_ASSERT_VALUES_EQUAL(reply.Error, "NOT_READY: ");
-        }
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TCdcAggregatorHeartbeatRetry>(replies.at(1)).Error, "NOT_READY: ");
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TCdcAggregatorHeartbeatRetry>(replies.at(2)).Error, "NOT_READY: ");
         UNIT_ASSERT(delivery.IsIdle());
     }
 
@@ -262,6 +256,31 @@ Y_UNIT_TEST_SUITE(CdcAggregatorHeartbeatDeliveryProtoConverter) {
         UNIT_ASSERT_VALUES_EQUAL(tabletBatchResult->WrittenVersionsBySourceDataShardId.at(1), TRowVersion(100, 0));
         UNIT_ASSERT_VALUES_EQUAL(tabletBatchResult->RejectionErrorsBySourceDataShardId.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(tabletBatchResult->RejectionErrorsBySourceDataShardId.at(2), "UNKNOWN_SOURCE");
+    }
+
+    Y_UNIT_TEST(ShouldSerializeWrittenVersionWhenReplyIsWritten) {
+        // given
+        const TCdcAggregatorHeartbeatDeliveryReply reply = TCdcAggregatorHeartbeatWritten{.Version = TRowVersion(120, 0)};
+
+        // when
+        const auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeReply(reply);
+
+        // then
+        UNIT_ASSERT(ev->Status == TEvCdcAggregatorService::TEvWriteHeartbeatResult::EStatus::Written);
+        UNIT_ASSERT_VALUES_EQUAL(ev->WrittenVersion, TRowVersion(120, 0));
+        UNIT_ASSERT_VALUES_EQUAL(ev->Error, "");
+    }
+
+    Y_UNIT_TEST(ShouldSerializeErrorWhenReplyIsRejected) {
+        // given
+        const TCdcAggregatorHeartbeatDeliveryReply reply = TCdcAggregatorHeartbeatRejected{.Error = "UNKNOWN_SOURCE"};
+
+        // when
+        const auto ev = TCdcAggregatorHeartbeatDeliveryProtoConverter().SerializeReply(reply);
+
+        // then
+        UNIT_ASSERT(ev->Status == TEvCdcAggregatorService::TEvWriteHeartbeatResult::EStatus::Rejected);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Error, "UNKNOWN_SOURCE");
     }
 
     Y_UNIT_TEST(ShouldReturnErrorWhenTabletDidNotProcessBatch) {

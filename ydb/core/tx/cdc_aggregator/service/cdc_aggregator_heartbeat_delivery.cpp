@@ -6,8 +6,6 @@ namespace NKikimr::NCdcAggregator {
 
 namespace {
 
-using EStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
-
 ui64 PopLeft(TDeque<ui64>& queue) {
     const ui64 front = queue.front();
     queue.pop_front();
@@ -53,40 +51,40 @@ std::optional<TCdcAggregatorHeartbeatBatch> TCdcAggregatorHeartbeatDelivery::Pre
     return batch;
 }
 
-TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::CompleteBatch(const TCdcAggregatorHeartbeatBatchResult& tabletBatchResult) {
-    TVector<TCdcAggregatorHeartbeatDeliveryReply> replies;
+THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::CompleteBatch(const TCdcAggregatorHeartbeatBatchResult& tabletBatchResult) {
+    THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> repliesBySourceDataShardId;
     for (const ui64 sourceDataShardId : AwaitingReplySourceDataShardIds) {
         if (const auto* writtenVersion = tabletBatchResult.WrittenVersionsBySourceDataShardId.FindPtr(sourceDataShardId)) {
-            replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Written, .WrittenVersion = *writtenVersion});
+            repliesBySourceDataShardId.emplace(sourceDataShardId, TCdcAggregatorHeartbeatWritten{.Version = *writtenVersion});
         } else if (const auto* error = tabletBatchResult.RejectionErrorsBySourceDataShardId.FindPtr(sourceDataShardId)) {
-            replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Rejected, .Error = *error});
+            repliesBySourceDataShardId.emplace(sourceDataShardId, TCdcAggregatorHeartbeatRejected{.Error = *error});
         } else {
-            replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Retry, .Error = "Heartbeat is not confirmed"});
+            repliesBySourceDataShardId.emplace(sourceDataShardId, TCdcAggregatorHeartbeatRetry{.Error = "Heartbeat is not confirmed"});
         }
     }
 
     AwaitingReplySourceDataShardIds.clear();
-    return replies;
+    return repliesBySourceDataShardId;
 }
 
-TVector<TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::FailBatch(const TString& error) {
+THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> TCdcAggregatorHeartbeatDelivery::FailBatch(const TString& error) {
     if (AwaitingReplySourceDataShardIds.empty()) {
         return {};
     }
 
-    TVector<TCdcAggregatorHeartbeatDeliveryReply> replies;
+    THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply> repliesBySourceDataShardId;
     for (const ui64 sourceDataShardId : AwaitingReplySourceDataShardIds) {
-        replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Retry, .Error = error});
+        repliesBySourceDataShardId.emplace(sourceDataShardId, TCdcAggregatorHeartbeatRetry{.Error = error});
     }
     for (const ui64 sourceDataShardId : PendingSourceDataShardIdQueue) {
-        replies.push_back({.SourceDataShardId = sourceDataShardId, .Status = EStatus::Retry, .Error = error});
+        repliesBySourceDataShardId.emplace(sourceDataShardId, TCdcAggregatorHeartbeatRetry{.Error = error});
     }
 
     PendingHeartbeatsBySourceDataShardId.clear();
     PendingSourceDataShardIdQueue.clear();
     AwaitingReplySourceDataShardIds.clear();
 
-    return replies;
+    return repliesBySourceDataShardId;
 }
 
 } // namespace NKikimr::NCdcAggregator

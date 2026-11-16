@@ -56,18 +56,12 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         TMonotonic LastActivity;
     };
 
-    using EStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
-
     void AcceptHeartbeat(const TOrigin& origin, const TEvCdcAggregatorService::TEvWriteHeartbeat& msg) {
         YDB_LOG_TRACE("Accept heartbeat",
             {"ev", msg.ToString()});
 
         if (!msg.RecipientTabletId) {
-            Reply(origin, TCdcAggregatorHeartbeatDeliveryReply{
-                .SourceDataShardId = msg.SourceDataShardId,
-                .Status = EStatus::Rejected,
-                .Error = "Recipient tablet id is not set",
-            });
+            Reply(origin, TCdcAggregatorHeartbeatRejected{.Error = "Recipient tablet id is not set"});
             return;
         }
 
@@ -144,18 +138,14 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             {"origins", it->second.Origins.size()},
             {"error", error});
         for (const auto& [sourceDataShardId, origin] : it->second.Origins) {
-            Reply(origin, TCdcAggregatorHeartbeatDeliveryReply{
-                .SourceDataShardId = sourceDataShardId,
-                .Status = EStatus::Retry,
-                .Error = error,
-            });
+            Reply(origin, TCdcAggregatorHeartbeatRetry{.Error = error});
         }
         CdcAggregatorConnections.erase(it);
     }
 
-    void ReplyToOrigins(TCdcAggregatorConnection& connection, const TVector<TCdcAggregatorHeartbeatDeliveryReply>& replies) {
-        for (const auto& reply : replies) {
-            auto it = connection.Origins.find(reply.SourceDataShardId);
+    void ReplyToOrigins(TCdcAggregatorConnection& connection, const THashMap<ui64, TCdcAggregatorHeartbeatDeliveryReply>& repliesBySourceDataShardId) {
+        for (const auto& [sourceDataShardId, reply] : repliesBySourceDataShardId) {
+            auto it = connection.Origins.find(sourceDataShardId);
             if (it == connection.Origins.end()) {
                 continue;
             }

@@ -210,6 +210,10 @@ private:
 } // namespace
 
 void TSchemeShard::StartIndexShadowDataRepair(const TActorContext& ctx, TVector<TPathId>&& paths) {
+    if (!AppData()->FeatureFlags.GetEnableIndexShadowDataRepair()) {
+        return;
+    }
+
     EraseIf(paths, [this](const TPathId& pathId) {
         const auto index = Indexes.find(PathsById.at(pathId)->ParentPathId);
         return index == Indexes.end()

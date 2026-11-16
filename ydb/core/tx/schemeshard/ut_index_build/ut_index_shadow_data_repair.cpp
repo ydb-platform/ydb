@@ -126,6 +126,7 @@ struct TRepairTest {
     TRepairTest(NAudit::TAuditLogBackends&& auditLogBackends = {})
         : Runtime(1, 1, false, std::move(auditLogBackends))
     {
+        Runtime.GetAppData().FeatureFlags.SetEnableIndexShadowDataRepair(true);
         TestCreateTable(Runtime, ++TxId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
@@ -219,6 +220,52 @@ struct TRepairTest {
 }
 
 Y_UNIT_TEST_SUITE(IndexShadowDataRepairTest) {
+    Y_UNIT_TEST(StartupRepairDisabledByDefault) {
+        TRepairTest test;
+        auto& flags = test.Runtime.GetAppData().FeatureFlags;
+        flags.ClearEnableIndexShadowDataRepair();
+        UNIT_ASSERT(!flags.HasEnableIndexShadowDataRepair());
+        UNIT_ASSERT(!flags.GetEnableIndexShadowDataRepair());
+        test.BuildIndex();
+        const auto before = test.Describe().GetPathDescription().GetTable().GetTableSchemaVersion();
+        const auto expected = test.PersistLegacyFlags();
+        auto legacy = expected;
+        legacy.SetShadowData(true);
+        legacy.MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+
+        unsigned repairWorkers = 0;
+        auto bootstraps = test.Runtime.AddObserver<TEvents::TEvBootstrap>([&](const auto& ev) {
+            if (test.Runtime.FindActorName(ev->Recipient).Contains("SHADOW_DATA_REPAIR")) {
+                ++repairWorkers;
+            }
+        });
+        unsigned repairRequests = 0;
+        auto requests = test.Runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](const auto& ev) {
+            if (ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpRepairIndexShadowData) {
+                ++repairRequests;
+            }
+        });
+        test.Reboot();
+        test.Env.SimulateSleep(test.Runtime, TDuration::Seconds(2));
+        const auto skipped = test.Describe();
+        UNIT_ASSERT_VALUES_EQUAL(repairWorkers, 0);
+        UNIT_ASSERT_VALUES_EQUAL(repairRequests, 0);
+        UNIT_ASSERT_VALUES_EQUAL(skipped.GetPathDescription().GetTable().GetTableSchemaVersion(), before);
+        UNIT_ASSERT_VALUES_EQUAL(skipped.GetPathDescription().GetTable().GetPartitionConfig().SerializeAsString(),
+            legacy.SerializeAsString());
+
+        flags.SetEnableIndexShadowDataRepair(true);
+        test.Reboot();
+        const auto repaired = test.Wait();
+        UNIT_ASSERT_VALUES_EQUAL(repairWorkers, 1);
+        UNIT_ASSERT(repairRequests > 0);
+        UNIT_ASSERT_VALUES_EQUAL(repaired.GetPathDescription().GetTable().GetPartitionConfig().SerializeAsString(),
+            expected.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(repaired.GetPathDescription().GetTable().GetTableSchemaVersion(), before + 1);
+        CheckShardConfigs(test.ShardConfigs());
+        test.CheckRows();
+    }
+
     Y_UNIT_TEST(StartupRepairsLegacyFlags) {
         std::vector<std::string> auditLines;
         TRepairTest test(Tests::CreateTestAuditLogBackends(auditLines));
@@ -354,7 +401,7 @@ Y_UNIT_TEST_SUITE(IndexShadowDataRepairTest) {
         test.SendRepair(TRepairTest::ImplPath(), true, NKikimrScheme::StatusAlreadyExists);
     }
 
-    Y_UNIT_TEST(RestartResumesAcceptedRepair) {
+    Y_UNIT_TEST_FLAG(RestartResumesAcceptedRepair, DisableRepairOnRestart) {
         TRepairTest test;
         test.BuildIndex();
         test.PersistLegacyFlags();
@@ -370,6 +417,7 @@ Y_UNIT_TEST_SUITE(IndexShadowDataRepairTest) {
         });
         test.Reboot();
         test.Runtime.WaitFor("durable repair proposal", [&] { return !proposals.empty(); });
+        test.Runtime.GetAppData().FeatureFlags.SetEnableIndexShadowDataRepair(!DisableRepairOnRestart);
         test.Reboot();
         proposals.Stop().Unblock();
         test.Wait();
@@ -492,6 +540,7 @@ Y_UNIT_TEST_SUITE(IndexShadowDataRepairTest) {
     Y_UNIT_TEST(RepairsReplicaImplementationTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexShadowDataRepair(true);
         AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(CreateIndexedTableRequest(100, "/MyRoot", R"(
             TableDescription {
                 Name: "Table"
@@ -536,6 +585,7 @@ Y_UNIT_TEST_SUITE(IndexShadowDataRepairTest) {
     Y_UNIT_TEST(RepairsMigratedImplementationTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexShadowDataRepair(true);
         ui64 txId = 100;
         TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(Name: "Tenant")");
         TestAlterSubDomain(runtime, ++txId, "/MyRoot", R"(

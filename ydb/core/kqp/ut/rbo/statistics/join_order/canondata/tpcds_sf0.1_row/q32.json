@@ -37,22 +37,16 @@
         "args":
           [
             {
-              "op_name":"HashShuffle",
+              "op_name":"InnerJoin (BlockHash)",
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (BlockHash)",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableRangeScan",
-                          "table":"catalog_sales"
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"date_dim"
-                        }
-                      ]
+                    "op_name":"TableRangeScan",
+                    "table":"catalog_sales"
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"date_dim"
                   }
                 ]
             }

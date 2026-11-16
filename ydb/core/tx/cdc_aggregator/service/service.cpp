@@ -53,32 +53,25 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
 
     using EStatus = TCdcAggregatorHeartbeatDeliveryReply::EStatus;
 
-    void Handle(TEvCdcAggregatorService::TEvWriteHeartbeat::TPtr& ev) {
-        const auto* msg = ev->Get();
-        YDB_LOG_TRACE("Handle",
-            {"ev", msg->ToString()});
+    void AcceptHeartbeat(const TOrigin& origin, const TEvCdcAggregatorService::TEvWriteHeartbeat& msg) {
+        YDB_LOG_TRACE("Accept heartbeat",
+            {"ev", msg.ToString()});
 
-        const TOrigin origin{
-            .Sender = ev->Sender,
-            .Cookie = ev->Cookie,
-        };
-
-        if (!msg->RecipientTabletId) {
+        if (!msg.RecipientTabletId) {
             Reply(origin, TCdcAggregatorHeartbeatDeliveryReply{
-                .SourceDataShardId = msg->SourceDataShardId,
+                .SourceDataShardId = msg.SourceDataShardId,
                 .Status = EStatus::Rejected,
                 .Error = "Recipient tablet id is not set",
             });
             return;
         }
 
-        const ui64 tabletId = msg->RecipientTabletId;
-        auto& connection = CdcAggregatorConnections[tabletId];
-        connection.Origins[msg->SourceDataShardId] = origin;
-        connection.CdcAggregatorHeartbeatDelivery.AddHeartbeat(msg->SourceDataShardId, msg->Heartbeat);
+        auto& connection = CdcAggregatorConnections[msg.RecipientTabletId];
+        connection.Origins[msg.SourceDataShardId] = origin;
+        connection.CdcAggregatorHeartbeatDelivery.AddHeartbeat(msg.SourceDataShardId, msg.Heartbeat);
     }
 
-    void SendHeartbeatBatchesPeriodically() {
+    void SendHeartbeatBatches() {
         for (auto& [tabletId, connection] : CdcAggregatorConnections) {
             auto& delivery = connection.CdcAggregatorHeartbeatDelivery;
             if (!delivery.HasBatchToSend()) {
@@ -97,14 +90,11 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
                 {"heartbeats", ev->Record.HeartbeatsSize()});
             NTabletPipe::SendData(SelfId(), connection.PipeClient, ev.Release());
         }
-
-        Schedule(TimerPeriod, new TEvPrivate::TEvTimerFired());
     }
 
-    void Handle(TEvCdcAggregator::TEvWriteHeartbeatsResult::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
-        YDB_LOG_DEBUG("Handle",
-            {"ev", ev->Get()->ToString()});
+    void ApplyHeartbeatBatchResult(const NKikimrCdcAggregator::TEvWriteHeartbeatsResult& record) {
+        YDB_LOG_DEBUG("Apply batch result",
+            {"record", record.ShortDebugString()});
 
         auto it = CdcAggregatorConnections.find(record.GetOrigin());
         if (it == CdcAggregatorConnections.end()) {
@@ -113,20 +103,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
 
         auto& delivery = it->second.CdcAggregatorHeartbeatDelivery;
         auto [result, error] = TCdcAggregatorHeartbeatDeliveryProtoConverter().ParseBatchResult(record);
-        Reply(it->second, result ? delivery.CompleteBatch(*result) : delivery.FailBatch(error));
-    }
-
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        const auto* msg = ev->Get();
-        if (msg->Status == NKikimrProto::OK) {
-            return;
-        }
-
-        DropCdcAggregatorConnection(msg->TabletId, msg->ClientId, TStringBuilder() << "Pipe connect failed: " << NKikimrProto::EReplyStatus_Name(msg->Status));
-    }
-
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        DropCdcAggregatorConnection(ev->Get()->TabletId, ev->Get()->ClientId, "Pipe destroyed");
+        ReplyToOrigins(it->second, result ? delivery.CompleteBatch(*result) : delivery.FailBatch(error));
     }
 
     void DropCdcAggregatorConnection(ui64 tabletId, const TActorId& pipeClient, const TString& error) {
@@ -149,7 +126,7 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
         CdcAggregatorConnections.erase(it);
     }
 
-    void Reply(TCdcAggregatorConnection& connection, const TVector<TCdcAggregatorHeartbeatDeliveryReply>& replies) {
+    void ReplyToOrigins(TCdcAggregatorConnection& connection, const TVector<TCdcAggregatorHeartbeatDeliveryReply>& replies) {
         for (const auto& reply : replies) {
             auto it = connection.Origins.find(reply.SourceDataShardId);
             if (it == connection.Origins.end()) {
@@ -159,6 +136,30 @@ class TCdcAggregatorService: public TActorBootstrapped<TCdcAggregatorService> {
             Reply(it->second, reply);
             connection.Origins.erase(it);
         }
+    }
+
+    void Handle(TEvCdcAggregatorService::TEvWriteHeartbeat::TPtr& ev) {
+        AcceptHeartbeat(TOrigin{.Sender = ev->Sender, .Cookie = ev->Cookie}, *ev->Get());
+    }
+
+    void Handle(TEvCdcAggregator::TEvWriteHeartbeatsResult::TPtr& ev) {
+        ApplyHeartbeatBatchResult(ev->Get()->Record);
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        const auto* msg = ev->Get();
+        if (msg->Status != NKikimrProto::OK) {
+            DropCdcAggregatorConnection(msg->TabletId, msg->ClientId, TStringBuilder() << "Pipe connect failed: " << NKikimrProto::EReplyStatus_Name(msg->Status));
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        DropCdcAggregatorConnection(ev->Get()->TabletId, ev->Get()->ClientId, "Pipe destroyed");
+    }
+
+    void HandleTimerFired() {
+        SendHeartbeatBatches();
+        Schedule(TimerPeriod, new TEvPrivate::TEvTimerFired());
     }
 
     void Reply(const TOrigin& origin, const TCdcAggregatorHeartbeatDeliveryReply& reply) {
@@ -185,7 +186,7 @@ public:
             hFunc(TEvCdcAggregator::TEvWriteHeartbeatsResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            sFunc(TEvPrivate::TEvTimerFired, SendHeartbeatBatchesPeriodically);
+            sFunc(TEvPrivate::TEvTimerFired, HandleTimerFired);
         }
     }
 

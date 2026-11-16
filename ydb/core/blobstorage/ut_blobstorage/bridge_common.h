@@ -275,14 +275,18 @@ namespace NBridgeTest {
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
-    // define new storage pool with the same settings as the existing one
-    inline void CreateAnotherPool(TEnvironmentSetup& env, ui64 storagePoolId) {
+    // define new storage pool with the same settings as the existing one, but the ones the callback changes
+    inline void CreateAnotherPool(TEnvironmentSetup& env, ui64 storagePoolId,
+            const std::function<void(NKikimrBlobStorage::TDefineStoragePool&)>& adjust = {}) {
         NKikimrBlobStorage::TDefineStoragePool pool = ReadStoragePool(env, 1);
         pool.SetStoragePoolId(storagePoolId);
         pool.SetName(TStringBuilder() << "pool_" << storagePoolId);
         pool.SetKind(pool.GetName());
         pool.SetNumGroups(1);
         pool.ClearItemConfigGeneration();
+        if (adjust) {
+            adjust(pool);
+        }
 
         NKikimrBlobStorage::TConfigRequest request;
         request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);

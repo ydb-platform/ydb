@@ -14,15 +14,30 @@ In bridge mode, cluster nodes are split into several [piles](glossary.md#pile) (
 
 At the [distributed storage](glossary.md#distributed-storage) level, bridge mode implements synchronous Active/Active replication between piles. At the [database node](glossary.md#database-node) level, Active/Passive redundancy is possible.
 
-Data is stored in pairs of [storage groups](glossary.md#storage-group) from different piles. Within each pile, any {{ ydb-short-name }} [operating mode](topology.md#cluster-config) supported for data storage may be used.
+For databases using bridged storage, each [storage group](glossary.md#storage-group) has one part in every participating pile. Within each pile, any {{ ydb-short-name }} [operating mode](topology.md#cluster-config) supported for data storage may be used.
 
-Bridge mode can achieve zero-downtime [switchover](https://en.wikipedia.org/wiki/Switchover). On [failover](https://en.wikipedia.org/wiki/Failover), the cluster requires explicit disabling of replication to the failed pile before it can resume. When any pile is disabled, request processing is suspended until the command to disable replication to that pile is executed.
+Bridge mode can achieve zero-downtime [switchover](https://en.wikipedia.org/wiki/Switchover). On [failover](https://en.wikipedia.org/wiki/Failover), the cluster requires explicit disabling of replication to the failed pile before it can resume. When any participating pile is disabled, request processing for bridged groups is suspended until the command to disable replication to that pile is executed.
 
 Piles are not standalone {{ ydb-short-name }} clusters; they are parts of a single cluster with a complex topology:
 
 - [Tablets](glossary.md#tablet) in bridge mode run as a single instance;
-- each pile runs its own [static group](glossary.md#static-group) and set of independent storage groups with regular [VDisk](glossary.md#vdisk)s. Storage groups are accessed via DS-proxy-proxy, which exposes the [DS-proxy](glossary.md#ds-proxy) interface to tablets and performs operations using two DS-proxy instances — one for the groups in each pile;
-- each pile runs its own set of replicas of [StateStorage](glossary.md#state-storage), [SchemeBoard](glossary.md#scheme-board), and [Board](glossary.md#board). Access to StateStorage, SchemeBoard, and Board is through similar proxy-proxy components.
+- each pile runs its own [static group](glossary.md#static-group) and storage-group parts with regular [VDisk](glossary.md#vdisk)s. Bridged storage groups are accessed through bridge proxy, which exposes the [DS-proxy](glossary.md#ds-proxy) interface to tablets and performs operations through the DS-proxy instances of the participating piles;
+- each pile runs its own set of replicas of [StateStorage](glossary.md#state-storage), [SchemeBoard](glossary.md#scheme-board), and [Board](glossary.md#board). Access to StateStorage, SchemeBoard, and Board is through similar proxy components.
+
+## Converting an ordinary cluster {#conversion}
+
+You can [convert an existing cluster that initially ran without bridge mode](../devops/deployment-options/manual/bridge-management.md#convert) while preserving its data. Initially, all its nodes are combined into a single pile. System storage always switches to bridge mode. Existing database pools also switch by default, but you can leave them ordinary and convert them later.
+
+A single-pile configuration is an intermediate stage: data remains only in the original part of the cluster, so this configuration provides no additional resilience to a data center failure. To obtain fault tolerance across data centers, [add and synchronize more piles](../devops/deployment-options/manual/bridge-management.md#add-pile). Databases using bridged storage are then replicated between piles, while databases on ordinary storage are not converted automatically and may remain in the original pile without bridge replication.
+
+## Database storage modes {#storage-pools}
+
+A bridge cluster supports two database storage modes:
+
+- **Bridged storage** keeps one part of each storage group in every participating pile and synchronously replicates writes between them.
+- **Ordinary storage** uses regular storage groups and their configured redundancy without using bridge's synchronous replication between piles.
+
+Cluster conversion makes all existing database pools bridged by default. To allow bridged and ordinary databases to coexist, set `bridge_config.enable_non_uniform_storage: true`. You can also leave existing pools ordinary during conversion and later switch each database between the two modes as described in [Managing a cluster in bridge mode](../devops/deployment-options/manual/bridge-management.md#database-mode).
 
 ## Pile states {#pile-states}
 
@@ -34,7 +49,7 @@ Each pile can be in one of the following states:
 
 - `PRIMARY`. The main pile where tablets run. Only one pile can be in the `PRIMARY` state.
 
-- `SYNCHRONIZED`. A follower pile whose storage groups are fully synchronized with `PRIMARY`.
+- `SYNCHRONIZED`. A pile whose bridged storage groups are fully synchronized with `PRIMARY`.
 
 - `DISCONNECTED`. Disconnected from `PRIMARY`; does not participate in operations.
 
@@ -44,7 +59,9 @@ Each pile can be in one of the following states:
 
 - `SUSPENDED`. A pile being smoothly transitioned to `DISCONNECTED`. When the transition completes, {{ ydb-short-name }} automatically moves the pile to `DISCONNECTED`.
 
-Normally, a pair of piles operates in `PRIMARY/SYNCHRONIZED` or `SYNCHRONIZED/PRIMARY`. That is, one pile is `PRIMARY` (tablets run there) and the other is `SYNCHRONIZED` (all its storage groups are synchronized with `PRIMARY`). In this configuration, a write is considered committed only after it has been successfully written to the storage groups of each pile with the required redundancy.
+- `INACTIVE`. A pile listed in `bridge_config` without allocated storage resources. Its nodes cannot join the cluster. Use `provision-pile` to prepare its storage and `destroy-pile` to return a disconnected pile to this state.
+
+Normally, a pair of piles operates in `PRIMARY/SYNCHRONIZED` or `SYNCHRONIZED/PRIMARY`. That is, one pile is `PRIMARY` (tablets run there) and the other is `SYNCHRONIZED` (all its bridged storage groups are synchronized with `PRIMARY`). In this configuration, a bridged write is considered committed only after it has been successfully written to the storage groups of each participating pile with the required redundancy.
 
 
 ### Transitions between states {#transitions-between-states}
@@ -58,7 +75,9 @@ Normally, a pair of piles operates in `PRIMARY/SYNCHRONIZED` or `SYNCHRONIZED/PR
 | `SYNCHRONIZED` | `DISCONNECTED` | Manually — [failover](../reference/ydb-cli/commands/bridge/failover.md) | Emergency disable of unavailable `SYNCHRONIZED`. |
 | `SYNCHRONIZED` | `PROMOTED` | Manually — [switchover](../reference/ydb-cli/commands/bridge/switchover.md) | Start planned change of `PRIMARY`. |
 | `SYNCHRONIZED` | `SUSPENDED` | Manually — [takedown](../reference/ydb-cli/commands/bridge/takedown.md) | Start planned disable of `SYNCHRONIZED` pile. |
-| `DISCONNECTED` | `NOT_SYNCHRONIZED` | Manually — [rejoin](../reference/ydb-cli/commands/bridge/rejoin.md) | Return pile to cluster after maintenance or recovery. |
+| `DISCONNECTED` | `NOT_SYNCHRONIZED` | Manually — [join-pile / rejoin](../reference/ydb-cli/commands/bridge/rejoin.md) | Join a provisioned pile or return it after maintenance or recovery. |
+| `DISCONNECTED` | `INACTIVE` | Manually — [destroy-pile](../reference/ydb-cli/commands/bridge/destroy-pile.md) | Permanently delete the pile's storage-group parts and data. |
+| `INACTIVE` | `DISCONNECTED` | Manually — [provision-pile](../reference/ydb-cli/commands/bridge/provision-pile.md) | Allocate the pile's parts of static and bridged storage groups. |
 | `NOT_SYNCHRONIZED` | `SYNCHRONIZED` | Automatically | Data synchronization complete. |
 | `NOT_SYNCHRONIZED` | `DISCONNECTED` | Manually — [failover](../reference/ydb-cli/commands/bridge/failover.md) | Emergency disable of unavailable `NOT_SYNCHRONIZED`. |
 | `PROMOTED` | `PRIMARY` | Automatically | Planned switchover complete. |

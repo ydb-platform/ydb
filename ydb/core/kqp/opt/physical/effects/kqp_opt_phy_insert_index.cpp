@@ -155,7 +155,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             : MakeInsertIndexRows(
                 insert.Input(), table, inputColumnsSet, insertColumns, insert.Pos(), ctx, false);
     }
-    AFL_ENSURE(insertRows);
+    YDB_LOG_ENSURE(insertRows);
 
     TVector<TExprBase> effects;
 

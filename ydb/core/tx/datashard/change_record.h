@@ -29,7 +29,9 @@ public:
     ui64 GetTxId() const override { return TxId; }
     EKind GetKind() const override { return Kind; }
     // The serialized buffer is released after parsing, but its size is retained.
-    size_t GetBodySize() const override { return ParsedBody ? BodySize : Body.size(); }
+    size_t GetBodySize() const override {
+        return (ParsedBody || DataChangeConsumed) ? BodySize : Body.size();
+    }
     ui64 GetLockId() const { return LockId; }
     ui64 GetLockOffset() const { return LockOffset; }
     const TPathId& GetPathId() const { return PathId; }
@@ -41,8 +43,13 @@ public:
     void Serialize(NKikimrChangeExchange::TChangeRecord& record) const;
 
     const NKikimrChangeExchange::TDataChange& GetDataChange() const;
+    // Moves the parsed body into out when this record is its only owner.
+    // Copies when that body is shared. A moved body cannot be read again.
+    void ExtractDataChange(NKikimrChangeExchange::TDataChange& out) const;
     TConstArrayRef<TCell> GetKey() const;
     TString GetPartitionKey() const;
+    // MD5 of the serialized key cells. Used when a binary CDC topic autopartitions.
+    TString GetRawKeyPartitionKey() const;
     i64 GetSeqNo() const;
     TInstant GetApproximateCreationDateTime() const;
     bool IsBroadcast() const override;
@@ -64,10 +71,12 @@ private:
     TPathId TableId;
     TUserTable::TCPtr Schema;
 
-    mutable std::shared_ptr<const NKikimrChangeExchange::TDataChange> ParsedBody;
+    mutable std::shared_ptr<NKikimrChangeExchange::TDataChange> ParsedBody;
+    mutable bool DataChangeConsumed = false;
     mutable size_t BodySize = 0;
     mutable TMaybe<TOwnedCellVec> Key;
     mutable TMaybe<TString> PartitionKey;
+    mutable TMaybe<TString> RawKeyPartitionKey;
 
 }; // TChangeRecord
 
@@ -141,8 +150,10 @@ public:
 private:
     void ResetBodyCache() {
         GetRecord()->ParsedBody.reset();
+        GetRecord()->DataChangeConsumed = false;
         GetRecord()->Key.Clear();
         GetRecord()->PartitionKey.Clear();
+        GetRecord()->RawKeyPartitionKey.Clear();
     }
 
 }; // TChangeRecordBuilder

@@ -1346,6 +1346,7 @@ struct TChangefeedSettings {
 
     TNodePtr Mode;
     TNodePtr Format;
+    TNodePtr Compression;
     TNodePtr InitialScan;
     TNodePtr UserSIDs;
     TNodePtr TraceIds;

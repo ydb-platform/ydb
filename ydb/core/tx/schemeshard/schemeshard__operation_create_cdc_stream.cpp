@@ -215,6 +215,12 @@ public:
         case NKikimrSchemeOp::ECdcStreamFormatProto:
         case NKikimrSchemeOp::ECdcStreamFormatJson:
             break;
+        case NKikimrSchemeOp::ECdcStreamFormatBinary:
+            if (!AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "BINARY format is not supported yet");
+                return result;
+            }
+            break;
         case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
             if (!AppData()->FeatureFlags.GetEnableChangefeedDynamoDBStreamsFormat()) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed,
@@ -251,14 +257,17 @@ public:
         case NKikimrSchemeOp::ECdcStreamCompressionZstd:
             if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatProto) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "ZSTD compression is supported only for JSON changefeed formats");
+                    "ZSTD compression is not supported for the PROTO changefeed format");
                 return result;
             }
-            if (streamDesc.HasCompressionLevel()
-                    && (streamDesc.GetCompressionLevel() < 1 || streamDesc.GetCompressionLevel() > 22)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "ZSTD compression level must be in range [1, 22]");
-                return result;
+            if (streamDesc.HasCompressionLevel()) {
+                const i32 level = streamDesc.GetCompressionLevel();
+                // -1 is the fast default and must round-trip. Other explicit levels stay in [1, 22].
+                if (level != -1 && (level < 1 || level > 22)) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter,
+                        "ZSTD compression level must be -1 or in range [1, 22]");
+                    return result;
+                }
             }
             break;
         default:
@@ -288,6 +297,7 @@ public:
             switch (streamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatProto:
             case NKikimrSchemeOp::ECdcStreamFormatJson:
+            case NKikimrSchemeOp::ECdcStreamFormatBinary:
                 break;
             default:
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
@@ -300,6 +310,7 @@ public:
             switch (streamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatProto:
             case NKikimrSchemeOp::ECdcStreamFormatJson:
+            case NKikimrSchemeOp::ECdcStreamFormatBinary:
                 break;
             default:
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
@@ -311,6 +322,7 @@ public:
         if (streamDesc.GetSchemaChanges()) {
             switch (streamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatJson:
+            case NKikimrSchemeOp::ECdcStreamFormatBinary:
                 break;
             default:
                 result->SetError(NKikimrScheme::StatusInvalidParameter,

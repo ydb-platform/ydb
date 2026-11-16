@@ -3198,6 +3198,16 @@ public:
             if (const auto& availabilityPeriod = settings.Settings.AvailabilityPeriod) {
                 config.MutableAvailabilityPeriod()->CopyFrom(*availabilityPeriod);
             }
+            if (const auto& format = settings.Settings.ChangefeedFormat) {
+                config.SetChangefeedFormat(*format == NYql::TReplicationSettings::EChangefeedFormat::Binary
+                    ? NKikimrReplication::CHANGEFEED_FORMAT_BINARY
+                    : NKikimrReplication::CHANGEFEED_FORMAT_JSON);
+            }
+            if (const auto& compression = settings.Settings.ChangefeedCompression) {
+                config.SetChangefeedCompression(*compression == NYql::TReplicationSettings::EChangefeedCompression::Zstd
+                    ? NKikimrReplication::CHANGEFEED_COMPRESSION_ZSTD
+                    : NKikimrReplication::CHANGEFEED_COMPRESSION_NONE);
+            }
 
             if (params.GetDatabase().empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));

@@ -805,7 +805,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             const auto& persisted = describe.GetPathDescription().GetCdcStreamDescription();
             UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(persisted.GetCompression()),
                 static_cast<ui32>(NKikimrSchemeOp::ECdcStreamCompressionZstd));
-            UNIT_ASSERT_VALUES_EQUAL(persisted.GetCompressionLevel(), compressionLevel.GetOrElse(3));
+            UNIT_ASSERT_VALUES_EQUAL(persisted.GetCompressionLevel(), compressionLevel.GetOrElse(-1));
         });
     }
 

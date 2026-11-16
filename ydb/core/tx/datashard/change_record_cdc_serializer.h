@@ -10,6 +10,15 @@ namespace NKikimr::NDataShard {
 
 class TChangeRecord;
 
+// Short CDC payloads stay raw. A zstd frame is several bytes, and even level -1
+// still scans the whole input, so rows under ~200 bytes cost more CPU than they
+// save. That covers a key plus a few small columns, which is most OLTP traffic.
+inline constexpr size_t CdcZstdMinPayloadBytes = 200;
+
+// Fast zstd strategy used when the stream does not set a level. 0 means unset.
+// An explicit level on the stream overrides this.
+inline constexpr int DefaultCdcZstdCompressionLevel = -1;
+
 class IChangeRecordSerializer {
 protected:
     using TCmdWrite = NKikimrClient::TPersQueuePartitionRequest_TCmdWrite;

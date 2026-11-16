@@ -3,6 +3,7 @@
 #include "lightweight_schema.h"
 
 #include <ydb/core/change_exchange/change_record.h>
+#include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -33,6 +34,12 @@ public:
 
     bool IsValidJson(TString& error) const;
 
+    // Protobuf row changes are checked before they are applied. A malformed
+    // record returns false so the worker stops with an error. Serialize() and
+    // GetKey() still abort if this check was skipped: that is an internal miss,
+    // not a way to handle a bad payload.
+    bool CheckData(TString& error) const;
+
     void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TMemoryPool& pool) const;
 
     TConstArrayRef<TCell> GetKey(TMemoryPool& pool) const;
@@ -47,17 +54,31 @@ public:
     bool TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema, TString& error) const;
 
 private:
+    void ClassifyBody(TStringBuf body);
+    bool EnsureProtoCells(TString& error) const;
+
     NJson::TJsonValue JsonBody;
     bool JsonParsed = false;
     TString JsonError;
     TLightweightSchema::TCPtr Schema;
     ui64 WriteTxId = 0;
+    bool IsProto = false;
+    NKikimrChangeExchange::TChangeRecord Proto;
 
+    mutable bool ProtoReady = false;
+    mutable TString ProtoError;
+    mutable NKikimrChangeExchange::TDataChange::RowOperationCase ProtoOp =
+        NKikimrChangeExchange::TDataChange::ROWOPERATION_NOT_SET;
+    mutable TString ProtoKeyBytes;
+    mutable TString ProtoValueBytes;
+    mutable TVector<NTable::TTag> ProtoDestTags;
     mutable TMaybe<TOwnedCellVec> Key;
 
 }; // TChangeRecord
 
 class TChangeRecordBuilder: public NChangeExchange::TChangeRecordBuilder<TChangeRecord, TChangeRecordBuilder> {
+    friend class TChangeRecord;
+
 public:
     using TBase::TBase;
 
@@ -69,7 +90,7 @@ public:
     template <typename T>
     TSelf& WithBody(T&& body) {
         auto* record = GetRecord();
-        record->JsonParsed = ParseJsonBody(body, record->JsonBody, record->JsonError);
+        record->ClassifyBody(body);
         return static_cast<TBase*>(this)->WithBody(std::forward<T>(body));
     }
 

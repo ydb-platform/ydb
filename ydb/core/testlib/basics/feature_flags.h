@@ -46,6 +46,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTempTables)
     FEATURE_FLAG_SETTER(EnableChangefeedDynamoDBStreamsFormat)
     FEATURE_FLAG_SETTER(EnableChangefeedDebeziumJsonFormat)
+    FEATURE_FLAG_SETTER(EnableBinaryChangefeedForAsyncReplication)
     FEATURE_FLAG_SETTER(EnableUniqConstraint)
     FEATURE_FLAG_SETTER(EnableUuidAsPrimaryKey)
     FEATURE_FLAG_SETTER(EnableTablePgTypes)

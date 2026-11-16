@@ -2581,7 +2581,10 @@ Y_UNIT_TEST_SUITE(TOlap) {
             for (ui32 i = 0; i < 100; ++i) {
                 std::vector<ui64> writeIds;
                 ++txId;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                // uncommitted data counts toward the quota, so the writes stop before the commits
+                if (!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId)) {
+                    break;
+                }
                 planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
@@ -2764,6 +2767,97 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsCount", 0);
         CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsVolumeBytes", 0);
+    }
+
+    Y_UNIT_TEST(UncommittedPortionsExceedSmallBlobsQuota) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        TTestEnv env(runtime, opts);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(true);
+        appData.SmallBlobsQuotaConfig.SetSmallBlobSizeThresholdBytes(1'000'000'000);
+        // the 1 GiB disk quota below scales the per-10TiB count by 1/10240
+        constexpr ui64 hardCountQuota = 5;
+        appData.SmallBlobsQuotaConfig.SetCountPer10TiB(hardCountQuota * 10240);
+        appData.SmallBlobsQuotaConfig.SetVolumeBytesPer10TiB(0);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "SomeDatabase"
+            DatabaseQuotas {
+                data_size_hard_quota: 1073741824
+                data_size_soft_quota: 1000000000
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", R"(
+            Name: "Table"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 pathId = 0;
+        ui64 shardId = 0;
+        auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            pathId = record.GetPathDescription().GetSelf().GetPathId();
+            txId = record.GetPathDescription().GetSelf().GetCreateTxId() + 1;
+            auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+            shardId = sharding.GetColumnShards()[0];
+        };
+        TestLsPathId(runtime, expectedTablePathId, checkFn);
+        UNIT_ASSERT(shardId);
+        UNIT_ASSERT(pathId);
+
+        const TString data = NTxUT::MakeTestBlob({0, 100000}, defaultYdbSchema, {}, {"timestamp"});
+        ui64 writeId = 0;
+        std::vector<ui64> uncommittedLockIds;
+        while (!GetSmallBlobsQuotaExceeded(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase"))) {
+            UNIT_ASSERT_C(uncommittedLockIds.size() < 6 * hardCountQuota, "uncommitted portions never exceeded the small-blobs quota; " << DEBUG_HINT);
+            std::vector<ui64> writeIds;
+            ++txId;
+            UNIT_ASSERT_C(NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+                              NEvWrite::EModificationType::Upsert, txId),
+                DEBUG_HINT);
+            uncommittedLockIds.push_back(txId);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+
+        {
+            std::vector<ui64> writeIds;
+            ++txId;
+            UNIT_ASSERT_C(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+                              NEvWrite::EModificationType::Upsert, txId, TDuration::Seconds(1)),
+                "a write must be refused while the quota is exceeded; " << DEBUG_HINT);
+        }
+
+        ui64 planStep = 0;
+        TSet<ui64> txIds;
+        for (const ui64 lockId : uncommittedLockIds) {
+            std::vector<ui64> writeIds;
+            planStep = std::max(planStep, NTxUT::ProposeCommit(runtime, sender, shardId, lockId, writeIds, lockId).Val());
+            txIds.insert(lockId);
+        }
+        NTxUT::PlanCommit(runtime, sender, shardId, NTxUT::TPlanStep{planStep}, txIds);
     }
 
     Y_UNIT_TEST(DropColumnTableWithLocalIndexesViaDropTable) {
@@ -2976,7 +3070,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
             for (ui32 i = 0; i < 100; ++i) {
                 std::vector<ui64> writeIds;
                 ++txId;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                if (!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId)) {
+                    break;
+                }
                 planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
@@ -3114,7 +3210,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
             for (ui32 i = 0; i < 100; ++i) {
                 std::vector<ui64> writeIds;
                 ++txId;
-                NTxUT::WriteData(runtime, writeSender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                if (!NTxUT::WriteData(runtime, writeSender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId)) {
+                    break;
+                }
                 planStep = NTxUT::ProposeCommit(runtime, writeSender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
@@ -3253,7 +3351,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
             for (ui32 i = 0; i < 100; ++i) {
                 std::vector<ui64> writeIds;
                 ++txId;
-                NTxUT::WriteData(runtime, writeSender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                if (!NTxUT::WriteData(runtime, writeSender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId)) {
+                    break;
+                }
                 planStep = NTxUT::ProposeCommit(runtime, writeSender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }

@@ -1,3 +1,5 @@
+* Fixed driver shutdown blocking while closed Topic or PersQueue read sessions remain alive.
+
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
 
 * Added availability-period reporting to draft async replication descriptions, including finite, unlimited, unknown, and invalid policies.

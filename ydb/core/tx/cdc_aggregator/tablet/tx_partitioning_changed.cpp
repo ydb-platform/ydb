@@ -5,23 +5,9 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
-#include <algorithm>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CDC_AGGREGATOR
 
 namespace NKikimr::NCdcAggregator {
-
-namespace {
-
-bool IsValidPartitioningChange(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds) {
-    return parentDataShardId
-        && !childDataShardIds.empty()
-        && childDataShardIds.front() != 0
-        && std::adjacent_find(childDataShardIds.begin(), childDataShardIds.end()) == childDataShardIds.end()
-        && !std::binary_search(childDataShardIds.begin(), childDataShardIds.end(), parentDataShardId);
-}
-
-} // namespace
 
 class TCdcAggregator::TTxPartitioningChanged : public TTxBase {
     using TResult = NKikimrCdcAggregator::TEvPartitioningChangedAck;
@@ -45,12 +31,10 @@ public:
         Result = MakeHolder<TEvCdcAggregator::TEvPartitioningChangedAck>();
         Result->Record.SetOrigin(Self->TabletID());
 
-        const ui64 parentDataShardId = record.GetParentDataShardId();
-        TVector<ui64> childDataShardIds(record.GetChildDataShardIds().begin(), record.GetChildDataShardIds().end());
-        std::sort(childDataShardIds.begin(), childDataShardIds.end());
-        if (!IsValidPartitioningChange(parentDataShardId, childDataShardIds)) {
+        const auto [change, error] = TCdcAggregatorStreamProtoConverter().ParsePartitioningChange(record);
+        if (!change) {
             Result->Record.SetStatus(TResult::BAD_REQUEST);
-            Result->Record.SetError(TStringBuilder() << "Invalid partitioning change of DataShard " << parentDataShardId);
+            Result->Record.SetError(error);
             return true;
         }
 
@@ -60,19 +44,22 @@ public:
             return true;
         }
 
-        const auto diff = Self->CdcAggregatorStream->ApplyPartitioningChange(parentDataShardId, childDataShardIds);
+        const auto diff = Self->CdcAggregatorStream->ApplyPartitioningChange(*change);
         if (!diff) {
             Result->Record.SetStatus(TResult::UNKNOWN_SOURCE);
-            Result->Record.SetError(TStringBuilder() << "Unknown partitioning change of DataShard " << parentDataShardId);
+            Result->Record.SetError(TStringBuilder() << "Unknown partitioning change " << change->OperationId);
             return true;
         }
 
-        NIceDb::TNiceDb db(txc.DB);
-        Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamSourcesDiff(db, *diff);
+        if (!diff->Deleted.empty()) {
+            NIceDb::TNiceDb db(txc.DB);
+            Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamPartitioningChange(db, *change, *diff);
+        }
 
         YDB_LOG_CREATE_CONTEXT({"tabletId", Self->TabletID()});
         YDB_LOG_INFO("Partitioning change applied",
-            {"parentDataShardId", parentDataShardId},
+            {"operationId", change->OperationId},
+            {"parentDataShardIds", JoinSeq(",", change->ParentDataShardIds)},
             {"inserted", JoinSeq(",", diff->Inserted)},
             {"deleted", JoinSeq(",", diff->Deleted)});
 

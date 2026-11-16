@@ -1,5 +1,7 @@
 #include "cdc_aggregator_stream_proto.h"
 
+#include <ydb/core/protos/cdc_aggregator.pb.h>
+
 #include <util/string/builder.h>
 
 #include <algorithm>
@@ -68,6 +70,34 @@ std::pair<std::optional<TCdcAggregatorStreamConfig>, TString> TCdcAggregatorStre
 
 std::pair<std::optional<TCdcAggregatorStreamTopic>, TString> TCdcAggregatorStreamProtoConverter::ParseTopic(const NKikimrCdcAggregator::TCdcAggregatorStreamTopic& proto) const {
     return ParseTopicFields(proto);
+}
+
+std::pair<std::optional<TCdcAggregatorStreamPartitioningChange>, TString> TCdcAggregatorStreamProtoConverter::ParsePartitioningChange(const NKikimrCdcAggregator::TEvPartitioningChanged& proto) const {
+    TCdcAggregatorStreamPartitioningChange change{
+        .OperationId = proto.GetOperationId(),
+        .ParentDataShardIds = {proto.GetParentDataShardIds().begin(), proto.GetParentDataShardIds().end()},
+        .ChildDataShardIds = {proto.GetChildDataShardIds().begin(), proto.GetChildDataShardIds().end()},
+    };
+    if (proto.HasParentDataShardId()) {
+        change.ParentDataShardIds.push_back(proto.GetParentDataShardId());
+    }
+    std::sort(change.ParentDataShardIds.begin(), change.ParentDataShardIds.end());
+    std::sort(change.ChildDataShardIds.begin(), change.ChildDataShardIds.end());
+
+    const auto& parents = change.ParentDataShardIds;
+    const auto& children = change.ChildDataShardIds;
+    if (!change.OperationId
+        || parents.empty() || parents.front() == 0
+        || std::adjacent_find(parents.begin(), parents.end()) != parents.end()
+        || children.empty() || children.front() == 0
+        || std::adjacent_find(children.begin(), children.end()) != children.end()
+        || std::any_of(parents.begin(), parents.end(), [&children](ui64 parentDataShardId) {
+            return std::binary_search(children.begin(), children.end(), parentDataShardId);
+        })) {
+        return {std::nullopt, TStringBuilder() << "Invalid partitioning change " << change.OperationId};
+    }
+
+    return {std::move(change), TString()};
 }
 
 TString TCdcAggregatorStreamProtoConverter::SerializeTopic(const TCdcAggregatorStreamTopic& topic) const {

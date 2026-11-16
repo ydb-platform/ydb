@@ -80,6 +80,7 @@ message TEvPartitioningChanged {
     optional fixed64 ParentDataShardId = 1;
     repeated fixed64 ChildDataShardIds = 2;
     optional uint64 OperationId = 3;
+    repeated fixed64 ParentDataShardIds = 4;
 }
 
 message TEvPartitioningChangedAck {

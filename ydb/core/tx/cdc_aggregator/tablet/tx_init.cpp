@@ -14,6 +14,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        Self->CdcAggregatorStream.reset();
         NIceDb::TNiceDb db(txc.DB);
         auto [ready, stream] = Self->CdcAggregatorStreamRepository.LoadCdcAggregatorStream(db);
         if (!ready) {

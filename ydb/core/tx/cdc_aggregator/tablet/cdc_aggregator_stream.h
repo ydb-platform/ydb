@@ -2,10 +2,12 @@
 
 #include <ydb/core/scheme/scheme_pathid.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 
 #include <optional>
+#include <utility>
 
 namespace NKikimr::NCdcAggregator {
 
@@ -34,10 +36,20 @@ struct TCdcAggregatorStreamSourcesDiff {
     THashSet<ui64> Deleted;
 };
 
+struct TCdcAggregatorStreamPartitioningChange {
+    ui64 OperationId = 0;
+    TVector<ui64> ParentDataShardIds;
+    TVector<ui64> ChildDataShardIds;
+
+    bool operator==(const TCdcAggregatorStreamPartitioningChange&) const = default;
+};
+
 class TCdcAggregatorStream {
 public:
+    using TPartitioningChanges = THashMap<std::pair<ui64, ui64>, TCdcAggregatorStreamPartitioningChange>;
+
     explicit TCdcAggregatorStream(const TCdcAggregatorStreamConfig& config);
-    TCdcAggregatorStream(TCdcAggregatorStreamTopic topic, THashSet<ui64> sourceDataShardIds);
+    TCdcAggregatorStream(TCdcAggregatorStreamTopic topic, THashSet<ui64> sourceDataShardIds, TPartitioningChanges partitioningChanges);
 
     const TCdcAggregatorStreamTopic& GetTopic() const {
         return Topic;
@@ -47,11 +59,12 @@ public:
         return SourceDataShardIds;
     }
 
-    std::optional<TCdcAggregatorStreamSourcesDiff> ApplyPartitioningChange(ui64 parentDataShardId, const TVector<ui64>& childDataShardIds);
+    std::optional<TCdcAggregatorStreamSourcesDiff> ApplyPartitioningChange(const TCdcAggregatorStreamPartitioningChange& change);
 
 private:
     TCdcAggregatorStreamTopic Topic;
     THashSet<ui64> SourceDataShardIds;
+    TPartitioningChanges PartitioningChanges;
 };
 
 } // namespace NKikimr::NCdcAggregator

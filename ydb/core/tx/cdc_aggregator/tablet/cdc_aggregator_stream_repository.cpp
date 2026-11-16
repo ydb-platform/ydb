@@ -2,7 +2,7 @@
 
 namespace NKikimr::NCdcAggregator {
 
-void TCdcAggregatorStreamRepository::Save(NIceDb::TNiceDb& db, const TCdcAggregatorStream& stream) const {
+void TCdcAggregatorStreamRepository::InsertCdcAggregatorStream(NIceDb::TNiceDb& db, const TCdcAggregatorStream& stream) const {
     db.Table<Schema::State>().Key(Schema::State::Id::Value).Update(
         NIceDb::TUpdate<Schema::State::TrackingConfig>(Converter.SerializeTopic(stream.GetTopic())));
 
@@ -11,7 +11,7 @@ void TCdcAggregatorStreamRepository::Save(NIceDb::TNiceDb& db, const TCdcAggrega
     }
 }
 
-void TCdcAggregatorStreamRepository::SaveSourcesDiff(NIceDb::TNiceDb& db, const TCdcAggregatorStreamSourcesDiff& diff) const {
+void TCdcAggregatorStreamRepository::ApplyCdcAggregatorStreamSourcesDiff(NIceDb::TNiceDb& db, const TCdcAggregatorStreamSourcesDiff& diff) const {
     for (const auto dataShardId : diff.Deleted) {
         db.Table<Schema::Sources>().Key(dataShardId).Delete();
     }
@@ -21,7 +21,7 @@ void TCdcAggregatorStreamRepository::SaveSourcesDiff(NIceDb::TNiceDb& db, const 
     }
 }
 
-bool TCdcAggregatorStreamRepository::Load(NIceDb::TNiceDb& db, std::optional<TCdcAggregatorStream>& stream) const {
+bool TCdcAggregatorStreamRepository::LoadCdcAggregatorStream(NIceDb::TNiceDb& db, std::optional<TCdcAggregatorStream>& stream) const {
     auto state = db.Table<Schema::State>().Key(Schema::State::Id::Value).Select();
     if (!state.IsReady()) {
         return false;
@@ -32,7 +32,7 @@ bool TCdcAggregatorStreamRepository::Load(NIceDb::TNiceDb& db, std::optional<TCd
     }
 
     THashSet<ui64> sources;
-    if (!LoadSources(db, sources)) {
+    if (!LoadSourceDataShardIds(db, sources)) {
         return false;
     }
 
@@ -45,7 +45,7 @@ bool TCdcAggregatorStreamRepository::Load(NIceDb::TNiceDb& db, std::optional<TCd
     return true;
 }
 
-bool TCdcAggregatorStreamRepository::LoadSources(NIceDb::TNiceDb& db, THashSet<ui64>& sources) const {
+bool TCdcAggregatorStreamRepository::LoadSourceDataShardIds(NIceDb::TNiceDb& db, THashSet<ui64>& sources) const {
     auto rowset = db.Table<Schema::Sources>().Select();
     if (!rowset.IsReady()) {
         return false;

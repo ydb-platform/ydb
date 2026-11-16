@@ -53,7 +53,7 @@ public:
         if (!Self->CdcAggregatorStream) {
             Self->CdcAggregatorStream.emplace(*config);
             NIceDb::TNiceDb db(txc.DB);
-            Self->CdcAggregatorStreamRepository.Save(db, *Self->CdcAggregatorStream);
+            Self->CdcAggregatorStreamRepository.InsertCdcAggregatorStream(db, *Self->CdcAggregatorStream);
             Result->Record.SetStatus(TResult::SUCCESS);
         } else if (IsSameConfig(*Self->CdcAggregatorStream, *config)) {
             Result->Record.SetStatus(TResult::SUCCESS);

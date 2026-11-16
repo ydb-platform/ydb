@@ -61,7 +61,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->CdcAggregatorStreamRepository.SaveSourcesDiff(db, *diff);
+        Self->CdcAggregatorStreamRepository.ApplyCdcAggregatorStreamSourcesDiff(db, *diff);
         Result->Record.SetStatus(TResult::SUCCESS);
 
         return true;

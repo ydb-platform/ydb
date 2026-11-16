@@ -15,7 +15,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
-        return Self->CdcAggregatorStreamRepository.Load(db, Self->CdcAggregatorStream);
+        return Self->CdcAggregatorStreamRepository.LoadCdcAggregatorStream(db, Self->CdcAggregatorStream);
     }
 
     void Complete(const TActorContext& ctx) override {

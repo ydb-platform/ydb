@@ -369,6 +369,49 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         UNIT_ASSERT_STRING_CONTAINS(ev->Message, "PQ12");
     }
 
+    Y_UNIT_TEST(UnknownPartitionsThenValidTopicReturnsBadRequest) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        EnableFetchLogs(*setup);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        setup->CreateTopic("topic1", "dc1", 2);
+        setup->CreateTopic("topic2", "dc1", 2);
+
+        // Request order does not determine the order of metadata processing:
+        // the actor stores topics in a hash map.
+        auto ev = Fetch(runtime, MakeSettings({
+            {"/Root/topic1", 42, 0, 10000},
+            {"/Root/topic1", 43, 0, 10000},
+            {"/Root/topic2", 0, 0, 10000},
+            {"/Root/topic2", 1, 0, 10000},
+        }));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "/Root/topic1");
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "PQ12");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 0);
+    }
+
+    // Isolate the process abort caused by a second PassAway before #58064 is fixed.
+    SIMPLE_UNIT_FORKED_TEST(UnknownPartitionsInTwoTopicsReturnsBadRequest) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        EnableFetchLogs(*setup);
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        setup->CreateTopic("topic1", "dc1", 2);
+        setup->CreateTopic("topic2", "dc1", 2);
+
+        // Both topics are invalid, regardless of their hash-map iteration order.
+        auto ev = Fetch(runtime, MakeSettings({
+            {"/Root/topic1", 42, 0, 10000},
+            {"/Root/topic2", 42, 0, 10000},
+        }));
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::BAD_REQUEST, ev->Message);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Message, "PQ12");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 0);
+    }
+
     // ---- P1: runtime errors ----
 
     Y_UNIT_TEST(PipeDisconnect) {

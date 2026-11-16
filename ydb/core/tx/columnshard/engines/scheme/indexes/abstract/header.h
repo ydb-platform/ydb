@@ -64,7 +64,7 @@ private:
 
     virtual std::optional<TBlobRangeLink16> DoGetAddressForCategory(const std::optional<ui64> /*cat*/) const override {
         //        YDB_LOG_VERIFY(!cat,
-                      {"cat", cat});
+        //            {"cat", cat});
         return TBlobRangeLink16(0, Size);
     }
 

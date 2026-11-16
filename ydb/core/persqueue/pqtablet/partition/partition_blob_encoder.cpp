@@ -2,6 +2,11 @@
 #include "partition_util.h"
 
 #include <ydb/core/base/appdata.h>
+<<<<<<< HEAD
+=======
+#include <ydb/core/persqueue/public/config.h>
+#include <ydb/library/actors/core/log.h>
+>>>>>>> 2ff1f3b9def (LOGBROKER-10406 Fixed bugs & add tests (#53523))
 
 namespace NKikimr::NPQ {
 
@@ -92,6 +97,15 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
         AFL_ENSURE(it != DataKeysBody.begin()); //always greater, startoffset can't be less that StartOffset
         AFL_ENSURE(it == DataKeysBody.end() || it->Key.GetOffset() > startOffset || it->Key.GetOffset() == startOffset && it->Key.GetPartNo() > partNo);
         --it;
+
+        while (
+            (it != DataKeysBody.begin()) &&
+            (it->Key.GetPartNo() > partNo) &&
+            ((std::prev(it)->Key.HasOffsetDelta() && std::prev(it)->Key.GetOffset() + *(std::prev(it)->Key.GetOffsetDelta()) > startOffset))
+        ) {
+            --it;
+        }
+
         AFL_ENSURE(it->Key.GetOffset() < startOffset || (it->Key.GetOffset() == startOffset && it->Key.GetPartNo() <= partNo));
         ui32 cnt = 0;
         ui32 sz = 0;
@@ -159,8 +173,11 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
             ui64 curOffset = offset;
 
             AFL_ENSURE(pno == blobs[i].GetPartNo());
+            // For a client batch covering [100, 105), a read at (103, 1)
+            // must skip part 0 even though the batch starts at 100, not 103.
+            // Do not apply this part filter to later messages (offset > startOffset).
             bool skip = (offset + blobs[i].LogicalMessageCount <= startOffset)
-                || (offset == startOffset && blobs[i].GetPartNo() < partNo);
+                || (offset <= startOffset && blobs[i].GetPartNo() < partNo);
 
             if (0 < lastOffset && lastOffset <= offset) {
                 break;
@@ -288,11 +305,18 @@ bool TPartitionBlobEncoder::PositionInBody(ui64 offset, ui32 partNo) const
         const auto& lastKey = DataKeysBody.back().Key;
         if (lastKey.HasOffsetDelta()) {
             pos = std::make_pair(lastKey.GetOffset() + *lastKey.GetOffsetDelta(), 0);
-        } else {
-            pos = std::make_pair(lastKey.GetOffset() + lastKey.GetCount(), 0);
+            return required < pos;
         }
-
+        
+        pos = std::make_pair(lastKey.GetOffset() + lastKey.GetCount(), 0);
         return required <= pos;
+    }
+
+    if (Head.PartNo > partNo && !DataKeysBody.empty()) {
+        const auto& lastKey = DataKeysBody.back().Key;
+        if (lastKey.HasOffsetDelta()) {
+            return offset < lastKey.GetOffset() + *lastKey.GetOffsetDelta();
+        }
     }
 
     return (offset < Head.Offset) || ((Head.Offset == offset) && (partNo < Head.PartNo));
@@ -383,10 +407,7 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
 namespace {
 
 TKey WithHeadOffsetDelta(TKey&& key, const THead& head) {
-    if (HasAppData()
-        && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()
-        && !head.GetBatches().empty())
-    {
+    if (CanWriteOffsetDeltaInKeys() && !head.GetBatches().empty()) {
         const ui64 offsetDelta = head.GetOffsetDelta();
         if (offsetDelta > 0) {
             key.SetOffsetDelta(offsetDelta);
@@ -562,6 +583,10 @@ void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
     }
     Head.PackedSize += NewHead.PackedSize;
 
+    if (NewHead.PackedSize > 0) {
+        Head.TrailingOffsetDelta = NewHead.TrailingOffsetDelta;
+    }
+
     if (Head.PackedSize > 0 && DataKeysBody.empty()) {
         startOffset = Head.Offset + (Head.PartNo > 0 ? 1 : 0);
     }
@@ -635,11 +660,31 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
     const ui32 size = NewHead.PackedSize;
     std::pair<TKey, ui32> res(key, size);
     ui32 x = headCleared ? 0 : Head.PackedSize;
+
     AFL_ENSURE(std::accumulate(DataKeysHead.begin(), DataKeysHead.end(), 0u, [](ui32 sum, const TKeyLevel& level){return sum + level.Sum();}) == NewHead.PackedSize + x);
     for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
         auto jt = it; ++jt;
         if (it->NeedCompaction()) {
             res = it->Compact();
+            // NewHead pushes OffsetDelta to the next key.
+            // level 3: [key1] [key2] [key3] [NewHead key (with offset delta!)]
+            // level 2: [key4]
+            // level 1: [key5] [key6]
+            // level 0: [key7] [key8]
+            // ...
+            // level 3: []
+            // level 2: [key4] [key1 + key2 + key3 + NewHead key (with offset delta!)]
+            // level 1: [key5] [key6]
+            // level 0: [key7] [key8]
+            // ...
+            if (CanWriteOffsetDeltaInKeys()) {
+                AFL_ENSURE(NewHead.GetOffsetDelta() > 0)
+                    ("NewHead.Offset", NewHead.Offset)
+                    ("NewHead.Count", NewHead.GetCount())
+                    ("NewHead.TrailingOffsetDelta", NewHead.TrailingOffsetDelta);
+                res.first.SetOffsetDelta(NewHead.Offset - res.first.GetOffset() + NewHead.GetOffsetDelta());
+            }
+
             if (jt != DataKeysHead.rend()) {
                 jt->AddKey(res.first, res.second);
             }
@@ -650,6 +695,10 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
     }
     AFL_ENSURE(res.second >= size);
     AFL_ENSURE(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo());
+    if (CanWriteOffsetDeltaInKeys()) {
+        AFL_ENSURE(res.first.HasOffsetDelta())
+            ("key", res.first.ToString());
+    }
     return res;
 }
 

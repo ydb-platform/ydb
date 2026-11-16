@@ -186,7 +186,15 @@ bool BuildExternalDataSourceScheme(
     FillExternalDataSourceDescription(dataSourceDescResult, dataSourceDesc, pathDesc.GetSelf());
     dataSourceDescResult.mutable_properties()->erase("REFERENCES");
 
-    scheme = NYdb::NDump::BuildCreateExternalDataSourceQuery(dataSourceDescResult, database);
+    auto mode = NYdb::NDump::EIamInitialTokenBackupMode::Preserve;
+    if (AppData()->FeatureFlags.GetEnableEdsIamBackupWithoutInitialToken() && dataSourceDesc.GetAuth().HasIam()) {
+        if (!dataSourceDesc.GetAuth().GetIam().HasResourceId()) {
+            error = "Cannot back up IAM external data source without a resolved resource ID";
+            return false;
+        }
+        mode = NYdb::NDump::EIamInitialTokenBackupMode::Omit;
+    }
+    scheme = NYdb::NDump::BuildCreateExternalDataSourceQuery(dataSourceDescResult, database, mode);
 
     return true;
 }

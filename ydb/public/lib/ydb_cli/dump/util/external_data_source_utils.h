@@ -12,9 +12,19 @@ namespace NYql {
 
 namespace NYdb::NDump {
 
+enum class EIamInitialTokenBackupMode {
+    Preserve,
+    Omit,
+};
+
 TString BuildCreateExternalDataSourceQuery(
     const Ydb::Table::DescribeExternalDataSourceResult& description,
     const TString& db);
+
+TString BuildCreateExternalDataSourceQuery(
+    const Ydb::Table::DescribeExternalDataSourceResult& description,
+    const TString& db,
+    EIamInitialTokenBackupMode mode);
 
 bool RewriteCreateExternalDataSourceQueryNoSecrets(
     TString& query,

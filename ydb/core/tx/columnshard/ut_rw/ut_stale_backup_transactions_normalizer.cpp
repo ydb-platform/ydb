@@ -9,7 +9,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/string_utils/base64/base64.h>
-#include <util/string/escape.h>
+#include <util/stream/str.h>
+#include <yql/essentials/ast/yql_ast_escaping.h>
 
 #include <inttypes.h>
 
@@ -19,6 +20,12 @@ using namespace Tests;
 using namespace NTxUT;
 
 namespace {
+
+TString EscapeMiniKQLString(TStringBuf value) {
+    TStringStream escaped;
+    NYql::EscapeArbitraryAtom(value, '"', &escaped);
+    return escaped.Str();
+}
 
 class TBackupNormalizerController: public NYDBTest::NColumnShard::TController {
 public:
@@ -81,8 +88,8 @@ public:
             body = restore.SerializeAsString();
         }
         UpdateLocalDbTableRow(Runtime, TTestTxConfig::TxTablet0, "TxInfo", Sprintf("'('('TxId (Uint64 '%" PRIu64 ")))", txId),
-            Sprintf("'('('TxKind (Uint32 '%" PRIu32 ")) '('TxBody (String '\"%s\")) '('MaxStep (Uint64 '%" PRIu64 ")))", static_cast<ui32>(kind),
-                EscapeC(body).c_str(), Max<ui64>()));
+            Sprintf("'('('TxKind (Uint32 '%" PRIu32 ")) '('TxBody (String '%s)) '('MaxStep (Uint64 '%" PRIu64 ")))", static_cast<ui32>(kind),
+                EscapeMiniKQLString(body).c_str(), Max<ui64>()));
         return body;
     }
 
@@ -99,7 +106,7 @@ public:
     void SetSerializedResult(const TString& result) {
         UpdateLocalDbTableRow(Runtime, TTestTxConfig::TxTablet0, "TableInfoV1",
             Sprintf("'('('PathId (Uint64 '%" PRIu64 ")) '('SchemeShardLocalPathId (Uint64 '%" PRIu64 ")))", InternalPathId, SchemeShardPathId),
-            Sprintf(R"('('('LastCompletedBackupTransaction (String '"%s"))))", EscapeC(result).c_str()));
+            Sprintf("'('('LastCompletedBackupTransaction (String '%s)))", EscapeMiniKQLString(result).c_str()));
     }
 
     void Reboot() {

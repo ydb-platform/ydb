@@ -29,6 +29,7 @@ PEERDIR(
     ydb/library/testlib/s3_recipe_helper
     ydb/public/lib/yson_value
     ydb/services/metadata
+    yql/essentials/ast
 )
 
 YQL_LAST_ABI_VERSION()

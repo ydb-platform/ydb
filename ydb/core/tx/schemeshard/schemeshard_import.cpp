@@ -6,6 +6,7 @@
 
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::IMPORT
@@ -17,12 +18,14 @@ namespace {
 
     void FillIssues(NKikimrImport::TImport& import, const TImportInfo& importInfo,
         NYql::TSeverityIds::ESeverityId severity = NYql::TSeverityIds::S_ERROR) {
-        if (importInfo.Issue) {
+        if (importInfo.Issue && !AnyOf(importInfo.Items, [&](const auto& item) {
+            return item.Issue == importInfo.Issue;
+        })) {
             AddIssue(import, importInfo.Issue, severity);
         }
 
         for (const auto& item : importInfo.Items) {
-            if (item.Issue && item.Issue != importInfo.Issue) {
+            if (item.Issue) {
                 AddIssue(import, item.Issue, severity);
             }
         }

@@ -44,6 +44,7 @@
 #include <contrib/libs/zstd/include/zstd.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/vector.h>
@@ -5798,6 +5799,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
         UNIT_ASSERT(!entry.GetIssues(0).message().empty());
 
+        runtime.WaitFor("import end audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) { return line.find("operation=IMPORT END") != std::string::npos; });
+        }, TDuration::Seconds(10));
         const auto line = FindAuditLine(auditLines, "operation=IMPORT END");
         UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
         UNIT_ASSERT_STRING_CONTAINS(line, "reason=" + entry.GetIssues(0).message());

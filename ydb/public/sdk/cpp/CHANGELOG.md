@@ -1,3 +1,5 @@
+* Fixed Windows gRPC header compatibility and table-path construction in the C++ examples.
+
 * Added support for tablet reassignment operation IDs.
 
 ## v3.27.0

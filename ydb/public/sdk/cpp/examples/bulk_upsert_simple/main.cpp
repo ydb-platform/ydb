@@ -115,7 +115,7 @@ std::string JoinPath(const std::string& basePath, const std::string& path) {
     std::filesystem::path prefixPathSplit(basePath);
     prefixPathSplit /= path;
 
-    return prefixPathSplit;
+    return prefixPathSplit.generic_string();
 }
 
 int main(int argc, char** argv) {

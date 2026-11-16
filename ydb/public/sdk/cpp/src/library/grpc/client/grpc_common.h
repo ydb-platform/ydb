@@ -1,5 +1,13 @@
 #pragma once
 
+#if defined(_WIN32) && !defined(OPTIONAL)
+// Windows SDK headers need this annotation even after an earlier win_undef.h.
+    #define OPTIONAL
+#endif
+
+#include <grpc/event_engine/port.h>
+#include <util/system/win_undef.h>
+
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/resource_quota.h>
 

@@ -3458,6 +3458,7 @@ TEST(TYsonStructTest, PolymorphicYsonStruct)
 
     // Now field1 is unrecognized.
     EXPECT_THROW(Deserialize(poly, node->AsMap()), std::exception);
+    EXPECT_EQ(node->AsMap()->GetChildValueOrThrow<std::string>("type"), "drv2");
 
     node = BuildYsonNodeFluently()
         .BeginMap()
@@ -3853,6 +3854,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefault)
 
     Deserialize(poly, empty->AsMap());
     EXPECT_EQ(poly.GetType(), EMyPolyDefaultType::Drv1);
+    EXPECT_FALSE(empty->AsMap()->FindChild("type"));
 
     auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(drv1Ptr.operator bool());

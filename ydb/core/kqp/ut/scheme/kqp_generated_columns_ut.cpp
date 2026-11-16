@@ -4618,7 +4618,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
     Y_UNIT_TEST(ExecuteScriptMaterializesStoredColumn) {
         auto appConfig = GeneratedColumnsAppConfig();
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetEnableSecureScriptExecutions(false).SetWithSampleTables(false));
         auto queryClient = kikimr.GetQueryClient();
 
         auto setup = queryClient.ExecuteQuery(R"(

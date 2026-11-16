@@ -88,6 +88,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(bool initializeHttpGateway, NYql
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableExternalDataSources(true);
     featureFlags.SetEnableScriptExecutionOperations(true);
+    featureFlags.SetEnableSecureScriptExecutions(false);
     featureFlags.SetEnableExternalSourceSchemaInference(true);
     featureFlags.SetEnableMoveColumnTable(true);
     featureFlags.SetEnableSchemaSecrets(true);

@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(ClientDataWrites) {
     }
 
     Y_UNIT_TEST_TWIN(Scripts, enableClientModifications) {
-        TKikimrRunner kikimr(Settings(enableClientModifications));
+        TKikimrRunner kikimr(Settings(enableClientModifications).SetEnableSecureScriptExecutions(false));
         auto tableClient = kikimr.GetTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
 

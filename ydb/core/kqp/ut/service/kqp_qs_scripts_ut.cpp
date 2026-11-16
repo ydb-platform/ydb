@@ -13,6 +13,15 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NQuery;
 
+namespace {
+
+TKikimrRunner MakeScriptKikimrRunner(NKikimrConfig::TAppConfig appConfig = {}) {
+    appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(false);
+    return DefaultKikimrRunner({}, appConfig);
+}
+
+}   // namespace
+
 Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, i32 tries = -1) {
         NYdb::NOperation::TOperationClient client(ydbDriver);
@@ -49,7 +58,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ExecuteScript) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto scriptExecutionOperation = db.ExecuteScript(R"(
@@ -66,7 +75,8 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting})
-            .SetEnableScriptExecutionOperations(true);
+            .SetEnableScriptExecutionOperations(true)
+            .SetEnableSecureScriptExecutions(false);
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -90,7 +100,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ExecuteScriptOnlyCommentsRejected) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         for (const auto& query : {"-- empty query", "/* Multi-line\n   comment */"}) {
@@ -105,7 +115,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ExecuteMultiScript) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto scriptExecutionOperation = db.ExecuteScript(R"(
@@ -141,7 +151,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(SyntaxV0Rejected) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto scriptExecutionOperation = db.ExecuteScript(R"(
@@ -173,7 +183,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ExplainScript) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto settings = TExecuteScriptSettings().ExecMode(EExecMode::Explain);
@@ -194,7 +204,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ParseScript) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto settings = TExecuteScriptSettings().ExecMode(EExecMode::Parse);
@@ -210,7 +220,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ValidateScript) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto settings = TExecuteScriptSettings().ExecMode(EExecMode::Validate);
@@ -225,7 +235,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithUnspecifiedMode) {
-                auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto settings = TExecuteScriptSettings().ExecMode(EExecMode::Unspecified);
@@ -239,7 +249,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithParameters) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto params = TParamsBuilder()
@@ -266,7 +276,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     void ExecuteScriptWithStatsMode(EStatsMode statsMode) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto settings = TExecuteScriptSettings()
@@ -317,7 +327,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ListScriptExecutions) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         NYdb::NOperation::TOperationClient client(kikimr.GetDriver());
@@ -358,7 +368,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ListScriptExecutionsInvalidPageToken) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
 
         NYdb::NOperation::TOperationClient client(kikimr.GetDriver());
         auto list = client.List<NYdb::NQuery::TScriptExecutionOperation>(42, "invalid-page-token").ExtractValueSync();
@@ -367,7 +377,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ForgetScriptExecution) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         NYdb::NOperation::TOperationClient client(kikimr.GetDriver());
@@ -421,7 +431,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ForgetScriptExecutionOnLongQuery) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
         // TODO: really long query
         auto scriptExecutionOperation = db.ExecuteScript(R"(
@@ -445,7 +455,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(ForgetScriptExecutionRace) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto scriptExecutionOperation = db.ExecuteScript(R"(
@@ -480,7 +490,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(CancelScriptExecution) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto scriptExecutionOperation = db.ExecuteScript(R"(
@@ -533,7 +543,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     void ExecuteScriptWithSettings(const TExecuteScriptSettings& settings, EExecStatus status, TString query = "SELECT 1;") {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto op = db.ExecuteScript(query, settings).ExtractValueSync();
@@ -574,7 +584,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
 
         settings = TExecuteScriptSettings().CancelAfterWithTimeout(TDuration::Seconds(100), TDuration::MilliSeconds(1));
         {
-            auto kikimr = DefaultKikimrRunner();
+            auto kikimr = MakeScriptKikimrRunner();
             auto op = kikimr.GetQueryClient().ExecuteScript(query, settings).ExtractValueSync();
             auto readyOp = WaitScriptExecutionOperation(op.Id(), kikimr.GetDriver());
             UNIT_ASSERT_C(readyOp.Ready(), readyOp.Status().GetIssues().ToString());
@@ -593,7 +603,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     void CheckScriptOperationExpires(const TExecuteScriptSettings &settings) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto scriptExecutionOperation = db.ExecuteScript(R"(
@@ -626,7 +636,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     void CheckScriptResultsExpire(const TExecuteScriptSettings& settings) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto scriptExecutionOperation = db.ExecuteScript(R"(
@@ -690,7 +700,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(InvalidFetchToken) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
         auto scriptExecutionOperation = CreateScriptExecutionOperation(1, db, kikimr.GetDriver());
 
@@ -702,7 +712,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(EmptyNextFetchToken) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         constexpr size_t NUMBER_OF_ROWS = 10;
@@ -720,7 +730,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(TestPaging) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         constexpr size_t NUMBER_OF_ROWS = 10;
@@ -752,7 +762,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->set_scriptresultrowslimit(ROWS_LIMIT);
 
-        auto kikimr = DefaultKikimrRunner({}, appCfg);
+        auto kikimr = MakeScriptKikimrRunner(appCfg);
         auto db = kikimr.GetQueryClient();
 
         auto scriptExecutionOperationTruncated = CreateScriptExecutionOperation(ROWS_LIMIT + 1, db, kikimr.GetDriver());
@@ -772,7 +782,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->set_scriptresultsizelimit(NUMER_ROWS / 2);
 
-        auto kikimr = DefaultKikimrRunner({}, appCfg);
+        auto kikimr = MakeScriptKikimrRunner(appCfg);
         auto db = kikimr.GetQueryClient();
 
         auto scriptExecutionOperation = CreateScriptExecutionOperation(NUMER_ROWS, db, kikimr.GetDriver());
@@ -790,7 +800,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableTableServiceConfig()->MutableQueryLimits()->set_resultrowslimit(ROWS_LIMIT);
 
-        auto kikimr = DefaultKikimrRunner({}, appCfg);
+        auto kikimr = MakeScriptKikimrRunner(appCfg);
         auto db = kikimr.GetQueryClient();
         auto scriptExecutionOperation = CreateScriptExecutionOperation(NUMER_BATCHES * ROWS_LIMIT + 1, db, kikimr.GetDriver());
 
@@ -809,7 +819,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     }
 
     Y_UNIT_TEST(Tcl) {
-        auto kikimr = DefaultKikimrRunner();
+        auto kikimr = MakeScriptKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto op = db.ExecuteScript(R"(
@@ -838,7 +848,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         appCfg.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMinSize(0);
         appCfg.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMethod("zstd_6");
 
-        auto kikimr = DefaultKikimrRunner({}, appCfg);
+        auto kikimr = MakeScriptKikimrRunner(appCfg);
         auto db = kikimr.GetQueryClient();
         auto scriptExecutionOperation = CreateScriptExecutionOperation(1, db, kikimr.GetDriver());
 

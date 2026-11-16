@@ -37,6 +37,7 @@ public:
         TFqSetupSettings settings;
         settings.VerbosityLevel = TFqSetupSettings::EVerbosity::InitLogs;
         settings.EnableYdbCompute = true;
+        settings.AppConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(false);
 
         auto& logConfig = *settings.AppConfig.MutableLogConfig();
         logConfig.SetDefaultLevel(NLog::EPriority::PRI_WARN);

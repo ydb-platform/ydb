@@ -354,7 +354,7 @@ message TFeatureFlags {
     optional bool EnableSuperLemmer = 319 [default = false];
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
-<<<<<<< HEAD
+    optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
     // Bumps GROUP BY HOP state version to 3
     optional bool EnableHoppingWindowStartCheck = 346 [default = false];
     // Creates asynchronous indexes on newly created asynchronous replication destinations.
@@ -365,14 +365,4 @@ message TFeatureFlags {
     // Allows persisting Waiting for column-table imports with unresolved dependencies.
     // Enable only after the rollback version supports resuming these imports.
     optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
-=======
-    optional bool EnableInsecureMirrorFactory = 322 [default = false];
-    optional bool EnableDataShardUncommittedWriteSeqNum = 323 [default = true];
-    // VDisk: allocate huge blobs (and small SSTs) as variable-size stripes instead of
-    // size-class slots. Reads of the stripe format work even when this flag is off.
-    optional bool EnableVDiskHeapAllocator = 324 [default = false, (RequireRestart) = true];
-    optional bool EnableCheckpointsCompression = 325 [default = false];
-    optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
-    optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
->>>>>>> 5be34f5c2d8 (dq streamlookup / kikimr lookup: use QueryService (#44586))
 }

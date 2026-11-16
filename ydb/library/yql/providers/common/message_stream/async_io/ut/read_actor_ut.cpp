@@ -56,6 +56,37 @@ public:
 }   // namespace
 
 Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
+    Y_UNIT_TEST(ReadLagIsAbsentWithoutWriteTime) {
+        TFixture f;
+        f.Client->SupportsWriteTime = false;
+        f.Init(true);
+        f.Start(std::nullopt);
+        f.Data(0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Read().size(), 1);
+        f.Setup.Execute([&](TFakeActor& actor) {
+            UNIT_ASSERT(!actor.DqAsyncInput->GetIngressStats().MaxReadLagMs);
+        });
+    }
+
+    Y_UNIT_TEST(ReadLagMeasuresServerWriteTimeAndSurvivesStatsReads) {
+        TFixture f;
+        f.Init(true, true);
+        f.Start(std::nullopt);
+        TMessageStreamRecord record;
+        record.Id.PartitionId = f.Control->GetPartitionId();
+        record.Id.Offset = 0;
+        record.Data = "payload";
+        record.WriteTime = TInstant::Now() - TDuration::Seconds(3);
+        f.Session->Events.emplace_back(TMessageStreamDataEvent{ f.Control, { std::move(record) } });
+        UNIT_ASSERT_VALUES_EQUAL(f.Read().size(), 1);
+        f.Setup.Execute([&](TFakeActor& actor) {
+            const auto lag = actor.DqAsyncInput->GetIngressStats().MaxReadLagMs;
+            UNIT_ASSERT(lag);
+            UNIT_ASSERT_GE(*lag, TDuration::Seconds(3).MilliSeconds());
+            UNIT_ASSERT_LT(*lag, TDuration::Minutes(1).MilliSeconds());
+            UNIT_ASSERT_VALUES_EQUAL(*actor.DqAsyncInput->GetIngressStats().MaxReadLagMs, *lag);
+        });
+    }
     Y_UNIT_TEST(AllocatorIsRequired) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(CreateMessageStreamReadActor(TMessageStreamReadActorSettings{}, std::make_unique<TState>()), yexception,
             "Message stream read actor requires an allocator");

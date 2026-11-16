@@ -400,6 +400,54 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WaitForRowDispatcherMemoryLimit(*this, "SimdJsonMemory");
     }
 
+    Y_UNIT_TEST_TWIN_F(StreamingQueryMaxReadLag, SharedReading, TStreamingTestFixture) {
+        auto* flags = SetupAppConfig().MutableFeatureFlags();
+        flags->SetEnableStreamingQueriesCounters(true);
+        flags->SetEnableSharedReadingInStreamingQueries(true);
+        flags->SetEnableStreamingQueryReadFrom(true);
+        const auto inputTopic = MakeExternalName("readLagInput");
+        const auto outputTopic = MakeExternalName("readLagOutput");
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
+        ExecQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE lag_source WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{endpoint}",
+                DATABASE_NAME = "{database}",
+                AUTH_METHOD = "NONE",
+                SHARED_READING = "{shared}"
+            );
+            CREATE STREAMING QUERY lag_query WITH (READ_FROM = EARLIEST) AS DO BEGIN
+                INSERT INTO lag_source.`{output}` SELECT Data FROM lag_source.`{input}`;
+            END DO;
+        )", "endpoint"_a = YDB_ENDPOINT, "database"_a = YDB_DATABASE, "shared"_a = SharedReading ? "true" : "false", "input"_a = inputTopic,
+            "output"_a = outputTopic));
+        CheckScriptExecutionsCount(1, 1);
+        WriteTopicMessage(inputTopic, "message");
+        ReadTopicMessage(outputTopic, "message");
+
+        NMonitoring::TDynamicCounters::TCounterPtr lag;
+        WaitFor(TDuration::Seconds(60), "streaming query read lag sensor", [&] {
+            for (ui32 node = 0; node < GetRuntime().GetNodeCount(); ++node) {
+                auto group = GetCounters("kqp", node)->FindSubgroup("subsystem", "streaming_queries");
+                if (group) {
+                    group = group->FindSubgroup("host", "");
+                }
+                if (group) {
+                    group = group->FindSubgroup("path", "/Root/lag_query");
+                }
+                if (group) {
+                    lag = group->FindCounter("max_read_lag");
+                    if (lag) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
+        UNIT_ASSERT_LT(lag->Val(), TDuration::Minutes(1).MilliSeconds());
+    }
+
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 

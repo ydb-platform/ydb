@@ -35,6 +35,7 @@ message TDqAsyncBufferStats {
     uint64 FilteredRows = 13;
     uint64 QueuedBytes = 14;
     uint64 QueuedRows = 15;
+    optional uint64 MaxReadLagMs = 16; // source window snapshot, milliseconds
 }
 
 message TDqStatsAggr {
@@ -257,6 +258,7 @@ message TDqTaskStats {
     uint64 IngressFilteredRows = 24;
     uint64 IngressQueuedBytes = 25;
     uint64 IngressQueuedRows = 26;
+    optional uint64 MaxReadLagMs = 27; // maximum across source snapshots, milliseconds
 
     // full stats
     repeated TDqAsyncInputBufferStats Sources = 150;

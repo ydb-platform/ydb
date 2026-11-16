@@ -1360,7 +1360,11 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
         ui64 filteredRows = 0;
         ui64 queuedBytes = 0;
         ui64 queuedRows = 0;
+        std::optional<ui64> maxReadLagMs;
         for (auto& [partitionId, partition] : consumer->Partitions) {
+            if (partition.Stat.MaxReadLagMs) {
+                maxReadLagMs = Max(maxReadLagMs.value_or(0), *partition.Stat.MaxReadLagMs);
+            }
             if (!partition.StatisticsUpdated) {
                 continue;
             }
@@ -1384,6 +1388,9 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
         event->Record.SetFilteredRows(filteredRows);
         event->Record.SetQueuedBytes(queuedBytes);
         event->Record.SetQueuedRows(queuedRows);
+        if (maxReadLagMs) {
+            event->Record.SetMaxReadLagMs(*maxReadLagMs);
+        }
         LWPROBE(Statistics, consumer->ReadActorId.ToString(), consumer->QueryId, consumer->Generation, event->Record.ByteSizeLong());
         consumer->EventsQueue.Send(event.release(), consumer->Generation);
     }

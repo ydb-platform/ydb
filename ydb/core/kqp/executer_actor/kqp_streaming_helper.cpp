@@ -30,31 +30,42 @@ public:
         TaskCount->Set(stats.TasksCount);
         InputBytes->Set(stats.InputBytes);
         OutputBytes->Set(stats.OutputBytes);
+        if (stats.MaxReadLagMs) {
+            if (!MaxReadLag) {
+                MaxReadLag = QueryGroup->GetCounter("max_read_lag");
+            }
+            MaxReadLag->Set(*stats.MaxReadLagMs);
+        } else if (MaxReadLag) {
+            QueryGroup->RemoveCounter("max_read_lag");
+            MaxReadLag.Reset();
+        }
     }
 
 private:
     void Init() {
         SubGroup = Counters->GetSubgroup("subsystem", "streaming_queries");
         HostGroup = SubGroup->GetSubgroup("host", "");
-        auto queryGroup = HostGroup->GetSubgroup("path", Path);
-        CpuMs = queryGroup->GetCounter("streaming.query.cpu.usage.milliseconds", true);
-        MemoryUsageBytes = queryGroup->GetCounter("streaming.query.memory.usage.bytes");
-        UptimeSeconds = queryGroup->GetCounter("streaming.query.uptime.seconds");
-        TaskCount = queryGroup->GetCounter("streaming.query.tasks.count");
-        InputBytes = queryGroup->GetCounter("streaming.query.input.bytes", true);
-        OutputBytes = queryGroup->GetCounter("streaming.query.output.bytes", true);
+        QueryGroup = HostGroup->GetSubgroup("path", Path);
+        CpuMs = QueryGroup->GetCounter("streaming.query.cpu.usage.milliseconds", true);
+        MemoryUsageBytes = QueryGroup->GetCounter("streaming.query.memory.usage.bytes");
+        UptimeSeconds = QueryGroup->GetCounter("streaming.query.uptime.seconds");
+        TaskCount = QueryGroup->GetCounter("streaming.query.tasks.count");
+        InputBytes = QueryGroup->GetCounter("streaming.query.input.bytes", true);
+        OutputBytes = QueryGroup->GetCounter("streaming.query.output.bytes", true);
     }
 
 private:
     const TString Path;
     ::NMonitoring::TDynamicCounterPtr SubGroup;
     ::NMonitoring::TDynamicCounterPtr HostGroup;
+    ::NMonitoring::TDynamicCounterPtr QueryGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr CpuMs;
     ::NMonitoring::TDynamicCounters::TCounterPtr MemoryUsageBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr UptimeSeconds;
     ::NMonitoring::TDynamicCounters::TCounterPtr TaskCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MaxReadLag; // milliseconds
     const ::NMonitoring::TDynamicCounterPtr Counters;
 };
 

@@ -2,6 +2,7 @@ YQL_LIBRARY()
 SRCS(read_actor.cpp)
 PEERDIR(
     library/cpp/containers/disjoint_interval_tree
+    library/cpp/sliding_window
     ydb/library/actors/core
     ydb/library/services
     ydb/library/yql/providers/abstract

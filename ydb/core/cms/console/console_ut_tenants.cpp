@@ -9,13 +9,16 @@
 #include <ydb/core/mind/tenant_slot_broker.h>
 #include <ydb/core/mind/tenant_slot_broker_impl.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <util/generic/string.h>
+#include <util/generic/algorithm.h>
 #include <util/random/random.h>
 
 #include <algorithm>
@@ -2136,6 +2139,36 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           Ydb::StatusIds::UNAUTHORIZED,
                           {{"hdd", 1}},
                           SLOT1_TYPE, ZONE1, 1);
+    }
+
+    Y_UNIT_TEST(TestRemoveTenantAuditAccessDenied) {
+        std::vector<std::string> auditLines;
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        runtime.RegisterService(NAudit::MakeAuditServiceID(), runtime.Register(
+            NAudit::CreateAuditWriter(Tests::CreateTestAuditLogBackends(auditLines)).release()));
+        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}});
+
+        TString proxyIssue;
+        auto observer = runtime.AddObserver<TEvTxUserProxy::TEvProposeTransactionStatus>([&](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetStatus() == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied) {
+                UNIT_ASSERT(record.GetSchemeShardReason().empty());
+                proxyIssue = NYql::IssuesFromMessageAsString(record.GetIssues());
+            }
+        });
+        CheckRemoveTenant(runtime, TENANT1_1_NAME,
+            NACLib::TUserToken("user1@builtin", {}).SerializeAsString(), Ydb::StatusIds::UNAUTHORIZED);
+        UNIT_ASSERT_STRING_CONTAINS(proxyIssue, "Access denied for user1@builtin on path /dc-1");
+
+        runtime.WaitFor("database removal failure audit record", [&] {
+            return AnyOf(auditLines, [](const auto& line) {
+                return line.find("operation=END REMOVE DATABASE") != std::string::npos;
+            });
+        }, TDuration::Seconds(10));
+        const auto line = Tests::FindAuditLine(auditLines, "operation=END REMOVE DATABASE");
+        UNIT_ASSERT_STRING_CONTAINS(line, "status=ERROR");
+        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "database=" << TENANT1_1_NAME);
+        UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << "reason=" << proxyIssue);
     }
 
     void RunTestAlterTenantTooManyStorageResourcesForRunning(TTenantTestRuntime& runtime) {

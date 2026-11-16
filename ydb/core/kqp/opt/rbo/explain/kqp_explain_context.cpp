@@ -7,6 +7,18 @@
 
 namespace NKikimr::NKqp {
 
+TExplainContext::TExplainContext() = default;
+TExplainContext::~TExplainContext() = default;
+
+NEval::TSession& TExplainContext::Evaluation() noexcept {
+    return Evaluation_;
+}
+
+TString TExplainContext::DescribeOpaqueExpression(const NYql::TExprNode::TPtr& node) {
+    // Resource exhaustion must not start a second traversal with a fresh budget.
+    return TStringBuilder() << UnknownExpressionName(node) << "(…)";
+}
+
 TString TExplainContext::UnknownExpressionName(const NYql::TExprNode::TPtr& node) {
     auto [it, inserted] = UnknownExpressions_.try_emplace(node);
     if (inserted) {

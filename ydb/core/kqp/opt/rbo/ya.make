@@ -47,6 +47,7 @@ PEERDIR(
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
+    ydb/core/kqp/opt/rbo/eval
     ydb/core/kqp/opt/rbo/html_log
     ydb/core/kqp/opt/rbo/physical_conversion
     ydb/core/kqp/opt/rbo/rules
@@ -71,4 +72,5 @@ END()
 RECURSE_FOR_TESTS(
     ut
     explain/ut
+    eval/ut
 )

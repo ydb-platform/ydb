@@ -1,6 +1,7 @@
 #include "kqp_read_ranges_explain.h"
 
 #include "../kqp_info_unit.h"
+#include "../eval/kqp_eval.h"
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
@@ -39,8 +40,6 @@ namespace {
 constexpr size_t MaxDescribedPoints = 10;
 constexpr size_t MaxRangeDepth = 64;
 constexpr size_t MaxRangeKeyColumns = 64;
-constexpr size_t MaxRangeEvaluationSteps = MaxRangeEvaluationNodes * 2;
-constexpr size_t MaxRangeEvaluationWork = 64 * 1024;
 
 bool FitsInputBudget(const TExprNode& root);
 bool IsIntegerSlot(EDataSlot slot);
@@ -177,6 +176,13 @@ std::optional<TKeyValue> ParseData(const TExprNode& node) {
     if (!slot || node.ChildrenSize() != (*slot == EDataSlot::Decimal ? 3u : 1u) || !node.Head().IsAtom()) {
         return std::nullopt;
     }
+    // A refused binary numeric literal must not be reinterpreted as text by
+    // explain's structural fallback. String-like payloads already contain bytes.
+    if ((node.Head().Flags() & TNodeFlags::BinaryContent) &&
+        *slot != EDataSlot::String && *slot != EDataSlot::Utf8 && *slot != EDataSlot::Uuid) {
+        return std::nullopt;
+    }
+
     const TStringBuf text = node.Head().Content();
     TKeyValue result{.Kind = TKeyValue::EKind::Data, .Slot = *slot};
     std::optional<NUdf::TUnboxedValuePod> value;
@@ -231,6 +237,11 @@ std::optional<TKeyValue> ParseData(const TExprNode& node) {
     if (!value) {
         return std::nullopt;
     }
+    if ((*slot == EDataSlot::Interval && !NUdf::IsValidLayoutValue<NUdf::TInterval>(value->Get<i64>())) ||
+        (*slot == EDataSlot::Interval64 && !NUdf::IsValidLayoutValue<NUdf::TInterval64>(value->Get<i64>()))) {
+        return std::nullopt;
+    }
+
     result.Value = *value;
     return result;
 }
@@ -247,15 +258,17 @@ TString QuoteText(TStringBuf text) {
     // Keep valid UTF-8 readable, escaping only what breaks the quoted form.
     TStringBuilder result;
     result << '"';
-    for (const char c : text) {
-        if (c == '"' || c == '\\') {
-            result << '\\' << c;
-        } else if (static_cast<unsigned char>(c) < 0x20 || c == 0x7f) {
-            result << EscapeC(TStringBuf(&c, 1));
-        } else {
-            result << c;
-        }
+    size_t begin = 0;
+    for (size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (c != '"' && c != '\\' && static_cast<unsigned char>(c) >= 0x20 && c != 0x7f) continue;
+        result << text.SubStr(begin, i - begin);
+        if (c == '"' || c == '\\') result << '\\' << c;
+        else result << EscapeC(TStringBuf(&c, 1));
+        RequireRange(result.size() <= MaxRangeEvaluationBytes);
+        begin = i + 1;
     }
+    result << text.SubStr(begin);
     result << '"';
     return result;
 }
@@ -277,7 +290,8 @@ TString FormatFloat(T value) {
 
 std::optional<TBoundary> ParseBoundary(const TExprNode& node, bool isLeft) {
     if (!node.IsList() || node.ChildrenSize() < 2 || !node.Tail().IsCallable("Int32")
-        || node.Tail().ChildrenSize() != 1 || !node.Tail().Head().IsAtom()) {
+        || node.Tail().ChildrenSize() != 1 || !node.Tail().Head().IsAtom()
+        || (node.Tail().Head().Flags() & TNodeFlags::BinaryContent)) {
         return std::nullopt;
     }
     i32 included;
@@ -286,24 +300,11 @@ std::optional<TBoundary> ParseBoundary(const TExprNode& node, bool isLeft) {
     }
     TVector<TBoundaryElement> elements;
     for (size_t i = 0; i + 1 < node.ChildrenSize(); ++i) {
-        // An empty outer Optional is an infinity. Only Just of an empty Optional, or an empty Optional cast to a nested
-        // Optional, is a finite NULL.
+        // An empty outer Optional is an infinity; Just of an empty Optional is
+        // a finite NULL. Casts are left to the evaluator, which checks both types.
         const auto& element = node.ChildPtr(i);
         if (element->IsCallable("Nothing") && element->ChildrenSize() == 1) {
             elements.push_back({.Infinite = !element->Head().IsCallable("PgType")});
-            continue;
-        }
-        if (element->IsCallable({"SafeCast", "StrictCast"}) && element->ChildrenSize() == 2 && element->Head().IsCallable("Nothing")) {
-            const TExprNode* type = &element->Tail();
-            size_t depth = 0;
-            while (type->IsCallable("OptionalType") && type->ChildrenSize() == 1) {
-                ++depth;
-                type = &type->Head();
-            }
-            if (!depth) {
-                return std::nullopt;
-            }
-            elements.push_back({.Infinite = depth == 1});
             continue;
         }
         auto value = ParseKeyValue(element);
@@ -491,6 +492,13 @@ std::optional<TRangeList> ParseRangeEmpty(const TExprNode& node) {
 }
 
 TString FormatRange(const TRange& range, TConstArrayRef<TString> keyColumns) {
+    size_t remaining = MaxRangeEvaluationBytes;
+    for (const auto* bound : {&range.Left, &range.Right}) {
+        for (const auto& c : bound->Components) {
+            RequireRange(c.Value.Bytes.size() <= remaining);
+            remaining -= c.Value.Bytes.size();
+        }
+    }
     return TStringBuilder()
         << (IsBoundaryRead(range.Left, keyColumns.size()) ? '[' : '(') << FormatBoundary(range.Left, true, keyColumns) << ", "
         << FormatBoundary(range.Right, false, keyColumns) << (IsBoundaryRead(range.Right, keyColumns.size()) ? ']' : ')');
@@ -1238,384 +1246,6 @@ std::optional<std::pair<TInt128, TInt128>> IntegerLimits(EDataSlot slot) {
     }
 }
 
-TKeyValue IntegerValue(EDataSlot slot, TInt128 value) {
-    TKeyValue result{.Kind = TKeyValue::EKind::Data, .Slot = slot};
-    switch (slot) {
-        case EDataSlot::Int8: result.Value = NUdf::TUnboxedValuePod(i8(value)); break;
-        case EDataSlot::Uint8: result.Value = NUdf::TUnboxedValuePod(ui8(value)); break;
-        case EDataSlot::Int16: result.Value = NUdf::TUnboxedValuePod(i16(value)); break;
-        case EDataSlot::Uint16: result.Value = NUdf::TUnboxedValuePod(ui16(value)); break;
-        case EDataSlot::Int32:
-        case EDataSlot::Date32: result.Value = NUdf::TUnboxedValuePod(i32(value)); break;
-        case EDataSlot::Uint32:
-        case EDataSlot::Datetime: result.Value = NUdf::TUnboxedValuePod(ui32(value)); break;
-        case EDataSlot::Date: result.Value = NUdf::TUnboxedValuePod(ui16(value)); break;
-        case EDataSlot::Int64:
-        case EDataSlot::Datetime64:
-        case EDataSlot::Timestamp64: result.Value = NUdf::TUnboxedValuePod(i64(value)); break;
-        case EDataSlot::Uint64:
-        case EDataSlot::Timestamp: result.Value = NUdf::TUnboxedValuePod(ui64(value)); break;
-        default: throw TUnsupportedRange{};
-    }
-    return result;
-}
-
-bool IsInterpretedSlot(EDataSlot slot) {
-    return IntegerLimits(slot) || slot == EDataSlot::Interval || slot == EDataSlot::Interval64
-        || slot == EDataSlot::Bool || slot == EDataSlot::String || slot == EDataSlot::Utf8 || slot == EDataSlot::Uuid;
-}
-
-bool IsInterpretedValue(const TKeyValue& value) {
-    return value.Kind == TKeyValue::EKind::Null || (value.Kind == TKeyValue::EKind::Data
-        && IsInterpretedSlot(value.Slot) && (value.Slot != EDataSlot::Uuid || value.Bytes.size() == 16));
-}
-
-int CompareKeys(const TKeyValue& a, const TKeyValue& b) {
-    RequireRange(IsInterpretedValue(a) && IsInterpretedValue(b));
-    if (a.Kind == TKeyValue::EKind::Null || b.Kind == TKeyValue::EKind::Null) {
-        return int(b.Kind == TKeyValue::EKind::Null) - int(a.Kind == TKeyValue::EKind::Null);
-    }
-    RequireRange(a.Slot == b.Slot);
-    if (const auto av = GetInteger(a)) {
-        const auto bv = *GetInteger(b);
-        return (*av > bv) - (*av < bv);
-    }
-    if (a.Slot == EDataSlot::Bool) {
-        return int(a.Value.Get<bool>()) - int(b.Value.Get<bool>());
-    }
-    return a.Bytes.compare(b.Bytes);
-}
-
-int CompareBounds(const TBoundary& a, const TBoundary& b, bool inclusion = true) {
-    RequireRange(a.Components.size() == b.Components.size());
-    for (size_t i = 0; i < a.Components.size(); ++i) {
-        const auto& x = a.Components[i];
-        const auto& y = b.Components[i];
-        if (x.Inf != y.Inf) return x.Inf < y.Inf ? -1 : 1;
-        if (x.Inf) break;
-        if (const int cmp = CompareKeys(x.Value, y.Value)) return cmp;
-    }
-    return inclusion ? (a.Included > b.Included) - (a.Included < b.Included) : 0;
-}
-
-bool EmptyRange(const TRange& range) {
-    return CompareBounds(range.Left, range.Right) >= 0 ||
-        (CompareBounds(range.Left, range.Right, false) == 0 && (!range.Left.Included || !range.Right.Included));
-}
-
-void NormalizeRanges(TRangeList& list) {
-    RequireRange(list.Width <= MaxRangeKeyColumns && list.Ranges.size() <= MaxEvaluatedRangeInputs);
-    for (const auto& range : list.Ranges) {
-        RequireRange(range.Left.Components.size() == list.Width && range.Right.Components.size() == list.Width);
-        for (const auto* bound : {&range.Left, &range.Right}) {
-            for (const auto& component : bound->Components) {
-                RequireRange(component.Inf || IsInterpretedValue(component.Value));
-            }
-        }
-    }
-    Sort(list.Ranges, [](const TRange& a, const TRange& b) { return CompareBounds(a.Left, b.Left) < 0; });
-    TVector<TRange> merged;
-    for (auto& range : list.Ranges) {
-        if (EmptyRange(range)) continue;
-        if (!merged.empty() && CompareBounds(range.Left, merged.back().Right) < 0) {
-            if (CompareBounds(range.Right, merged.back().Right) > 0) merged.back().Right = std::move(range.Right);
-        } else {
-            merged.push_back(std::move(range));
-        }
-    }
-    list.Ranges = std::move(merged);
-}
-
-void FinalizeRanges(TRangeList& list) {
-    for (auto& range : list.Ranges) {
-        if (bool(range.Left.Included) == bool(range.Right.Included)) continue;
-        size_t finite = 0;
-        while (finite < list.Width && !range.Left.Components[finite].Inf && !range.Right.Components[finite].Inf) ++finite;
-        if (!finite || (finite < list.Width && (!range.Left.Components[finite].Inf || !range.Right.Components[finite].Inf))) continue;
-        bool equalPrefix = true;
-        for (size_t i = 0; i + 1 < finite; ++i) {
-            equalPrefix &= CompareKeys(range.Left.Components[i].Value, range.Right.Components[i].Value) == 0;
-        }
-        const auto& left = range.Left.Components[finite - 1].Value;
-        const auto& right = range.Right.Components[finite - 1].Value;
-        if (!equalPrefix || left.Kind != TKeyValue::EKind::Data || right.Kind != TKeyValue::EKind::Data
-            || left.Slot != right.Slot || !IntegerLimits(left.Slot) || *GetInteger(right) - *GetInteger(left) != 1) continue;
-        const auto point = range.Left.Included ? range.Left : range.Right;
-        range.Left = range.Right = point;
-        range.Left.Included = -1;
-        range.Right.Included = 1;
-        for (size_t i = finite; i < list.Width; ++i) {
-            range.Left.Components[i].Inf = -1;
-            range.Right.Components[i].Inf = 1;
-        }
-    }
-}
-
-struct TRangeKeyType {
-    EDataSlot Slot;
-    bool Nullable = false;
-};
-
-TRangeKeyType RangeKeyType(const TExprNode& node) {
-    const TExprNode* type = &node;
-    const bool nullable = type->IsCallable("OptionalType") && type->ChildrenSize() == 1;
-    if (nullable) type = &type->Head();
-    RequireRange(type->IsCallable("DataType") && type->ChildrenSize() == 1);
-    const auto slot = NUdf::FindDataSlot(type->Head().Content());
-    RequireRange(bool(slot));
-    RequireRange(IsInterpretedSlot(*slot));
-    return {*slot, nullable};
-}
-
-TKeyValue LiteralValue(const TExprNode::TPtr& node) {
-    const auto value = ParseKeyValue(node);
-    RequireRange(value && IsInterpretedValue(*value));
-    return *value;
-}
-
-TRangeList InterpretRangeFor(TStringBuf op, TKeyValue value, const TExprNode& typeNode) {
-    const auto type = RangeKeyType(typeNode);
-    const TBoundary low{{type.Nullable ? TComponent{.Value = {}} : TComponent{.Inf = -1}}, 0};
-    const TBoundary high{{TComponent{.Inf = 1}}, 0};
-    if (op == "Exists" || op == "NotExists") {
-        RequireRange(type.Nullable);
-        return op == "Exists" ? TRangeList{{{low, high}}, 1}
-            : TRangeList{{{TBoundary{{TComponent{}}, -1}, TBoundary{{TComponent{}}, 1}}}, 1};
-    }
-    RequireRange(op == "==" || op == "===" || op == "!=" || op == "<" || op == "<="
-        || op == ">" || op == ">=" || op == "StartsWith" || op == "NotStartsWith");
-    if (value.Kind == TKeyValue::EKind::Null) {
-        RequireRange(op == "==" || op == "===");
-        return {{}, 1};
-    }
-    if (IsIntegerSlot(type.Slot) && IsIntegerSlot(value.Slot)) {
-        const auto integer = *GetInteger(value);
-        const auto [min, max] = *IntegerLimits(type.Slot);
-        if (integer < min || integer > max) {
-            if (op == "!=") return {{{low, high}}, 1};
-            if ((integer > max && (op == "<" || op == "<=")) || (integer < min && (op == ">" || op == ">="))) {
-                value = IntegerValue(type.Slot, integer > max ? max : min);
-                op = integer > max ? "<=" : ">=";
-            } else {
-                RequireRange(op == "==" || op == "===" || op == "<" || op == "<=" || op == ">" || op == ">=");
-                return {{}, 1};
-            }
-        } else {
-            value = IntegerValue(type.Slot, integer);
-        }
-    } else if ((type.Slot == EDataSlot::String || type.Slot == EDataSlot::Utf8)
-        && (value.Slot == EDataSlot::String || value.Slot == EDataSlot::Utf8)) {
-        RequireRange(type.Slot != EDataSlot::Utf8 || IsUtf(value.Bytes));
-        value.Slot = type.Slot;
-    } else {
-        RequireRange(value.Slot == type.Slot);
-    }
-    if (const auto limits = IntegerLimits(value.Slot)) {
-        RequireRange(*GetInteger(value) >= limits->first && *GetInteger(value) <= limits->second);
-    }
-    const TBoundary open{{TComponent{.Value = value}}, 0};
-    const TBoundary left{{TComponent{.Value = value}}, -1};
-    const TBoundary right{{TComponent{.Value = value}}, 1};
-    if (op == "StartsWith" || op == "NotStartsWith") {
-        RequireRange(type.Slot == EDataSlot::String || type.Slot == EDataSlot::Utf8);
-        const std::string_view text(value.Bytes.data(), value.Bytes.size());
-        const auto next = type.Slot == EDataSlot::Utf8 ? NYql::NextValidUtf8(text) : NYql::NextLexicographicString(text);
-        TBoundary upper = high;
-        if (next) {
-            value.Bytes = TString(*next);
-            upper = TBoundary{{TComponent{.Value = value}}, 0};
-        }
-        if (op == "StartsWith") return {{{left, upper}}, 1};
-        TRangeList result{{{low, open}}, 1};
-        if (next) {
-            upper.Included = -1;
-            result.Ranges.push_back({upper, high});
-        }
-        return result;
-    }
-    if (op == "===") {
-        if (const auto limits = IntegerLimits(type.Slot); limits && *GetInteger(value) < limits->second) {
-            return {{{left, TBoundary{{TComponent{.Value = IntegerValue(type.Slot, *GetInteger(value) + 1)}}, 0}}}, 1};
-        }
-        op = "==";
-    }
-    if (op == "==") return {{{left, right}}, 1};
-    if (op == "!=") return {{{low, open}, {open, high}}, 1};
-    if (op == "<") return {{{low, open}}, 1};
-    if (op == "<=") return {{{low, right}}, 1};
-    if (op == ">") return {{{open, high}}, 1};
-    return {{{left, high}}, 1};
-}
-
-// Operations on range lists use the whole composite boundary, never independent per-column intervals.
-TRangeList MultiplyRanges(TRangeList first, const TRangeList& second, ui64 limit) {
-    RequireRange(first.Width + second.Width <= MaxRangeKeyColumns);
-    TVector<TRange> result;
-    for (const auto& a : first.Ranges) {
-        if (second.Ranges.empty()) break;
-        if (a.Left.Included && a.Right.Included && CompareBounds(a.Left, a.Right, false) == 0) {
-            RequireRange(second.Ranges.size() <= Min<ui64>(limit, MaxEvaluatedRangeInputs) - result.size());
-            for (const auto& b : second.Ranges) {
-                auto append = [](TBoundary prefix, const TBoundary& suffix) {
-                    RequireRange(!suffix.Components.empty());
-                    if (!suffix.Components.front().Inf) prefix.Included = suffix.Included;
-                    prefix.Components.insert(prefix.Components.end(), suffix.Components.begin(), suffix.Components.end());
-                    return prefix;
-                };
-                result.push_back({append(a.Left, b.Left), append(a.Right, b.Right)});
-            }
-        } else {
-            RequireRange(result.size() < Min<ui64>(limit, MaxEvaluatedRangeInputs));
-            auto padded = a;
-            for (size_t i = 0; i < second.Width; ++i) {
-                padded.Left.Components.push_back({.Inf = GetInfSign(a.Left.HasPrefix(), a.Left.Included != 0, true)});
-                padded.Right.Components.push_back({.Inf = GetInfSign(a.Right.HasPrefix(), a.Right.Included != 0, false)});
-            }
-            result.push_back(std::move(padded));
-        }
-    }
-    return {std::move(result), first.Width + second.Width};
-}
-
-ui64 RangeCountLiteral(const TExprNode& node) {
-    ui64 value = 0;
-    RequireRange(node.IsCallable("Uint64") && node.ChildrenSize() == 1 && TryFromString(node.Head().Content(), value));
-    return value;
-}
-
-class TRangeInterpreter {
-public:
-    TRangeList Evaluate(const TExprNode::TPtr& node) {
-        RequireRange(++Steps_ <= MaxRangeEvaluationSteps);
-        TRangeList result;
-        if (node->IsCallable("RangeFinalize") && node->ChildrenSize() == 1) {
-            result = Evaluate(node->HeadPtr());
-            FinalizeRanges(result);
-        } else if (node->IsCallable("AsRange")) {
-            size_t literalBytes = 0;
-            auto list = ParseAsRange(*node, &literalBytes);
-            RequireRange(bool(list));
-            Spend(literalBytes);
-            result = std::move(*list);
-        } else if (node->IsCallable("RangeEmpty") && node->ChildrenSize() == 1) {
-            const auto empty = ParseRangeEmpty(*node);
-            RequireRange(empty.has_value());
-            result = *empty;
-        } else if (node->IsCallable("RangeFor") && node->ChildrenSize() == 3) {
-            result = InterpretRangeFor(node->Head().Content(), node->Head().IsAtom({"Exists", "NotExists"})
-                ? TKeyValue{} : ReadLiteral(node->ChildPtr(1)), node->Tail());
-        } else if (node->IsCallable({"RangeUnion", "RangeIntersect"}) && node->ChildrenSize()) {
-            result = Evaluate(node->HeadPtr());
-            for (size_t i = 1; i < node->ChildrenSize(); ++i) {
-                auto next = Evaluate(node->ChildPtr(i));
-                RequireRange(result.Width == next.Width);
-                if (node->IsCallable("RangeUnion")) {
-                    RequireRange(result.Ranges.size() + next.Ranges.size() <= MaxEvaluatedRangeInputs);
-                    result.Ranges.insert(result.Ranges.end(), next.Ranges.begin(), next.Ranges.end());
-                } else {
-                    TVector<TRange> intersection;
-                    size_t a = 0, b = 0;
-                    while (a < result.Ranges.size() && b < next.Ranges.size()) {
-                        const auto& x = result.Ranges[a];
-                        const auto& y = next.Ranges[b];
-                        TRange range{CompareBounds(x.Left, y.Left) > 0 ? x.Left : y.Left,
-                                     CompareBounds(x.Right, y.Right) < 0 ? x.Right : y.Right};
-                        if (!EmptyRange(range)) intersection.push_back(std::move(range));
-                        if (CompareBounds(x.Right, y.Right) < 0) ++a; else ++b;
-                    }
-                    result.Ranges = std::move(intersection);
-                }
-                if (node->IsCallable("RangeIntersect")) Normalize(result);
-            }
-        } else if (node->IsCallable("RangeMultiply") && node->ChildrenSize() > 1) {
-            const auto limit = RangeCountLiteral(node->Head());
-            result = Evaluate(node->ChildPtr(1));
-            RequireRange(node->ChildrenSize() > 2 || result.Ranges.size() <= limit);
-            for (size_t i = 2; i < node->ChildrenSize(); ++i) result = Multiply(std::move(result), Evaluate(node->ChildPtr(i)), limit);
-        } else if (node->IsCallable({"If", "IfStrict"}) && node->ChildrenSize() == 3) {
-            const auto condition = ReadLiteral(node->HeadPtr());
-            RequireRange(condition.Kind == TKeyValue::EKind::Data && condition.Slot == EDataSlot::Bool);
-            result = Evaluate(node->ChildPtr(condition.Value.Get<bool>() ? 1 : 2));
-        } else if (node->IsCallable("IfPresent")) {
-            result = SqlIn(node);
-        } else {
-            throw TUnsupportedRange{};
-        }
-        Normalize(result);
-        return result;
-    }
-
-private:
-    void Spend(size_t work) {
-        RequireRange(work <= RemainingWork_);
-        RemainingWork_ -= work;
-    }
-
-    TKeyValue ReadLiteral(const TExprNode::TPtr& node) {
-        const TExprNode* value = node.Get();
-        while (value->IsCallable({"Just", "ToString"}) && value->ChildrenSize() == 1) value = &value->Head();
-        if (value->IsCallable() && NUdf::FindDataSlot(value->Content()) && value->ChildrenSize()) Spend(value->Head().Content().size());
-        return LiteralValue(node);
-    }
-
-    void Normalize(TRangeList& list) {
-        Spend((list.Width + 1) * (list.Ranges.size() + 1));
-        NormalizeRanges(list);
-    }
-
-    TRangeList Multiply(TRangeList first, const TRangeList& second, ui64 limit) {
-        Spend((first.Width + second.Width + 1) * (first.Ranges.size() + second.Ranges.size() + 1));
-        return MultiplyRanges(std::move(first), second, limit);
-    }
-
-    // Only accept the extractor's checked IN template. General Map/FlatMap/IfPresent programs are not interpreted.
-    TRangeList SqlIn(const TExprNode::TPtr& node) {
-        const auto in = MatchSqlInRanges(node);
-        RequireRange(in && in->Items && in->Items->size() <= MaxEvaluatedRangeInputs);
-        const ui64 limit = in->Limit;
-        RequireRange(in->Items->size() <= limit);
-        const auto& multiply = *in->ItemRanges;
-        const auto* tupleTypes = in->TupleTypes;
-        TRangeList result{.Width = in->Columns.size()};
-        for (const auto& item : *in->Items) {
-            RequireRange(++Steps_ <= MaxRangeEvaluationSteps);
-            if (tupleTypes) {
-                RequireRange(item->IsList() && item->ChildrenSize() == tupleTypes->ChildrenSize());
-                // A tuple cast may discard the entire item, including components not used in the key.
-                // Only identity casts of literal tuples are supported here.
-                for (size_t i = 0; i < item->ChildrenSize(); ++i) {
-                    const auto value = ReadLiteral(item->ChildPtr(i));
-                    const auto type = RangeKeyType(*tupleTypes->Child(i));
-                    RequireRange(value.Kind == TKeyValue::EKind::Data && value.Slot == type.Slot);
-                }
-            }
-            TRangeList row;
-            for (size_t i = 0; i < in->Columns.size(); ++i) {
-                const auto value = in->GetValue(item, in->Columns[i]);
-                RequireRange(bool(value));
-                const auto& range = *multiply.Child(i + 1);
-                auto column = InterpretRangeFor(range.Head().Content(), ReadLiteral(value), range.Tail());
-                Normalize(column);
-                row = i ? Multiply(std::move(row), column, limit) : std::move(column);
-            }
-            RequireRange(result.Ranges.size() + row.Ranges.size() <= Min<ui64>(limit, MaxEvaluatedRangeInputs));
-            result.Ranges.insert(result.Ranges.end(), row.Ranges.begin(), row.Ranges.end());
-        }
-        return result;
-    }
-
-    size_t Steps_ = 0;
-    size_t RemainingWork_ = MaxRangeEvaluationWork;
-};
-
-std::optional<TRangeList> InterpretRanges(const TExprNode::TPtr& ranges) {
-    try {
-        return TRangeInterpreter().Evaluate(ranges);
-    } catch (const TUnsupportedRange&) {
-        return std::nullopt;
-    }
-}
-
 bool FitsInputBudget(const TExprNode& root) {
     TVector<std::pair<const TExprNode*, size_t>> pending{{&root, 0}};
     THashMap<const TExprNode*, size_t> depths;
@@ -1676,6 +1306,20 @@ std::optional<TString> DescribeLiteralKeyRange(const TExprNode::TPtr& keyRange, 
     return text.size() <= MaxRangeEvaluationBytes ? std::optional<TString>(std::move(text)) : std::nullopt;
 }
 
+TRange DisplayRange(const NEval::TRange& source) {
+    const auto boundary = [](const NEval::TBoundary& bound) {
+        TBoundary result{.Included = bound.Included};
+        result.Components.reserve(bound.Components.size());
+        for (const auto& c : bound.Components) {
+            result.Components.push_back({.Inf = c.Inf, .Value = {
+                .Kind = c.Value.Null ? TKeyValue::EKind::Null : TKeyValue::EKind::Data,
+                .Slot = c.Value.Slot, .Bytes = TString(c.Value.Text()), .Value = c.Value.Data}});
+        }
+        return result;
+    };
+    return {boundary(source.Left), boundary(source.Right)};
+}
+
 bool FitsKeyColumnsBudget(const TVector<TString>& columns) {
     if (columns.empty() || columns.size() > MaxRangeKeyColumns) return false;
     size_t bytes = 0;
@@ -1701,18 +1345,24 @@ TReadRangesDescription DescribeReadRanges(const TExprNode::TPtr& literalRange,
                     return {.Ranges = TVector<TString>{std::move(*literal)}};
                 }
             }
-            if (ranges && expectedMaxRanges && *expectedMaxRanges <= MaxEvaluatedRangeInputs && FitsInputBudget(*ranges)) {
-                if (const auto list = InterpretRanges(ranges); list && list->Width <= keyColumns.size()
-                    && list->Ranges.size() <= MaxExplainedReadRanges) {
-                    TVector<TString> result;
-                    size_t bytes = 0;
-                    for (const auto& range : list->Ranges) {
-                        auto text = FormatRange(range, keyColumns);
-                        RequireRange(text.size() <= MaxRangeEvaluationBytes - bytes);
-                        bytes += text.size();
-                        result.push_back(std::move(text));
+            if (ranges && expectedMaxRanges && *expectedMaxRanges <= MaxEvaluatedRangeInputs) {
+                const auto evaluated = context.Evaluation().Evaluate(ranges);
+                if (const auto* error = evaluated.GetError(); error && error->Code == NEval::EError::BudgetExceeded) {
+                    return {.Expression = context.DescribeOpaqueExpression(source)};
+                }
+                if (const auto* value = evaluated.GetValue()) {
+                    const auto* list = (*value)->GetRanges();
+                    if (list && list->Width <= keyColumns.size() && list->Items.size() <= MaxExplainedReadRanges) {
+                        TVector<TString> result;
+                        size_t bytes = 0;
+                        for (const auto& range : list->Items) {
+                            auto text = FormatRange(DisplayRange(range), keyColumns);
+                            RequireRange(text.size() <= MaxRangeEvaluationBytes - bytes);
+                            bytes += text.size();
+                            result.push_back(std::move(text));
+                        }
+                        return {.Ranges = std::move(result)};
                     }
-                    return {.Ranges = std::move(result)};
                 }
             }
             return {.Expression = DescribeRangesStructure(source, keyColumns, context)};

@@ -101,6 +101,60 @@ void AssertRanges(TStringBuf expression, const TVector<TString>& keys, const TVe
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
+    Y_UNIT_TEST(EmptyBoundaryCastsDoNotConfuseNullAndInfinity) {
+        const TString optional = "(OptionalType (DataType 'Int64))";
+        const TString nested = "(OptionalType " + optional + ')';
+        for (TStringBuf cast : {"SafeCast", "StrictCast"}) {
+            const TString absent = TStringBuilder() << '(' << cast << " (Nothing " << nested << ") " << nested << ')';
+            const TString infiniteBound = "'(" + absent + " (Int32 '0))";
+            const TString full = "(AsRange '(" + infiniteBound + ' ' + infiniteBound + "))";
+            AssertRanges(full, {"a"}, {"({a: -∞}, {a: +∞})"});
+            // Without an estimate, explain skips evaluation. Its structural
+            // fallback must decline the cast instead of inventing finite NULLs.
+            AssertExpression(full, {"a"}, "f1()");
+
+            const TString null = TStringBuilder() << '(' << cast << " (Nothing " << optional << ") " << nested << ')';
+            const TString nullBound = "'(" + null + " (Int32 '1))";
+            AssertRanges("(AsRange '(" + nullBound + ' ' + nullBound + "))", {"a"}, {"[{a: NULL}, {a: NULL}]"});
+        }
+    }
+
+    Y_UNIT_TEST(RefusedLiteralsStayUnknownInFallbacks) {
+        NYql::TExprContext ctx;
+        const NYql::TPositionHandle pos{};
+        const TVector<NYql::TExprNode::TPtr> literals = {
+            ctx.NewCallable(pos, "Uint8", {ctx.NewAtom(pos, "1", NYql::TNodeFlags::BinaryContent)}),
+            Compile("(Interval '9223372036854775807)", ctx),
+            Compile("(Interval64 '9223372036854775807)", ctx),
+        };
+        for (const auto& literal : literals) {
+            const auto type = ctx.NewCallable(pos, "DataType", {ctx.NewAtom(pos, literal->Content())});
+            const auto ranges = ctx.NewCallable(pos, "RangeFor", {ctx.NewAtom(pos, "=="), literal, type});
+            for (TMaybe<size_t> estimate : {TMaybe<size_t>{}, TMaybe<size_t>{1}}) {
+                const auto result = DescribeReadRanges(nullptr, ranges, {"a"}, estimate);
+                UNIT_ASSERT(!result.Ranges);
+                UNIT_ASSERT(result.Expression);
+                UNIT_ASSERT_VALUES_EQUAL(*result.Expression, "a ∈ {f1()}");
+            }
+
+            const auto bound = ctx.NewCallable(pos, "KqlKeyInc", {literal});
+            const auto result = DescribeReadRanges(ctx.NewList(pos, {bound, bound}), nullptr, {"a"});
+            UNIT_ASSERT(!result.Ranges);
+            UNIT_ASSERT(result.Expression);
+            UNIT_ASSERT_VALUES_EQUAL(*result.Expression, "f1()");
+        }
+    }
+
+    Y_UNIT_TEST(EvaluationAccessDoesNotAllocateSessionStorage) {
+        TExplainContext explain;
+        static_assert(noexcept(explain.Evaluation()));
+        const auto& session = explain.Evaluation();
+        UNIT_ASSERT(&session == &explain.Evaluation());
+        UNIT_ASSERT_VALUES_EQUAL(session.GetUsage().Work, 0);
+        UNIT_ASSERT_VALUES_EQUAL(session.GetUsage().Bytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(session.GetUsage().Memory, 0);
+    }
+
     Y_UNIT_TEST(CompositeTupleWithExcludedUpperPrefix) {
         AssertRanges(R"(
             (AsRange '(
@@ -704,7 +758,7 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
                      "(RangeFor '< (Int64 '5) (DataType 'Int64)))", {"a"}, {});
     }
 
-    Y_UNIT_TEST(Utf8PrefixesUseTheExistingSuccessorFunction) {
+    Y_UNIT_TEST(Utf8PrefixesPreserveSuccessorSemantics) {
         AssertRanges("(RangeFor 'StartsWith (String '\"при\") (DataType 'Utf8))", {"s"},
                      {"[{s: \"при\"}, {s: \"прй\"})"});
         AssertRanges("(RangeFor 'StartsWith (String '\"\\xFF\") (DataType 'String))", {"s"},
@@ -867,7 +921,10 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         const auto smallPair = ctx.NewList(value->Pos(), {smallBound, smallBound});
         auto shared = ctx.NewCallable(value->Pos(), "AsRange", {smallPair});
         for (size_t i = 0; i < 6; ++i) shared = ctx.NewCallable(value->Pos(), "RangeUnion", {shared, shared});
-        UNIT_ASSERT(!DescribeReadRanges(nullptr, shared, {"key"}, 1).Ranges);
+        // Shared work is memoized. Only the one resulting range needs rendering.
+        const auto cached = DescribeReadRanges(nullptr, shared, {"key"}, 1);
+        UNIT_ASSERT(cached.Ranges);
+        UNIT_ASSERT_VALUES_EQUAL(cached.Ranges->size(), 1);
     }
 
     Y_UNIT_TEST(SharedExpressionAndCompositeWidthAreBounded) {
@@ -875,9 +932,12 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         auto node = Compile("(RangeFor '== (Int64 '1) (DataType 'Int64))", ctx);
         for (size_t i = 0; i < 20; ++i) node = ctx.NewCallable(node->Pos(), "RangeUnion", {node, node});
         const auto description = DescribeReadRanges(nullptr, node, {"a"}, 1);
-        UNIT_ASSERT(!description.Ranges);
-        UNIT_ASSERT(description.Expression);
-        UNIT_ASSERT_VALUES_EQUAL(*description.Expression, "f1()");
+        UNIT_ASSERT(description.Ranges);
+        UNIT_ASSERT_VALUES_EQUAL(*description.Ranges, TVector<TString>{"[{a: 1}, {a: 1}]"});
+        for (size_t i = 0; i < 65; ++i) node = ctx.NewCallable(node->Pos(), "RangeUnion", {node, node});
+        const auto tooDeep = DescribeReadRanges(nullptr, node, {"a"}, 1);
+        UNIT_ASSERT(!tooDeep.Ranges);
+        UNIT_ASSERT(tooDeep.Expression);
         const auto point = Compile("(RangeFor '== (Int64 '1) (DataType 'Int64))", ctx);
         NYql::TExprNode::TListType arguments{Compile("(Uint64 '1000)", ctx)};
         TVector<TString> keys;
